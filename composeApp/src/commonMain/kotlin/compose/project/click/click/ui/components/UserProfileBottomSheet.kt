@@ -841,12 +841,12 @@ fun UserProfileBottomSheet(
                                     modifier = Modifier
                                         .size(88.dp)
                                         .clip(CircleShape)
-                                        .background(Brush.linearGradient(listOf(PrimaryBlue, LightBlue))),
+                                        .background(PrimaryBlue),
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     Text(
                                         text = u.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
-                                        color = LightBlue.copy(alpha = 0.96f),
+                                        color = Color.White,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 32.sp,
                                     )

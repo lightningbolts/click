@@ -4,6 +4,8 @@
 **Source:** `ui/chat/ConnectionActionSheet.kt`, `ui/chat/ConnectionSheetDialogs.kt`, `ui/chat/MessageActionSheet.kt`, `ui/screens/ChatView.kt`, `ui/screens/ConnectionsListView.kt`, `ui/screens/ConnectionsScreen.kt`, `ui/screens/MapScreen.kt`, `ui/chat/ChatMessageBubble.kt`, `ui/components/GlassAlertDialog.kt`, `ui/components/AnimatedClickDialog.kt`  
 **Out of scope:** Web, backend moderation APIs, redesign proposals.
 
+**Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: invented from design system.
+
 ---
 
 ## ASCII hierarchy
@@ -33,11 +35,11 @@ Safety entry points
 | Property | Value |
 |----------|-------|
 | Container | `ClickActionBottomSheet` → `ClickPlatformSheet` → `MapBeaconSheetRoot` |
-| Background | `GlassSheetTokens.OledBlack` (`#000000`) |
-| Scrim | α = 0.55 |
+| Background | Opaque `surface` (`#ffffff` light / `#2f3131` dark) |
+| Scrim | α = 0.40 (flat black, no blur) |
 | Column | `fillMaxWidth()`, `fillMaxHeight()`, `padding(bottom = 32.dp)` |
-| Header title | Centered, `titleMedium`, `GlassSheetTokens.OnOled`, `padding(horizontal = 20.dp, vertical = 12.dp)` |
-| Header divider | `HorizontalDivider`, `GlassSheetTokens.GlassBorder` @ 50% alpha |
+| Header title | Centered, `titleMedium`, `on-surface`, `padding(horizontal = 20.dp, vertical = 12.dp)` |
+| Header divider | `HorizontalDivider`, `#000` @ 100% |
 | Rows | `BentoGlassOptionRow` (default bordered; safety rows `showBorder = false`) |
 | Bottom | `Spacer(weight = 1f)` pushes content up |
 
@@ -109,7 +111,7 @@ Safety entry points
 
 | Property | Value |
 |----------|-------|
-| Container | `ClickActionBottomSheet`, OLED black, `padding(bottom = 32.dp)` |
+| Container | `ClickActionBottomSheet`, opaque `surface`, `padding(bottom = 32.dp)` |
 | Rows | `BentoGlassOptionRow`: `showBorder = false`, `horizontalInset = 0.dp`, `cornerRadius = 0.dp` |
 | Emoji strip | 6 quick reactions: `👍` `❤️` `😂` `😮` `😢` `😡` @ 28sp, evenly spaced |
 | More emojis | `TextButton` `"More emojis…"` (PrimaryBlue) → `emojiPickMode` |

@@ -25,7 +25,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -189,11 +188,7 @@ private fun MemoryLocationCard(
                 modifier = Modifier
                     .size(56.dp)
                     .clip(RoundedCornerShape(28.dp))
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(timeColor, timeColor.copy(alpha = 0.6f)),
-                        ),
-                    ),
+                    .background(timeColor),
                 contentAlignment = Alignment.Center,
             ) {
                 if (point.shouldPulse) {

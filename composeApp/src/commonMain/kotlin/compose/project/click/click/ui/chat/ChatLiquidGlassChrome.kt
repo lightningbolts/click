@@ -7,7 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.background
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.TextFieldColors
@@ -15,67 +15,47 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.foundation.background
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 
 /**
- * Translucent plate + blur for chat chrome (samples content behind on supported
- * platforms; older targets still get the soft tint).
+ * Opaque Functional Clarity plate for chat chrome (no blur).
  */
 @Composable
 internal fun ChatLiquidGlassPlate(
     modifier: Modifier = Modifier,
-    tint: Color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+    tint: Color = MaterialTheme.colorScheme.surface,
     blurRadius: Dp = 18.dp,
     testTag: String,
 ) {
+    @Suppress("UNUSED_VARIABLE")
+    val ignoredBlur = blurRadius
     Box(
         modifier = modifier
             .graphicsLayer { clip = true }
             .background(tint)
-            .blur(blurRadius)
             .testTag(testTag),
     )
 }
 
 /**
- * Vertical fade from transparent (lets the ambient mesh read through at the top of the strip)
- * down to [MaterialTheme.colorScheme.background] so the composer row meets the connection list
- * base tone when the chat sheet is swiped aside.
+ * Solid underlay for composer chrome — no gradient fades.
  */
 @Composable
 internal fun ChatComposerChromeFadeUnderlay(
     modifier: Modifier = Modifier,
     testTag: String = ChatGlassComposerPlateTestTag,
 ) {
-    val bg = MaterialTheme.colorScheme.background
-    val mid = MaterialTheme.colorScheme.surface.copy(alpha = 0.12f)
-    BoxWithConstraints(modifier = modifier.testTag(testTag)) {
-        val h = constraints.maxHeight.toFloat().coerceAtLeast(1f)
-        val extension = h * 0.35f
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(
-                    Brush.verticalGradient(
-                        0f to Color.Transparent,
-                        0.35f to mid.copy(alpha = 0.08f),
-                        0.72f to bg.copy(alpha = 0.22f),
-                        1f to Color.Transparent,
-                        startY = -extension,
-                        endY = h + extension,
-                    ),
-                ),
-        )
-    }
+    val bg = MaterialTheme.colorScheme.surface
+    Box(
+        modifier = modifier
+            .testTag(testTag)
+            .background(bg),
+    )
 }
 
 @Composable
@@ -95,18 +75,15 @@ internal fun Modifier.chatSpringPressScale(interactionSource: MutableInteraction
     }
 }
 
-/** Text-field container colors only — composer row background stays transparent. */
+/** Text-field container colors — opaque bordered Functional Clarity fields. */
 @Composable
 internal fun rememberChatComposerFieldColors(): TextFieldColors {
-    val composerStyle = LocalPlatformStyle.current
-    val fieldFill = MaterialTheme.colorScheme.surfaceVariant
+    val fieldFill = MaterialTheme.colorScheme.surface
     return OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = PrimaryBlue.copy(alpha = if (composerStyle.isIOS) 0.55f else 0.65f),
-        unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(
-            alpha = if (composerStyle.isIOS) 0.10f else 0.14f,
-        ),
-        focusedContainerColor = fieldFill.copy(alpha = if (composerStyle.isIOS) 0.96f else 0.98f),
-        unfocusedContainerColor = fieldFill.copy(alpha = if (composerStyle.isIOS) 0.92f else 0.95f),
+        focusedBorderColor = PrimaryBlue,
+        unfocusedBorderColor = compose.project.click.click.ui.theme.BorderHard,
+        focusedContainerColor = fieldFill,
+        unfocusedContainerColor = fieldFill,
     )
 }
 

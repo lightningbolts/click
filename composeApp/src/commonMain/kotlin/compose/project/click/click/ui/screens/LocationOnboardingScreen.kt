@@ -1,5 +1,6 @@
 package compose.project.click.click.ui.screens
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -16,7 +17,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import androidx.compose.ui.platform.LocalDensity
@@ -24,9 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.ui.theme.BackgroundDark
+import compose.project.click.click.ui.theme.BorderHardDark
 import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.ui.theme.SurfaceDark
 
 /**
  * Full-screen explainer shown before the OS location permission dialog.
@@ -42,7 +41,7 @@ fun LocationOnboardingScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(BackgroundDark)
+            .background(MaterialTheme.colorScheme.background)
     ) {
         Column(
             modifier = Modifier
@@ -58,14 +57,14 @@ fun LocationOnboardingScreen(
                 "Remember where you met",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 "Your personal Memory Map shows every connection as a pin—only you see it.",
                 style = MaterialTheme.typography.bodyLarge,
-                color = Color.White.copy(alpha = 0.85f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 8.dp)
             )
@@ -76,22 +75,15 @@ fun LocationOnboardingScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp),
+                    .height(200.dp)
+                    .border(2.dp, BorderHardDark, RoundedCornerShape(20.dp)),
                 shape = RoundedCornerShape(20.dp),
-                color = SurfaceDark
+                color = MaterialTheme.colorScheme.surface,
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .clip(RoundedCornerShape(20.dp))
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    PrimaryBlue.copy(alpha = 0.15f),
-                                    SurfaceDark
-                                )
-                            )
-                        )
                 ) {
                     mapPreviewContent()
                 }
@@ -114,7 +106,7 @@ fun LocationOnboardingScreen(
                 Text(
                     "We capture a single GPS snapshot at the moment you tap—no continuous tracking.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.9f)
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
 
@@ -128,14 +120,14 @@ fun LocationOnboardingScreen(
                 Icon(
                     Icons.Default.Map,
                     contentDescription = null,
-                    tint = PrimaryBlue.copy(alpha = 0.8f),
+                    tint = PrimaryBlue,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     "Anonymous venue and campus trends are included by default, and you can opt out anytime in Your Data.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.8f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
@@ -165,7 +157,7 @@ fun LocationOnboardingScreen(
             ) {
                 Text(
                     "Not now",
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyLarge
                 )
             }
@@ -195,18 +187,19 @@ fun LocationOnboardingMapPreview() {
     val r2 = with(density) { 10.dp.toPx() }
     val r3 = with(density) { 8.dp.toPx() }
     val rPin = with(density) { 14.dp.toPx() }
+    val pinAccentColor = MaterialTheme.colorScheme.primaryContainer
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (validPins.isEmpty()) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val w = size.width
                 val h = size.height
-                drawCircle(color = PrimaryBlue.copy(alpha = 0.4f), radius = r1, center = center)
-                drawCircle(color = PrimaryBlue.copy(alpha = 0.35f), radius = r2, center = androidx.compose.ui.geometry.Offset(w * 0.3f, h * 0.4f))
-                drawCircle(color = PrimaryBlue.copy(alpha = 0.35f), radius = r2, center = androidx.compose.ui.geometry.Offset(w * 0.7f, h * 0.55f))
-                drawCircle(color = PrimaryBlue.copy(alpha = 0.25f), radius = r3, center = androidx.compose.ui.geometry.Offset(w * 0.5f, h * 0.25f))
-                drawCircle(color = PrimaryBlue.copy(alpha = 0.25f), radius = r3, center = androidx.compose.ui.geometry.Offset(w * 0.2f, h * 0.7f))
-                drawCircle(color = PrimaryBlue.copy(alpha = 0.25f), radius = r3, center = androidx.compose.ui.geometry.Offset(w * 0.8f, h * 0.3f))
+                drawCircle(color = PrimaryBlue, radius = r1, center = center)
+                drawCircle(color = PrimaryBlue, radius = r2, center = androidx.compose.ui.geometry.Offset(w * 0.3f, h * 0.4f))
+                drawCircle(color = PrimaryBlue, radius = r2, center = androidx.compose.ui.geometry.Offset(w * 0.7f, h * 0.55f))
+                drawCircle(color = pinAccentColor, radius = r3, center = androidx.compose.ui.geometry.Offset(w * 0.5f, h * 0.25f))
+                drawCircle(color = pinAccentColor, radius = r3, center = androidx.compose.ui.geometry.Offset(w * 0.2f, h * 0.7f))
+                drawCircle(color = pinAccentColor, radius = r3, center = androidx.compose.ui.geometry.Offset(w * 0.8f, h * 0.3f))
             }
         } else {
             Canvas(modifier = Modifier.fillMaxSize()) {

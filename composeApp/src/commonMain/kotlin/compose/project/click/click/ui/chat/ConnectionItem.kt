@@ -37,7 +37,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,7 +50,6 @@ import compose.project.click.click.ui.components.ConnectionListUserAvatarFace //
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
 import compose.project.click.click.ui.components.groupAvatarClusterWidth // pragma: allowlist secret
-import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.util.AvailabilityOverlapCache // pragma: allowlist secret
 
@@ -300,10 +298,7 @@ fun ConnectionItem(
                     Box(
                         modifier = Modifier
                             .size(20.dp)
-                            .background(
-                                Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue)),
-                                RoundedCornerShape(10.dp),
-                            ),
+                            .background(PrimaryBlue, RoundedCornerShape(10.dp)),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(

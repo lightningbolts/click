@@ -4,6 +4,8 @@
 **Source:** `ui/screens/SettingsScreen.kt`, `ui/screens/SettingsInterestsCard.kt`, `ui/screens/PermissionDisplayState.kt`, `ui/components/AvailabilitySheet.kt`, `ui/components/InterestEditor.kt`, `ui/components/InterestTaxonomy.kt`, `viewmodel/AvailabilityViewModel.kt`  
 **Out of scope:** Web, backend APIs, onboarding permission screens (`PermissionsOnboardingScreen`, `LocationOnboardingScreen`), redesign proposals.
 
+**Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: `click/docs/design-assets/settings/`.
+
 ---
 
 ## ASCII hierarchy
@@ -41,7 +43,7 @@ SettingsScreen (tab route "settings")
 |----------|-------|
 | Root | `AdaptiveBackground` + `AppScreenScaffold` |
 | Page title | `"Settings"` |
-| Header | Floating liquid-glass header; lazy scroll content |
+| Header | Floating solid header bar with 2dp bottom `#000` border; lazy scroll content |
 | Section spacing | 14dp between section headers and cards |
 | Search | Header magnifier → `onOpenSearch` → `UnifiedSearchSheet` |
 | Local snackbar | Bottom-centered, 24dp padding — avatar, interests, media errors |

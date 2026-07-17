@@ -4,6 +4,8 @@
 **Source:** `ui/camera/DisposableCameraShared.kt`, `ui/camera/DisposableRollCapturedPreview.kt`, `ui/camera/DisposableRollFilters.kt`, `ui/camera/DisposableCameraView.kt`, `ui/chat/ChatPhotoBubble.kt`, `ui/chat/ConnectionChatMessageComposer.kt`, `ui/components/ProfileBottomSheet.kt`, `App.kt`, `viewmodel/ChatViewModel.kt`, `collaboration/ClickDropReveal.kt`  
 **Out of scope:** Web, backend collaboration APIs, redesign proposals.
 
+**Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: invented from design system.
+
 ---
 
 ## ASCII hierarchy

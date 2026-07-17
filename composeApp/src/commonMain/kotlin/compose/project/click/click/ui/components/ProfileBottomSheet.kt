@@ -1179,7 +1179,7 @@ private fun ProfileSheetHeader(
                     .align(Alignment.Center)
                     .size(68.dp)
                     .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(LightBlue, PrimaryBlue))),
+                    .background(PrimaryBlue),
                 contentAlignment = Alignment.Center,
             ) {
                 if (!avatarUrl.isNullOrBlank()) {

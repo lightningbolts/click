@@ -1,27 +1,29 @@
-# Design System Foundation
+# Design System Foundation — Functional Clarity (Target State)
 
-As-built specification for the Click mobile Compose design system. All values are sourced from `click/composeApp/src/commonMain/kotlin/compose/project/click/click/ui/` unless noted.
+**Visual system:** Neo-brutalist Functional Clarity — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients.  
+**Design tokens:** [../../design-assets/functional_clarity/DESIGN.md](../../design-assets/functional_clarity/DESIGN.md)  
+**Compose source index:** `click/composeApp/src/commonMain/kotlin/compose/project/click/click/ui/` — existing `Glass*` API names may remain for churn; they **render as brutalist cards** in the target theme.
 
 **Source index**
 
-| Area | Path |
-|------|------|
-| Colors | `ui/theme/Color.kt` |
-| Typography | `ui/theme/Typography.kt` |
-| Platform theme + color scheme | `ui/theme/PlatformTheme.kt` |
-| Screen chrome defaults | `ui/components/ScreenChrome.kt` |
-| Glass sheet tokens | `ui/components/GlassSheetTokens.kt` |
-| Glass cards | `ui/components/GlassCard.kt` |
-| Adaptive cards/buttons | `ui/components/AdaptiveCard.kt` |
-| Liquid glass pill | `ui/components/LiquidGlassPill.kt` |
-| Sheet grabber | `ui/components/GlassSheetGrabber.kt` |
-| Sheet gesture physics | `ui/components/GlassSheetGesturePhysics.kt` |
-| Material modal sheet | `ui/components/GlassModalBottomSheet.kt` |
-| Calf adaptive sheet | `ui/components/GlassAdaptiveBottomSheet.kt` |
-| Unified popup | `ui/components/UnifiedPopup.kt` |
-| Unified toast | `ui/components/UnifiedToast.kt` |
-| Chat bubble tokens | `ui/chat/ChatBubbleTokens.kt` |
-| Chat bubble paint | `ui/chat/ChatMessageBubble.kt` |
+| Area | Path | Target rendering |
+|------|------|------------------|
+| Colors | `ui/theme/Color.kt` | Functional Clarity palette (see §1) |
+| Typography | `ui/theme/Typography.kt` | Manrope M3 scale |
+| Platform theme + color scheme | `ui/theme/PlatformTheme.kt` | `clickColorScheme` remapped to FC tokens |
+| Screen chrome defaults | `ui/components/ScreenChrome.kt` | Solid headers, no blur |
+| Glass sheet tokens | `ui/components/GlassSheetTokens.kt` | **→** opaque sheet surfaces + 2dp `#000` border |
+| Glass cards | `ui/components/GlassCard.kt` | **→** bordered card (16dp radius, solid fill) |
+| Adaptive cards/buttons | `ui/components/AdaptiveCard.kt` | **→** bordered surfaces, solid primary buttons |
+| Liquid glass pill | `ui/components/LiquidGlassPill.kt` | **→** solid pill/chip (no gradient, no noise) |
+| Sheet grabber | `ui/components/GlassSheetGrabber.kt` | **→** 40×4dp `#000` bar on solid sheet header |
+| Sheet gesture physics | `ui/components/GlassSheetGesturePhysics.kt` | Unchanged behavior |
+| Material modal sheet | `ui/components/GlassModalBottomSheet.kt` | **→** opaque sheet + hard border |
+| Calf adaptive sheet | `ui/components/GlassAdaptiveBottomSheet.kt` | **→** opaque sheet + hard border |
+| Unified popup | `ui/components/UnifiedPopup.kt` | **→** bordered dialog card |
+| Unified toast | `ui/components/UnifiedToast.kt` | **→** bordered compact pill |
+| Chat bubble tokens | `ui/chat/ChatBubbleTokens.kt` | Solid sent/received fills |
+| Chat bubble paint | `ui/chat/ChatMessageBubble.kt` | No gradient bubbles |
 
 ---
 
@@ -29,35 +31,36 @@ As-built specification for the Click mobile Compose design system. All values ar
 
 ### 1.1 Layout / Container
 
-- **Brand tokens** (`Color.kt`): `PrimaryBlue` `#8338EC`, `LightBlue` `#A374F9`, `DeepBlue` `#5F1DAD`, `SoftBlue` `#F3EBFF`, `AccentBlue` `#6A1BC9`, `NeonPurple` `#D0BCFF`.
-- **Light mode**: `BackgroundLight` `#FAFAFA`, `SurfaceLight` `#FFFFFF`, `GlassLight` `#F5F5F5`, `OnSurfaceLight` `#1A1A1A`, `OnSurfaceVariant` `#616161`, `TextSecondary` `#757575`.
-- **Dark mode**: `BackgroundDark` `#09090B`, `SurfaceDark` `#18181B`, `OnSurfaceDark` `#FAFAFA`, `GlassDark` `#18181B` at 80% alpha.
-- **Glass primitives**: `GlassWhite` `#FFFFFF` at 5%, `GlassBorder` `#FFFFFF` at 10%, `GlassBorderPrimary` `PrimaryBlue` at 15%, `GlassWhiteHover` `#FFFFFF` at 8%.
-- **Gradient text** (web parity): `GradientTextStart` `#FFFFFF`, `GradientTextEnd` `#A1A1AA`.
+- **Brand tokens** (Functional Clarity): `primary` `#630ed4`, `on-primary` `#ffffff`, `primary-container` `#7c3aed`, `on-primary-container` `#ede0ff`, `surface-tint` `#732ee4`.
+- **Light mode**: `background` `#f9f9f9`, `surface` `#ffffff`, `surface-container-low` `#f3f3f4`, `surface-container` `#eeeeee`, `on-surface` `#1a1c1c`, `on-surface-variant` `#4a4455`, `outline` `#7b7487`.
+- **Dark mode (inverse)**: `background` `#1a1c1c`, `surface` `#2f3131`, `surface-container` `#3a3c3c`, `on-surface` `#f0f1f1`, `on-surface-variant` `#ccc3d8` — **opaque surfaces + hard borders**, not OLED glass or translucent frost.
+- **Structural border**: `#000000` at **2dp** on cards, sheets, inputs, and tab bar top edge.
+- **No glass primitives**: no `GlassWhite` alpha fills, no `GlassBorder` hairlines, no backdrop blur.
+- **No gradient text**: headings use solid `on-surface` or `primary`; no `GradientTextStart`/`End` usage.
 - **Material color scheme** (`PlatformTheme.kt` `clickColorScheme`):
-  - Light: `primary` = PrimaryBlue, `secondary` = AccentBlue, `background` = BackgroundLight, `surface` = SurfaceLight, `onSurface` = OnSurfaceLight, `primaryContainer` = SoftBlue, `onPrimaryContainer` = DeepBlue, `surfaceVariant` = `#E0E0E0`.
-  - Dark: `primary` = PrimaryBlue, `secondary` = AccentBlue, `background` = BackgroundDark, `surface` = SurfaceDark, `onSurface` = OnSurfaceDark, `primaryContainer` = DeepBlue, `onPrimaryContainer` = NeonPurple, `surfaceVariant` = `#2C2C2C`.
-- **App root background** (`App.kt`): dark mode adds a radial gradient from `PrimaryBlue` at 15% alpha (top-left, radius 1000) over `BackgroundDark`; light mode uses flat `BackgroundLight`.
+  - Light: `primary` = `#630ed4`, `background` = `#f9f9f9`, `surface` = `#ffffff`, `onSurface` = `#1a1c1c`, `primaryContainer` = `#7c3aed`, `onPrimaryContainer` = `#ede0ff`, `surfaceVariant` = `#e2e2e2`.
+  - Dark: `primary` = `#630ed4`, `background` = `#1a1c1c`, `surface` = `#2f3131`, `onSurface` = `#f0f1f1`, `primaryContainer` = `#5a00c6`, `onPrimaryContainer` = `#eaddff`, `surfaceVariant` = `#3a3c3c`.
+- **App root background** (`App.kt`): flat `background` color only — **no radial gradient** overlay in dark mode.
 
 ### 1.2 Interactive Elements
 
-- Primary actions use `MaterialTheme.colorScheme.primary` (PrimaryBlue).
-- Secondary/accent uses `AccentBlue` / `primaryContainer` / `onPrimaryContainer` per scheme.
-- Glass-accented surfaces use white or primary at platform-specific alphas (see PlatformStyle).
+- Primary actions: solid `primary` `#630ed4` fill, `on-primary` `#ffffff` bold label, **8dp** corner radius, **2dp** `#000` border optional on secondary variants.
+- Secondary actions: solid `#ffffff` fill, **2dp** `#000` border, `on-surface` bold text.
+- Accent chips/tags: solid `primary-container` or `surface-container` fills with `on-primary-container` / `on-surface` text — no glow.
 
 ### 1.3 States
 
 | State | Light | Dark |
 |-------|-------|------|
-| **Default** | Background `#FAFAFA`, Surface `#FFFFFF`, OnSurface `#1A1A1A` | Background `#09090B`, Surface `#18181B`, OnSurface `#FAFAFA` |
-| **Pressed/Highlighted** | `GlassWhiteHover` 8% on glass surfaces | Same glass hover token |
-| **Active** | `primary` / `primaryContainer` for selected controls | Same mapping |
-| **Focus** | Inherited from M3 components (e.g. `PrimaryBlue` cursor in search fields) | Same |
-| **Disabled** | `AdaptiveButton`: `Color.Gray` content, gray container at 8–10% alpha | Same |
-| **Loading** | Shimmer screens use theme background; spinners use `PrimaryBlue` / `LightBlue` | Same |
-| **Empty** | `onSurfaceVariant` / `TextSecondary` for hint copy | Same |
-| **Error** | `MaterialTheme.colorScheme.error` on destructive actions (calls, etc.) | Same |
-| **Success** | `PrimaryBlue`→`LightBlue` gradients on sent bubbles, send buttons | Same |
+| **Default** | Background `#f9f9f9`, Surface `#ffffff`, OnSurface `#1a1c1c` | Background `#1a1c1c`, Surface `#2f3131`, OnSurface `#f0f1f1` |
+| **Pressed/Highlighted** | **2dp translate** down-right + **instant 10% darken** on fill (no animation curve) | Same mechanical press |
+| **Active** | `primary` fill or `primary-container` for selected tabs/chips | Same |
+| **Focus** | **2dp** `#630ed4` focus ring on inputs (no soft glow) | Same |
+| **Disabled** | `on-surface` at 38% on `surface-container` fill; border retained at 50% | Same |
+| **Loading** | Flat `background`; spinners use `primary` `#630ed4` | Same |
+| **Empty** | `on-surface-variant` `#4a4455` for hint copy | Same |
+| **Error** | `error` `#ba1a1a` on destructive actions | Same |
+| **Success** | Solid `primary` sent bubbles / confirm buttons — **no gradient** | Same |
 
 ### 1.4 Micro-copy
 
@@ -66,16 +69,16 @@ As-built specification for the Click mobile Compose design system. All values ar
 ### 1.5 Flow Sequence
 
 1. `PlatformThemeProvider(isDarkMode)` wraps authenticated and unauthenticated trees.
-2. `clickColorScheme(isDarkMode)` supplies M3 semantic colors.
-3. `PlatformStyleProvider` resolves iOS vs Android glass/corner deltas.
+2. `clickColorScheme(isDarkMode)` supplies M3 semantic colors mapped to Functional Clarity.
+3. `PlatformStyleProvider` resolves iOS vs Android press/ripple deltas (see §3).
 4. Components read `MaterialTheme.colorScheme` and `LocalPlatformStyle.current`.
 
 ### 1.6 A11y & Responsive
 
-- Text contrast: `OnSurfaceLight` on `SurfaceLight`; `OnSurfaceDark` on `SurfaceDark`.
-- `onSurfaceVariant` (`#616161`) used for secondary labels; meets secondary-text intent on light surfaces.
-- Dark `surfaceVariant` `#2C2C2C` used for received chat bubbles at 90% alpha.
+- Text contrast: `on-surface` `#1a1c1c` on `surface` `#ffffff`; dark inverse meets WCAG on opaque fills.
+- `on-surface-variant` `#4a4455` for secondary labels; minimum **14px** label size enforced.
 - No hard-coded font sizes in `Color.kt`; all type scales via Typography.
+- Borders aid low-vision edge detection — do not remove for "cleaner" look.
 
 ---
 
@@ -83,25 +86,39 @@ As-built specification for the Click mobile Compose design system. All values ar
 
 ### 2.1 Layout / Container
 
-- **Font family**: Manrope only — weights Normal, Medium, SemiBold, Bold loaded from Compose resources (`manrope_regular`, `manrope_medium`, `manrope_semibold`, `manrope_bold`).
-- **Scale**: Full Material 3 type scale — all 13 roles (`displayLarge` through `labelSmall`) inherit default M3 sizes/line heights from `Typography()` baseline; **only** `fontFamily` is overridden to Manrope (`Typography.kt`). No per-role size overrides in theme file.
+- **Font family**: Manrope only — weights Normal (500), SemiBold (600), Bold (700), ExtraBold (800) from Compose resources.
+- **Scale** (Functional Clarity editorial hierarchy):
+
+| Role | Size | Weight | Line height |
+|------|------|--------|-------------|
+| `display-lg` | 48px | 800 | 52px |
+| `headline-lg` | 32px | 700 | 40px |
+| `headline-md` | 24px | 700 | 32px |
+| `body-lg` | 18px | 500 | 28px |
+| `body-md` | 16px | 500 | 24px |
+| `label-bold` | 14px | 700 | 20px |
+| `label-md` | 14px | 600 | 20px |
+
+- M3 role mapping: map `titleLarge` → `headline-md`, `bodyMedium` → `body-md`, `labelLarge` → `label-bold`, etc.
+- **No italics**; hierarchy via weight and size only.
 
 ### 2.2 Interactive Elements
 
-- Buttons, labels, headers use standard M3 roles (`labelLarge`, `titleMedium`, `bodyMedium`, etc.).
+- Buttons use `label-bold` (14px / 700).
+- Section headers use `headline-md` or `label-bold` uppercase for category labels.
 - Chat bubbles apply local scale multipliers on top of M3 roles (see Chat Bubble Tokens).
 
 ### 2.3 States
 
 | State | Behavior |
 |-------|----------|
-| **Default** | Manrope at M3 default metrics for each role |
+| **Default** | Manrope at FC metrics for each role |
 | **Pressed/Highlighted** | No typography change |
-| **Active** | `FontWeight.SemiBold` applied ad hoc (e.g. popup titles) |
+| **Active** | `FontWeight.Bold` on selected tab labels |
 | **Focus** | No type change |
-| **Disabled** | Inherited M3 disabled content alpha on buttons |
-| **Loading** | `bodyMedium` on loading captions |
-| **Empty** | `bodyMedium` / `labelSmall` for hints |
+| **Disabled** | M3 disabled content alpha (38%) |
+| **Loading** | `body-md` on loading captions |
+| **Empty** | `body-md` / `label-md` for hints |
 | **Error** | Standard body styles |
 | **Success** | Standard body styles |
 
@@ -128,33 +145,32 @@ As-built specification for the Click mobile Compose design system. All values ar
 
 | Property | iOS | Android |
 |----------|-----|---------|
-| `cardCornerRadius` | 28 dp | 28 dp |
-| `compactCardCornerRadius` | 8 dp | 8 dp |
-| `buttonCornerRadius` | **12 dp** | **16 dp** |
-| `cardBorderWidth` | **0.5 dp** | **1 dp** |
-| `glassBackgroundAlpha` | **0.08** | **0.05** |
-| `glassBorderAlpha` | **0.14** | **0.10** |
-| `glassBorderPrimaryAlpha` | **0.20** | **0.15** |
-| `useShadowElevation` | **false** | **true** |
+| `cardCornerRadius` | **16 dp** | **16 dp** |
+| `compactCardCornerRadius` | **8 dp** | **8 dp** |
+| `buttonCornerRadius` | **8 dp** | **8 dp** |
+| `cardBorderWidth` | **2 dp** | **2 dp** |
+| `borderColor` | `#000000` | `#000000` |
+| `useShadowElevation` | **false** | **false** |
 | `useRipple` | **false** | **true** |
+| `pressTranslateDp` | **2 dp** | **2 dp** |
 
 Detection: `getPlatform().name.contains("iOS")`.
 
 ### 3.2 Interactive Elements
 
-- `GlassCard`, `GlassCardCompact`, `GlassSurface` read platform alphas and border width.
-- `AdaptiveButton` branches on `style.isIOS` for fill vs bordered M3 button.
-- `GlassCard` clickable uses `indication = null` (no ripple on either platform at card level).
+- `GlassCard`, `GlassCardCompact`, `GlassSurface` → solid fill + **2dp** `#000` border (API names unchanged).
+- `AdaptiveButton` → solid `primary` fill (iOS) or bordered secondary (Android variant); press = 2dp translate + instant darken.
+- Card-level `clickable`: `indication = null` on iOS; Android may show ripple on M3 buttons when `useRipple` true.
 
 ### 3.3 States
 
 | State | iOS | Android |
 |-------|-----|---------|
-| **Default** | Higher glass alpha (more visible frost) | Lower glass alpha |
-| **Pressed/Highlighted** | No ripple on glass cards | No ripple on glass cards; M3 buttons may ripple when `useRipple` true |
-| **Active** | Primary border at 20% | Primary border at 15% |
-| **Focus** | Platform default | Platform default |
-| **Disabled** | `AdaptiveButton` gray 8% fill | Gray 10% fill + border retained |
+| **Default** | Opaque surface + hard border | Opaque surface + hard border |
+| **Pressed/Highlighted** | 2dp translate + instant darken | 2dp translate + instant darken; ripple on buttons only |
+| **Active** | `primary` border or fill | Same |
+| **Focus** | 2dp `primary` ring | Same |
+| **Disabled** | Gray `surface-container` fill, 38% content | Same + optional ripple suppressed |
 | **Loading** | N/A | N/A |
 | **Empty** | N/A | N/A |
 | **Error** | N/A | N/A |
@@ -170,8 +186,8 @@ Detection: `getPlatform().name.contains("iOS")`.
 
 ### 3.6 A11y & Responsive
 
-- Identical corner radii across platforms; touch targets unchanged.
-- iOS omits shadow elevation on glass surfaces (flat OLED aesthetic).
+- Identical corner radii and border widths across platforms.
+- iOS omits ripple; Android retains Material ripple on standard buttons only.
 
 ---
 
@@ -183,7 +199,7 @@ Detection: `getPlatform().name.contains("iOS")`.
 
 | Token | Value |
 |-------|-------|
-| `HorizontalPadding` | 20 dp |
+| `HorizontalPadding` | 16 dp (`margin-mobile`) |
 | `SectionSpacing` | 24 dp |
 | `HeaderCollapseScrollThreshold` | 96 px |
 | `FloatingHeaderLargeHeight` | 112 dp (initial fallback) |
@@ -193,13 +209,13 @@ Detection: `getPlatform().name.contains("iOS")`.
 | `AndroidNavBarContentHeight` | 80 dp |
 | `FabGapAboveTabBar` | 6 dp |
 
-`AppScreenChromeState.bottomChromeHeight` — mutable, updated by `PlatformBottomBar` (measured tab bar top on iOS; nav height + inset on Android).
+`AppScreenChromeState.bottomChromeHeight` — mutable, updated by `PlatformBottomBar`.
 
 Helpers: `rememberTabBarOverlayHeight()`, `rememberBottomChromePadding()`, `rememberStatusBarTopPadding()`, `rememberFabAboveNavPadding()`, `rememberComposerBottomPadding()`, `chatComposerDock`, `chatThreadKeyboardDock`.
 
 ### 4.2 Interactive Elements
 
-- Floating headers: `LiquidGlassPageHeader` in `AppScreenScaffold` (see shell doc).
+- Floating headers: `LiquidGlassPageHeader` API → **solid header bar** with **2dp** bottom `#000` border (no blur).
 - FABs sit `FabGapAboveTabBar` above measured tab bar top.
 - Chat composers dock above tab bar; iOS uses `maxOf(tabStack, imeBottom)`.
 
@@ -210,7 +226,7 @@ Helpers: `rememberTabBarOverlayHeight()`, `rememberBottomChromePadding()`, `reme
 | **Default** | Bottom chrome = measured tab/nav height + optional 16 dp scroll padding |
 | **Pressed/Highlighted** | N/A |
 | **Active** | Header `collapseFraction` 0→1 over 96 px scroll |
-| **Focus** | IME lifts chat via `graphicsLayer` (iOS native lift) or `offset` (Android) |
+| **Focus** | IME lifts chat via `graphicsLayer` (iOS) or `offset` (Android) |
 | **Disabled** | N/A |
 | **Loading** | N/A |
 | **Empty** | N/A |
@@ -237,38 +253,38 @@ Helpers: `rememberTabBarOverlayHeight()`, `rememberBottomChromePadding()`, `reme
 
 ---
 
-## 5. GlassSheetTokens
+## 5. GlassSheetTokens (→ Opaque Sheet Tokens)
 
 ### 5.1 Layout / Container
 
-`GlassSheetTokens` object:
+`GlassSheetTokens` object — **target mapping**:
 
-| Token | Value |
-|-------|-------|
-| `OledBlack` | `#000000` |
-| `GlassSurface` | White 5% |
-| `GlassBorder` | White 12% |
-| `GlassBorderPressed` | White 22% |
-| `OnOled` | White 92% |
-| `OnOledMuted` | White 62% |
-| `SheetTopCorner` | 32 dp |
-| `BentoExteriorCorner` | 28 dp |
-| `BentoInteriorCorner` | 8 dp |
-| `ScrimBaseAlpha` | 0.58 |
+| Token | As-built (legacy) | Target (Functional Clarity) |
+|-------|-------------------|----------------------------|
+| `OledBlack` | `#000000` glass shell | `surface` `#ffffff` (light) / `#2f3131` (dark) |
+| `GlassSurface` | White 5% | `surface-container-low` solid |
+| `GlassBorder` | White 12% | `#000000` **2dp** |
+| `GlassBorderPressed` | White 22% | `#000000` **2dp** + 2dp translate |
+| `OnOled` | White 92% | `on-surface` |
+| `OnOledMuted` | White 62% | `on-surface-variant` |
+| `SheetTopCorner` | 32 dp | **16 dp** |
+| `BentoExteriorCorner` | 28 dp | **16 dp** |
+| `BentoInteriorCorner` | 8 dp | **8 dp** |
+| `ScrimBaseAlpha` | 0.58 | **0.40** solid black dim (no blur) |
 
 ### 5.2 Interactive Elements
 
-- Sheet shells: OLED black fill + glass border.
-- Scrim: black at `ScrimBaseAlpha` (popup/sheet); modal sheet scrim animates 0.38–0.58 based on sheet offset.
+- Sheet shells: opaque fill + **2dp** `#000` top/side border.
+- Scrim: flat black at 40% — **no backdrop blur**.
 
 ### 5.3 States
 
 | State | Token |
 |-------|-------|
-| **Default** | `GlassSurface` + `GlassBorder` |
-| **Pressed/Highlighted** | `GlassBorderPressed` (22%) |
-| **Active** | Expanded sheet at full `ScrimBaseAlpha` |
-| **Focus** | N/A |
+| **Default** | Solid `surface` + `border` 2dp `#000` |
+| **Pressed/Highlighted** | 2dp translate + instant darken on sheet chrome rows |
+| **Active** | Expanded sheet at full scrim |
+| **Focus** | 2dp `primary` ring on fields |
 | **Disabled** | N/A |
 | **Loading** | N/A |
 | **Empty** | N/A |
@@ -277,44 +293,44 @@ Helpers: `rememberTabBarOverlayHeight()`, `rememberBottomChromePadding()`, `reme
 
 ### 5.4 Micro-copy
 
-- Content uses `OnOled` / `OnOledMuted` on OLED shells.
+- Content uses `on-surface` / `on-surface-variant` on opaque shells.
 
 ### 5.5 Flow Sequence
 
-Shared by `GlassModalBottomSheet`, `GlassAdaptiveBottomSheet`, `UnifiedPopup`, `UnifiedToast` (opaque variant).
+Shared by `GlassModalBottomSheet`, `GlassAdaptiveBottomSheet`, `UnifiedPopup`, `UnifiedToast`.
 
 ### 5.6 A11y & Responsive
 
-- `SheetTopCorner` 32 dp top radius on modal sheets.
-- Bento exterior 28 dp matches `GlassCard` corner constant.
+- `SheetTopCorner` 16 dp top radius on modal sheets.
+- Bento exterior 16 dp matches `GlassCard` corner constant.
 
 ---
 
-## 6. GlassCard & GlassCardCompact
+## 6. GlassCard & GlassCardCompact (→ Bordered Card)
 
 ### 6.1 Layout / Container
 
-- **GlassCard** / **GlassSurface**: corner = `LocalPlatformStyle.cardCornerRadius` (28 dp); constant `GlassCornerRadius` = 28 dp, `GlassCardShape` = `RoundedCornerShape(28.dp)`.
-- **GlassCardCompact**: `compactCardCornerRadius` = 8 dp.
+- **GlassCard** / **GlassSurface**: corner = **16 dp**; constant `GlassCardShape` = `RoundedCornerShape(16.dp)`.
+- **GlassCardCompact**: **8 dp** radius.
 - Default `contentPadding`: 16 dp (compact: 12 dp).
-- Background: `Color.White.copy(alpha = glassBackgroundAlpha)`.
-- Border: white at `glassBorderAlpha`, or `PrimaryBlue` at `glassBorderPrimaryAlpha` when `usePrimaryBorder = true`.
-- **glassEffect** modifier: static `GlassWhite` + 1 dp border (`GlassBorder` or `GlassBorderPrimary`), clipped to 28 dp shape.
+- Background: solid `surface` `#ffffff` (light) or `surface-container` (dark).
+- Border: **2 dp** solid `#000000`; `usePrimaryBorder = true` → **2 dp** `#630ed4` border.
+- **No** `glassEffect` alpha modifier — removed in target theme.
 
 ### 6.2 Interactive Elements
 
-- Optional `onClick`: `clickable(indication = null)`.
+- Optional `onClick`: `clickable` with press = **2dp translate** + instant 10% darken.
 - `GlassSurface` uses M3 `Surface` with `shadowElevation = 0.dp`.
 
 ### 6.3 States
 
 | State | Visual |
 |-------|--------|
-| **Default** | Frosted white fill + hairline border |
-| **Pressed/Highlighted** | No built-in pressed tint (indication null) |
-| **Active** | `usePrimaryBorder` → primary-tinted border |
-| **Focus** | N/A |
-| **Disabled** | Non-clickable when `onClick` null |
+| **Default** | Solid fill + 2dp `#000` border |
+| **Pressed/Highlighted** | 2dp translate down-right + 10% darken |
+| **Active** | `usePrimaryBorder` → `#630ed4` border |
+| **Focus** | 2dp `primary` ring |
+| **Disabled** | Non-clickable; 38% content alpha |
 | **Loading** | N/A |
 | **Empty** | N/A |
 | **Error** | N/A |
@@ -326,12 +342,12 @@ Shared by `GlassModalBottomSheet`, `GlassAdaptiveBottomSheet`, `UnifiedPopup`, `
 
 ### 6.5 Flow Sequence
 
-`LocalPlatformStyle` → shape/alpha/border → optional click.
+`LocalPlatformStyle` → shape/border → optional click with mechanical press.
 
 ### 6.6 A11y & Responsive
 
-- 28 dp corners; compact 8 dp for dense rows.
-- iOS 0.5 dp borders vs Android 1 dp.
+- 16 dp corners on standard cards; 8 dp for dense rows.
+- 2 dp borders on both platforms.
 
 ---
 
@@ -339,27 +355,28 @@ Shared by `GlassModalBottomSheet`, `GlassAdaptiveBottomSheet`, `UnifiedPopup`, `
 
 ### 7.1 Layout / Container
 
-- **AdaptiveCard**: corner = `getAdaptiveCornerRadius()` (28 dp); padding = 16 dp.
-- Surface alpha: iOS 0.85, Android 0.8 on `MaterialTheme.colorScheme.surface`.
-- Border: `PrimaryBlue` at iOS 0.35 / Android 0.5 alpha; width = `cardBorderWidth`.
-- **AdaptiveSurface**: bottom-rounded sheet shape, surface 80% alpha.
-- **AdaptiveBackground**: transparent `Box`.
+- **AdaptiveCard**: corner = **16 dp**; padding = 16 dp.
+- Surface: solid `surface` — **no alpha**.
+- Border: **2 dp** `#000000`.
+- **AdaptiveSurface**: bottom-rounded sheet shape, solid `surface`.
+- **AdaptiveBackground**: flat `background` `#f9f9f9` (no transparent layer).
 
 ### 7.2 Interactive Elements
 
 - **AdaptiveButton**:
-  - iOS: filled `PrimaryBlue` 15% container, `PrimaryBlue` content, 0 elevation, corner `buttonCornerRadius` (12 dp).
-  - Android: `primaryContainer` 50% + 1 dp `PrimaryBlue` 50% border, corner 16 dp.
+  - Primary: solid `#630ed4` fill, `#ffffff` bold text, **8 dp** corner, **0 elevation**.
+  - Secondary: solid `#ffffff` fill, **2 dp** `#000` border, `#1a1c1c` text.
+  - Press: **2dp translate** + instant 10% darken.
 
 ### 7.3 States
 
 | State | AdaptiveButton |
 |-------|----------------|
-| **Default** | See above |
-| **Pressed/Highlighted** | M3 button pressed state (0 elevation iOS) |
+| **Default** | Solid primary or bordered secondary |
+| **Pressed/Highlighted** | 2dp translate + instant darken |
 | **Active** | N/A |
-| **Focus** | M3 focus ring |
-| **Disabled** | `disabledContainerColor` = Gray 8% (iOS) / 10% (Android); `disabledContentColor` = Gray |
+| **Focus** | 2dp `primary` ring |
+| **Disabled** | `surface-container` fill, 38% content |
 | **Loading** | N/A |
 | **Empty** | N/A |
 | **Error** | N/A |
@@ -371,25 +388,24 @@ Shared by `GlassModalBottomSheet`, `GlassAdaptiveBottomSheet`, `UnifiedPopup`, `
 
 ### 7.5 Flow Sequence
 
-Platform branch inside composable → `RoundedCornerShape(style.buttonCornerRadius)`.
+Platform branch inside composable → `RoundedCornerShape(8.dp)` for buttons, `16.dp` for cards.
 
 ### 7.6 A11y & Responsive
 
-- Disabled gray is explicit (not theme onSurface disabled).
+- Disabled state uses explicit gray — not theme onSurface disabled alone.
 
 ---
 
-## 8. LiquidGlassPill
+## 8. LiquidGlassPill (→ Solid Pill)
 
 ### 8.1 Layout / Container
 
-- Default `cornerRadiusDp` = **24** (used by grabber wrapper at 22, toast overlay at 28).
+- Default `cornerRadiusDp` = **24** (grabber wrapper 22, toast overlay 28).
 - Inner padding: horizontal 14 dp, vertical 8 dp.
-- Vertical gradient on `scheme.surface`: top alpha lerp 0.58→0.90, bottom 0.34→0.78 by `backgroundStrength` (0–1).
-- Border: `onSurface` at alpha lerp 0.08→0.18.
-- Optional backing layer: `scheme.background` at alpha lerp 0→0.42 when `backgroundStrength` > 0.
-- Procedural noise: density default 0.04, up to 4000 dots, white 2–8% alpha, 0.5 px radius.
-- Caller may stack `Modifier.blur` externally for true backdrop blur (API 31+).
+- Background: solid `surface` or `surface-container` — **no vertical gradient**.
+- Border: **2 dp** `#000000`.
+- **No** procedural noise layer.
+- **No** external `Modifier.blur`.
 
 ### 8.2 Interactive Elements
 
@@ -397,29 +413,29 @@ Platform branch inside composable → `RoundedCornerShape(style.buttonCornerRadi
 
 ### 8.3 States
 
-| State | `backgroundStrength` |
-|-------|----------------------|
-| **Default** | 0 — translucent map overlay |
-| **Pressed/Highlighted** | N/A |
+| State | Visual |
+|-------|--------|
+| **Default** | Solid pill on map overlay |
+| **Pressed/Highlighted** | Child button press semantics |
 | **Active** | N/A |
 | **Focus** | N/A |
 | **Disabled** | N/A |
 | **Loading** | N/A |
 | **Empty** | N/A |
 | **Error** | N/A |
-| **Success** | 0.85 — `UnifiedToastOverlay` readable over content |
+| **Success** | `UnifiedToastOverlay` — solid `surface` + border |
 
 ### 8.4 Micro-copy
 
-- Used for map memory count pills, toast overlay body, grabber chrome.
+- Map memory count pills, toast overlay body, grabber chrome.
 
 ### 8.5 Flow Sequence
 
-Clip → gradient → border → noise canvas → padded content.
+Clip → solid fill → border → padded content.
 
 ### 8.6 A11y & Responsive
 
-- Noise fallback ensures glass read at small sizes on Android < API 31.
+- High-contrast border ensures pill read at small sizes without blur fallback.
 
 ---
 
@@ -428,22 +444,22 @@ Clip → gradient → border → noise canvas → padded content.
 ### 9.1 Layout / Container
 
 - Full width; padding top 10 dp, bottom 6 dp.
-- Wraps `LiquidGlassPill(cornerRadiusDp = 22, noiseDensity = 0.035f)`.
-- Inner pill bar: 40×4 dp, `RoundedCornerShape(50)`, white 42% alpha.
+- Inner bar: 40×4 dp, `RoundedCornerShape(50)`, solid `#000000` at 40% (light) / `#f0f1f1` at 60% (dark).
+- **No** `LiquidGlassPill` wrapper — plain centered bar on solid sheet header.
 
 ### 9.2 Interactive Elements
 
-- Drag handle for `GlassModalBottomSheet` and `GlassAdaptiveBottomSheet`; gesture handled by sheet state.
+- Drag handle for modal/adaptive sheets; gesture handled by sheet state.
 
 ### 9.3 States
 
 | State | Behavior |
 |-------|----------|
-| **Default** | Visible grabber pill |
+| **Default** | Visible grabber bar |
 | **Pressed/Highlighted** | Sheet drag offset (parent) |
 | **Active** | Sheet expanding |
 | **Focus** | N/A |
-| **Disabled** | Hidden when sheet non-draggable (parent) |
+| **Disabled** | Hidden when sheet non-draggable |
 | **Loading** | N/A |
 | **Empty** | N/A |
 | **Error** | N/A |
@@ -459,7 +475,7 @@ Sheet `dragHandle = { GlassSheetGrabber() }`.
 
 ### 9.6 A11y & Responsive
 
-- 40 dp wide × 4 dp tall affordance centered in pill.
+- 40 dp wide × 4 dp tall affordance centered.
 
 ---
 
@@ -467,26 +483,26 @@ Sheet `dragHandle = { GlassSheetGrabber() }`.
 
 ### 10.1 Layout / Container
 
-- `containerColor` = `OledBlack`; `contentColor` = `OnOled`.
-- Shape: top corners `SheetTopCorner` (32 dp).
-- `tonalElevation` = 0.
-- Column body full width on `OledBlack`.
+- `containerColor` = opaque `surface`; `contentColor` = `on-surface`.
+- Shape: top corners **16 dp**.
+- `tonalElevation` = 0; **no shadow**.
+- Border: **2 dp** `#000` on top and sides.
 - Default `sheetState` = `rememberGlassModalBottomSheetState()` (travel 420 dp).
-- Scrim: `Color.Black` alpha = `0.42 + (ScrimBaseAlpha - 0.42) * expandAmount`, clamped 0.38–0.58.
+- Scrim: `Color.Black` at **0.40** flat — no blur, no animated scrim gradient.
 
 ### 10.2 Interactive Elements
 
 - `GlassSheetGrabber` drag handle.
-- `confirmValueChange` on hide: commit if offset > 50% travel OR velocity > 800 px/s (`GlassGestureCommitFraction`, `GlassGestureFlickVelocityPxPerSec`).
+- `confirmValueChange` on hide: commit if offset > 50% travel OR velocity > 800 px/s.
 
 ### 10.3 States
 
 | State | Behavior |
 |-------|----------|
 | **Default** | Hidden / collapsed |
-| **Pressed/Highlighted** | Dragging — scrim deepens with expand |
+| **Pressed/Highlighted** | Dragging — scrim static at 40% |
 | **Active** | Expanded sheet |
-| **Focus** | N/A |
+| **Focus** | Field focus rings inside sheet |
 | **Disabled** | N/A |
 | **Loading** | N/A |
 | **Empty** | Consumer empty state |
@@ -495,16 +511,16 @@ Sheet `dragHandle = { GlassSheetGrabber() }`.
 
 ### 10.4 Micro-copy
 
-- Consumer content on OLED shell.
+- Consumer content on opaque shell.
 
 ### 10.5 Flow Sequence
 
-Offset snapshot → scrim alpha → `ModalBottomSheet` → grabber + column content.
+`ModalBottomSheet` → grabber + column content; scrim is flat dim.
 
 ### 10.6 A11y & Responsive
 
 - `BottomSheetDefaults.windowInsets` default for safe area.
-- Flick-dismiss threshold 800 px/s (iOS-style).
+- Flick-dismiss threshold 800 px/s.
 
 ---
 
@@ -512,12 +528,10 @@ Offset snapshot → scrim alpha → `ModalBottomSheet` → grabber + column cont
 
 **Sources:** `ui/components/ClickBottomSheet.kt`, `ui/components/GlassAdaptiveBottomSheet.kt`, `ui/sheet/MapBeaconSheetRoot.kt`
 
-Two sheet families coexist:
-
-| Family | Entry points | Shell |
-|--------|--------------|-------|
-| **Click sheets** | `ClickPlatformSheet`, `ClickActionBottomSheet`, `ClickFormBottomSheet` | `MapBeaconSheetRoot` (iOS native medium detent; Android Calf half-height cap) |
-| **Glass adaptive** | `GlassAdaptiveBottomSheet` | Calf `AdaptiveBottomSheet` OLED shell (search, etc.) |
+| Family | Entry points | Target shell |
+|--------|--------------|--------------|
+| **Click sheets** | `ClickPlatformSheet`, `ClickActionBottomSheet`, `ClickFormBottomSheet` | Opaque `surface` + 2dp border |
+| **Glass adaptive** | `GlassAdaptiveBottomSheet` | Opaque `surface` + 2dp border |
 
 ### 11.1 Layout / Container — Click sheets
 
@@ -528,40 +542,35 @@ Two sheet families coexist:
 | `ContentHorizontalPadding` | 20 dp |
 | `ContentBottomPadding` | 24 dp |
 | `TitleBottomSpacing` | 12 dp |
-| `ScrimAlpha` | 0.55 |
+| `ScrimAlpha` | **0.40** (flat, no blur) |
 
 **Hierarchy:**
 
 ```
 ClickActionBottomSheet / ClickFormBottomSheet
  └── ClickPlatformSheet
-      └── MapBeaconSheetRoot (OLED black, scrim Black@55%, zero window insets)
+      └── MapBeaconSheetRoot (opaque surface, scrim Black@40%, zero window insets)
            └── ClickSheetDialogChrome (grabber + semantic color remap)
                 └── Column content
 ```
 
-**`ClickSheetChrome`:** optional `titleLarge` SemiBold title in `OnOled`, then content; bottom padding 24 dp.
-
-**Usage:** Short menus → `ClickActionBottomSheet` (message/connection/hub actions). Tall forms → `ClickFormBottomSheet` (profile, availability, connection context, verified click).
-
-**`GlassAdaptiveBottomSheet`:** Calf adaptive with `OledBlack` / `OnOled`; default scrim `ScrimBaseAlpha` (0.58); positional threshold 56 dp; velocity 800 px/s; default `dragHandle` = `GlassSheetGrabber()`.
+**`GlassAdaptiveBottomSheet`:** Calf adaptive with opaque `surface` / `on-surface`; scrim 40%; positional threshold 56 dp; velocity 800 px/s.
 
 ### 11.2 Interactive Elements
 
 - Platform drag-to-dismiss and back dismiss via sheet root.
 - Grabber via `ClickSheetDialogChrome` / `GlassSheetGrabber`.
-- `UnifiedSearchSheet` uses `GlassAdaptiveBottomSheet` with `contentWindowInsets = WindowInsets(0)`.
 
 ### 11.3 States
 
 | State | Behavior |
 |-------|----------|
-| **Default** | OLED sheet expanded / medium detent |
-| **Pressed/Highlighted** | Drag offset; border may use `GlassBorderPressed` on chrome |
-| **Active** | Sheet visible; underlay dimmed |
-| **Focus** | Focusable fields inside form sheets |
+| **Default** | Opaque sheet expanded / medium detent |
+| **Pressed/Highlighted** | 2dp translate on row press |
+| **Active** | Sheet visible; flat dim underlay |
+| **Focus** | 2dp primary ring on fields |
 | **Disabled** | N/A at shell |
-| **Loading** | Caller shows spinner inside content |
+| **Loading** | Caller spinner inside content |
 | **Empty** | Caller empty copy |
 | **Error** | Caller inline error |
 | **Success** | Dismiss after action |
@@ -569,24 +578,15 @@ ClickActionBottomSheet / ClickFormBottomSheet
 ### 11.4 Micro-copy
 
 - Titles supplied by callers (`ClickSheetChrome(title = …)`).
-- Search host copy: see [11-search.md](11-search.md).
 
 ### 11.5 Flow Sequence
 
-```
-Caller opens Action/Form sheet
- → MapBeaconSheetRoot presents platform sheet
- → User fills / taps action OR drags/backs to dismiss
- → onDismissRequest
-```
-
-Glass adaptive: `rememberGlassAdaptiveSheetState` → `GlassAdaptiveBottomSheet` → consumer column.
+Caller opens sheet → platform presents opaque shell → dismiss on action or drag.
 
 ### 11.6 A11y & Responsive
 
-- iOS: native page sheet + theme re-injection into separate `ComposeUIViewController`.
+- iOS: native page sheet + theme re-injection.
 - Android: Calf adaptive, half-height cap for Click sheets.
-- No custom live-region on sheet chrome; rely on titled content.
 
 ---
 
@@ -594,42 +594,26 @@ Glass adaptive: `rememberGlassAdaptiveSheetState` → `GlassAdaptiveBottomSheet`
 
 ### 12.1 Layout / Container
 
-**UnifiedPopupTokens**:
+**UnifiedPopupCard**: `BentoExteriorCorner` (**16 dp**), **2 dp** `#000` border, solid `surface` fill; padding H 18 / V 16; margin 22 dp.
 
-| Token | Value |
-|-------|-------|
-| `FadeInMillis` | 320 |
-| `FadeOutMillis` | 220 |
-| `ScaleInInitial` | 0.92 |
-| `ScaleOutTarget` | 0.94 |
-| `ContentClearDelayMillis` | 240 |
-| `OverlayZIndex` | 80 |
+**UnifiedPopupOverlay**: full-screen scrim **40%** black — no blur.
 
-**UnifiedPopupOverlay**: full-screen `Box` z-index 80; scrim `Black` at `scrimAlpha` default `ScrimBaseAlpha` (0.58); centered content.
-
-**UnifiedPopupCard**: `BentoExteriorCorner` (28 dp), 1 dp `GlassBorder`, `OledBlack` fill; padding H 18 / V 16; default horizontal margin 22 dp (alert uses 28 dp).
-
-**UnifiedPopupFormDialog**: max width 360 dp default (null = full width for pickers); surface padding 28 dp; inner padding 24 dp; `tonalElevation` 6 dp on OLED surface.
-
-**UnifiedPopupMotion.Picker**: fade in 280 / out 320; scale 0.95→0.97; slide enter 6% / exit 5%.
+Motion tokens unchanged (`FadeInMillis` 320, `ScaleInInitial` 0.92, etc.).
 
 ### 12.2 Interactive Elements
 
 - Scrim tap dismisses (animated).
 - `PlatformBackHandler` when overlay visible.
-- `LocalUnifiedPopupAnimatedDismiss` for in-card buttons (fade-out before `onDismissRequest`).
-- `UnifiedPopupTextButton`: M3 `TextButton` with configurable `contentColor`.
-- Alert: optional icon, title (`titleMedium` OnOled), text (`bodyMedium` OnOledMuted), action row end-aligned.
-- Form: title semibold `OnOled`; Cancel (muted) + Confirm (OnOled).
+- Alert: title (`titleMedium` on-surface), text (`body-md` on-surface-variant).
 
 ### 12.3 States
 
 | State | Behavior |
 |-------|----------|
 | **Default** | Hidden |
-| **Pressed/Highlighted** | Button pressed states |
-| **Active** | Overlay `targetState` true |
-| **Focus** | `Popup` focusable on alert variant |
+| **Pressed/Highlighted** | Button mechanical press |
+| **Active** | Overlay visible |
+| **Focus** | `Popup` focusable on alert |
 | **Disabled** | N/A |
 | **Loading** | Consumer body |
 | **Empty** | N/A |
@@ -639,18 +623,15 @@ Glass adaptive: `rememberGlassAdaptiveSheetState` → `GlassAdaptiveBottomSheet`
 ### 12.4 Micro-copy
 
 - Default dismiss: `"Cancel"` (`UnifiedPopupFormDialog`).
-- Titles/confirm labels: consumer-provided strings.
 
 ### 12.5 Flow Sequence
 
-1. `visible` true → `transitionState.targetState = true`.
-2. Scrim fade + content scale/fade (optional slide for Picker motion).
-3. Dismiss request → animate out → `onDismissRequest` on idle.
+Animate in → interact → animate out → `onDismissRequest`.
 
 ### 12.6 A11y & Responsive
 
 - `PopupProperties(focusable, dismissOnBackPress, dismissOnClickOutside)` on alert.
-- Form dialog `contentMaxWidth` 360 dp on phones; null for full-width date/time wheels.
+- Form dialog `contentMaxWidth` 360 dp on phones.
 
 ---
 
@@ -658,62 +639,49 @@ Glass adaptive: `rememberGlassAdaptiveSheetState` → `GlassAdaptiveBottomSheet`
 
 ### 13.1 Layout / Container
 
-**UnifiedToastTokens**:
+**UnifiedToastHost** (compact pill):
+
+- Shape: `RoundedCornerShape(14.dp)` with **2 dp** `#000` border.
+- Background: solid `surface` or `inverse-surface` (dark toast on light app).
+- **No** `GlassSurface` alpha variant.
+
+**UnifiedToastOverlay**: solid bordered pill (`cornerRadiusDp` 28), **no** `LiquidGlassPill` gradient.
 
 | Token | Value |
 |-------|-------|
-| `EnterMillis` | 240 (iOS: +40 = **280**) |
-| `ExitMillis` | 180 |
 | `DefaultDurationMs` | **2400** |
-| `CompactCornerDp` | 14 |
-| `OverlayCornerDp` | 28 |
 | `MaxWidthDp` | 300 |
-
-**UnifiedToastHost** (compact pill):
-
-- Alignment: `CenterEnd` default; `Center` when `opaque = true`.
-- Background: `GlassSheetTokens.GlassSurface` OR opaque `OledBlack` + `GlassBorder`.
-- Padding: H 14 / V 10; `bodyMedium`, `OnOled` text.
-
-**UnifiedToastOverlay** (center nudge):
-
-- Full-bleed `Box`; `LiquidGlassPill` corner 28, `backgroundStrength` 0.85.
-- Column: `bodyLarge` onSurface message + `TextButton` dismiss.
 
 ### 13.2 Interactive Elements
 
-- Compact: auto-dismiss via `UnifiedToastState.show(scope, text, durationMs)`.
-- Overlay: `TextButton` calls `onDismiss`.
-- `UnifiedToastState.dismiss()` cancels job and clears message.
+- Compact: auto-dismiss via `UnifiedToastState.show`.
+- Overlay: `TextButton` dismiss — default **"Got it"**.
 
 ### 13.3 States
 
 | State | Behavior |
 |-------|----------|
-| **Default** | Hidden (`message == null`) |
-| **Pressed/Highlighted** | TextButton pressed (overlay) |
+| **Default** | Hidden |
+| **Pressed/Highlighted** | TextButton mechanical press |
 | **Active** | `AnimatedVisibility` visible |
 | **Focus** | N/A |
 | **Disabled** | N/A |
 | **Loading** | N/A |
 | **Empty** | Hidden |
-| **Error** | Consumer error string in pill |
-| **Success** | Consumer success string; auto-hide 2400 ms |
+| **Error** | Error string in bordered pill |
+| **Success** | Success string; auto-hide 2400 ms |
 
 ### 13.4 Micro-copy
 
-- Overlay default dismiss label: **"Got it"** (`UnifiedToastOverlay` `dismissLabel` parameter).
+- Overlay default dismiss: **"Got it"**.
 
 ### 13.5 Flow Sequence
 
-1. `show()` sets message, launches delay `DefaultDurationMs`.
-2. Enter: slide vertical 1/3 + fade (compact); spring fade+scale (overlay).
-3. Exit: reverse; overlay dismiss invokes `onDismiss`.
+`show()` → enter animation → delay → exit.
 
 ### 13.6 A11y & Responsive
 
 - Max width 300 dp on compact toast.
-- iOS enter 280 ms vs Android 240 ms.
 
 ---
 
@@ -721,68 +689,50 @@ Glass adaptive: `rememberGlassAdaptiveSheetState` → `GlassAdaptiveBottomSheet`
 
 ### 14.1 Layout / Container
 
-**Scale**: `REL = 0.8` — all bubble layout dp values = design dp × 0.8.
-
-| Token | Scaled value (design × 0.8) |
-|-------|----------------------------|
-| `contentMaxWidth` | 450 dp → 360 dp |
-| `cornerMain` | 27 → 21.6 dp |
-| `cornerTailSmall` | 8 → 6.4 dp |
-| `bubblePaddingHorizontal` | 15 → 12 dp |
-| `bubblePaddingVertical` | 12 → 9.6 dp |
-| `messageMaxWidthToParentFraction` | 0.75 |
-| `peerAvatarSize` | 36 → 28.8 dp |
-| Reaction chip corner 18 → 14.4 dp | etc. |
-
-**Typography multipliers** (on M3 roles):
-
-- Message/reply: `bodyMedium` / `bodySmall` / `labelSmall` × `1.3 × REL` (1.04×).
-- Edited footnote: × `1.35 × REL` (1.08×).
-- Audio time labels: × `1.5 × REL`.
+**Scale**: `REL = 0.8` — layout dp values = design dp × 0.8 (unchanged).
 
 **Sent bubble** (`ChatMessageBubble.kt`):
 
-- Fill: `Brush.linearGradient(PrimaryBlue → LightBlue)`.
+- Fill: solid `primary` `#630ed4` — **no linear gradient**.
+- Text: `on-primary` `#ffffff`.
 - Shape: `RoundedCornerShape(cornerMain)`.
 
 **Received bubble**:
 
-- Fill: `surfaceVariant` at **90%** alpha.
-- Border: 1 dp `PrimaryBlue` at **18%** alpha.
+- Fill: solid `surface-variant` `#e2e2e2` (light) / `#3a3c3c` (dark).
+- Border: **2 dp** `#000000` at 100%.
 - Same corner main radius.
 
 ### 14.2 Interactive Elements
 
-- Long-press reactions, reply blocks, media attachments use same token padding.
-- Send button gradient: `PrimaryBlue → LightBlue` when `canSend`; else flat `surfaceVariant`.
+- Send button: solid `primary` when `canSend`; else flat `surface-variant`.
+- Long-press reactions, reply blocks unchanged behaviorally.
 
 ### 14.3 States
 
 | State | Sent | Received |
 |-------|------|----------|
-| **Default** | Violet gradient | Gray variant 90% + primary border 18% |
-| **Pressed/Highlighted** | Gesture handlers on bubble | Same |
+| **Default** | Solid `#630ed4` | Solid `surface-variant` + 2dp border |
+| **Pressed/Highlighted** | 2dp translate on bubble actions | Same |
 | **Active** | Selected for reply | Same |
-| **Focus** | Composer field: primary border 55–65% | N/A |
-| **Disabled** | Send gradient → surfaceVariant | N/A |
-| **Loading** | Photo placeholder surfaceVariant 35% | Same |
+| **Focus** | Composer: 2dp `primary` border | N/A |
+| **Disabled** | Send → `surface-variant` | N/A |
+| **Loading** | Photo placeholder `surface-container` | Same |
 | **Empty** | N/A | N/A |
-| **Error** | Failed send states in composer | N/A |
-| **Success** | Sent gradient | N/A |
+| **Error** | Failed send in composer | N/A |
+| **Success** | Solid primary sent bubble | N/A |
 
 ### 14.4 Micro-copy
 
 - `"edited"` footnote via `chatBubbleEditedFootnoteStyle()`.
-- Typing indicator dots bounce `6 × REL` dp peak.
 
 ### 14.5 Flow Sequence
 
-Measure row width → cap at 75% → apply scaled padding → paint sent gradient or received variant.
+Measure row width → cap at 75% → paint solid fills.
 
 ### 14.6 A11y & Responsive
 
 - Bubble text scales with M3 × REL multiplier.
-- Peer avatar 28.8 dp at REL 0.8.
 
 ---
 
@@ -790,22 +740,22 @@ Measure row width → cap at 75% → apply scaled padding → paint sent gradien
 
 ```
 PlatformThemeProvider
-├── clickColorScheme (Color.kt + M3)
-├── clickTypography (Manrope M3 scale)
-└── PlatformStyleProvider (iOS/Android deltas)
-    ├── GlassCard / GlassCardCompact (28 dp / 8 dp)
-    ├── AdaptiveCard / AdaptiveButton
-    ├── LiquidGlassPill (default 24 dp corner)
+├── clickColorScheme (Functional Clarity palette)
+├── clickTypography (Manrope FC scale)
+└── PlatformStyleProvider (2dp borders, press translate)
+    ├── GlassCard → bordered card (16dp / 8dp compact)
+    ├── AdaptiveCard / AdaptiveButton → solid fills
+    ├── LiquidGlassPill → solid pill
     └── ScreenChrome (AppScreenDefaults)
 
-GlassSheetTokens (OLED sheets)
-├── GlassModalBottomSheet (Material)
-├── GlassAdaptiveBottomSheet (Calf)
+GlassSheetTokens → opaque sheets + 40% scrim
+├── GlassModalBottomSheet
+├── GlassAdaptiveBottomSheet
 ├── UnifiedPopup* (z-index 80)
-└── UnifiedToast* (compact + overlay)
+└── UnifiedToast* (bordered compact + overlay)
 
 ChatBubbleTokens (REL 0.8)
-└── ChatMessageBubble sent/received paint
+└── ChatMessageBubble solid sent/received paint
 ```
 
 ---
@@ -822,4 +772,4 @@ ChatBubbleTokens (REL 0.8)
 
 ---
 
-*Document reflects as-built code. No web or backend scope. No redesign proposals.*
+*Target-state Functional Clarity specification. Compose `Glass*` API names retained where churn is costly; visual output is neo-brutalist opaque surfaces. No web or backend scope.*

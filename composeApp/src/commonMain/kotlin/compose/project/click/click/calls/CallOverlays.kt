@@ -54,7 +54,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -63,8 +62,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.getPlatform
+import compose.project.click.click.ui.components.GlassSheetTokens
+import compose.project.click.click.ui.theme.BorderHardDark
 import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.ui.theme.SurfaceDark
 import kotlin.math.roundToInt
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 
@@ -119,9 +121,10 @@ fun CallPreviewOverlay(
                 .widthIn(max = 324.dp)
                 .fillMaxWidth(),
             shape = RoundedCornerShape(28.dp),
-            color = Color(0xFF08101F).copy(alpha = 0.94f),
-            tonalElevation = 12.dp,
-            shadowElevation = 20.dp,
+            color = GlassSheetTokens.OledBlack,
+            border = androidx.compose.foundation.BorderStroke(1.dp, BorderHardDark),
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
@@ -144,8 +147,8 @@ fun CallPreviewOverlay(
                         .padding(top = 14.dp)
                         .size(72.dp)
                         .clip(RoundedCornerShape(36.dp))
-                        .background(Brush.linearGradient(listOf(PrimaryBlue, LightBlue)))
-                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(36.dp))
+                        .background(PrimaryBlue)
+                        .border(1.dp, BorderHardDark, RoundedCornerShape(36.dp))
                         .alpha(pulseInner),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -227,7 +230,7 @@ fun CallPreviewOverlay(
                                 modifier = Modifier
                                     .size(52.dp)
                                     .clip(RoundedCornerShape(26.dp))
-                                    .background(Brush.linearGradient(listOf(PrimaryBlue, LightBlue)))
+                                    .background(PrimaryBlue)
                             ) {
                                 Icon(
                                     imageVector = if (isVideoCall) Icons.Filled.Videocam else Icons.Filled.Call,
@@ -244,7 +247,7 @@ fun CallPreviewOverlay(
                             modifier = Modifier
                                 .size(52.dp)
                                 .clip(RoundedCornerShape(26.dp))
-                                .background(Brush.linearGradient(listOf(PrimaryBlue, LightBlue)))
+                                .background(PrimaryBlue)
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Check,
@@ -311,9 +314,10 @@ fun ActiveCallOverlay(
                     }
                 },
             shape = RoundedCornerShape(28.dp),
-            color = Color(0xFF050A16).copy(alpha = 0.94f),
-            tonalElevation = 12.dp,
-            shadowElevation = 24.dp,
+            color = GlassSheetTokens.OledBlack,
+            border = androidx.compose.foundation.BorderStroke(1.dp, BorderHardDark),
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
@@ -345,8 +349,8 @@ fun ActiveCallOverlay(
                             .heightIn(min = 180.dp)
                             .aspectRatio(1.2f)
                             .clip(RoundedCornerShape(28.dp))
-                            .background(Color.White.copy(alpha = 0.08f))
-                            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(28.dp)),
+                            .background(SurfaceDark)
+                            .border(1.dp, BorderHardDark, RoundedCornerShape(28.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         CallVideoSurface(
@@ -371,8 +375,8 @@ fun ActiveCallOverlay(
                                 .padding(12.dp)
                                 .size(width = 96.dp, height = 136.dp)
                                 .clip(RoundedCornerShape(20.dp))
-                                .background(Color.White.copy(alpha = 0.1f))
-                                .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(20.dp)),
+                                .background(SurfaceDark)
+                                .border(1.dp, BorderHardDark, RoundedCornerShape(20.dp)),
                             contentAlignment = Alignment.Center
                         ) {
                             CallVideoSurface(
@@ -395,8 +399,8 @@ fun ActiveCallOverlay(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(24.dp))
-                            .background(Color.White.copy(alpha = 0.06f))
-                            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(24.dp))
+                            .background(SurfaceDark)
+                            .border(1.dp, BorderHardDark, RoundedCornerShape(24.dp))
                             .padding(horizontal = 14.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -405,7 +409,7 @@ fun ActiveCallOverlay(
                             modifier = Modifier
                                 .size(56.dp)
                                 .clip(RoundedCornerShape(28.dp))
-                                .background(Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))),
+                                .background(PrimaryBlue),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(

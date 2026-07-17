@@ -79,7 +79,7 @@ class UnifiedToastState {
 fun rememberUnifiedToastState(): UnifiedToastState = remember { UnifiedToastState() }
 
 /**
- * Compact glass toast pill (connections FAB row, chat composer feedback, etc.).
+ * Compact toast pill — opaque surface + hard border (connections FAB row, chat composer feedback, etc.).
  */
 @Composable
 fun UnifiedToastHost(
@@ -117,12 +117,13 @@ fun UnifiedToastHost(
                 } else {
                     Modifier
                         .clip(toastShape)
-                        .background(GlassSheetTokens.GlassSurface)
+                        .background(GlassSheetTokens.GlassSurface, toastShape)
+                        .border(1.dp, GlassSheetTokens.GlassBorder, toastShape)
                 }
                 Text(
                     text = text,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = GlassSheetTokens.OnOled,
+                    color = if (opaque) GlassSheetTokens.OnOled else MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier
                         .widthIn(max = UnifiedToastTokens.MaxWidthDp.dp)
                         .then(backgroundModifier)

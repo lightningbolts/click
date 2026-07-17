@@ -82,7 +82,7 @@ private fun PresenceSubtitleRow(online: Boolean) {
 }
 
 /**
- * Floating liquid-glass header island. [collapseFraction] is 0 (large) → 1 (compact) driven by
+ * Floating Functional Clarity header island. [collapseFraction] is 0 (large) → 1 (compact) driven by
  * [AppScreenScaffold] scroll position.
  */
 @Composable

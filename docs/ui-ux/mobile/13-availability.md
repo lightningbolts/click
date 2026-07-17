@@ -4,6 +4,8 @@
 **Source:** `ui/components/AvailabilitySheet.kt`, `ui/components/AvailabilityComponents.kt`, `viewmodel/AvailabilityViewModel.kt`, `data/models/AvailabilityModels.kt`  
 **Out of scope:** Web, backend APIs, redesign.
 
+**Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: invented from design system.
+
 ---
 
 ## ASCII hierarchy
@@ -34,7 +36,7 @@ AvailabilityComponents (molecules — used on profile/settings/home surfaces)
 
 | Property | Value |
 |----------|-------|
-| Shell | `ClickFormBottomSheet` on `GlassSheetTokens.OledBlack` |
+| Shell | `ClickFormBottomSheet` on opaque `surface` + 2dp `#000` border |
 | Padding | 24dp horizontal, 16dp vertical |
 | Section spacing | 16dp vertical |
 | Timeframe chips | `FlowRow`, 8dp gaps |

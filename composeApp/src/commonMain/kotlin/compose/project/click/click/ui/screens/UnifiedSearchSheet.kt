@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
@@ -49,13 +51,15 @@ import compose.project.click.click.ui.components.rememberGlassAdaptiveSheetState
 import compose.project.click.click.ui.components.ClickLogoPulse
 import compose.project.click.click.ui.components.GlassAdaptiveBottomSheet
 import compose.project.click.click.ui.components.GlassSheetTokens
+import compose.project.click.click.ui.theme.BorderHardDark
 import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.ui.theme.SurfaceDark
 import compose.project.click.click.viewmodel.GlobalSearchViewModel
 import compose.project.click.click.viewmodel.SearchResultCategory
 import kotlinx.coroutines.delay
 
 /**
- * In-context global search presented as a glass adaptive bottom sheet (replaces [GlobalSearchScreen] routing).
+ * In-context global search presented as a Functional Clarity adaptive bottom sheet (replaces [GlobalSearchScreen] routing).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -133,7 +137,8 @@ private fun UnifiedSearchSheetContent(
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            color = Color.White.copy(alpha = 0.08f),
+            color = SurfaceDark,
+            border = BorderStroke(1.dp, BorderHardDark),
         ) {
             TextField(
                 modifier = Modifier
@@ -244,8 +249,8 @@ private fun UnifiedSearchSheetContent(
 
 @Composable
 private fun searchFilterChipColors() = FilterChipDefaults.filterChipColors(
-    selectedContainerColor = PrimaryBlue.copy(alpha = 0.35f),
+    selectedContainerColor = PrimaryBlue,
     selectedLabelColor = GlassSheetTokens.OnOled,
-    containerColor = Color.White.copy(alpha = 0.06f),
-    labelColor = GlassSheetTokens.OnOled.copy(alpha = 0.85f),
+    containerColor = SurfaceDark,
+    labelColor = GlassSheetTokens.OnOled,
 )

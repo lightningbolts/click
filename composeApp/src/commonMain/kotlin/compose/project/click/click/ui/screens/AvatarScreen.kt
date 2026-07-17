@@ -42,7 +42,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -52,7 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import compose.project.click.click.ui.chat.rememberChatMediaPickers
-import compose.project.click.click.ui.theme.LightBlue
+import compose.project.click.click.ui.theme.BorderHard
 import compose.project.click.click.ui.theme.PrimaryBlue
 import kotlinx.coroutines.launch
 
@@ -114,15 +113,7 @@ fun AvatarScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        PrimaryBlue.copy(alpha = 0.16f),
-                        MaterialTheme.colorScheme.background,
-                        MaterialTheme.colorScheme.background,
-                    ),
-                ),
-            ),
+            .background(MaterialTheme.colorScheme.background),
     ) {
         Column(
             modifier = Modifier
@@ -204,8 +195,8 @@ fun AvatarScreen(
                 colors = ButtonDefaults.buttonColors(
                     containerColor = PrimaryBlue,
                     contentColor = Color.White,
-                    disabledContainerColor = PrimaryBlue.copy(alpha = 0.32f),
-                    disabledContentColor = Color.White.copy(alpha = 0.8f),
+                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 ),
             ) {
                 if (uploading) {
@@ -248,15 +239,8 @@ private fun AvatarPreview(bytes: ByteArray?, existingUrl: String?) {
         modifier = Modifier
             .size(168.dp)
             .clip(CircleShape)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(
-                        PrimaryBlue.copy(alpha = 0.18f),
-                        LightBlue.copy(alpha = 0.08f),
-                    ),
-                ),
-            )
-            .border(width = 2.dp, color = PrimaryBlue.copy(alpha = 0.35f), shape = CircleShape),
+            .background(MaterialTheme.colorScheme.surface)
+            .border(width = 2.dp, color = BorderHard, shape = CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         when {
@@ -284,7 +268,7 @@ private fun AvatarPreview(bytes: ByteArray?, existingUrl: String?) {
                 Icon(
                     imageVector = Icons.Outlined.Person,
                     contentDescription = null,
-                    tint = PrimaryBlue.copy(alpha = 0.85f),
+                    tint = PrimaryBlue,
                     modifier = Modifier.size(88.dp),
                 )
             }
@@ -303,7 +287,8 @@ private fun AvatarSourceButton(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(2.dp, BorderHard, RoundedCornerShape(16.dp))
             .clickable(enabled = enabled) { onClick() }
             .padding(vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

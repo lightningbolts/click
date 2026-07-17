@@ -30,7 +30,7 @@ internal object ChatBubbleTokens {
 
     /** Fallback when composables are not under measured constraints (e.g. previews). */
     val contentMaxWidth: Dp = chatBubbleScaledDp(450f)
-    val cornerMain: Dp = chatBubbleScaledDp(27f)
+    val cornerMain: Dp = chatBubbleScaledDp(16f)
     val cornerTailSmall: Dp = chatBubbleScaledDp(8f)
     val bubblePaddingHorizontal: Dp = chatBubbleScaledDp(15f)
     val bubblePaddingVertical: Dp = chatBubbleScaledDp(12f)

@@ -45,7 +45,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -54,7 +53,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.ui.components.GlassCard
-import compose.project.click.click.ui.theme.LightBlue
+import compose.project.click.click.ui.theme.BorderHardDark
 import compose.project.click.click.ui.theme.PrimaryBlue
 
 /**
@@ -116,32 +115,16 @@ internal fun DisposableCameraChrome(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .height(190.dp)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Black.copy(alpha = 0.68f),
-                            Color.Black.copy(alpha = 0.12f),
-                            Color.Transparent,
-                        ),
-                    ),
-                ),
+                .height(120.dp)
+                .background(Color.Black.copy(alpha = 0.65f)),
         )
 
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .height(320.dp)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.24f),
-                            Color.Black.copy(alpha = 0.78f),
-                        ),
-                    ),
-                ),
+                .height(220.dp)
+                .background(Color.Black.copy(alpha = 0.72f)),
         )
 
         GlassIconButton(
@@ -159,10 +142,10 @@ internal fun DisposableCameraChrome(
                 .statusBarsPadding()
                 .padding(top = 18.dp),
             shape = RoundedCornerShape(999.dp),
-            color = Color.Black.copy(alpha = 0.32f),
+            color = Color.Black,
             border = androidx.compose.foundation.BorderStroke(
                 width = 1.dp,
-                color = Color.White.copy(alpha = 0.18f),
+                color = BorderHardDark,
             ),
         ) {
             Text(
@@ -413,15 +396,7 @@ internal fun DisposableCameraFallback(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color.Black,
-                        Color(0xFF07111F),
-                        Color.Black,
-                    ),
-                ),
-            ),
+            .background(Color.Black),
     ) {
         GlassIconButton(
             onClick = onDismiss,
@@ -477,8 +452,8 @@ private fun GlassIconButton(
         modifier = modifier
             .size(46.dp)
             .clip(CircleShape)
-            .background(Color.Black.copy(alpha = 0.28f))
-            .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape)
+            .background(Color.Black)
+            .border(1.dp, BorderHardDark, CircleShape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -497,7 +472,7 @@ private fun GlassIconButton(
 
 @Composable
 private fun SendRollButton(
-    glowAlpha: Float,
+    @Suppress("UNUSED_PARAMETER") glowAlpha: Float,
     onClick: () -> Unit,
 ) {
     Box(
@@ -513,23 +488,10 @@ private fun SendRollButton(
     ) {
         Box(
             modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            PrimaryBlue.copy(alpha = glowAlpha),
-                            LightBlue.copy(alpha = glowAlpha * 0.55f),
-                            Color.Transparent,
-                        ),
-                    ),
-                ),
-        )
-        Box(
-            modifier = Modifier
                 .size(78.dp)
                 .clip(CircleShape)
-                .background(Brush.linearGradient(listOf(PrimaryBlue, LightBlue)))
-                .border(4.dp, Color.White.copy(alpha = 0.92f), CircleShape),
+                .background(PrimaryBlue)
+                .border(4.dp, BorderHardDark, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -545,7 +507,7 @@ private fun SendRollButton(
 @Composable
 private fun ShutterButton(
     enabled: Boolean,
-    glowAlpha: Float,
+    @Suppress("UNUSED_PARAMETER") glowAlpha: Float,
     onClick: () -> Unit,
 ) {
     val shutterScale by animateFloatAsState(
@@ -572,30 +534,17 @@ private fun ShutterButton(
     ) {
         Box(
             modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            PrimaryBlue.copy(alpha = glowAlpha),
-                            LightBlue.copy(alpha = glowAlpha * 0.35f),
-                            Color.Transparent,
-                        ),
-                    ),
-                ),
-        )
-        Box(
-            modifier = Modifier
                 .size(78.dp)
                 .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.18f))
-                .border(5.dp, Color.White.copy(alpha = 0.96f), CircleShape),
+                .background(Color.White.copy(alpha = if (enabled) 0.22f else 0.10f))
+                .border(5.dp, BorderHardDark, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Box(
                 modifier = Modifier
                     .size(58.dp)
                     .clip(CircleShape)
-                    .background(Color.White.copy(alpha = if (enabled) 0.28f else 0.12f)),
+                    .background(Color.White.copy(alpha = if (enabled) 0.32f else 0.14f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(

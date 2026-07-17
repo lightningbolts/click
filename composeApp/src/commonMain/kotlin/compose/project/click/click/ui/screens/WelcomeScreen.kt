@@ -4,6 +4,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,7 +43,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -50,7 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import compose.project.click.click.ui.theme.LightBlue
+import compose.project.click.click.ui.theme.BorderHard
 import compose.project.click.click.ui.theme.PrimaryBlue
 
 /**
@@ -85,15 +85,7 @@ fun WelcomeScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        PrimaryBlue.copy(alpha = 0.18f),
-                        MaterialTheme.colorScheme.background,
-                        MaterialTheme.colorScheme.background,
-                    ),
-                ),
-            ),
+            .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -116,9 +108,8 @@ fun WelcomeScreen(
                 modifier = Modifier
                     .size(92.dp)
                     .clip(CircleShape)
-                    .background(
-                        Brush.linearGradient(listOf(PrimaryBlue, LightBlue)),
-                    ),
+                    .background(PrimaryBlue)
+                    .border(2.dp, BorderHard, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -197,7 +188,7 @@ fun WelcomeScreen(
             Text(
                 text = "Next — pick a few interests and add a photo.",
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
         }
@@ -214,7 +205,8 @@ private fun WelcomePill(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(2.dp, BorderHard, RoundedCornerShape(16.dp))
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -222,7 +214,8 @@ private fun WelcomePill(
             modifier = Modifier
                 .size(40.dp)
                 .clip(CircleShape)
-                .background(PrimaryBlue.copy(alpha = 0.18f)),
+                .background(MaterialTheme.colorScheme.primaryContainer)
+                .border(2.dp, BorderHard, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Icon(

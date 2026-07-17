@@ -40,7 +40,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -63,7 +62,6 @@ import compose.project.click.click.data.models.mediaUrlOrNull
 import compose.project.click.click.data.models.originalMimeTypeOrNull
 import compose.project.click.click.data.models.parsedMediaMetadata
 import compose.project.click.click.data.models.replyRef
-import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.viewmodel.SecureChatMediaHost
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState
@@ -164,8 +162,6 @@ fun ChatMessageBubble(
         val viewerId = currentUserId ?: return@LaunchedEffect
         secureMediaHost?.ensureSecureChatAudioLoaded(scopeId, viewerId, message)
     }
-
-    val sentGradient = Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))
 
     val bubblePillShape = RoundedCornerShape(ChatBubbleTokens.cornerMain)
     val sentShape = bubblePillShape
@@ -437,7 +433,7 @@ fun ChatMessageBubble(
                         modifier = Modifier
                             .widthIn(max = bubbleContentMaxWidth)
                             .clip(sentShape)
-                            .background(sentGradient)
+                            .background(PrimaryBlue)
                             .padding(
                                 horizontal = ChatBubbleTokens.bubblePaddingHorizontal,
                                 vertical = ChatBubbleTokens.bubblePaddingVertical,

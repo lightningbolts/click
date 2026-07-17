@@ -11,6 +11,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -30,7 +31,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -748,26 +748,17 @@ private fun NfcIdleContent(
                     .matchParentSize()
                     .scale(haloScale)
                     .alpha(if (supportsTap) haloAlpha else 0.12f)
-                    .background(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                PrimaryBlue.copy(alpha = 0.48f),
-                                PrimaryBlue.copy(alpha = 0.08f),
-                                Color.Transparent,
-                            ),
-                        ),
-                        shape = CircleShape,
-                    ),
+                    .border(2.dp, PrimaryBlue, CircleShape),
             )
             Surface(
                 modifier = Modifier.size(128.dp),
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
-                tonalElevation = 8.dp,
-                shadowElevation = 18.dp,
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
                 border = BorderStroke(
-                    1.dp,
-                    PrimaryBlue.copy(alpha = if (supportsTap) 0.28f else 0.1f),
+                    2.dp,
+                    if (supportsTap) PrimaryBlue else BorderHard,
                 ),
             ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -814,9 +805,9 @@ private fun NfcIdleContent(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f)
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
             ),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.10f)),
+            border = BorderStroke(2.dp, BorderHard),
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
@@ -1241,7 +1232,8 @@ private fun NfcSuccessContent(
         if (connection.semanticLocation != null || connection.displayLocationLabel != null) {
             Surface(
                 shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                border = BorderStroke(2.dp, BorderHard),
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -1284,9 +1276,9 @@ private fun NfcSuccessContent(
         if (!messageSent) {
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                border = BorderStroke(1.dp, PrimaryBlue.copy(alpha = 0.3f)),
-                modifier = Modifier.fillMaxWidth()
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                border = BorderStroke(2.dp, PrimaryBlue),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 Row(
                     modifier = Modifier.padding(8.dp),
@@ -1335,7 +1327,8 @@ private fun NfcSuccessContent(
         } else {
             Surface(
                 shape = RoundedCornerShape(12.dp),
-                color = Color(0xFF4CAF50).copy(alpha = 0.15f)
+                color = MaterialTheme.colorScheme.tertiaryContainer,
+                border = BorderStroke(2.dp, BorderHard),
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
@@ -1433,15 +1426,15 @@ private fun CommonGroundSection(tags: List<String>) {
             tags.take(3).forEach { tag ->
                 Surface(
                     shape = RoundedCornerShape(16.dp),
-                    color = PrimaryBlue.copy(alpha = 0.15f),
-                    border = BorderStroke(1.dp, NeonPurple.copy(alpha = 0.5f))
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    border = BorderStroke(2.dp, BorderHard),
                 ) {
                     Text(
                         text = tag,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = NeonPurple
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
                 }
             }

@@ -24,8 +24,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -38,6 +36,7 @@ import coil3.compose.AsyncImage
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserProfile
 import compose.project.click.click.data.models.toUserProfile
+import compose.project.click.click.ui.theme.PrimaryBlue
 
 private val OnlineGreen = Color(0xFF22C55E)
 
@@ -166,15 +165,7 @@ fun ConnectionListUserAvatarFace(
     }
 }
 
-private val CoreHaloPurple = Color(0xFF9D4EDD)
-private val CoreHaloGold = Color(0xFFE8B923)
 private val CoreHaloRingWidth = 2.5.dp
-
-private val CoreHaloBrush = Brush.linearGradient(
-    colors = listOf(CoreHaloPurple, CoreHaloGold, CoreHaloPurple),
-    start = Offset(0f, 0f),
-    end = Offset(200f, 200f),
-)
 
 /**
  * Purple/gold ring for core connections (wraps a circular avatar).
@@ -208,7 +199,7 @@ fun CoreConnectionAvatarFrame(
                 if (isCore) {
                     Modifier.border(
                         width = CoreHaloRingWidth,
-                        brush = CoreHaloBrush,
+                        color = PrimaryBlue,
                         shape = CircleShape,
                     )
                 } else {

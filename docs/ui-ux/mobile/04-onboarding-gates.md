@@ -6,6 +6,8 @@
 **Source of truth:** `App.kt` gate order, `OnboardingViewModel.kt`, screen composables listed below.  
 **Date:** 2026-07-16  
 
+**Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: invented from design system.
+
 ---
 
 ## Active gate order (post-auth)
@@ -130,7 +132,7 @@ Permissions (`PermissionsOnboardingScreen`, `LocationOnboardingScreen`) are **le
 | Error | Inline `Text` | Server save failure |
 | Primary | `Button` full width | Save action |
 
-Birthday field: `testTag = "profile-gate-birthday-field"`. Date picker matches Sign Up glass/OLED styling.
+Birthday field: `testTag = "profile-gate-birthday-field"`. Date picker matches Sign Up opaque bordered sheet styling.
 
 ### Interactive Elements
 
@@ -200,9 +202,9 @@ Birthday field: `testTag = "profile-gate-birthday-field"`. Date picker matches S
 
 | Layer | Element | Notes |
 |-------|---------|-------|
-| Root | `Box` full-screen | Gradient: PrimaryBlue 18% → background |
+| Root | `Box` full-screen | Flat `background` `#f9f9f9` |
 | Scroll | `Column` centered | Status bar + 40dp top, 24dp horizontal |
-| Hero | Circle gradient badge | `"C"` letter, 92dp |
+| Hero | Circle bordered badge | `"C"` letter, 92dp; solid `primary-container` fill, 2dp `#000` border |
 | Copy | Headline + subhead | Personalized if `firstName` present |
 | Pills | 3× `WelcomePill` rows | Icon + title + body, 16dp rounded surface |
 | CTA | Primary `Button` | 52dp, 16dp corners, arrow icon |
@@ -345,7 +347,7 @@ Minimum tags: `INTEREST_ONBOARDING_MIN_TAGS = 5`.
 
 | Layer | Element | Notes |
 |-------|---------|-------|
-| Root | `Box` full-screen | PrimaryBlue 16% gradient → background |
+| Root | `Box` full-screen | Flat `background` `#f9f9f9` |
 | Scroll | `Column` centered | 24dp horizontal, status bar + 28dp top |
 | Header | Title + body | Center-aligned |
 | Preview | 168dp circle | Placeholder person icon, existing URL, or selected bytes |
@@ -369,7 +371,7 @@ Upload success → `AppDataManager.refresh(force = true)` → advance onboarding
 
 | State | Visual / behavior |
 |-------|-------------------|
-| **Empty preview** | Person outline icon in gradient circle |
+| **Empty preview** | Person outline icon in bordered circle (`surface-container`, 2dp `#000`) |
 | **Existing avatar** | `AsyncImage` from `existingAvatarUrl` |
 | **Selected local** | `AsyncImage` from bytes |
 | **No selection** | Primary label `"Choose a photo"`, button disabled |

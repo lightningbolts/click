@@ -4,6 +4,8 @@
 **Source:** `calls/CallOverlays.kt`, `calls/CallState.kt`, `calls/CallSessionManager.kt`, `calls/PlatformIncomingCallUi.kt`, `calls/PlatformIncomingCallUi.ios.kt`, `calls/PlatformIncomingCallUi.android.kt`, `App.kt` global overlay host  
 **Out of scope:** Web, backend signaling, LiveKit room internals, chat thread UI (see [08-chat.md](08-chat.md)).
 
+**Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: invented from design system.
+
 ---
 
 ## ASCII hierarchy
@@ -47,9 +49,9 @@ PlatformIncomingCallUi (outside Compose tree)
 | Property | Value |
 |----------|-------|
 | Position | Top-center `Box`, status-bar inset + 10dp top, 16dp horizontal, 20dp bottom |
-| Card | `Surface`, `RoundedCornerShape(28dp)`, `#08101F` @ 94% alpha, max width 324dp |
+| Card | `Surface`, `RoundedCornerShape(16dp)`, solid `surface` `#ffffff` / dark `#2f3131`, 2dp `#000` border, max width 324dp |
 | Padding | 18dp horizontal, 16dp vertical |
-| Avatar | 72dp circle, gradient fill, pulsing outer halo (infinite animation) |
+| Avatar | 72dp circle, solid `primary` fill, 2dp `#000` border, pulsing outer ring (infinite animation) |
 | Initial glyph | First letter of `counterpartName` uppercase, or `"?"` |
 | Name | `titleLarge`, semibold, white |
 | Subtitle | `"Video call"` or `"Voice call"` |
@@ -61,12 +63,12 @@ PlatformIncomingCallUi (outside Compose tree)
 | Property | Value |
 |----------|-------|
 | Position | Top-center; status-bar + 12dp top; 16dp sides |
-| Card | `Surface`, 28dp corners, `#050A16` @ 94% alpha, max 380dp, `fillMaxWidth(0.94f)` |
+| Card | `Surface`, 16dp corners, solid `surface`, 2dp `#000` border, max 380dp, `fillMaxWidth(0.94f)` |
 | Drag | `detectDragGestures` — horizontal ±`(maxWidth-220dp)/2`, vertical `0…maxHeight/2` |
 | Video stage | `aspectRatio(1.2f)`, min height 180dp, 28dp corners |
 | Remote video | Full stage; placeholder text when `!remoteVideoAvailable` |
 | Local PiP | 96×136dp bottom-end, 20dp corners |
-| Voice row | 56dp avatar circle + status line in frosted row |
+| Voice row | 56dp avatar circle + status line in bordered row (`surface-container`, 2dp `#000`) |
 | Controls | 48dp tonal buttons + 56dp red end-call |
 
 ### CallState model

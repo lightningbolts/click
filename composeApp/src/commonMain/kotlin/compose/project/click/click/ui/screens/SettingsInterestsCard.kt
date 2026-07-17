@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -30,7 +31,9 @@ import compose.project.click.click.ui.components.AdaptiveCard
 import compose.project.click.click.ui.components.InterestEditor
 import compose.project.click.click.ui.components.filterToPredefinedInterestTags
 import compose.project.click.click.ui.theme.LocalPlatformStyle
+import compose.project.click.click.ui.theme.BorderHard
 import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.ui.theme.SoftBlue
 import kotlinx.coroutines.launch
 
 /**
@@ -111,7 +114,8 @@ internal fun SettingsInterestsCard(
                         interestTags.forEach { tag ->
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
-                                color = PrimaryBlue.copy(alpha = 0.12f),
+                                color = SoftBlue,
+                                border = BorderStroke(1.dp, BorderHard),
                             ) {
                                 Text(
                                     text = tag,

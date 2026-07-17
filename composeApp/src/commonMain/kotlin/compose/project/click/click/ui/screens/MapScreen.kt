@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
@@ -818,7 +817,7 @@ private fun MapLayerFilterDropdown(
     val style = LocalPlatformStyle.current
     val menuSurface = MaterialTheme.colorScheme.surface
     val onMenuSurface = MaterialTheme.colorScheme.onSurface
-    val menuOutline = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+    val menuOutline = BorderHard
     val itemCount = MapLayerFilter.entries.size
     val menuUpOffset = if (opensDownward) {
         8.dp
@@ -875,13 +874,9 @@ private fun MapLayerFilterDropdown(
             offset = DpOffset(0.dp, -menuUpOffset),
             shape = RoundedCornerShape(if (isIOS) 14.dp else 12.dp),
             containerColor = menuSurface,
-            tonalElevation = if (isIOS) 0.dp else 2.dp,
-            shadowElevation = if (isIOS) 0.dp else 8.dp,
-            border = if (isIOS) {
-                BorderStroke(0.5.dp, menuOutline)
-            } else {
-                null
-            },
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+            border = BorderStroke(2.dp, menuOutline),
         ) {
             MapLayerFilter.entries.forEach { filter ->
                 val isSelected = when (filter) {
@@ -1724,14 +1719,13 @@ fun ConnectionMarkerSheet(
                 .size(100.dp)
                 .clip(CircleShape)
                 .background(
-                    Brush.linearGradient(
-                        colors = when (point.timeState) {
-                            TimeState.LIVE -> listOf(PrimaryBlue, DeepBlue)
-                            TimeState.RECENT -> listOf(LightBlue, PrimaryBlue)
-                            TimeState.ARCHIVE -> listOf(Color.Gray, Color.DarkGray)
-                        },
-                    ),
-                ),
+                    when (point.timeState) {
+                        TimeState.LIVE -> PrimaryBlue
+                        TimeState.RECENT -> MaterialTheme.colorScheme.primaryContainer
+                        TimeState.ARCHIVE -> MaterialTheme.colorScheme.surfaceVariant
+                    },
+                )
+                .border(2.dp, BorderHard, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             if (point.shouldPulse) {
@@ -1741,7 +1735,11 @@ fun ConnectionMarkerSheet(
                 otherUser?.name?.firstOrNull()?.uppercase() ?: "?",
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
-                color = LightBlue.copy(alpha = 0.96f),
+                color = when (point.timeState) {
+                    TimeState.LIVE -> Color.White
+                    TimeState.RECENT -> MaterialTheme.colorScheme.onPrimaryContainer
+                    TimeState.ARCHIVE -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
             )
         }
 
@@ -1818,7 +1816,11 @@ private fun MarkerSheetTimeStateBadge(timeState: TimeState) {
         TimeState.ARCHIVE -> Triple(Color.Gray, "Memory", Icons.Filled.History)
     }
 
-    Surface(shape = RoundedCornerShape(12.dp), color = color.copy(alpha = 0.1f)) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(2.dp, color),
+    ) {
         Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,

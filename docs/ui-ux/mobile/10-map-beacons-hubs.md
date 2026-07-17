@@ -4,6 +4,8 @@
 **Source:** `ui/screens/MapScreen.kt`, `ui/screens/MapDiscoveryLayout.kt`, `ui/screens/BeaconDropSheet.kt`, `ui/components/CreateHubModal.kt`, `ui/screens/HubChatScreen.kt`, `ui/screens/HubChatSettingsMenu.kt`, `viewmodel/MapViewModel.kt`, `viewmodel/MapLayerFilter.kt`  
 **Out of scope:** Web, backend APIs, redesign.
 
+**Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: `click/docs/design-assets/map_events_full_screen_map/`.
+
 ---
 
 ## ASCII hierarchy
@@ -43,7 +45,7 @@ CreateHubModal — also reachable from BeaconDropSheet Hub category
 
 | Property | Value |
 |----------|-------|
-| Background | `AdaptiveBackground` → `GlassSheetTokens.OledBlack`; ghost mode adds 0.7 alpha + dark gray wash |
+| Background | Flat `background` `#f9f9f9`; ghost mode adds `surface-dim` wash + 2dp dashed `#000` overlay hint |
 | Scaffold | Zero content insets; `SnackbarHost` only |
 | Success child | `MapDiscoveryScreen` (not raw full-bleed map as primary surface) |
 
@@ -54,7 +56,7 @@ CreateHubModal — also reachable from BeaconDropSheet Hub category
 | Feed | `LazyColumn`, 10dp row spacing, 20dp horizontal padding |
 | Top inset | Status bar + expanded floating header (~76dp) + 8dp |
 | Bottom inset | Bottom chrome + PiP height (160dp) + FAB gap + 16dp |
-| PiP map | 120×160dp, 16dp radius, glass border, bottom-end above tab bar |
+| PiP map | 120×160dp, 16dp radius, 2dp `#000` border, bottom-end above tab bar |
 | Drop beacon FAB | 56dp, `primaryContainer`, bottom-start (left of PiP) |
 | Header | `DiscoveryFloatingHeader` — title `"Discovery"`, subtitle dynamic stats line |
 
@@ -80,7 +82,7 @@ Hub row subtitle template: `"Ephemeral · {activeUserCount} here"`
 
 | Control | Position | Size |
 |---------|----------|------|
-| Close (`"Minimize map"`) | Top-start | 44dp liquid glass |
+| Close (`"Minimize map"`) | Top-start | 44dp solid bordered circle button |
 | Layer filter dropdown | Top-center-right | max 132dp trigger, 240dp menu |
 | Drop beacon (`"Drop beacon"`) | Bottom-start | 56dp |
 | Zoom in / out | Bottom-end column | 48dp each |
@@ -89,7 +91,7 @@ Hub row subtitle template: `"Ephemeral · {activeUserCount} here"`
 
 | Property | Value |
 |----------|-------|
-| Container | `MapBeaconSheetRoot` + `ClickSheetDialogChrome`, OLED black |
+| Container | `MapBeaconSheetRoot` + `ClickSheetDialogChrome`, opaque `surface` + 2dp border |
 | Padding | 20dp horizontal, 12dp vertical |
 | Category chips | Horizontal `LazyRow` |
 | Hub mode | Name field + category `FlowRow` |
@@ -99,7 +101,7 @@ Hub row subtitle template: `"Ephemeral · {activeUserCount} here"`
 
 ### CreateHubModal / JoinCommunityHubSheet
 
-Both use `ClickFormBottomSheet` on `GlassSheetTokens.OledBlack`, 24dp horizontal padding.
+Both use `ClickFormBottomSheet` on opaque `surface`, 2dp `#000` border, 24dp horizontal padding.
 
 ### CommunityHubBottomSheet
 
@@ -113,11 +115,11 @@ Creator toolbar: `"Edit beacon"` / `"Delete beacon"` icon buttons (creator only)
 
 | Region | Height / notes |
 |--------|----------------|
-| Glass header | 56dp + status bar; back, title, occupant subtitle, ⋮ menu |
+| Solid header | 56dp + status bar; back, title, occupant subtitle, ⋮ menu; 2dp bottom `#000` border |
 | Tap-to-connect banner | Primary blue surface, centered copy |
 | Lobby banner (when `inLobby`) | `primaryContainer` tint — currently disabled (`inLobby = false`) |
 | Timeline | `ChatMessageTimeline`, hub-neutral mesh |
-| Composer | `HubChatInputBar` — attach + field + gradient send |
+| Composer | `HubChatInputBar` — attach + field + solid primary send button |
 
 ---
 

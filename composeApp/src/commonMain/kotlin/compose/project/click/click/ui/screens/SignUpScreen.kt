@@ -23,7 +23,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
@@ -131,14 +130,7 @@ fun SignUpScreen(
             .pointerInput(Unit) {
                 detectTapGestures(onTap = { focusManager.clearFocus() })
             }
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.background,
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
-                    )
-                )
-            )
+            .background(MaterialTheme.colorScheme.background)
     ) {
         // Back Button - Positioned absolutely at top left with proper clickable surface
         IconButton(
@@ -213,8 +205,8 @@ fun SignUpScreen(
                 modifier = Modifier
                     .size(112.dp)
                     .clip(CircleShape)
-                    .border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f), CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    .border(2.dp, BorderHard, CircleShape)
+                    .background(MaterialTheme.colorScheme.surface)
                     .clickable(enabled = !isLoading) { mediaPickers.openPhotoLibrary() },
                 contentAlignment = Alignment.Center,
             ) {
@@ -281,7 +273,7 @@ fun SignUpScreen(
                     ),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        unfocusedBorderColor = BorderHard
                     ),
                     shape = RoundedCornerShape(12.dp),
                     enabled = !isLoading
@@ -301,7 +293,7 @@ fun SignUpScreen(
                     ),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        unfocusedBorderColor = BorderHard
                     ),
                     shape = RoundedCornerShape(12.dp),
                     enabled = !isLoading
@@ -343,7 +335,7 @@ fun SignUpScreen(
                 ),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    unfocusedBorderColor = BorderHard
                 ),
                 shape = RoundedCornerShape(12.dp),
                 enabled = !isLoading
@@ -416,7 +408,7 @@ fun SignUpScreen(
                 ),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    unfocusedBorderColor = BorderHard
                 ),
                 shape = RoundedCornerShape(12.dp),
                 enabled = !isLoading
@@ -452,7 +444,7 @@ fun SignUpScreen(
                 ),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    unfocusedBorderColor = BorderHard
                 ),
                 shape = RoundedCornerShape(12.dp),
                 enabled = !isLoading
@@ -501,7 +493,7 @@ fun SignUpScreen(
                 ),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    unfocusedBorderColor = BorderHard
                 ),
                 shape = RoundedCornerShape(12.dp),
                 enabled = !isLoading,

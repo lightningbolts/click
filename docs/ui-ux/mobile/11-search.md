@@ -4,6 +4,8 @@
 **Source:** `ui/screens/UnifiedSearchSheet.kt`, `ui/screens/GlobalSearchScreen.kt`, `viewmodel/GlobalSearchViewModel.kt`, `viewmodel/GlobalSearchMatch.kt`  
 **Out of scope:** Web, backend APIs, redesign.
 
+**Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: invented from design system.
+
 ---
 
 ## ASCII hierarchy
@@ -34,10 +36,10 @@ GlobalSearchScreen (@Deprecated — full-screen scaffold, same VM + row componen
 
 | Property | Value |
 |----------|-------|
-| Shell | `GlassAdaptiveBottomSheet` + `rememberGlassAdaptiveSheetState` |
-| Background | `GlassSheetTokens.OledBlack` |
+| Shell | `GlassAdaptiveBottomSheet` + `rememberGlassAdaptiveSheetState` (renders opaque bordered sheet) |
+| Background | Solid `surface` `#ffffff` / dark `#2f3131` |
 | Padding | 12dp horizontal, 8dp vertical |
-| Search field | `Surface` 16dp radius, 8% white fill; borderless `TextField` |
+| Search field | `Surface` 8dp radius, solid `surface-container` fill; 2dp `#000` border; borderless inner `TextField` |
 | Filter row | Horizontal scroll, 8dp chip spacing, 8dp top / 4dp bottom padding |
 | Results list | `LazyColumn`, 16dp horizontal padding, 10dp row spacing |
 | Bottom pad | Navigation bar inset + 12dp |
@@ -55,8 +57,9 @@ GlobalSearchScreen (@Deprecated — full-screen scaffold, same VM + row componen
 
 | Property | Value |
 |----------|-------|
-| Shape | 16dp `RoundedCornerShape`, `SurfaceDark` 60% alpha |
+| Shape | 16dp `RoundedCornerShape`, solid `surface` |
 | Padding | 16dp horizontal, 10dp vertical |
+| Border | 2dp `#000` |
 | Leading | 42dp avatar (person) or 42dp rounded icon tile |
 | Trailing | `ChevronRight` 20dp, 30% white |
 

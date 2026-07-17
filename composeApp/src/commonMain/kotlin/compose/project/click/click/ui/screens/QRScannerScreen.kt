@@ -31,8 +31,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import compose.project.click.click.ui.theme.BorderHard
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
@@ -221,11 +221,11 @@ fun QRScannerScreen(
                         .padding(horizontal = 20.dp, vertical = 16.dp)
                         .clip(RoundedCornerShape(24.dp))
                         .border(
-                            width = 1.dp,
+                            width = 2.dp,
                             color = if (showError) {
-                                MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+                                MaterialTheme.colorScheme.error
                             } else {
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                                PrimaryBlue
                             },
                             shape = RoundedCornerShape(24.dp),
                         ),
@@ -253,11 +253,12 @@ fun QRScannerScreen(
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp),
+                        .padding(horizontal = 20.dp)
+                        .border(2.dp, BorderHard, RoundedCornerShape(24.dp)),
                     shape = RoundedCornerShape(24.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
-                    tonalElevation = 2.dp,
-                    shadowElevation = 10.dp
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
                 ) {
                     Row(
                         modifier = Modifier
@@ -271,9 +272,9 @@ fun QRScannerScreen(
                             shape = CircleShape,
                             color = when (presentationState) {
                                 QrScannerPresentationState.Error -> MaterialTheme.colorScheme.errorContainer
-                                QrScannerPresentationState.Connecting -> PrimaryBlue.copy(alpha = 0.18f)
-                                QrScannerPresentationState.TargetAcquired -> PrimaryBlue.copy(alpha = 0.18f)
-                                QrScannerPresentationState.Searching -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
+                                QrScannerPresentationState.Connecting -> MaterialTheme.colorScheme.primaryContainer
+                                QrScannerPresentationState.TargetAcquired -> MaterialTheme.colorScheme.primaryContainer
+                                QrScannerPresentationState.Searching -> MaterialTheme.colorScheme.surfaceVariant
                             }
                         ) {
                             Box(contentAlignment = Alignment.Center) {
@@ -345,19 +346,14 @@ fun QRScannerScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .border(
-                            width = 1.dp,
-                            brush = Brush.horizontalGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.error.copy(alpha = 0.6f),
-                                    MaterialTheme.colorScheme.error.copy(alpha = 0.3f)
-                                )
-                            ),
-                            shape = RoundedCornerShape(16.dp)
+                            width = 2.dp,
+                            color = MaterialTheme.colorScheme.error,
+                            shape = RoundedCornerShape(16.dp),
                         ),
                     shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.95f),
-                    tonalElevation = 4.dp,
-                    shadowElevation = 8.dp
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
                 ) {
                     Row(
                         modifier = Modifier
@@ -465,28 +461,14 @@ private fun ScannerLensOverlay(
                     bottom = frameBottomPadding
                 )
                 .border(
-                    width = 1.5.dp,
-                    brush = Brush.linearGradient(
-                        colors = when (state) {
-                            QrScannerPresentationState.Error -> listOf(
-                                MaterialTheme.colorScheme.error.copy(alpha = 0.75f),
-                                MaterialTheme.colorScheme.error.copy(alpha = 0.28f)
-                            )
-                            QrScannerPresentationState.Connecting -> listOf(
-                                PrimaryBlue.copy(alpha = 0.95f),
-                                PrimaryBlue.copy(alpha = 0.3f)
-                            )
-                            QrScannerPresentationState.TargetAcquired -> listOf(
-                                Color.White.copy(alpha = 0.95f),
-                                PrimaryBlue.copy(alpha = 0.35f)
-                            )
-                            QrScannerPresentationState.Searching -> listOf(
-                                Color.White.copy(alpha = 0.7f),
-                                Color.White.copy(alpha = 0.16f)
-                            )
-                        }
-                    ),
-                    shape = RoundedCornerShape(24.dp)
+                    width = 2.dp,
+                    color = when (state) {
+                        QrScannerPresentationState.Error -> MaterialTheme.colorScheme.error
+                        QrScannerPresentationState.Connecting -> PrimaryBlue
+                        QrScannerPresentationState.TargetAcquired -> PrimaryBlue
+                        QrScannerPresentationState.Searching -> BorderHard
+                    },
+                    shape = RoundedCornerShape(24.dp),
                 )
         )
 
@@ -498,14 +480,8 @@ private fun ScannerLensOverlay(
                     .fillMaxWidth()
                     .height(3.dp)
                     .background(
-                        brush = Brush.horizontalGradient(
-                            listOf(
-                                Color.Transparent,
-                                PrimaryBlue.copy(alpha = 0.85f),
-                                Color.Transparent
-                            )
-                        ),
-                        shape = RoundedCornerShape(99.dp)
+                        color = PrimaryBlue,
+                        shape = RoundedCornerShape(99.dp),
                     )
             )
         }
@@ -551,9 +527,12 @@ private fun ScannerLensOverlay(
             Surface(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = badgeTopPadding),
+                    .padding(top = badgeTopPadding)
+                    .border(2.dp, BorderHard, RoundedCornerShape(999.dp)),
                 shape = RoundedCornerShape(999.dp),
-                color = Color.Black.copy(alpha = 0.28f)
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
             ) {
                 Text(
                     text = when (state) {
@@ -564,7 +543,7 @@ private fun ScannerLensOverlay(
                     },
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                     style = MaterialTheme.typography.labelLarge,
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
         }

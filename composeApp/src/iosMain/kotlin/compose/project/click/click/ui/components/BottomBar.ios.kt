@@ -25,9 +25,11 @@ import compose.project.click.click.navigation.NavigationItem
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
 import platform.UIKit.NSLayoutConstraint
+import platform.UIKit.UIColor
 import platform.UIKit.UIDevice
 import platform.UIKit.UIImage
 import platform.UIKit.UITabBar
+import platform.UIKit.UITabBarAppearance
 import platform.UIKit.UITabBarDelegateProtocol
 import platform.UIKit.UITabBarItem
 import platform.darwin.NSObject
@@ -49,7 +51,21 @@ actual fun PlatformBottomBar(
         UIDevice.currentDevice.systemVersion.toDoubleOrNull()?.let { it >= 26.0 } ?: false
     }
 
-    val tabBar = remember { UITabBar().apply { translatesAutoresizingMaskIntoConstraints = false } }
+    val tabBar = remember {
+        UITabBar().apply {
+            translatesAutoresizingMaskIntoConstraints = false
+            // Functional Clarity: solid opaque bar (no liquid glass translucency).
+            setTranslucent(false)
+            barTintColor = UIColor.whiteColor
+            backgroundColor = UIColor.whiteColor
+            val appearance = UITabBarAppearance().apply {
+                configureWithOpaqueBackground()
+                backgroundColor = UIColor.whiteColor
+            }
+            standardAppearance = appearance
+            scrollEdgeAppearance = appearance
+        }
+    }
 
     val delegate = remember {
         object : NSObject(), UITabBarDelegateProtocol {

@@ -4,6 +4,8 @@
 **Source:** `ui/components/ProfileBottomSheet.kt`, `ui/components/UserProfileBottomSheet.kt`, `ui/screens/MemoriesListSection.kt`, `ui/components/ProfileConnectionMoment.kt`  
 **Out of scope:** Web, backend APIs, redesign.
 
+**Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: invented from design system.
+
 ---
 
 ## ASCII hierarchy
@@ -39,10 +41,10 @@ MemoriesListSection (list organism)
 | Container | Full-height sheet (`MapBeaconSheetRoot` on map; `ClickFormBottomSheet` elsewhere) |
 | Header avatar | 68dp circle (78dp tap target); optional camera overlay for groups |
 | Tabs | `ScrollableTabRow` — icons + labels from `ProfileSheetTab` |
-| Action grid | 52dp min-height `GlassCard` buttons, 10dp spacing |
+| Action grid | 52dp min-height bordered card buttons, 10dp spacing |
 | Timeline | Journal composer card + timeline rows + hydrated public profile blocks |
 | Media | 3-column image grid; audio rows below |
-| Links / Files | Full-width glass rows |
+| Links / Files | Full-width bordered rows (2dp `#000`) |
 
 ### ProfileSheetTab labels
 
@@ -60,7 +62,7 @@ MemoriesListSection (list organism)
 |----------|-------|
 | List padding | 20dp |
 | Row spacing | 12dp |
-| Card | `GlassCard`, 56dp gradient location icon |
+| Card | bordered card, 56dp solid `primary-container` location icon tile |
 | Header | `"Your Memories"` + optional `"{visible} of {total} in view"` |
 
 ### UserProfileBottomSheet (legacy)

@@ -4,6 +4,8 @@
 **Source:** `ui/screens/HomeScreen.kt`, `ui/components/HomeComponents.kt`, `ui/components/ConnectionArchiveWarningBanner.kt`, `viewmodel/HomeViewModel.kt`  
 **Out of scope:** Web, backend APIs, redesign.
 
+**Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: `click/docs/design-assets/home/`.
+
 ---
 
 ## ASCII hierarchy
@@ -39,11 +41,11 @@ HomeScreen (organism)
         │   ├── GradientSectionHeader "Recent Connections"
         │   ├── LocationGroupCard[] (expandable)
         │   │   └── ConnectionRowItem[]
-        │   └── GlassCard empty state
+        │   └── bordered card empty state
         ├── ConnectionInsightsCard (conditional)
         └── Your Stats
             ├── GradientSectionHeader "Your Stats"
-            └── GlassStatCard × 2 ("Total Clicks", "Locations")
+            └── bordered stat card × 2 ("Total Clicks", "Locations")
 ├── AvailabilitySheet (modal overlay, conditional)
 └── SnackbarHost (nudge / icebreaker feedback)
 ```
@@ -56,7 +58,7 @@ HomeScreen (organism)
 
 | Property | Value |
 |----------|-------|
-| Background | `MaterialTheme.colorScheme.background` (Zinc-950 family) |
+| Background | `MaterialTheme.colorScheme.background` (`#f9f9f9` light) |
 | Horizontal padding | 20dp (`ScreenPaddingHorizontal`) |
 | Section spacing | 24dp (`CardSpacing`) |
 | Header | `AppScreenScaffold` — title `"Home"`, subtitle dynamic |
@@ -67,13 +69,13 @@ HomeScreen (organism)
 | Component | Role on Home |
 |-----------|----------------|
 | `PollPairCard` | Hero reconnect suggestion (oldest stale 1:1 chat) |
-| `StatCard` | Legacy stat card (not used on Home; Home uses inline `GlassStatCard`) |
+| `StatCard` | Legacy stat card (not used on Home; Home uses inline bordered stat cards) |
 | `OnlineFriendItem` | Not mounted on current HomeScreen |
 | `RecentClickCard` | Not mounted on current HomeScreen |
 
 ### ConnectionArchiveWarningBanner
 
-Glass + gradient border card (matches `PollPairCard` visual language). 24dp outer radius, 18dp inner padding. Merged semantics: `"{headline}. {body}. Open chat. Send icebreaker."`
+Bordered card with 2dp `#000` border (matches `PollPairCard` visual language). 16dp outer radius, 18dp inner padding. Merged semantics: `"{headline}. {body}. Open chat. Send icebreaker."`
 
 ### AvailabilitySheet entry
 
@@ -137,9 +139,9 @@ Static error chrome: `"Error loading home data"` + primary `"Retry"` button.
 | Overlap lines | Hidden | `"You and {firstName} are both available right now!"` per peer |
 | Reconnect | Hidden | Up to 3 `ReconnectReminderCard` |
 | Event reminders | Hidden | `HomeEventReminderCard` per due RSVP beacon |
-| Recent Connections | `GlassCard` empty state | Up to 5 connections grouped by location |
+| Recent Connections | bordered card empty state | Up to 5 connections grouped by location |
 | Connection Insights | Hidden if `totalConnections == 0` or null insights | Collapsed/expanded card |
-| Stats | Always shown in Success | Two `GlassStatCard` values |
+| Stats | Always shown in Success | Two bordered stat card values |
 
 ### LocationGroupCard
 

@@ -2,7 +2,9 @@
 
 **Scope:** `ChatView.kt`, `ui/chat/*` (composer, timeline, bubbles, loading, dialogs, icebreaker, vibe check, tether toasts).  
 **Source:** `ui/screens/ChatView.kt`, `ui/chat/ConnectionChatMessageComposer.kt`, `ChatMessageTimeline.kt`, `ChatMessageBubble.kt`, `ChatLoadingAndDialogs.kt`, `MessageActionSheet.kt`, `VoiceMessageRecordDialogLayout.kt`, `VibeCheckAndIcebreaker.kt`, `ConnectionActionSheet.kt`, `ConnectionSheetDialogs.kt`  
-**Out of scope:** Web, backend APIs, inbox list shell (see [07-connections-inbox.md](07-connections-inbox.md)), call overlay detail (see [09-calls.md](09-calls.md)).
+**Out of scope:** Web, backend APIs, chat thread UI (see [08-chat.md](08-chat.md)), call overlay detail (see [09-calls.md](09-calls.md)).
+
+**Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: `click/docs/design-assets/chat/`.
 
 ---
 
@@ -67,6 +69,7 @@ ChatView (organism — full-screen thread)
 | Property | Value |
 |----------|-------|
 | Height | 56dp below status-bar inset |
+| Surface | Solid `surface` bar with 2dp bottom `#000` border (no blur) |
 | Horizontal padding | 20dp |
 | Back | `IconButton` 48dp tap target |
 | 1:1 avatar | `CoreConnectionAvatarFrame` 36dp + online indicator 9dp |
@@ -189,11 +192,11 @@ See [MessageActionSheet organism](#messageactionsheet) below.
 | Condition | UI |
 |-----------|-----|
 | `isLoadingMessages && messages.isEmpty()` | Center spinner + `"Loading messages…"` |
-| `messages.isEmpty()` | `GlassCard` empty state |
+| `messages.isEmpty()` | bordered card empty state |
 | `messages.nonEmpty()` | `ChatMessageTimeline` |
 | `isLoadingOlderMessages` | Top-of-list `CircularProgressIndicator` |
 
-### Empty thread (`GlassCard`)
+### Empty thread (bordered card)
 
 | Field | 1:1 | Group |
 |-------|-----|-------|

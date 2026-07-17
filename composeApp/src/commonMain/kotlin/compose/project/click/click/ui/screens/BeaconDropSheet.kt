@@ -155,7 +155,7 @@ fun BeaconDropSheetContent(
         BeaconDropCategory.COMMUNITY_HUB -> MapBeaconKind.OTHER
     }
     val chipContainer = MaterialTheme.colorScheme.surfaceContainerHighest
-    val chipSelected = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+    val chipSelected = MaterialTheme.colorScheme.primaryContainer
     val scroll = rememberScrollState()
     val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     val fieldColors = OutlinedTextFieldDefaults.colors(

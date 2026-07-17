@@ -1,6 +1,7 @@
 package compose.project.click.click.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,8 +28,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import compose.project.click.click.ui.theme.BorderHard
+import compose.project.click.click.ui.theme.PrimaryBlue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -92,7 +94,7 @@ fun AppClipHandshakeScreen(invocationUrl: String?) {
             loading -> {
                 AdaptiveCircularProgressIndicator(
                     modifier = Modifier.size(40.dp),
-                    color = Color(0xFF8338EC),
+                    color = PrimaryBlue,
                 )
             }
             error != null -> {
@@ -137,11 +139,8 @@ private fun AppClipDownloadCta() {
             modifier = Modifier
                 .size(72.dp)
                 .clip(RoundedCornerShape(20.dp))
-                .background(
-                    Brush.linearGradient(
-                        listOf(Color(0xFF8338EC), Color(0xFF3A86FF)),
-                    ),
-                ),
+                .background(PrimaryBlue)
+                .border(2.dp, BorderHard, RoundedCornerShape(20.dp)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(

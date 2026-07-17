@@ -1,102 +1,46 @@
 package compose.project.click.click.ui.components
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.util.lerp
-import kotlin.random.Random
+import compose.project.click.click.ui.theme.BorderHard
+import compose.project.click.click.ui.theme.LocalPlatformStyle
 
 /**
- * Material 3 "Liquid Glass" pill used for floating map overlays (e.g. the memories count).
- *
- * Rendering strategy per the 2026-04-16 spec review:
- *   * Android API 31+ + iOS / Desktop — the caller is free to stack [Modifier.blur] on top before
- *     invoking this composable to produce a true backdrop blur. We do **not** blur internally
- *     because the blur has to sample the map tiles *behind* the pill, which only the caller
- *     has in scope.
- *   * **Android < API 31** — `Modifier.blur` is a no-op on older devices (it only compiles;
- *     runtime requires Android 12+). We ship a **frosted-tint + procedural noise** fallback that
- *     looks intentional at small sizes: a translucent gradient fill plus a faint noise canvas so
- *     the surface reads as glass rather than flat plastic. The fallback runs on every platform
- *     unconditionally so the noise is baked in regardless of whether backdrop blur is available,
- *     matching the requirement that we do **not** restrict the app to API 31+.
- *
- * Usage:
- *   LiquidGlassPill(
- *     modifier = Modifier.align(Alignment.TopStart).padding(16.dp),
- *   ) { Text("12 memories") }
+ * Functional Clarity pill — opaque fill + hard border (no blur, noise, or gradients).
+ * API name retained for call-site compatibility.
  */
 @Composable
 fun LiquidGlassPill(
     modifier: Modifier = Modifier,
     cornerRadiusDp: Int = 24,
     noiseDensity: Float = 0.04f,
-    /**
-     * 0 = default translucent glass; 1 = denser fill for collapsed floating headers so titles
-     * stay readable over scrolling content.
-     */
     backgroundStrength: Float = 0f,
     content: @Composable () -> Unit,
 ) {
-    val shape = RoundedCornerShape(cornerRadiusDp.dp)
-    val scheme = MaterialTheme.colorScheme
-    val strength = backgroundStrength.coerceIn(0f, 1f)
+    // noiseDensity / backgroundStrength kept for signature compatibility; unused.
+    @Suppress("UNUSED_VARIABLE")
+    val ignoredNoise = noiseDensity
+    @Suppress("UNUSED_VARIABLE")
+    val ignoredStrength = backgroundStrength
 
-    val baseGradient = remember(scheme, strength) {
-        val topAlpha = lerp(0.58f, 0.90f, strength)
-        val bottomAlpha = lerp(0.34f, 0.78f, strength)
-        Brush.verticalGradient(
-            colors = listOf(
-                scheme.surface.copy(alpha = topAlpha),
-                scheme.surface.copy(alpha = bottomAlpha),
-            ),
-        )
-    }
-    val borderAlpha = lerp(0.08f, 0.18f, strength)
-    val backingAlpha = lerp(0f, 0.42f, strength)
+    val shape = RoundedCornerShape(cornerRadiusDp.dp)
+    val borderWidth = LocalPlatformStyle.current.cardBorderWidth
+    val scheme = MaterialTheme.colorScheme
 
     Box(
         modifier = modifier
             .clip(shape)
-            .background(baseGradient)
-            .border(1.dp, scheme.onSurface.copy(alpha = borderAlpha), shape),
+            .background(scheme.surface)
+            .border(borderWidth, BorderHard, shape),
     ) {
-        if (backingAlpha > 0f) {
-            Box(
-                Modifier
-                    .matchParentSize()
-                    .background(scheme.background.copy(alpha = backingAlpha)),
-            )
-        }
-        // Procedural noise overlay — keeps the surface reading as glass on every platform.
-        Canvas(modifier = Modifier.matchParentSize()) {
-            val density = noiseDensity.coerceIn(0.0f, 0.2f)
-            val total = (size.width * size.height * density).toInt().coerceAtMost(4_000)
-            val rng = Random(seed = (size.width.toInt() xor size.height.toInt()))
-            for (i in 0 until total) {
-                val x = rng.nextFloat() * size.width
-                val y = rng.nextFloat() * size.height
-                val dotAlpha = 0.02f + rng.nextFloat() * 0.06f
-                drawCircle(
-                    color = Color.White.copy(alpha = dotAlpha),
-                    radius = 0.5f,
-                    center = Offset(x, y),
-                )
-            }
-        }
-
         Box(Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
             content()
         }

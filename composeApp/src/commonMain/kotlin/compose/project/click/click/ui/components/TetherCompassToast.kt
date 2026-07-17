@@ -5,6 +5,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -22,10 +23,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.ui.theme.BorderHard
+import compose.project.click.click.ui.theme.PrimaryBlue
 import kotlinx.coroutines.delay
 
 private const val TETHER_TOAST_VISIBLE_MS = 30_000L
@@ -68,14 +70,13 @@ fun TetherCompassToast(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        brush = Brush.horizontalGradient(
-                            colors = listOf(
-                                Color(0xFF1D4ED8),
-                                Color(0xFF2563EB),
-                                Color(0xFF1D4ED8),
-                            ),
-                        ),
-                        shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
+                        PrimaryBlue,
+                        RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
+                    )
+                    .border(
+                        2.dp,
+                        BorderHard,
+                        RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
                     )
                     .padding(horizontal = 18.dp, vertical = 16.dp),
             ) {

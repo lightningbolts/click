@@ -6,6 +6,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -59,7 +60,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
@@ -83,6 +83,7 @@ import compose.project.click.click.ui.chat.ChatMediaPickerHandles // pragma: all
 import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatLiquidGlassPlate // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatSpringPressScale // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatInterMessageHubBaseCompact // pragma: allowlist secret
@@ -96,13 +97,13 @@ import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx // pr
 import compose.project.click.click.ui.chat.isTimestampPeekRevealed // pragma: allowlist secret
 import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
-import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
 import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatComposerStripReserve // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatComposerFieldColors // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatNativeKeyboardInsets // pragma: allowlist secret
 import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
+import compose.project.click.click.ui.theme.BorderHard // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
@@ -266,19 +267,21 @@ fun HubChatScreen(
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                // ── Edge-to-edge translucent glass header (parity with ChatView 1-on-1 / group) ──
-                // No solid plate: the header is transparent over the ambient mesh, matching the
-                // seamless liquid-glass chrome used by standard chats.
-                Column(
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = topInset)
                         .height(56.dp)
-                        .padding(horizontal = 20.dp)
                         .testTag(ChatGlassHeaderPlateTestTag),
                 ) {
+                    ChatLiquidGlassPlate(
+                        modifier = Modifier.matchParentSize(),
+                        testTag = ChatGlassHeaderPlateTestTag,
+                    )
                     Row(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 20.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         IconButton(onClick = onNavigateBack) {
@@ -372,10 +375,12 @@ fun HubChatScreen(
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
-                    color = PrimaryBlue.copy(alpha = 0.78f),
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                        .border(2.dp, BorderHard, RoundedCornerShape(14.dp)),
+                    color = PrimaryBlue,
                     shape = RoundedCornerShape(14.dp),
                     tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
                 ) {
                     Text(
                         text = "See someone interesting? Go tap phones to make a permanent connection.",
@@ -391,10 +396,12 @@ fun HubChatScreen(
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .border(2.dp, BorderHard, RoundedCornerShape(16.dp)),
+                        color = MaterialTheme.colorScheme.primaryContainer,
                         shape = RoundedCornerShape(16.dp),
                         tonalElevation = 0.dp,
+                        shadowElevation = 0.dp,
                     ) {
                         Text(
                             text = "You're the first one here! We'll ping you when others join.",
@@ -713,17 +720,8 @@ private fun HubChatInputBar(
 
     val canSend = !inLobby && !isOutOfBounds && draft.trim().isNotEmpty()
     val enabled = !inLobby && !isOutOfBounds && !isSending
-    val attachTint = PrimaryBlue.copy(alpha = 0.92f)
-    val sendGradient = Brush.linearGradient(
-        colors = if (canSend) {
-            listOf(PrimaryBlue, LightBlue)
-        } else {
-            listOf(
-                MaterialTheme.colorScheme.surfaceVariant,
-                MaterialTheme.colorScheme.surfaceVariant,
-            )
-        },
-    )
+    val attachTint = PrimaryBlue
+    val sendBackground = if (canSend) PrimaryBlue else MaterialTheme.colorScheme.surfaceVariant
     val composerInputTextStyle = MaterialTheme.typography.bodyMedium
     val composerTextStyleCentered = composerInputTextStyle.merge(
         TextStyle(
@@ -844,19 +842,12 @@ private fun HubChatInputBar(
                         .zIndex(4f)
                         .focusProperties { canFocus = false },
                     anchor = {
-                        val bgAlpha = if (isSending || inLobby) 0.12f else 0.24f
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .clip(CircleShape)
-                                .background(
-                                    Brush.linearGradient(
-                                        listOf(
-                                            PrimaryBlue.copy(alpha = bgAlpha),
-                                            PrimaryBlue.copy(alpha = bgAlpha),
-                                        ),
-                                    ),
-                                )
+                                .background(MaterialTheme.colorScheme.primaryContainer)
+                                .border(2.dp, BorderHard, CircleShape)
                                 .chatSpringPressScale(attachInteraction),
                             contentAlignment = Alignment.Center,
                         ) {
@@ -896,7 +887,7 @@ private fun HubChatInputBar(
                     },
                 )
 
-                // ── Send button (right, gradient pill, same as ConnectionChatMessageComposer) ─
+                // ── Send button (right, solid primary pill) ─
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
@@ -905,7 +896,12 @@ private fun HubChatInputBar(
                         .focusProperties { canFocus = false }
                         .chatSpringPressScale(sendInteraction)
                         .clip(if (composerStyle.isIOS) CircleShape else RoundedCornerShape(fieldCorner))
-                        .background(sendGradient)
+                        .background(sendBackground)
+                        .border(
+                            width = 2.dp,
+                            color = BorderHard,
+                            shape = if (composerStyle.isIOS) CircleShape else RoundedCornerShape(fieldCorner),
+                        )
                         .clickable(
                             interactionSource = sendInteraction,
                             indication = null,

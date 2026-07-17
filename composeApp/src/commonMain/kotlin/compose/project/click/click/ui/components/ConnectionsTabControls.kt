@@ -36,8 +36,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import compose.project.click.click.ui.theme.BorderHard
 import compose.project.click.click.ui.theme.LightBlue
-import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 
 /**
@@ -176,20 +176,14 @@ private fun ConnectionsTabFilterMenuChip(
         "Archived ($archivedCount)",
     )
     val currentLabel = labels.getOrElse(selectedTabIndex) { labels[0] }
-    val segStyle = LocalPlatformStyle.current
-    val segBorderWidth = if (segStyle.isIOS) 0.5.dp else 1.dp
     val chipCorner = GlassSheetTokens.BentoExteriorCorner - 6.dp
 
     Box {
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(chipCorner))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (segStyle.isIOS) 0.35f else 0.45f))
-                .border(
-                    segBorderWidth,
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-                    RoundedCornerShape(chipCorner),
-                )
+                .background(MaterialTheme.colorScheme.surface)
+                .border(2.dp, BorderHard, RoundedCornerShape(chipCorner))
                 .clickable { expanded = true }
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -344,20 +338,14 @@ private fun DiscoverySortFilterMenuChip(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val currentLabel = labels.getOrElse(selectedSortIndex) { labels[0] }
-    val segStyle = LocalPlatformStyle.current
-    val segBorderWidth = if (segStyle.isIOS) 0.5.dp else 1.dp
     val chipCorner = GlassSheetTokens.BentoExteriorCorner - 6.dp
 
     Box {
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(chipCorner))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (segStyle.isIOS) 0.35f else 0.45f))
-                .border(
-                    segBorderWidth,
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-                    RoundedCornerShape(chipCorner),
-                )
+                .background(MaterialTheme.colorScheme.surface)
+                .border(2.dp, BorderHard, RoundedCornerShape(chipCorner))
                 .clickable { expanded = true }
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -411,8 +399,6 @@ fun DiscoverySortSegmentBar(
     onTabSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val segStyle = LocalPlatformStyle.current
-    val segBorderWidth = if (segStyle.isIOS) 0.5.dp else 1.dp
     val exterior = GlassSheetTokens.BentoExteriorCorner
     val trackPadding = 6.dp
     val segmentCorner = exterior - trackPadding
@@ -420,17 +406,9 @@ fun DiscoverySortSegmentBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .border(
-                width = segBorderWidth,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f),
-                shape = RoundedCornerShape(exterior),
-            )
+            .border(2.dp, BorderHard, RoundedCornerShape(exterior))
             .clip(RoundedCornerShape(exterior))
-            .background(
-                MaterialTheme.colorScheme.surfaceVariant.copy(
-                    alpha = if (segStyle.isIOS) 0.25f else 0.35f,
-                ),
-            )
+            .background(MaterialTheme.colorScheme.surface)
             .padding(trackPadding),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -443,12 +421,8 @@ fun DiscoverySortSegmentBar(
                     .then(
                         if (selected) {
                             Modifier
-                                .background(PrimaryBlue.copy(alpha = if (segStyle.isIOS) 0.14f else 0.18f))
-                                .border(
-                                    segBorderWidth,
-                                    PrimaryBlue.copy(alpha = if (segStyle.isIOS) 0.25f else 0.35f),
-                                    RoundedCornerShape(segmentCorner),
-                                )
+                                .background(MaterialTheme.colorScheme.primaryContainer)
+                                .border(2.dp, PrimaryBlue, RoundedCornerShape(segmentCorner))
                         } else {
                             Modifier
                         },
@@ -477,8 +451,6 @@ fun ConnectionsSegmentBar(
     archivedCount: Int,
     modifier: Modifier = Modifier,
 ) {
-    val segStyle = LocalPlatformStyle.current
-    val segBorderWidth = if (segStyle.isIOS) 0.5.dp else 1.dp
     val exterior = GlassSheetTokens.BentoExteriorCorner
     val trackPadding = 6.dp
     val segmentCorner = exterior - trackPadding
@@ -486,17 +458,9 @@ fun ConnectionsSegmentBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .border(
-                width = segBorderWidth,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f),
-                shape = RoundedCornerShape(exterior),
-            )
+            .border(2.dp, BorderHard, RoundedCornerShape(exterior))
             .clip(RoundedCornerShape(exterior))
-            .background(
-                MaterialTheme.colorScheme.surfaceVariant.copy(
-                    alpha = if (segStyle.isIOS) 0.25f else 0.35f,
-                ),
-            )
+            .background(MaterialTheme.colorScheme.surface)
             .padding(trackPadding),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -513,12 +477,8 @@ fun ConnectionsSegmentBar(
                     .then(
                         if (selected) {
                             Modifier
-                                .background(PrimaryBlue.copy(alpha = if (segStyle.isIOS) 0.14f else 0.18f))
-                                .border(
-                                    segBorderWidth,
-                                    PrimaryBlue.copy(alpha = if (segStyle.isIOS) 0.25f else 0.35f),
-                                    RoundedCornerShape(segmentCorner),
-                                )
+                                .background(MaterialTheme.colorScheme.primaryContainer)
+                                .border(2.dp, PrimaryBlue, RoundedCornerShape(segmentCorner))
                         } else {
                             Modifier
                         },

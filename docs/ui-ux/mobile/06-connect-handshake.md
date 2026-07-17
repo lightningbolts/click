@@ -4,6 +4,8 @@
 **Source:** `AddClickScreen.kt`, `MyQRCodeScreen.kt`, `QRScannerScreen.kt`, `NfcScreen.kt`, `ConnectionContextSheet.kt`, `ConnectionRevealOverlay.kt`, `AppClipHandshakeScreen.kt`, `ConnectionViewModel.kt`  
 **Out of scope:** Web, backend API contracts, redesign.
 
+**Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: `click/docs/design-assets/add_click_streamlined_header/`.
+
 ---
 
 ## ASCII hierarchy
@@ -87,7 +89,7 @@ Column: `PageHeader` → `AnimatedContent` state body (weight 1) → optional ha
 
 ### ConnectionRevealOverlay
 
-Full-screen gradient scrim (`#07111E` → `#04070C`). Centered glass card max 340dp width.
+Full-screen flat scrim (black @ 40%, no blur). Centered bordered card max 340dp width, 2dp `#000` border, 16dp radius.
 
 ---
 

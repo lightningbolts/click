@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import click.composeapp.generated.resources.Res
 import click.composeapp.generated.resources.manrope_bold
 import click.composeapp.generated.resources.manrope_medium
@@ -23,25 +24,107 @@ val ManropeFontFamily: FontFamily
 
 private fun TextStyle.withManrope(family: FontFamily): TextStyle = copy(fontFamily = family)
 
+/**
+ * Functional Clarity typography — Manrope with oversized headlines and
+ * minimum 14sp body/label sizes.
+ */
 @Composable
 fun clickTypography(): Typography {
     val family = ManropeFontFamily
-    val baseline = Typography()
     return Typography(
-        displayLarge = baseline.displayLarge.withManrope(family),
-        displayMedium = baseline.displayMedium.withManrope(family),
-        displaySmall = baseline.displaySmall.withManrope(family),
-        headlineLarge = baseline.headlineLarge.withManrope(family),
-        headlineMedium = baseline.headlineMedium.withManrope(family),
-        headlineSmall = baseline.headlineSmall.withManrope(family),
-        titleLarge = baseline.titleLarge.withManrope(family),
-        titleMedium = baseline.titleMedium.withManrope(family),
-        titleSmall = baseline.titleSmall.withManrope(family),
-        bodyLarge = baseline.bodyLarge.withManrope(family),
-        bodyMedium = baseline.bodyMedium.withManrope(family),
-        bodySmall = baseline.bodySmall.withManrope(family),
-        labelLarge = baseline.labelLarge.withManrope(family),
-        labelMedium = baseline.labelMedium.withManrope(family),
-        labelSmall = baseline.labelSmall.withManrope(family),
+        displayLarge = TextStyle(
+            fontFamily = family,
+            fontWeight = FontWeight.Bold,
+            fontSize = 48.sp,
+            lineHeight = 52.sp,
+            letterSpacing = (-0.04).sp,
+        ),
+        displayMedium = TextStyle(
+            fontFamily = family,
+            fontWeight = FontWeight.Bold,
+            fontSize = 40.sp,
+            lineHeight = 44.sp,
+            letterSpacing = (-0.03).sp,
+        ),
+        displaySmall = TextStyle(
+            fontFamily = family,
+            fontWeight = FontWeight.Bold,
+            fontSize = 36.sp,
+            lineHeight = 40.sp,
+            letterSpacing = (-0.02).sp,
+        ),
+        headlineLarge = TextStyle(
+            fontFamily = family,
+            fontWeight = FontWeight.Bold,
+            fontSize = 32.sp,
+            lineHeight = 40.sp,
+            letterSpacing = (-0.02).sp,
+        ),
+        headlineMedium = TextStyle(
+            fontFamily = family,
+            fontWeight = FontWeight.Bold,
+            fontSize = 24.sp,
+            lineHeight = 32.sp,
+        ),
+        headlineSmall = TextStyle(
+            fontFamily = family,
+            fontWeight = FontWeight.Bold,
+            fontSize = 20.sp,
+            lineHeight = 28.sp,
+        ),
+        titleLarge = TextStyle(
+            fontFamily = family,
+            fontWeight = FontWeight.Bold,
+            fontSize = 20.sp,
+            lineHeight = 28.sp,
+        ),
+        titleMedium = TextStyle(
+            fontFamily = family,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 16.sp,
+            lineHeight = 24.sp,
+        ),
+        titleSmall = TextStyle(
+            fontFamily = family,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+        ),
+        bodyLarge = TextStyle(
+            fontFamily = family,
+            fontWeight = FontWeight.Medium,
+            fontSize = 18.sp,
+            lineHeight = 28.sp,
+        ),
+        bodyMedium = TextStyle(
+            fontFamily = family,
+            fontWeight = FontWeight.Medium,
+            fontSize = 16.sp,
+            lineHeight = 24.sp,
+        ),
+        bodySmall = TextStyle(
+            fontFamily = family,
+            fontWeight = FontWeight.Medium,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+        ),
+        labelLarge = TextStyle(
+            fontFamily = family,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+        ),
+        labelMedium = TextStyle(
+            fontFamily = family,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+        ),
+        labelSmall = TextStyle(
+            fontFamily = family,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+        ),
     )
 }

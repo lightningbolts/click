@@ -4,7 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Chat
@@ -20,15 +20,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.data.models.PollPairSuggestion
+import androidx.compose.foundation.shape.RoundedCornerShape
 import compose.project.click.click.ui.theme.*
 
-private val WebAccentBlue = Color(0xFF3A86FF)
-
+import compose.project.click.click.data.models.PollPairSuggestion
 @Composable
 fun OnlineFriendItem(name: String, status: String) {
     Row(
@@ -41,14 +39,8 @@ fun OnlineFriendItem(name: String, status: String) {
             modifier = Modifier
                 .size(48.dp)
                 .clip(RoundedCornerShape(24.dp))
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            PrimaryBlue.copy(alpha = 0.3f),
-                            Color.Transparent
-                        )
-                    )
-                ),
+                .background(MaterialTheme.colorScheme.primaryContainer)
+                .border(2.dp, BorderHard, CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -90,25 +82,18 @@ fun RecentClickCard(name: String, time: String, location: String) {
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Glowing Icon Container
+            // Icon container
             Box(
                 modifier = Modifier
-                    .size(48.dp),
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .border(2.dp, BorderHard, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                // Glow effect
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .background(
-                            brush = Brush.radialGradient(
-                                colors = listOf(PrimaryBlue.copy(alpha = 0.4f), Color.Transparent)
-                            )
-                        )
-                )
                 Text(
                     name.first().toString(),
-                    color = NeonPurple,
+                    color = PrimaryBlue,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium
                 )
@@ -144,7 +129,7 @@ fun RecentClickCard(name: String, time: String, location: String) {
 }
 
 /**
- * Hero “Poll-Pair” card: matches dashboard glass + gradient-border language from the web app.
+ * Hero Poll-Pair card with opaque surface and hard border.
  */
 @Composable
 fun PollPairCard(
@@ -156,13 +141,6 @@ fun PollPairCard(
     icebreakerCooldownSec: Int = 0,
 ) {
     val outerShape = RoundedCornerShape(24.dp)
-    val innerShape = RoundedCornerShape(23.dp)
-    val borderGradient = Brush.linearGradient(
-        colors = listOf(
-            PrimaryBlue.copy(alpha = 0.65f),
-            WebAccentBlue.copy(alpha = 0.65f)
-        )
-    )
     val displayName = suggestion.otherUserName ?: "your click"
     val subtitle = when {
         suggestion.daysSinceContact <= 0 -> "No recent messages — say hi?"
@@ -170,26 +148,14 @@ fun PollPairCard(
         else -> "${suggestion.daysSinceContact} days since you last chatted"
     }
 
-    val pStyle = LocalPlatformStyle.current
-    Box(
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .then(
-                if (pStyle.useShadowElevation) Modifier.shadow(20.dp, outerShape, spotColor = PrimaryBlue.copy(alpha = 0.35f))
-                else Modifier
-            )
             .clip(outerShape)
-            .background(borderGradient)
-            .padding(if (pStyle.isIOS) 0.5.dp else 1.dp)
+            .background(MaterialTheme.colorScheme.surface)
+            .border(2.dp, BorderHard, outerShape)
+            .padding(18.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(innerShape)
-                .background(GlassWhite)
-                .border(1.dp, GlassBorder, innerShape)
-                .padding(18.dp)
-        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -198,11 +164,8 @@ fun PollPairCard(
                     modifier = Modifier
                         .size(48.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(
-                            Brush.linearGradient(
-                                listOf(PrimaryBlue.copy(alpha = 0.35f), WebAccentBlue.copy(alpha = 0.2f))
-                            )
-                        ),
+                        .background(PrimaryBlue)
+                        .border(2.dp, BorderHard, RoundedCornerShape(16.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     androidx.compose.material3.Icon(
@@ -218,7 +181,7 @@ fun PollPairCard(
                         text = "Poll-Pair",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        color = NeonPurple
+                        color = PrimaryBlue
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
@@ -231,7 +194,7 @@ fun PollPairCard(
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -265,7 +228,7 @@ fun PollPairCard(
                     enabled = icebreakerSendEnabled,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(1.dp, GlassBorder),
+                    border = BorderStroke(2.dp, BorderHard),
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = MaterialTheme.colorScheme.onSurface
                     ),
@@ -275,7 +238,7 @@ fun PollPairCard(
                         Icons.Filled.Lightbulb,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
-                        tint = WebAccentBlue.copy(alpha = if (icebreakerSendEnabled) 1f else 0.4f)
+                        tint = if (icebreakerSendEnabled) PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
@@ -286,7 +249,6 @@ fun PollPairCard(
                 }
             }
         }
-    }
 }
 
 @Composable
@@ -305,24 +267,19 @@ fun StatCard(
                 .padding(24.dp), // Generous padding
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Glowing Icon
             Box(
-                contentAlignment = Alignment.Center
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(PrimaryBlue)
+                    .border(2.dp, BorderHard, RoundedCornerShape(16.dp)),
+                contentAlignment = Alignment.Center,
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .background(
-                            brush = Brush.radialGradient(
-                                colors = listOf(PrimaryBlue.copy(alpha = 0.5f), Color.Transparent)
-                            )
-                        )
-                )
                 androidx.compose.material3.Icon(
                     icon,
                     contentDescription = null,
-                    tint = NeonPurple,
-                    modifier = Modifier.size(32.dp)
+                    tint = Color.White,
+                    modifier = Modifier.size(32.dp),
                 )
             }
             Spacer(modifier = Modifier.height(12.dp))

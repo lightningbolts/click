@@ -17,7 +17,7 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] `./gradlew :composeApp:iosSimulatorArm64Test` (or `iosSimulatorArm64Test` target)
 - [ ] `ChatSwipeMathTest` — swipe-to-reply inverse math
 - [ ] `ChatViewModelTest` — send/receive/session
-- [ ] `GlassCardUiTest` — glass card rendering (iOS sim)
+- [ ] `GlassCardUiTest` — bordered card rendering (iOS sim; Functional Clarity)
 - [ ] `UnifiedToastTokensTest` — toast timing constants
 - [ ] `QrCodeViewUiTest` — QR display (iOS sim)
 - [ ] `ConnectionEncounterMergeTest` — encounter merge logic
@@ -35,7 +35,7 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 
 - [ ] Cold start → `AppShimmerScreen` while auth/onboarding resolves
 - [ ] Bottom tab bar: Home, Add Click, Clicks, Map, Settings — all five navigate correctly
-- [ ] `[P] iOS` Native `UITabBar` renders; iOS 26+ inset behavior correct (no black gap)
+- [ ] `[P] iOS` Native `UITabBar` renders as opaque solid bar (Functional Clarity; no liquid glass translucency); inset behavior correct (no black gap)
 - [ ] `[P] Android` M3 `NavigationBar` renders with correct selection state
 - [ ] Tab re-tap returns to tab root (no duplicate stack entries)
 - [ ] `AnimatedContent` tab transitions: slide + fade on tap navigation
@@ -58,11 +58,11 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] `[UI] iOS` Primary/secondary buttons use `UIButton` highlight (no Compose scale bounce)
 - [ ] `[UI] Android` Buttons show bounded ripple; pills/circles fully rounded ripple
 - [ ] `[UI] iOS` No Material ripple on any surface
-- [ ] `[UI]` Context menus: Android `DropdownMenu`; iOS `UIMenu` or approved glass popup for floating menus
+- [ ] `[UI]` Context menus: Android `DropdownMenu`; iOS `UIMenu` or approved Functional Clarity bordered popup for floating menus
 - [ ] `[UI]` Toasts: Android `SnackbarHost` motion; iOS banner slide without bouncy spring
 - [ ] `[UI]` Swipe-back / swipe-to-reply settle: no overshoot bounce; platform easing only
 - [ ] `[UI]` Haptics: selection tick on chips/toggles; heavy on long-press/destructive; success on connect/NFC
-- [ ] `[UI]` `LiquidGlassPill` used only for static decoration (no press on faux glass pills)
+- [ ] `[UI]` Functional Clarity solid pills (`LiquidGlassPill` API) used only for static decoration (no press on non-interactive header pills)
 - [ ] `[KNOWN-10]` Spot-check visual polish on Home, Clicks, Map, chat composer, sheets (misc UI bugs)
 
 ---

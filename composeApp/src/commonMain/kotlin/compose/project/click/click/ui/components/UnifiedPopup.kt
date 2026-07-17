@@ -401,11 +401,14 @@ fun UnifiedPopupFormDialog(
                 if (contentMaxWidth != null) base.widthIn(max = contentMaxWidth) else base
             }
         Surface(
-            modifier = surfaceModifier,
+            modifier = surfaceModifier
+                .clip(RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner))
+                .border(1.dp, GlassSheetTokens.GlassBorder, RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner)),
             shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
             color = GlassSheetTokens.OledBlack,
             contentColor = GlassSheetTokens.OnOled,
-            tonalElevation = 6.dp,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
         ) {
             CompositionLocalProvider(LocalContentColor provides GlassSheetTokens.OnOled) {
                 val horizontalPad = innerHorizontalPadding ?: innerPadding

@@ -1,12 +1,14 @@
 # App Shell & Navigation
 
-As-built specification for the Click mobile app shell, gate stack, tab navigation, overlays, and back behavior. Sources: `click/composeApp/src/commonMain/kotlin/compose/project/click/click/App.kt`, `navigation/NavigationItem.kt`, `ui/components/*`, `ui/screens/UnifiedSearchSheet.kt`, `calls/CallOverlays.kt`.
+Target-state specification for the Click mobile app shell, gate stack, tab navigation, overlays, and back behavior. Sources: `click/composeApp/src/commonMain/kotlin/compose/project/click/click/App.kt`, `navigation/NavigationItem.kt`, `ui/components/*`, `ui/screens/UnifiedSearchSheet.kt`, `calls/CallOverlays.kt`.
+
+**Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: invented from design system.
 
 ---
 
 ## Gate Stack Overview
 
-The root composable `App()` wraps all UI in `PlatformThemeProvider` → `ConnectionSensorMonitorsProvider` → full-screen `Box` (theme background + optional dark radial glow).
+The root composable `App()` wraps all UI in `PlatformThemeProvider` → `ConnectionSensorMonitorsProvider` → full-screen `Box` (flat `background` `#f9f9f9` / dark inverse — no radial glow).
 
 ### ASCII: Authentication & Post-Login Gate Order
 
@@ -168,7 +170,7 @@ The root composable `App()` wraps all UI in `PlatformThemeProvider` → `Connect
 
 **Android** (`BottomBar.android.kt`):
 
-- `NavigationBar`: surface 95% alpha, tonal elevation 8 dp.
+- `NavigationBar`: solid `surface` fill, **2dp** top `#000` border, **0 elevation** (no shadow).
 - Items: icon only (`alwaysShowLabel = false`).
 - Selected: `primary` icon/text, `primaryContainer` indicator.
 - Unselected: `onSurfaceVariant`.
@@ -176,10 +178,9 @@ The root composable `App()` wraps all UI in `PlatformThemeProvider` → `Connect
 
 **iOS** (`BottomBar.ios.kt`):
 
-- Native `UITabBar` subview on `UIViewController`.
-- Items use SF Symbols + titles.
-- Liquid Glass iOS 26+: tab bar pinned to view bottom (not safe area); else safe area bottom.
-- Measured clearance from screen bottom to tab bar top → `AppScreenChromeState`.
+- Native `UITabBar` subview on `UIViewController` — **solid bordered bar** (not liquid glass).
+- Items use SF Symbols + titles; active tab = solid `#630ed4` circle behind icon.
+- Tab bar pinned to view bottom; measured clearance → `AppScreenChromeState`.
 - Placeholder `Box` mirrors tab bar frame for Compose layout sync.
 
 ### 2.3 States
@@ -207,7 +208,7 @@ The root composable `App()` wraps all UI in `PlatformThemeProvider` → `Connect
 
 ### 2.6 A11y & Responsive
 
-- iOS measures real tab bar height including home indicator (Liquid Glass vs legacy).
+- iOS measures real tab bar height including home indicator (solid bordered bar).
 - Android falls back to 80 dp + nav inset when not visible.
 
 ---
@@ -301,7 +302,7 @@ See §6 Screen Transitions.
 - `LazyColumn` / `verticalScroll` with horizontal padding `AppScreenDefaults.HorizontalPadding` (20 dp).
 - Bottom `contentPadding` = `rememberBottomChromePadding()` (tab overlay + 16 dp).
 - Top spacer item = `rememberFloatingHeaderTopPadding` (status bar + measured header + 24 dp section spacing).
-- `FloatingHeaderOverlay` z-index 1: `LiquidGlassPageHeader` + optional search icon.
+- `FloatingHeaderOverlay` z-index 1: `LiquidGlassPageHeader` (renders as **solid header bar**, 2dp bottom `#000` border) + optional search icon.
 
 ### 5.2 Interactive Elements
 
@@ -312,7 +313,7 @@ See §6 Screen Transitions.
 
 | State | Header |
 |-------|--------|
-| **Default** | Expanded liquid glass island |
+| **Default** | Expanded solid header bar with title/subtitle |
 | **Active scroll** | `collapseFraction` 0→1 |
 | **Hidden** | `collapseFraction >= 1` and scroll past slack |
 
@@ -512,13 +513,13 @@ Back event → cascade dismiss overlays → pop route history.
 
 - **Not** a route; `showUnifiedSearchSheet` boolean in `App.kt`.
 - Rendered sibling to `Scaffold` inner `Box` (true screen bottom).
-- `GlassAdaptiveBottomSheet` + `rememberGlassAdaptiveSheetState(skipPartiallyExpanded = false)`.
+- `GlassAdaptiveBottomSheet` + `rememberGlassAdaptiveSheetState(skipPartiallyExpanded = false)` (opaque bordered sheet).
 - Auto `sheetState.show()` after 32 ms delay.
-- Content: OLED black column, 12 dp horizontal padding.
+- Content: opaque `surface` column, 12 dp horizontal padding, 2dp top border.
 
 ### 9.2 Interactive Elements
 
-- Search `TextField` in 16 dp rounded surface (white 8%).
+- Search `TextField` in 8 dp rounded bordered surface (`surface-container`, 2dp `#000`).
 - Filter chips: All + per `SearchResultCategory`.
 - Results list navigates to chat, map, beacon, settings (dismisses sheet).
 
@@ -674,7 +675,7 @@ Ended tail: suppressEndedPreviewAfterActiveCall coordinates dismiss
 
 - Mounted in scaffold wrapper `Box`, **`zIndex(70f)`**, `Alignment.TopCenter`.
 - `TetherCompassToast` with `padding(top = statusBarTop + 64.dp)`.
-- Blue gradient banner, `BentoExteriorCorner` (28 dp), Explore icon.
+- Solid `primary` `#630ed4` banner, 16dp corners, 2dp `#000` border, Explore icon.
 
 ### 12.2 Interactive Elements
 
@@ -709,7 +710,7 @@ Chat thread also shows same toast locally in `ChatView` for peer pings.
 
 ### 12.6 A11y & Responsive
 
-- Full width with 16 dp horizontal margin; bold `titleMedium` white on blue gradient.
+- Full width with 16 dp horizontal margin; bold `titleMedium` white on solid `primary` `#630ed4`.
 
 ---
 

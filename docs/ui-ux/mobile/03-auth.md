@@ -6,6 +6,8 @@
 **Source of truth:** `LoginScreen.kt`, `SignUpScreen.kt`, `AuthViewModel.kt`, `App.kt` auth gate.  
 **Date:** 2026-07-16  
 
+**Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: invented from design system.
+
 ---
 
 ## Gate overview
@@ -40,7 +42,7 @@ Cold boot / signed out
 
 | Layer | Element | Notes |
 |-------|---------|-------|
-| Root | `Box` full-screen | Vertical gradient: `background` → `primaryContainer` @ 20% alpha |
+| Root | `Box` full-screen | Flat `background` `#f9f9f9` (no gradient) |
 | Scroll | `Column` + `verticalScroll` | `imePadding`, `navigationBarsPadding`, horizontal 24dp |
 | Header | `Icon` TouchApp 80dp | Primary tint |
 | Header | Title + subtitle | Center-aligned |
@@ -145,7 +147,7 @@ OAuth buttons: outlined, 52dp height, disabled while loading.
 
 | Layer | Element | Notes |
 |-------|---------|-------|
-| Root | `Box` full-screen | Same gradient as Login |
+| Root | `Box` full-screen | Flat `background` `#f9f9f9` (no gradient) |
 | Chrome | Back `IconButton` | Top-start, 48dp, circular surface + shadow, `zIndex(2)` |
 | Scroll | `Column` + `verticalScroll` | `safeDrawing` top, `imePadding`, horizontal 24dp, top 60dp |
 | Header | TouchApp icon + titles | Center-aligned |
@@ -157,7 +159,7 @@ OAuth buttons: outlined, 52dp height, disabled while loading.
 | Primary | Create Account `Button` | Full width, 56dp |
 | Footer | Sign In link row | Center |
 
-Date picker: `DatePickerDialog` with glass/OLED theming (`GlassSheetTokens`, `PrimaryBlue`).
+Date picker: `DatePickerDialog` with opaque bordered sheet theming (`GlassSheetTokens` → solid surface, 2dp `#000` border, `primary` `#630ed4`).
 
 ### Interactive Elements
 

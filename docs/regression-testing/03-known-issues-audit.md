@@ -383,7 +383,7 @@ UI renders cleanly and consistently across screens.
 - Ghost mode overlay asymmetry iOS vs Android ([KNOWN-5](#5-map-not-rendering-in-color))
 - Hazard / SOS clustering and glyph mismatch ([KNOWN-9](#9-hazard-beacon-icon-oversized))
 - Map dark style vs colorful expectation ([KNOWN-5](#5-map-not-rendering-in-color))
-- Composer / glass chrome regressions after platform UI work
+- Composer / Functional Clarity chrome regressions after platform UI work
 
 Capture screenshots per tab (Home, Add Click, Clicks, Map, Settings) + chat + sheets when filing specifics.
 

@@ -2,17 +2,22 @@ package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.ui.theme.BorderHard
+import compose.project.click.click.ui.theme.OnSurfaceLight
+import compose.project.click.click.ui.theme.OnSurfaceVariant
+import compose.project.click.click.ui.theme.SurfaceLight
 
-/** Phase 2026 — shared OLED / floating-glass tokens for sheets and bento surfaces. */
+/** Functional Clarity sheet tokens — opaque surfaces, hard borders, flat scrim. */
 object GlassSheetTokens {
-    val OledBlack: Color = Color(0xFF000000)
-    val GlassSurface: Color = Color.White.copy(alpha = 0.05f)
-    val GlassBorder: Color = Color.White.copy(alpha = 0.12f)
-    val GlassBorderPressed: Color = Color.White.copy(alpha = 0.22f)
-    val OnOled: Color = Color.White.copy(alpha = 0.92f)
-    val OnOledMuted: Color = Color.White.copy(alpha = 0.62f)
-    val SheetTopCorner = 32.dp
-    val BentoExteriorCorner = 28.dp
+    val OledBlack: Color = Color(0xFF1A1C1C)
+    val GlassSurface: Color = SurfaceLight
+    val GlassBorder: Color = BorderHard
+    val GlassBorderPressed: Color = BorderHard
+    val OnOled: Color = OnSurfaceLight
+    val OnOledMuted: Color = OnSurfaceVariant
+    val SheetTopCorner = 16.dp
+    val BentoExteriorCorner = 16.dp
     val BentoInteriorCorner = 8.dp
-    val ScrimBaseAlpha = 0.58f
+    /** Flat high-opacity dim (no blur). */
+    val ScrimBaseAlpha = 0.40f
 }

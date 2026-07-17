@@ -4,20 +4,20 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * JVM unit tests for [GlassCard] public constants (no Compose UI harness required).
+ * JVM unit tests for Functional Clarity card/sheet tokens (no Compose UI harness required).
  */
 class GlassCardTest {
 
     @Test
     fun glassCornerRadius_matchesDesignToken() {
-        assertEquals(28f, GlassCornerRadius.value)
+        assertEquals(16f, GlassCornerRadius.value)
     }
 
     @Test
-    fun glassSheetTokens_sheetAndBentoRadii_matchPhase2026() {
-        assertEquals(32f, GlassSheetTokens.SheetTopCorner.value)
-        assertEquals(28f, GlassSheetTokens.BentoExteriorCorner.value)
+    fun glassSheetTokens_sheetAndBentoRadii_matchFunctionalClarity() {
+        assertEquals(16f, GlassSheetTokens.SheetTopCorner.value)
+        assertEquals(16f, GlassSheetTokens.BentoExteriorCorner.value)
         assertEquals(8f, GlassSheetTokens.BentoInteriorCorner.value)
-        assertEquals(0.58f, GlassSheetTokens.ScrimBaseAlpha)
+        assertEquals(0.40f, GlassSheetTokens.ScrimBaseAlpha)
     }
 }

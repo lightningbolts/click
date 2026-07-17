@@ -144,8 +144,8 @@ import compose.project.click.click.data.hub.HubVerifyResult
 @Composable
 @Preview
 fun App() {
-    // Default to dark until persisted preference is loaded.
-    var isDarkMode by remember { mutableStateOf(true) }
+    // Functional Clarity: light-first until persisted preference is loaded.
+    var isDarkMode by remember { mutableStateOf(false) }
 
     // Ktor client
     val client = remember {
@@ -496,20 +496,6 @@ fun App() {
             modifier = Modifier
                 .fillMaxSize()
                 .background(if (isDarkMode) BackgroundDark else BackgroundLight)
-                .let { modifier ->
-                    if (isDarkMode) {
-                        modifier.background(
-                            brush = androidx.compose.ui.graphics.Brush.radialGradient(
-                                colors = listOf(
-                                    PrimaryBlue.copy(alpha = 0.15f),
-                                    Color.Transparent
-                                ),
-                                center = androidx.compose.ui.geometry.Offset(0f, 0f),
-                                radius = 1000f
-                            )
-                        )
-                    } else modifier
-                }
         ) {
         // Show login/signup screens when not authenticated
         if (authViewModel.authState is AuthState.Loading || authShimmerVisible) {

@@ -1,6 +1,8 @@
 package compose.project.click.click.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -56,7 +58,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -65,12 +66,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.ChatWithDetails
+import compose.project.click.click.ui.components.GlassSheetTokens
 import compose.project.click.click.ui.theme.BackgroundDark
-import compose.project.click.click.ui.theme.DeepBlue
-import compose.project.click.click.ui.theme.GradientTextEnd
-import compose.project.click.click.ui.theme.GradientTextStart
-import compose.project.click.click.ui.theme.LightBlue
+import compose.project.click.click.ui.theme.BorderHardDark
 import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.ui.theme.SoftBlue
 import compose.project.click.click.ui.theme.SurfaceDark
 import compose.project.click.click.viewmodel.GlobalSearchViewModel
 import compose.project.click.click.viewmodel.SearchResult
@@ -138,7 +138,8 @@ fun GlobalSearchScreen(
                         Surface(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(16.dp),
-                            color = Color.White.copy(alpha = 0.08f),
+                            color = SurfaceDark,
+                            border = BorderStroke(1.dp, BorderHardDark),
                         ) {
                             TextField(
                                 modifier = Modifier
@@ -181,10 +182,10 @@ fun GlobalSearchScreen(
                                 onClick = { viewModel.toggleCategory(cat) },
                                 label = { Text(categoryLabel(cat)) },
                                 colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = PrimaryBlue.copy(alpha = 0.35f),
+                                    selectedContainerColor = PrimaryBlue,
                                     selectedLabelColor = Color.White,
-                                    containerColor = Color.White.copy(alpha = 0.06f),
-                                    labelColor = Color.White.copy(alpha = 0.85f),
+                                    containerColor = SurfaceDark,
+                                    labelColor = GlassSheetTokens.OnOled,
                                 ),
                             )
                         }
@@ -293,21 +294,19 @@ internal fun UnifiedSearchResultsList(
     onNavigateToBeacon: (String) -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
 ) {
-    val gradientBrush = Brush.horizontalGradient(
-        colors = listOf(GradientTextStart, GradientTextEnd),
-    )
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = bottomPadding),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
-            SearchSectionHeader(label = "Results", brush = gradientBrush)
+            SearchSectionHeader(label = "Results")
         }
         items(results, key = { searchResultStableKey(it) }) { row ->
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = SurfaceDark.copy(alpha = 0.6f),
+                color = SurfaceDark,
+                border = BorderStroke(1.dp, BorderHardDark),
             ) {
                 SearchResultRow(
                     result = row,
@@ -336,7 +335,7 @@ internal fun searchResultStableKey(r: SearchResult): String =
     }
 
 @Composable
-internal fun SearchSectionHeader(label: String, brush: Brush) {
+internal fun SearchSectionHeader(label: String) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -346,8 +345,8 @@ internal fun SearchSectionHeader(label: String, brush: Brush) {
             text = label,
             style = MaterialTheme.typography.titleSmall.copy(
                 fontWeight = FontWeight.Bold,
-                brush = brush,
             ),
+            color = PrimaryBlue,
         )
     }
 }
@@ -439,13 +438,14 @@ internal fun BadgeRow(result: SearchResult) {
 internal fun TinyBadge(text: String) {
     Surface(
         shape = RoundedCornerShape(8.dp),
-        color = Color.White.copy(alpha = 0.1f),
+        color = SurfaceDark,
+        border = BorderStroke(1.dp, BorderHardDark),
     ) {
         Text(
             text = text,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
             style = MaterialTheme.typography.labelSmall,
-            color = Color.White.copy(alpha = 0.75f),
+            color = GlassSheetTokens.OnOled,
             fontWeight = FontWeight.SemiBold,
         )
     }
@@ -542,7 +542,7 @@ internal fun PersonLeadingAvatar(details: ChatWithDetails) {
         modifier = Modifier
             .size(42.dp)
             .clip(CircleShape)
-            .background(Brush.linearGradient(colors = listOf(PrimaryBlue, LightBlue))),
+            .background(PrimaryBlue),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -556,17 +556,11 @@ internal fun PersonLeadingAvatar(details: ChatWithDetails) {
 
 @Composable
 internal fun MessageLeadingIcon() {
-    Box(
-        modifier = Modifier
-            .size(42.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(PrimaryBlue.copy(alpha = 0.15f)),
-        contentAlignment = Alignment.Center,
-    ) {
+    SearchLeadingIconBox {
         Icon(
             imageVector = Icons.Default.Chat,
             contentDescription = null,
-            tint = LightBlue,
+            tint = PrimaryBlue,
             modifier = Modifier.size(22.dp),
         )
     }
@@ -574,17 +568,11 @@ internal fun MessageLeadingIcon() {
 
 @Composable
 internal fun LocationLeadingIcon() {
-    Box(
-        modifier = Modifier
-            .size(42.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(DeepBlue.copy(alpha = 0.3f)),
-        contentAlignment = Alignment.Center,
-    ) {
+    SearchLeadingIconBox {
         Icon(
             imageVector = Icons.Default.LocationOn,
             contentDescription = null,
-            tint = LightBlue,
+            tint = PrimaryBlue,
             modifier = Modifier.size(22.dp),
         )
     }
@@ -592,17 +580,11 @@ internal fun LocationLeadingIcon() {
 
 @Composable
 internal fun BeaconLeadingIcon() {
-    Box(
-        modifier = Modifier
-            .size(42.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(PrimaryBlue.copy(alpha = 0.18f)),
-        contentAlignment = Alignment.Center,
-    ) {
+    SearchLeadingIconBox {
         Icon(
             imageVector = Icons.Filled.Place,
             contentDescription = null,
-            tint = LightBlue,
+            tint = PrimaryBlue,
             modifier = Modifier.size(22.dp),
         )
     }
@@ -610,19 +592,27 @@ internal fun BeaconLeadingIcon() {
 
 @Composable
 internal fun IntentLeadingIcon() {
+    SearchLeadingIconBox {
+        Icon(
+            imageVector = Icons.Filled.EventAvailable,
+            contentDescription = null,
+            tint = PrimaryBlue,
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
+
+@Composable
+private fun SearchLeadingIconBox(content: @Composable () -> Unit) {
     Box(
         modifier = Modifier
             .size(42.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(PrimaryBlue.copy(alpha = 0.15f)),
+            .background(SoftBlue)
+            .border(1.dp, BorderHardDark, RoundedCornerShape(12.dp)),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            imageVector = Icons.Filled.EventAvailable,
-            contentDescription = null,
-            tint = LightBlue,
-            modifier = Modifier.size(22.dp),
-        )
+        content()
     }
 }
 

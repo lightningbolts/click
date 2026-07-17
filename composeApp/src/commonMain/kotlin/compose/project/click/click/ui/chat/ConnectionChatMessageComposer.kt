@@ -61,7 +61,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
@@ -80,7 +79,6 @@ import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.replySnippetForMetadata
-import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.utils.toImageBitmap // pragma: allowlist secret
@@ -319,16 +317,11 @@ internal fun ConnectionChatMessageComposer(
             val attachInteraction = remember { MutableInteractionSource() }
             val sendInteraction = remember { MutableInteractionSource() }
             val canSend = messageInput.trim().isNotEmpty()
-            val sendGradient = Brush.linearGradient(
-                colors = if (canSend) {
-                    listOf(PrimaryBlue, LightBlue)
-                } else {
-                    listOf(
-                        MaterialTheme.colorScheme.surfaceVariant,
-                        MaterialTheme.colorScheme.surfaceVariant,
-                    )
-                },
-            )
+            val sendBackground = if (canSend) {
+                PrimaryBlue
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            }
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -426,14 +419,7 @@ internal fun ConnectionChatMessageComposer(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .clip(CircleShape)
-                                .background(
-                                    Brush.linearGradient(
-                                        listOf(
-                                            PrimaryBlue.copy(alpha = bgAlpha),
-                                            PrimaryBlue.copy(alpha = bgAlpha),
-                                        ),
-                                    ),
-                                )
+                                .background(PrimaryBlue.copy(alpha = bgAlpha))
                                 .chatSpringPressScale(attachInteraction),
                             contentAlignment = Alignment.Center,
                         ) {
@@ -521,7 +507,7 @@ internal fun ConnectionChatMessageComposer(
                         .focusProperties { canFocus = false }
                         .chatSpringPressScale(sendInteraction)
                         .clip(if (composerStyle.isIOS) CircleShape else RoundedCornerShape(fieldCorner))
-                        .background(sendGradient)
+                        .background(sendBackground)
                         .clickable(
                             interactionSource = sendInteraction,
                             indication = null,

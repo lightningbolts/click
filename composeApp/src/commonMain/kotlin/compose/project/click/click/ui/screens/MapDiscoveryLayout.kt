@@ -91,13 +91,12 @@ import compose.project.click.click.ui.components.GlassSheetTokens
 import compose.project.click.click.ui.components.headerCollapseFraction
 import compose.project.click.click.ui.components.rememberBottomChromePadding
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding
+import compose.project.click.click.ui.theme.BorderHard
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.ui.utils.CommunityHubPin
 import compose.project.click.click.ui.utils.ConnectionMapPoint
 import compose.project.click.click.ui.utils.MapRenderData
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.text.TextStyle
 import compose.project.click.click.events.eventSchedule
 import compose.project.click.click.events.formatEventScheduleRange
 import compose.project.click.click.events.isActiveForDiscoveryFeed
@@ -650,7 +649,7 @@ internal fun MapDiscoveryScreen(
                     .size(width = PipPreviewWidth, height = PipPreviewHeight)
                     .zIndex(11f)
                     .clip(pipShape)
-                    .border(1.dp, GlassSheetTokens.GlassBorder, pipShape)
+                    .border(2.dp, BorderHard, pipShape)
                     .clickable(
                         interactionSource = pipInteraction,
                         indication = ripple(bounded = true),
@@ -680,6 +679,7 @@ internal fun MapDiscoveryScreen(
                         .zIndex(4f)
                         .size(40.dp)
                         .clip(RoundedCornerShape(12.dp))
+                        .border(2.dp, BorderHard, RoundedCornerShape(12.dp))
                         .background(GlassSheetTokens.GlassSurface),
                 ) {
                     Icon(
@@ -740,18 +740,10 @@ private fun DiscoverySectionHeader(
     text: String,
     modifier: Modifier = Modifier,
 ) {
-    val brush = Brush.horizontalGradient(
-        colors = listOf(
-            MaterialTheme.colorScheme.onSurface,
-            MaterialTheme.colorScheme.onSurfaceVariant,
-        ),
-    )
     Text(
         text = text,
         modifier = modifier,
-        style = MaterialTheme.typography.titleLarge.merge(
-            TextStyle(brush = brush),
-        ),
+        style = MaterialTheme.typography.titleLarge,
         fontWeight = FontWeight.Bold,
         color = GlassSheetTokens.OnOled,
     )
@@ -804,21 +796,13 @@ private fun DiscoveryFeedRow(
     distanceText: String? = null,
     reserveDistanceLine: Boolean = false,
 ) {
-    val borderAlpha by animateFloatAsState(
-        targetValue = GlassSheetTokens.GlassBorder.alpha,
-        animationSpec = spring(
-            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
-            stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
-        ),
-        label = "discovery_row_border",
-    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner))
             .border(
-                width = 1.dp,
-                color = GlassSheetTokens.GlassBorder.copy(alpha = borderAlpha),
+                width = 2.dp,
+                color = BorderHard,
                 shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
             )
             .background(GlassSheetTokens.GlassSurface)
@@ -830,7 +814,7 @@ private fun DiscoveryFeedRow(
             modifier = Modifier
                 .size(44.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(PrimaryBlue.copy(alpha = 0.14f)),
+                .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center,
         ) {
             Icon(imageVector = icon, contentDescription = null, tint = PrimaryBlue)

@@ -8,13 +8,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -24,11 +25,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -77,18 +77,6 @@ import kotlin.time.Duration.Companion.milliseconds
 // Spacing constants matching app's consistent 20.dp horizontal padding
 private val ScreenPaddingHorizontal = 20.dp
 private val CardSpacing = 24.dp
-
-/**
- * Creates a gradient brush for section headers
- * Matches web's text-gradient effect (White to Zinc-400)
- */
-@Composable
-private fun headerGradientBrush() = Brush.horizontalGradient(
-    colors = listOf(
-        MaterialTheme.colorScheme.onSurface,
-        MaterialTheme.colorScheme.onSurfaceVariant
-    )
-)
 
 @Composable
 fun HomeScreen(
@@ -195,7 +183,7 @@ fun HomeScreen(
                     Text(
                         state.message,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
@@ -273,11 +261,11 @@ fun HomeScreen(
                         if (reconnectReminders.isNotEmpty()) {
                             item {
                                 Spacer(modifier = Modifier.height(8.dp))
-                                GradientSectionHeader(text = "Reconnect")
+                                SectionHeader(text = "Reconnect")
                                 Text(
                                     "Connections you haven't talked to in a while",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
 
@@ -293,7 +281,7 @@ fun HomeScreen(
                         if (homeEventReminders.isNotEmpty()) {
                             item {
                                 Spacer(modifier = Modifier.height(8.dp))
-                                GradientSectionHeader(text = "Event reminders")
+                                SectionHeader(text = "Event reminders")
                             }
                             items(homeEventReminders, key = { "${it.beaconId}:${it.kind.name}" }) { reminder ->
                                 HomeEventReminderCard(
@@ -306,7 +294,7 @@ fun HomeScreen(
                         // Recent Connections Section — grouped by location (5 most recent)
                         if (locationGroupedConnections.isNotEmpty()) {
                             item {
-                                GradientSectionHeader(text = "Recent Connections")
+                                SectionHeader(text = "Recent Connections")
                             }
                             items(locationGroupedConnections.entries.toList(), key = { it.key }) { (location, connections) ->
                                 val isExpanded = location in expandedLocations
@@ -347,7 +335,7 @@ fun HomeScreen(
                                         Text(
                                             "Start making connections by tapping Add Click",
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 }
@@ -368,7 +356,7 @@ fun HomeScreen(
 
                         item {
                             Spacer(modifier = Modifier.height(8.dp))
-                            GradientSectionHeader(text = "Your Stats")
+                            SectionHeader(text = "Your Stats")
                         }
 
                         item {
@@ -416,17 +404,15 @@ fun HomeScreen(
 }
 
 /**
- * Section header with gradient text effect
- * Matches web's text-gradient (White to Zinc-400)
+ * Section header with solid Neo-Brutalist typography.
  */
 @Composable
-private fun GradientSectionHeader(text: String) {
+private fun SectionHeader(text: String) {
     Text(
         text,
-        style = MaterialTheme.typography.titleLarge.merge(
-            TextStyle(brush = headerGradientBrush())
-        ),
-        fontWeight = FontWeight.Bold
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurface,
     )
 }
 
@@ -464,7 +450,7 @@ private fun GlassStatCard(
             Text(
                 label,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -502,16 +488,13 @@ private fun LocationGroupCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Location pin icon with glow
+                // Location pin icon
                 Box(
                     modifier = Modifier
                         .size(44.dp)
-                        .background(
-                            brush = Brush.radialGradient(
-                                colors = listOf(PrimaryBlue.copy(alpha = 0.35f), Color.Transparent)
-                            ),
-                            shape = RoundedCornerShape(22.dp)
-                        ),
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .border(2.dp, BorderHard, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -534,17 +517,15 @@ private fun LocationGroupCard(
                     Text(
                         "${connections.size} connection${if (connections.size != 1) "s" else ""}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
                 // Count badge
                 Box(
                     modifier = Modifier
-                        .background(
-                            Brush.linearGradient(listOf(PrimaryBlue, LightBlue)),
-                            RoundedCornerShape(12.dp)
-                        )
+                        .background(PrimaryBlue, RoundedCornerShape(12.dp))
+                        .border(2.dp, BorderHard, RoundedCornerShape(12.dp))
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
@@ -561,7 +542,7 @@ private fun LocationGroupCard(
                     Icons.Filled.ChevronRight,
                     contentDescription = if (isExpanded) "Collapse" else "Expand",
                     modifier = Modifier.rotate(chevronAngle),
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
@@ -624,12 +605,14 @@ private fun ConnectionRowItem(
     val displayName = otherUser?.name ?: "Connection"
 
     val rowStyle = LocalPlatformStyle.current
+    val rowShape = RoundedCornerShape(if (rowStyle.isIOS) 14.dp else 12.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(if (rowStyle.isIOS) 14.dp else 12.dp))
+            .clip(rowShape)
             .clickable { onNavigate() }
-            .background(Color.White.copy(alpha = rowStyle.glassBackgroundAlpha))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(2.dp, BorderHard, rowShape)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -638,7 +621,8 @@ private fun ConnectionRowItem(
             modifier = Modifier
                 .size(36.dp)
                 .clip(RoundedCornerShape(18.dp))
-                .background(Brush.linearGradient(listOf(PrimaryBlue, LightBlue))),
+                .background(PrimaryBlue)
+                .border(2.dp, BorderHard, CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -661,7 +645,7 @@ private fun ConnectionRowItem(
             Text(
                 timeAgo,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
@@ -674,7 +658,7 @@ private fun ConnectionRowItem(
                 Icons.Filled.Notifications,
                 contentDescription = "Nudge",
                 modifier = Modifier.size(18.dp),
-                tint = PrimaryBlue.copy(alpha = 0.85f)
+                tint = PrimaryBlue
             )
         }
 
@@ -687,7 +671,7 @@ private fun ConnectionRowItem(
                 Icons.Filled.Chat,
                 contentDescription = "Open chat",
                 modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -720,20 +704,15 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Glowing Icon with radial gradient
+            // Icon container
             Box(
-                modifier = Modifier.size(56.dp),
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .border(2.dp, BorderHard, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .background(
-                            brush = Brush.radialGradient(
-                                colors = listOf(PrimaryBlue.copy(alpha = 0.4f), Color.Transparent)
-                            )
-                        )
-                )
                 Icon(
                     Icons.Filled.Person,
                     contentDescription = null,
@@ -758,13 +737,13 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
                         Icons.Filled.AccessTime,
                         contentDescription = null,
                         modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         timeAgo,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -772,7 +751,7 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
             Icon(
                 Icons.Filled.ChevronRight,
                 contentDescription = "View details",
-                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -804,7 +783,7 @@ fun HomeEventReminderCard(
             Text(
                 text = eventReminderBody(reminder.kind, reminder.description, reminder.title),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -845,14 +824,14 @@ fun ReconnectReminderCard(
                 Surface(
                     modifier = Modifier.size(44.dp),
                     shape = RoundedCornerShape(22.dp),
-                    color = PrimaryBlue.copy(alpha = 0.3f)
+                    color = MaterialTheme.colorScheme.primaryContainer
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
                             reminder.userName?.firstOrNull()?.uppercase() ?: "?",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = LightBlue
+                            color = PrimaryBlue
                         )
                     }
                 }
@@ -867,7 +846,7 @@ fun ReconnectReminderCard(
                     Text(
                         "${reminder.daysSinceContact} days since last chat",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -968,7 +947,7 @@ fun ConnectionInsightsCard(
                 Icon(
                     if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                     contentDescription = if (expanded) "Collapse" else "Expand",
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             
@@ -1051,7 +1030,7 @@ private fun InsightStat(
         Text(
             label,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
@@ -1078,7 +1057,7 @@ private fun InsightRow(
             Text(
                 label,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         Text(
@@ -1096,7 +1075,7 @@ private fun HomeAvailabilityIntentsRow(
     onOpenSheet: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        GradientSectionHeader(text = "I'm down for…")
+        SectionHeader(text = "I'm down for…")
         Spacer(modifier = Modifier.height(10.dp))
         Row(
             modifier = Modifier
@@ -1130,9 +1109,9 @@ private fun HomeAvailabilityIntentsRow(
                         }
                     },
                     shape = RoundedCornerShape(22.dp),
-                    border = BorderStroke(1.dp, PrimaryBlue.copy(alpha = 0.35f)),
+                    border = BorderStroke(2.dp, BorderHard),
                     colors = AssistChipDefaults.assistChipColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        containerColor = MaterialTheme.colorScheme.surface,
                         labelColor = MaterialTheme.colorScheme.onSurface,
                     ),
                 )
@@ -1150,9 +1129,9 @@ private fun HomeAvailabilityIntentsRow(
                     Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                 },
                 shape = RoundedCornerShape(22.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
+                border = BorderStroke(2.dp, BorderHard),
                 colors = AssistChipDefaults.assistChipColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
                     labelColor = MaterialTheme.colorScheme.onSurface,
                 ),
             )

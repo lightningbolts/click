@@ -4,6 +4,8 @@
 **Source:** `ui/components/UnifiedToast.kt`, `ui/components/GlassSnackbarHost.kt`, `ui/components/GlassmorphicOverlay.kt`, `ui/components/OfflineStatusBanner.kt`, `ui/components/AppShimmerScreen.kt`, `ui/components/ClickLogoPulse.kt`, `ui/components/TetherCompassToast.kt`, `encounter/TetherCompass.kt`, `ui/components/AppScreenScaffold.kt`, `viewmodel/ConnectivityViewModel.kt`, `App.kt`  
 **Out of scope:** Web (`aria-live` patterns), backend, redesign proposals.
 
+**Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: invented from design system.
+
 ---
 
 ## ASCII hierarchy
@@ -33,26 +35,26 @@ Per-screen overlays:
 
 ## 1. Layout
 
-### UnifiedToastHost (compact glass pill)
+### UnifiedToastHost (compact bordered pill)
 
 | Property | Value |
 |----------|-------|
 | Container | `Box(modifier, contentAlignment)` |
 | Alignment | `CenterEnd` default; `Center` when `opaque = true` |
-| Shape | `RoundedCornerShape(14.dp)` |
+| Shape | `RoundedCornerShape(14.dp)` with **2dp** `#000` border |
 | Max width | `300.dp` |
 | Text padding | horizontal `14.dp`, vertical `10.dp` |
 | Typography | `bodyMedium` |
-| Text color | `GlassSheetTokens.OnOled` (white @ 92%) |
-| Variant glass | `background(GlassSheetTokens.GlassSurface)` — white @ 5% |
-| Variant opaque | `background(GlassSheetTokens.OledBlack)` + `border(1.dp, GlassSheetTokens.GlassBorder)` |
+| Text color | `on-surface` |
+| Variant default | solid `surface` fill + 2dp `#000` border |
+| Variant inverse | solid `inverse-surface` + 2dp `#000` border |
 
 ### UnifiedToastOverlay ("Got it" pill)
 
 | Property | Value |
 |----------|-------|
 | Container | `Box(modifier.fillMaxSize(), Alignment.Center)` |
-| Pill | `LiquidGlassPill(cornerRadiusDp=28, backgroundStrength=0.85f)` |
+| Pill | Solid bordered pill (`cornerRadiusDp` 28, `surface` fill, 2dp `#000` border — no gradient/noise) |
 | Pill horizontal padding | `24.dp` |
 | Column padding | horizontal `8.dp`, vertical `4.dp` |
 | Message | `bodyLarge`, `onSurface`, `TextAlign.Center` |
@@ -68,8 +70,9 @@ Typealias wrapper — identical to `UnifiedToastHost` with `opaque = false`. **N
 | Property | Value |
 |----------|-------|
 | Shape | `RoundedCornerShape(999.dp)` (full pill) |
-| Surface | `surfaceContainerHighest.copy(alpha = 0.92f)` |
-| Elevation | tonal `2.dp`, shadow `2.dp` |
+| Surface | solid `surface-container` |
+| Border | 2dp `#000` |
+| Elevation | **0** (no shadow) |
 | Row padding | horizontal `12.dp`, vertical `6.dp` |
 | Icon | `Icons.Default.CloudOff`, `14.dp`, `onSurfaceVariant` |
 | Spacer | `6.dp` between icon and text |
@@ -100,8 +103,8 @@ Typealias wrapper — identical to `UnifiedToastHost` with `opaque = false`. **N
 | Property | Value |
 |----------|-------|
 | Modifier default | `fillMaxWidth()`, `padding(horizontal=16.dp, vertical=8.dp)` |
-| Background | Horizontal gradient `#1D4ED8` → `#2563EB` → `#1D4ED8` |
-| Shape | `RoundedCornerShape(28.dp)` (`GlassSheetTokens.BentoExteriorCorner`) |
+| Background | Solid `primary` `#630ed4` (no horizontal gradient) |
+| Shape | `RoundedCornerShape(16.dp)` |
 | Inner padding | horizontal `18.dp`, vertical `16.dp` |
 | Row | `Explore` icon (white) + `12.dp` gap + message text |
 | Typography | `titleMedium`, `FontWeight.Bold`, white |

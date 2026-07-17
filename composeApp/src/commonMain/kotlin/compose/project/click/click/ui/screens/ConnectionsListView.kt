@@ -84,7 +84,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
@@ -1117,7 +1116,7 @@ private fun HubActionSheet(
                     .padding(horizontal = 20.dp, vertical = 12.dp)
                     .align(Alignment.CenterHorizontally),
             )
-            HorizontalDivider(color = GlassSheetTokens.GlassBorder.copy(alpha = 0.5f))
+            HorizontalDivider(color = GlassSheetTokens.GlassBorder)
 
             BentoGlassOptionRow(
                 showBorder = false,
@@ -1308,18 +1307,6 @@ private fun ActiveHubFeedRow(
     val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
     val rowInteraction = remember { MutableInteractionSource() }
     val pressed by rowInteraction.collectIsPressedAsState()
-    val cardBorderAlpha by animateFloatAsState(
-        targetValue = when {
-            isIOS -> GlassSheetTokens.GlassBorder.alpha
-            pressed -> GlassSheetTokens.GlassBorderPressed.alpha
-            else -> GlassSheetTokens.GlassBorder.alpha
-        },
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium,
-        ),
-        label = "hub_row_glass_border",
-    )
     val rowTapModifier = if (isIOS) {
         Modifier.pointerInput(onClick, onLongPress) {
             detectTapGestures(
@@ -1347,8 +1334,8 @@ private fun ActiveHubFeedRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner))
             .border(
-                width = 1.dp,
-                color = GlassSheetTokens.GlassBorder.copy(alpha = cardBorderAlpha),
+                width = 2.dp,
+                color = GlassSheetTokens.GlassBorder,
                 shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
             )
             .background(GlassSheetTokens.GlassSurface)

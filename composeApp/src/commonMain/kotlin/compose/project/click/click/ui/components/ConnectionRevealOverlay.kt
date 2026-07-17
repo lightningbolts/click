@@ -3,6 +3,7 @@ package compose.project.click.click.ui.components
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,11 +34,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.ui.theme.BorderHard
 import compose.project.click.click.ui.theme.PrimaryBlue
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -99,15 +99,7 @@ fun ConnectionRevealOverlay(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF07111E).copy(alpha = 0.96f),
-                        Color(0xFF0C1C32).copy(alpha = 0.92f),
-                        Color(0xFF04070C).copy(alpha = 0.98f)
-                    )
-                )
-            ),
+            .background(GlassSheetTokens.OledBlack),
         contentAlignment = Alignment.Center
     ) {
         Box(
@@ -115,42 +107,35 @@ fun ConnectionRevealOverlay(
                 .size(260.dp)
                 .scale(if (pulseActive) handshakeScale else 1f)
                 .alpha(if (pulseActive) handshakeAlpha * 0.45f else 0.28f)
-                .background(PrimaryBlue.copy(alpha = 0.22f), CircleShape)
+                .border(2.dp, PrimaryBlue, CircleShape)
         )
 
         Surface(
             modifier = Modifier
                 .widthIn(max = 340.dp)
                 .scale(cardScale)
-                .alpha(cardAlpha),
+                .alpha(cardAlpha)
+                .border(2.dp, BorderHard, RoundedCornerShape(32.dp)),
             shape = RoundedCornerShape(32.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
-            tonalElevation = 8.dp,
-            shadowElevation = 24.dp
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
                 modifier = Modifier
                     .widthIn(min = 280.dp)
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                PrimaryBlue.copy(alpha = 0.1f),
-                                Color.Transparent
-                            )
-                        ),
-                        shape = RoundedCornerShape(32.dp)
-                    )
                     .padding(horizontal = 28.dp, vertical = 34.dp)
             ) {
                 Surface(
                     modifier = Modifier
                         .size(72.dp)
                         .scale(if (pulseActive) handshakeScale else 1f)
-                        .alpha(if (pulseActive) handshakeAlpha else 1f),
+                        .alpha(if (pulseActive) handshakeAlpha else 1f)
+                        .border(2.dp, PrimaryBlue, CircleShape),
                     shape = CircleShape,
-                    color = PrimaryBlue.copy(alpha = 0.14f)
+                    color = MaterialTheme.colorScheme.primaryContainer,
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(

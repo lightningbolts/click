@@ -41,7 +41,6 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
@@ -53,7 +52,6 @@ import androidx.compose.ui.unit.sp
 import compose.project.click.click.data.models.mediaUrlLooksLikePlaintextWebChatMediaUpload
 import compose.project.click.click.getPlatform
 import compose.project.click.click.media.rememberChatAudioPlayer
-import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue
 
@@ -74,14 +72,13 @@ private data class VoiceChromePalette(
     val playBorder: Color,
     val playIcon: Color,
     val trackBg: Color,
-    val progressBrush: Brush,
+    val progressColor: Color,
     val timeColor: Color,
 )
 
 @Composable
 private fun rememberVoiceChromePalette(kind: ChatAudioChromeKind): VoiceChromePalette {
     val scheme = MaterialTheme.colorScheme
-    val violet = Color(0xFF8338EC)
     return remember(kind, scheme.surface, scheme.surfaceContainerHigh, scheme.outline, scheme.onSurfaceVariant) {
         when (kind) {
             ChatAudioChromeKind.SentBubble -> VoiceChromePalette(
@@ -91,9 +88,7 @@ private fun rememberVoiceChromePalette(kind: ChatAudioChromeKind): VoiceChromePa
                 playBorder = Color.White.copy(alpha = 0.30f),
                 playIcon = Color.White,
                 trackBg = Color.Black.copy(alpha = 0.25f),
-                progressBrush = Brush.horizontalGradient(
-                    colors = listOf(Color.White.copy(alpha = 0.92f), Color.White.copy(alpha = 0.78f)),
-                ),
+                progressColor = Color.White,
                 timeColor = Color.White.copy(alpha = 0.75f),
             )
             ChatAudioChromeKind.ReceivedBubble -> VoiceChromePalette(
@@ -103,7 +98,7 @@ private fun rememberVoiceChromePalette(kind: ChatAudioChromeKind): VoiceChromePa
                 playBorder = PrimaryBlue.copy(alpha = 0.38f),
                 playIcon = Color(0xFFC4A8FF),
                 trackBg = Color.Black.copy(alpha = 0.45f),
-                progressBrush = Brush.horizontalGradient(colors = listOf(violet, PrimaryBlue, LightBlue)),
+                progressColor = PrimaryBlue,
                 timeColor = scheme.onSurfaceVariant.copy(alpha = 0.92f),
             )
             ChatAudioChromeKind.ProfileSurface -> {
@@ -116,7 +111,7 @@ private fun rememberVoiceChromePalette(kind: ChatAudioChromeKind): VoiceChromePa
                         playBorder = PrimaryBlue.copy(alpha = 0.45f),
                         playIcon = Color.White,
                         trackBg = Color.White.copy(alpha = 0.22f),
-                        progressBrush = Brush.horizontalGradient(colors = listOf(violet, PrimaryBlue, LightBlue)),
+                        progressColor = PrimaryBlue,
                         timeColor = GlassSheetTokens.OnOledMuted,
                     )
                 } else {
@@ -127,7 +122,7 @@ private fun rememberVoiceChromePalette(kind: ChatAudioChromeKind): VoiceChromePa
                         playBorder = PrimaryBlue.copy(alpha = 0.38f),
                         playIcon = Color(0xFFC4A8FF),
                         trackBg = Color.Black.copy(alpha = 0.45f),
-                        progressBrush = Brush.horizontalGradient(colors = listOf(violet, PrimaryBlue, LightBlue)),
+                        progressColor = PrimaryBlue,
                         timeColor = scheme.onSurfaceVariant.copy(alpha = 0.92f),
                     )
                 }
@@ -575,7 +570,7 @@ private fun AudioSeekTrack(
                     .fillMaxHeight()
                     .width(fillW)
                     .clip(TrackShape)
-                    .background(palette.progressBrush, TrackShape),
+                    .background(palette.progressColor, TrackShape),
             )
         }
     }

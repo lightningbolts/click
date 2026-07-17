@@ -45,7 +45,7 @@ private const val FloatingHeaderInsetItemKey = "__floating_header_inset__"
 
 /**
  * Standard tab-root layout: scrollable body extends under the floating nav bar, with bottom
- * content padding so every control stays reachable. A liquid-glass header island floats at
+ * content padding so every control stays reachable. A Functional Clarity header island floats at
  * the top and collapses as the user scrolls.
  */
 @Composable

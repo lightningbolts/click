@@ -346,7 +346,7 @@ private fun MicrophonePermissionExplainerContent(
 private fun PermissionCardDivider() {
     HorizontalDivider(
         modifier = Modifier.padding(start = 36.dp, top = 2.dp, bottom = 2.dp),
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+        color = MaterialTheme.colorScheme.outlineVariant,
     )
 }
 
@@ -400,20 +400,16 @@ private fun PermissionToggleRow(
     onCheckedChange: (Boolean) -> Unit,
 ) {
     val iconTint = when {
-        !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+        !enabled -> MaterialTheme.colorScheme.onSurfaceVariant
         checked -> PrimaryBlue
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     val titleColor = if (enabled) {
         MaterialTheme.colorScheme.onSurface
     } else {
-        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-    }
-    val descriptionColor = if (enabled) {
         MaterialTheme.colorScheme.onSurfaceVariant
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
     }
+    val descriptionColor = MaterialTheme.colorScheme.onSurfaceVariant
 
     Row(
         modifier = Modifier
@@ -450,7 +446,7 @@ private fun PermissionToggleRow(
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = PrimaryBlue,
-                checkedTrackColor = PrimaryBlue.copy(alpha = 0.5f),
+                checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
             ),
         )
     }

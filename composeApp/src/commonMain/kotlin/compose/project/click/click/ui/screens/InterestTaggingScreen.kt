@@ -61,7 +61,7 @@ fun InterestTaggingScreen(
                 text = "Pick at least $INTEREST_ONBOARDING_MIN_TAGS interests to help find common ground with your connections",
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 8.dp),
             )
 
@@ -102,7 +102,7 @@ fun InterestTaggingScreen(
                 ) {
                     Text(
                         "Skip for now",
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }

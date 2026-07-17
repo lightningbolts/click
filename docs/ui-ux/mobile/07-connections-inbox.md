@@ -4,6 +4,8 @@
 **Source:** `ui/screens/ConnectionsScreen.kt`, `ConnectionsListView.kt`, `ui/chat/ConnectionItem.kt`, `ui/components/ConnectionsTabControls.kt`, `ui/chat/ConnectionActionSheet.kt`, `ui/chat/ConnectionSheetDialogs.kt`  
 **Out of scope:** Web, backend, full `ChatView` spec (see [08-chat.md](08-chat.md)).
 
+**Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: `click/docs/design-assets/chat/`.
+
 ---
 
 ## ASCII hierarchy
@@ -58,8 +60,8 @@ ConnectionsScreen (organism — tab shell + chat overlay)
 
 | Property | Value |
 |----------|-------|
-| Shape | `GlassSheetTokens.BentoExteriorCorner` |
-| Border | 1dp glass, pressed alpha animation |
+| Shape | 16dp `RoundedCornerShape` (Bento exterior) |
+| Border | 2dp `#000` hard border; pressed = 2dp translate + instant darken |
 | Padding | 16dp horizontal, 10dp vertical |
 | Avatar | 44dp; group uses `GroupAvatar` cluster |
 | Core pin | `CoreConnectionAvatarFrame` when in core set |

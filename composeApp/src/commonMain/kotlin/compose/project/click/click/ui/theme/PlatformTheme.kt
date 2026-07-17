@@ -12,6 +12,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.getPlatform
 
+/**
+ * Platform deltas for Functional Clarity. Visual language is unified;
+ * [useRipple] remains Android-only per platform interaction rules.
+ */
 @Immutable
 data class PlatformStyle(
     val isIOS: Boolean,
@@ -19,52 +23,58 @@ data class PlatformStyle(
     val compactCardCornerRadius: Dp,
     val buttonCornerRadius: Dp,
     val cardBorderWidth: Dp,
+    /** Legacy name — unused for fills; cards use opaque surfaces. */
     val glassBackgroundAlpha: Float,
+    /** Legacy name — unused; borders use [BorderHard]. */
     val glassBorderAlpha: Float,
     val glassBorderPrimaryAlpha: Float,
     val useShadowElevation: Boolean,
     val useRipple: Boolean,
+    val pressOffset: Dp,
 )
 
 val LocalPlatformStyle = staticCompositionLocalOf {
     PlatformStyle(
         isIOS = false,
-        cardCornerRadius = 28.dp,
+        cardCornerRadius = 16.dp,
         compactCardCornerRadius = 8.dp,
-        buttonCornerRadius = 16.dp,
-        cardBorderWidth = 1.dp,
-        glassBackgroundAlpha = 0.05f,
-        glassBorderAlpha = 0.10f,
-        glassBorderPrimaryAlpha = 0.15f,
-        useShadowElevation = true,
+        buttonCornerRadius = 8.dp,
+        cardBorderWidth = 2.dp,
+        glassBackgroundAlpha = 1f,
+        glassBorderAlpha = 1f,
+        glassBorderPrimaryAlpha = 1f,
+        useShadowElevation = false,
         useRipple = true,
+        pressOffset = 2.dp,
     )
 }
 
 private val iOSPlatformStyle = PlatformStyle(
     isIOS = true,
-    cardCornerRadius = 28.dp,
+    cardCornerRadius = 16.dp,
     compactCardCornerRadius = 8.dp,
-    buttonCornerRadius = 12.dp,
-    cardBorderWidth = 0.5.dp,
-    glassBackgroundAlpha = 0.08f,
-    glassBorderAlpha = 0.14f,
-    glassBorderPrimaryAlpha = 0.20f,
+    buttonCornerRadius = 8.dp,
+    cardBorderWidth = 2.dp,
+    glassBackgroundAlpha = 1f,
+    glassBorderAlpha = 1f,
+    glassBorderPrimaryAlpha = 1f,
     useShadowElevation = false,
     useRipple = false,
+    pressOffset = 2.dp,
 )
 
 private val androidPlatformStyle = PlatformStyle(
     isIOS = false,
-    cardCornerRadius = 28.dp,
+    cardCornerRadius = 16.dp,
     compactCardCornerRadius = 8.dp,
-    buttonCornerRadius = 16.dp,
-    cardBorderWidth = 1.dp,
-    glassBackgroundAlpha = 0.05f,
-    glassBorderAlpha = 0.10f,
-    glassBorderPrimaryAlpha = 0.15f,
-    useShadowElevation = true,
+    buttonCornerRadius = 8.dp,
+    cardBorderWidth = 2.dp,
+    glassBackgroundAlpha = 1f,
+    glassBorderAlpha = 1f,
+    glassBorderPrimaryAlpha = 1f,
+    useShadowElevation = false,
     useRipple = true,
+    pressOffset = 2.dp,
 )
 
 @Composable
@@ -81,24 +91,36 @@ fun clickColorScheme(isDarkMode: Boolean) =
     if (isDarkMode) {
         darkColorScheme(
             primary = PrimaryBlue,
-            secondary = AccentBlue,
+            onPrimary = Color.White,
+            secondary = Color(0xFF5E5E5E),
+            onSecondary = Color.White,
             background = BackgroundDark,
+            onBackground = OnSurfaceDark,
             surface = SurfaceDark,
             onSurface = OnSurfaceDark,
-            primaryContainer = DeepBlue,
-            onPrimaryContainer = NeonPurple,
-            surfaceVariant = Color(0xFF2C2C2C),
+            primaryContainer = LightBlue,
+            onPrimaryContainer = SoftBlue,
+            surfaceVariant = Color(0xFF3A3C3C),
+            onSurfaceVariant = OutlineVariant,
+            outline = OutlineMuted,
+            error = Color(0xFFBA1A1A),
         )
     } else {
         lightColorScheme(
             primary = PrimaryBlue,
-            secondary = AccentBlue,
+            onPrimary = Color.White,
+            secondary = Color(0xFF5E5E5E),
+            onSecondary = Color.White,
             background = BackgroundLight,
+            onBackground = OnSurfaceLight,
             surface = SurfaceLight,
             onSurface = OnSurfaceLight,
             primaryContainer = SoftBlue,
             onPrimaryContainer = DeepBlue,
-            surfaceVariant = Color(0xFFE0E0E0),
+            surfaceVariant = SurfaceContainerHighest,
+            onSurfaceVariant = OnSurfaceVariant,
+            outline = OutlineMuted,
+            error = Color(0xFFBA1A1A),
         )
     }
 

@@ -75,6 +75,7 @@ npm test
 
 High-signal unit tests to keep green: `ChatSwipeMathTest`, `ChatViewModelTest`, `ConnectionEncounterMergeTest`, `DiscoveryFeedSectionsTest`, `OfflineBootTest`, proximity codec/matching tests under `composeApp` and `click-web/__tests__/`.
 
+**Last §0 run (Functional Clarity revamp, 2026-07-16):** Android compile + `testDebugUnitTest` PASS · iOS Simulator compile + `iosSimulatorArm64Test` PASS · `click-web` `npm test` 22 suites / 145 tests PASS. Device smoke ([02-smoke-10min.md](02-smoke-10min.md)), full checklist, known-issues audit, and Android focus matrix still required on hardware before release merge.
 ---
 
 ## Platforms & builds
