@@ -1,0 +1,259 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Click - Home</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "background": "#f9f9f9",
+                        "on-primary": "#ffffff",
+                        "on-primary-fixed-variant": "#5a00c6",
+                        "on-tertiary-fixed-variant": "#444749",
+                        "surface-container-high": "#e8e8e8",
+                        "surface-container-lowest": "#ffffff",
+                        "outline-variant": "#ccc3d8",
+                        "error-container": "#ffdad6",
+                        "tertiary-fixed": "#e1e2e4",
+                        "secondary": "#5e5e5e",
+                        "primary": "#630ed4",
+                        "surface-container-low": "#f3f3f4",
+                        "secondary-fixed": "#e2e2e2",
+                        "primary-fixed": "#eaddff",
+                        "tertiary-fixed-dim": "#c5c6c8",
+                        "primary-fixed-dim": "#d2bbff",
+                        "surface-tint": "#732ee4",
+                        "on-surface": "#1a1c1c",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-fixed": "#25005a",
+                        "on-secondary": "#ffffff",
+                        "on-secondary-fixed-variant": "#474747",
+                        "inverse-surface": "#2f3131",
+                        "surface-bright": "#f9f9f9",
+                        "secondary-fixed-dim": "#c6c6c6",
+                        "inverse-on-surface": "#f0f1f1",
+                        "surface": "#f9f9f9",
+                        "surface-container": "#eeeeee",
+                        "on-tertiary-container": "#e5e6e8",
+                        "on-tertiary-fixed": "#191c1e",
+                        "on-background": "#1a1c1c",
+                        "outline": "#7b7487",
+                        "on-primary-container": "#ede0ff",
+                        "surface-container-highest": "#e2e2e2",
+                        "on-surface-variant": "#4a4455",
+                        "tertiary": "#4d4f51",
+                        "surface-dim": "#dadada",
+                        "primary-container": "#7c3aed",
+                        "on-error-container": "#93000a",
+                        "on-secondary-container": "#646464",
+                        "secondary-container": "#e2e2e2",
+                        "on-error": "#ffffff",
+                        "inverse-primary": "#d2bbff",
+                        "tertiary-container": "#656769",
+                        "error": "#ba1a1a",
+                        "surface-variant": "#e2e2e2",
+                        "on-secondary-fixed": "#1b1b1b"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xl": "32px",
+                        "margin-mobile": "16px",
+                        "gutter": "12px",
+                        "2xl": "48px",
+                        "sm": "8px",
+                        "unit": "4px",
+                        "lg": "24px",
+                        "md": "16px",
+                        "xs": "4px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Manrope"],
+                        "label-md": ["Manrope"],
+                        "body-md": ["Manrope"],
+                        "display-lg": ["Manrope"],
+                        "body-lg": ["Manrope"],
+                        "label-bold": ["Manrope"],
+                        "headline-md": ["Manrope"]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Manrope', sans-serif;
+            background-color: #f9f9f9;
+        }
+        
+        .neo-card {
+            border: 2px solid #000000;
+            border-radius: 16px;
+            background-color: #ffffff;
+            overflow: hidden;
+        }
+
+        .neo-button-primary {
+            background-color: #630ed4;
+            color: #ffffff;
+            border-radius: 8px;
+            font-weight: 700;
+            transition: background-color 0s;
+        }
+        .neo-button-primary:active {
+            background-color: #4f0baf;
+        }
+
+        .neo-button-secondary {
+            background-color: #ffffff;
+            color: #1a1c1c;
+            border: 2px solid #000000;
+            border-radius: 8px;
+            font-weight: 700;
+        }
+        .neo-button-secondary:active {
+            background-color: #f3f3f4;
+        }
+        
+        .pill-search {
+            border: 2px solid #000000;
+            border-radius: 9999px;
+            background-color: #ffffff;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background pb-32">
+<!-- Top App Bar -->
+
+<main class="px-margin-mobile pt-lg flex flex-col gap-xl">
+<!-- Welcome Section -->
+<section>
+<h2 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Good morning, Alex.</h2>
+<p class="font-body-lg text-body-lg text-secondary mt-xs">Ready to connect today?</p>
+</section>
+<!-- Search Bar -->
+<div class="pill-search flex items-center px-4 py-3 gap-3">
+<span class="material-symbols-outlined text-primary">search</span>
+<input class="w-full bg-transparent border-none outline-none font-body-md text-body-md placeholder:text-secondary focus:ring-0 p-0 text-on-surface" placeholder="Search people, places, events..." type="text">
+</div>
+<!-- Featured Click -->
+<section>
+<div class="flex justify-between items-end mb-md">
+<h3 class="font-headline-md text-headline-md">Featured Click</h3>
+<span class="font-label-bold text-label-bold text-primary">View Map</span>
+</div>
+<div class="neo-card relative">
+<div class="h-48 w-full bg-surface-container border-b-2 border-black">
+<img class="w-full h-full object-cover" data-alt="A dynamic, wide shot of a modern co-working space buzzing with activity. The space features large windows letting in bright, flat natural light. There are sleek, angular desks and colorful accents in solid purple and yellow against white walls. The style is crisp, high-contrast, and geometric, fitting a neo-brutalist tech aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDS1kICIBKkvL9jiZ6welSpZMl2DJRcvKy4Aku1QPm_V07afD-C27XlGiF2fXZ_wfvDiImPe7-I4ugqkkYW0tDwqDt8Kz5WdOjLHAMvNp_K-D82hecWquo4KxUn-NOwaya0Sg1yhrTkfjwMMZJ-wzBx-u7yVStyeXRxSjWmHvy0ERudolUl2yFbkf7dAC9612i_1uZZHy-FdTj10Zy62_1aSBQwoyhwnTNKVrZjAqHApH8ZLLhJrPv_c07lPphNgRrUQJnJapTSkLw">
+</div>
+<div class="p-4 bg-white relative">
+<div class="absolute -top-6 right-4 bg-primary text-white font-label-bold text-sm px-3 py-1 rounded-full border-2 border-black">
+                        Today 6 PM
+                    </div>
+<div class="flex justify-between items-start">
+<div>
+<h4 class="font-headline-md text-lg font-bold text-on-surface">Tech Founders Mixer</h4>
+<p class="font-body-md text-secondary mt-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">location_on</span>
+                                Workshop17 Watershed
+                            </p>
+</div>
+</div>
+<div class="mt-4 flex gap-2">
+<button class="neo-button-primary flex-1 py-3 text-center font-label-bold">Join Event</button>
+<button class="neo-button-secondary w-12 flex items-center justify-center">
+<span class="material-symbols-outlined">bookmark</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- Categories Grid -->
+<section>
+<h3 class="font-headline-md text-headline-md mb-md">Explore Categories</h3>
+<div class="grid grid-cols-2 gap-gutter">
+<!-- Networking -->
+<div class="neo-card p-4 aspect-square flex flex-col justify-between bg-[#f4effc]">
+<div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center border-2 border-black">
+<span class="material-symbols-outlined text-white">groups</span>
+</div>
+<div>
+<h4 class="font-label-bold text-lg text-on-surface">Networking</h4>
+<p class="font-body-md text-sm text-secondary">24 events near you</p>
+</div>
+</div>
+<!-- Social -->
+<div class="neo-card p-4 aspect-square flex flex-col justify-between bg-[#fff0f5]">
+<div class="w-10 h-10 rounded-full bg-[#ff4d8d] flex items-center justify-center border-2 border-black">
+<span class="material-symbols-outlined text-white">local_cafe</span>
+</div>
+<div>
+<h4 class="font-label-bold text-lg text-on-surface">Social</h4>
+<p class="font-body-md text-sm text-secondary">Coffee &amp; casual</p>
+</div>
+</div>
+<!-- Workshop -->
+<div class="neo-card p-4 aspect-square flex flex-col justify-between bg-[#f0f9ff]">
+<div class="w-10 h-10 rounded-full bg-[#0ea5e9] flex items-center justify-center border-2 border-black">
+<span class="material-symbols-outlined text-white">architecture</span>
+</div>
+<div>
+<h4 class="font-label-bold text-lg text-on-surface">Workshop</h4>
+<p class="font-body-md text-sm text-secondary">Learn &amp; build</p>
+</div>
+</div>
+<!-- Co-working -->
+<div class="neo-card p-4 aspect-square flex flex-col justify-between bg-[#fffbeb]">
+<div class="w-10 h-10 rounded-full bg-[#f59e0b] flex items-center justify-center border-2 border-black">
+<span class="material-symbols-outlined text-white">laptop_mac</span>
+</div>
+<div>
+<h4 class="font-label-bold text-lg text-on-surface">Co-working</h4>
+<p class="font-body-md text-sm text-secondary">Find a desk</p>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Nav Bar -->
+<nav class="fixed bottom-6 left-4 right-4 flex justify-around px-4 py-2 bg-white border-2 border-black rounded-full z-50 items-end pb-2"><button class="flex flex-col items-center gap-1 text-primary">
+    <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">home</span>
+    <span class="text-[10px] font-bold uppercase tracking-wider">HOME</span>
+  </button>
+  <button class="flex flex-col items-center gap-1 text-on-surface-variant">
+    <span class="material-symbols-outlined">calendar_today</span>
+    <span class="text-[10px] font-bold uppercase tracking-wider">MY CLICKS</span>
+  </button>
+  <div class="relative flex items-center justify-center">
+    <button class="flex items-center justify-center bg-primary text-white w-14 h-14 rounded-full border-2 border-black -mb-2">
+      <span class="material-symbols-outlined text-3xl">add</span>
+    </button>
+  </div>
+  <button class="flex flex-col items-center gap-1 text-on-surface-variant">
+    <span class="material-symbols-outlined">map</span>
+    <span class="text-[10px] font-bold uppercase tracking-wider">MAP</span>
+  </button>
+  <button class="flex flex-col items-center gap-1 text-on-surface-variant">
+    <span class="material-symbols-outlined">person</span>
+    <span class="text-[10px] font-bold uppercase tracking-wider">PROFILE</span>
+  </button></nav>
+
+
+
+
+</body></html>

@@ -1,0 +1,237 @@
+<!DOCTYPE html><html class="light" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Chat</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "background": "#f9f9f9",
+                        "on-primary": "#ffffff",
+                        "on-primary-fixed-variant": "#5a00c6",
+                        "on-tertiary-fixed-variant": "#444749",
+                        "surface-container-high": "#e8e8e8",
+                        "surface-container-lowest": "#ffffff",
+                        "outline-variant": "#ccc3d8",
+                        "error-container": "#ffdad6",
+                        "tertiary-fixed": "#e1e2e4",
+                        "secondary": "#5e5e5e",
+                        "primary": "#630ed4",
+                        "surface-container-low": "#f3f3f4",
+                        "secondary-fixed": "#e2e2e2",
+                        "primary-fixed": "#eaddff",
+                        "tertiary-fixed-dim": "#c5c6c8",
+                        "primary-fixed-dim": "#d2bbff",
+                        "surface-tint": "#732ee4",
+                        "on-surface": "#1a1c1c",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-fixed": "#25005a",
+                        "on-secondary": "#ffffff",
+                        "on-secondary-fixed-variant": "#474747",
+                        "inverse-surface": "#2f3131",
+                        "surface-bright": "#f9f9f9",
+                        "secondary-fixed-dim": "#c6c6c6",
+                        "inverse-on-surface": "#f0f1f1",
+                        "surface": "#f9f9f9",
+                        "surface-container": "#eeeeee",
+                        "on-tertiary-container": "#e5e6e8",
+                        "on-tertiary-fixed": "#191c1e",
+                        "on-background": "#1a1c1c",
+                        "outline": "#7b7487",
+                        "on-primary-container": "#ede0ff",
+                        "surface-container-highest": "#e2e2e2",
+                        "on-surface-variant": "#4a4455",
+                        "tertiary": "#4d4f51",
+                        "surface-dim": "#dadada",
+                        "primary-container": "#7c3aed",
+                        "on-error-container": "#93000a",
+                        "on-secondary-container": "#646464",
+                        "secondary-container": "#e2e2e2",
+                        "on-error": "#ffffff",
+                        "inverse-primary": "#d2bbff",
+                        "tertiary-container": "#656769",
+                        "error": "#ba1a1a",
+                        "surface-variant": "#e2e2e2",
+                        "on-secondary-fixed": "#1b1b1b"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xl": "32px",
+                        "margin-mobile": "16px",
+                        "gutter": "12px",
+                        "2xl": "48px",
+                        "sm": "8px",
+                        "unit": "4px",
+                        "lg": "24px",
+                        "md": "16px",
+                        "xs": "4px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Manrope"],
+                        "label-md": ["Manrope"],
+                        "body-md": ["Manrope"],
+                        "display-lg": ["Manrope"],
+                        "body-lg": ["Manrope"],
+                        "label-bold": ["Manrope"],
+                        "headline-md": ["Manrope"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "label-md": ["14px", { "lineHeight": "20px", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "500" }],
+                        "display-lg": ["48px", { "lineHeight": "52px", "letterSpacing": "-0.04em", "fontWeight": "800" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "500" }],
+                        "label-bold": ["14px", { "lineHeight": "20px", "fontWeight": "700" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "700" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Manrope', sans-serif; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen flex flex-col relative pb-[90px]">
+<!-- TopAppBar -->
+
+<!-- Main Content Canvas -->
+<main class="flex-grow flex flex-col p-margin-mobile gap-lg max-w-3xl mx-auto w-full">
+<!-- Search Bar -->
+<div class="relative w-full">
+<div class="absolute inset-y-0 left-0 pl-md flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-primary">search</span>
+</div>
+<input class="w-full pl-xl pr-md py-md bg-surface-container-lowest border-2 border-on-surface rounded-full font-body-md text-on-background placeholder:text-secondary focus:outline-none focus:ring-0 focus:border-primary transition-colors" placeholder="Search conversations..." type="text">
+</div>
+<!-- Chat List -->
+<section class="flex flex-col gap-md">
+  <h2 class="text-label-bold font-label-bold text-on-surface-variant uppercase tracking-wider">Remember Me</h2>
+  <div class="flex gap-md overflow-x-auto pb-sm scrollbar-hide">
+    <div class="flex flex-col items-center gap-xs flex-shrink-0 w-20">
+      <div class="relative">
+        <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuCO_E86zaN3sqh_5MkLoRwfnCcZk_jW3pvslNhD8vQe96DQJUZTW6LXiEqR3wAf4IcONntGiEKAv-BEe-axhf-8UbXrEGyV8PfuZwySX30wGUN-b3LWSp7y_TFMCo9vnOXkAFyX0s_Fj_PQOw5U6rjCHe9ItQuxu8C4JO94Ph1vtCkPQ8L7IrnWsIc5pwGdUYhA3npokkytKFT623P9hhc9XfG6MgC2sP9GX0K-BBf_bat9p-heA9KtscWrDcsRraRLo7osKLZ0Uhs" class="w-14 h-14 rounded-full border-2 border-on-surface object-cover" alt="Matthew Epshtein">
+        <div class="absolute -bottom-1 -right-1 bg-primary text-on-primary text-[10px] px-1 rounded-full border-2 border-surface-container-lowest font-bold">12h</div>
+      </div>
+      <span class="text-label-md font-label-md text-on-background truncate w-full text-center">Matthew</span>
+    </div>
+    <div class="flex flex-col items-center gap-xs flex-shrink-0 w-20">
+      <div class="relative">
+        <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuD1imhtB_WUjwQHdLR0qbA13Hw1WEjvXUtr6IlJt3hFG1q-JKDhY_F9_VJbyAWAV_f6ETKLF3nNV33x4cmhERHRH3m00Lu0GSdnMtRrVkEiQZNAwbB3qmHbwCs5h47Xp4faXbq4siBOUzHEeAGf6f_XqX2Avba53hFtr5x8LSh-B_55khDFzoZZL0k1F6I4K56KUXU0O4EWLnUzXhBTuhrFfVFn7E0r4c3Tr7u1stwHMAyCe6kL6hO9uCjcemR6CU2VsC6aULFprzo" class="w-14 h-14 rounded-full border-2 border-on-surface object-cover" alt="User">
+        <div class="absolute -bottom-1 -right-1 bg-primary text-on-primary text-[10px] px-1 rounded-full border-2 border-surface-container-lowest font-bold">36h</div>
+      </div>
+      <span class="text-label-md font-label-md text-on-background truncate w-full text-center">You</span>
+    </div>
+    <div class="flex flex-col items-center gap-xs flex-shrink-0 w-20">
+      <div class="relative">
+        <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuDFtyi0-otu-gee7JFIsbn3Y4UMOBFdvFb4gUhEVJCOlyvl4uR8CZwGsQlr7b5Gm01T_ffAMbWVBkEh-mAJ_080KuIyl-__tDVm6RvhC5rcDEXdHLfdXFtCCgyRaYzVGu4blKRQe6z0uMuBpMuMuskk8Lwzi3T55lMG_yhyhx-RDs5Arvr8XpShNDI5yqK5cT3ylLjt8alL5e9ABL6h5DS88YLW_dDaq5M2F6521yhZ6XJxqbM4SmK9c5qURkMQLZE2YxSZZOyBi4M" class="w-14 h-14 rounded-full border-2 border-on-surface object-cover" alt="Alex">
+        <div class="absolute -bottom-1 -right-1 bg-primary text-on-primary text-[10px] px-1 rounded-full border-2 border-surface-container-lowest font-bold">42h</div>
+      </div>
+      <span class="text-label-md font-label-md text-on-background truncate w-full text-center">Alex</span>
+    </div>
+  </div>
+</section><h2 class="text-label-bold font-label-bold text-on-surface-variant uppercase tracking-wider mb-unit">Clicks</h2><div class="flex flex-col gap-gutter">
+<!-- Chat Item: Unread -->
+<div class="bg-surface-container-lowest border-2 border-on-surface rounded-xl p-md flex items-center gap-md hover:bg-surface-container transition-colors cursor-pointer active:translate-y-px active:translate-x-px">
+<div class="relative flex-shrink-0">
+<img class="w-14 h-14 rounded-lg border-2 border-on-surface object-cover" data-alt="A square portrait of an energetic young professional wearing stylish glasses, smiling against a vibrant purple background. High contrast lighting, sharp focus, Neo-brutalist aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDFtyi0-otu-gee7JFIsbn3Y4UMOBFdvFb4gUhEVJCOlyvl4uR8CZwGsQlr7b5Gm01T_ffAMbWVBkEh-mAJ_080KuIyl-__tDVm6RvhC5rcDEXdHLfdXFtCCgyRaYzVGu4blKRQe6z0uMuBpMuMuskk8Lwzi3T55lMG_yhyhx-RDs5Arvr8XpShNDI5yqK5cT3ylLjt8alL5e9ABL6h5DS88YLW_dDaq5M2F6521yhZ6XJxqbM4SmK9c5qURkMQLZE2YxSZZOyBi4M">
+<div class="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full border-2 border-surface-container-lowest"></div>
+</div>
+<div class="flex-grow min-w-0 flex flex-col justify-center">
+<div class="flex justify-between items-baseline mb-unit">
+<h3 class="font-label-bold text-label-bold text-on-background truncate">Alex Mercer</h3>
+<span class="font-label-md text-label-md text-primary flex-shrink-0 ml-sm">10:42 AM</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant truncate font-bold">Are we still on for the design review?</p>
+</div>
+</div>
+<!-- Chat Item: Read -->
+<div class="bg-surface-container-lowest border-2 border-on-surface rounded-xl p-md flex items-center gap-md hover:bg-surface-container transition-colors cursor-pointer active:translate-y-px active:translate-x-px">
+<img class="w-14 h-14 rounded-lg border-2 border-on-surface object-cover flex-shrink-0" data-alt="A square portrait of a woman with curly hair looking thoughtfully off-camera. Studio lighting, solid light grey background, high contrast, clean minimalist aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCZdQlZzVhArsf7-YQZCJlK4qOCmuKzkrBGhj2s5hDP2tY6GCklkIzTFBfvsCcJsaOy7FhbCOt4DR5Yky6pMUXKfNkRFAQF6FuEVqG9syQLve6eaKvgDWTtg6CA7quFVJsInX-h8gGoLqGrN7ttJGV8DvCDGuIW36faTO-nvNWK9oHDDg1O-qj-17Gibd5J_n7Y1bx-JVZwXYeOOBcFEP8l3nv9i3x4KJjHGThFtU7l2acZUK_xlUo41_BJ0URir3kmyMmvSf6woEI">
+<div class="flex-grow min-w-0 flex flex-col justify-center">
+<div class="flex justify-between items-baseline mb-unit">
+<h3 class="font-label-bold text-label-bold text-on-background truncate">Sarah Jenkins</h3>
+<span class="font-label-md text-label-md text-secondary flex-shrink-0 ml-sm">Yesterday</span>
+</div>
+<p class="font-body-md text-body-md text-secondary truncate">I uploaded the new assets to the shared drive.</p>
+</div>
+</div>
+<!-- Chat Item: Read -->
+<div class="bg-surface-container-lowest border-2 border-on-surface rounded-xl p-md flex items-center gap-md hover:bg-surface-container transition-colors cursor-pointer active:translate-y-px active:translate-x-px">
+<img class="w-14 h-14 rounded-lg border-2 border-on-surface object-cover flex-shrink-0" data-alt="A square portrait of a man with a neat beard, wearing a dark turtleneck. Dramatic side lighting, solid white background, sharp architectural composition." src="https://lh3.googleusercontent.com/aida-public/AB6AXuANKmdOyJFok6yG0RmbWA23a9TzPNycG7CsB8XXt-RYE3gDHj10tJAfrhHtXSTEMuqGHm_Pf6aKSpYYkd3R01fWkuXb2MZyQr19AsJglNdwwXEwTV2ZTXDwlXyduyT8bu2ZRnWS-II0YUeN34fXmLg3ooStcSy6N-jVUm8aNhA63JpS71somkqr388E9XJlxBDWmLupaIiAMIuVW602cvytU1KOIxPtMytkhN8axk_iB5K1OfUPevcqPBlBcZyTJLMayeAVaPsIVNo">
+<div class="flex-grow min-w-0 flex flex-col justify-center">
+<div class="flex justify-between items-baseline mb-unit">
+<h3 class="font-label-bold text-label-bold text-on-background truncate">David Kim</h3>
+<span class="font-label-md text-label-md text-secondary flex-shrink-0 ml-sm">Tuesday</span>
+</div>
+<p class="font-body-md text-body-md text-secondary truncate">Looks good to me. Ship it.</p>
+</div>
+</div>
+<!-- Chat Item: Unread -->
+<div class="bg-surface-container-lowest border-2 border-on-surface rounded-xl p-md flex items-center gap-md hover:bg-surface-container transition-colors cursor-pointer active:translate-y-px active:translate-x-px">
+<div class="relative flex-shrink-0">
+<div class="w-14 h-14 rounded-lg border-2 border-on-surface bg-surface-container-highest flex items-center justify-center font-display-lg text-secondary">
+<span class="material-symbols-outlined text-2xl">group</span>
+</div>
+<div class="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full border-2 border-surface-container-lowest"></div>
+</div>
+<div class="flex-grow min-w-0 flex flex-col justify-center">
+<div class="flex justify-between items-baseline mb-unit">
+<h3 class="font-label-bold text-label-bold text-on-background truncate">Project Alpha Sync</h3>
+<span class="font-label-md text-label-md text-primary flex-shrink-0 ml-sm">Mon</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant truncate font-bold">Elena: The latest prototype is ready.</p>
+</div>
+</div>
+<!-- Chat Item: Read -->
+<div class="bg-surface-container-lowest border-2 border-on-surface rounded-xl p-md flex items-center gap-md hover:bg-surface-container transition-colors cursor-pointer active:translate-y-px active:translate-x-px opacity-75">
+<img class="w-14 h-14 rounded-lg border-2 border-on-surface object-cover flex-shrink-0 grayscale" data-alt="A square portrait of an older woman with short grey hair, smiling warmly. Soft diffuse lighting, solid pale yellow background, crisp details." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCaZqK_dDBY_hbx51JFFY4hz6cgTdFNpoQhZBsZsgMUPeEszlQTCTREsF-1AffQ0E62b1Z9gCmzeTaGEOWWhmsr6muOl8ID0ARAHtOwLkcAmau2zqRGHLLVLEkeCjUp_DWA2t61ot0c2IFu5Jy1exYSM-FMfw2iCt_8y3ytiF4jgwSs-qVjPFlU22krYYZzD3dDUmQ5Ie6qh6fwVtjovxGtjYQYE2BDvx561Ngxs3pqlZDlJLsHqLKLQE3fCyQxdnDf5tWm43zn_84">
+<div class="flex-grow min-w-0 flex flex-col justify-center">
+<div class="flex justify-between items-baseline mb-unit">
+<h3 class="font-label-bold text-label-bold text-on-background truncate">Maria Garcia</h3>
+<span class="font-label-md text-label-md text-secondary flex-shrink-0 ml-sm">Last week</span>
+</div>
+<p class="font-body-md text-body-md text-secondary truncate">Thanks for the update!</p>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-6 left-4 right-4 flex justify-around items-center px-4 py-2 bg-white border-2 border-black rounded-full z-50">
+  <button class="flex flex-col items-center gap-1 text-on-surface-variant">
+    <span class="material-symbols-outlined">home</span>
+    <span class="text-[10px] font-bold uppercase tracking-wider">HOME</span>
+  </button>
+  <button class="flex flex-col items-center gap-1 text-primary">
+    <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">calendar_today</span>
+    <span class="text-[10px] font-bold uppercase tracking-wider">MY CLICKS</span>
+  </button>
+  <div class="relative flex items-center justify-center w-14 h-14">
+    <button class="absolute bottom-[-8px] flex items-center justify-center bg-primary text-white w-14 h-14 rounded-full border-2 border-black active:translate-y-px">
+      <span class="material-symbols-outlined text-3xl">add</span>
+    </button>
+  </div>
+  <button class="flex flex-col items-center gap-1 text-on-surface-variant">
+    <span class="material-symbols-outlined">map</span>
+    <span class="text-[10px] font-bold uppercase tracking-wider">MAP</span>
+  </button>
+  <button class="flex flex-col items-center gap-1 text-on-surface-variant">
+    <span class="material-symbols-outlined">person</span>
+    <span class="text-[10px] font-bold uppercase tracking-wider">PROFILE</span>
+  </button>
+</nav></body></html>

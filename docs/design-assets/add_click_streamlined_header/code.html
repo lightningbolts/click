@@ -1,0 +1,159 @@
+<!DOCTYPE html><html lang="en" style=""><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=block" rel="stylesheet"><script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script><script id="tailwind-config">try{
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "background": "#f9f9f9",
+                        "on-primary": "#ffffff",
+                        "on-primary-fixed-variant": "#5a00c6",
+                        "on-tertiary-fixed-variant": "#444749",
+                        "surface-container-high": "#e8e8e8",
+                        "surface-container-lowest": "#ffffff",
+                        "outline-variant": "#ccc3d8",
+                        "error-container": "#ffdad6",
+                        "tertiary-fixed": "#e1e2e4",
+                        "secondary": "#5e5e5e",
+                        "primary": "#630ed4",
+                        "surface-container-low": "#f3f3f4",
+                        "secondary-fixed": "#e2e2e2",
+                        "primary-fixed": "#eaddff",
+                        "tertiary-fixed-dim": "#c5c6c8",
+                        "primary-fixed-dim": "#d2bbff",
+                        "surface-tint": "#732ee4",
+                        "on-surface": "#1a1c1c",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-fixed": "#25005a",
+                        "on-secondary": "#ffffff",
+                        "on-secondary-fixed-variant": "#474747",
+                        "inverse-surface": "#2f3131",
+                        "surface-bright": "#f9f9f9",
+                        "secondary-fixed-dim": "#c6c6c6",
+                        "inverse-on-surface": "#f0f1f1",
+                        "surface": "#f9f9f9",
+                        "surface-container": "#eeeeee",
+                        "on-tertiary-container": "#e5e6e8",
+                        "on-tertiary-fixed": "#191c1e",
+                        "on-background": "#1a1c1c",
+                        "outline": "#7b7487",
+                        "on-primary-container": "#ede0ff",
+                        "surface-container-highest": "#e2e2e2",
+                        "on-surface-variant": "#4a4455",
+                        "tertiary": "#4d4f51",
+                        "surface-dim": "#dadada",
+                        "primary-container": "#7c3aed",
+                        "on-error-container": "#93000a",
+                        "on-secondary-container": "#646464",
+                        "secondary-container": "#e2e2e2",
+                        "on-error": "#ffffff",
+                        "inverse-primary": "#d2bbff",
+                        "tertiary-container": "#656769",
+                        "error": "#ba1a1a",
+                        "surface-variant": "#e2e2e2",
+                        "on-secondary-fixed": "#1b1b1b"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xl": "32px",
+                        "margin-mobile": "16px",
+                        "gutter": "12px",
+                        "2xl": "48px",
+                        "sm": "8px",
+                        "unit": "4px",
+                        "lg": "24px",
+                        "md": "16px",
+                        "xs": "4px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Manrope"],
+                        "label-md": ["Manrope"],
+                        "body-md": ["Manrope"],
+                        "display-lg": ["Manrope"],
+                        "body-lg": ["Manrope"],
+                        "label-bold": ["Manrope"],
+                        "headline-md": ["Manrope"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "label-md": ["14px", { "lineHeight": "20px", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "500" }],
+                        "display-lg": ["48px", { "lineHeight": "52px", "letterSpacing": "-0.04em", "fontWeight": "800" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "500" }],
+                        "label-bold": ["14px", { "lineHeight": "20px", "fontWeight": "700" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "700" }]
+                    }
+                }
+            }
+        }
+    }catch(_e){}</script></head><body class="bg-background text-on-background min-h-screen flex flex-col pb-[100px]">
+<!-- TopAppBar -->
+
+<!-- Main Content Canvas -->
+<main class="flex-1 px-margin-mobile py-lg w-full max-w-2xl mx-auto flex flex-col gap-lg relative"><div class="flex flex-col gap-lg">
+<!-- Header Section -->
+<div class="bg-surface-container-highest dark:bg-surface-dim rounded-[16px] border-2 border-black py-md px-lg">
+<h2 class="font-display-lg text-display-lg font-black">Add Click</h2>
+</div>
+<!-- Tap to Connect (Large Card) -->
+<div class="bg-surface-container-lowest dark:bg-surface-dim border-2 border-black rounded-[16px] p-2xl flex flex-col items-center text-center gap-md cursor-pointer btn-active">
+<span class="material-symbols-outlined text-[80px] text-primary" style="font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 48;">bluetooth</span>
+<div>
+<h3 class="font-headline-md text-headline-md">Tap to Connect</h3>
+<p class="font-body-md text-on-surface-variant mt-sm">Nearby handshake with Bluetooth and audio</p>
+</div>
+</div>
+<!-- QR Grid -->
+<div class="grid grid-cols-2 gap-lg">
+<div class="bg-surface-container-lowest dark:bg-surface-dim border-2 border-black rounded-[16px] p-lg flex flex-col items-center text-center gap-sm cursor-pointer btn-active">
+<span class="material-symbols-outlined text-[48px] text-primary">qr_code_2</span>
+<div>
+<h4 class="font-label-bold text-label-bold">My Code</h4>
+<p class="text-[12px] text-on-surface-variant">Share your QR</p>
+</div>
+</div>
+<div class="bg-surface-container-lowest dark:bg-surface-dim border-2 border-black rounded-[16px] p-lg flex flex-col items-center text-center gap-sm cursor-pointer btn-active">
+<span class="material-symbols-outlined text-[48px] text-primary">qr_code_scanner</span>
+<div>
+<h4 class="font-label-bold text-label-bold">Scan Code</h4>
+<p class="text-[12px] text-on-surface-variant">Friend or hub QR</p>
+</div>
+</div>
+</div>
+<!-- Hub Links -->
+<div class="flex justify-around py-md mb-lg">
+<button class="text-primary font-label-bold hover:underline">Create ephemeral hub</button>
+<button class="text-primary font-label-bold hover:underline">Join community hub</button>
+</div>
+</div></main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-6 left-4 right-4 flex justify-around items-center px-4 py-2 bg-white border-2 border-black rounded-full z-50">
+<button class="flex flex-col items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined">home</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">Home</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined">calendar_today</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">My Clicks</span>
+</button>
+<button class="flex flex-col items-center justify-center bg-primary text-white w-14 h-14 rounded-full border-2 border-black">
+<span class="material-symbols-outlined text-3xl">add</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">Add Click</span></button>
+<button class="flex flex-col items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined">map</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">Map</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined">person</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">Profile</span>
+</button>
+</nav>
+<!-- Desktop Nav Replacement (Hidden on mobile) -->
+<nav class="hidden md:flex fixed top-0 left-1/2 -translate-x-1/2 z-50 items-center h-[80px] gap-xl">
+<a class="text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container dark:hover:bg-surface-container-high font-label-bold text-label-bold px-md py-sm rounded-lg" href="#">Home</a>
+<a class="text-primary dark:text-inverse-primary font-bold hover:bg-surface-container dark:hover:bg-surface-container-high font-label-bold text-label-bold px-md py-sm rounded-lg" href="#">Add Click</a>
+</nav></body></html>

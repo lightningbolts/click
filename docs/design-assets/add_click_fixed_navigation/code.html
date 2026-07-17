@@ -1,0 +1,223 @@
+<!DOCTYPE html><html lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Add Click - Connections</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "background": "#f9f9f9",
+                        "on-primary": "#ffffff",
+                        "on-primary-fixed-variant": "#5a00c6",
+                        "on-tertiary-fixed-variant": "#444749",
+                        "surface-container-high": "#e8e8e8",
+                        "surface-container-lowest": "#ffffff",
+                        "outline-variant": "#ccc3d8",
+                        "error-container": "#ffdad6",
+                        "tertiary-fixed": "#e1e2e4",
+                        "secondary": "#5e5e5e",
+                        "primary": "#630ed4",
+                        "surface-container-low": "#f3f3f4",
+                        "secondary-fixed": "#e2e2e2",
+                        "primary-fixed": "#eaddff",
+                        "tertiary-fixed-dim": "#c5c6c8",
+                        "primary-fixed-dim": "#d2bbff",
+                        "surface-tint": "#732ee4",
+                        "on-surface": "#1a1c1c",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-fixed": "#25005a",
+                        "on-secondary": "#ffffff",
+                        "on-secondary-fixed-variant": "#474747",
+                        "inverse-surface": "#2f3131",
+                        "surface-bright": "#f9f9f9",
+                        "secondary-fixed-dim": "#c6c6c6",
+                        "inverse-on-surface": "#f0f1f1",
+                        "surface": "#f9f9f9",
+                        "surface-container": "#eeeeee",
+                        "on-tertiary-container": "#e5e6e8",
+                        "on-tertiary-fixed": "#191c1e",
+                        "on-background": "#1a1c1c",
+                        "outline": "#7b7487",
+                        "on-primary-container": "#ede0ff",
+                        "surface-container-highest": "#e2e2e2",
+                        "on-surface-variant": "#4a4455",
+                        "tertiary": "#4d4f51",
+                        "surface-dim": "#dadada",
+                        "primary-container": "#7c3aed",
+                        "on-error-container": "#93000a",
+                        "on-secondary-container": "#646464",
+                        "secondary-container": "#e2e2e2",
+                        "on-error": "#ffffff",
+                        "inverse-primary": "#d2bbff",
+                        "tertiary-container": "#656769",
+                        "error": "#ba1a1a",
+                        "surface-variant": "#e2e2e2",
+                        "on-secondary-fixed": "#1b1b1b"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xl": "32px",
+                        "margin-mobile": "16px",
+                        "gutter": "12px",
+                        "2xl": "48px",
+                        "sm": "8px",
+                        "unit": "4px",
+                        "lg": "24px",
+                        "md": "16px",
+                        "xs": "4px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Manrope"],
+                        "label-md": ["Manrope"],
+                        "body-md": ["Manrope"],
+                        "display-lg": ["Manrope"],
+                        "body-lg": ["Manrope"],
+                        "label-bold": ["Manrope"],
+                        "headline-md": ["Manrope"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "label-md": ["14px", { "lineHeight": "20px", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "500" }],
+                        "display-lg": ["48px", { "lineHeight": "52px", "letterSpacing": "-0.04em", "fontWeight": "800" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "500" }],
+                        "label-bold": ["14px", { "lineHeight": "20px", "fontWeight": "700" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "700" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Manrope', sans-serif; }
+        .rolodex-stack {
+            display: flex;
+            flex-direction: column;
+        }
+        .rolodex-card {
+            transition: transform 0.2s ease, margin-top 0.2s ease;
+        }
+        .rolodex-card:not(:first-child) {
+            margin-top: -64px;
+        }
+        .rolodex-card:hover {
+            transform: translateY(-16px);
+            z-index: 10 !important;
+        }
+        .rolodex-card:active {
+            transform: translateY(2px) translateX(2px);
+        }
+        .btn-active:active {
+            filter: brightness(0.9);
+            transform: translateY(2px) translateX(2px);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-background min-h-screen flex flex-col pb-[100px]">
+<!-- TopAppBar -->
+<!-- Main Content Canvas -->
+<main class="flex-1 px-margin-mobile py-lg w-full max-w-2xl mx-auto flex flex-col gap-lg relative pt-xl">
+<div class="flex justify-between items-end mb-md">
+<h2 class="font-headline-lg text-headline-lg">Your Clicks</h2>
+</div>
+<!-- Rolodex Stack -->
+<div class="rolodex-stack flex-1">
+<!-- Card 1 -->
+<div class="rolodex-card relative z-10 bg-primary text-on-primary border-2 border-black rounded-[16px] p-lg flex flex-col gap-md" style="z-index: 4;">
+<div class="flex justify-between items-start">
+<h3 class="font-display-lg text-[40px] leading-[44px] font-black tracking-tight max-w-[70%]">Sarah Jenkins</h3>
+<div class="w-16 h-16 rounded-full border-2 border-black overflow-hidden bg-white shrink-0">
+<img class="w-full h-full object-cover" data-alt="A close up portrait of a young professional woman smiling warmly, flat lighting, high contrast white background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCRMqayg3pR5151wG-AM4U3P-qaJB4ShQoUA6ER4jVCIMXsXZhuOAnQO8qc_ydPIfBB-9qo8m5gyIhODiw8nzC6ESG-e6edBA-bouN-0SPvRSBMADzce8JRqRe9vIuLS6evX0Qf-T-V6HBuWd9MhAmRZDAx2Ox0VbAemZzTcMujwQxuhC6PwDL25hiEyuMkY6lBFQwL8vrcDTk8pk_gQpm_DbgD2yiinhJbyVSriKDbqS8UZ-IelMDWH2dSBv-9K4-1Y_KpXI_GJo4">
+</div>
+</div>
+<p class="font-body-md text-on-primary/80">UX Designer @ TechCorp. Always down for coffee and wireframes.</p>
+<div class="flex gap-sm mt-auto pt-md">
+<span class="bg-black text-white font-label-bold text-label-bold px-sm py-unit rounded-full">Design</span>
+<span class="bg-black text-white font-label-bold text-label-bold px-sm py-unit rounded-full">Coffee</span>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="rolodex-card relative z-20 bg-surface-container-high text-on-surface border-2 border-black rounded-[16px] p-lg flex flex-col gap-md" style="z-index: 3;">
+<div class="flex justify-between items-start">
+<h3 class="font-display-lg text-[40px] leading-[44px] font-black tracking-tight max-w-[70%]">Marcus Cole</h3>
+<div class="w-16 h-16 rounded-full border-2 border-black overflow-hidden bg-white shrink-0">
+<img class="w-full h-full object-cover" data-alt="A portrait of a confident man with a short beard, wearing a plain grey t-shirt, studio lighting, solid light grey background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuACU98mvNX_kRceJ0PsksZHk--iUxMOH6Tgdh_-udvPtFfFCBHHGoMqE3iJO8SFrGGF3PJAhOsVvjkTdl9eeYMzJX8-kSrg62pgS3iaFsiej2ACBrhOmYOHHx6kwKs56hkUXrnbprFkA739ChUclOOw3Y_iKDjdzK5cSMxw2hRsmK5TppB3GWWFmNNpzpd5csFYXrrEr2F36xNt4uYn6GzMO31msiO42qk9moElA3AdUVeQNJrAU4nw8YuZtNB1MCOmGgRYPjeZOSU">
+</div>
+</div>
+<p class="font-body-md text-on-surface-variant">Full Stack Dev. Rust enthusiast. Building the next big thing.</p>
+<div class="flex gap-sm mt-auto pt-md">
+<span class="bg-primary text-on-primary font-label-bold text-label-bold px-sm py-unit rounded-full">Engineering</span>
+<span class="bg-primary text-on-primary font-label-bold text-label-bold px-sm py-unit rounded-full">Startups</span>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="rolodex-card relative z-30 bg-surface-container-lowest text-on-surface border-2 border-black rounded-[16px] p-lg flex flex-col gap-md" style="z-index: 2;">
+<div class="flex justify-between items-start">
+<h3 class="font-display-lg text-[40px] leading-[44px] font-black tracking-tight max-w-[70%]">Elena Rossi</h3>
+<div class="w-16 h-16 rounded-full border-2 border-black overflow-hidden bg-white shrink-0">
+<img class="w-full h-full object-cover" data-alt="A candid portrait of a woman with curly hair looking off-camera, bright daylight, minimalist outdoor setting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCdGKvKOA4T3rs1ZzC2irDs-EGcxzaVvmTbaAgCpqDaMciMf06N2BHbaNUbzajmBWxsXUWx4GO_drlIQuWrSDbo6cureVTrQ1YdS9R9HnBfW0EorG9ydzPyC89iToslydUcTCOlFuHdgmbXiryFk39h7OHIXrScDbVBh57MhRQ3evQlQ0XOqgV07xYoSrRn4GvGaWouhex6IBW6Ebvb863aSBFZlWN5tKBx6zUSTEFuIXYTiizcMph2eGhClKn_hJGhYprPrPh2CPg">
+</div>
+</div>
+<p class="font-body-md text-on-surface-variant">Product Manager. Organizing chaos into shipping features.</p>
+<div class="flex gap-sm mt-auto pt-md">
+<span class="bg-secondary text-on-secondary font-label-bold text-label-bold px-sm py-unit rounded-full">Product</span>
+<span class="bg-secondary text-on-secondary font-label-bold text-label-bold px-sm py-unit rounded-full">Strategy</span>
+</div>
+</div>
+<!-- Card 4 -->
+<div class="rolodex-card relative z-40 bg-surface-variant text-on-surface border-2 border-black rounded-[16px] p-lg flex flex-col gap-md" style="z-index: 1;">
+<div class="flex justify-between items-start">
+<h3 class="font-display-lg text-[40px] leading-[44px] font-black tracking-tight max-w-[70%]">David Kim</h3>
+<div class="w-16 h-16 rounded-full border-2 border-black overflow-hidden bg-white shrink-0">
+<img class="w-full h-full object-cover" data-alt="A headshot of a man wearing glasses and a dark button down shirt, neutral expression, solid pale blue background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCEd8Zl8sVqaAtax2jNePOvVcrS4zAi2LQIeOxBkHxc-oYzwxhnA_q1ncClU2-RrnR6R5vYzSyk2hpUuo8m53LnuTaV5zJ-tSFdvoNX1EVB-vQUW5fZKRzg8Fwk83SmQ3E_9uI4ntunsQnjUsMoBvt8RFhx-GfHtOquMQIXK-c13gPGWCrg8WC_mENdG27evaiN4r4YJunuVuie7efGwT-_yNIP2bHIFYsxBOMXIseiI50uGVUWxvtNc6kzUUeH_kH3XoVhb3ExGW8">
+</div>
+</div>
+<p class="font-body-md text-on-surface-variant">Data Scientist. Turning numbers into narratives.</p>
+<div class="flex gap-sm mt-auto pt-md">
+<span class="bg-on-surface text-background font-label-bold text-label-bold px-sm py-unit rounded-full">Data</span>
+<span class="bg-on-surface text-background font-label-bold text-label-bold px-sm py-unit rounded-full">Analytics</span>
+</div>
+</div>
+</div>
+<!-- Add Click FAB (Contextual to this screen) -->
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-6 left-4 right-4 flex justify-around items-center px-4 py-2 bg-white border-2 border-black rounded-full z-50"><button class="flex flex-1 flex-col items-center gap-1 text-on-surface-variant">
+  <span class="material-symbols-outlined">home</span>
+  <span class="text-[10px] font-bold uppercase tracking-wider">HOME</span>
+</button>
+<button class="flex flex-1 flex-col items-center gap-1 text-primary">
+  <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">calendar_today</span>
+  <span class="text-[10px] font-bold uppercase tracking-wider">MY CLICKS</span>
+</button>
+<div class="flex flex-1 justify-center">
+  <button class="flex items-center justify-center bg-primary text-white w-14 h-14 rounded-full border-2 border-black -mb-2">
+    <span class="material-symbols-outlined text-3xl">add</span>
+  </button>
+</div>
+<button class="flex flex-1 flex-col items-center gap-1 text-on-surface-variant">
+  <span class="material-symbols-outlined">map</span>
+  <span class="text-[10px] font-bold uppercase tracking-wider">MAP</span>
+</button>
+<button class="flex flex-1 flex-col items-center gap-1 text-on-surface-variant">
+  <span class="material-symbols-outlined">person</span>
+  <span class="text-[10px] font-bold uppercase tracking-wider">PROFILE</span>
+</button></nav>
+
+</body></html>

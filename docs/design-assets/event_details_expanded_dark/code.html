@@ -1,0 +1,220 @@
+<!DOCTYPE html><html lang="en" class="light" style=""><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=block" rel="stylesheet"><meta charset="utf-8"><script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script><script id="tailwind-config">try{try{
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "surface": "#f9f9f9",
+                      "on-tertiary-fixed": "#191c1e",
+                      "surface-tint": "#732ee4",
+                      "secondary-fixed-dim": "#c6c6c6",
+                      "on-tertiary-fixed-variant": "#444749",
+                      "primary-fixed-dim": "#d2bbff",
+                      "on-primary-fixed-variant": "#5a00c6",
+                      "on-primary-container": "#ede0ff",
+                      "surface-container-lowest": "#ffffff",
+                      "secondary": "#5e5e5e",
+                      "surface-variant": "#e2e2e2",
+                      "on-secondary-fixed": "#1b1b1b",
+                      "on-primary": "#ffffff",
+                      "on-secondary": "#ffffff",
+                      "tertiary": "#4d4f51",
+                      "inverse-on-surface": "#f0f1f1",
+                      "inverse-primary": "#d2bbff",
+                      "surface-container-low": "#f3f3f4",
+                      "outline-variant": "#ccc3d8",
+                      "on-error": "#ffffff",
+                      "on-error-container": "#93000a",
+                      "primary-container": "#7c3aed",
+                      "surface-bright": "#f9f9f9",
+                      "on-surface": "#1a1c1c",
+                      "secondary-fixed": "#e2e2e2",
+                      "error-container": "#ffdad6",
+                      "background": "#f9f9f9",
+                      "secondary-container": "#e2e2e2",
+                      "surface-container-highest": "#e2e2e2",
+                      "primary-fixed": "#eaddff",
+                      "on-tertiary": "#ffffff",
+                      "on-surface-variant": "#4a4455",
+                      "tertiary-fixed-dim": "#c5c6c8",
+                      "tertiary-container": "#656769",
+                      "surface-container": "#eeeeee",
+                      "inverse-surface": "#2f3131",
+                      "primary": "#630ed4",
+                      "outline": "#7b7487",
+                      "on-tertiary-container": "#e5e6e8",
+                      "on-primary-fixed": "#25005a",
+                      "surface-dim": "#dadada",
+                      "on-secondary-fixed-variant": "#474747",
+                      "surface-container-high": "#e8e8e8"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "gutter": "12px",
+                      "2xl": "48px",
+                      "md": "16px",
+                      "xl": "32px",
+                      "margin-mobile": "16px",
+                      "sm": "8px",
+                      "lg": "24px",
+                      "xs": "4px",
+                      "unit": "4px"
+              },
+              "fontFamily": {
+                      "body-lg": ["Manrope"],
+                      "label-md": ["Manrope"],
+                      "body-md": ["Manrope"],
+                      "label-bold": ["Manrope"],
+                      "headline-md": ["Manrope"],
+                      "headline-lg": ["Manrope"],
+                      "display-lg": ["Manrope"]
+              },
+              "fontSize": {
+                      "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "500"}],
+                      "label-md": ["14px", {"lineHeight": "20px", "fontWeight": "600"}],
+                      "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "500"}],
+                      "label-bold": ["14px", {"lineHeight": "20px", "fontWeight": "700"}],
+                      "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "700"}],
+                      "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "headline-lg-mobile": ["24px", {"lineHeight": "30px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                      "display-lg": ["48px", {"lineHeight": "52px", "letterSpacing": "-0.04em", "fontWeight": "800"}]
+              }
+            },
+          },
+        }
+      }catch(_e){}}catch(_e){}</script></head><body class="bg-background text-on-surface antialiased">
+<!-- Header (Shared Component) -->
+
+<!-- Map Canvas (Full Background) -->
+<main class="fixed inset-0 z-0">
+<div class="w-full h-full grayscale brightness-[0.2]" data-location="New York City" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAxfx3cWzVhfjnzjwZdBB1Ui6i_pS6GNY4OmRnkLmIKxtJFOByqBRE0PMZEJu8ZDCcdkQcPw7tuioqR6LdsSqOlVabgQ1D5qbW6QW0Rwcsv2eeNkeybrtxCrBfNufW9boB-CW6147YqmAbIRNw9jeow67RwBnEvDPUXHMPZGmdL0C9E69svEsuCh7i9wfLR2Q3Ccib8lxphg1Qc3-ldzI8hGlbfEvhUcpCDx7M-KBHvbIQB0-gGcSIOgQD9P7epKqNwerYbNRQAoxI')"></div>
+<!-- Artificial Map Pins -->
+<div class="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2">
+<div class="w-4 h-4 bg-primary rounded-full animate-ping absolute"></div>
+<div class="w-4 h-4 bg-primary rounded-full border-2 border-white relative z-10"></div>
+</div>
+</main>
+<!-- Bottom Sheet UI -->
+<div class="fixed inset-x-0 bottom-0 z-40 flex flex-col items-center">
+<!-- Sheet Handle -->
+<div class="w-12 h-1.5 bg-on-surface-variant/30 rounded-full mb-2"></div>
+<!-- Sheet Content -->
+<section class="w-full max-w-md bg-white border-t-2 border-x-2 border-black rounded-t-[32px] px-6 pt-8 pb-32 max-h-[85vh] overflow-y-auto no-scrollbar relative shadow-none">
+<!-- Hero Row -->
+<div class="flex justify-between items-start mb-6">
+<div>
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-600 text-white rounded-md mb-2">
+<span class="w-2 h-2 bg-white rounded-full animate-pulse"></span>
+<span class="font-label-bold text-[10px] uppercase tracking-wider">LIVE</span>
+</div>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">Rooftop Mixer</h2>
+<p class="font-body-md text-on-surface-variant">The Highline Sky Lounge</p>
+</div>
+<button class="w-12 h-12 rounded-full border-2 border-black flex items-center justify-center active:bg-surface-variant transition-colors">
+<span class="material-symbols-outlined">share</span>
+</button>
+</div>
+<!-- Bento Stats Grid -->
+<div class="flex gap-4 mb-8">
+<div class="flex-1 bg-surface-container border-2 border-black p-4 rounded-xl">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-primary text-sm">schedule</span>
+<span class="font-label-md text-on-surface-variant">Start Time</span>
+</div>
+<p class="font-headline-md text-headline-md">8:00<span class="text-lg font-normal"> PM</span></p>
+</div>
+<div class="flex-1 bg-surface-container border-2 border-black p-4 rounded-xl">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-primary text-sm">event_busy</span>
+<span class="font-label-md text-on-surface-variant">End Time</span>
+</div>
+<p class="font-headline-md text-headline-md">12:00<span class="text-lg font-normal"> AM</span></p>
+</div>
+</div>
+<!-- Host Card -->
+<div class="mb-8">
+<h4 class="font-label-bold text-on-surface-variant mb-4 uppercase text-xs tracking-widest">Categories</h4>
+<div class="flex flex-wrap gap-2">
+<span class="px-3 py-1 bg-surface-container border-2 border-black rounded-full font-label-md text-sm">Promotional</span>
+<span class="px-3 py-1 bg-surface-container border-2 border-black rounded-full font-label-md text-sm">Social</span>
+<span class="px-3 py-1 bg-surface-container border-2 border-black rounded-full font-label-md text-sm">School Event</span>
+</div>
+</div><div class="mb-8 p-4 bg-white border-2 border-black rounded-xl flex items-center gap-4">
+<div class="w-14 h-14 rounded-full border-2 border-black overflow-hidden bg-primary-fixed">
+<img class="w-full h-full object-cover" data-alt="A professional headshot of Sarah Jenkins, a friendly-looking woman with glasses and dark hair, set against a minimalist architectural background in soft, natural daylight. High contrast and clean composition." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAwvk8O70aMAFXn0ZHxQ5xkw-fegDHk9W9yMpJtbCNPx3NaV1yNPyJL2uD-hNsS-ZGdrYhnx6_noEy5ae-DJrRcdrF1lnT2h0yd8plXEYkoYwFWaBXgds8i0fnKJXByjGAC7W98n2Zvm4Kcl3QxEZI60b7OXGiRK4Dk8ChsayCmigjrF6kT_LGprxdqRrTKgQBWfqnldSIxeKpfmRymTVabCm0SJ_v_Yh04wEM1CMIs_mWdkrOX4R_45fzXKSb43xmIJ6aMJzjspms">
+</div>
+<div>
+<p class="font-label-md text-on-surface-variant">Host</p>
+<h3 class="font-label-bold text-lg">Sarah Jenkins</h3>
+</div>
+<div class="ml-auto">
+<span class="material-symbols-outlined text-primary">verified</span>
+</div>
+</div>
+<!-- Participants -->
+<div class="mb-10">
+<h4 class="font-label-bold text-on-surface-variant mb-4 uppercase text-xs tracking-widest">Active Clicks (124)</h4>
+<div class="flex -space-x-3 items-center">
+<div class="w-12 h-12 rounded-full border-2 border-black bg-surface overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Close-up portrait of a young man with a stylish haircut, smiling outdoors in a city environment. Soft urban lighting, modern streetwear aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDg8YhAO2eXNLOXQrAm1957Y5VG79XX37QPevzhvz6pMXBaGiKKih5Wko5U758bqYY164a4dB8tuwnjSC5GWyN-bR860SB40IuA6mp7EIaDXFKhGiXJm298CCe1ueENt6FWKGYF9XSrTQU0q-wmJbEzGepNWTIZLJF_MTiddqcXIGBnTMZue2JOxiyGvvlCZBlWnnUAwGxCxckDtgK8UpsDGDgUUzb902FZwUZPKQj4br6V4bUj0lthvsB3TiJbAhNKrHBwaWjhKwA">
+</div>
+<div class="w-12 h-12 rounded-full border-2 border-black bg-surface overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Close-up portrait of a woman with braided hair and colorful jewelry, looking away from camera. Studio lighting with bold shadows." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDmjhskm5eEmI26AIl7YQWuWHD1LZoujEEz0hYmunlnBmMMlYySG8QIfv8ohY6sGo3627QL4t5n9ew9EdkEVbI4DTM9ESsTR1QBii70XdrebWvU3oejZ-esijb2vGIoZtuBNGwTmjzoGt4GbDpxlUvNosozMmz4HUtg8FnDA4uTFcE7Flpo8JC5GGAqtZw93YNU_9eV40i247FfQabv4tEtwq2qGoEN_17OIHixmRwn0k8vcNNzd6H6QSzQDqH6oG9LDP4xufYpxdw">
+</div>
+<div class="w-12 h-12 rounded-full border-2 border-black bg-surface overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Candid street photography of a person wearing neon-accented headphones. Evening city lighting with sharp contrasts." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCbr6yGWNfCCGm8BIzt4FDObvoWMBSfbNKPzGunwHaRhcrcsUSoE7TUK1xE2bAbvd3-Ddg8RRUfiLrnRq-Ps0ebFdSOwtXj50I7utAx426D_GDXa5gssKLPOW4zmds0qH__p18N6m-RLnTv5ZR274EsOIhJ7JjLcZMaMrZGvXYcA2OHy_sAcmLN8unkQr2PV7LtRMB4DDA-lEzukEl7LMPonsKRm4VIwobu9LwLBSrPhK1s2gyIv_NOF1R7DbahKO4KdpAf7vW5COI">
+</div>
+<div class="w-12 h-12 rounded-full border-2 border-black bg-surface overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Close-up of a person with minimalist tattoos on their neck and face, wearing a black turtleneck. Moody, high-contrast lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAQ61mL8oYAof8OnC1cBrZJilKlgQEsgAWFNEPpprEMjIXmFcBNGKo5MRItVbUMIGk2Wg_mSgXpzRBkBpXudSmN7m3L7DtjoHosk_ciU5tu4PkYoQjv4USTclY1yxPqf3Q3HaijDQPAaHNQN9fhrd1PBQeBh0du7L4kJu8kKdiBfgd5f7t575Nm53uIKpGOgUyQGqvp21vqb27DNBSHr7LSeW6IoLF4FkWxnmm3fK7Hf2C3W05xl6GXxLhHw4YYUFMa40n37auLvuY">
+</div>
+<div class="w-12 h-12 rounded-full border-2 border-black bg-primary-fixed-dim flex items-center justify-center">
+<span class="font-label-bold text-primary">+120</span>
+</div>
+</div>
+</div>
+<!-- Primary Action -->
+<button class="w-full py-5 bg-primary text-white rounded-xl font-label-bold text-lg active-press shadow-none border-b-4 border-r-4 border-black/20 hover:bg-primary/90 transition-all flex items-center justify-center gap-3">
+<span class="material-symbols-outlined">route</span>
+                Join Event Route
+            </button>
+</section>
+</div>
+<!-- Bottom Navigation Bar (Shared-->
+<nav class="fixed bottom-6 left-4 right-4 flex justify-between items-center px-2 py-2 bg-white border-2 border-black rounded-full z-50"><button class="flex flex-1 flex-col items-center gap-1 text-on-surface-variant">
+  <span class="material-symbols-outlined">home</span>
+  <span class="text-[10px] font-bold uppercase tracking-wider">HOME</span>
+</button>
+<button class="flex flex-1 flex-col items-center gap-1 text-on-surface-variant">
+  <span class="material-symbols-outlined">calendar_today</span>
+  <span class="text-[10px] font-bold uppercase tracking-wider">MY CLICKS</span>
+</button>
+<div class="relative flex-1 flex justify-center">
+  <button class="absolute bottom-[-10px] flex items-center justify-center bg-primary text-white w-14 h-14 rounded-full border-2 border-black z-50">
+    <span class="material-symbols-outlined text-3xl">add</span>
+  </button>
+</div>
+<button class="flex flex-1 flex-col items-center gap-1 text-primary">
+  <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">map</span>
+  <span class="text-[10px] font-bold uppercase tracking-wider">MAP</span>
+</button>
+<button class="flex flex-1 flex-col items-center gap-1 text-on-surface-variant">
+  <span class="material-symbols-outlined">person</span>
+  <span class="text-[10px] font-bold uppercase tracking-wider">PROFILE</span>
+</button></nav>
+<!-- Overlay Background (to dim map under sheet) -->
+<div class="fixed inset-0 bg-black/40 z-30 pointer-events-none"></div>
+<script class="">
+        // Micro-interaction for the handle
+        const sheet = document.querySelector('section');
+        let startY = 0;
+        
+        sheet.addEventListener('touchstart', (e) => {
+            startY = e.touches[0].clientY;
+        });
+
+        sheet</script></body></html>
