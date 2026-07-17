@@ -29,14 +29,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.ConnectionArchiveNotice // pragma: allowlist secret
-import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.ui.theme.clickBorderColor
+import compose.project.click.click.ui.theme.clickCardSurface
 
 /**
  * Opaque surface card matching [PollPairCard]; archive / idle window reminder with actions.
@@ -52,7 +51,7 @@ fun ConnectionArchiveWarningBanner(
 ) {
     val summary =
         "${notice.headline}. ${notice.body}. Open chat. Send icebreaker."
-    val outerShape = RoundedCornerShape(24.dp)
+    val outerShape = RoundedCornerShape(16.dp)
 
     Column(
         modifier = modifier
@@ -61,9 +60,9 @@ fun ConnectionArchiveWarningBanner(
                 contentDescription = summary
             }
             .clip(outerShape)
-            .background(MaterialTheme.colorScheme.surface)
+            .background(clickCardSurface())
             .border(2.dp, clickBorderColor(), outerShape)
-            .padding(18.dp),
+            .padding(16.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -73,14 +72,14 @@ fun ConnectionArchiveWarningBanner(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(PrimaryBlue)
+                    .background(MaterialTheme.colorScheme.primary)
                     .border(2.dp, clickBorderColor(), RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = Icons.Filled.Schedule,
                     contentDescription = null,
-                    tint = Color.White,
+                    tint = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier.size(26.dp),
                 )
             }
@@ -90,7 +89,7 @@ fun ConnectionArchiveWarningBanner(
                     text = notice.headline,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
-                    color = PrimaryBlue,
+                    color = MaterialTheme.colorScheme.primary,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
@@ -117,10 +116,10 @@ fun ConnectionArchiveWarningBanner(
             Button(
                 onClick = onOpenChat,
                 modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = PrimaryBlue,
-                    contentColor = Color.White,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
                 ),
                 contentPadding = PaddingValues(vertical = 12.dp),
             ) {
@@ -136,7 +135,7 @@ fun ConnectionArchiveWarningBanner(
                 onClick = onSendIcebreaker,
                 enabled = icebreakerSendEnabled,
                 modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(8.dp),
                 border = BorderStroke(2.dp, clickBorderColor()),
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = MaterialTheme.colorScheme.onSurface,
@@ -147,7 +146,11 @@ fun ConnectionArchiveWarningBanner(
                     Icons.Filled.Lightbulb,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
-                    tint = if (icebreakerSendEnabled) PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = if (icebreakerSendEnabled) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(

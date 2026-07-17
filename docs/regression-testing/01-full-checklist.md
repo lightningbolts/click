@@ -342,15 +342,17 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 
 ## 9. Home dashboard (`HomeScreen`)
 
-- [ ] Recent connections grouped by location; tap opens chat
-- [ ] "I'm down for…" availability intents strip
+- [ ] Time-of-day greeting + first name visible (no competing `"Home"` title)
+- [ ] Search pill opens unified search
+- [ ] Featured Event (when reminder exists) → View on Map focuses beacon
+- [ ] Explore nearby tiles only for kinds/hubs with nearby count > 0 (no fake Networking/Workshop tiles)
+- [ ] "I'm down for…" availability intents strip (after Featured Event, before Explore)
 - [ ] Post new availability intent from Home
-- [ ] Reconnect reminders: reconnect + dismiss
-- [ ] Event reminder cards (day-of, one-hour-before) — dismiss + tap navigates
-- [ ] `CalendarOverlapBentoCard` when calendar overlaps (if shown)
+- [ ] Reconnect reminders: Message + dismiss
+- [ ] Recent connections grouped by location; tap opens chat
+- [ ] Event reminder cards (day-of, one-hour-before) — dismiss + View on Map; featured beacon not duplicated
 - [ ] Connection insights card when data available
-- [ ] Discovery / quick entry chips navigate correctly
-- [ ] `ConnectionArchiveWarningBanner` from home path if applicable
+- [ ] `ConnectionArchiveWarningBanner` / Poll-Pair from home path if applicable
 - [ ] Pull-to-refresh or refresh affordance updates data
 
 ---

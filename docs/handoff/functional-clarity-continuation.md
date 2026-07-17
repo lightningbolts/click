@@ -139,7 +139,7 @@ These are **layout / IA** workstreams, not bugfixes. Use design-asset HTML for h
 
 | Revamp | Mock / source | Counterpart screens | Intent |
 |--------|---------------|---------------------|--------|
-| **Home IA** | `docs/design-assets/home/` | `HomeScreen` | Featured Click, explore categories, greeting hierarchy |
+| **Home IA** | `docs/design-assets/home/` | `HomeScreen` | **Landed (2026-07-17):** greeting first; Featured Event; I'm down for → Explore → Poll-Pair/archive; reconnect with inbox avatars; insights columns; no redundant location pins; search caret fixes |
 | **Settings grouping** | `settings/` | `SettingsScreen` | Profile header + preference clusters |
 | **Inbox density** | `chat/` + `add_click_fixed_navigation/` | `ConnectionsListView` | Card stack / dense bordered list; rolodex name stack |
 | **Add Click hero** | `add_click_streamlined_header/` | `AddClickScreen` | Large Tap-to-Connect hero |
@@ -241,8 +241,9 @@ Read first:
 - [x] Chat timeline order/dupes, picker keys, profile sheet, transparent nav **code** landed (#17–#23).
 - [x] P1 #4 events list/map parity **code** landed (device verify still open).
 - [x] Code audit residuals hardened: client 503 recover, confirm dedup, Keychain -50, 1:1 Message CTA, hazard pin metrics (2026-07-17).
+- [x] Track C **Home IA** layout + docs landed (2026-07-17); device smoke still open.
 - [ ] **Device verification** for Track B / B+ P0–P1 rows (incl. #4).
 - [ ] Smoke checklist on Android + iOS.
-- [ ] Track C layout redesigns completed or explicitly scheduled.
+- [ ] Remaining Track C layout redesigns completed or explicitly scheduled.
 
-**Next:** device smoke for chat timeline + transparent nav + Track B P0s + events (#4) + #3/#9/Keychain hardenings.
+**Next:** device smoke for chat timeline + transparent nav + Track B P0s + events (#4) + Home IA visual confirm; then next Track C screen.

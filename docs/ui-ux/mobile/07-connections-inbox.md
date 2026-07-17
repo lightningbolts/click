@@ -185,6 +185,7 @@ FAB `contentDescription`: `"Create verified click"`
 |---------|--------|
 | Title | `"Create verified click"` |
 | Subtitle | `"Pick friends who are all connected to each other. Eligibility is verified on the server."` |
+| Search placeholder | `"Search connections"` — vertically centered in `ConnectionPickerSearchBar` (`BasicTextField`, not clipped) |
 | Primary | `"Create"` |
 | Add-to-group variant title | `"Add to group"` |
 | Add subtitle | `"Choose verified connections who are connected to everyone in this click."` |

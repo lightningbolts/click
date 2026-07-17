@@ -26,6 +26,8 @@ AvailabilityComponents (molecules — used on profile/settings/home surfaces)
 └── ActivitySelectionRow — preset activity chips
 ```
 
+**On Home, the strip sits after Featured Event and immediately before Explore nearby** (archive / Poll-Pair stay-in-touch cards come after Explore). See [05-home.md](05-home.md).
+
 **Entry:** Home `HomeAvailabilityIntentsRow` chip tap → `AvailabilitySheet` (see [05-home.md](05-home.md)).
 
 ---

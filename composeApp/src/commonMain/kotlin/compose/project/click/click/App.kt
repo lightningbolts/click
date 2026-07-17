@@ -103,6 +103,7 @@ import compose.project.click.click.viewmodel.AuthViewModel
 import compose.project.click.click.viewmodel.AuthState
 import compose.project.click.click.viewmodel.ChatViewModel
 import compose.project.click.click.viewmodel.MapViewModel
+import compose.project.click.click.viewmodel.MapLayerFilter
 import compose.project.click.click.viewmodel.OnboardingViewModel
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.storage.createTokenStorage
@@ -889,6 +890,7 @@ fun App() {
             var showNfcScreen by remember { mutableStateOf(false) }
             var pendingChatId by remember { mutableStateOf<String?>(null) }
             var pendingBeaconId by remember { mutableStateOf<String?>(null) }
+            var pendingMapLayerFilter by remember { mutableStateOf<MapLayerFilter?>(null) }
             var isConnectionsChatOpen by remember { mutableStateOf(false) }
             var verifiedCliqueProximityAutofillIntent by remember { mutableStateOf<VerifiedCliqueProximityIntent?>(null) }
             fun navigateTo(route: String) {
@@ -929,6 +931,7 @@ fun App() {
                 isConnectionsChatOpen = false
                 pendingChatId = null
                 pendingBeaconId = null
+                pendingMapLayerFilter = null
                 return true
             }
 
@@ -1341,6 +1344,14 @@ fun App() {
                                             navigateTo(NavigationItem.Connections.route)
                                         },
                                         onOpenSearch = { showUnifiedSearchSheet = true },
+                                        onNavigateToMap = { beaconId ->
+                                            pendingBeaconId = beaconId
+                                            navigateTo(NavigationItem.Map.route)
+                                        },
+                                        onNavigateToMapLayer = { filter ->
+                                            pendingMapLayerFilter = filter
+                                            navigateTo(NavigationItem.Map.route)
+                                        },
                                     )
 
                                     NavigationItem.AddClick.route -> AddClickScreen(
@@ -1422,6 +1433,8 @@ fun App() {
                                         },
                                         initialBeaconId = pendingBeaconId,
                                         onBeaconFocusConsumed = { pendingBeaconId = null },
+                                        initialLayerFilter = pendingMapLayerFilter,
+                                        onLayerFilterConsumed = { pendingMapLayerFilter = null },
                                         onJoinCommunityHub = { hubId ->
                                             launchCommunityHubJoin(hubId)
                                         },

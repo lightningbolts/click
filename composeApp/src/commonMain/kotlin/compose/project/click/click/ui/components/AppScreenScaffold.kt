@@ -47,6 +47,9 @@ private const val FloatingHeaderInsetItemKey = "__floating_header_inset__"
  * Standard tab-root layout: scrollable body extends under the floating nav bar, with bottom
  * content padding so every control stays reachable. A Functional Clarity header island floats at
  * the top and collapses as the user scrolls.
+ *
+ * When [showFloatingHeader] is false (e.g. Home discovery IA), only status-bar top inset is
+ * applied — no title island or header search icon.
  */
 @Composable
 fun AppScreenScaffold(
@@ -57,6 +60,7 @@ fun AppScreenScaffold(
     navigationIcon: @Composable (() -> Unit)? = null,
     actions: @Composable (RowScope.() -> Unit)? = null,
     onOpenSearch: (() -> Unit)? = null,
+    showFloatingHeader: Boolean = true,
     horizontalPadding: Dp = AppScreenDefaults.HorizontalPadding,
     lazyListState: LazyListState = rememberLazyListState(),
     headerBelowContent: @Composable (() -> Unit)? = null,
@@ -68,18 +72,29 @@ fun AppScreenScaffold(
     val density = LocalDensity.current
     val compactHeaderClearance = rememberCompactFloatingHeaderClearance(statusBarTop)
     val collapseFraction by remember(lazyListState) {
-        derivedStateOf { lazyListState.headerCollapseFraction() }
+        derivedStateOf {
+            if (showFloatingHeader) lazyListState.headerCollapseFraction() else 0f
+        }
     }
-    val (topContentPadding, headerMeasureModifier) =
+    val (measuredTopPadding, headerMeasureModifier) =
         rememberFloatingHeaderTopPadding(collapseFraction, statusBarTop)
+    val topContentPadding = if (showFloatingHeader) {
+        measuredTopPadding
+    } else {
+        statusBarTop + 16.dp
+    }
     val expandedHeaderSlack = remember(topContentPadding, compactHeaderClearance) {
         (topContentPadding - compactHeaderClearance).coerceAtLeast(0.dp)
     }
-    val headerHidden = rememberLazyFloatingHeaderHidden(
-        lazyListState = lazyListState,
-        expandedHeaderSlack = expandedHeaderSlack,
-        density = density,
-    )
+    val headerHidden = if (showFloatingHeader) {
+        rememberLazyFloatingHeaderHidden(
+            lazyListState = lazyListState,
+            expandedHeaderSlack = expandedHeaderSlack,
+            density = density,
+        )
+    } else {
+        true
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
@@ -98,29 +113,31 @@ fun AppScreenScaffold(
             content()
         }
 
-        FloatingHeaderOverlay(
-            hidden = headerHidden,
-            horizontalPadding = horizontalPadding,
-            headerMeasureModifier = headerMeasureModifier,
-        ) {
-            LiquidGlassPageHeader(
-                title = title,
-                subtitle = subtitle,
-                presenceOnline = presenceOnline,
-                navigationIcon = navigationIcon,
-                actions = if (onOpenSearch != null || actions != null) {
-                    {
-                        if (onOpenSearch != null) {
-                            HeaderSearchIconButton(onClick = onOpenSearch)
+        if (showFloatingHeader) {
+            FloatingHeaderOverlay(
+                hidden = headerHidden,
+                horizontalPadding = horizontalPadding,
+                headerMeasureModifier = headerMeasureModifier,
+            ) {
+                LiquidGlassPageHeader(
+                    title = title,
+                    subtitle = subtitle,
+                    presenceOnline = presenceOnline,
+                    navigationIcon = navigationIcon,
+                    actions = if (onOpenSearch != null || actions != null) {
+                        {
+                            if (onOpenSearch != null) {
+                                HeaderSearchIconButton(onClick = onOpenSearch)
+                            }
+                            actions?.invoke(this)
                         }
-                        actions?.invoke(this)
-                    }
-                } else {
-                    null
-                },
-                collapseFraction = collapseFraction,
-            )
-            headerBelowContent?.invoke()
+                    } else {
+                        null
+                    },
+                    collapseFraction = collapseFraction,
+                )
+                headerBelowContent?.invoke()
+            }
         }
     }
 }

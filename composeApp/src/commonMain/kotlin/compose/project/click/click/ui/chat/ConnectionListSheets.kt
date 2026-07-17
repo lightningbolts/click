@@ -29,14 +29,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Surface
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.unit.Dp
-import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
@@ -55,8 +49,13 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import compose.project.click.click.ui.components.ClickFormBottomSheet
+import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -104,43 +103,51 @@ internal fun ConnectionPickerSearchBar(
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
     val hideKeyboard = { keyboardController?.hide() }
-    Surface(
+    val shape = RoundedCornerShape(14.dp)
+    Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(PickerSearchBarHeight),
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            .height(PickerSearchBarHeight)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        TextField(
-            modifier = Modifier.fillMaxSize(),
+        Icon(
+            Icons.Filled.Search,
+            contentDescription = null,
+            tint = GlassSheetTokens.OnOledMuted(),
+            modifier = Modifier.size(20.dp),
+        )
+        BasicTextField(
             value = query,
             onValueChange = onQueryChange,
             singleLine = true,
-            placeholder = {
-                Text(
-                    placeholder,
-                    color = GlassSheetTokens.OnOledMuted(),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            },
-            textStyle = MaterialTheme.typography.bodyMedium,
-            leadingIcon = {
-                Icon(
-                    Icons.Filled.Search,
-                    contentDescription = null,
-                    tint = GlassSheetTokens.OnOledMuted(),
-                    modifier = Modifier.size(20.dp),
-                )
-            },
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = Color.Transparent,
-                unfocusedContainerColor = Color.Transparent,
-                focusedTextColor = GlassSheetTokens.OnOled(),
-                unfocusedTextColor = GlassSheetTokens.OnOled(),
-                cursorColor = PrimaryBlue,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                color = GlassSheetTokens.OnOled(),
             ),
+            cursorBrush = SolidColor(PrimaryBlue),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            decorationBox = { innerTextField ->
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    if (query.isEmpty()) {
+                        Text(
+                            text = placeholder,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = GlassSheetTokens.OnOledMuted(),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    innerTextField()
+                }
+            },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(
                 onSearch = { hideKeyboard() },

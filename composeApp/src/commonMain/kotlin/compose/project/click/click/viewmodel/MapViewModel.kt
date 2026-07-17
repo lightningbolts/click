@@ -819,6 +819,17 @@ class MapViewModel : ViewModel() {
         prefetchDiscoveryProximityData(showPulse = false, markInitialComplete = false)
     }
 
+    /** Home explore tile: focus map on a single layer preset (not a toggle). */
+    fun applyHomeLayerPreset(filter: MapLayerFilter) {
+        _pinRenderZoomFloor.value = null
+        _selectedLayerFilters.value = when (filter) {
+            MapLayerFilter.ALL -> defaultMapLayerFilters()
+            else -> setOf(filter)
+        }
+        _visibleBounds.value?.let { scheduleBeaconFetchForBounds(it, debounceMs = 0L) }
+        prefetchDiscoveryProximityData(showPulse = false, markInitialComplete = false)
+    }
+
     fun clearBeaconInsertError() {
         _beaconInsertError.value = null
     }

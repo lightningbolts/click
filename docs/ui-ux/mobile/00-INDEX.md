@@ -35,7 +35,7 @@ Touch platforms have no Hover; **Pressed/Highlighted** stands in for Hover.
 | [02-shell-navigation.md](02-shell-navigation.md) | App gates, 5-tab shell, swipe-back, global overlays |
 | [03-auth.md](03-auth.md) | Login, Sign Up, OAuth, validation, auth errors |
 | [04-onboarding-gates.md](04-onboarding-gates.md) | Profile basics, Welcome, Interests, Avatar; legacy permission screens |
-| [05-home.md](05-home.md) | Home feed, reconnect, archive banner, stats, availability entry |
+| [05-home.md](05-home.md) | Home IA: greeting, Featured Event, dynamic explore, reconnect, availability, stats |
 | [06-connect-handshake.md](06-connect-handshake.md) | Add Click, QR, Tap/NFC, App Clip, context sheet, reveal |
 | [07-connections-inbox.md](07-connections-inbox.md) | Clicks inbox, segments, action sheets, verified click create |
 | [08-chat.md](08-chat.md) | 1:1 & group chat, composer, bubbles, icebreaker, vibe check |
@@ -126,7 +126,7 @@ HTML/PNG mocks under `click/docs/design-assets/` map to feature docs as visual r
 | Design-asset folder | Feature doc(s) | Notes |
 |---------------------|----------------|-------|
 | `functional_clarity/` | [01-design-system.md](01-design-system.md) | Token source of truth (`DESIGN.md`) |
-| `home/` | [05-home.md](05-home.md) | Home feed, stats, reconnect cards |
+| `home/` | [05-home.md](05-home.md) | Greeting, Featured Event, dynamic explore; mock is hierarchy-only (see `home/README.md`) |
 | `settings/` | [14-settings-privacy.md](14-settings-privacy.md) | Settings sections, toggles |
 | `chat/` | [07-connections-inbox.md](07-connections-inbox.md), [08-chat.md](08-chat.md) | Inbox rows + thread chrome |
 | `add_click_streamlined_header/`, `add_click_fixed_navigation/` | [06-connect-handshake.md](06-connect-handshake.md) | Add Click hub, QR/Tap entry |

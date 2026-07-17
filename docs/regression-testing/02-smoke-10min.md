@@ -11,7 +11,7 @@ Full matrix: [01-full-checklist.md](01-full-checklist.md) · Known issues: [03-k
 ## Preflight (≤ 2 min)
 
 - [ ] App cold-starts to shimmer → auth or main shell (no crash)
-- [ ] Sign in if needed; land on Home
+- [ ] Sign in if needed; land on Home (greeting visible; availability or reconnect still reachable)
 - [ ] All five tabs open: Home, Add Click, Clicks, Map, Settings
 
 ---

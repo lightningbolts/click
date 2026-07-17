@@ -109,6 +109,9 @@ fun MapScreen(
     /** When set, focuses the matching beacon pin once map beacons have loaded. */
     initialBeaconId: String? = null,
     onBeaconFocusConsumed: () -> Unit = {},
+    /** Home explore: apply a single map layer preset once when navigating from Home. */
+    initialLayerFilter: MapLayerFilter? = null,
+    onLayerFilterConsumed: () -> Unit = {},
     /** Proximity verify + hop into hub chat (matches Add Click hub join). */
     onJoinCommunityHub: (hubId: String) -> Unit = {},
     mapPipExpanded: Boolean = false,
@@ -208,6 +211,12 @@ fun MapScreen(
         if (rawMapBeacons.none { it.id == beaconId }) return@LaunchedEffect
         viewModel.onBeaconPinTapped(beaconId)
         onBeaconFocusConsumed()
+    }
+
+    LaunchedEffect(initialLayerFilter) {
+        val filter = initialLayerFilter ?: return@LaunchedEffect
+        viewModel.applyHomeLayerPreset(filter)
+        onLayerFilterConsumed()
     }
 
     DisposableEffect(Unit) {
