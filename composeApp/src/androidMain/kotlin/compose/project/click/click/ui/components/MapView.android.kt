@@ -124,7 +124,7 @@ actual fun PlatformMap(
             }
     }
 
-    // Map properties - grayscale when ghost mode. PiP preview uses the same tiles with gestures off.
+    // Default colorful Google tiles; grayscale only in ghost mode. PiP uses the same tiles with gestures off.
     val mapProperties = remember(ghostMode, canShowMyLocation) {
         MapProperties(
             // Enabling my-location without runtime permission crashes with SecurityException.
@@ -132,7 +132,7 @@ actual fun PlatformMap(
             mapStyleOptions = if (ghostMode) {
                 MapStyleOptions(GRAYSCALE_MAP_STYLE)
             } else {
-                MapStyleOptions(DARK_MAP_STYLE)
+                null
             }
         )
     }
@@ -395,53 +395,6 @@ private fun bitmapDescriptorForLabeledPin(
 
     return BitmapDescriptorFactory.fromBitmap(bmp)
 }
-
-// Dark map style JSON matching the Glass & Neon aesthetic (Zinc-950 base)
-private const val DARK_MAP_STYLE = """
-[
-  {
-    "elementType": "geometry",
-    "stylers": [{"color": "#09090b"}]
-  },
-  {
-    "elementType": "labels.icon",
-    "stylers": [{"visibility": "off"}]
-  },
-  {
-    "elementType": "labels.text.fill",
-    "stylers": [{"color": "#71717a"}]
-  },
-  {
-    "elementType": "labels.text.stroke",
-    "stylers": [{"color": "#09090b"}]
-  },
-  {
-    "featureType": "road",
-    "elementType": "geometry",
-    "stylers": [{"color": "#18181b"}]
-  },
-  {
-    "featureType": "road.highway",
-    "elementType": "geometry",
-    "stylers": [{"color": "#27272a"}]
-  },
-  {
-    "featureType": "water",
-    "elementType": "geometry",
-    "stylers": [{"color": "#0c0c0e"}]
-  },
-  {
-    "featureType": "poi",
-    "elementType": "geometry",
-    "stylers": [{"color": "#18181b"}]
-  },
-  {
-    "featureType": "transit",
-    "elementType": "geometry",
-    "stylers": [{"color": "#18181b"}]
-  }
-]
-"""
 
 // Grayscale map style for ghost mode
 private const val GRAYSCALE_MAP_STYLE = """
