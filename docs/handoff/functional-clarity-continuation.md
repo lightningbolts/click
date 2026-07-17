@@ -1,6 +1,6 @@
 # Functional Clarity Revamp — Continuation Handoff
 
-**Date:** 2026-07-16 (updated after Track A + merge of PR #44 map color)  
+**Date:** 2026-07-16 (updated after Track B P0 code fixes)  
 **Product:** Click KMP mobile (`click/composeApp`)  
 **Audience:** Next chat / agent continuing this work  
 
@@ -13,7 +13,7 @@ This document is the source of truth for **what remains**. Read it before writin
 | Track | Status | What it covers |
 |-------|--------|----------------|
 | **A — Dark/light + theme hardening** | **DONE** (2026-07-16) | `LocalIsDarkMode`, `clickBorderColor()` / `clickCardSurface()`, theme-aware `GlassSheetTokens` / `OledSheetTheme`, tab bars, hotspot `BorderHard` sweep, map basemap policy |
-| **B — Known issues P0/P1** | **NEXT — start here** | Audit #1–#11 product bugs (calls, voice, proximity, group create, events) |
+| **B — Known issues P0/P1** | **P0 code DONE — device verify + P1 next** | P0 #1/#2/#6/#7/#8 code landed; P1 #3/#4 + device smoke still open |
 | **C — Mock layout redesigns** | Deferred (separate chat) | Design-asset IA/layout from `docs/design-assets/*` |
 
 **Do not redo Track A** unless a regression is found. Prefer a dedicated Track B chat.
@@ -47,12 +47,13 @@ Also merged: **PR #44 `map_color_android`** — Android light-mode map uses defa
 
 | Priority | Workstream | Why |
 |----------|------------|-----|
-| **P0** | Preexisting known issues #1, #2, #6, #7, #8, relevant #11 | Product-breaking; **Track B** |
-| **P1** | Known issues #3, #4 + remaining #9, #10 | Proximity UX, events list, polish |
+| **P0 device** | Verify #1, #2, #6, #7, #8 on Android hardware | Code landed; do not false-pass `[KNOWN-N]` |
+| **P1** | Known issues #3 polish, #4 + remaining #9, #10 | Events list, proximity UX, polish |
 | **P2** | Device regression (smoke + full checklist) | Manual; requires hardware |
 | **Separate chat** | Design-asset **screen redesigns** (layout/IA) | Track C — see §5 |
 
-~~Dark / light mode consistency~~ — **Track A complete**; only spot-fix regressions if found during smoke.
+~~Dark / light mode consistency~~ — **Track A complete**; only spot-test regressions if found during smoke.
+~~P0 code fixes (#1/#2/#6/#7/#8)~~ — **Track B code landed 2026-07-16**; device smoke still open.
 
 ---
 
@@ -168,8 +169,8 @@ Read first:
 ### Recommended chat split
 
 1. ~~**Chat A — Dark/light + theme hardening**~~ **DONE**
-2. **Chat B — Known issues P0/P1** ← **start next**
-3. **Chat C — Mock layout redesigns** (after B or parallel owner)
+2. ~~**Chat B — Known issues P0 code**~~ **DONE (device verify + P1 remain)**
+3. **Chat C — Mock layout redesigns** (after B device verify or parallel owner)
 
 ---
 
@@ -194,7 +195,9 @@ Read first:
 ## 9. Done when
 
 - [x] Dark and light modes consistent in code (Track A); device smoke still pending.
-- [ ] P0 known issues (#1, #2, #6, #7, #8, relevant #11) fixed and regression-checked on device.
+- [x] P0 known issues (#1, #2, #6, #7, #8) **code fixes landed** (Track B 2026-07-16); **device verification still required**.
 - [ ] P1 #3–#4 addressed; #5 confirmed on device / #9 decided or fixed.
-- [ ] §0 automated green; smoke checklist completed on Android + iOS.
+- [x] §0 automated green (Track B re-run); smoke checklist still open on Android + iOS.
 - [ ] Layout redesigns either completed in Track C or explicitly scheduled with owners.
+
+Next: device smoke for Track B P0s, then P1 #4 (events list).

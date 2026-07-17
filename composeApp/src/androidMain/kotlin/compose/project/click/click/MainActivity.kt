@@ -10,9 +10,11 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import compose.project.click.click.data.storage.initTokenStorage
+import compose.project.click.click.calls.AndroidCallRuntime
 import compose.project.click.click.calls.initCallManager
 import compose.project.click.click.calls.CallInvite
 import compose.project.click.click.calls.CallSessionManager
@@ -32,6 +34,12 @@ import com.google.android.gms.maps.MapsInitializer
 import io.github.jan.supabase.auth.handleDeeplinks
 
 class MainActivity : ComponentActivity() {
+    private val callPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { results ->
+        AndroidCallRuntime.handlePermissionResult(results.isNotEmpty() && results.values.all { it })
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -56,6 +64,9 @@ class MainActivity : ComponentActivity() {
         AppSystemSettings.isDebugMode =
             (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
+        AndroidCallRuntime.registerPermissionRequester { permissions ->
+            callPermissionLauncher.launch(permissions)
+        }
         initCallManager(applicationContext, this)
 
         initPushNotificationService(applicationContext, this)
@@ -72,6 +83,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        initCallManager(applicationContext, this)
         compose.project.click.click.notifications.AndroidPushNotificationRuntime.setAppInForeground(true)
         onApplicationDidBecomeActive()
     }
@@ -80,6 +92,13 @@ class MainActivity : ComponentActivity() {
         compose.project.click.click.notifications.AndroidPushNotificationRuntime.setAppInForeground(false)
         onApplicationDidEnterBackground()
         super.onPause()
+    }
+
+    override fun onDestroy() {
+        if (isFinishing) {
+            AndroidCallRuntime.registerPermissionRequester(null)
+        }
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {

@@ -355,6 +355,10 @@ object CallSessionManager {
             return
         }
         if (distinctMembers.size > MAX_GROUP_CALL_MEMBERS) {
+            failCall(
+                invite = null,
+                reason = "Group calls are limited to $MAX_GROUP_CALL_MEMBERS people",
+            )
             return
         }
 

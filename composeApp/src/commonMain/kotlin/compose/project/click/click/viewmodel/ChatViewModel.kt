@@ -3952,24 +3952,40 @@ class ChatViewModel(
         }
         viewModelScope.launch {
             try {
+                AppDataManager.refresh(force = true)
+                // Allow the forced refresh to settle so key-wrap sees current edges.
+                delay(450)
+                val connections = AppDataManager.connections.value
                 val initialName = buildInitialVerifiedCliqueDisplayName(members, userId)
                 val rpc = VerifiedCliqueCreation.createVerifiedCliqueWithWrappedKeys(
                     chatRepository = chatRepository,
-                    connections = AppDataManager.connections.value,
+                    connections = connections,
                     currentUserId = userId,
                     memberUserIds = members,
                     initialGroupName = initialName,
                 )
-                val payload = rpc.getOrNull()
-                if (payload != null) {
-                    val chatId = chatRepository.resolveChatIdForGroupId(payload.groupId)
-                    if (chatId != null) {
-                        chatRepository.cacheGroupMasterKey(chatId, payload.masterKey32)
-                    }
-                    loadChats(isForced = true)
-                    PlatformHapticsPolicy.successNotification()
+                val payload = rpc.getOrElse { err ->
+                    onResult(Result.failure(err))
+                    return@launch
                 }
-                onResult(rpc.map { it.groupId })
+                val chatId = chatRepository.resolveChatIdForGroupId(payload.groupId)
+                if (chatId == null) {
+                    loadChats(isForced = true)
+                    onResult(
+                        Result.failure(
+                            IllegalStateException(
+                                "Click created but chat is not ready yet. Pull to refresh.",
+                            ),
+                        ),
+                    )
+                    return@launch
+                }
+                chatRepository.cacheGroupMasterKey(chatId, payload.masterKey32)
+                loadChats(isForced = true)
+                PlatformHapticsPolicy.successNotification()
+                onResult(Result.success(payload.groupId))
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 onResult(Result.failure(e))
             }

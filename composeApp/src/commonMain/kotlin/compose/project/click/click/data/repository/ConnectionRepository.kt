@@ -1709,7 +1709,9 @@ class ConnectionRepository(
                 .decodeList<Connection>()
                 .map { it.withEncountersSortedNewestFirst() }
                 .firstOrNull { conn ->
-                    userId1 in conn.user_ids && userId2 in conn.user_ids
+                    conn.user_ids.size == 2 &&
+                        userId1 in conn.user_ids &&
+                        userId2 in conn.user_ids
                 }
         } catch (e: Exception) {
             println("Error checking connection: ${e.redactedRestMessage()}")

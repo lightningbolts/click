@@ -2235,11 +2235,17 @@ class SupabaseChatRepository(
     private fun decodeUuidScalarFromRpc(body: String): String {
         val t = body.trim()
         if (t.length in 32..40 && t.count { it == '-' } == 4) return t
-        val el = Json.parseToJsonElement(t)
+        val el = runCatching { Json.parseToJsonElement(t) }.getOrElse {
+            throw IllegalStateException("Unexpected RPC payload: $t")
+        }
         return when (el) {
             is JsonPrimitive -> el.content.trim().trim('"')
-            is JsonArray -> el.first().jsonPrimitive.content.trim().trim('"')
-            else -> error("Unexpected RPC payload: $t")
+            is JsonArray -> {
+                val first = el.firstOrNull()
+                    ?: throw IllegalStateException("Unexpected empty RPC payload")
+                first.jsonPrimitive.content.trim().trim('"')
+            }
+            else -> throw IllegalStateException("Unexpected RPC payload: $t")
         }
     }
 

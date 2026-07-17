@@ -26,6 +26,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import compose.project.click.click.calls.CallSessionManager
+import compose.project.click.click.calls.CallState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -135,6 +137,13 @@ actual fun rememberChatMediaPickers(
     }
 
     fun openVoiceRecorder() {
+        val activeCall = CallSessionManager.callState.value
+        if (activeCall is CallState.Connecting || activeCall is CallState.Connected) {
+            onMediaAccessBlocked(
+                "Microphone is in use for a call. End the call before recording a voice message.",
+            )
+            return
+        }
         when {
             ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
                 PackageManager.PERMISSION_GRANTED -> {
@@ -150,6 +159,9 @@ actual fun rememberChatMediaPickers(
             onFinished = { bytes, durationSec ->
                 showVoiceDialog = false
                 onAudioPicked(bytes, "audio/mp4", durationSec)
+            },
+            onRecordBlocked = { message ->
+                onMediaAccessBlocked(message)
             },
         )
     }
@@ -170,6 +182,7 @@ actual fun rememberChatMediaPickers(
 private fun VoiceRecordDialog(
     onDismiss: () -> Unit,
     onFinished: (ByteArray, Long?) -> Unit,
+    onRecordBlocked: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -182,18 +195,22 @@ private fun VoiceRecordDialog(
     var recordedDurationSec by remember { mutableLongStateOf(0L) }
     var recordStartMs by remember { mutableLongStateOf(0L) }
 
+    fun releaseRecorderQuietly() {
+        runCatching {
+            recorder?.apply {
+                try {
+                    stop()
+                } catch (_: Exception) {
+                }
+                release()
+            }
+        }
+        recorder = null
+    }
+
     DisposableEffect(Unit) {
         onDispose {
-            runCatching {
-                recorder?.apply {
-                    try {
-                        stop()
-                    } catch (_: Exception) {
-                    }
-                    release()
-                }
-            }
-            recorder = null
+            releaseRecorderQuietly()
         }
     }
 
@@ -230,48 +247,59 @@ private fun VoiceRecordDialog(
 
     GlassAlertDialog(
         onDismissRequest = {
-            runCatching {
-                recorder?.apply {
-                    try {
-                        stop()
-                    } catch (_: Exception) {
-                    }
-                    release()
-                }
-            }
-            recorder = null
+            releaseRecorderQuietly()
             phase = VoiceRecordUiPhase.Idle
             if (outputFile.exists()) outputFile.delete()
             onDismiss()
         },
         title = { },
         text = {
-            androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth()) {
+            Box(Modifier.fillMaxWidth()) {
             VoiceMessageRecordDialogLayout(
                 phase = phase,
                 displaySeconds = displaySeconds,
                 waveformSamples = waveformSamples,
                 previewLocalMediaUrl = previewUrl,
                 onCancel = {
-                    runCatching {
-                        recorder?.apply {
-                            try {
-                                stop()
-                            } catch (_: Exception) {
-                            }
-                            release()
-                        }
-                    }
-                    recorder = null
+                    releaseRecorderQuietly()
                     phase = VoiceRecordUiPhase.Idle
                     if (outputFile.exists()) outputFile.delete()
                     onDismiss()
                 },
                 onRecord = {
+                    if (recorder != null) {
+                        releaseRecorderQuietly()
+                    }
+                    val activeCall = CallSessionManager.callState.value
+                    if (activeCall is CallState.Connecting || activeCall is CallState.Connected) {
+                        onRecordBlocked(
+                            "Microphone is in use for a call. End the call before recording a voice message.",
+                        )
+                        return@VoiceMessageRecordDialogLayout
+                    }
                     outputFile.parentFile?.mkdirs()
                     if (outputFile.exists()) outputFile.delete()
-                    val mr = createMediaRecorder(context, outputFile)
-                    mr.start()
+                    val created = runCatching { createMediaRecorder(context, outputFile) }
+                    val mr = created.getOrNull()
+                    if (mr == null) {
+                        if (outputFile.exists()) outputFile.delete()
+                        phase = VoiceRecordUiPhase.Idle
+                        onRecordBlocked(
+                            "Microphone busy or unavailable. Try again in a moment.",
+                        )
+                        return@VoiceMessageRecordDialogLayout
+                    }
+                    val started = runCatching { mr.start() }
+                    if (started.isFailure) {
+                        runCatching { mr.release() }
+                        recorder = null
+                        if (outputFile.exists()) outputFile.delete()
+                        phase = VoiceRecordUiPhase.Idle
+                        onRecordBlocked(
+                            "Microphone busy or unavailable. Try again in a moment.",
+                        )
+                        return@VoiceMessageRecordDialogLayout
+                    }
                     recorder = mr
                     recordStartMs = System.currentTimeMillis()
                     elapsedSec = 0L
@@ -295,16 +323,7 @@ private fun VoiceRecordDialog(
                     phase = VoiceRecordUiPhase.Preview
                 },
                 onReRecord = {
-                    runCatching {
-                        recorder?.apply {
-                            try {
-                                stop()
-                            } catch (_: Exception) {
-                            }
-                            release()
-                        }
-                    }
-                    recorder = null
+                    releaseRecorderQuietly()
                     phase = VoiceRecordUiPhase.Idle
                     elapsedSec = 0L
                     recordedDurationSec = 0L
@@ -338,22 +357,21 @@ private fun VoiceRecordDialog(
 
 @Suppress("DEPRECATION")
 private fun createMediaRecorder(context: Context, file: File): MediaRecorder {
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        MediaRecorder(context).apply {
-            setAudioSource(MediaRecorder.AudioSource.MIC)
-            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            setOutputFile(file.absolutePath)
-            prepare()
-        }
+    val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        MediaRecorder(context)
     } else {
-        MediaRecorder().apply {
-            setAudioSource(MediaRecorder.AudioSource.MIC)
-            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            setOutputFile(file.absolutePath)
-            prepare()
-        }
+        MediaRecorder()
+    }
+    try {
+        recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
+        recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+        recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+        recorder.setOutputFile(file.absolutePath)
+        recorder.prepare()
+        return recorder
+    } catch (error: Exception) {
+        runCatching { recorder.release() }
+        throw error
     }
 }
 

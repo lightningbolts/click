@@ -20,17 +20,19 @@ Regression annotations: checklist rows tagged `[KNOWN-N]` link here.
 
 | # | Title | Type | Status | Priority |
 |---|--------|------|--------|----------|
-| 1 | Incomplete group registration (Bluetooth handshake) | Bug | Confirmed risk | P0 |
-| 2 | Duplicate connections | Bug | Confirmed risk | P0 |
-| 3 | Handshake limited to groups (no 1:1 DM) | Feature / UX | Partial / misfiled | P1 |
+| 1 | Incomplete group registration (Bluetooth handshake) | Bug | Code fix landed — needs device repro | P0 |
+| 2 | Duplicate connections | Bug | Code fix landed — needs device repro | P0 |
+| 3 | Handshake limited to groups (no 1:1 DM) | Feature / UX | Partial / misfiled (auto-clique gated) | P1 |
 | 4 | Events missing from list view | Bug | Confirmed | P1 |
 | 5 | Map not rendering in color | Bug / design ambiguity | Confirmed | P2 |
-| 6 | Android calls not working | Bug | Confirmed | P0 |
-| 7 | Voice message crashes Android | Bug | Confirmed risk | P0 |
-| 8 | Group chat creation crashes app | Bug | Needs device repro | P0 |
+| 6 | Android calls not working | Bug | Code fix landed — needs device repro | P0 |
+| 7 | Voice message crashes Android | Bug | Code fix landed — needs device repro | P0 |
+| 8 | Group chat creation crashes app | Bug | Code fix landed — needs device repro | P0 |
 | 9 | Hazard beacon icon oversized | UI bug | Confirmed inconsistency | P2 |
 | 10 | General visual bugs | UI | Open | P2 |
 | 11 | Android-specific bugs (roll-up) | Bug | Open (see #6–7 + matrix) | P0–P2 |
+
+**Track B (2026-07-16):** Code fixes for P0 `#1`, `#2`, `#6`, `#7`, `#8` (and `#3` auto-clique side effect). Do **not** mark `[KNOWN-N]` checklist rows pass until verified on device.
 
 ---
 
@@ -64,6 +66,12 @@ Every participant present during a group handshake is registered on the group co
 ### Suspected root cause
 
 Server marks handshake rows matched without a durable connection for the full BFS component; coalesce + evidence graph can exclude a phone that was physically present but lacked mutual BLE/ultrasonic evidence within the window.
+
+### Fix landed (code — 2026-07-16 Track B)
+
+- `bindProximityHandshake`: on `ensureConnectionForMemberSet` failure, return 503 and **do not** call `markPendingHandshakesMatched` (leaves GET recovery viable).
+- Pairwise clique edge ensure failures for N>2 return 503 instead of silent warn.
+- Pairwise edges created during group bind use `forceActive: true` (promote `pending` → `active`).
 
 ### Suggested regression cases
 
@@ -107,6 +115,12 @@ A connection between two users is created exactly once (for that member set), re
 ### Suspected root cause
 
 Dedup is incomplete across server/client paths and group-vs-pair cardinality; group taps produce multiple legitimate rows that may be reported as duplicates.
+
+### Fix landed (code — 2026-07-16 Track B)
+
+- Recent-connection lock now covers 1:1 as well as groups.
+- Client: 12s re-tap debounce + in-flight guard; confirm path passes `preflightConnectionId` from bind.
+- `findConnectionRowForUserPair` requires `user_ids.size == 2`.
 
 ### Suggested regression cases
 
@@ -152,6 +166,10 @@ Handshake flow should let users create a direct message connection, not just a g
 ### Product clarification
 
 Treat as **UX/product fix**: keep server 1:1; stop auto-clique for size==2 unless `tagging.isGroup`; optionally add explicit “Create DM vs Group” if product wants a chooser.
+
+### Fix landed (code — 2026-07-16 Track B)
+
+- `saveContextTags` auto-clique gated to `tagging.isGroup && memberUserIds.size >= 3` (no 2-person clique after 1:1 tap).
 
 ---
 
@@ -259,6 +277,12 @@ Incoming: [`PlatformIncomingCallUi.android.kt`](../../composeApp/src/androidMain
 
 Await permission result, then continue `startCall`; or use Activity Result API + queue pending invite.
 
+### Fix landed (code — 2026-07-16 Track B)
+
+- `AndroidCallRuntime` queues pending call + Activity Result launcher in `MainActivity`; grant resumes `startCall` without ending first.
+- Activity ref refreshed in `MainActivity.onResume`.
+- Group call >8 surfaces `CallOverlayState.Ended` with limit message.
+
 ---
 
 ## 7. Voice message crashes Android app
@@ -290,6 +314,11 @@ Voice messages send and play without crashing.
 ### Repro steps
 
 TBD: open chat on Android → hold voice → if crash, capture Logcat stack around `MediaRecorder.start`.
+
+### Fix landed (code — 2026-07-16 Track B)
+
+- `prepare`/`start` wrapped; failures toast and stay Idle (no UI-thread crash).
+- Voice record blocked while call is Connecting/Connected.
 
 ---
 
@@ -331,6 +360,12 @@ Proximity auto-create swallows failures via `getOrNull()`.
 - [ ] Eligible clique create → group opens
 - [ ] Ineligible selection disabled / toast, no crash
 - [ ] Immediately after proximity multi-tap autofill create
+
+### Fix landed (code — 2026-07-16 Track B)
+
+- `createVerifiedClique` refreshes connections before wrap; requires chat id after RPC; failures stay `Result`/toast.
+- Proximity pairwise edges promoted to `active` for clique eligibility (server).
+- `decodeUuidScalarFromRpc` / wrap-key paths throw `IllegalStateException` instead of bare `error()`.
 
 ---
 
@@ -438,9 +473,9 @@ Tri-Factor is not classic NFC-only; BLE is one of three factors. Group registrat
 
 ## Recommended fix order (follow-up engineering)
 
-1. **P0** Android call permission retry (#6)  
-2. **P0** Guard `MediaRecorder.start` + release (#7)  
-3. **P0** Device-repro and fix group create crash (#8)  
-4. **P0** Handshake match/mark + pair cardinality dedup (#1, #2)  
-5. **P1** Event list/map parity (#4); 1:1 vs clique UX (#3)  
+1. ~~**P0** Android call permission retry (#6)~~ — code landed; device verify
+2. ~~**P0** Guard `MediaRecorder.start` + release (#7)~~ — code landed; device verify
+3. ~~**P0** Device-repro and fix group create crash (#8)~~ — code landed; device verify
+4. ~~**P0** Handshake match/mark + pair cardinality dedup (#1, #2)~~ — code landed; device verify
+5. **P1** Event list/map parity (#4); finish 1:1 UX (#3) on device
 6. **P2** Map color intent (#5); hazard icon (#9); visual sweep (#10)
