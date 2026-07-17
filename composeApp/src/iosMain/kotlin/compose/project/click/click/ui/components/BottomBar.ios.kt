@@ -27,7 +27,6 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
 import platform.UIKit.NSLayoutConstraint
 import platform.UIKit.UIColor
-import platform.UIKit.UIDevice
 import platform.UIKit.UIImage
 import platform.UIKit.UITabBar
 import platform.UIKit.UITabBarAppearance
@@ -49,10 +48,6 @@ actual fun PlatformBottomBar(
     val currentItems by rememberUpdatedState(items)
     val isDarkMode = LocalIsDarkMode.current
 
-    val isLiquidGlass = remember {
-        UIDevice.currentDevice.systemVersion.toDoubleOrNull()?.let { it >= 26.0 } ?: false
-    }
-
     val tabBar = remember {
         UITabBar().apply {
             translatesAutoresizingMaskIntoConstraints = false
@@ -60,35 +55,42 @@ actual fun PlatformBottomBar(
         }
     }
 
-    // Translucent bar so Compose content scrolls underneath. Selected tint is a
-    // light brand purple in dark mode so both icon + label stay readable on the bar
-    // (UITabBar applies tintColor to both).
+    // Fully clear chrome so Compose materials under the icons match materials above —
+    // no fill, blur, or hairline that would create a different "material" band.
     SideEffect {
-        val barColor = if (isDarkMode) {
-            // SurfaceDark #1A1C1C @ ~88%
-            UIColor.colorWithRed(0x1A / 255.0, green = 0x1C / 255.0, blue = 0x1C / 255.0, alpha = 0.88)
-        } else {
-            UIColor.colorWithRed(1.0, green = 1.0, blue = 1.0, alpha = 0.92)
-        }
+        val clear = UIColor.clearColor
         val selectedColor = if (isDarkMode) {
-            // NeonPurple #D2BBFF — readable on dark translucent bar
+            // NeonPurple #D2BBFF — readable over dark page content without a bar fill
             UIColor.colorWithRed(0xD2 / 255.0, green = 0xBB / 255.0, blue = 0xFF / 255.0, alpha = 1.0)
         } else {
             UIColor.colorWithRed(0x63 / 255.0, green = 0x0E / 255.0, blue = 0xD4 / 255.0, alpha = 1.0)
         }
         val unselectedColor = if (isDarkMode) {
-            // Brighter onSurfaceVariant #D6D9D9
-            UIColor.colorWithRed(0xD6 / 255.0, green = 0xD9 / 255.0, blue = 0xD9 / 255.0, alpha = 1.0)
+            UIColor.colorWithRed(0xF0 / 255.0, green = 0xF1 / 255.0, blue = 0xF1 / 255.0, alpha = 1.0)
         } else {
             UIColor.colorWithRed(0x4A / 255.0, green = 0x44 / 255.0, blue = 0x55 / 255.0, alpha = 1.0)
         }
-        tabBar.barTintColor = barColor
-        tabBar.backgroundColor = barColor
+
+        // Match page BackgroundDark so any uncovered gap is not pure black.
+        viewController.view.backgroundColor = if (isDarkMode) {
+            UIColor.colorWithRed(0x10 / 255.0, green = 0x12 / 255.0, blue = 0x12 / 255.0, alpha = 1.0)
+        } else {
+            UIColor.colorWithRed(0xF9 / 255.0, green = 0xF9 / 255.0, blue = 0xF9 / 255.0, alpha = 1.0)
+        }
+
+        tabBar.barTintColor = clear
+        tabBar.backgroundColor = clear
         tabBar.tintColor = selectedColor
         tabBar.unselectedItemTintColor = unselectedColor
+        tabBar.backgroundImage = UIImage()
+        tabBar.shadowImage = UIImage()
+        tabBar.setTranslucent(true)
+
         val appearance = UITabBarAppearance().apply {
-            configureWithDefaultBackground()
-            backgroundColor = barColor
+            configureWithTransparentBackground()
+            backgroundColor = clear
+            backgroundEffect = null
+            shadowColor = clear
         }
         tabBar.standardAppearance = appearance
         tabBar.scrollEdgeAppearance = appearance
@@ -121,22 +123,15 @@ actual fun PlatformBottomBar(
 
     DisposableEffect(tabBar, viewController) {
         viewController.view.addSubview(tabBar)
+        // Pin to the absolute bottom so Compose paints continuously under icons + home indicator.
         NSLayoutConstraint.activateConstraints(
             listOf(
                 tabBar.leadingAnchor.constraintEqualToAnchor(viewController.view.leadingAnchor),
                 tabBar.trailingAnchor.constraintEqualToAnchor(viewController.view.trailingAnchor),
-                tabBar.bottomAnchor.constraintEqualToAnchor(
-                    if (isLiquidGlass) viewController.view.bottomAnchor
-                    else viewController.view.safeAreaLayoutGuide.bottomAnchor
-                ),
+                tabBar.bottomAnchor.constraintEqualToAnchor(viewController.view.bottomAnchor),
             )
         )
         onDispose { tabBar.removeFromSuperview() }
-    }
-
-    val safeAreaBottom = remember {
-        if (isLiquidGlass) 0.dp
-        else viewController.view.safeAreaInsets.useContents { bottom.dp }
     }
 
     SideEffect {
@@ -145,10 +140,10 @@ actual fun PlatformBottomBar(
         tabBar.userInteractionEnabled = visible
     }
 
-    LaunchedEffect(visible, tabBar, safeAreaBottom) {
+    LaunchedEffect(visible, tabBar) {
         if (!visible) {
             AppScreenChromeState.updateBottomChromeHeight(
-                safeAreaBottom + AppScreenDefaults.ExtraScrollBottomPadding,
+                AppScreenDefaults.ExtraScrollBottomPadding,
             )
         }
     }
@@ -156,7 +151,7 @@ actual fun PlatformBottomBar(
     var topLeft by remember { mutableStateOf(DpOffset.Zero) }
     var positionInRoot by remember { mutableStateOf(DpOffset.Zero) }
     var tabBarWidth by remember { mutableStateOf(0.dp) }
-    var tabBarHeight by remember { mutableStateOf(safeAreaBottom + AppScreenDefaults.IosTabBarContentHeight) }
+    var tabBarHeight by remember { mutableStateOf(AppScreenDefaults.IosTabBarContentHeight) }
 
     LaunchedEffect(Unit, visible) {
         if (!visible) return@LaunchedEffect
@@ -166,9 +161,7 @@ actual fun PlatformBottomBar(
             tabBar.frame.useContents {
                 topLeft = DpOffset(origin.x.dp, origin.y.dp)
                 tabBarWidth = size.width.dp
-                val bottom = if (isLiquidGlass) 0.dp
-                    else viewController.view.safeAreaInsets.useContents { bottom.dp }
-                val h = size.height.dp + bottom
+                val h = size.height.dp
                 if (tabBarHeight != h) {
                     tabBarHeight = h
                     stable = 0
@@ -180,8 +173,6 @@ actual fun PlatformBottomBar(
                     val clearanceFromTop = with(density) {
                         clearanceFromTopPx.toFloat().toDp()
                     }
-                    // Distance from screen bottom to tab-bar top — do not max with tab height
-                    // (that double-counts and pushes map controls too high).
                     AppScreenChromeState.updateBottomChromeHeight(clearanceFromTop)
                 }
             }
