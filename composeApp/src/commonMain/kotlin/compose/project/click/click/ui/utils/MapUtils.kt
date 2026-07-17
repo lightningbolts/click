@@ -186,7 +186,7 @@ data class BoundingBox(
  */
 sealed class MapRenderData {
     /**
-     * @param standaloneBeacons High-priority beacons (soundtrack, hazard, utility) that stay
+     * @param standaloneBeacons High-priority beacons (soundtrack, hazard, utility, event) that stay
      * as individual pins while zoomed out so they are not absorbed into connection clusters.
      */
     data class Clusters(
@@ -399,6 +399,7 @@ fun determineMapRenderData(
         MapBeaconKind.SOUNDTRACK,
         MapBeaconKind.HAZARD,
         MapBeaconKind.UTILITY,
+        MapBeaconKind.EVENT,
     )
     val points = connections.mapNotNull { conn ->
         try {

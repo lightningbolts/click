@@ -13,7 +13,7 @@ This document is the source of truth for **what has been addressed**, **what sti
 | Track | Status | What it covers |
 |-------|--------|----------------|
 | **A — Dark/light + theme hardening** | **DONE** (2026-07-16) | `LocalIsDarkMode`, `clickBorderColor()` / `clickCardSurface()`, theme-aware sheets/tokens, tab theme, map basemap policy |
-| **B — Known issues P0/P1** | **P0 + B+ UI code landed — device verify + P1 next** | Handshake/calls/voice/group create + chat/profile/nav UI fixes through 2026-07-17 |
+| **B — Known issues P0/P1** | **P0 + B+ UI + #4 code landed — device verify next** | Handshake/calls/voice/group create + chat/profile/nav UI + events list/map parity through 2026-07-17 |
 | **C — Mock layout redesigns** | **Deferred** (separate chat) | Design-asset IA/layout from `docs/design-assets/*` |
 
 **Do not redo Track A** unless a regression is found.  
@@ -88,7 +88,7 @@ All “code landed” rows below still require **device smoke**. Do not false-pa
 | # | Title | Pri | Status | Notes |
 |---|--------|-----|--------|-------|
 | **3** | Handshake → clear 1:1 DM UX | P1 | Partial | Auto-clique gated; polish/device UX still open |
-| **4** | Events missing from list view | P1 | **Confirmed — not fixed** | `EVENT` clustering in `MapUtils.determineMapRenderData` / discovery list parity |
+| **4** | Events missing from list view | P1 | Code fix landed — needs device repro | `EVENT` in `standaloneKinds`; ALL-layer `isVisibleEventBeacon` |
 | **5** | Map not rendering in color | P2 | Basemap code fixed | Confirm on Android light device; leave open if still wrong |
 | **9** | Hazard beacon icon oversized | P2 | Confirmed | Pin size inconsistency |
 | **10** | General visual bugs | P2 | Open | Spot-check after smoke |
@@ -107,11 +107,10 @@ All “code landed” rows below still require **device smoke**. Do not false-pa
 
 ### 2.4 Recommended next engineering order
 
-1. **Device smoke** Track B P0s + chat timeline (#21) + verified click (#14/#18) + transparent nav (#23).
-2. **P1 code:** Events list/map parity (**#4**).
-3. **P1 polish:** #3 1:1 handshake UX on device; Keychain -50 if auth flakes.
-4. **P2:** #5 confirm, #9 hazard size, #10 visual sweep.
-5. **Track C** mock layout redesigns (separate chat) — see §3.
+1. **Device smoke** Track B P0s + chat timeline (#21) + verified click (#14/#18) + transparent nav (#23) + events (#4).
+2. **P1 polish:** #3 1:1 handshake UX on device; Keychain -50 if auth flakes.
+3. **P2:** #5 confirm, #9 hazard size, #10 visual sweep.
+4. **Track C** mock layout redesigns (separate chat) — see §3.
 
 ---
 
@@ -221,9 +220,9 @@ Read first:
 - [x] Dark/light consistent in code (Track A); deeper dark + contrast bumps landed.
 - [x] P0 known issues (#1, #2, #6, #7, #8) **code** landed.
 - [x] Chat timeline order/dupes, picker keys, profile sheet, transparent nav **code** landed (#17–#23).
-- [ ] **Device verification** for Track B / B+ P0–P1 rows.
-- [ ] P1 #4 events list fixed.
+- [x] P1 #4 events list/map parity **code** landed (device verify still open).
+- [ ] **Device verification** for Track B / B+ P0–P1 rows (incl. #4).
 - [ ] Smoke checklist on Android + iOS.
 - [ ] Track C layout redesigns completed or explicitly scheduled.
 
-**Next:** device smoke for chat timeline + transparent nav + Track B P0s, then **#4 events list**.
+**Next:** device smoke for chat timeline + transparent nav + Track B P0s + events (#4).

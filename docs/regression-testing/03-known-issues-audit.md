@@ -25,7 +25,7 @@ Continuation status: [`../handoff/functional-clarity-continuation.md`](../handof
 | 1 | Incomplete group registration (Bluetooth handshake) | Bug | Code fix landed — needs device repro | P0 |
 | 2 | Duplicate connections | Bug | Code fix landed — needs device repro | P0 |
 | 3 | Handshake limited to groups (no 1:1 DM) | Feature / UX | Partial / misfiled (auto-clique gated) | P1 |
-| 4 | Events missing from list view | Bug | Confirmed | P1 |
+| 4 | Events missing from list view | Bug | Code fix landed — needs device repro | P1 |
 | 5 | Map not rendering in color | Bug / design ambiguity | Confirmed (basemap code fixed — device confirm) | P2 |
 | 6 | Android calls not working | Bug | Code fix landed — needs device repro | P0 |
 | 7 | Voice message crashes Android | Bug | Code fix landed — needs device repro | P0 |
@@ -196,7 +196,7 @@ Treat as **UX/product fix**: keep server 1:1; stop auto-clique for size==2 unles
 |-------|--------|
 | **Type** | Bug |
 | **Area** | Map / Events |
-| **Status** | Confirmed |
+| **Status** | Code fix landed — needs device repro |
 | **Priority** | P1 |
 
 ### Expected
@@ -205,11 +205,17 @@ Any event visible on the map appears in the list (discovery feed).
 
 ### Evidence
 
-1. **Map clustering** — [`MapUtils.determineMapRenderData`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/ui/utils/MapUtils.kt): at zoom &lt; 12, `standaloneKinds` includes `SOUNDTRACK`, `HAZARD`, `UTILITY` but **not `EVENT`**. Events cluster with connections on the map while the feed lists them individually — counts/visibility diverge.
+1. **Map clustering** — [`MapUtils.determineMapRenderData`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/ui/utils/MapUtils.kt): at zoom &lt; 12, `standaloneKinds` previously included `SOUNDTRACK`, `HAZARD`, `UTILITY` but **not `EVENT`**. Events clustered with connections on the map while the feed listed them individually — counts/visibility diverged.
 
 2. **Feed section gap** — [`MapDiscoveryLayout`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/ui/screens/MapDiscoveryLayout.kt): `buildDiscoveryFeedItems` includes connections, but Connections section in `groupDiscoveryFeedIntoSections` is commented out (dead path; not events directly, but feed/map parity debt).
 
-3. **Visibility rules** — Events use `isVisible` until `endEpochMs` ([`EventSchedule`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/events/EventSchedule.kt)); layer filters apply to both paths via `discoveryFeedBeacons` — so pure filter mismatch is less likely than clustering / stale viewport cache.
+3. **Visibility rules** — Events use `isVisible` until `endEpochMs` ([`EventSchedule`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/events/EventSchedule.kt)); `filterBeaconsForLayers` previously skipped `isVisibleEventBeacon` when `ALL` was selected, so ended events could remain on the map while the feed dropped them.
+
+### Fix landed (code — 2026-07-17)
+
+- `EVENT` added to `standaloneKinds` so zoomed-out events stay individual pins (not absorbed into connection clusters).
+- `filterBeaconsForLayers` applies `isVisibleEventBeacon()` for `MapLayerFilter.ALL` as well as per-layer paths.
+- Unit coverage: `MapRenderDataTest`.
 
 ### Suggested regression cases
 
@@ -826,6 +832,6 @@ Tri-Factor is not classic NFC-only; BLE is one of three factors. Group registrat
 5. ~~**P0** Chat timeline order/dupes / picker keys / inbox preview (#17–#19, #21, #25)~~ — code landed; device verify
 6. ~~**P1** Profile sheet + transparent nav (#22, #23)~~ — code landed; device verify
 7. ~~**P0** Connections list flicker after chat back (#24)~~ — code landed; device verify
-8. **P1** Event list/map parity (#4); finish 1:1 UX (#3) on device
+8. ~~**P1** Event list/map parity (#4)~~ — code landed; device verify; finish 1:1 UX (#3) on device
 9. **P2** Map color intent (#5); hazard icon (#9); visual sweep (#10)
 10. **Track C** Design-asset layout redesigns — see [`../handoff/functional-clarity-continuation.md`](../handoff/functional-clarity-continuation.md) §3

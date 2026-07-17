@@ -684,7 +684,11 @@ class MapViewModel : ViewModel() {
         beacons: List<MapBeacon>,
         layers: Set<MapLayerFilter>,
     ): List<MapBeacon> {
-        if (layers.contains(MapLayerFilter.ALL)) return beacons
+        // Always apply event schedule visibility so map pins match the discovery feed
+        // (feed also uses isActiveForDiscoveryFeed → isVisibleEventBeacon for EVENT).
+        if (layers.contains(MapLayerFilter.ALL)) {
+            return beacons.filter { it.isVisibleEventBeacon() }
+        }
         val out = mutableListOf<MapBeacon>()
         for (b in beacons) {
             val include = when (b.kind) {
