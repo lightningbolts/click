@@ -2,13 +2,24 @@
 
 **Date:** 2026-07-17  
 **Product:** Click KMP mobile (`click/composeApp`)  
-**Previous chat:** Track C Home IA (landed + polish)  
+**Previous chat:** Track C Settings grouping (landed)  
 
 Read this before writing code. Prefer **one primary revamp per chat**.
 
 ---
 
 ## 0. Just finished (do not redo)
+
+### Settings grouping — landed
+
+- Profile header first: avatar, display name, email (when present), **Edit Profile** → name dialog
+- Preference clusters: **Availability** → **Alerts** (notifications + ambient) → **Privacy & data** (Your Data toggles + Permissions Hub) → **Interests** → **Appearance**
+- Standalone bordered **Sign out** at bottom (Account section removed)
+- 24dp between clusters; layout/IA only — ViewModels / toggles unchanged
+
+**Docs:** `docs/ui-ux/mobile/14-settings-privacy.md`, handoff §3 Settings row.
+
+**Still open:** device smoke for Settings visual confirm; Track B `[KNOWN-N]` device verify.
 
 ### Home IA — landed
 
@@ -22,7 +33,7 @@ Read this before writing code. Prefer **one primary revamp per chat**.
 
 **Docs:** `docs/ui-ux/mobile/05-home.md`, `docs/design-assets/home/README.md`, handoff §3 Home row, regression §9 / smoke, `13-availability.md`, `07-connections-inbox.md` search note.
 
-**Still open:** device smoke for Home IA visual confirm; Track B `[KNOWN-N]` device verify.
+**Still open:** device smoke for Home IA visual confirm.
 
 ### Track A / B
 
@@ -38,16 +49,15 @@ Source of truth for prior work: [`functional-clarity-continuation.md`](functiona
 
 | Priority | Revamp | Mock / source | Screen | Intent |
 |----------|--------|---------------|--------|--------|
-| **1** | **Settings grouping** | `docs/design-assets/settings/` | `SettingsScreen` | Profile header + preference clusters |
-| **2** | **Inbox density** | `chat/` + `add_click_fixed_navigation/` | `ConnectionsListView` | Card stack / dense bordered list; rolodex name stack |
-| **3** | **Add Click hero** | `add_click_streamlined_header/` | `AddClickScreen` | Large Tap-to-Connect hero |
-| **4** | **Events discovery** | `events_discovery_with_real_mini_map/` | `MapDiscoveryLayout` | Events-for-you + mini-map PiP |
-| **5** | **Full-map events** | `map_events_full_screen_map/` | `MapScreen` | Full-map + event pin sheet |
-| **6** | **Event detail** | `event_details_expanded_dark/` | Beacon/event sheets | Expanded detail over map |
+| **1** | **Inbox density** | `chat/` + `add_click_fixed_navigation/` | `ConnectionsListView` | Card stack / dense bordered list; rolodex name stack |
+| **2** | **Add Click hero** | `add_click_streamlined_header/` | `AddClickScreen` | Large Tap-to-Connect hero |
+| **3** | **Events discovery** | `events_discovery_with_real_mini_map/` | `MapDiscoveryLayout` | Events-for-you + mini-map PiP |
+| **4** | **Full-map events** | `map_events_full_screen_map/` | `MapScreen` | Full-map + event pin sheet |
+| **5** | **Event detail** | `event_details_expanded_dark/` | Beacon/event sheets | Expanded detail over map |
 
 Optional later (after related device OK): Nav chrome v2, Chat composer polish, Profile memories IA — see handoff §3.
 
-**Suggested default for next chat:** Settings grouping **or** Inbox density (highest-traffic remaining surfaces).
+**Suggested default for next chat:** Inbox density (highest-traffic remaining surface).
 
 ---
 
@@ -58,14 +68,13 @@ Continue Click Track C using:
 click/docs/handoff/track-c-next-revamps.md
 and click/docs/handoff/functional-clarity-continuation.md
 
-Home IA is DONE — do not redo unless regressing.
+Home IA + Settings grouping are DONE — do not redo unless regressing.
 Track A done. Track B code landed — device verify only; do not false-pass [KNOWN-N].
 
 Scope for THIS chat (pick one primary):
-1) Settings grouping — docs/design-assets/settings/ → SettingsScreen
-2) Inbox density — docs/design-assets/chat/ + add_click_fixed_navigation/ → ConnectionsListView
-3) Add Click hero — docs/design-assets/add_click_streamlined_header/ → AddClickScreen
-4) Events discovery / full-map / event detail — map stack (say which)
+1) Inbox density — docs/design-assets/chat/ + add_click_fixed_navigation/ → ConnectionsListView
+2) Add Click hero — docs/design-assets/add_click_streamlined_header/ → AddClickScreen
+3) Events discovery / full-map / event detail — map stack (say which)
 
 Rules:
 - Do NOT edit the neo-brutalist plan file under .cursor/plans.
@@ -85,7 +94,7 @@ Rules:
 |---------|------|
 | Prior handoff | `docs/handoff/functional-clarity-continuation.md` |
 | Home (done) | `docs/ui-ux/mobile/05-home.md` |
-| Settings | `docs/ui-ux/mobile/14-settings-privacy.md`, `docs/design-assets/settings/` |
+| Settings (done) | `docs/ui-ux/mobile/14-settings-privacy.md`, `docs/design-assets/settings/` |
 | Inbox | `docs/ui-ux/mobile/07-connections-inbox.md`, `docs/design-assets/chat/` |
 | Add Click | `docs/ui-ux/mobile/06-connect-handshake.md`, `docs/design-assets/add_click_streamlined_header/` |
 | Map / events | `docs/ui-ux/mobile/10-map-beacons-hubs.md`, design-assets `events_*` / `map_events_*` |
@@ -97,4 +106,5 @@ Rules:
 
 - [x] Home polish (order, insights, location pin, verified-click search) shipped
 - [x] Docs updated for Home order + verified-click search
+- [x] Settings grouping (profile header + preference clusters + standalone Sign out) shipped
 - [ ] Next Track C revamp started in a dedicated chat using §2 prompt

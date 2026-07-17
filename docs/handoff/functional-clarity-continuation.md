@@ -140,7 +140,7 @@ These are **layout / IA** workstreams, not bugfixes. Use design-asset HTML for h
 | Revamp | Mock / source | Counterpart screens | Intent |
 |--------|---------------|---------------------|--------|
 | **Home IA** | `docs/design-assets/home/` | `HomeScreen` | **Landed (2026-07-17):** greeting first; Featured Event; I'm down for → Explore → Poll-Pair/archive; reconnect with inbox avatars; insights columns; no redundant location pins; search caret fixes |
-| **Settings grouping** | `settings/` | `SettingsScreen` | Profile header + preference clusters |
+| **Settings grouping** | `settings/` | `SettingsScreen` | **Landed (2026-07-17):** profile header first; Alerts + Privacy & data clusters; standalone Sign out |
 | **Inbox density** | `chat/` + `add_click_fixed_navigation/` | `ConnectionsListView` | Card stack / dense bordered list; rolodex name stack |
 | **Add Click hero** | `add_click_streamlined_header/` | `AddClickScreen` | Large Tap-to-Connect hero |
 | **Events discovery** | `events_discovery_with_real_mini_map/` | `MapDiscoveryLayout` | Events-for-you + mini-map PiP |
