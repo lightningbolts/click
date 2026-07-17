@@ -494,7 +494,7 @@ private fun LocationGroupCard(
                         .size(44.dp)
                         .clip(RoundedCornerShape(22.dp))
                         .background(MaterialTheme.colorScheme.primaryContainer)
-                        .border(2.dp, BorderHard, CircleShape),
+                        .border(2.dp, clickBorderColor(), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -525,7 +525,7 @@ private fun LocationGroupCard(
                 Box(
                     modifier = Modifier
                         .background(PrimaryBlue, RoundedCornerShape(12.dp))
-                        .border(2.dp, BorderHard, RoundedCornerShape(12.dp))
+                        .border(2.dp, clickBorderColor(), RoundedCornerShape(12.dp))
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
@@ -557,7 +557,7 @@ private fun LocationGroupCard(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     HorizontalDivider(
-                        color = GlassBorder,
+                        color = clickBorderColor(),
                         modifier = Modifier.padding(bottom = 4.dp)
                     )
                     connections.forEach { connection ->
@@ -612,7 +612,7 @@ private fun ConnectionRowItem(
             .clip(rowShape)
             .clickable { onNavigate() }
             .background(MaterialTheme.colorScheme.surface)
-            .border(2.dp, BorderHard, rowShape)
+            .border(2.dp, clickBorderColor(), rowShape)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -622,7 +622,7 @@ private fun ConnectionRowItem(
                 .size(36.dp)
                 .clip(RoundedCornerShape(18.dp))
                 .background(PrimaryBlue)
-                .border(2.dp, BorderHard, CircleShape),
+                .border(2.dp, clickBorderColor(), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -710,7 +710,7 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
                     .size(56.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primaryContainer)
-                    .border(2.dp, BorderHard, CircleShape),
+                    .border(2.dp, clickBorderColor(), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -974,7 +974,7 @@ fun ConnectionInsightsCard(
             // Expanded details
             if (expanded) {
                 Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(color = GlassBorder)
+                HorizontalDivider(color = clickBorderColor())
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1109,7 +1109,7 @@ private fun HomeAvailabilityIntentsRow(
                         }
                     },
                     shape = RoundedCornerShape(22.dp),
-                    border = BorderStroke(2.dp, BorderHard),
+                    border = BorderStroke(2.dp, clickBorderColor()),
                     colors = AssistChipDefaults.assistChipColors(
                         containerColor = MaterialTheme.colorScheme.surface,
                         labelColor = MaterialTheme.colorScheme.onSurface,
@@ -1129,7 +1129,7 @@ private fun HomeAvailabilityIntentsRow(
                     Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                 },
                 shape = RoundedCornerShape(22.dp),
-                border = BorderStroke(2.dp, BorderHard),
+                border = BorderStroke(2.dp, clickBorderColor()),
                 colors = AssistChipDefaults.assistChipColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant,
                     labelColor = MaterialTheme.colorScheme.onSurface,

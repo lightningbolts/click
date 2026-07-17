@@ -895,7 +895,7 @@ fun ConnectionsListView(
                         Text(
                             text = "Loading your tap group in Clicks…",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = GlassSheetTokens.OnOledMuted,
+                            color = GlassSheetTokens.OnOledMuted(),
                         )
                     }
                 }
@@ -923,13 +923,13 @@ fun ConnectionsListView(
                         supplementalHintUsers.forEach { u ->
                             Surface(
                                 shape = RoundedCornerShape(20.dp),
-                                color = GlassSheetTokens.GlassSurface,
+                                color = GlassSheetTokens.GlassSurface(),
                             ) {
                                 Text(
                                     u.name?.trim()?.ifBlank { null } ?: "Friend",
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                                     style = MaterialTheme.typography.labelLarge,
-                                    color = GlassSheetTokens.OnOled,
+                                    color = GlassSheetTokens.OnOled(),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
@@ -1104,19 +1104,19 @@ private fun HubActionSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
-                .background(GlassSheetTokens.OledBlack)
+                .background(GlassSheetTokens.OledBlack())
                 .padding(bottom = 32.dp),
         ) {
             val title = details?.name ?: hub.name
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
-                color = GlassSheetTokens.OnOled,
+                color = GlassSheetTokens.OnOled(),
                 modifier = Modifier
                     .padding(horizontal = 20.dp, vertical = 12.dp)
                     .align(Alignment.CenterHorizontally),
             )
-            HorizontalDivider(color = GlassSheetTokens.GlassBorder)
+            HorizontalDivider(color = GlassSheetTokens.GlassBorder())
 
             BentoGlassOptionRow(
                 showBorder = false,
@@ -1158,7 +1158,7 @@ private fun HubActionSheet(
                         Icon(
                             Icons.Outlined.Edit,
                             contentDescription = null,
-                            tint = GlassSheetTokens.OnOledMuted,
+                            tint = GlassSheetTokens.OnOledMuted(),
                         )
                     },
                 )
@@ -1191,7 +1191,7 @@ private fun HubActionSheet(
                 Text(
                     text = "Loading hub options…",
                     style = MaterialTheme.typography.bodySmall,
-                    color = GlassSheetTokens.OnOledMuted,
+                    color = GlassSheetTokens.OnOledMuted(),
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
                 )
             }
@@ -1237,30 +1237,30 @@ private fun HubActionSheet(
                         value = editNameDraft,
                         onValueChange = { editNameDraft = it.take(80) },
                         singleLine = true,
-                        label = { Text("Hub name", color = GlassSheetTokens.OnOledMuted) },
+                        label = { Text("Hub name", color = GlassSheetTokens.OnOledMuted()) },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = GlassSheetTokens.OnOled,
-                            unfocusedTextColor = GlassSheetTokens.OnOled,
+                            focusedTextColor = GlassSheetTokens.OnOled(),
+                            unfocusedTextColor = GlassSheetTokens.OnOled(),
                             focusedBorderColor = PrimaryBlue,
-                            unfocusedBorderColor = GlassSheetTokens.GlassBorder,
+                            unfocusedBorderColor = GlassSheetTokens.GlassBorder(),
                             cursorColor = PrimaryBlue,
-                            focusedLabelColor = GlassSheetTokens.OnOledMuted,
-                            unfocusedLabelColor = GlassSheetTokens.OnOledMuted,
+                            focusedLabelColor = GlassSheetTokens.OnOledMuted(),
+                            unfocusedLabelColor = GlassSheetTokens.OnOledMuted(),
                         ),
                     )
                     OutlinedTextField(
                         value = editCategoryDraft,
                         onValueChange = { editCategoryDraft = it.take(40) },
                         singleLine = true,
-                        label = { Text("Category", color = GlassSheetTokens.OnOledMuted) },
+                        label = { Text("Category", color = GlassSheetTokens.OnOledMuted()) },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = GlassSheetTokens.OnOled,
-                            unfocusedTextColor = GlassSheetTokens.OnOled,
+                            focusedTextColor = GlassSheetTokens.OnOled(),
+                            unfocusedTextColor = GlassSheetTokens.OnOled(),
                             focusedBorderColor = PrimaryBlue,
-                            unfocusedBorderColor = GlassSheetTokens.GlassBorder,
+                            unfocusedBorderColor = GlassSheetTokens.GlassBorder(),
                             cursorColor = PrimaryBlue,
-                            focusedLabelColor = GlassSheetTokens.OnOledMuted,
-                            unfocusedLabelColor = GlassSheetTokens.OnOledMuted,
+                            focusedLabelColor = GlassSheetTokens.OnOledMuted(),
+                            unfocusedLabelColor = GlassSheetTokens.OnOledMuted(),
                         ),
                     )
                 }
@@ -1290,7 +1290,7 @@ private fun HubActionSheet(
             dismissButton = {
                 val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
                 TextButton(onClick = dismissAnimated) {
-                    Text("Cancel", color = GlassSheetTokens.OnOledMuted)
+                    Text("Cancel", color = GlassSheetTokens.OnOledMuted())
                 }
             },
         )
@@ -1335,10 +1335,10 @@ private fun ActiveHubFeedRow(
             .clip(RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner))
             .border(
                 width = 2.dp,
-                color = GlassSheetTokens.GlassBorder,
+                color = GlassSheetTokens.GlassBorder(),
                 shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
             )
-            .background(GlassSheetTokens.GlassSurface)
+            .background(GlassSheetTokens.GlassSurface())
             .then(rowTapModifier)
             .padding(start = 16.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,

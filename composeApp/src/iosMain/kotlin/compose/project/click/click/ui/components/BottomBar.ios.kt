@@ -22,6 +22,7 @@ import androidx.compose.ui.uikit.LocalUIViewController
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.navigation.NavigationItem
+import compose.project.click.click.ui.theme.LocalIsDarkMode
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
 import platform.UIKit.NSLayoutConstraint
@@ -46,6 +47,7 @@ actual fun PlatformBottomBar(
     val viewController = LocalUIViewController.current
     val onItemSelectedState by rememberUpdatedState(onItemSelected)
     val currentItems by rememberUpdatedState(items)
+    val isDarkMode = LocalIsDarkMode.current
 
     val isLiquidGlass = remember {
         UIDevice.currentDevice.systemVersion.toDoubleOrNull()?.let { it >= 26.0 } ?: false
@@ -54,17 +56,38 @@ actual fun PlatformBottomBar(
     val tabBar = remember {
         UITabBar().apply {
             translatesAutoresizingMaskIntoConstraints = false
-            // Functional Clarity: solid opaque bar (no liquid glass translucency).
             setTranslucent(false)
-            barTintColor = UIColor.whiteColor
-            backgroundColor = UIColor.whiteColor
-            val appearance = UITabBarAppearance().apply {
-                configureWithOpaqueBackground()
-                backgroundColor = UIColor.whiteColor
-            }
-            standardAppearance = appearance
-            scrollEdgeAppearance = appearance
         }
+    }
+
+    // Functional Clarity: opaque bar matching app light/dark surfaces.
+    SideEffect {
+        val barColor = if (isDarkMode) {
+            UIColor.colorWithRed(0x2F / 255.0, green = 0x31 / 255.0, blue = 0x31 / 255.0, alpha = 1.0)
+        } else {
+            UIColor.whiteColor
+        }
+        val selectedColor = UIColor.colorWithRed(
+            0x63 / 255.0,
+            green = 0x0E / 255.0,
+            blue = 0xD4 / 255.0,
+            alpha = 1.0,
+        )
+        val unselectedColor = if (isDarkMode) {
+            UIColor.colorWithRed(0xCC / 255.0, green = 0xC3 / 255.0, blue = 0xD8 / 255.0, alpha = 1.0)
+        } else {
+            UIColor.colorWithRed(0x4A / 255.0, green = 0x44 / 255.0, blue = 0x55 / 255.0, alpha = 1.0)
+        }
+        tabBar.barTintColor = barColor
+        tabBar.backgroundColor = barColor
+        tabBar.tintColor = selectedColor
+        tabBar.unselectedItemTintColor = unselectedColor
+        val appearance = UITabBarAppearance().apply {
+            configureWithOpaqueBackground()
+            backgroundColor = barColor
+        }
+        tabBar.standardAppearance = appearance
+        tabBar.scrollEdgeAppearance = appearance
     }
 
     val delegate = remember {

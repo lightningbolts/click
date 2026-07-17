@@ -36,8 +36,8 @@ fun GlassAdaptiveBottomSheet(
         adaptiveSheetState = adaptiveSheetState,
         modifier = modifier,
         sheetMaxWidth = sheetMaxWidth,
-        containerColor = GlassSheetTokens.OledBlack,
-        contentColor = GlassSheetTokens.OnOled,
+        containerColor = GlassSheetTokens.OledBlack(),
+        contentColor = GlassSheetTokens.OnOled(),
         scrimColor = scrimColor,
         contentWindowInsets = contentWindowInsets,
         dragHandle = dragHandle,
@@ -45,12 +45,12 @@ fun GlassAdaptiveBottomSheet(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(GlassSheetTokens.OledBlack),
+                .background(GlassSheetTokens.OledBlack()),
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(GlassSheetTokens.OledBlack),
+                    .background(GlassSheetTokens.OledBlack()),
                 content = content,
             )
         }

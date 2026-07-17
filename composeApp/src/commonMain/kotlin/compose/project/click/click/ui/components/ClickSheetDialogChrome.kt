@@ -17,8 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.ui.theme.LocalIsDarkMode
 
 /**
  * Shared OLED sheet chrome (grabber + themed body) used by map beacon sheets and all
@@ -27,15 +27,15 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun ClickSheetDialogChrome(
     modifier: Modifier = Modifier,
-    sheetColor: Color = GlassSheetTokens.OledBlack,
-    onSurface: Color = GlassSheetTokens.OnOled,
+    sheetColor: Color = GlassSheetTokens.OledBlack(),
+    onSurface: Color = GlassSheetTokens.OnOled(),
     useGrabber: Boolean = true,
     alignSemanticColorsToSheet: Boolean = true,
     content: @Composable () -> Unit,
 ) {
+    val darkSheet = LocalIsDarkMode.current
     val grabberTint = if (alignSemanticColorsToSheet) {
-        val darkSheet = sheetColor.luminance() < 0.05f
-        if (darkSheet) GlassSheetTokens.OnOledMuted.copy(alpha = 0.42f)
+        if (darkSheet) GlassSheetTokens.OnOledMuted().copy(alpha = 0.42f)
         else contentColorFor(sheetColor).copy(alpha = 0.38f)
     } else {
         onSurface.copy(alpha = 0.3f)
@@ -44,14 +44,13 @@ fun ClickSheetDialogChrome(
     @Composable
     fun themedContent() {
         if (alignSemanticColorsToSheet) {
-            val darkSheet = sheetColor.luminance() < 0.05f
             val primaryOn =
-                if (darkSheet) GlassSheetTokens.OnOled else contentColorFor(sheetColor)
+                if (darkSheet) GlassSheetTokens.OnOled() else contentColorFor(sheetColor)
             val mutedOn =
-                if (darkSheet) GlassSheetTokens.OnOledMuted
+                if (darkSheet) GlassSheetTokens.OnOledMuted()
                 else lerp(sheetColor, primaryOn, 0.88f)
             val elevatedSurface =
-                if (darkSheet) GlassSheetTokens.GlassSurface
+                if (darkSheet) GlassSheetTokens.GlassSurface()
                 else lerp(sheetColor, primaryOn, 0.12f)
             val scheme = MaterialTheme.colorScheme
             MaterialTheme(

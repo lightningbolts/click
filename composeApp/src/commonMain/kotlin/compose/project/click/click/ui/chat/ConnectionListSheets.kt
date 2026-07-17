@@ -118,7 +118,7 @@ internal fun ConnectionPickerSearchBar(
             placeholder = {
                 Text(
                     placeholder,
-                    color = GlassSheetTokens.OnOledMuted,
+                    color = GlassSheetTokens.OnOledMuted(),
                     style = MaterialTheme.typography.bodyMedium,
                 )
             },
@@ -127,15 +127,15 @@ internal fun ConnectionPickerSearchBar(
                 Icon(
                     Icons.Filled.Search,
                     contentDescription = null,
-                    tint = GlassSheetTokens.OnOledMuted,
+                    tint = GlassSheetTokens.OnOledMuted(),
                     modifier = Modifier.size(20.dp),
                 )
             },
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = Color.Transparent,
                 unfocusedContainerColor = Color.Transparent,
-                focusedTextColor = GlassSheetTokens.OnOled,
-                unfocusedTextColor = GlassSheetTokens.OnOled,
+                focusedTextColor = GlassSheetTokens.OnOled(),
+                unfocusedTextColor = GlassSheetTokens.OnOled(),
                 cursorColor = PrimaryBlue,
                 focusedIndicatorColor = Color.Transparent,
                 unfocusedIndicatorColor = Color.Transparent,
@@ -220,7 +220,7 @@ private fun ConnectionPickerSelectedStrip(
                 Text(
                     text = user.name?.trim()?.ifBlank { null } ?: "Friend",
                     style = MaterialTheme.typography.labelSmall,
-                    color = GlassSheetTokens.OnOledMuted,
+                    color = GlassSheetTokens.OnOledMuted(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -241,7 +241,7 @@ private fun ConnectionPickerUserRow(
         headlineContent = {
             Text(
                 text = label,
-                color = if (enabled || selected) GlassSheetTokens.OnOled else GlassSheetTokens.OnOledMuted,
+                color = if (enabled || selected) GlassSheetTokens.OnOled() else GlassSheetTokens.OnOledMuted(),
                 style = MaterialTheme.typography.bodyLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -298,8 +298,8 @@ internal fun ConnectionMemberPickerSheet(
     val selectedUsers = remember(candidates, selectedIds) {
         candidates.filter { it.id in selectedIds }
     }
-    val onSurface = GlassSheetTokens.OnOled
-    val onVariant = GlassSheetTokens.OnOledMuted
+    val onSurface = GlassSheetTokens.OnOled()
+    val onVariant = GlassSheetTokens.OnOledMuted()
 
     fun toggleUser(userId: String) {
         hideKeyboard()
@@ -323,7 +323,7 @@ internal fun ConnectionMemberPickerSheet(
                 .fillMaxWidth()
                 .fillMaxHeight()
                 .imePadding()
-                .background(GlassSheetTokens.OledBlack)
+                .background(GlassSheetTokens.OledBlack())
                 .padding(horizontal = 20.dp, vertical = 12.dp),
         ) {
             Text(
@@ -486,7 +486,7 @@ internal fun LocationGapNudge(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val cardBorderAlpha by animateFloatAsState(
-        targetValue = if (isPressed) GlassSheetTokens.GlassBorderPressed.alpha else GlassSheetTokens.GlassBorder.alpha,
+        targetValue = if (isPressed) GlassSheetTokens.GlassBorderPressed().alpha else GlassSheetTokens.GlassBorder().alpha,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessMedium,
@@ -500,10 +500,10 @@ internal fun LocationGapNudge(
             .clip(RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner))
             .border(
                 width = 1.dp,
-                color = GlassSheetTokens.GlassBorder.copy(alpha = cardBorderAlpha),
+                color = GlassSheetTokens.GlassBorder().copy(alpha = cardBorderAlpha),
                 shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
             )
-            .background(GlassSheetTokens.GlassSurface)
+            .background(GlassSheetTokens.GlassSurface())
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -612,9 +612,9 @@ internal fun GroupMembersPickerSheet(
         onDismiss()
     }
     val scroll = rememberScrollState()
-    val surface = GlassSheetTokens.OledBlack
-    val onSurface = GlassSheetTokens.OnOled
-    val onVariant = GlassSheetTokens.OnOledMuted
+    val surface = GlassSheetTokens.OledBlack()
+    val onSurface = GlassSheetTokens.OnOled()
+    val onVariant = GlassSheetTokens.OnOledMuted()
     ClickActionBottomSheet(
         onDismissRequest = onDismiss,
     ) {

@@ -31,9 +31,9 @@ import compose.project.click.click.ui.components.AdaptiveCard
 import compose.project.click.click.ui.components.InterestEditor
 import compose.project.click.click.ui.components.filterToPredefinedInterestTags
 import compose.project.click.click.ui.theme.LocalPlatformStyle
-import compose.project.click.click.ui.theme.BorderHard
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.ui.theme.SoftBlue
+import compose.project.click.click.ui.theme.clickBorderColor
 import kotlinx.coroutines.launch
 
 /**
@@ -115,7 +115,7 @@ internal fun SettingsInterestsCard(
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
                                 color = SoftBlue,
-                                border = BorderStroke(1.dp, BorderHard),
+                                border = BorderStroke(1.dp, clickBorderColor()),
                             ) {
                                 Text(
                                     text = tag,

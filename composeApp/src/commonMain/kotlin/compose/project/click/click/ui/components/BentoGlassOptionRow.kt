@@ -36,7 +36,7 @@ fun BentoGlassOptionRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     leading: (@Composable () -> Unit)? = null,
-    titleColor: androidx.compose.ui.graphics.Color = GlassSheetTokens.OnOled,
+    titleColor: androidx.compose.ui.graphics.Color = GlassSheetTokens.OnOled(),
     destructive: Boolean = false,
     /** Default interior radius; message sheets use [GlassSheetTokens.BentoExteriorCorner] for larger pills. */
     cornerRadius: Dp = GlassSheetTokens.BentoInteriorCorner,
@@ -74,7 +74,7 @@ fun BentoGlassOptionRow(
             .clip(shape)
             .then(
                 if (showBorder) {
-                    Modifier.border(1.dp, GlassSheetTokens.GlassBorder.copy(alpha = borderAlpha), shape)
+                    Modifier.border(1.dp, GlassSheetTokens.GlassBorder().copy(alpha = borderAlpha), shape)
                 } else {
                     Modifier
                 },
@@ -110,7 +110,7 @@ fun BentoGlassOptionRow(
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = GlassSheetTokens.OnOledMuted,
+                        color = GlassSheetTokens.OnOledMuted(),
                     )
                 }
             }

@@ -186,7 +186,7 @@ internal fun ForwardDialog(
                                             .fillMaxWidth()
                                             .padding(vertical = 4.dp)
                                             .clip(RoundedCornerShape(8.dp))
-                                            .background(GlassSheetTokens.GlassSurface)
+                                            .background(GlassSheetTokens.GlassSurface())
                                             .padding(8.dp)
                                             .clickable {
                                                 onSelect(item.connection.id)

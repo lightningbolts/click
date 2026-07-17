@@ -26,8 +26,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.BorderHard
 import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.ui.theme.clickBorderColor
 import kotlinx.coroutines.delay
 
 private const val TETHER_TOAST_VISIBLE_MS = 30_000L
@@ -75,7 +75,7 @@ fun TetherCompassToast(
                     )
                     .border(
                         2.dp,
-                        BorderHard,
+                        clickBorderColor(),
                         RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
                     )
                     .padding(horizontal = 18.dp, vertical = 16.dp),

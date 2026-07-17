@@ -93,9 +93,9 @@ internal fun MessageActionSheet(
         LaunchedEffect(Unit) {
             PlatformHapticsPolicy.lightImpact()
         }
-        val sheetBg = GlassSheetTokens.OledBlack
-        val onSurface = GlassSheetTokens.OnOled
-        val onVariant = GlassSheetTokens.OnOledMuted
+        val sheetBg = GlassSheetTokens.OledBlack()
+        val onSurface = GlassSheetTokens.OnOled()
+        val onVariant = GlassSheetTokens.OnOledMuted()
         Column(
             modifier = Modifier
                 .fillMaxWidth()

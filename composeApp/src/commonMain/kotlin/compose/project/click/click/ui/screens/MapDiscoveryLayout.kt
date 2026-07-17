@@ -91,9 +91,9 @@ import compose.project.click.click.ui.components.GlassSheetTokens
 import compose.project.click.click.ui.components.headerCollapseFraction
 import compose.project.click.click.ui.components.rememberBottomChromePadding
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding
-import compose.project.click.click.ui.theme.BorderHard
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.ui.theme.clickBorderColor
 import compose.project.click.click.ui.utils.CommunityHubPin
 import compose.project.click.click.ui.utils.ConnectionMapPoint
 import compose.project.click.click.ui.utils.MapRenderData
@@ -487,7 +487,7 @@ internal fun MapDiscoveryScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(GlassSheetTokens.OledBlack),
+            .background(GlassSheetTokens.OledBlack()),
     ) {
         LazyColumn(
             state = listState,
@@ -649,7 +649,7 @@ internal fun MapDiscoveryScreen(
                     .size(width = PipPreviewWidth, height = PipPreviewHeight)
                     .zIndex(11f)
                     .clip(pipShape)
-                    .border(2.dp, BorderHard, pipShape)
+                    .border(2.dp, clickBorderColor(), pipShape)
                     .clickable(
                         interactionSource = pipInteraction,
                         indication = ripple(bounded = true),
@@ -679,13 +679,13 @@ internal fun MapDiscoveryScreen(
                         .zIndex(4f)
                         .size(40.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .border(2.dp, BorderHard, RoundedCornerShape(12.dp))
-                        .background(GlassSheetTokens.GlassSurface),
+                        .border(2.dp, clickBorderColor(), RoundedCornerShape(12.dp))
+                        .background(GlassSheetTokens.GlassSurface()),
                 ) {
                     Icon(
                         Icons.Filled.OpenInFull,
                         contentDescription = "Expand map",
-                        tint = GlassSheetTokens.OnOled,
+                        tint = GlassSheetTokens.OnOled(),
                     )
                 }
             }
@@ -726,7 +726,7 @@ internal fun MapDiscoveryScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(GlassSheetTokens.OledBlack),
+                    .background(GlassSheetTokens.OledBlack()),
             ) {
                 mapContent(Modifier.fillMaxSize(), true)
                 expandedMapChrome()
@@ -745,7 +745,7 @@ private fun DiscoverySectionHeader(
         modifier = modifier,
         style = MaterialTheme.typography.titleLarge,
         fontWeight = FontWeight.Bold,
-        color = GlassSheetTokens.OnOled,
+        color = GlassSheetTokens.OnOled(),
     )
 }
 
@@ -802,10 +802,10 @@ private fun DiscoveryFeedRow(
             .clip(RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner))
             .border(
                 width = 2.dp,
-                color = BorderHard,
+                color = clickBorderColor(),
                 shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
             )
-            .background(GlassSheetTokens.GlassSurface)
+            .background(GlassSheetTokens.GlassSurface())
             .clickable(onClick = onClick)
             .padding(start = 16.dp, top = 10.dp, bottom = 10.dp, end = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -825,14 +825,14 @@ private fun DiscoveryFeedRow(
                 text = title,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = GlassSheetTokens.OnOled,
+                color = GlassSheetTokens.OnOled(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = GlassSheetTokens.OnOledMuted,
+                color = GlassSheetTokens.OnOledMuted(),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -840,7 +840,7 @@ private fun DiscoveryFeedRow(
                 Text(
                     text = distanceText ?: "\u00A0",
                     style = MaterialTheme.typography.labelSmall,
-                    color = GlassSheetTokens.OnOledMuted.copy(alpha = if (distanceText != null) 0.8f else 0f),
+                    color = GlassSheetTokens.OnOledMuted().copy(alpha = if (distanceText != null) 0.8f else 0f),
                     maxLines = 1,
                 )
             }
@@ -848,7 +848,7 @@ private fun DiscoveryFeedRow(
         Icon(
             Icons.Filled.LocationOn,
             contentDescription = null,
-            tint = GlassSheetTokens.OnOledMuted.copy(alpha = 0.5f),
+            tint = GlassSheetTokens.OnOledMuted().copy(alpha = 0.5f),
             modifier = Modifier.size(20.dp),
         )
     }

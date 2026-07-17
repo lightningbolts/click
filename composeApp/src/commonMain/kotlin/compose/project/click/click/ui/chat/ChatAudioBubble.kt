@@ -79,7 +79,19 @@ private data class VoiceChromePalette(
 @Composable
 private fun rememberVoiceChromePalette(kind: ChatAudioChromeKind): VoiceChromePalette {
     val scheme = MaterialTheme.colorScheme
-    return remember(kind, scheme.surface, scheme.surfaceContainerHigh, scheme.outline, scheme.onSurfaceVariant) {
+    val glassSurface = GlassSheetTokens.GlassSurface()
+    val glassBorder = GlassSheetTokens.GlassBorder()
+    val onOledMuted = GlassSheetTokens.OnOledMuted()
+    return remember(
+        kind,
+        scheme.surface,
+        scheme.surfaceContainerHigh,
+        scheme.outline,
+        scheme.onSurfaceVariant,
+        glassSurface,
+        glassBorder,
+        onOledMuted,
+    ) {
         when (kind) {
             ChatAudioChromeKind.SentBubble -> VoiceChromePalette(
                 shellBg = Color.White.copy(alpha = 0.12f),
@@ -105,14 +117,14 @@ private fun rememberVoiceChromePalette(kind: ChatAudioChromeKind): VoiceChromePa
                 val onOledSheet = scheme.surface.luminance() < 0.08f
                 if (onOledSheet) {
                     VoiceChromePalette(
-                        shellBg = GlassSheetTokens.GlassSurface,
-                        shellBorder = GlassSheetTokens.GlassBorder,
+                        shellBg = glassSurface,
+                        shellBorder = glassBorder,
                         playFill = PrimaryBlue.copy(alpha = 0.28f),
                         playBorder = PrimaryBlue.copy(alpha = 0.45f),
                         playIcon = Color.White,
                         trackBg = Color.White.copy(alpha = 0.22f),
                         progressColor = PrimaryBlue,
-                        timeColor = GlassSheetTokens.OnOledMuted,
+                        timeColor = onOledMuted,
                     )
                 } else {
                     VoiceChromePalette(

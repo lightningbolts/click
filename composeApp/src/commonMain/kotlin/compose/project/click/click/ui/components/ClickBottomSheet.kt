@@ -41,8 +41,8 @@ fun ClickPlatformSheet(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val sheetColor = GlassSheetTokens.OledBlack
-    val onSheet = GlassSheetTokens.OnOled
+    val sheetColor = GlassSheetTokens.OledBlack()
+    val onSheet = GlassSheetTokens.OnOled()
     MapBeaconSheetRoot(
         visible = true,
         onDismissRequest = onDismissRequest,
@@ -80,7 +80,7 @@ fun ClickSheetChrome(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(GlassSheetTokens.OledBlack)
+            .background(GlassSheetTokens.OledBlack())
             .padding(bottom = ClickSheetDefaults.ContentBottomPadding),
     ) {
         if (title != null) {
@@ -88,7 +88,7 @@ fun ClickSheetChrome(
                 text = title,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
-                color = GlassSheetTokens.OnOled,
+                color = GlassSheetTokens.OnOled(),
             )
             Spacer(Modifier.height(ClickSheetDefaults.TitleBottomSpacing))
         }

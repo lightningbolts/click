@@ -8,14 +8,12 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.*
@@ -24,15 +22,6 @@ import compose.project.click.click.ui.theme.*
 private fun platformCardShape(): RoundedCornerShape {
     val style = LocalPlatformStyle.current
     return RoundedCornerShape(style.cardCornerRadius)
-}
-
-@Composable
-private fun platformCardBackground(): Color =
-    MaterialTheme.colorScheme.surface
-
-@Composable
-private fun platformCardBorder(usePrimary: Boolean): Color {
-    return if (usePrimary) PrimaryBlue else BorderHard
 }
 
 @Composable
@@ -52,8 +41,8 @@ fun GlassCard(
 ) {
     val style = LocalPlatformStyle.current
     val shape = platformCardShape()
-    val bg = platformCardBackground()
-    val borderColor = platformCardBorder(usePrimaryBorder)
+    val bg = clickCardSurface()
+    val borderColor = clickBorderColor(usePrimaryBorder)
     val borderWidth = platformBorderWidth()
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
@@ -93,8 +82,8 @@ fun GlassSurface(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val shape = platformCardShape()
-    val bg = platformCardBackground()
-    val borderColor = platformCardBorder(usePrimaryBorder)
+    val bg = clickCardSurface()
+    val borderColor = clickBorderColor(usePrimaryBorder)
     val borderWidth = platformBorderWidth()
 
     Surface(
@@ -112,11 +101,13 @@ fun GlassSurface(
     }
 }
 
+@Composable
 fun Modifier.glassEffect(usePrimaryBorder: Boolean = false): Modifier {
-    val borderColor = if (usePrimaryBorder) PrimaryBlue else BorderHard
+    val borderColor = clickBorderColor(usePrimaryBorder)
+    val bg = clickCardSurface()
     return this
         .clip(GlassCardShape)
-        .background(SurfaceLight)
+        .background(bg)
         .border(2.dp, borderColor, GlassCardShape)
 }
 
@@ -129,8 +120,8 @@ fun GlassCardCompact(
 ) {
     val style = LocalPlatformStyle.current
     val compactShape = RoundedCornerShape(style.compactCardCornerRadius)
-    val bg = platformCardBackground()
-    val borderColor = platformCardBorder(false)
+    val bg = clickCardSurface()
+    val borderColor = clickBorderColor()
     val borderWidth = platformBorderWidth()
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()

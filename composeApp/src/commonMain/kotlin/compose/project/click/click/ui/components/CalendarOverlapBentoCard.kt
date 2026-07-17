@@ -55,8 +55,8 @@ fun CalendarOverlapBentoCard(
             .fillMaxWidth()
             .scale(scale),
         shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
-        color = GlassSheetTokens.GlassSurface,
-        border = BorderStroke(1.dp, GlassSheetTokens.GlassBorder),
+        color = GlassSheetTokens.GlassSurface(),
+        border = BorderStroke(1.dp, GlassSheetTokens.GlassBorder()),
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
@@ -76,7 +76,7 @@ fun CalendarOverlapBentoCard(
                     text = "You both have a gap on $dayLabel at $timeLabel",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
-                    color = GlassSheetTokens.OnOled,
+                    color = GlassSheetTokens.OnOled(),
                 )
             }
             Button(

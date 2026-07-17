@@ -68,7 +68,7 @@ internal fun ConnectionSheetDialogs(
                 dismissButton = {
                     val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
                     TextButton(onClick = dismissAnimated) {
-                        Text("Cancel", color = GlassSheetTokens.OnOledMuted)
+                        Text("Cancel", color = GlassSheetTokens.OnOledMuted())
                     }
                 },
             )
@@ -91,7 +91,7 @@ internal fun ConnectionSheetDialogs(
                 dismissButton = {
                     val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
                     TextButton(onClick = dismissAnimated) {
-                        Text("Cancel", color = GlassSheetTokens.OnOledMuted)
+                        Text("Cancel", color = GlassSheetTokens.OnOledMuted())
                     }
                 },
             )
@@ -105,7 +105,7 @@ internal fun ConnectionSheetDialogs(
                     Column {
                         Text(
                             "Please describe the issue:",
-                            color = GlassSheetTokens.OnOledMuted,
+                            color = GlassSheetTokens.OnOledMuted(),
                             modifier = Modifier.padding(bottom = 8.dp),
                         )
                         OutlinedTextField(
@@ -114,14 +114,14 @@ internal fun ConnectionSheetDialogs(
                             placeholder = {
                                 Text(
                                     "Reason for report...",
-                                    color = GlassSheetTokens.OnOledMuted.copy(alpha = 0.5f),
+                                    color = GlassSheetTokens.OnOledMuted().copy(alpha = 0.5f),
                                 )
                             },
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = GlassSheetTokens.OnOled,
-                                unfocusedTextColor = GlassSheetTokens.OnOled,
+                                focusedTextColor = GlassSheetTokens.OnOled(),
+                                unfocusedTextColor = GlassSheetTokens.OnOled(),
                                 focusedBorderColor = PrimaryBlue,
-                                unfocusedBorderColor = GlassSheetTokens.GlassBorder,
+                                unfocusedBorderColor = GlassSheetTokens.GlassBorder(),
                                 cursorColor = PrimaryBlue,
                             ),
                             modifier = Modifier.fillMaxWidth(),
@@ -146,7 +146,7 @@ internal fun ConnectionSheetDialogs(
                 dismissButton = {
                     val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
                     TextButton(onClick = dismissAnimated) {
-                        Text("Cancel", color = GlassSheetTokens.OnOledMuted)
+                        Text("Cancel", color = GlassSheetTokens.OnOledMuted())
                     }
                 },
             )
@@ -165,7 +165,7 @@ internal fun ConnectionSheetDialogs(
                 dismissButton = {
                     val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
                     TextButton(onClick = dismissAnimated) {
-                        Text("Cancel", color = GlassSheetTokens.OnOledMuted)
+                        Text("Cancel", color = GlassSheetTokens.OnOledMuted())
                     }
                 },
             )
@@ -186,7 +186,7 @@ internal fun ConnectionSheetDialogs(
                 dismissButton = {
                     val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
                     TextButton(onClick = dismissAnimated) {
-                        Text("Cancel", color = GlassSheetTokens.OnOledMuted)
+                        Text("Cancel", color = GlassSheetTokens.OnOledMuted())
                     }
                 },
             )
@@ -212,7 +212,7 @@ internal fun ConnectionSheetDialogs(
                 dismissButton = {
                     val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
                     TextButton(onClick = dismissAnimated) {
-                        Text("Cancel", color = GlassSheetTokens.OnOledMuted)
+                        Text("Cancel", color = GlassSheetTokens.OnOledMuted())
                     }
                 },
             )

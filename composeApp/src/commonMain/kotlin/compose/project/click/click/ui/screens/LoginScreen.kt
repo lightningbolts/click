@@ -117,7 +117,7 @@ fun LoginScreen(
                 ),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = BorderHard
+                    unfocusedBorderColor = clickBorderColor()
                 ),
                 shape = RoundedCornerShape(12.dp),
                 enabled = !isLoading
@@ -158,7 +158,7 @@ fun LoginScreen(
                 ),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = BorderHard
+                    unfocusedBorderColor = clickBorderColor()
                 ),
                 shape = RoundedCornerShape(12.dp),
                 enabled = !isLoading

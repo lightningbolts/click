@@ -205,7 +205,7 @@ fun SignUpScreen(
                 modifier = Modifier
                     .size(112.dp)
                     .clip(CircleShape)
-                    .border(2.dp, BorderHard, CircleShape)
+                    .border(2.dp, clickBorderColor(), CircleShape)
                     .background(MaterialTheme.colorScheme.surface)
                     .clickable(enabled = !isLoading) { mediaPickers.openPhotoLibrary() },
                 contentAlignment = Alignment.Center,
@@ -273,7 +273,7 @@ fun SignUpScreen(
                     ),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = BorderHard
+                        unfocusedBorderColor = clickBorderColor()
                     ),
                     shape = RoundedCornerShape(12.dp),
                     enabled = !isLoading
@@ -293,7 +293,7 @@ fun SignUpScreen(
                     ),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = BorderHard
+                        unfocusedBorderColor = clickBorderColor()
                     ),
                     shape = RoundedCornerShape(12.dp),
                     enabled = !isLoading
@@ -335,7 +335,7 @@ fun SignUpScreen(
                 ),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = BorderHard
+                    unfocusedBorderColor = clickBorderColor()
                 ),
                 shape = RoundedCornerShape(12.dp),
                 enabled = !isLoading
@@ -346,22 +346,22 @@ fun SignUpScreen(
                 DatePickerDialog(
                     onDismissRequest = { showBirthdayPicker = false },
                     colors = DatePickerDefaults.colors(
-                        containerColor = GlassSheetTokens.OledBlack,
-                        titleContentColor = GlassSheetTokens.OnOled,
-                        headlineContentColor = GlassSheetTokens.OnOled,
-                        weekdayContentColor = GlassSheetTokens.OnOledMuted,
-                        subheadContentColor = GlassSheetTokens.OnOledMuted,
-                        navigationContentColor = GlassSheetTokens.OnOled,
-                        yearContentColor = GlassSheetTokens.OnOled,
-                        currentYearContentColor = GlassSheetTokens.OnOled,
-                        selectedYearContentColor = GlassSheetTokens.OnOled,
+                        containerColor = GlassSheetTokens.OledBlack(),
+                        titleContentColor = GlassSheetTokens.OnOled(),
+                        headlineContentColor = GlassSheetTokens.OnOled(),
+                        weekdayContentColor = GlassSheetTokens.OnOledMuted(),
+                        subheadContentColor = GlassSheetTokens.OnOledMuted(),
+                        navigationContentColor = GlassSheetTokens.OnOled(),
+                        yearContentColor = GlassSheetTokens.OnOled(),
+                        currentYearContentColor = GlassSheetTokens.OnOled(),
+                        selectedYearContentColor = GlassSheetTokens.OnOled(),
                         selectedYearContainerColor = PrimaryBlue,
-                        dayContentColor = GlassSheetTokens.OnOled,
+                        dayContentColor = GlassSheetTokens.OnOled(),
                         selectedDayContainerColor = PrimaryBlue,
-                        selectedDayContentColor = GlassSheetTokens.OnOled,
+                        selectedDayContentColor = GlassSheetTokens.OnOled(),
                         todayDateBorderColor = PrimaryBlue,
                         todayContentColor = PrimaryBlue,
-                        dayInSelectionRangeContainerColor = GlassSheetTokens.GlassSurface,
+                        dayInSelectionRangeContainerColor = GlassSheetTokens.GlassSurface(),
                     ),
                     confirmButton = {
                         TextButton(
@@ -408,7 +408,7 @@ fun SignUpScreen(
                 ),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = BorderHard
+                    unfocusedBorderColor = clickBorderColor()
                 ),
                 shape = RoundedCornerShape(12.dp),
                 enabled = !isLoading
@@ -444,7 +444,7 @@ fun SignUpScreen(
                 ),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = BorderHard
+                    unfocusedBorderColor = clickBorderColor()
                 ),
                 shape = RoundedCornerShape(12.dp),
                 enabled = !isLoading
@@ -493,7 +493,7 @@ fun SignUpScreen(
                 ),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = BorderHard
+                    unfocusedBorderColor = clickBorderColor()
                 ),
                 shape = RoundedCornerShape(12.dp),
                 enabled = !isLoading,

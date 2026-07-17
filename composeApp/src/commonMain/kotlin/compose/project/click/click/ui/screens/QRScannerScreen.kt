@@ -32,7 +32,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import compose.project.click.click.ui.theme.BorderHard
+import compose.project.click.click.ui.theme.clickBorderColor
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
@@ -254,7 +254,7 @@ fun QRScannerScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp)
-                        .border(2.dp, BorderHard, RoundedCornerShape(24.dp)),
+                        .border(2.dp, clickBorderColor(), RoundedCornerShape(24.dp)),
                     shape = RoundedCornerShape(24.dp),
                     color = MaterialTheme.colorScheme.surface,
                     tonalElevation = 0.dp,
@@ -466,7 +466,7 @@ private fun ScannerLensOverlay(
                         QrScannerPresentationState.Error -> MaterialTheme.colorScheme.error
                         QrScannerPresentationState.Connecting -> PrimaryBlue
                         QrScannerPresentationState.TargetAcquired -> PrimaryBlue
-                        QrScannerPresentationState.Searching -> BorderHard
+                        QrScannerPresentationState.Searching -> clickBorderColor()
                     },
                     shape = RoundedCornerShape(24.dp),
                 )
@@ -528,7 +528,7 @@ private fun ScannerLensOverlay(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = badgeTopPadding)
-                    .border(2.dp, BorderHard, RoundedCornerShape(999.dp)),
+                    .border(2.dp, clickBorderColor(), RoundedCornerShape(999.dp)),
                 shape = RoundedCornerShape(999.dp),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 0.dp,

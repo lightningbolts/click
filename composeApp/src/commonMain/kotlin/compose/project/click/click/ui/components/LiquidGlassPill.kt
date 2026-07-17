@@ -10,8 +10,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.BorderHard
 import compose.project.click.click.ui.theme.LocalPlatformStyle
+import compose.project.click.click.ui.theme.clickBorderColor
 
 /**
  * Functional Clarity pill — opaque fill + hard border (no blur, noise, or gradients).
@@ -39,7 +39,7 @@ fun LiquidGlassPill(
         modifier = modifier
             .clip(shape)
             .background(scheme.surface)
-            .border(borderWidth, BorderHard, shape),
+            .border(borderWidth, clickBorderColor(), shape),
     ) {
         Box(Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
             content()

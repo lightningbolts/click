@@ -29,8 +29,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import compose.project.click.click.ui.theme.BorderHard
 import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.ui.theme.clickBorderColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -140,7 +140,7 @@ private fun AppClipDownloadCta() {
                 .size(72.dp)
                 .clip(RoundedCornerShape(20.dp))
                 .background(PrimaryBlue)
-                .border(2.dp, BorderHard, RoundedCornerShape(20.dp)),
+                .border(2.dp, clickBorderColor(), RoundedCornerShape(20.dp)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(

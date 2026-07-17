@@ -51,11 +51,11 @@ Execute in this order. Do **not** start mock layout redesigns in the same chat a
 
 ### Acceptance criteria for dark/light
 
-- [ ] Toggle dark ↔ light in Settings: every tab root, sheet, dialog, toast, tab bar, and chat chrome updates correctly.
-- [ ] Borders remain visible in both modes (2dp hard edge; black on light, white or high-contrast on dark).
-- [ ] No forced-white sheets or forced-black text on dark surfaces (except intentional inverse chips).
-- [ ] Primary `#630ed4` CTAs readable in both modes (`onPrimary` white).
-- [ ] Map basemap policy decided and documented (color in light? dark tiles only in dark mode? ghost = grayscale).
+- [x] Toggle dark ↔ light in Settings: every tab root, sheet, dialog, toast, tab bar, and chat chrome updates correctly. *(Track A 2026-07-16: helpers + sheet tokens + tab bars + hotspot sweep; device smoke still pending)*
+- [x] Borders remain visible in both modes (2dp hard edge; black on light, white or high-contrast on dark). *(via `clickBorderColor()` / `LocalIsDarkMode`)*
+- [x] No forced-white sheets or forced-black text on dark surfaces (except intentional inverse chips). *(`OledSheetTheme` + `GlassSheetTokens` theme-aware; call/search overlays stay intentional dark)*
+- [x] Primary `#630ed4` CTAs readable in both modes (`onPrimary` white).
+- [x] Map basemap policy decided and documented (light = color/default; dark = dark tiles; ghost = grayscale/muted).
 
 ### Suggested implementation approach
 
@@ -118,7 +118,7 @@ The first pass mostly **restyled** existing Compose structure (borders, fills, n
 
 | Gate | Status after first pass |
 |------|-------------------------|
-| §0 automated (Gradle + `npm test`) | Was PASS — **re-run after changes** |
+| §0 automated (Gradle + `npm test`) | Track A 2026-07-16 PASS — Android compile + `testDebugUnitTest` · iOS sim compile + `iosSimulatorArm64Test` · `click-web` `npm test` 22 suites / 145 tests |
 | Smoke [`02-smoke-10min.md`](../regression-testing/02-smoke-10min.md) | **Not run on device** |
 | Full checklist [`01-full-checklist.md`](../regression-testing/01-full-checklist.md) | **Not run** |
 | Known-issues audit | **Bugs still open** |

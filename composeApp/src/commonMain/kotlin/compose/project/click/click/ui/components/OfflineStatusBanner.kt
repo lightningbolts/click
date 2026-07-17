@@ -16,7 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.BorderHard
+import compose.project.click.click.ui.theme.clickBorderColor
 
 /** Compact offline chip — visible below the status bar without shifting main content. */
 @Composable
@@ -28,7 +28,7 @@ fun OfflineStatusBanner(
         modifier = modifier,
         shape = RoundedCornerShape(999.dp),
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, BorderHard),
+        border = BorderStroke(1.dp, clickBorderColor()),
         shadowElevation = 0.dp,
         tonalElevation = 0.dp,
     ) {

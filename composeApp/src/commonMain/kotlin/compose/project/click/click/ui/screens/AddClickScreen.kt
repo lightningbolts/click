@@ -253,7 +253,7 @@ fun ClickedSuccessContent(
                 .size(120.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primaryContainer)
-                .border(2.dp, BorderHard, CircleShape),
+                .border(2.dp, clickBorderColor(), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Icon(

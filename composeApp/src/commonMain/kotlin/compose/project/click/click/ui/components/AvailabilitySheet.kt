@@ -65,7 +65,7 @@ fun AvailabilitySheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
-                .background(GlassSheetTokens.OledBlack),
+                .background(GlassSheetTokens.OledBlack()),
         ) {
             Column(
                 modifier = Modifier
@@ -79,7 +79,7 @@ fun AvailabilitySheet(
                     text = if (isEditing) "Edit availability" else "Share availability",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = GlassSheetTokens.OnOled,
+                    color = GlassSheetTokens.OnOled(),
                 )
                 Text(
                     text = if (isEditing) {
@@ -88,7 +88,7 @@ fun AvailabilitySheet(
                         "Pick how long you're open, and a short tag so connections know what you're up for."
                     },
                     style = MaterialTheme.typography.bodyMedium,
-                    color = GlassSheetTokens.OnOledMuted,
+                    color = GlassSheetTokens.OnOledMuted(),
                 )
 
                 Text(

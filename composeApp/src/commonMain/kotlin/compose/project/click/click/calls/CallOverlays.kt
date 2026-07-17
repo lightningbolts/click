@@ -63,6 +63,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.getPlatform
 import compose.project.click.click.ui.components.GlassSheetTokens
+import compose.project.click.click.ui.theme.BackgroundDark
 import compose.project.click.click.ui.theme.BorderHardDark
 import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.PrimaryBlue
@@ -121,7 +122,7 @@ fun CallPreviewOverlay(
                 .widthIn(max = 324.dp)
                 .fillMaxWidth(),
             shape = RoundedCornerShape(28.dp),
-            color = GlassSheetTokens.OledBlack,
+            color = BackgroundDark,
             border = androidx.compose.foundation.BorderStroke(1.dp, BorderHardDark),
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,
@@ -314,7 +315,7 @@ fun ActiveCallOverlay(
                     }
                 },
             shape = RoundedCornerShape(28.dp),
-            color = GlassSheetTokens.OledBlack,
+            color = BackgroundDark,
             border = androidx.compose.foundation.BorderStroke(1.dp, BorderHardDark),
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,

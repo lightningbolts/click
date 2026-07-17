@@ -36,8 +36,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import compose.project.click.click.ui.theme.BorderHard
 import compose.project.click.click.ui.theme.LightBlue
+import compose.project.click.click.ui.theme.clickBorderColor
 import compose.project.click.click.ui.theme.PrimaryBlue
 
 /**
@@ -183,7 +183,7 @@ private fun ConnectionsTabFilterMenuChip(
             modifier = Modifier
                 .clip(RoundedCornerShape(chipCorner))
                 .background(MaterialTheme.colorScheme.surface)
-                .border(2.dp, BorderHard, RoundedCornerShape(chipCorner))
+                .border(2.dp, clickBorderColor(), RoundedCornerShape(chipCorner))
                 .clickable { expanded = true }
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -345,7 +345,7 @@ private fun DiscoverySortFilterMenuChip(
             modifier = Modifier
                 .clip(RoundedCornerShape(chipCorner))
                 .background(MaterialTheme.colorScheme.surface)
-                .border(2.dp, BorderHard, RoundedCornerShape(chipCorner))
+                .border(2.dp, clickBorderColor(), RoundedCornerShape(chipCorner))
                 .clickable { expanded = true }
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -406,7 +406,7 @@ fun DiscoverySortSegmentBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .border(2.dp, BorderHard, RoundedCornerShape(exterior))
+            .border(2.dp, clickBorderColor(), RoundedCornerShape(exterior))
             .clip(RoundedCornerShape(exterior))
             .background(MaterialTheme.colorScheme.surface)
             .padding(trackPadding),
@@ -458,7 +458,7 @@ fun ConnectionsSegmentBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .border(2.dp, BorderHard, RoundedCornerShape(exterior))
+            .border(2.dp, clickBorderColor(), RoundedCornerShape(exterior))
             .clip(RoundedCornerShape(exterior))
             .background(MaterialTheme.colorScheme.surface)
             .padding(trackPadding),

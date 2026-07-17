@@ -759,7 +759,7 @@ fun UserProfileBottomSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
-                .background(GlassSheetTokens.OledBlack)
+                .background(GlassSheetTokens.OledBlack())
         ) {
         Column(
             modifier = Modifier
@@ -776,11 +776,11 @@ fun UserProfileBottomSheet(
                     text = "Profile",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
-                    color = GlassSheetTokens.OnOled,
+                    color = GlassSheetTokens.OnOled(),
                     modifier = Modifier.weight(1f)
                 )
                 IconButton(onClick = { dismiss() }) {
-                    Icon(Icons.Filled.Close, contentDescription = "Close", tint = GlassSheetTokens.OnOled)
+                    Icon(Icons.Filled.Close, contentDescription = "Close", tint = GlassSheetTokens.OnOled())
                 }
             }
 
@@ -803,7 +803,7 @@ fun UserProfileBottomSheet(
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.padding(vertical = 16.dp)
                     )
-                    TextButton(onClick = { dismiss() }) { Text("Close", color = GlassSheetTokens.OnOled) }
+                    TextButton(onClick = { dismiss() }) { Text("Close", color = GlassSheetTokens.OnOled()) }
                 }
                 profile != null -> {
                     val p = profile!!
@@ -945,7 +945,7 @@ fun UserProfileBottomSheet(
                     }
                 }
                 else -> {
-                    Text("Profile unavailable", color = GlassSheetTokens.OnOledMuted)
+                    Text("Profile unavailable", color = GlassSheetTokens.OnOledMuted())
                 }
             }
         }

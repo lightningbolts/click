@@ -78,8 +78,8 @@ fun WaitlistDialog(
                     .fillMaxWidth()
                     .padding(horizontal = 24.dp)
                     .clip(shape)
-                    .border(1.dp, GlassSheetTokens.GlassBorder, shape)
-                    .background(GlassSheetTokens.OledBlack)
+                    .border(1.dp, GlassSheetTokens.GlassBorder(), shape)
+                    .background(GlassSheetTokens.OledBlack())
                     .verticalScroll(rememberScrollState())
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
@@ -93,7 +93,7 @@ fun WaitlistDialog(
                     text = "Join the Waitlist",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.SemiBold,
-                    color = GlassSheetTokens.OnOled,
+                    color = GlassSheetTokens.OnOled(),
                 )
                 if (successMessage != null) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -106,14 +106,14 @@ fun WaitlistDialog(
                             text = successMessage ?: "You're on the list! We'll be in touch.",
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.SemiBold,
-                            color = GlassSheetTokens.OnOled,
+                            color = GlassSheetTokens.OnOled(),
                         )
                     }
                 } else {
                     Text(
                         text = "Add your email and Click will reach out when the launch is ready.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = GlassSheetTokens.OnOledMuted,
+                        color = GlassSheetTokens.OnOledMuted(),
                     )
                     OutlinedTextField(
                         value = email,
@@ -122,17 +122,17 @@ fun WaitlistDialog(
                             errorMessage = null
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Email", color = GlassSheetTokens.OnOledMuted) },
+                        label = { Text("Email", color = GlassSheetTokens.OnOledMuted()) },
                         singleLine = true,
                         isError = errorMessage != null,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = GlassSheetTokens.OnOled,
-                            unfocusedTextColor = GlassSheetTokens.OnOled,
+                            focusedTextColor = GlassSheetTokens.OnOled(),
+                            unfocusedTextColor = GlassSheetTokens.OnOled(),
                             focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = GlassSheetTokens.GlassBorder,
+                            unfocusedBorderColor = GlassSheetTokens.GlassBorder(),
                             cursorColor = MaterialTheme.colorScheme.primary,
-                            focusedLabelColor = GlassSheetTokens.OnOledMuted,
-                            unfocusedLabelColor = GlassSheetTokens.OnOledMuted,
+                            focusedLabelColor = GlassSheetTokens.OnOledMuted(),
+                            unfocusedLabelColor = GlassSheetTokens.OnOledMuted(),
                         ),
                     )
                     errorMessage?.let {
@@ -156,7 +156,7 @@ fun WaitlistDialog(
                         }
                     } else {
                         TextButton(onClick = onDismiss, enabled = !isSubmitting) {
-                            Text("Cancel", color = GlassSheetTokens.OnOledMuted)
+                            Text("Cancel", color = GlassSheetTokens.OnOledMuted())
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Button(

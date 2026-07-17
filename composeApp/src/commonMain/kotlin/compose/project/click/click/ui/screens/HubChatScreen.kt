@@ -103,7 +103,7 @@ import compose.project.click.click.ui.chat.ChatComposerStripReserve // pragma: a
 import compose.project.click.click.ui.chat.rememberChatComposerFieldColors // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatNativeKeyboardInsets // pragma: allowlist secret
 import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
-import compose.project.click.click.ui.theme.BorderHard // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
@@ -376,7 +376,7 @@ fun HubChatScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 4.dp)
-                        .border(2.dp, BorderHard, RoundedCornerShape(14.dp)),
+                        .border(2.dp, clickBorderColor(), RoundedCornerShape(14.dp)),
                     color = PrimaryBlue,
                     shape = RoundedCornerShape(14.dp),
                     tonalElevation = 0.dp,
@@ -397,7 +397,7 @@ fun HubChatScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 12.dp, vertical = 6.dp)
-                            .border(2.dp, BorderHard, RoundedCornerShape(16.dp)),
+                            .border(2.dp, clickBorderColor(), RoundedCornerShape(16.dp)),
                         color = MaterialTheme.colorScheme.primaryContainer,
                         shape = RoundedCornerShape(16.dp),
                         tonalElevation = 0.dp,
@@ -599,30 +599,30 @@ fun HubChatScreen(
                         value = editNameDraft,
                         onValueChange = { editNameDraft = it.take(80) },
                         singleLine = true,
-                        label = { Text("Hub name", color = GlassSheetTokens.OnOledMuted) },
+                        label = { Text("Hub name", color = GlassSheetTokens.OnOledMuted()) },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = GlassSheetTokens.OnOled,
-                            unfocusedTextColor = GlassSheetTokens.OnOled,
+                            focusedTextColor = GlassSheetTokens.OnOled(),
+                            unfocusedTextColor = GlassSheetTokens.OnOled(),
                             focusedBorderColor = PrimaryBlue,
-                            unfocusedBorderColor = GlassSheetTokens.GlassBorder,
+                            unfocusedBorderColor = GlassSheetTokens.GlassBorder(),
                             cursorColor = PrimaryBlue,
-                            focusedLabelColor = GlassSheetTokens.OnOledMuted,
-                            unfocusedLabelColor = GlassSheetTokens.OnOledMuted,
+                            focusedLabelColor = GlassSheetTokens.OnOledMuted(),
+                            unfocusedLabelColor = GlassSheetTokens.OnOledMuted(),
                         ),
                     )
                     OutlinedTextField(
                         value = editCategoryDraft,
                         onValueChange = { editCategoryDraft = it.take(40) },
                         singleLine = true,
-                        label = { Text("Category", color = GlassSheetTokens.OnOledMuted) },
+                        label = { Text("Category", color = GlassSheetTokens.OnOledMuted()) },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = GlassSheetTokens.OnOled,
-                            unfocusedTextColor = GlassSheetTokens.OnOled,
+                            focusedTextColor = GlassSheetTokens.OnOled(),
+                            unfocusedTextColor = GlassSheetTokens.OnOled(),
                             focusedBorderColor = PrimaryBlue,
-                            unfocusedBorderColor = GlassSheetTokens.GlassBorder,
+                            unfocusedBorderColor = GlassSheetTokens.GlassBorder(),
                             cursorColor = PrimaryBlue,
-                            focusedLabelColor = GlassSheetTokens.OnOledMuted,
-                            unfocusedLabelColor = GlassSheetTokens.OnOledMuted,
+                            focusedLabelColor = GlassSheetTokens.OnOledMuted(),
+                            unfocusedLabelColor = GlassSheetTokens.OnOledMuted(),
                         ),
                     )
                 }
@@ -651,7 +651,7 @@ fun HubChatScreen(
             dismissButton = {
                 val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
                 TextButton(onClick = dismissAnimated) {
-                    Text("Cancel", color = GlassSheetTokens.OnOledMuted)
+                    Text("Cancel", color = GlassSheetTokens.OnOledMuted())
                 }
             },
         )
@@ -676,7 +676,7 @@ fun HubChatScreen(
             dismissButton = {
                 val dismissAnimated = LocalGlassAlertAnimatedDismiss.current
                 TextButton(onClick = dismissAnimated) {
-                    Text("Cancel", color = GlassSheetTokens.OnOledMuted)
+                    Text("Cancel", color = GlassSheetTokens.OnOledMuted())
                 }
             },
         )
@@ -847,7 +847,7 @@ private fun HubChatInputBar(
                                 .fillMaxSize()
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.primaryContainer)
-                                .border(2.dp, BorderHard, CircleShape)
+                                .border(2.dp, clickBorderColor(), CircleShape)
                                 .chatSpringPressScale(attachInteraction),
                             contentAlignment = Alignment.Center,
                         ) {
@@ -899,7 +899,7 @@ private fun HubChatInputBar(
                         .background(sendBackground)
                         .border(
                             width = 2.dp,
-                            color = BorderHard,
+                            color = clickBorderColor(),
                             shape = if (composerStyle.isIOS) CircleShape else RoundedCornerShape(fieldCorner),
                         )
                         .clickable(

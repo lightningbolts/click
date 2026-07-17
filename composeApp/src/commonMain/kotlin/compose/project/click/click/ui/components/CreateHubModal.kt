@@ -80,7 +80,7 @@ fun CreateHubModal(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(GlassSheetTokens.OledBlack),
+                .background(GlassSheetTokens.OledBlack()),
         ) {
             CreateHubSheetBody(
                 initialName = initialName,
@@ -118,7 +118,7 @@ fun JoinCommunityHubSheet(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(GlassSheetTokens.OledBlack),
+                .background(GlassSheetTokens.OledBlack()),
         ) {
             Column(
                 modifier = Modifier
@@ -131,12 +131,12 @@ fun JoinCommunityHubSheet(
                     text = "Join community hub",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = GlassSheetTokens.OnOled,
+                    color = GlassSheetTokens.OnOled(),
                 )
                 Text(
                     text = "Enter the hub code shown at the venue. You must be within range for the location check.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = GlassSheetTokens.OnOledMuted,
+                    color = GlassSheetTokens.OnOledMuted(),
                 )
                 OutlinedTextField(
                     value = hubCodeDraft,
@@ -146,10 +146,10 @@ fun JoinCommunityHubSheet(
                     placeholder = {
                         Text(
                             "e.g. local_point",
-                            color = GlassSheetTokens.OnOledMuted.copy(alpha = 0.5f),
+                            color = GlassSheetTokens.OnOledMuted().copy(alpha = 0.5f),
                         )
                     },
-                    label = { Text("Hub code", color = GlassSheetTokens.OnOledMuted) },
+                    label = { Text("Hub code", color = GlassSheetTokens.OnOledMuted()) },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     colors = textFieldColors,
                 )
@@ -164,7 +164,7 @@ fun JoinCommunityHubSheet(
                             onDismiss()
                         },
                     ) {
-                        Text("Cancel", color = GlassSheetTokens.OnOledMuted)
+                        Text("Cancel", color = GlassSheetTokens.OnOledMuted())
                     }
                     TextButton(
                         onClick = {
@@ -177,7 +177,7 @@ fun JoinCommunityHubSheet(
                         },
                         enabled = hubCodeDraft.trim().isNotEmpty(),
                     ) {
-                        Text("Join hub", color = GlassSheetTokens.OnOled)
+                        Text("Join hub", color = GlassSheetTokens.OnOled())
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -256,18 +256,18 @@ private fun CreateHubSheetBody(
             text = "Create community hub",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            color = GlassSheetTokens.OnOled,
+            color = GlassSheetTokens.OnOled(),
         )
         Text(
             text = "Ephemeral 24h space — GPS anchors the venue ring.",
             style = MaterialTheme.typography.bodyMedium,
-            color = GlassSheetTokens.OnOledMuted,
+            color = GlassSheetTokens.OnOledMuted(),
         )
         OutlinedTextField(
             value = nameDraft,
             onValueChange = { nameDraft = it.take(80) },
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("Hub name", color = GlassSheetTokens.OnOledMuted) },
+            label = { Text("Hub name", color = GlassSheetTokens.OnOledMuted()) },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             colors = textFieldColors,
@@ -276,7 +276,7 @@ private fun CreateHubSheetBody(
             text = "Category",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
-            color = GlassSheetTokens.OnOled,
+            color = GlassSheetTokens.OnOled(),
         )
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -292,8 +292,8 @@ private fun CreateHubSheetBody(
                     },
                     label = { Text(label) },
                     colors = FilterChipDefaults.filterChipColors(
-                        labelColor = GlassSheetTokens.OnOledMuted,
-                        selectedLabelColor = GlassSheetTokens.OnOled,
+                        labelColor = GlassSheetTokens.OnOledMuted(),
+                        selectedLabelColor = GlassSheetTokens.OnOled(),
                         selectedContainerColor = PrimaryBlue.copy(alpha = 0.25f),
                     ),
                 )
@@ -303,8 +303,8 @@ private fun CreateHubSheetBody(
                 onClick = { isCustomCategory = true },
                 label = { Text("Custom…") },
                 colors = FilterChipDefaults.filterChipColors(
-                    labelColor = GlassSheetTokens.OnOledMuted,
-                    selectedLabelColor = GlassSheetTokens.OnOled,
+                    labelColor = GlassSheetTokens.OnOledMuted(),
+                    selectedLabelColor = GlassSheetTokens.OnOled(),
                     selectedContainerColor = PrimaryBlue.copy(alpha = 0.25f),
                 ),
             )
@@ -314,12 +314,12 @@ private fun CreateHubSheetBody(
                 value = customCategoryDraft,
                 onValueChange = { customCategoryDraft = it.take(CUSTOM_CATEGORY_MAX_CHARS) },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Custom category", color = GlassSheetTokens.OnOledMuted) },
+                label = { Text("Custom category", color = GlassSheetTokens.OnOledMuted()) },
                 singleLine = true,
                 supportingText = {
                     Text(
                         "${customCategoryDraft.length}/$CUSTOM_CATEGORY_MAX_CHARS",
-                        color = GlassSheetTokens.OnOledMuted.copy(alpha = 0.5f),
+                        color = GlassSheetTokens.OnOledMuted().copy(alpha = 0.5f),
                     )
                 },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -330,7 +330,7 @@ private fun CreateHubSheetBody(
             Text(
                 text = "Locking GPS…",
                 style = MaterialTheme.typography.bodySmall,
-                color = GlassSheetTokens.OnOledMuted,
+                color = GlassSheetTokens.OnOledMuted(),
             )
         }
         Row(
@@ -339,7 +339,7 @@ private fun CreateHubSheetBody(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             TextButton(onClick = { if (!submitting) onDismiss() }) {
-                Text("Cancel", color = GlassSheetTokens.OnOledMuted)
+                Text("Cancel", color = GlassSheetTokens.OnOledMuted())
             }
             TextButton(
                 onClick = {
@@ -408,7 +408,7 @@ private fun CreateHubSheetBody(
                         color = PrimaryBlue,
                     )
                 } else {
-                    Text("Create hub", color = GlassSheetTokens.OnOled)
+                    Text("Create hub", color = GlassSheetTokens.OnOled())
                 }
             }
         }
@@ -418,13 +418,13 @@ private fun CreateHubSheetBody(
 
 @Composable
 private fun hubSheetTextFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedTextColor = GlassSheetTokens.OnOled,
-    unfocusedTextColor = GlassSheetTokens.OnOled,
+    focusedTextColor = GlassSheetTokens.OnOled(),
+    unfocusedTextColor = GlassSheetTokens.OnOled(),
     focusedBorderColor = PrimaryBlue,
-    unfocusedBorderColor = GlassSheetTokens.GlassBorder,
+    unfocusedBorderColor = GlassSheetTokens.GlassBorder(),
     cursorColor = PrimaryBlue,
-    focusedLabelColor = GlassSheetTokens.OnOledMuted,
-    unfocusedLabelColor = GlassSheetTokens.OnOledMuted,
-    focusedPlaceholderColor = GlassSheetTokens.OnOledMuted.copy(alpha = 0.5f),
-    unfocusedPlaceholderColor = GlassSheetTokens.OnOledMuted.copy(alpha = 0.5f),
+    focusedLabelColor = GlassSheetTokens.OnOledMuted(),
+    unfocusedLabelColor = GlassSheetTokens.OnOledMuted(),
+    focusedPlaceholderColor = GlassSheetTokens.OnOledMuted().copy(alpha = 0.5f),
+    unfocusedPlaceholderColor = GlassSheetTokens.OnOledMuted().copy(alpha = 0.5f),
 )

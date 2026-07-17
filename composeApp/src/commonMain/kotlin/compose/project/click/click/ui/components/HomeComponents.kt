@@ -40,7 +40,7 @@ fun OnlineFriendItem(name: String, status: String) {
                 .size(48.dp)
                 .clip(RoundedCornerShape(24.dp))
                 .background(MaterialTheme.colorScheme.primaryContainer)
-                .border(2.dp, BorderHard, CircleShape),
+                .border(2.dp, clickBorderColor(), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -88,7 +88,7 @@ fun RecentClickCard(name: String, time: String, location: String) {
                     .size(48.dp)
                     .clip(RoundedCornerShape(24.dp))
                     .background(MaterialTheme.colorScheme.primaryContainer)
-                    .border(2.dp, BorderHard, CircleShape),
+                    .border(2.dp, clickBorderColor(), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -153,7 +153,7 @@ fun PollPairCard(
             .fillMaxWidth()
             .clip(outerShape)
             .background(MaterialTheme.colorScheme.surface)
-            .border(2.dp, BorderHard, outerShape)
+            .border(2.dp, clickBorderColor(), outerShape)
             .padding(18.dp)
     ) {
             Row(
@@ -165,7 +165,7 @@ fun PollPairCard(
                         .size(48.dp)
                         .clip(RoundedCornerShape(16.dp))
                         .background(PrimaryBlue)
-                        .border(2.dp, BorderHard, RoundedCornerShape(16.dp)),
+                        .border(2.dp, clickBorderColor(), RoundedCornerShape(16.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     androidx.compose.material3.Icon(
@@ -228,7 +228,7 @@ fun PollPairCard(
                     enabled = icebreakerSendEnabled,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(2.dp, BorderHard),
+                    border = BorderStroke(2.dp, clickBorderColor()),
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = MaterialTheme.colorScheme.onSurface
                     ),
@@ -272,7 +272,7 @@ fun StatCard(
                     .size(48.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(PrimaryBlue)
-                    .border(2.dp, BorderHard, RoundedCornerShape(16.dp)),
+                    .border(2.dp, clickBorderColor(), RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center,
             ) {
                 androidx.compose.material3.Icon(

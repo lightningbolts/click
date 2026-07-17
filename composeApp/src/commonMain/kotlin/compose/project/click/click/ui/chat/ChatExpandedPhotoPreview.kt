@@ -112,9 +112,9 @@ fun ChatExpandedPhotoPreview(
                 .fillMaxWidth()
                 .padding(horizontal = 22.dp)
                 .clip(shape)
-                .border(1.dp, GlassSheetTokens.GlassBorder, shape),
+                .border(1.dp, GlassSheetTokens.GlassBorder(), shape),
             shape = shape,
-            color = GlassSheetTokens.OledBlack,
+            color = GlassSheetTokens.OledBlack(),
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -151,14 +151,14 @@ fun ChatExpandedPhotoPreview(
                         Text(
                             text = "Preparing photo…",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = GlassSheetTokens.OnOledMuted,
+                            color = GlassSheetTokens.OnOledMuted(),
                             modifier = Modifier.padding(vertical = 32.dp),
                         )
                     }
                 }
                 Spacer(Modifier.height(8.dp))
                 TextButton(onClick = onDismiss) {
-                    Text("Close", color = GlassSheetTokens.OnOled)
+                    Text("Close", color = GlassSheetTokens.OnOled())
                 }
             }
         }

@@ -120,7 +120,7 @@ fun VibeCheckBanner(
                         },
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = GlassSheetTokens.OnOledMuted,
+                        color = GlassSheetTokens.OnOledMuted(),
                     )
                 }
             },

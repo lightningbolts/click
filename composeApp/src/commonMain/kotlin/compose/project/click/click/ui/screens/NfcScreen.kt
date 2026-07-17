@@ -758,7 +758,7 @@ private fun NfcIdleContent(
                 shadowElevation = 0.dp,
                 border = BorderStroke(
                     2.dp,
-                    if (supportsTap) PrimaryBlue else BorderHard,
+                    if (supportsTap) PrimaryBlue else clickBorderColor(),
                 ),
             ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -807,7 +807,7 @@ private fun NfcIdleContent(
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
             ),
-            border = BorderStroke(2.dp, BorderHard),
+            border = BorderStroke(2.dp, clickBorderColor()),
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
@@ -1233,7 +1233,7 @@ private fun NfcSuccessContent(
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant,
-                border = BorderStroke(2.dp, BorderHard),
+                border = BorderStroke(2.dp, clickBorderColor()),
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -1328,7 +1328,7 @@ private fun NfcSuccessContent(
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.tertiaryContainer,
-                border = BorderStroke(2.dp, BorderHard),
+                border = BorderStroke(2.dp, clickBorderColor()),
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
@@ -1427,7 +1427,7 @@ private fun CommonGroundSection(tags: List<String>) {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.primaryContainer,
-                    border = BorderStroke(2.dp, BorderHard),
+                    border = BorderStroke(2.dp, clickBorderColor()),
                 ) {
                     Text(
                         text = tag,

@@ -387,13 +387,13 @@ fun ConnectionContextSheet(
                 text = titleText,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = GlassSheetTokens.OnOled,
+                color = GlassSheetTokens.OnOled(),
             )
 
             Text(
                 text = subtitleText,
                 style = MaterialTheme.typography.bodyMedium,
-                color = GlassSheetTokens.OnOledMuted,
+                color = GlassSheetTokens.OnOledMuted(),
             )
 
             if (!locationName.isNullOrBlank()) {

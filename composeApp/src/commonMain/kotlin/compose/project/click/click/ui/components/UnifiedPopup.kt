@@ -216,9 +216,9 @@ fun UnifiedPopupCard(
             .fillMaxWidth()
             .padding(horizontal = horizontalPadding)
             .clip(shape)
-            .border(1.dp, GlassSheetTokens.GlassBorder, shape),
+            .border(1.dp, GlassSheetTokens.GlassBorder(), shape),
         shape = shape,
-        color = GlassSheetTokens.OledBlack,
+        color = GlassSheetTokens.OledBlack(),
         tonalElevation = 0.dp,
     ) {
         Column(
@@ -323,13 +323,13 @@ fun UnifiedPopupAlert(
                                 }
                             }
                             ProvideTextStyle(
-                                MaterialTheme.typography.titleMedium.copy(color = GlassSheetTokens.OnOled),
+                                MaterialTheme.typography.titleMedium.copy(color = GlassSheetTokens.OnOled()),
                             ) {
                                 title()
                             }
                             if (text != null) {
                                 ProvideTextStyle(
-                                    MaterialTheme.typography.bodyMedium.copy(color = GlassSheetTokens.OnOledMuted),
+                                    MaterialTheme.typography.bodyMedium.copy(color = GlassSheetTokens.OnOledMuted()),
                                 ) {
                                     text()
                                 }
@@ -403,14 +403,14 @@ fun UnifiedPopupFormDialog(
         Surface(
             modifier = surfaceModifier
                 .clip(RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner))
-                .border(1.dp, GlassSheetTokens.GlassBorder, RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner)),
+                .border(1.dp, GlassSheetTokens.GlassBorder(), RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner)),
             shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
-            color = GlassSheetTokens.OledBlack,
-            contentColor = GlassSheetTokens.OnOled,
+            color = GlassSheetTokens.OledBlack(),
+            contentColor = GlassSheetTokens.OnOled(),
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,
         ) {
-            CompositionLocalProvider(LocalContentColor provides GlassSheetTokens.OnOled) {
+            CompositionLocalProvider(LocalContentColor provides GlassSheetTokens.OnOled()) {
                 val horizontalPad = innerHorizontalPadding ?: innerPadding
                 val bodyPad = bodyHorizontalPadding ?: horizontalPad
                 Column(modifier = Modifier.padding(vertical = innerPadding)) {
@@ -418,7 +418,7 @@ fun UnifiedPopupFormDialog(
                         text = title,
                         style = titleStyle,
                         fontWeight = FontWeight.SemiBold,
-                        color = GlassSheetTokens.OnOled,
+                        color = GlassSheetTokens.OnOled(),
                         modifier = Modifier.padding(horizontal = horizontalPad),
                     )
                     Spacer(Modifier.padding(top = 12.dp))
@@ -442,14 +442,14 @@ fun UnifiedPopupFormDialog(
                         if (dismissLabel != null) {
                             UnifiedPopupTextButton(
                                 label = dismissLabel,
-                                contentColor = GlassSheetTokens.OnOledMuted,
+                                contentColor = GlassSheetTokens.OnOledMuted(),
                                 onClick = requestAnimatedDismiss,
                             )
                             Spacer(Modifier.width(8.dp))
                         }
                         UnifiedPopupTextButton(
                             label = confirmLabel,
-                            contentColor = GlassSheetTokens.OnOled,
+                            contentColor = GlassSheetTokens.OnOled(),
                             onClick = {
                                 onConfirm()
                                 requestAnimatedDismiss()

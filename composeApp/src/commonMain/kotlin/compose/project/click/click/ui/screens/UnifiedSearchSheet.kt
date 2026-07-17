@@ -51,6 +51,7 @@ import compose.project.click.click.ui.components.rememberGlassAdaptiveSheetState
 import compose.project.click.click.ui.components.ClickLogoPulse
 import compose.project.click.click.ui.components.GlassAdaptiveBottomSheet
 import compose.project.click.click.ui.components.GlassSheetTokens
+import compose.project.click.click.ui.theme.BackgroundDark
 import compose.project.click.click.ui.theme.BorderHardDark
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.ui.theme.SurfaceDark
@@ -130,7 +131,7 @@ private fun UnifiedSearchSheetContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(GlassSheetTokens.OledBlack)
+            .background(BackgroundDark)
             .imePadding()
             .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
@@ -150,14 +151,14 @@ private fun UnifiedSearchSheetContent(
                 placeholder = {
                     Text(
                         "Search people, places, beacons, intents…",
-                        color = GlassSheetTokens.OnOledMuted,
+                        color = GlassSheetTokens.OnOledMuted(),
                     )
                 },
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
                     unfocusedContainerColor = Color.Transparent,
-                    focusedTextColor = GlassSheetTokens.OnOled,
-                    unfocusedTextColor = GlassSheetTokens.OnOled,
+                    focusedTextColor = GlassSheetTokens.OnOled(),
+                    unfocusedTextColor = GlassSheetTokens.OnOled(),
                     cursorColor = PrimaryBlue,
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
@@ -250,7 +251,7 @@ private fun UnifiedSearchSheetContent(
 @Composable
 private fun searchFilterChipColors() = FilterChipDefaults.filterChipColors(
     selectedContainerColor = PrimaryBlue,
-    selectedLabelColor = GlassSheetTokens.OnOled,
+    selectedLabelColor = GlassSheetTokens.OnOled(),
     containerColor = SurfaceDark,
-    labelColor = GlassSheetTokens.OnOled,
+    labelColor = GlassSheetTokens.OnOled(),
 )

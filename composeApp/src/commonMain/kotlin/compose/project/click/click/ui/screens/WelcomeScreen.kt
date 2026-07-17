@@ -50,8 +50,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import compose.project.click.click.ui.theme.BorderHard
 import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.ui.theme.clickBorderColor
 
 /**
  * Phase 2 — C8: the short "why Click" screen at the top of the new onboarding state
@@ -109,7 +109,7 @@ fun WelcomeScreen(
                     .size(92.dp)
                     .clip(CircleShape)
                     .background(PrimaryBlue)
-                    .border(2.dp, BorderHard, CircleShape),
+                    .border(2.dp, clickBorderColor(), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -206,7 +206,7 @@ private fun WelcomePill(
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surface)
-            .border(2.dp, BorderHard, RoundedCornerShape(16.dp))
+            .border(2.dp, clickBorderColor(), RoundedCornerShape(16.dp))
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -215,7 +215,7 @@ private fun WelcomePill(
                 .size(40.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primaryContainer)
-                .border(2.dp, BorderHard, CircleShape),
+                .border(2.dp, clickBorderColor(), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Icon(

@@ -108,9 +108,9 @@ fun ConnectionItem(
     val pressed by rowInteraction.collectIsPressedAsState()
     val cardBorderAlpha by animateFloatAsState(
         targetValue = if (pressed) {
-            GlassSheetTokens.GlassBorderPressed.alpha
+            GlassSheetTokens.GlassBorderPressed().alpha
         } else {
-            GlassSheetTokens.GlassBorder.alpha
+            GlassSheetTokens.GlassBorder().alpha
         },
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
@@ -125,10 +125,10 @@ fun ConnectionItem(
             .clip(RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner))
             .border(
                 width = 1.dp,
-                color = GlassSheetTokens.GlassBorder.copy(alpha = cardBorderAlpha),
+                color = GlassSheetTokens.GlassBorder().copy(alpha = cardBorderAlpha),
                 shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
             )
-            .background(GlassSheetTokens.GlassSurface)
+            .background(GlassSheetTokens.GlassSurface())
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

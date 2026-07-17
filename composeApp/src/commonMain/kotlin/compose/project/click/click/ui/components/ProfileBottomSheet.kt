@@ -862,9 +862,9 @@ fun ProfileBottomSheet(
                         .fillMaxWidth()
                         .padding(horizontal = 22.dp)
                         .clip(previewShape)
-                        .border(1.dp, GlassSheetTokens.GlassBorder, previewShape),
+                        .border(1.dp, GlassSheetTokens.GlassBorder(), previewShape),
                     shape = previewShape,
-                    color = GlassSheetTokens.OledBlack,
+                    color = GlassSheetTokens.OledBlack(),
                     tonalElevation = 0.dp,
                 ) {
                         Column(
@@ -1471,7 +1471,7 @@ private fun JournalComposerCard(
             .fillMaxWidth()
             .clip(shape)
             .border(1.dp, PrimaryBlue.copy(alpha = 0.28f), shape)
-            .background(GlassSheetTokens.GlassSurface)
+            .background(GlassSheetTokens.GlassSurface())
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -1547,7 +1547,7 @@ private fun ProfileVisibilityPill(
         color = if (selected) PrimaryBlue.copy(alpha = 0.18f) else Color.Transparent,
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            if (selected) PrimaryBlue.copy(alpha = 0.7f) else GlassSheetTokens.GlassBorder,
+            if (selected) PrimaryBlue.copy(alpha = 0.7f) else GlassSheetTokens.GlassBorder(),
         ),
     ) {
         Text(
@@ -1582,8 +1582,8 @@ private fun SharedInterestsTimelineSection(items: List<GroupSharedInterest>) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(shape)
-                    .border(1.dp, GlassSheetTokens.GlassBorder, shape)
-                    .background(GlassSheetTokens.GlassSurface)
+                    .border(1.dp, GlassSheetTokens.GlassBorder(), shape)
+                    .background(GlassSheetTokens.GlassSurface())
                     .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -1635,8 +1635,8 @@ private fun JournalTimelineRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .border(1.dp, GlassSheetTokens.GlassBorder, shape)
-            .background(GlassSheetTokens.GlassSurface)
+            .border(1.dp, GlassSheetTokens.GlassBorder(), shape)
+            .background(GlassSheetTokens.GlassSurface())
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -1722,8 +1722,8 @@ private fun TimelineRow(item: ProfileSheetTimelineItem) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(rowShape)
-            .border(1.dp, GlassSheetTokens.GlassBorder, rowShape)
-            .background(GlassSheetTokens.GlassSurface)
+            .border(1.dp, GlassSheetTokens.GlassBorder(), rowShape)
+            .background(GlassSheetTokens.GlassSurface())
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.Top,
     ) {
@@ -1803,8 +1803,8 @@ private fun MediaPanel(
                                     .weight(1f)
                                     .height(96.dp)
                                     .clip(skelShape)
-                                    .border(1.dp, GlassSheetTokens.GlassBorder, skelShape)
-                                    .background(GlassSheetTokens.GlassSurface),
+                                    .border(1.dp, GlassSheetTokens.GlassBorder(), skelShape)
+                                    .background(GlassSheetTokens.GlassSurface()),
                             )
                         }
                     }
@@ -1855,8 +1855,8 @@ private fun MediaPanel(
                         label = "media_thumb_press",
                     )
                     val thumbShape = RoundedCornerShape(14.dp)
-                    val thumbBorder = GlassSheetTokens.GlassBorder
-                    val thumbBg = GlassSheetTokens.GlassSurface
+                    val thumbBorder = GlassSheetTokens.GlassBorder()
+                    val thumbBg = GlassSheetTokens.GlassSurface()
                     val thumbModifier = Modifier
                         .weight(1f)
                         .height(110.dp)
@@ -1979,8 +1979,8 @@ private fun MediaPanel(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(lockShape)
-                                    .border(1.dp, GlassSheetTokens.GlassBorder, lockShape)
-                                    .background(GlassSheetTokens.GlassSurface)
+                                    .border(1.dp, GlassSheetTokens.GlassBorder(), lockShape)
+                                    .background(GlassSheetTokens.GlassSurface())
                                     .padding(horizontal = 16.dp, vertical = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -2040,8 +2040,8 @@ private fun LinksPanel(items: List<ProfileSheetLink>, onOpen: (String) -> Unit) 
     ) {
         items(items, key = { it.id }) { link ->
             val linkShape = RoundedCornerShape(14.dp)
-            val cardBorder = GlassSheetTokens.GlassBorder
-            val cardBg = GlassSheetTokens.GlassSurface
+            val cardBorder = GlassSheetTokens.GlassBorder()
+            val cardBg = GlassSheetTokens.GlassSurface()
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2190,8 +2190,8 @@ private fun FilesPanel(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(fileShape)
-                    .border(1.dp, GlassSheetTokens.GlassBorder, fileShape)
-                    .background(GlassSheetTokens.GlassSurface)
+                    .border(1.dp, GlassSheetTokens.GlassBorder(), fileShape)
+                    .background(GlassSheetTokens.GlassSurface())
                     .clickable(enabled = !opening) { onDownload(file) }
                     .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,

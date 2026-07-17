@@ -51,8 +51,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import compose.project.click.click.ui.chat.rememberChatMediaPickers
-import compose.project.click.click.ui.theme.BorderHard
 import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.ui.theme.clickBorderColor
 import kotlinx.coroutines.launch
 
 /**
@@ -240,7 +240,7 @@ private fun AvatarPreview(bytes: ByteArray?, existingUrl: String?) {
             .size(168.dp)
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.surface)
-            .border(width = 2.dp, color = BorderHard, shape = CircleShape),
+            .border(width = 2.dp, color = clickBorderColor(), shape = CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         when {
@@ -288,7 +288,7 @@ private fun AvatarSourceButton(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surface)
-            .border(2.dp, BorderHard, RoundedCornerShape(16.dp))
+            .border(2.dp, clickBorderColor(), RoundedCornerShape(16.dp))
             .clickable(enabled = enabled) { onClick() }
             .padding(vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

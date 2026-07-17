@@ -185,7 +185,7 @@ fun GlobalSearchScreen(
                                     selectedContainerColor = PrimaryBlue,
                                     selectedLabelColor = Color.White,
                                     containerColor = SurfaceDark,
-                                    labelColor = GlassSheetTokens.OnOled,
+                                    labelColor = GlassSheetTokens.OnOled(),
                                 ),
                             )
                         }
@@ -445,7 +445,7 @@ internal fun TinyBadge(text: String) {
             text = text,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
             style = MaterialTheme.typography.labelSmall,
-            color = GlassSheetTokens.OnOled,
+            color = GlassSheetTokens.OnOled(),
             fontWeight = FontWeight.SemiBold,
         )
     }

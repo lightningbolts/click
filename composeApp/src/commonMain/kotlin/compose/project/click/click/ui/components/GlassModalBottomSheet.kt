@@ -58,8 +58,8 @@ fun GlassModalBottomSheet(
         sheetState = sheetState,
         modifier = modifier,
         sheetMaxWidth = sheetMaxWidth,
-        containerColor = GlassSheetTokens.OledBlack,
-        contentColor = GlassSheetTokens.OnOled,
+        containerColor = GlassSheetTokens.OledBlack(),
+        contentColor = GlassSheetTokens.OnOled(),
         tonalElevation = 0.dp,
         scrimColor = Color.Black.copy(alpha = scrimAlpha),
         dragHandle = { GlassSheetGrabber() },
@@ -73,7 +73,7 @@ fun GlassModalBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(GlassSheetTokens.OledBlack),
+                .background(GlassSheetTokens.OledBlack()),
             content = content,
         )
     }

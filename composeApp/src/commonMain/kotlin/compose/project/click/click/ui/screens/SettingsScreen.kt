@@ -701,7 +701,7 @@ fun SettingsScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { pendingDeleteAvailabilityIntent = null }) {
-                        Text("Cancel", color = GlassSheetTokens.OnOledMuted)
+                        Text("Cancel", color = GlassSheetTokens.OnOledMuted())
                     }
                 },
             )
@@ -709,13 +709,13 @@ fun SettingsScreen(
 
         if (showNameDialog) {
             val nameDialogFieldColors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = GlassSheetTokens.OnOled,
-                unfocusedTextColor = GlassSheetTokens.OnOled,
+                focusedTextColor = GlassSheetTokens.OnOled(),
+                unfocusedTextColor = GlassSheetTokens.OnOled(),
                 focusedBorderColor = PrimaryBlue,
-                unfocusedBorderColor = GlassSheetTokens.GlassBorder,
+                unfocusedBorderColor = GlassSheetTokens.GlassBorder(),
                 cursorColor = PrimaryBlue,
-                focusedLabelColor = GlassSheetTokens.OnOledMuted,
-                unfocusedLabelColor = GlassSheetTokens.OnOledMuted,
+                focusedLabelColor = GlassSheetTokens.OnOledMuted(),
+                unfocusedLabelColor = GlassSheetTokens.OnOledMuted(),
             )
             GlassAlertDialog(
                 onDismissRequest = { showNameDialog = false },
@@ -728,7 +728,7 @@ fun SettingsScreen(
                         OutlinedTextField(
                             value = newFirstName,
                             onValueChange = { newFirstName = it },
-                            label = { Text("First name", color = GlassSheetTokens.OnOledMuted) },
+                            label = { Text("First name", color = GlassSheetTokens.OnOledMuted()) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                             colors = nameDialogFieldColors,
@@ -736,7 +736,7 @@ fun SettingsScreen(
                         OutlinedTextField(
                             value = newLastName,
                             onValueChange = { newLastName = it },
-                            label = { Text("Last name", color = GlassSheetTokens.OnOledMuted) },
+                            label = { Text("Last name", color = GlassSheetTokens.OnOledMuted()) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                             colors = nameDialogFieldColors,
@@ -752,12 +752,12 @@ fun SettingsScreen(
                             }
                         }
                     ) {
-                        Text("Save", color = GlassSheetTokens.OnOled)
+                        Text("Save", color = GlassSheetTokens.OnOled())
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showNameDialog = false }) {
-                        Text("Cancel", color = GlassSheetTokens.OnOledMuted)
+                        Text("Cancel", color = GlassSheetTokens.OnOledMuted())
                     }
                 }
             )

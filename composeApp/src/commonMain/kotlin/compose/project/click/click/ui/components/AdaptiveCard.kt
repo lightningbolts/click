@@ -26,7 +26,7 @@ fun AdaptiveCard(
 
     val cardModifier = modifier.border(
         width = borderWidth,
-        color = BorderHard,
+        color = clickBorderColor(),
         shape = shape
     )
 
@@ -65,7 +65,7 @@ fun AdaptiveSurface(
             .fillMaxWidth()
             .border(
                 width = LocalPlatformStyle.current.cardBorderWidth,
-                color = BorderHard,
+                color = clickBorderColor(),
                 shape = RoundedCornerShape(bottomStart = radius, bottomEnd = radius),
             ),
         shape = RoundedCornerShape(bottomStart = radius, bottomEnd = radius),
@@ -111,7 +111,7 @@ fun AdaptiveButton(
             pressedElevation = 0.dp,
             focusedElevation = 0.dp,
         ),
-        border = BorderStroke(style.cardBorderWidth, BorderHard),
+        border = BorderStroke(style.cardBorderWidth, clickBorderColor()),
         shape = RoundedCornerShape(style.buttonCornerRadius),
         content = content
     )

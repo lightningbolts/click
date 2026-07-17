@@ -5,6 +5,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.UIKitInteropProperties
 import androidx.compose.ui.viewinterop.UIKitView
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.ui.theme.LocalIsDarkMode
 import compose.project.click.click.ui.utils.TimeState // pragma: allowlist secret
 import kotlinx.datetime.Clock
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -23,6 +24,7 @@ import platform.MapKit.MKUserTrackingModeNone
 import platform.MapKit.MKStandardMapConfiguration
 import platform.MapKit.MKMapElevationStyleFlat
 import platform.MapKit.MKFeatureDisplayPriorityRequired
+import platform.MapKit.MKStandardMapEmphasisStyleMuted
 import platform.UIKit.UIColor
 import platform.UIKit.UIUserInterfaceStyle
 import platform.darwin.NSObject
@@ -55,6 +57,7 @@ actual fun PlatformMap(
     var lastAppliedTargetLat by remember { mutableStateOf<Double?>(null) }
     var lastAppliedTargetLon by remember { mutableStateOf<Double?>(null) }
     var lastAppliedTargetZoom by remember { mutableStateOf<Double?>(null) }
+    val isDarkMode = LocalIsDarkMode.current
 
     // C12: MKMapViewDelegate bridge so iOS pin taps reach the shared ProfileBottomSheet
     // flow through the same `onPinTapped` / `onClusterTapped` callbacks as Android.
@@ -86,11 +89,6 @@ actual fun PlatformMap(
                 userInteractionEnabled = mapGesturesEnabled
                 showsUserLocation = !ghostMode
                 userTrackingMode = MKUserTrackingModeNone
-                
-                // Enable dark mode for the map
-                overrideUserInterfaceStyle = UIUserInterfaceStyle.UIUserInterfaceStyleDark
-                
-                // Use flat elevation for cleaner dark appearance
                 preferredConfiguration = MKStandardMapConfiguration().apply {
                     elevationStyle = MKMapElevationStyleFlat
                 }
@@ -103,6 +101,18 @@ actual fun PlatformMap(
             map.userInteractionEnabled = mapGesturesEnabled
             // Update user location visibility based on ghost mode
             map.showsUserLocation = !ghostMode
+            // Basemap: ghost → muted; dark app → dark UI style; light → default color map.
+            map.overrideUserInterfaceStyle = when {
+                ghostMode -> UIUserInterfaceStyle.UIUserInterfaceStyleLight
+                isDarkMode -> UIUserInterfaceStyle.UIUserInterfaceStyleDark
+                else -> UIUserInterfaceStyle.UIUserInterfaceStyleLight
+            }
+            map.preferredConfiguration = MKStandardMapConfiguration().apply {
+                elevationStyle = MKMapElevationStyleFlat
+                if (ghostMode) {
+                    emphasisStyle = MKStandardMapEmphasisStyleMuted
+                }
+            }
             if (map.delegate !== pinTapDelegate) {
                 map.delegate = pinTapDelegate
             }

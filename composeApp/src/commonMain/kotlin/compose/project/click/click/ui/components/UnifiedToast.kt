@@ -112,18 +112,18 @@ fun UnifiedToastHost(
             if (text != null) {
                 val backgroundModifier = if (opaque) {
                     Modifier
-                        .background(GlassSheetTokens.OledBlack, toastShape)
-                        .border(1.dp, GlassSheetTokens.GlassBorder, toastShape)
+                        .background(GlassSheetTokens.OledBlack(), toastShape)
+                        .border(1.dp, GlassSheetTokens.GlassBorder(), toastShape)
                 } else {
                     Modifier
                         .clip(toastShape)
-                        .background(GlassSheetTokens.GlassSurface, toastShape)
-                        .border(1.dp, GlassSheetTokens.GlassBorder, toastShape)
+                        .background(GlassSheetTokens.GlassSurface(), toastShape)
+                        .border(1.dp, GlassSheetTokens.GlassBorder(), toastShape)
                 }
                 Text(
                     text = text,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (opaque) GlassSheetTokens.OnOled else MaterialTheme.colorScheme.onSurface,
+                    color = if (opaque) GlassSheetTokens.OnOled() else MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier
                         .widthIn(max = UnifiedToastTokens.MaxWidthDp.dp)
                         .then(backgroundModifier)

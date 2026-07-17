@@ -37,8 +37,9 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.BorderHard
+import compose.project.click.click.ui.theme.BackgroundDark
 import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.ui.theme.clickBorderColor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
@@ -99,7 +100,7 @@ fun ConnectionRevealOverlay(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(GlassSheetTokens.OledBlack),
+            .background(BackgroundDark),
         contentAlignment = Alignment.Center
     ) {
         Box(
@@ -115,7 +116,7 @@ fun ConnectionRevealOverlay(
                 .widthIn(max = 340.dp)
                 .scale(cardScale)
                 .alpha(cardAlpha)
-                .border(2.dp, BorderHard, RoundedCornerShape(32.dp)),
+                .border(2.dp, clickBorderColor(), RoundedCornerShape(32.dp)),
             shape = RoundedCornerShape(32.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 0.dp,

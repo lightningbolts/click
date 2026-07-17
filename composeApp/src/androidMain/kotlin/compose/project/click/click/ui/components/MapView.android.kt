@@ -20,6 +20,7 @@ import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.maps.android.compose.*
 import compose.project.click.click.ui.components.markerHueDegrees
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.ui.theme.LocalIsDarkMode
 import compose.project.click.click.utils.LocationService
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
@@ -51,6 +52,7 @@ actual fun PlatformMap(
     val canShowMyLocation = !ghostMode && mapGesturesEnabled && hasLocationPermission
     val previewMode = !mapGesturesEnabled
     val deviceLocation by AppDataManager.lastKnownDeviceLocation.collectAsState()
+    val isDarkMode = LocalIsDarkMode.current
 
     // Determine center position
     val resolvedCenterLat = centerLat ?: deviceLocation?.first
@@ -124,15 +126,15 @@ actual fun PlatformMap(
             }
     }
 
-    // Map properties - grayscale when ghost mode. PiP preview uses the same tiles with gestures off.
-    val mapProperties = remember(ghostMode, canShowMyLocation) {
+    // Map basemap: ghost → grayscale; dark app → zinc dark style; light app → default color tiles.
+    val mapProperties = remember(ghostMode, canShowMyLocation, isDarkMode) {
         MapProperties(
             // Enabling my-location without runtime permission crashes with SecurityException.
             isMyLocationEnabled = canShowMyLocation,
-            mapStyleOptions = if (ghostMode) {
-                MapStyleOptions(GRAYSCALE_MAP_STYLE)
-            } else {
-                MapStyleOptions(DARK_MAP_STYLE)
+            mapStyleOptions = when {
+                ghostMode -> MapStyleOptions(GRAYSCALE_MAP_STYLE)
+                isDarkMode -> MapStyleOptions(DARK_MAP_STYLE)
+                else -> null
             }
         )
     }

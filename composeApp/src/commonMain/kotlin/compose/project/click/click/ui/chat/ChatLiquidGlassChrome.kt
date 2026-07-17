@@ -81,7 +81,7 @@ internal fun rememberChatComposerFieldColors(): TextFieldColors {
     val fieldFill = MaterialTheme.colorScheme.surface
     return OutlinedTextFieldDefaults.colors(
         focusedBorderColor = PrimaryBlue,
-        unfocusedBorderColor = compose.project.click.click.ui.theme.BorderHard,
+        unfocusedBorderColor = compose.project.click.click.ui.theme.clickBorderColor(),
         focusedContainerColor = fieldFill,
         unfocusedContainerColor = fieldFill,
     )

@@ -296,7 +296,7 @@ fun MapScreen(
                 .then(grayscaleModifier)
                 .background(
                     if (ghostModeEnabled) Color.DarkGray.copy(alpha = 0.3f)
-                    else GlassSheetTokens.OledBlack,
+                    else GlassSheetTokens.OledBlack(),
                 ),
         ) {
             when (val state = mapState) {
@@ -409,8 +409,8 @@ fun MapScreen(
     }
 
     if (showBeaconDropSheet) {
-        val dropSheetColor = GlassSheetTokens.OledBlack
-        val onDropSheet = GlassSheetTokens.OnOled
+        val dropSheetColor = GlassSheetTokens.OledBlack()
+        val onDropSheet = GlassSheetTokens.OnOled()
         MapBeaconSheetRoot(
             visible = true,
             onDismissRequest = { showBeaconDropSheet = false },
@@ -465,8 +465,8 @@ fun MapScreen(
 
     if (showCommunityHubSheet && selection is MapSelection.HubSelected) {
         val hubSel = selection as MapSelection.HubSelected
-        val hubSheetBg = GlassSheetTokens.OledBlack
-        val onHubSheet = GlassSheetTokens.OnOled
+        val hubSheetBg = GlassSheetTokens.OledBlack()
+        val onHubSheet = GlassSheetTokens.OnOled()
         MapBeaconSheetRoot(
             visible = true,
             onDismissRequest = { viewModel.clearSelection() },
@@ -506,8 +506,8 @@ fun MapScreen(
 
     if (showBeaconDetailSheet && selection is MapSelection.BeaconSelected) {
         val beaconSel = selection as MapSelection.BeaconSelected
-        val detailSurface = GlassSheetTokens.OledBlack
-        val onDetailSurface = GlassSheetTokens.OnOled
+        val detailSurface = GlassSheetTokens.OledBlack()
+        val onDetailSurface = GlassSheetTokens.OnOled()
         MapBeaconSheetRoot(
             visible = true,
             onDismissRequest = { viewModel.clearSelection() },
@@ -548,8 +548,8 @@ fun MapScreen(
         val sheetData = remember(connectionSelection, viewerUserId) {
             buildProfileSheetState(connectionSelection, viewerUserId)
         }
-        val profileSheetColor = GlassSheetTokens.OledBlack
-        val onProfileSheet = GlassSheetTokens.OnOled
+        val profileSheetColor = GlassSheetTokens.OledBlack()
+        val onProfileSheet = GlassSheetTokens.OnOled()
         MapBeaconSheetRoot(
             visible = true,
             onDismissRequest = {
@@ -817,7 +817,7 @@ private fun MapLayerFilterDropdown(
     val style = LocalPlatformStyle.current
     val menuSurface = MaterialTheme.colorScheme.surface
     val onMenuSurface = MaterialTheme.colorScheme.onSurface
-    val menuOutline = BorderHard
+    val menuOutline = clickBorderColor()
     val itemCount = MapLayerFilter.entries.size
     val menuUpOffset = if (opensDownward) {
         8.dp
@@ -990,7 +990,7 @@ private fun BeaconDetailSheetContent(
     ) {
         Text(
             text = "This removes the pin from the map for everyone nearby.",
-            color = GlassSheetTokens.OnOledMuted,
+            color = GlassSheetTokens.OnOledMuted(),
         )
     }
 
@@ -1011,13 +1011,13 @@ private fun BeaconDetailSheetContent(
             label = { Text("Description") },
             maxLines = 4,
             colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = GlassSheetTokens.OnOled,
-                unfocusedTextColor = GlassSheetTokens.OnOled,
+                focusedTextColor = GlassSheetTokens.OnOled(),
+                unfocusedTextColor = GlassSheetTokens.OnOled(),
                 focusedBorderColor = PrimaryBlue,
-                unfocusedBorderColor = GlassSheetTokens.GlassBorder,
+                unfocusedBorderColor = GlassSheetTokens.GlassBorder(),
                 cursorColor = PrimaryBlue,
-                focusedLabelColor = GlassSheetTokens.OnOledMuted,
-                unfocusedLabelColor = GlassSheetTokens.OnOledMuted,
+                focusedLabelColor = GlassSheetTokens.OnOledMuted(),
+                unfocusedLabelColor = GlassSheetTokens.OnOledMuted(),
             ),
         )
     }
@@ -1512,12 +1512,12 @@ private fun CommunityHubBottomSheet(
             text = hub.name,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = GlassSheetTokens.OnOled,
+            color = GlassSheetTokens.OnOled(),
         )
         Text(
             text = "${hub.activeUserCount} active nearby",
             style = MaterialTheme.typography.bodyMedium,
-            color = GlassSheetTokens.OnOledMuted,
+            color = GlassSheetTokens.OnOledMuted(),
         )
         val distLabel = distanceMeters?.let { d ->
             if (d >= 1000) {
@@ -1530,7 +1530,7 @@ private fun CommunityHubBottomSheet(
         Text(
             text = distLabel,
             style = MaterialTheme.typography.bodySmall,
-            color = GlassSheetTokens.OnOledMuted,
+            color = GlassSheetTokens.OnOledMuted(),
         )
         when (canJoinGeofence) {
             true -> {
@@ -1545,7 +1545,7 @@ private fun CommunityHubBottomSheet(
                 Text(
                     text = "Move closer to join this hub.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = GlassSheetTokens.OnOledMuted,
+                    color = GlassSheetTokens.OnOledMuted(),
                 )
             }
             null -> {
@@ -1563,7 +1563,7 @@ private fun CommunityHubBottomSheet(
                     Text(
                         text = "Verifying your location…",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = GlassSheetTokens.OnOledMuted,
+                        color = GlassSheetTokens.OnOledMuted(),
                     )
                 }
             }
@@ -1725,7 +1725,7 @@ fun ConnectionMarkerSheet(
                         TimeState.ARCHIVE -> MaterialTheme.colorScheme.surfaceVariant
                     },
                 )
-                .border(2.dp, BorderHard, CircleShape),
+                .border(2.dp, clickBorderColor(), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             if (point.shouldPulse) {

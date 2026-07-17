@@ -86,7 +86,7 @@ internal fun ConnectionActionSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
-                .background(GlassSheetTokens.OledBlack)
+                .background(GlassSheetTokens.OledBlack())
                 .padding(bottom = 32.dp),
         ) {
             chatDetails?.let { details ->
@@ -98,12 +98,12 @@ internal fun ConnectionActionSheet(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
-                    color = GlassSheetTokens.OnOled,
+                    color = GlassSheetTokens.OnOled(),
                     modifier = Modifier
                         .padding(horizontal = 20.dp, vertical = 12.dp)
                         .align(Alignment.CenterHorizontally),
                 )
-                HorizontalDivider(color = GlassSheetTokens.GlassBorder.copy(alpha = 0.5f))
+                HorizontalDivider(color = GlassSheetTokens.GlassBorder().copy(alpha = 0.5f))
             }
 
             if (!isGroup) {
@@ -117,7 +117,7 @@ internal fun ConnectionActionSheet(
                         Icon(
                             Icons.Outlined.NotificationsActive,
                             contentDescription = null,
-                            tint = GlassSheetTokens.OnOledMuted,
+                            tint = GlassSheetTokens.OnOledMuted(),
                         )
                     },
                 )
@@ -131,7 +131,7 @@ internal fun ConnectionActionSheet(
                             Icon(
                                 Icons.Default.StarBorder,
                                 contentDescription = null,
-                                tint = GlassSheetTokens.OnOledMuted,
+                                tint = GlassSheetTokens.OnOledMuted(),
                             )
                         },
                     )
@@ -163,7 +163,7 @@ internal fun ConnectionActionSheet(
                             Icon(
                                 Icons.Default.Unarchive,
                                 contentDescription = null,
-                                tint = GlassSheetTokens.OnOledMuted,
+                                tint = GlassSheetTokens.OnOledMuted(),
                             )
                         },
                     )
@@ -176,7 +176,7 @@ internal fun ConnectionActionSheet(
                             Icon(
                                 Icons.Default.Archive,
                                 contentDescription = null,
-                                tint = GlassSheetTokens.OnOledMuted,
+                                tint = GlassSheetTokens.OnOledMuted(),
                             )
                         },
                     )
@@ -191,7 +191,7 @@ internal fun ConnectionActionSheet(
                             Icon(
                                 Icons.Outlined.MarkEmailUnread,
                                 contentDescription = null,
-                                tint = GlassSheetTokens.OnOledMuted,
+                                tint = GlassSheetTokens.OnOledMuted(),
                             )
                         },
                     )
@@ -199,7 +199,7 @@ internal fun ConnectionActionSheet(
 
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 6.dp),
-                    color = GlassSheetTokens.GlassBorder.copy(alpha = 0.35f),
+                    color = GlassSheetTokens.GlassBorder().copy(alpha = 0.35f),
                 )
 
                 BentoGlassOptionRow(
@@ -257,7 +257,7 @@ internal fun ConnectionActionSheet(
                             Icon(
                                 Icons.Outlined.MarkEmailUnread,
                                 contentDescription = null,
-                                tint = GlassSheetTokens.OnOledMuted,
+                                tint = GlassSheetTokens.OnOledMuted(),
                             )
                         },
                     )
@@ -271,7 +271,7 @@ internal fun ConnectionActionSheet(
                         Icon(
                             Icons.AutoMirrored.Filled.Logout,
                             contentDescription = null,
-                            tint = GlassSheetTokens.OnOledMuted,
+                            tint = GlassSheetTokens.OnOledMuted(),
                         )
                     },
                 )

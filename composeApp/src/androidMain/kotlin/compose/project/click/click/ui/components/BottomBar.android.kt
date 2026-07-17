@@ -14,9 +14,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.navigation.NavigationItem
-import compose.project.click.click.ui.theme.BorderHard
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.ui.theme.clickBorderColor
 
 @Composable
 actual fun PlatformBottomBar(
@@ -40,7 +40,7 @@ actual fun PlatformBottomBar(
     val borderWidth = LocalPlatformStyle.current.cardBorderWidth
 
     NavigationBar(
-        modifier = Modifier.border(width = borderWidth, color = BorderHard),
+        modifier = Modifier.border(width = borderWidth, color = clickBorderColor()),
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
     ) {

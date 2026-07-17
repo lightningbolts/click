@@ -24,8 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.ui.theme.BorderHardDark
 import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.ui.theme.clickBorderColor
 
 /**
  * Full-screen explainer shown before the OS location permission dialog.
@@ -76,7 +76,7 @@ fun LocationOnboardingScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(200.dp)
-                    .border(2.dp, BorderHardDark, RoundedCornerShape(20.dp)),
+                    .border(2.dp, clickBorderColor(), RoundedCornerShape(20.dp)),
                 shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.surface,
             ) {

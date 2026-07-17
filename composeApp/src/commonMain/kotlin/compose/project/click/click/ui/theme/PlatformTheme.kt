@@ -6,8 +6,11 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.getPlatform
@@ -25,7 +28,7 @@ data class PlatformStyle(
     val cardBorderWidth: Dp,
     /** Legacy name — unused for fills; cards use opaque surfaces. */
     val glassBackgroundAlpha: Float,
-    /** Legacy name — unused; borders use [BorderHard]. */
+    /** Legacy name — unused; borders use [clickBorderColor]. */
     val glassBorderAlpha: Float,
     val glassBorderPrimaryAlpha: Float,
     val useShadowElevation: Boolean,
@@ -48,6 +51,37 @@ val LocalPlatformStyle = staticCompositionLocalOf {
         pressOffset = 2.dp,
     )
 }
+
+/** App dark-mode flag from [PlatformThemeProvider]; defaults false (light-first). */
+val LocalIsDarkMode = compositionLocalOf { false }
+
+/**
+ * Structural 2dp border: black on light, white on dark.
+ * When [usePrimary] is true, returns brand primary instead.
+ */
+@Composable
+@ReadOnlyComposable
+fun clickBorderColor(usePrimary: Boolean = false): Color {
+    if (usePrimary) return PrimaryBlue
+    val dark = LocalIsDarkMode.current ||
+        MaterialTheme.colorScheme.background.luminance() < 0.5f
+    return if (dark) BorderHardDark else BorderHard
+}
+
+/** Opaque card/sheet fill from the active Material scheme. */
+@Composable
+@ReadOnlyComposable
+fun clickCardSurface(): Color = MaterialTheme.colorScheme.surface
+
+/** On-surface text for cards/sheets. */
+@Composable
+@ReadOnlyComposable
+fun clickSheetOnSurface(): Color = MaterialTheme.colorScheme.onSurface
+
+/** Muted on-surface for secondary sheet labels. */
+@Composable
+@ReadOnlyComposable
+fun clickSheetOnSurfaceMuted(): Color = MaterialTheme.colorScheme.onSurfaceVariant
 
 private val iOSPlatformStyle = PlatformStyle(
     isIOS = true,
@@ -133,6 +167,8 @@ fun PlatformThemeProvider(
         colorScheme = clickColorScheme(isDarkMode),
         typography = clickTypography(),
     ) {
-        PlatformStyleProvider(content)
+        CompositionLocalProvider(LocalIsDarkMode provides isDarkMode) {
+            PlatformStyleProvider(content)
+        }
     }
 }
