@@ -126,7 +126,8 @@ actual fun PlatformMap(
             }
     }
 
-    // Map basemap: ghost → grayscale; dark app → zinc dark style; light app → default color tiles.
+    // Map basemap: ghost → grayscale; dark app → zinc dark style; light app → default color tiles
+    // (PR #44 map_color_android + Track A dark/light policy).
     val mapProperties = remember(ghostMode, canShowMyLocation, isDarkMode) {
         MapProperties(
             // Enabling my-location without runtime permission crashes with SecurityException.
@@ -398,7 +399,7 @@ private fun bitmapDescriptorForLabeledPin(
     return BitmapDescriptorFactory.fromBitmap(bmp)
 }
 
-// Dark map style JSON matching the Glass & Neon aesthetic (Zinc-950 base)
+// Dark map style for app dark mode (Zinc-950 base)
 private const val DARK_MAP_STYLE = """
 [
   {
