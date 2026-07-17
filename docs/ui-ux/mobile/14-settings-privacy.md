@@ -1,0 +1,566 @@
+# 14 — Settings & Privacy
+
+**Scope:** `SettingsScreen`, `SettingsInterestsCard`, `AvailabilitySheet` (modal from Settings), `Edit name` dialog, `PermissionDisplayState` hints, `InterestEditor` / `InterestTaxonomy`.  
+**Source:** `ui/screens/SettingsScreen.kt`, `ui/screens/SettingsInterestsCard.kt`, `ui/screens/PermissionDisplayState.kt`, `ui/components/AvailabilitySheet.kt`, `ui/components/InterestEditor.kt`, `ui/components/InterestTaxonomy.kt`, `viewmodel/AvailabilityViewModel.kt`  
+**Out of scope:** Web, backend APIs, onboarding permission screens (`PermissionsOnboardingScreen`, `LocationOnboardingScreen`), redesign proposals.
+
+---
+
+## ASCII hierarchy
+
+```
+SettingsScreen (tab route "settings")
+├── AppScreenScaffold
+│   ├── PageHeader title: "Settings"
+│   │   └── Search action → UnifiedSearchSheet
+│   └── LazyColumn (14dp section spacing)
+│       ├── Section "Availability"
+│       ├── Section "Notifications"
+│       ├── Section "Sound & microphone"
+│       ├── Section "Your Data"
+│       ├── Section "Privacy & permissions"
+│       ├── Section "Interests"
+│       │   └── SettingsInterestsCard (hidden when userId blank)
+│       ├── Section "Appearance"
+│       └── Section "Account"
+├── AvailabilitySheet (modal)
+├── Remove availability? dialog
+├── Edit name dialog
+└── Local SnackbarHost (avatar, interests, media errors)
+```
+
+**Navigation:** Bottom tab `"Settings"` → route `NavigationItem.Settings.route` (`"settings"`). Global snackbar (app `Scaffold`) handles name-update and notification-save errors via `AppDataManager.transientUserMessages`.
+
+---
+
+## 1. Layout
+
+### Screen shell
+
+| Property | Value |
+|----------|-------|
+| Root | `AdaptiveBackground` + `AppScreenScaffold` |
+| Page title | `"Settings"` |
+| Header | Floating liquid-glass header; lazy scroll content |
+| Section spacing | 14dp between section headers and cards |
+| Search | Header magnifier → `onOpenSearch` → `UnifiedSearchSheet` |
+| Local snackbar | Bottom-centered, 24dp padding — avatar, interests, media errors |
+| Global snackbar | App-level `Scaffold.snackbarHost` — name-update errors, notification save errors |
+
+### Section: Availability
+
+| Element | Position / style |
+|---------|------------------|
+| Section header | `"Availability"` |
+| Card row 1 | Toggle — `"Free currently"`; `EventAvailable` icon tint `PrimaryBlue` when on, else `onSurfaceVariant` |
+| Card row 2 | Full-width button — `"Share intent & timeframe"` |
+| Subsection title | `"Active availability post"` |
+| Per-intent row | Tag label (fallback `"—"`), detail `{timeframe} · {activeUntilLabel}`, actions `"Edit"` / `"Remove"` |
+| `activeUntilLabel` formats | `"Today · HH:MM"`, `"Tomorrow · HH:MM"`, `"M/D · HH:MM"` |
+
+### Section: Notifications
+
+| Element | String |
+|---------|--------|
+| Section header | `"Notifications"` |
+| Toggle 1 | `"Message notifications"` (no subtitle) |
+| Toggle 2 | `"Call alerts"` (no subtitle) |
+
+### Section: Sound & microphone
+
+| Element | String |
+|---------|--------|
+| Section header | `"Sound & microphone"` |
+| Toggle | `"Ambient sound enrichment"` |
+| Subtitle | `"Short mic sample at connect time for a noise category only. No recordings stored."` |
+| Conditional error (mic off + opt-in on) | `"Microphone access is off — enable it in system settings to use ambient enrichment."` |
+
+### Section: Your Data
+
+| Element | String |
+|---------|--------|
+| Section header | `"Your Data"` |
+| Toggle 1 | `"Ghost Mode"` |
+| Subtitle 1 | `"Go off the grid — hide your location, pause matching, and mute presence."` |
+| Active banner (ghost on) | `"Ghost mode is on — location not shared."` |
+| Toggle 2 | `"Location snap"` |
+| Subtitle 2 | `"GPS recorded at moment of tap"` |
+| Toggle 3 | `"Memory Map"` |
+| Subtitle 3 | `"Personal only, never shared"` |
+| Toggle 4 | `"Business insights"` |
+| Subtitle 4 | `"Anonymized venue trends"` |
+
+**Location snap hints** (shown only when snap ON):
+
+| Permission state | Hint string |
+|------------------|-------------|
+| Not set | `"Location isn't enabled yet — tap Allow location in Permissions Hub when you connect."` |
+| Denied | `"Location access is off — open System Settings to capture connection snaps."` |
+| Granted | No hint |
+
+Hint colors: error (denied), amber `#F59E0B` (not set).
+
+**Note:** Unlike onboarding, Settings does not disable Memory Map / Business insights when Location snap is off — all four toggles are independently enabled.
+
+### Section: Privacy & permissions
+
+| Element | String |
+|---------|--------|
+| Section header | `"Privacy & permissions"` |
+| Collapsible hub header | `"Permissions Hub"` |
+| Hub subtitle | `"Review & fix microphone, location, and Bluetooth access."` |
+| Chevron a11y | `"Collapse"` / `"Expand"` |
+
+**Inline panel rows** (`InlinePermissionsPanel`):
+
+| Permission | Title | Description | Badge labels | Primary CTA |
+|------------|-------|-------------|--------------|-------------|
+| Mic | `"Microphone"` | `"Short ambient sample during handshake."` | `"Granted"`, `"Not set"`, `"Denied"`, `"System-managed"` | `"Allow microphone"` or `"Open settings"` |
+| Location | `"Location"` | `"One pin at the moment of a connection."` | same | `"Allow location"` or `"Open settings"` |
+| Bluetooth | `"Bluetooth"` | `"Used for nearby tap handshake."` | `"System-managed"` only | none |
+
+Bottom button: `"System Settings"`.
+
+### Section: Interests
+
+| Element | Detail |
+|---------|--------|
+| Section header | `"Interests"` — always shown |
+| Card | `SettingsInterestsCard` — rendered only when `userId` non-blank; if no user, header appears with no card |
+
+### Section: Appearance
+
+| Element | String |
+|---------|--------|
+| Section header | `"Appearance"` |
+| Toggle | `"Dark mode"` |
+
+### Section: Account
+
+| Element | String / style |
+|---------|----------------|
+| Section header | `"Account"` |
+| Avatar | Tap target; initials fallback `"?"` |
+| Avatar helper | `"Tap to change photo · auto-compressed if needed"` |
+| Name label | `"Name"` |
+| Field labels | `"First name"`, `"Last name"` |
+| Empty name display | `"—"` |
+| Sign out button | `"Sign out"` — iOS: error tint on light error background; Android: solid error fill |
+
+### SettingsInterestsCard layout
+
+| Element | Detail |
+|---------|--------|
+| Card title | `"My Interests"` |
+| Subtitle | `"Select categories and subcategories. Changes power Common Ground with your connections."` |
+| Selected tags | Blue chip pills above editor |
+| Editor | `InterestEditor` — expandable category rows with subcategory chips |
+| Selection count | `"{N} selected"` |
+| Primary button | `"Save Interests"` (dirty) or `"Saved"` (clean) |
+| Save button radius | iOS 12dp / Android 28dp |
+
+### AvailabilitySheet layout (modal)
+
+| Element | Create mode | Edit mode |
+|---------|-------------|-----------|
+| Title | `"Share availability"` | `"Edit availability"` |
+| Body | `"Pick how long you're open, and a short tag so connections know what you're up for."` | `"Time window starts again from now with the length you pick. Update your tag or timeframe below."` |
+| Section label | `"Timeframe"` | `"Timeframe"` |
+| Duration chips | `"15 min"`, `"30 min"`, `"45 min"`, `"1 hour"`, `"90 min"`, `"2 hours"`, `"3 hours"`, `"6 hours"`, `"24 hours"` | same |
+| Field label | `"Intent tag"` | `"Intent tag"` |
+| Placeholder | `"Coffee, study, walk…"` | `"Coffee, study, walk…"` |
+| Char counter | `"{n}/25"` | `"{n}/25"` |
+| Cancel | `"Cancel"` | `"Cancel"` |
+| Submit | `"Post"` | `"Save"` |
+| Submit (loading) | `"Saving…"` | `"Saving…"` |
+
+### Edit name dialog layout
+
+| Element | String |
+|---------|--------|
+| Title | `"Edit name"` |
+| Fields | `"First name"`, `"Last name"` |
+| Save | `"Save"` (enabled only when first name non-blank) |
+| Cancel | `"Cancel"` |
+
+### Remove availability dialog
+
+| Element | String |
+|---------|--------|
+| Title | `"Remove availability?"` |
+| Body | `Stop showing "{label}" as your active availability.` (fallback label: `"this intent"`) |
+| Confirm | `"Remove"` |
+| Dismiss | `"Cancel"` |
+
+---
+
+## 2. Interactive
+
+| Control | Action | Side effects |
+|---------|--------|--------------|
+| **Free currently** toggle | `availabilityViewModel.toggleFreeThisWeek()` | Persists to local + Supabase |
+| **Share intent & timeframe** | Opens `AvailabilitySheet` (reset first) | Sheet modal |
+| **Edit** (active intent) | Opens sheet prefilled | Time window resets from now on save |
+| **Remove** (active intent) | Opens confirm dialog | Deletes intent on confirm |
+| **Message notifications** toggle | `AppDataManager.setMessageNotificationsEnabled` | Reverts + global snackbar on save fail |
+| **Call alerts** toggle | `AppDataManager.setCallNotificationsEnabled` | Reverts + global snackbar on save fail |
+| **Ambient sound enrichment** toggle | Saves opt-in; requests mic permission if enabling | Default loads from token storage (`true`) |
+| **Ghost Mode** toggle | `AppDataManager.toggleGhostMode()` | Session-scoped; halts sync/presence |
+| **Location snap** toggle | `AppDataManager.setConnectionSnapEnabled`; requests location if enabling | Shows permission hints when ON |
+| **Memory Map** toggle | `AppDataManager.setShowOnMapEnabled` | — |
+| **Business insights** toggle | `AppDataManager.setIncludeInInsightsEnabled` | — |
+| **Permissions Hub** row | Expand/collapse inline panel | Chevron toggles `"Collapse"` / `"Expand"` |
+| **Allow microphone** / **Allow location** | OS permission dialogs | — |
+| **Open settings** (denied location) | `openApplicationSystemSettings()` | Deep link to system settings |
+| **System Settings** button | Same deep link | — |
+| Interest category row | Tap toggles category expand | Subcategory chips toggle selection |
+| Subcategory chip | Tap toggles tag in/out of selection | Dirty state enables Save |
+| **Save Interests** | `supabaseRepository.updateUserInterests` + `AppDataManager.applyInterestTags` | Snackbar on success/fail |
+| **Dark mode** toggle | `onToggleDarkMode` → `tokenStorage.saveDarkModeEnabled` | Immediate theme switch |
+| Avatar tap / camera FAB | `mediaPickers.openPhotoLibrary()` | Upload via `AuthRepository.uploadProfilePicture` |
+| **Edit name** pencil | Opens dialog | Save calls `AppDataManager.updateProfileName` |
+| **Sign out** | `authViewModel.signOut()` | Auth cleared, returns to login |
+| Header search | Opens `UnifiedSearchSheet` | — |
+
+**Interest taxonomy filtering:** Only predefined taxonomy tags kept; custom/legacy tags dropped. No custom-interest input on mobile.
+
+---
+
+## 3. States
+
+### Availability section
+
+| State | UI |
+|-------|-----|
+| Loading intents | `"Loading…"` |
+| Empty active list | `"Nothing active yet. Post above to show connections what you're up for and for how long."` |
+| Has active intent(s) | Tag + timeframe + Edit/Remove per row |
+| Delete fail | Inline red error via `formatAvailabilityIntentSaveError` |
+
+### Notifications / Sound / Your Data / Appearance
+
+| State | UI |
+|-------|-----|
+| Default | Toggle reflects persisted preference |
+| Notification save fail | Global snackbar; toggle reverts |
+| Ghost on | Banner `"Ghost mode is on — location not shared."`; icon tint `PrimaryBlue` |
+| Location snap hints | Conditional amber/error helper text |
+
+### Permissions Hub
+
+| Badge | Meaning |
+|-------|---------|
+| `"Granted"` | OS permission granted |
+| `"Not set"` | Not yet requested |
+| `"Denied"` | User denied; shows `"Open settings"` CTA |
+| `"System-managed"` | Bluetooth only; no CTA |
+
+### SettingsInterestsCard
+
+| State | UI |
+|-------|-----|
+| **No userId** | Entire card hidden (early return) |
+| **Loading** | `CircularProgressIndicator` when cache empty, no tags, no error |
+| **Loaded empty** | Editor shown, no tag chips, `"0 selected"`, button `"Saved"` disabled |
+| **Loaded with tags** | Blue chip pills + editor |
+| **Dirty** | Button `"Save Interests"`, enabled |
+| **Saving** | Button shows `CircularProgressIndicator`, disabled |
+| **Save success** | Button → `"Saved"`, snackbar `"Saved {N} interests"`, `loadError` cleared |
+| **Save error** | Inline red `"Could not save interests"` + snackbar with same message |
+| **Load error** | Inline red `"Could not load interests"` |
+
+**Save rules:** No min/max tag count (`minTags=null`, `maxTags=null`). Save enabled only when `tagsDirty && !tagsSaving`.
+
+### Account
+
+| State | UI |
+|-------|-----|
+| Default | Shows name fields or `"—"` |
+| Photo uploading | Avatar updates on success |
+| Photo success | Local snackbar `"Profile photo updated"` |
+| Photo fail | Server msg or `"Could not update profile photo"` |
+| Media blocked | Platform-specific photo access string |
+| Name save | Silent success (optimistic UI); errors via global snackbar |
+| Name save fail | `"Couldn't update your profile. Please try again."` or server message |
+
+### AvailabilitySheet submit errors
+
+| Error | String |
+|-------|--------|
+| Not signed in | `"Sign in to share availability."` |
+| Empty tag | `"Add a short intent tag."` |
+| Migration missing | `"Availability isn't set up on the server yet. Ask your admin to run the database migration."` |
+| Permissions | `"Couldn't save (permissions). Sign out, sign in again, then retry."` |
+| Session | `"Session issue. Sign in again, then retry."` |
+| Generic | `"Could not save. Try again."` |
+| Server | Raw server message (truncated 240 chars) |
+
+### Snackbar / feedback messages (complete)
+
+| Trigger | Message | Host |
+|---------|---------|------|
+| Avatar success | `"Profile photo updated"` | Settings local |
+| Avatar failure | Server msg or `"Could not update profile photo"` | Settings local |
+| Media blocked (Android) | `"Couldn't read that photo. If access was denied, enable Photos & videos permission for Click in Settings."` | Settings local |
+| Media blocked (iOS) | `"Couldn't read that photo. Enable Photos access for Click in Settings."` | Settings local |
+| Interests save success | `"Saved {N} interests"` | Settings local |
+| Interests save fail | Server msg or `"Could not save interests"` | Inline + local |
+| Interests load fail | Server msg or `"Could not load interests"` | Inline only |
+| Name update fail | `"Couldn't update your profile. Please try again."` or server msg | App global |
+| Notification save fail | `"Couldn't save notification settings. Please try again."` or server msg | App global |
+
+---
+
+## 4. Micro-copy
+
+### Screen chrome
+
+| Key | String |
+|-----|--------|
+| Tab label | `"Settings"` |
+| Page title | `"Settings"` |
+| Header search a11y | `"Search"` |
+
+### Availability
+
+| Key | String |
+|-----|--------|
+| Section | `"Availability"` |
+| Free toggle | `"Free currently"` |
+| Share button | `"Share intent & timeframe"` |
+| Subsection | `"Active availability post"` |
+| Loading | `"Loading…"` |
+| Empty | `"Nothing active yet. Post above to show connections what you're up for and for how long."` |
+| Tag fallback | `"—"` |
+| Edit | `"Edit"` |
+| Remove | `"Remove"` |
+| Sheet create title | `"Share availability"` |
+| Sheet edit title | `"Edit availability"` |
+| Sheet create body | `"Pick how long you're open, and a short tag so connections know what you're up for."` |
+| Sheet edit body | `"Time window starts again from now with the length you pick. Update your tag or timeframe below."` |
+| Timeframe label | `"Timeframe"` |
+| Intent tag label | `"Intent tag"` |
+| Intent placeholder | `"Coffee, study, walk…"` |
+| Cancel | `"Cancel"` |
+| Post | `"Post"` |
+| Save | `"Save"` |
+| Saving | `"Saving…"` |
+| Remove dialog title | `"Remove availability?"` |
+| Remove dialog body | `Stop showing "{label}" as your active availability.` |
+| Remove confirm | `"Remove"` |
+
+### Notifications
+
+| Key | String |
+|-----|--------|
+| Section | `"Notifications"` |
+| Messages | `"Message notifications"` |
+| Calls | `"Call alerts"` |
+
+### Sound & microphone
+
+| Key | String |
+|-----|--------|
+| Section | `"Sound & microphone"` |
+| Toggle | `"Ambient sound enrichment"` |
+| Subtitle | `"Short mic sample at connect time for a noise category only. No recordings stored."` |
+| Mic off error | `"Microphone access is off — enable it in system settings to use ambient enrichment."` |
+
+### Your Data
+
+| Key | String |
+|-----|--------|
+| Section | `"Your Data"` |
+| Ghost Mode | `"Ghost Mode"` |
+| Ghost subtitle | `"Go off the grid — hide your location, pause matching, and mute presence."` |
+| Ghost banner | `"Ghost mode is on — location not shared."` |
+| Location snap | `"Location snap"` |
+| Location snap subtitle | `"GPS recorded at moment of tap"` |
+| Memory Map | `"Memory Map"` |
+| Memory Map subtitle | `"Personal only, never shared"` |
+| Business insights | `"Business insights"` |
+| Business insights subtitle | `"Anonymized venue trends"` |
+
+### Privacy & permissions
+
+| Key | String |
+|-----|--------|
+| Section | `"Privacy & permissions"` |
+| Hub title | `"Permissions Hub"` |
+| Hub subtitle | `"Review & fix microphone, location, and Bluetooth access."` |
+| Microphone | `"Microphone"` |
+| Microphone desc | `"Short ambient sample during handshake."` |
+| Location | `"Location"` |
+| Location desc | `"One pin at the moment of a connection."` |
+| Bluetooth | `"Bluetooth"` |
+| Bluetooth desc | `"Used for nearby tap handshake."` |
+| Allow microphone | `"Allow microphone"` |
+| Allow location | `"Allow location"` |
+| Open settings | `"Open settings"` |
+| System Settings | `"System Settings"` |
+| Badge granted | `"Granted"` |
+| Badge not set | `"Not set"` |
+| Badge denied | `"Denied"` |
+| Badge system | `"System-managed"` |
+
+### Interests
+
+| Key | String |
+|-----|--------|
+| Section | `"Interests"` |
+| Card title | `"My Interests"` |
+| Card subtitle | `"Select categories and subcategories. Changes power Common Ground with your connections."` |
+| Selection count | `"{N} selected"` |
+| Save dirty | `"Save Interests"` |
+| Save clean | `"Saved"` |
+| Load error | `"Could not load interests"` |
+| Save error | `"Could not save interests"` |
+| Save success snackbar | `"Saved {N} interests"` |
+
+**Interest taxonomy categories** (emoji + label + subcategories):
+
+| Emoji | Category | Subcategories |
+|-------|----------|---------------|
+| 🎵 | `"Music"` | `"Live Shows"`, `"DJing"`, `"Producing"`, `"Guitar"`, `"Piano"`, `"Singing"`, `"Alto Sax"`, `"Tenor Sax"`, `"Drums"`, `"Violin"`, `"Bass"`, `"Songwriting"` |
+| 🎼 | `"Instruments"` | `"Alto Sax"`, `"Tenor Sax"`, `"Trumpet"`, `"Clarinet"`, `"Cello"`, `"Flute"`, `"Ukulele"`, `"Synth"`, `"Beat Making"` |
+| 🥾 | `"Hiking"` | `"Day Hikes"`, `"Backpacking"`, `"Trail Running"`, `"Rock Climbing"`, `"Scrambling"`, `"Nature Walks"` |
+| ☕ | `"Coffee"` | `"Espresso"`, `"Pour Over"`, `"Cafe Hopping"`, `"Latte Art"`, `"Home Brewing"` |
+| 🎮 | `"Gaming"` | `"PC"`, `"Console"`, `"Indie"`, `"Board Games"`, `"VR"`, `"Competitive"`, `"Co-op"`, `"RPG"`, `"Strategy"` |
+| 📚 | `"Reading"` | `"Fiction"`, `"Non-Fiction"`, `"Sci-Fi"`, `"Fantasy"`, `"Book Clubs"`, `"Poetry"` |
+| 💪 | `"Fitness"` | `"Gym"`, `"Yoga"`, `"CrossFit"`, `"Running"`, `"Swimming"`, `"Martial Arts"`, `"Pilates"`, `"Cycling"` |
+| 💻 | `"Tech"` | `"AI/ML"`, `"Web Dev"`, `"Mobile Dev"`, `"Cybersecurity"`, `"Hardware"`, `"Open Source"`, `"Cloud"`, `"Data Science"` |
+| 🎨 | `"Art"` | `"Painting"`, `"Sketching"`, `"Digital Art"`, `"Sculpture"`, `"Ceramics"`, `"Street Art"`, `"Calligraphy"`, `"Graphic Design"` |
+| 🎬 | `"Film"` | `"Indie Film"`, `"Horror"`, `"Documentaries"`, `"Animation"`, `"Film Making"` |
+| 🍕 | `"Food"` | `"Cooking"`, `"Baking"`, `"Food Trucks"`, `"Fine Dining"`, `"Vegan"`, `"Meal Prep"` |
+| ✈️ | `"Travel"` | `"Backpacking"`, `"Road Trips"`, `"City Breaks"`, `"Solo Travel"`, `"Camping"`, `"Digital Nomad"`, `"Hostels"` |
+| ⚽ | `"Sports"` | `"Basketball"`, `"Soccer"`, `"Baseball"`, `"Football"`, `"Softball"`, `"Ultimate"`, `"Tennis"`, `"Volleyball"`, `"Skiing"`, `"Surfing"` |
+| 🏃 | `"Outdoor Sports"` | `"Running"`, `"Cycling"`, `"Triathlon"`, `"Climbing"`, `"Skiing"`, `"Snowboarding"`, `"Surfing"` |
+| 🤝 | `"Volunteering"` | `"Environment"`, `"Education"`, `"Community"`, `"Animal Welfare"`, `"Mentoring"` |
+| 📸 | `"Photography"` | `"Street"`, `"Portrait"`, `"Landscape"`, `"Film Photography"`, `"Drone"`, `"Concert Photography"`, `"Editing"` |
+| 🧘 | `"Wellness"` | `"Meditation"`, `"Mindfulness"`, `"Breathwork"`, `"Journaling"`, `"Mental Health"` |
+| 🗣️ | `"Languages"` | `"Spanish"`, `"French"`, `"Mandarin"`, `"Japanese"`, `"Korean"`, `"Language Exchange"` |
+| 🎭 | `"Performing Arts"` | `"Theater"`, `"Improv"`, `"Acting"`, `"Stand-up Comedy"`, `"Dance"` |
+| 🐶 | `"Animals"` | `"Dogs"`, `"Cats"`, `"Birds"`, `"Animal Rescue"`, `"Pet Training"` |
+| 🧩 | `"Puzzles & Strategy"` | `"Chess"`, `"Sudoku"`, `"Escape Rooms"`, `"Crosswords"`, `"Go"` |
+
+### Appearance
+
+| Key | String |
+|-----|--------|
+| Section | `"Appearance"` |
+| Toggle | `"Dark mode"` |
+
+### Account
+
+| Key | String |
+|-----|--------|
+| Section | `"Account"` |
+| Avatar helper | `"Tap to change photo · auto-compressed if needed"` |
+| Name label | `"Name"` |
+| First name | `"First name"` |
+| Last name | `"Last name"` |
+| Empty | `"—"` |
+| Sign out | `"Sign out"` |
+| Edit dialog title | `"Edit name"` |
+| Initials fallback | `"?"` |
+
+---
+
+## 5. Flow
+
+### Toggle availability status
+
+```
+Settings tab → Availability section
+  → Toggle "Free currently" → immediate persist
+  → Optional: tap "Share intent & timeframe"
+    → AvailabilitySheet
+    → Pick duration chip → enter intent tag → "Post"
+    → Sheet dismisses → active list refreshes
+```
+
+### Manage active availability post
+
+```
+View "Active availability post"
+  → "Edit" → sheet prefilled → "Save" (resets window from now)
+  → "Remove" → "Remove availability?" dialog → "Remove"
+    → Inline error if delete fails
+```
+
+### Privacy / location
+
+```
+Your Data section
+  → Toggle Ghost Mode / Location snap / Memory Map / Business insights
+  → Enabling Location snap without permission → OS location dialog
+  → Location snap hints guide to Permissions Hub or System Settings
+```
+
+### Permissions Hub
+
+```
+Privacy & permissions → tap "Permissions Hub" to expand
+  → Review badge status per permission
+  → "Allow microphone" / "Allow location" → OS dialogs
+  → Denied location → "Open settings" on row or "System Settings" button
+```
+
+### Edit interests
+
+```
+Interests section → wait for load (spinner if cold)
+  → Expand categories, tap chips to select/deselect
+  → "Save Interests" when dirty
+  → Success snackbar "Saved {N} interests" + button shows "Saved"
+```
+
+### Account
+
+```
+Tap avatar or camera icon → photo library → upload → "Profile photo updated"
+Tap edit pencil → "Edit name" dialog → "Save" (first name required)
+"Sign out" → auth cleared, returns to login
+```
+
+### Appearance
+
+```
+Toggle "Dark mode" → persisted to token storage
+```
+
+---
+
+## 6. A11y
+
+| Element | `contentDescription` / semantics |
+|---------|----------------------------------|
+| Header search | `"Search"` |
+| Permissions chevron | `"Collapse"` / `"Expand"` |
+| Profile photo (image) | `"Profile photo"` |
+| Change photo FAB | `"Change profile photo"` |
+| Edit name button | `"Edit name"` |
+| Sign out icon | `null` (decorative) |
+| Section row icons (toggles, permissions) | `null` |
+| InterestEditor expand icons | `null` |
+| InterestEditor check icons | `null` |
+| `AdaptiveSwitch` | No custom semantics — relies on platform switch behavior |
+
+**Gaps:**
+
+- Toggle rows lack explicit `contentDescription` combining title + checked state.
+- Permission status badges are visual only (icon + colored text, no a11y description).
+- Category rows use clickable `Surface` with emoji + text — no explicit a11y label beyond visible text.
+- Interest chips have no individual semantics.
+
+**Focus order:** Header (title → search) → scrollable sections top-to-bottom → inline dialogs when open.
+
+**Platform notes:** Sign out button colors/elevation differ iOS vs Android. Interest save button corner radius differs iOS (12dp) vs Android (28dp).
+
+---
+
+## Related documents
+
+- [04-onboarding-gates.md](04-onboarding-gates.md) — permission onboarding variants (`"Connection location snap"`, `"Show on my Memory Map"`, etc.)
+- [07-connections-inbox.md](07-connections-inbox.md) — availability bolt on connection rows
+- [11-search.md](11-search.md) — `UnifiedSearchSheet` from header

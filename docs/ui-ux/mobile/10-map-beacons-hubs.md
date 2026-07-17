@@ -1,0 +1,404 @@
+# 10 — Map, Beacons & Hubs
+
+**Scope:** Kotlin Multiplatform mobile — `MapScreen`, `MapDiscoveryLayout` (`MapDiscoveryScreen`), `BeaconDropSheet`, `CreateHubModal`, `JoinCommunityHubSheet`, `CommunityHubBottomSheet`, `BeaconDetailSheet` (`BeaconDetailSheetContent`), `HubChatScreen`, `HubChatSettingsMenu`.  
+**Source:** `ui/screens/MapScreen.kt`, `ui/screens/MapDiscoveryLayout.kt`, `ui/screens/BeaconDropSheet.kt`, `ui/components/CreateHubModal.kt`, `ui/screens/HubChatScreen.kt`, `ui/screens/HubChatSettingsMenu.kt`, `viewmodel/MapViewModel.kt`, `viewmodel/MapLayerFilter.kt`  
+**Out of scope:** Web, backend APIs, redesign.
+
+---
+
+## ASCII hierarchy
+
+```
+MapScreen (organism)
+├── MapState branches: Loading | Error | Success
+├── MapDiscoveryScreen (feed + PiP map)
+│   ├── DiscoveryFloatingHeader — "Discovery", stats, Distance/Recent, search, refresh
+│   ├── LazyColumn feed sections + empty/loading rows
+│   ├── Drop beacon FAB (bottom-start)
+│   └── Map PiP preview + expand (bottom-end)
+├── Fullscreen map overlay (expanded)
+│   └── MapExpandedMapChrome — close, layer filter, drop beacon, zoom
+├── MapBeaconSheetRoot overlays (conditional)
+│   ├── BeaconDropSheetContent
+│   ├── CommunityHubBottomSheet
+│   ├── BeaconDetailSheetContent
+│   └── ProfileBottomSheet (connection pin)
+├── CreateHubModal
+└── SnackbarHost (ghost mode, nudge, beacon errors)
+
+HubChatScreen (separate route)
+├── ChatChannelLoadingView | timeline + composer
+├── Hub settings DropdownMenu (HubChatSettingsMenu rules)
+└── GlassAlertDialog / UnifiedPopupFormDialog (leave, delete, edit)
+
+JoinCommunityHubSheet — mounted from AddClickScreen (not MapScreen)
+CreateHubModal — also reachable from BeaconDropSheet Hub category
+```
+
+---
+
+## 1. Layout
+
+### MapScreen root
+
+| Property | Value |
+|----------|-------|
+| Background | `AdaptiveBackground` → `GlassSheetTokens.OledBlack`; ghost mode adds 0.7 alpha + dark gray wash |
+| Scaffold | Zero content insets; `SnackbarHost` only |
+| Success child | `MapDiscoveryScreen` (not raw full-bleed map as primary surface) |
+
+### MapDiscoveryScreen (`MapDiscoveryLayout.kt`)
+
+| Property | Value |
+|----------|-------|
+| Feed | `LazyColumn`, 10dp row spacing, 20dp horizontal padding |
+| Top inset | Status bar + expanded floating header (~76dp) + 8dp |
+| Bottom inset | Bottom chrome + PiP height (160dp) + FAB gap + 16dp |
+| PiP map | 120×160dp, 16dp radius, glass border, bottom-end above tab bar |
+| Drop beacon FAB | 56dp, `primaryContainer`, bottom-start (left of PiP) |
+| Header | `DiscoveryFloatingHeader` — title `"Discovery"`, subtitle dynamic stats line |
+
+**Stats subtitle template:** `"{liveCount} live · {totalConnections} memories"`
+
+### Discovery feed sections (grouped titles)
+
+| Section title | Source kind |
+|---------------|-------------|
+| `"Community hubs"` | `DiscoveryFeedItem.Hub` |
+| `"Soundtracks"` | `MapBeaconKind.SOUNDTRACK` |
+| `"SOS beacons"` | `MapBeaconKind.SOS` |
+| `"Hazards"` | `MapBeaconKind.HAZARD` |
+| `"Utilities"` | `MapBeaconKind.UTILITY` |
+| `"Study spots"` | `MapBeaconKind.STUDY` |
+| `"Social vibes"` | `MapBeaconKind.SOCIAL_VIBE` |
+| `"Events"` | `MapBeaconKind.EVENT` |
+| `"Beacons"` | `MapBeaconKind.OTHER` |
+
+Hub row subtitle template: `"Ephemeral · {activeUserCount} here"`
+
+### MapExpandedMapChrome
+
+| Control | Position | Size |
+|---------|----------|------|
+| Close (`"Minimize map"`) | Top-start | 44dp liquid glass |
+| Layer filter dropdown | Top-center-right | max 132dp trigger, 240dp menu |
+| Drop beacon (`"Drop beacon"`) | Bottom-start | 56dp |
+| Zoom in / out | Bottom-end column | 48dp each |
+
+### BeaconDropSheet (`BeaconDropSheetContent`)
+
+| Property | Value |
+|----------|-------|
+| Container | `MapBeaconSheetRoot` + `ClickSheetDialogChrome`, OLED black |
+| Padding | 20dp horizontal, 12dp vertical |
+| Category chips | Horizontal `LazyRow` |
+| Hub mode | Name field + category `FlowRow` |
+| Non-hub | Title / soundtrack URL / event picker / duration chips / description |
+| Visibility | `"Who can see this"` chip row + `"Display my name"` switch |
+| CTA | Full-width `Button` — `"Create hub"` or `"Drop pin"` |
+
+### CreateHubModal / JoinCommunityHubSheet
+
+Both use `ClickFormBottomSheet` on `GlassSheetTokens.OledBlack`, 24dp horizontal padding.
+
+### CommunityHubBottomSheet
+
+Headline hub name (`headlineSmall`), active count, distance/geofence row, join CTA or blocker copy, `"Close"` `TextButton`.
+
+### BeaconDetailSheet
+
+Creator toolbar: `"Edit beacon"` / `"Delete beacon"` icon buttons (creator only). Body varies by `MapBeaconKind` (soundtrack card, event RSVP, or community detail).
+
+### HubChatScreen
+
+| Region | Height / notes |
+|--------|----------------|
+| Glass header | 56dp + status bar; back, title, occupant subtitle, ⋮ menu |
+| Tap-to-connect banner | Primary blue surface, centered copy |
+| Lobby banner (when `inLobby`) | `primaryContainer` tint — currently disabled (`inLobby = false`) |
+| Timeline | `ChatMessageTimeline`, hub-neutral mesh |
+| Composer | `HubChatInputBar` — attach + field + gradient send |
+
+---
+
+## 2. Interactive
+
+### Discovery feed
+
+| Gesture | Target | Action |
+|---------|--------|--------|
+| Tap row | Hub / beacon / connection item | Open respective bottom sheet or profile |
+| Tap empty row | `"Nothing nearby yet"` | Opens beacon drop sheet |
+| Pull-to-refresh | List at top | `refreshDiscoveryFeed()` |
+| Tap sort segment / chip | `"Distance"` / `"Recent"` | Re-sorts sections; scrolls to top |
+| Tap search (header) | Magnifier | `onOpenSearch()` → `UnifiedSearchSheet` |
+| Tap refresh (header) | Refresh icon | `refreshDiscoveryFeed()` |
+| Tap FAB | Drop beacon | `showBeaconDropSheet = true` |
+| Tap PiP / expand icon | Map preview | `mapPipExpanded = true` |
+| Back (Android) | When map expanded | Collapse PiP |
+
+### Expanded map
+
+| Gesture | Action |
+|---------|--------|
+| Pin tap | Connection → `ProfileBottomSheet`; beacon/hub → detail sheets |
+| Cluster tap | Zoom to cluster |
+| Layer filter item | Toggle `MapLayerFilter` union |
+| Drop beacon FAB | Same as discovery FAB |
+| Close | Collapse fullscreen map |
+
+### Beacon drop flow
+
+| Control | Action |
+|---------|--------|
+| Category chip | Switches form mode (including `"Hub"` → hub fields) |
+| `"Create hub"` (hub mode) | Closes drop sheet → `CreateHubModal` with prefilled name/category |
+| `"Drop pin"` | `MapViewModel.submitBeaconDrop(...)` |
+| Paste icon (soundtrack) | Paste clipboard into URL field |
+| Visibility chips | Sets `BeaconVisibilityAudience` |
+| Display my name switch | Toggles `showCreatorName` |
+
+### Hub join (map sheet)
+
+| State | Primary action |
+|-------|----------------|
+| `canJoinGeofence == true` | `"Join Hub"` → `onJoinCommunityHub(hubId)` |
+| `false` | No button; copy only |
+| `null` | Spinner + `"Verifying your location…"` |
+| Always | `"Close"` dismisses |
+
+### Beacon detail (creator)
+
+| Action | Result |
+|--------|--------|
+| Edit | `AnimatedClickDialog` `"Edit beacon"` / `"Save"` |
+| Delete | `AnimatedClickDialog` `"Delete beacon?"` / `"Delete"` |
+| Event RSVP | `"RSVP / Sign Up"` or `"Cancel RSVP"` |
+| Play preview | Audio player on soundtrack beacons |
+| `"Play full song"` | Opens original media URL |
+
+### Hub chat settings (`HubChatSettingsMenu`)
+
+| Viewer | Menu items |
+|--------|------------|
+| Participant | `"Leave Hub"` (destructive) |
+| Creator | `"Leave Hub"`, `"Edit Hub"`, `"Delete Hub"` (destructive) |
+
+---
+
+## 3. States
+
+### MapScreen root (`MapState`)
+
+| State | UI |
+|-------|-----|
+| **Loading** | Center `AdaptiveCircularProgressIndicator` |
+| **Error** | `"Error loading map"` + dynamic `message` + `"Retry"` |
+| **Success** | `MapDiscoveryScreen` + optional sheets |
+
+### Discovery feed
+
+| Condition | UI |
+|-----------|-----|
+| Empty + not pending | Single row: `"Nothing nearby yet"` / `"Drop a beacon or join a hub from the map preview."` |
+| Empty + pending | Center `ClickLogoPulse` (72dp) |
+| Has items + pending | Footer pulse |
+| Pull refreshing | Logo indicator at top; rubber-band offset |
+
+### Ghost mode
+
+| Effect | Copy |
+|--------|------|
+| Map desaturated (0.7 alpha) | Snackbar on enable: `"You are off the grid"` |
+| Memories pill (legacy component) | `"Ghost Mode"` vs `"{n} memories"` |
+
+### Geofence join (`CommunityHubBottomSheet`)
+
+| `canJoinGeofence` | Distance label | CTA |
+|-------------------|----------------|-----|
+| `null` | `"Checking location…"` or computed distance | Spinner + `"Verifying your location…"` |
+| `true` | `"{n} m away"` or `"{km} km away"` | `"Join Hub"` enabled |
+| `false` | Same distance rules | `"Move closer to join this hub."` |
+
+### Beacon drop validation / errors
+
+| Trigger | Inline / snackbar copy |
+|---------|------------------------|
+| Missing title | `"Please add a title."` |
+| Missing music URL | `"Please add a music link."` |
+| No GPS | `"Location is required to drop a community beacon. Enable location in Settings and try again."` |
+| Invalid music URL | `"Enter a valid Spotify, Apple Music, or YouTube link."` |
+| Title too long | `"Title must be 80 characters or less."` |
+| Description too long | `"Description must be 500 characters or less."` |
+| Event schedule | `"Pick event start and end times."` / `"Event end must be after start."` / `"Event start must be in the future."` / `"Events can last at most 1 month."` |
+| Remote failure | Dynamic `beaconInsertError` or `beaconDropFailureToast` |
+| Delete/update fail | `"Could not delete beacon"` / `"Could not update beacon"` |
+
+### HubChat composer locks (`HubChatInputBar`)
+
+| Condition | Placeholder | Attach / send |
+|-----------|-------------|---------------|
+| `inLobby` (occupantCount < 3, currently forced off) | `"Chat unlocks when 3+ join"` | Disabled |
+| `outOfBounds` | `"You are no longer at this location"` | Disabled |
+| Normal | `"Message the hub…"` | Enabled when draft non-empty |
+| Sending | — | Send disabled; attach dimmed |
+
+Lobby banner (when active): `"You're the first one here! We'll ping you when others join."`
+
+### Hub dialogs
+
+| Dialog | Title | Body | Confirm |
+|--------|-------|------|---------|
+| Leave | `"Leave hub?"` | `"You will leave this community hub and lose quick access from your Groups list."` | `"Leave"` |
+| Delete (creator) | `"Delete hub?"` | `"Are you sure? This will kick all users and delete the history."` | `"Delete"` |
+| Edit (creator) | `"Edit Hub"` | Fields: `"Hub name"`, `"Category"` | `"Save"` |
+
+---
+
+## 4. Micro-copy
+
+All user-visible strings quoted below.
+
+### Discovery header & feed
+
+- `"Discovery"`
+- `"{liveCount} live · {totalConnections} memories"` (subtitle)
+- `"Distance"`, `"Recent"` (sort)
+- `"Nothing nearby yet"`
+- `"Drop a beacon or join a hub from the map preview."`
+- Section titles: `"Community hubs"`, `"Soundtracks"`, `"SOS beacons"`, `"Hazards"`, `"Utilities"`, `"Study spots"`, `"Social vibes"`, `"Events"`, `"Beacons"`
+- Hub subtitle: `"Ephemeral · {n} here"`
+- Distance suffix: `"{n} m away"`, `"{km} km away"`
+- Beacon TTL examples: `"Expires in {n} min"`, `"Expires in 1 hour"`, `"Expires in {n} hours"`, `"Expires in 1 day"`, `"Expires in {n} days"`, `"Active beacon"`, `"Scheduled event"`
+
+### Map chrome & layers
+
+- `"Drop beacon"` (FAB content description)
+- `"Expand map"`, `"Minimize map"`
+- `"Zoom in"`, `"Zoom out"`
+- Layer menu: `"All"`, `"My Connections"`, `"Soundtracks"`, `"Alerts & Utilities"`, `"Events"`, `"Social Vibes"`, `"Community Hubs"`
+- Compact trigger labels: `"All"`, `"Conn"`, `"Audio"`, `"Alerts"`, `"Social"`, `"Hubs"`, `"{n} on"`, `"—"`
+- Grass nudge overlay: `"Looking for the right vibe? Try dropping a 'Looking for Coffee' intent and let the map come to you. Put your phone in your pocket and we'll vibrate when a match is nearby."`
+
+### Ghost mode & errors
+
+- `"You are off the grid"`
+- `"Error loading map"`
+- `"Retry"`
+- `"Nudge sent to {name}!"`, `"Failed to send nudge"`
+
+### BeaconDropSheet
+
+- `"Drop a community beacon"`
+- Categories: `"Soundtrack"`, `"Hazard"`, `"Utility"`, `"SOS"`, `"Study"`, `"Event"`, `"Hub"`
+- `"Hub name"` (placeholder)
+- Hub categories (chips): `"General"`, `"Music"`, `"Study"`, `"Sports"`, `"Food"`, `"Nightlife"`, `"Gaming"`, `"Tech"`, `"Art"`, `"Fitness"`, `"Networking"`, `"Party"`
+- `"Spotify, Apple Music, or YouTube link"` (placeholder)
+- `"Paste link"` (content description)
+- `"Title (max 80)"`, `"Description (optional, max 500)"`
+- `"Visible for"` + duration chips: `"15 min"`, `"30 min"`, `"45 min"`, `"1 hour"`, `"90 min"`, `"2 hours"`, `"3 hours"`, `"6 hours"`, `"24 hours"`, `"2 days"` … `"7 days"`
+- `"Who can see this"`: `"Everyone"`, `"Connections only"`, `"Core connections only"`
+- `"Display my name"` / `"Show your name on the map pin for others nearby."`
+- Validation: `"Please add a title."`, `"Please add a music link."`
+- CTAs: `"Create hub"`, `"Drop pin"`
+
+### CreateHubModal
+
+- `"Create community hub"`
+- `"Ephemeral 24h space — GPS anchors the venue ring."`
+- `"Hub name"` (label)
+- `"Category"`, `"Custom…"`, `"Custom category"` (label)
+- `"Locking GPS…"`
+- `"Cancel"`, `"Create hub"`
+- Errors: `"Could not read GPS for this hub."`, `"Hub created but id missing."`, `"Could not create hub ({status})"`, `"Could not create hub"`
+
+### JoinCommunityHubSheet
+
+- `"Join community hub"`
+- `"Enter the hub code shown at the venue. You must be within range for the location check."`
+- `"Hub code"` (label), `"e.g. local_point"` (placeholder)
+- `"Cancel"`, `"Join hub"`
+
+### CommunityHubBottomSheet
+
+- `"{activeUserCount} active nearby"`
+- `"Checking location…"`, `"Distance unavailable"`
+- `"Join Hub"`, `"Move closer to join this hub."`, `"Verifying your location…"`, `"Close"`
+
+### BeaconDetailSheet
+
+- `"Edit beacon"`, `"Delete beacon"` (content descriptions)
+- `"Delete beacon?"` / `"This removes the pin from the map for everyone nearby."` / `"Delete"`
+- `"Edit beacon"` / `"Save"` / `"Description"` (field label)
+- `"Hosted by {name}"`, `"Shared by {name}"`
+- `"Created · {datetime}"`, `"Expires · {datetime}"`, `"Unknown"`
+- `"No description"`
+- Distance: `"{n} m away"`, `"{whole}.{frac} km away"`
+- Soundtrack: `"Soundtrack"` (type header), `"Play preview"` / `"Pause preview"`, `"Play full song"`
+- Event: `"Attendees"`, `"Be the first to RSVP."`, `"RSVP / Sign Up"`, `"Cancel RSVP"`, `"Saving in the background..."`, `"Could not update RSVP. Please try again."`
+
+### HubChatScreen
+
+- `"Back"`, `"Hub settings"` (content descriptions)
+- Occupant subtitle: `"{n} person here"` / `"{n} people here"` (lobby) or `"{n} people in this hub"`
+- Banner: `"See someone interesting? Go tap phones to make a permanent connection."`
+- Lobby: `"You're the first one here! We'll ping you when others join."`
+- Composer placeholders: `"Chat unlocks when 3+ join"`, `"You are no longer at this location"`, `"Message the hub…"`
+- Attach menu: `"Attach"`, `"Photo library"`, `"Take photo"`, `"Send"`
+- Settings: `"Leave Hub"`, `"Edit Hub"`, `"Delete Hub"`
+- Download failure: `"Download not available in hub chat."`
+
+### Profile sheet from map pin (badges)
+
+- `"Live now"`, `"Recent"`, `"Memory"`
+- Fallback name: `"Connection"`
+
+---
+
+## 5. Flow
+
+```mermaid
+flowchart TD
+    A[Map tab] --> B{MapState}
+    B -->|Loading| C[Spinner]
+    B -->|Error| D[Retry]
+    B -->|Success| E[Discovery feed + PiP]
+    E --> F[Tap FAB / empty row]
+    F --> G[BeaconDropSheet]
+    G -->|Hub category| H[CreateHubModal]
+    G -->|Other| I[Drop pin → map refresh]
+    H --> J[onJoinCommunityHub]
+    E --> K[Tap hub row / pin]
+    K --> L[CommunityHubBottomSheet]
+    L -->|Join + in geofence| J
+    J --> M[HubChatScreen]
+    E --> N[Tap beacon]
+    N --> O[BeaconDetailSheet]
+    E --> O2[Expand map]
+    O2 --> P[Layer filter / zoom / drop]
+```
+
+**Join hub alternate path:** Add Click → `JoinCommunityHubSheet` → enter hub code → geofence gate → `HubChatScreen`.
+
+**Leave / delete hub:** HubChat ⋮ menu → confirm dialog → pop to Connections or hub removed.
+
+---
+
+## 6. A11y
+
+| Element | Behavior |
+|---------|----------|
+| Drop beacon FAB | `contentDescription = "Drop beacon"` |
+| Map expand / minimize | `"Expand map"`, `"Minimize map"` |
+| Zoom controls | `"Zoom in"`, `"Zoom out"` |
+| Soundtrack preview | `"Play preview"` / `"Pause preview"` toggle |
+| Beacon creator actions | `"Edit beacon"`, `"Delete beacon"` |
+| Hub chat back / menu | `"Back"`, `"Hub settings"` |
+| Layer filter | Chip shows selected state via check icon in menu items |
+| Discovery rows | Title + subtitle + distance line; icon decorative (`contentDescription = null`) |
+| Ghost mode snackbar | Short duration; map still operable but visually muted |
+| Geofence blocked join | Error copy exposed as text (not icon-only) |
+| Dialogs | `GlassAlertDialog` / `AnimatedClickDialog` — title + body + labeled buttons |
+| Join hub sheet | Single-line code field with `"Hub code"` label |
+
+**Gaps:** Discovery feed rows do not merge title/subtitle into a single semantics node. Layer filter trigger uses truncated label (`"Conn"`) which may be unclear to screen readers — full labels exist only in the dropdown menu.
