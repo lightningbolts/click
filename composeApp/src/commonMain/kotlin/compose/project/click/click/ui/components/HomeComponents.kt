@@ -148,7 +148,7 @@ fun RecentClickCard(name: String, time: String, location: String) {
 }
 
 /**
- * Time-of-day greeting that replaces the floating "Home" title.
+ * Time-of-day greeting in the same LiquidGlass header island used on other tab roots.
  */
 @Composable
 fun HomeGreetingBlock(
@@ -163,20 +163,10 @@ fun HomeGreetingBlock(
         in 17..21 -> "Good evening"
         else -> "Hello"
     }
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Text(
-            text = "$salutation, $firstName.",
-            style = MaterialTheme.typography.headlineLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Text(
-            text = subtitle,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+    Box(modifier = modifier.fillMaxWidth()) {
+        LiquidGlassPageHeader(
+            title = "$salutation, $firstName.",
+            subtitle = subtitle,
         )
     }
 }

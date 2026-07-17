@@ -175,6 +175,7 @@ import compose.project.click.click.ui.chat.ChatBubblePhotoContent // pragma: all
 import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatWarmLoadingView // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionItem // pragma: allowlist secret
+import compose.project.click.click.ui.chat.RememberMeStrip // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ForwardDialog // pragma: allowlist secret
 import compose.project.click.click.ui.chat.VibeCheckBanner // pragma: allowlist secret
 import compose.project.click.click.ui.chat.GroupMembersPickerContext // pragma: allowlist secret
@@ -405,6 +406,13 @@ fun ConnectionsListView(
     val activeOneToOneChats = remember(activeChats) {
         activeChats.sortedByDescending { connectionListActivityTs(it) }
     }
+    val rememberMeChats = remember(activeChats, coreConnectionIds) {
+        activeChats
+            .filter { it.groupClique == null && it.connection.id in coreConnectionIds }
+            .sortedByDescending { connectionListActivityTs(it) }
+    }
+    val showRememberMeStrip =
+        selectedTabIndex == 0 && searchQuery.isBlank() && rememberMeChats.isNotEmpty()
 
     LaunchedEffect(currentUserId, viewerAvailabilityBubbles, activeOneToOneChats) {
         val userId = currentUserId?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
@@ -726,6 +734,15 @@ fun ConnectionsListView(
                             ),
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
+                            if (showRememberMeStrip) {
+                                item(key = "remember_me_strip") {
+                                    RememberMeStrip(
+                                        chats = rememberMeChats,
+                                        onChatSelected = onChatSelected,
+                                        modifier = Modifier.padding(bottom = 4.dp),
+                                    )
+                                }
+                            }
                             // ── Active community hubs (shown in Groups tab) ─────
                             if (selectedTabIndex == 1 && activeHubs.isNotEmpty()) {
                                 items(

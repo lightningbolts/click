@@ -316,4 +316,27 @@ class ChatFormattingTest {
     }
 
     // endregion
+
+    // region formatRememberMeBadge
+
+    @Test
+    fun rememberMeBadge_nullTimestampReturnsNull() {
+        assertEquals(null, formatRememberMeBadge(null, nowMs = 1_000_000L))
+    }
+
+    @Test
+    fun rememberMeBadge_nearNowIsOneMinute() {
+        assertEquals("1m", formatRememberMeBadge(999_000L, nowMs = 1_000_000L))
+    }
+
+    @Test
+    fun rememberMeBadge_compactBucketsWithoutAgo() {
+        val nowMs = 1_000_000_000L
+        assertEquals("5m", formatRememberMeBadge(nowMs - 5L * 60_000L, nowMs = nowMs))
+        assertEquals("12h", formatRememberMeBadge(nowMs - 12L * 3_600_000L, nowMs = nowMs))
+        assertEquals("2d", formatRememberMeBadge(nowMs - 2L * 86_400_000L, nowMs = nowMs))
+        assertEquals("3w", formatRememberMeBadge(nowMs - 21L * 86_400_000L, nowMs = nowMs))
+    }
+
+    // endregion
 }

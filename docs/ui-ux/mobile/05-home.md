@@ -65,7 +65,7 @@ HomeScreen (organism)
 | Background | `MaterialTheme.colorScheme.background` |
 | Horizontal padding | 20dp |
 | Section spacing | 24dp (`CardSpacing`) |
-| Header | **No** floating `"Home"` title — `AppScreenScaffold(showFloatingHeader = false)`; greeting lives in feed |
+| Header | No floating `"Home"` title — greeting is in-feed via `HomeGreetingBlock` → `LiquidGlassPageHeader` (same bordered island as other screens) |
 | List | `LazyColumn` when `HomeState.Success` |
 | Bottom chrome | Transparent nav overlay + `rememberBottomChromePadding()` |
 
@@ -73,7 +73,7 @@ HomeScreen (organism)
 
 | Component | Role on Home |
 |-----------|----------------|
-| `HomeGreetingBlock` | Time-of-day salutation + first name + `"Ready to connect today?"` |
+| `HomeGreetingBlock` | Time-of-day salutation + first name + `"Ready to connect today?"` inside `LiquidGlassPageHeader` |
 | `HomeSearchPill` | Bordered pill → `onOpenSearch()` |
 | `FeaturedEventSection` / `FeaturedEventCard` | Upcoming **event** hero from `homeEventReminders.firstOrNull()` |
 | `ExploreNearbyBeaconsSection` | Dynamic tiles from `prefetchedMapBeacons` + hubs (count > 0 only) |

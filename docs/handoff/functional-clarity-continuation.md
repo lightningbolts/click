@@ -141,7 +141,7 @@ These are **layout / IA** workstreams, not bugfixes. Use design-asset HTML for h
 |--------|---------------|---------------------|--------|
 | **Home IA** | `docs/design-assets/home/` | `HomeScreen` | **Landed (2026-07-17):** greeting first; Featured Event; I'm down for → Explore → Poll-Pair/archive; reconnect with inbox avatars; insights columns; no redundant location pins; search caret fixes |
 | **Settings grouping** | `settings/` | `SettingsScreen` | **Landed (2026-07-17):** profile header first; Alerts + Privacy & data clusters; standalone Sign out |
-| **Inbox density** | `chat/` + `add_click_fixed_navigation/` | `ConnectionsListView` | Card stack / dense bordered list; rolodex name stack |
+| **Inbox density** | `chat/` + `add_click_fixed_navigation/` | `ConnectionsListView` | **Partial (2026-07-17):** Remember Me strip for Core 1:1s landed; list row spacing left as-is (no dense stack / overlapping rolodex cards) |
 | **Add Click hero** | `add_click_streamlined_header/` | `AddClickScreen` | Large Tap-to-Connect hero |
 | **Events discovery** | `events_discovery_with_real_mini_map/` | `MapDiscoveryLayout` | Events-for-you + mini-map PiP |
 | **Full-map events** | `map_events_full_screen_map/` | `MapScreen` | Full-map + event pin sheet |
@@ -242,8 +242,9 @@ Read first:
 - [x] P1 #4 events list/map parity **code** landed (device verify still open).
 - [x] Code audit residuals hardened: client 503 recover, confirm dedup, Keychain -50, 1:1 Message CTA, hazard pin metrics (2026-07-17).
 - [x] Track C **Home IA** layout + docs landed (2026-07-17); device smoke still open.
+- [x] Track C **Inbox Remember Me** strip (Core 1:1s) landed (2026-07-17); list spacing left as-is; device smoke still open.
 - [ ] **Device verification** for Track B / B+ P0–P1 rows (incl. #4).
 - [ ] Smoke checklist on Android + iOS.
 - [ ] Remaining Track C layout redesigns completed or explicitly scheduled.
 
-**Next:** device smoke for chat timeline + transparent nav + Track B P0s + events (#4) + Home IA visual confirm; then next Track C screen.
+**Next:** device smoke for chat timeline + transparent nav + Track B P0s + events (#4) + Home IA + Remember Me visual confirm; then next Track C screen (Add Click hero).

@@ -1,10 +1,12 @@
 # 07 — Connections Inbox (Clicks)
 
-**Scope:** `ConnectionsScreen`, `ConnectionsListView`, `ConnectionItem`, `ConnectionsTabControls` / `ConnectionsFloatingHeader`, `ConnectionActionSheet`, `ConnectionSheetDialogs`, verified-click FAB, hub feed rows.  
-**Source:** `ui/screens/ConnectionsScreen.kt`, `ConnectionsListView.kt`, `ui/chat/ConnectionItem.kt`, `ui/components/ConnectionsTabControls.kt`, `ui/chat/ConnectionActionSheet.kt`, `ui/chat/ConnectionSheetDialogs.kt`  
+**Scope:** `ConnectionsScreen`, `ConnectionsListView`, `ConnectionItem`, `RememberMeStrip`, `ConnectionsTabControls` / `ConnectionsFloatingHeader`, `ConnectionActionSheet`, `ConnectionSheetDialogs`, verified-click FAB, hub feed rows.  
+**Source:** `ui/screens/ConnectionsScreen.kt`, `ConnectionsListView.kt`, `ui/chat/ConnectionItem.kt`, `ui/chat/RememberMeStrip.kt`, `ui/components/ConnectionsTabControls.kt`, `ui/chat/ConnectionActionSheet.kt`, `ui/chat/ConnectionSheetDialogs.kt`  
 **Out of scope:** Web, backend, full `ChatView` spec (see [08-chat.md](08-chat.md)).
 
 **Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: `click/docs/design-assets/chat/`.
+
+**Track C (2026-07-17):** Remember Me horizontal strip for Core-pinned 1:1s on Active tab; list row spacing left unchanged.
 
 ---
 
@@ -19,6 +21,10 @@ ConnectionsScreen (organism — tab shell + chat overlay)
 │   │   ├── ConnectionsSegmentBar: Active | Groups | Archived
 │   │   └── compact: ConnectionsTabFilterMenuChip dropdown
 │   ├── LazyColumn
+│   │   ├── RememberMeStrip (Active tab, no search, Core 1:1s non-empty)
+│   │   │   ├── label: "Remember Me"
+│   │   │   ├── LazyRow chips (avatar + time badge + first name)
+│   │   │   └── label: "Clicks"
 │   │   ├── ActiveHubFeedRow[] (Groups tab only)
 │   │   └── ConnectionItem[] per chat
 │   ├── Empty / Loading / Error states
@@ -56,6 +62,20 @@ ConnectionsScreen (organism — tab shell + chat overlay)
 | FAB | 56dp `PrimaryBlue`, bottom-end above nav (`rememberFabAboveNavPadding`) |
 | Toast | `GlassToastHost` left of FAB on Active tab |
 
+### RememberMeStrip
+
+| Property | Value |
+|----------|-------|
+| Membership | Core-pinned **1:1** only (`connection.id in coreConnectionIds`, `groupClique == null`) |
+| Visibility | Active tab; hide when searching or core empty |
+| Sort | Activity desc (`connectionListActivityTs`) |
+| Avatar | 56dp `ConnectionListUserAvatarFace` in `CoreConnectionAvatarFrame`; 2dp `clickBorderColor()` |
+| Time chip | Primary fill; compact `formatRememberMeBadge` (`12h` / `2d` / …); omit if no last activity |
+| Name | First name (`firstName` or first token of display name) |
+| Labels | `"Remember Me"` then optional `"Clicks"` above the list |
+| Hit target | Circular on avatar (`CoreConnectionAvatarFrame` + `clip(CircleShape)`); name label separately tappable |
+| Duplication | Core people still appear in `ConnectionItem` rows below |
+
 ### ConnectionItem
 
 | Property | Value |
@@ -78,6 +98,7 @@ Three equal segments: `"Active ({n})"`, `"Groups ({n})"`, `"Archived ({n})"`. Co
 
 | Gesture | Target | Action |
 |---------|--------|--------|
+| Tap chip | `RememberMeStrip` chip | `onChatSelected(chatId)` |
 | Tap row | `ConnectionItem` | `onChatSelected(chatId)` |
 | Long-press row | `ConnectionItem` | Open `ConnectionActionSheet` |
 | Tap 1:1 avatar | Avatar | `TabbedUserProfileSheet` |

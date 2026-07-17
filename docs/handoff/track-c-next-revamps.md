@@ -2,13 +2,25 @@
 
 **Date:** 2026-07-17  
 **Product:** Click KMP mobile (`click/composeApp`)  
-**Previous chat:** Track C Settings grouping (landed)  
+**Previous chat:** Track C Inbox Remember Me strip (landed)
 
 Read this before writing code. Prefer **one primary revamp per chat**.
 
 ---
 
 ## 0. Just finished (do not redo)
+
+### Inbox Remember Me — landed (partial Inbox density)
+
+- Active-tab **Remember Me** horizontal strip: Core-pinned **1:1** only (`coreConnectionIds`)
+- Chips: 56dp avatar + compact time badge (`formatRememberMeBadge`) + first name; tap opens chat
+- Section labels **Remember Me** / **Clicks**; hide when searching or core empty
+- Core people still appear in the normal list; **row spacing / ConnectionItem chrome unchanged**
+- Not done: overlapping rolodex card stack from `add_click_fixed_navigation/`
+
+**Docs:** `docs/ui-ux/mobile/07-connections-inbox.md`, handoff §3 Inbox row.
+
+**Still open:** device smoke for Remember Me visual confirm; Track B `[KNOWN-N]` device verify.
 
 ### Settings grouping — landed
 
@@ -49,15 +61,15 @@ Source of truth for prior work: [`functional-clarity-continuation.md`](functiona
 
 | Priority | Revamp | Mock / source | Screen | Intent |
 |----------|--------|---------------|--------|--------|
-| **1** | **Inbox density** | `chat/` + `add_click_fixed_navigation/` | `ConnectionsListView` | Card stack / dense bordered list; rolodex name stack |
-| **2** | **Add Click hero** | `add_click_streamlined_header/` | `AddClickScreen` | Large Tap-to-Connect hero |
-| **3** | **Events discovery** | `events_discovery_with_real_mini_map/` | `MapDiscoveryLayout` | Events-for-you + mini-map PiP |
-| **4** | **Full-map events** | `map_events_full_screen_map/` | `MapScreen` | Full-map + event pin sheet |
-| **5** | **Event detail** | `event_details_expanded_dark/` | Beacon/event sheets | Expanded detail over map |
+| **1** | **Add Click hero** | `add_click_streamlined_header/` | `AddClickScreen` | Large Tap-to-Connect hero |
+| **2** | **Events discovery** | `events_discovery_with_real_mini_map/` | `MapDiscoveryLayout` | Events-for-you + mini-map PiP |
+| **3** | **Full-map events** | `map_events_full_screen_map/` | `MapScreen` | Full-map + event pin sheet |
+| **4** | **Event detail** | `event_details_expanded_dark/` | Beacon/event sheets | Expanded detail over map |
+| Later | Inbox dense / rolodex stack | `add_click_fixed_navigation/` | `ConnectionsListView` | Only if product wants overlapping cards (spacing currently intentional) |
 
 Optional later (after related device OK): Nav chrome v2, Chat composer polish, Profile memories IA — see handoff §3.
 
-**Suggested default for next chat:** Inbox density (highest-traffic remaining surface).
+**Suggested default for next chat:** Add Click hero.
 
 ---
 
@@ -68,13 +80,12 @@ Continue Click Track C using:
 click/docs/handoff/track-c-next-revamps.md
 and click/docs/handoff/functional-clarity-continuation.md
 
-Home IA + Settings grouping are DONE — do not redo unless regressing.
+Home IA + Settings grouping + Inbox Remember Me are DONE — do not redo unless regressing.
 Track A done. Track B code landed — device verify only; do not false-pass [KNOWN-N].
 
 Scope for THIS chat (pick one primary):
-1) Inbox density — docs/design-assets/chat/ + add_click_fixed_navigation/ → ConnectionsListView
-2) Add Click hero — docs/design-assets/add_click_streamlined_header/ → AddClickScreen
-3) Events discovery / full-map / event detail — map stack (say which)
+1) Add Click hero — docs/design-assets/add_click_streamlined_header/ → AddClickScreen
+2) Events discovery / full-map / event detail — map stack (say which)
 
 Rules:
 - Do NOT edit the neo-brutalist plan file under .cursor/plans.
@@ -95,7 +106,7 @@ Rules:
 | Prior handoff | `docs/handoff/functional-clarity-continuation.md` |
 | Home (done) | `docs/ui-ux/mobile/05-home.md` |
 | Settings (done) | `docs/ui-ux/mobile/14-settings-privacy.md`, `docs/design-assets/settings/` |
-| Inbox | `docs/ui-ux/mobile/07-connections-inbox.md`, `docs/design-assets/chat/` |
+| Inbox (Remember Me done) | `docs/ui-ux/mobile/07-connections-inbox.md`, `docs/design-assets/chat/` |
 | Add Click | `docs/ui-ux/mobile/06-connect-handshake.md`, `docs/design-assets/add_click_streamlined_header/` |
 | Map / events | `docs/ui-ux/mobile/10-map-beacons-hubs.md`, design-assets `events_*` / `map_events_*` |
 | Regression | `docs/regression-testing/00-INDEX.md` (§0 gates) |
@@ -107,4 +118,5 @@ Rules:
 - [x] Home polish (order, insights, location pin, verified-click search) shipped
 - [x] Docs updated for Home order + verified-click search
 - [x] Settings grouping (profile header + preference clusters + standalone Sign out) shipped
+- [x] Inbox Remember Me strip (Core 1:1s) shipped; list spacing left as-is
 - [ ] Next Track C revamp started in a dedicated chat using §2 prompt
