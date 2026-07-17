@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Surface
@@ -108,7 +109,7 @@ internal fun ConnectionPickerSearchBar(
             .fillMaxWidth()
             .height(PickerSearchBarHeight),
         shape = RoundedCornerShape(14.dp),
-        color = Color.White.copy(alpha = 0.08f),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
     ) {
         TextField(
             modifier = Modifier.fillMaxSize(),
@@ -292,11 +293,12 @@ internal fun ConnectionMemberPickerSheet(
         hideKeyboard()
         focusManager.clearFocus()
     }
-    val filteredCandidates = remember(candidates, searchQuery) {
-        candidates.filter { matchesConnectionPickerSearch(it, searchQuery) }
+    val uniqueCandidates = remember(candidates) { candidates.distinctBy { it.id } }
+    val filteredCandidates = remember(uniqueCandidates, searchQuery) {
+        uniqueCandidates.filter { matchesConnectionPickerSearch(it, searchQuery) }
     }
-    val selectedUsers = remember(candidates, selectedIds) {
-        candidates.filter { it.id in selectedIds }
+    val selectedUsers = remember(uniqueCandidates, selectedIds) {
+        uniqueCandidates.filter { it.id in selectedIds }
     }
     val onSurface = GlassSheetTokens.OnOled()
     val onVariant = GlassSheetTokens.OnOledMuted()
@@ -406,10 +408,11 @@ internal fun ConnectionMemberPickerSheet(
                         .fillMaxWidth()
                         .weight(1f, fill = true),
                 ) {
-                    items(
+                    itemsIndexed(
                         items = filteredCandidates,
-                        key = { it.id },
-                    ) { user ->
+                        // distinctBy above; index in key guards any residual id collision.
+                        key = { index, user -> "picker-${user.id}-$index" },
+                    ) { _, user ->
                         val selected = user.id in selectedIds
                         val enabled = selected ||
                             (eligibilityReady && (eligibilityMask.isEmpty() || eligibilityMask[user.id] == true))

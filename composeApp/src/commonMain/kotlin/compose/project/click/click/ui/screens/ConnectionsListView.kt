@@ -459,7 +459,8 @@ fun ConnectionsListView(
     }
     val connectionsDisplayLimit by viewModel.connectionsDisplayLimit.collectAsState()
     val displayedChats = remember(filteredChats, connectionsDisplayLimit, searchQuery) {
-        if (searchQuery.isNotBlank()) filteredChats else filteredChats.take(connectionsDisplayLimit)
+        val page = if (searchQuery.isNotBlank()) filteredChats else filteredChats.take(connectionsDisplayLimit)
+        page.distinctBy { it.connection.id }
     }
     LaunchedEffect(connectionsLazyListState, filteredChats.size, connectionsDisplayLimit, searchQuery) {
         if (searchQuery.isNotBlank()) return@LaunchedEffect
@@ -833,7 +834,8 @@ fun ConnectionsListView(
     }
 
     val cliquePickerCandidates = remember(verifiedCliquePickableOneToOneChats) {
-        verifiedCliquePickableOneToOneChats.map { it.otherUser }
+        // Duplicate 1:1 rows for the same peer must not enter the picker LazyColumn.
+        verifiedCliquePickableOneToOneChats.map { it.otherUser }.distinctBy { it.id }
     }
     val canCreateVerifiedClique = cliqueSheetEligibilityReady &&
         selectedCliqueFriendIds.isNotEmpty() &&

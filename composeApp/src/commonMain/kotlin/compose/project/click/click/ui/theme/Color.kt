@@ -28,12 +28,14 @@ val OnSurfaceVariant = Color(0xFF4A4455)
 val TextSecondary = Color(0xFF4A4455)
 
 // ============================================================================
-// Dark Mode — opaque inverse (no glass)
+// Dark Mode — deeper gray (not pure black)
 // ============================================================================
-val BackgroundDark = Color(0xFF1A1C1C)
-val SurfaceDark = Color(0xFF2F3131) // inverse-surface
+val BackgroundDark = Color(0xFF101212)
+val SurfaceDark = Color(0xFF1A1C1C) // raised surface over background
 val OnSurfaceDark = Color(0xFFF0F1F1)
 val GlassDark = SurfaceDark // legacy alias → opaque
+val SurfaceContainerDark = Color(0xFF242626)
+val SurfaceVariantDark = Color(0xFF2A2C2C)
 
 // ============================================================================
 // Hard borders & structural tokens (replace glass vocabulary)

@@ -418,36 +418,54 @@ fun ChatView(
         }
     }
 
-    // Newest-first + reverseLayout pins latest messages next to the composer; snap to index 0 after layout
+    // Newest-first + reverseLayout pins latest messages next to the composer.
+    // Snap only on open and when a peer message arrives while already near the bottom —
+    // never on every size change (load-older / prefetch merge), which caused lag + teleports.
     val successMessages = (chatMessagesState as? ChatMessagesState.Success)?.messages.orEmpty()
-    val scrollAnchor = successMessages.lastOrNull()?.message?.id to successMessages.size
-    LaunchedEffect(listState, hasMoreOlderMessages, isLoadingOlderMessages) {
+    val peerNewestMessageId = successMessages.lastOrNull()?.takeIf { !it.isSent }?.message?.id
+    var initialTimelineScrollDone by remember(chatId) { mutableStateOf(false) }
+
+    LaunchedEffect(listState) {
         snapshotFlow {
             val info = listState.layoutInfo
             val total = info.totalItemsCount
             val maxVisibleIndex = info.visibleItemsInfo.maxOfOrNull { it.index } ?: 0
-            maxVisibleIndex to total
-        }.collect { (maxVisibleIndex, total) ->
+            Triple(maxVisibleIndex, total, listState.firstVisibleItemIndex)
+        }.collect { (maxVisibleIndex, total, firstVisible) ->
             if (total > 0 &&
                 hasMoreOlderMessages &&
                 !isLoadingOlderMessages &&
+                firstVisible > 0 &&
                 maxVisibleIndex >= total - 3
             ) {
                 viewModel.loadOlderMessages()
             }
         }
     }
-    LaunchedEffect(chatId, scrollAnchor) {
-        if (successMessages.isEmpty()) return@LaunchedEffect
-        repeat(50) {
+
+    suspend fun scrollChatTimelineToLatest() {
+        repeat(8) {
             if (listState.layoutInfo.totalItemsCount > 0) {
                 suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = true
                 listState.scrollToItem(0)
-                delay(120)
+                delay(48)
                 suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = false
-                return@LaunchedEffect
+                return
             }
             delay(16L)
+        }
+    }
+
+    LaunchedEffect(chatId, successMessages.isNotEmpty()) {
+        if (successMessages.isEmpty() || initialTimelineScrollDone) return@LaunchedEffect
+        initialTimelineScrollDone = true
+        scrollChatTimelineToLatest()
+    }
+
+    LaunchedEffect(peerNewestMessageId) {
+        if (peerNewestMessageId == null || !initialTimelineScrollDone) return@LaunchedEffect
+        if (listState.firstVisibleItemIndex <= 2) {
+            scrollChatTimelineToLatest()
         }
     }
 

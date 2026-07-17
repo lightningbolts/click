@@ -22,8 +22,9 @@ class ChatTimelineCache(
 
     fun store(connectionId: String, messages: List<Message>) {
         if (connectionId.isBlank() || messages.isEmpty()) return
+        val sorted = messages.sortedWith(compareBy({ it.timeCreated }, { it.id }))
         _timelinesByConnectionId.update { current ->
-            val next = current + (connectionId to messages)
+            val next = current + (connectionId to sorted)
             if (next.size <= maxConnections) next else pruneToMax(next)
         }
     }

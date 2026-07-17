@@ -31,8 +31,21 @@ Regression annotations: checklist rows tagged `[KNOWN-N]` link here.
 | 9 | Hazard beacon icon oversized | UI bug | Confirmed inconsistency | P2 |
 | 10 | General visual bugs | UI | Open | P2 |
 | 11 | Android-specific bugs (roll-up) | Bug | Open (see #6–7 + matrix) | P0–P2 |
+| 12 | Add Click interactive-back card flicker | UI bug | Code fix landed — needs device repro | P1 |
+| 13 | Profile sheets dark/light inconsistency | UI bug | Code fix landed — needs device repro | P1 |
+| 14 | Create verified click dialog crash (scroll/click) | Bug | Code fix landed — needs device repro | P0 |
+| 15 | Segment tabs highlight covers text | UI bug | Code fix landed — needs device repro | P1 |
+| 16 | Dark mode text contrast | UI | Code fix landed — needs device repro | P1 |
+| 17 | Chat interactive-back LazyColumn duplicate key crash | Bug | Code fix landed — needs device repro | P0 |
+| 18 | Verified click picker duplicate LazyColumn UUID keys | Bug | Code fix landed — needs device repro | P0 |
+| 19 | Chat scroll lag / teleport on load-older | Bug | Code fix landed — needs device repro | P0 |
+| 20 | Dark mode surfaces too light | UI | Code fix landed — needs device repro | P2 |
+| 21 | Chat timeline out-of-order days + duplicate bubbles | Bug | Code fix landed — needs device repro | P0 |
+| 22 | Profile sheet OLED / avatar / top spacing | UI | Code fix landed — needs device repro | P1 |
 
 **Track B (2026-07-16):** Code fixes for P0 `#1`, `#2`, `#6`, `#7`, `#8` (and `#3` auto-clique side effect). Do **not** mark `[KNOWN-N]` checklist rows pass until verified on device.
+
+**Track B+ UI (2026-07-16):** Issues `#12`–`#16` filed from device feedback (iOS; likely Android parity).
 
 ---
 
@@ -445,6 +458,212 @@ Open-ended investigation — track concrete items here and in [04-android-focus.
 | Map dark / grayscale | #5 | Style JSON |
 | WorkManager proximity flush | checklist §19 | Offline tap sync |
 | MediaRecorder mic contention | #7 vs proximity | Shared mic |
+
+---
+
+## 12. Add Click interactive-back card flicker
+
+| Field | Detail |
+|-------|--------|
+| **Type** | Bug (UI) |
+| **Area** | Add Click / navigation (iOS swipe-back; Android risk) |
+| **Status** | Confirmed |
+| **Priority** | P1 |
+
+### Expected
+
+Interactive back from My Code / Scan / Tap-to-Connect reveals a stable Add Click screen without per-card flashes.
+
+### Evidence
+
+`App.kt` swaps `AnimatedContent` to `my_qr` / `qr_scanner` / `nfc`, destroying `AddClickScreen`. `InteractiveSwipeBackContainer` then remounts `previousContent = { renderScreen("add_click") }` mid-gesture, so the three `AdaptiveCard` boxes compose from scratch under the scrim.
+
+### Fix direction
+
+Persistent Add Click underlay + overlay sub-routes (same pattern as `ConnectionsScreen` chat overlay): empty `previousContent`, parallax mirrored onto the base layer.
+
+---
+
+## 13. Profile bottom sheets dark/light inconsistency
+
+| Field | Detail |
+|-------|--------|
+| **Type** | Bug (UI) |
+| **Area** | Profile sheets |
+| **Status** | Confirmed |
+| **Priority** | P1 |
+
+### Expected
+
+Profile sheets match app dark/light on every entry point (Clicks tab and Map).
+
+### Evidence
+
+`TabbedUserProfileSheet` wraps `OledSheetTheme`; Map pin path (`MapScreen`) uses `ClickSheetDialogChrome` without `OledSheetTheme`. Picker search bar hard-codes `Color.White.copy(alpha = 0.08f)`.
+
+### Fix direction
+
+Apply `OledSheetTheme` on Map profile path; theme-aware search field fill; drop light-only hard-codes.
+
+---
+
+## 14. Create verified click dialog crash (scroll / click)
+
+| Field | Detail |
+|-------|--------|
+| **Type** | Bug |
+| **Area** | Groups / FAB picker |
+| **Status** | Confirmed |
+| **Priority** | P0 |
+
+### Expected
+
+Scrolling and tapping members in Create verified click never crashes.
+
+### Evidence
+
+`ConnectionMemberPickerSheet` uses `Column(fillMaxHeight)` + `LazyColumn(weight(1f))` while `ClickFormBottomSheet`’s intermediate `Column` is only `fillMaxWidth()` → unbounded max height → classic LazyColumn infinity crash on measure.
+
+### Fix direction
+
+`ClickBottomSheet` inner column `fillMaxHeight()` / `fillMaxSize()`.
+
+---
+
+## 15. Segment tab highlight covers text
+
+| Field | Detail |
+|-------|--------|
+| **Type** | Bug (UI) |
+| **Area** | Clicks + Map headers |
+| **Status** | Confirmed |
+| **Priority** | P1 |
+
+### Expected
+
+Selected Active / Groups / Archived and Distance / Recent labels stay readable.
+
+### Evidence
+
+`ConnectionsSegmentBar` / `DiscoverySortSegmentBar` use `primaryContainer` fill with `LightBlue` text. In dark mode `primaryContainer == LightBlue`, so label vanishes into the highlight.
+
+### Fix direction
+
+Selected text → `onPrimaryContainer` (or `onPrimary` on solid primary fill).
+
+---
+
+## 16. Dark mode text contrast
+
+| Field | Detail |
+|-------|--------|
+| **Type** | Bug (UI) |
+| **Area** | Theme / typography |
+| **Status** | Confirmed |
+| **Priority** | P1 |
+
+### Expected
+
+Secondary and variant text remains clearly readable on dark surfaces.
+
+### Evidence
+
+Dark `onSurfaceVariant` was tied to purple-tinted `OutlineVariant`; muted labels and segment bugs compound low contrast.
+
+### Fix direction
+
+Brighter dark `onSurfaceVariant`; ensure sheets/segments use scheme on-surface tokens.
+
+---
+
+## 17. Chat interactive-back LazyColumn duplicate key crash
+
+| Field | Detail |
+|-------|--------|
+| **Type** | Bug |
+| **Area** | Chat / iOS swipe-back |
+| **Status** | Code fix landed — needs device repro |
+| **Priority** | P0 |
+
+### Expected
+
+Interactive back from an open chat never crashes.
+
+### Evidence
+
+`IllegalArgumentException: Key "separator-nf-2026-4-22" was already used` in the chat `LazyColumn`. [`buildChatTimelineEntriesNewestFirst`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/ui/chat/ChatTimeline.kt) used day-only separator keys (`separator-nf-$dayKey`); unsorted or oscillating day buckets reused the same key and crashed Compose during swipe-back remasure.
+
+### Fix landed (2026-07-17)
+
+- Separator keys include a monotonic seq (`separator-nf-$seq-$dayKey`).
+- `ensureUniqueTimelineKeys` last-resort dedupe before LazyColumn.
+
+---
+
+## 18. Verified click picker duplicate LazyColumn UUID keys
+
+| Field | Detail |
+|-------|--------|
+| **Type** | Bug |
+| **Area** | Groups / Create verified click |
+| **Status** | Code fix landed — needs device repro |
+| **Priority** | P0 |
+
+### Expected
+
+Opening Create verified click and scrolling the member picker never crashes.
+
+### Evidence
+
+`IllegalArgumentException: Key "<uuid>" was already used`. Multiple 1:1 inbox rows for the same peer produced duplicate `User.id` keys in `ConnectionMemberPickerSheet`’s `LazyColumn`.
+
+### Fix landed (2026-07-17)
+
+- `cliquePickerCandidates` / sheet candidates `distinctBy { it.id }`.
+- Lazy keys `picker-${user.id}-$index` via `itemsIndexed`.
+
+---
+
+## 19. Chat scroll lag / teleport on load-older
+
+| Field | Detail |
+|-------|--------|
+| **Type** | Bug |
+| **Area** | Chat timeline |
+| **Status** | Code fix landed — needs device repro |
+| **Priority** | P0 |
+
+### Expected
+
+Scrolling older messages stays where you are; new peer messages only auto-scroll when near the bottom. Disk/hot cache still used (no extra Supabase egress).
+
+### Evidence
+
+`LaunchedEffect(newestId to size)` called `scrollToItem(0)` on every size change (including load-older). Prefetch also overwrote a longer live window with a bounded ~80-msg cache.
+
+### Fix landed (2026-07-17)
+
+- Open once + peer-newest-while-near-bottom scroll policy (hub-style).
+- Prefetch merges via `mergeMessageTimelinesPreservingLiveState` (cache preserved).
+
+---
+
+## 20. Dark mode surfaces too light
+
+| Field | Detail |
+|-------|--------|
+| **Type** | UI |
+| **Area** | Theme |
+| **Status** | Code fix landed — needs device repro |
+| **Priority** | P2 |
+
+### Expected
+
+Dark mode uses a deeper gray (not pure black).
+
+### Fix landed (2026-07-17)
+
+- `BackgroundDark` `#101212`, `SurfaceDark` `#1A1C1C`, container tiers `#242626` / `#2A2C2C`.
 
 ---
 

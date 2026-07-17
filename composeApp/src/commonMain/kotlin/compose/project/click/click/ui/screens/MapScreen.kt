@@ -650,6 +650,7 @@ private fun buildProfileSheetState(
         links = emptyList(),
         files = emptyList(),
         userId = otherUser?.id,
+        email = otherUser?.email?.takeIf { it.isNotBlank() },
         viewerUserId = viewerUserId,
         // Drives the BFF-owned Media / Files hydration inside [ProfileBottomSheet]
         // via `ConnectionRepository.fetchConnectionTabs`.

@@ -14,8 +14,8 @@ import compose.project.click.click.data.models.MessageWithUser
  */
 internal fun chatBubbleStableRowKey(mwu: MessageWithUser): String {
     val m = mwu.message
-    if (!mwu.isSent) return m.id
-    val stamp = m.localSentAt ?: return m.id
+    if (!mwu.isSent) return "msg-${m.id}"
+    val stamp = m.localSentAt ?: return "msg-${m.id}"
     return "out-${m.user_id}-$stamp"
 }
 
@@ -57,7 +57,10 @@ internal fun buildChatTimelineEntries(messages: List<MessageWithUser>): List<Cha
 
     val timeline = mutableListOf<ChatTimelineEntry>()
     var previousDayKey: String? = null
-    messages.forEach { messageWithUser ->
+    // Always walk chronological order so day separators cannot oscillate.
+    messages
+        .sortedWith(compareBy({ it.message.timeCreated }, { it.message.id }))
+        .forEach { messageWithUser ->
         val dayKey = messageDayKey(messageWithUser.message.timeCreated)
         if (dayKey != previousDayKey) {
             timeline += ChatTimelineEntry.DaySeparator(
@@ -71,7 +74,7 @@ internal fun buildChatTimelineEntries(messages: List<MessageWithUser>): List<Cha
             messageWithUser = messageWithUser,
         )
     }
-    return timeline
+    return ensureUniqueTimelineKeys(timeline)
 }
 
 /**
@@ -82,16 +85,22 @@ internal fun buildChatTimelineEntries(messages: List<MessageWithUser>): List<Cha
  */
 internal fun buildChatTimelineEntriesNewestFirst(messages: List<MessageWithUser>): List<ChatTimelineEntry> {
     if (messages.isEmpty()) return emptyList()
-    val newestFirst = messages.asReversed()
+    // Sort first — callers sometimes feed unsorted hot-cache / merge output.
+    // Walking unsorted list order makes day separators oscillate (Apr 22 → Mar 6 → Apr 22).
+    val newestFirst = messages
+        .sortedWith(compareBy({ it.message.timeCreated }, { it.message.id }))
+        .asReversed()
     val out = mutableListOf<ChatTimelineEntry>()
     var currentDayKey: String? = null
     var currentDayTimestamp = 0L
+    var separatorSeq = 0
 
     newestFirst.forEach { messageWithUser ->
         val dayKey = messageDayKey(messageWithUser.message.timeCreated)
         if (currentDayKey != null && dayKey != currentDayKey) {
+            // Include a monotonic seq so residual day revisits cannot collide keys.
             out += ChatTimelineEntry.DaySeparator(
-                key = "separator-nf-$currentDayKey",
+                key = "separator-nf-${separatorSeq++}-$currentDayKey",
                 label = formatConversationDayLabel(currentDayTimestamp),
             )
         }
@@ -112,7 +121,28 @@ internal fun buildChatTimelineEntriesNewestFirst(messages: List<MessageWithUser>
         )
     }
 
-    return out
+    return ensureUniqueTimelineKeys(out)
+}
+
+/**
+ * Last-resort uniqueness for LazyColumn item keys. Day oscillation, duplicate
+ * outbound `localSentAt` stamps, or optimistic/delivered pairs that have not yet
+ * converged can otherwise crash Compose with "Key was already used".
+ */
+internal fun ensureUniqueTimelineKeys(entries: List<ChatTimelineEntry>): List<ChatTimelineEntry> {
+    if (entries.isEmpty()) return entries
+    val seen = HashSet<String>(entries.size)
+    return entries.mapIndexed { index, entry ->
+        var key = entry.key
+        if (!seen.add(key)) {
+            key = "${entry.key}#$index"
+            seen.add(key)
+        }
+        when (entry) {
+            is ChatTimelineEntry.DaySeparator -> entry.copy(key = key)
+            is ChatTimelineEntry.MessageEntry -> entry.copy(key = key)
+        }
+    }
 }
 
 // Ambient mesh color seeding for chat lives in [ChatAmbientColorSeeds]; this file keeps timeline keys only.
