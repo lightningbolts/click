@@ -6,6 +6,8 @@
 **Source of truth:** As-built Compose screens and components (not a redesign).  
 **Date:** 2026-07-16  
 
+**Regression / QA:** After major changes, run [../../regression-testing/00-INDEX.md](../../regression-testing/00-INDEX.md) (full checklist, smoke, known-issues audit). These UI/UX files describe expected behavior; they are not a test plan.
+
 ---
 
 ## How to read this set
