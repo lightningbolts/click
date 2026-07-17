@@ -42,6 +42,7 @@ import compose.project.click.click.ui.components.AdaptiveButton // pragma: allow
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassCardCompact // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.OnlineFriendItem // pragma: allowlist secret
 import compose.project.click.click.ui.components.PollPairCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.RecentClickCard // pragma: allowlist secret
@@ -398,7 +399,7 @@ fun HomeScreen(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 16.dp)
+                .padding(bottom = rememberBottomChromePadding() + 8.dp)
         )
     }
 }

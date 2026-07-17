@@ -75,7 +75,7 @@ private fun PresenceSubtitleRow(online: Boolean) {
                 text = if (isOn) "Online" else "Offline",
                 style = MaterialTheme.typography.labelSmall,
                 color = if (isOn) Color(0xFF16A34A)
-                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f)
             )
         }
     }
@@ -145,7 +145,7 @@ fun LiquidGlassPageHeader(
                                 Text(
                                     text = subtitle,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
@@ -178,7 +178,7 @@ fun LiquidGlassPageHeader(
                                 Text(
                                     text = subtitle,
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }

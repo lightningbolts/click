@@ -56,25 +56,29 @@ actual fun PlatformBottomBar(
     val tabBar = remember {
         UITabBar().apply {
             translatesAutoresizingMaskIntoConstraints = false
-            setTranslucent(false)
+            setTranslucent(true)
         }
     }
 
-    // Functional Clarity: opaque bar matching app light/dark surfaces.
+    // Translucent bar so Compose content scrolls underneath. Selected tint is a
+    // light brand purple in dark mode so both icon + label stay readable on the bar
+    // (UITabBar applies tintColor to both).
     SideEffect {
         val barColor = if (isDarkMode) {
-            UIColor.colorWithRed(0x2F / 255.0, green = 0x31 / 255.0, blue = 0x31 / 255.0, alpha = 1.0)
+            // SurfaceDark #1A1C1C @ ~88%
+            UIColor.colorWithRed(0x1A / 255.0, green = 0x1C / 255.0, blue = 0x1C / 255.0, alpha = 0.88)
         } else {
-            UIColor.whiteColor
+            UIColor.colorWithRed(1.0, green = 1.0, blue = 1.0, alpha = 0.92)
         }
-        val selectedColor = UIColor.colorWithRed(
-            0x63 / 255.0,
-            green = 0x0E / 255.0,
-            blue = 0xD4 / 255.0,
-            alpha = 1.0,
-        )
+        val selectedColor = if (isDarkMode) {
+            // NeonPurple #D2BBFF — readable on dark translucent bar
+            UIColor.colorWithRed(0xD2 / 255.0, green = 0xBB / 255.0, blue = 0xFF / 255.0, alpha = 1.0)
+        } else {
+            UIColor.colorWithRed(0x63 / 255.0, green = 0x0E / 255.0, blue = 0xD4 / 255.0, alpha = 1.0)
+        }
         val unselectedColor = if (isDarkMode) {
-            UIColor.colorWithRed(0xCC / 255.0, green = 0xC3 / 255.0, blue = 0xD8 / 255.0, alpha = 1.0)
+            // Brighter onSurfaceVariant #D6D9D9
+            UIColor.colorWithRed(0xD6 / 255.0, green = 0xD9 / 255.0, blue = 0xD9 / 255.0, alpha = 1.0)
         } else {
             UIColor.colorWithRed(0x4A / 255.0, green = 0x44 / 255.0, blue = 0x55 / 255.0, alpha = 1.0)
         }
@@ -83,7 +87,7 @@ actual fun PlatformBottomBar(
         tabBar.tintColor = selectedColor
         tabBar.unselectedItemTintColor = unselectedColor
         val appearance = UITabBarAppearance().apply {
-            configureWithOpaqueBackground()
+            configureWithDefaultBackground()
             backgroundColor = barColor
         }
         tabBar.standardAppearance = appearance

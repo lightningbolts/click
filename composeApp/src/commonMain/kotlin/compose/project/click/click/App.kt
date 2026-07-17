@@ -1268,25 +1268,6 @@ fun App() {
                 modifier = Modifier.fillMaxSize(),
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 snackbarHost = { SnackbarHost(snackbarHostState) },
-                bottomBar = {
-                    PlatformBottomBar(
-                        items = bottomNavItems,
-                        currentRoute = currentRoute,
-                        visible = !hideMainBottomBar,
-                        onItemSelected = { item ->
-                            if (item.route == NavigationItem.AddClick.route) {
-                                PlatformHapticsPolicy.heavyImpact()
-                                PlatformHapticsPolicy.successNotification()
-                            }
-                            navigateTo(item.route)
-                            hubChatArgs = null
-                            showMyQRCode = false
-                            showQRScanner = false
-                            showNfcScreen = false
-                            focusManager.clearFocus()
-                        },
-                    )
-                },
             ) { paddingValues ->
                 Box(
                     modifier = Modifier
@@ -2233,6 +2214,31 @@ fun App() {
                         }
                     }
                 }
+            }
+            // Overlay (not Scaffold bottomBar) so tab content scrolls under a translucent bar.
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .zIndex(5f),
+            ) {
+                PlatformBottomBar(
+                    items = bottomNavItems,
+                    currentRoute = currentRoute,
+                    visible = !hideMainBottomBar,
+                    onItemSelected = { item ->
+                        if (item.route == NavigationItem.AddClick.route) {
+                            PlatformHapticsPolicy.heavyImpact()
+                            PlatformHapticsPolicy.successNotification()
+                        }
+                        navigateTo(item.route)
+                        hubChatArgs = null
+                        showMyQRCode = false
+                        showQRScanner = false
+                        showNfcScreen = false
+                        focusManager.clearFocus()
+                    },
+                )
             }
             if (showUnifiedSearchSheet) {
                 val searchUserId = when (val state = authViewModel.authState) {

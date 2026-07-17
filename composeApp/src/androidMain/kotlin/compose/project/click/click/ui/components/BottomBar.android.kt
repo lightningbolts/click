@@ -9,6 +9,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
@@ -38,25 +39,35 @@ actual fun PlatformBottomBar(
     if (!visible) return
 
     val borderWidth = LocalPlatformStyle.current.cardBorderWidth
+    val scheme = MaterialTheme.colorScheme
 
     NavigationBar(
         modifier = Modifier.border(width = borderWidth, color = clickBorderColor()),
-        containerColor = MaterialTheme.colorScheme.surface,
+        // Translucent so tab content remains visible scrolling underneath.
+        containerColor = scheme.surface.copy(alpha = 0.88f),
         tonalElevation = 0.dp,
     ) {
         items.forEach { item ->
             NavigationBarItem(
                 icon = { Icon(item.icon, contentDescription = item.title) },
+                label = {
+                    Text(
+                        text = item.title,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                    )
+                },
                 selected = currentRoute == item.route,
                 onClick = { onItemSelected(item) },
                 colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = MaterialTheme.colorScheme.onPrimary,
-                    selectedTextColor = PrimaryBlue,
+                    selectedIconColor = scheme.onPrimary,
+                    // Label sits on the bar surface, not the purple indicator — use bright on-surface.
+                    selectedTextColor = scheme.onSurface,
                     indicatorColor = PrimaryBlue,
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    unselectedIconColor = scheme.onSurfaceVariant,
+                    unselectedTextColor = scheme.onSurfaceVariant,
                 ),
-                alwaysShowLabel = false
+                alwaysShowLabel = true,
             )
         }
     }
