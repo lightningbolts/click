@@ -124,7 +124,7 @@ Treat [`../regression-testing/03-known-issues-audit.md`](../regression-testing/0
 
 | Gate | Status |
 |------|--------|
-| §0 automated (Gradle + `npm test`) | Track A PASS 2026-07-16; **re-run after Track B / merges** |
+| §0 automated (Gradle + `npm test`) | Post-merge 2026-07-16 PASS — Android compile + `testDebugUnitTest` · `click-web` 22/145 · iOS sim compile (re-check after merge) |
 | Smoke [`02-smoke-10min.md`](../regression-testing/02-smoke-10min.md) | **Not run on device** |
 | Full checklist [`01-full-checklist.md`](../regression-testing/01-full-checklist.md) | **Not run** |
 | Known-issues audit | **Bugs still open** (Track B) |
