@@ -4,9 +4,11 @@
 **Scope:** Kotlin Multiplatform mobile app (`click/`) — Android + iOS Compose UI, App Clip handshake, CallKit/PushKit overlays.  
 **Out of scope:** Web companion (`click-web/`), B2B Insights, Admin, business signup, backend/APIs/Edge Functions/RLS. Network and permission failures appear only as **user-visible** states.  
 **Source of truth:** Functional Clarity target-state Compose UI (neo-brutalist revamp) — opaque surfaces, 2px `#000` borders, primary `#630ed4`; not as-built glass. Design tokens: [../../design-assets/functional_clarity/DESIGN.md](../../design-assets/functional_clarity/DESIGN.md).  
-**Date:** 2026-07-16  
+**Date:** 2026-07-17  
 
 **Regression / QA:** After major changes, run [../../regression-testing/00-INDEX.md](../../regression-testing/00-INDEX.md) (full checklist, smoke, known-issues audit). These UI/UX files describe expected behavior; they are not a test plan.
+
+**Continuation status (addressed / open / Track C):** [../../handoff/functional-clarity-continuation.md](../../handoff/functional-clarity-continuation.md).
 
 ---
 

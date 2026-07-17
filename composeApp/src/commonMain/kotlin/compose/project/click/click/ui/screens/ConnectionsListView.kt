@@ -550,8 +550,18 @@ fun ConnectionsListView(
     DisposableEffect(Unit) {
         onDispose { toastState.dismiss() }
     }
+    var suppressReorderScroll by remember { mutableStateOf(false) }
     LaunchedEffect(isListObscured) {
-        if (isListObscured) toastState.dismiss()
+        if (isListObscured) {
+            toastState.dismiss()
+            suppressReorderScroll = true
+        } else {
+            // After chat reveal, inbox patches from leaveChatRoom can reorder rows — skip the
+            // auto scroll-to-top for one settle window so swipe-back does not look like a recompose.
+            suppressReorderScroll = true
+            delay(CHAT_TRANSITION_DURATION_MS + CHAT_GESTURE_CLOSE_SETTLE_MS)
+            suppressReorderScroll = false
+        }
     }
 
     // Show nudge feedback (clear before show so returning to this tab does not replay).
@@ -644,6 +654,7 @@ fun ConnectionsListView(
                     }
                 }
                 LaunchedEffect(clicksListOrderSignature) {
+                    if (suppressReorderScroll) return@LaunchedEffect
                     if (filteredChats.isEmpty()) return@LaunchedEffect
                     val nearTop = connectionsLazyListState.firstVisibleItemIndex <= 2 &&
                         connectionsLazyListState.firstVisibleItemScrollOffset < 96

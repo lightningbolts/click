@@ -37,7 +37,27 @@ class ChatTimelineCache(
             val merged = when {
                 idx >= 0 -> existing.toMutableList().apply { this[idx] = message }
                 else -> existing + message
-            }.sortedBy { it.timeCreated }
+            }.sortedWith(compareBy({ it.timeCreated }, { it.id }))
+            val next = current + (connectionId to merged)
+            if (next.size <= maxConnections) next else pruneToMax(next)
+        }
+    }
+
+    /** Merge a page of messages into an existing timeline without dropping newer rows. */
+    fun mergeMessages(connectionId: String, messages: List<Message>) {
+        if (connectionId.isBlank() || messages.isEmpty()) return
+        _timelinesByConnectionId.update { current ->
+            val existing = current[connectionId].orEmpty()
+            if (existing.isEmpty()) {
+                val sorted = messages.sortedWith(compareBy({ it.timeCreated }, { it.id }))
+                val next = current + (connectionId to sorted)
+                return@update if (next.size <= maxConnections) next else pruneToMax(next)
+            }
+            val byId = existing.associateBy { it.id }.toMutableMap()
+            for (message in messages) {
+                byId[message.id] = message
+            }
+            val merged = byId.values.sortedWith(compareBy({ it.timeCreated }, { it.id }))
             val next = current + (connectionId to merged)
             if (next.size <= maxConnections) next else pruneToMax(next)
         }

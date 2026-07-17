@@ -550,6 +550,22 @@ object AppDataManager {
         if (connectionId.isBlank()) return
         val updated = _inboxFeedChats.value.map { row ->
             if (row.connection.id != connectionId) return@map row
+            val existing = row.lastMessage
+            val shouldReplacePreview = existing == null ||
+                lastMessagePreview.id == existing.id ||
+                lastMessagePreview.timeCreated > existing.timeCreated ||
+                (lastMessagePreview.timeCreated == existing.timeCreated &&
+                    lastMessagePreview.id >= existing.id)
+            if (!shouldReplacePreview) {
+                return@map row.copy(
+                    connection = row.connection.copy(
+                        last_message_at = listOfNotNull(
+                            row.connection.last_message_at,
+                            lastMessagePreview.timeCreated,
+                        ).maxOrNull(),
+                    ),
+                )
+            }
             row.copy(
                 lastMessage = lastMessagePreview,
                 connection = row.connection.copy(
@@ -1353,7 +1369,17 @@ object AppDataManager {
             if (c.id != connectionId) return@map c
             val mergedAt = listOfNotNull(c.last_message_at, lastMessageAt).maxOrNull()
             val newChat = if (lastMessagePreview != null) {
-                c.chat.copy(messages = listOf(lastMessagePreview))
+                val existingPreview = c.chat.messages.firstOrNull()
+                val shouldReplacePreview = existingPreview == null ||
+                    lastMessagePreview.id == existingPreview.id ||
+                    lastMessagePreview.timeCreated > existingPreview.timeCreated ||
+                    (lastMessagePreview.timeCreated == existingPreview.timeCreated &&
+                        lastMessagePreview.id >= existingPreview.id)
+                if (shouldReplacePreview) {
+                    c.chat.copy(messages = listOf(lastMessagePreview))
+                } else {
+                    c.chat
+                }
             } else {
                 c.chat
             }

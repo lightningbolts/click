@@ -104,14 +104,16 @@ The root composable `App()` wraps all UI in `PlatformThemeProvider` → `Connect
 
 ### 1.1 Layout / Container
 
-- Outer `Box(fillMaxSize)` wraps offline banner, `Scaffold`, search sheet, tether overlay.
-- `Scaffold`: `contentWindowInsets = WindowInsets(0)`, `snackbarHost = { SnackbarHost(snackbarHostState) }`.
+- Outer `Box(fillMaxSize)` wraps offline banner, `Scaffold`, **overlay** `PlatformBottomBar`, search sheet, tether overlay.
+- `Scaffold`: `contentWindowInsets = WindowInsets(0)`, `snackbarHost = { SnackbarHost(snackbarHostState) }` — **no `bottomBar` slot** (content is full-bleed under the tab icons).
 - Content `Box`: top padding from scaffold; `graphicsLayer { alpha = homeSurfaceAlpha }` for entrance fade.
 - Inner `Surface(background)` hosts `AnimatedContent(screenKey)` + hub chat overlay + modals + z-indexed globals.
+- Tab-root lists use `rememberBottomChromePadding()` so the last controls clear hit targets while still scrolling under the icons.
 
 ### 1.2 Interactive Elements
 
-- `PlatformBottomBar` in `bottomBar` slot.
+- `PlatformBottomBar` as a **bottom overlay** (`zIndex(5f)`), not Scaffold `bottomBar`.
+- Chrome is **fully transparent** — page materials under the icons must match materials above (no fill/blur/seam). See known issue `#23`.
 - Tab selection calls `navigateTo(item.route)` and clears overlay flags (`hubChatArgs`, QR, NFC).
 - **Add Click tab**: `PlatformHapticsPolicy.heavyImpact()` + `successNotification()` before navigate.
 - `SnackbarHost` for `connectionViewModel.transientNotice` and `AppDataManager.transientUserMessages`.
@@ -831,8 +833,8 @@ Connections/Map open roll → opening flag → camera visible → capture or dis
 ├─ Hub chat AnimatedVisibility (full screen, no explicit z)
 ├─ ConnectionRevealOverlay / context sheets
 ├─ AnimatedContent (tab + QR/NFC/MyQR screens)
-├─ PlatformBottomBar (Scaffold bottomBar slot)
-└─ Scaffold content / background
+├─ PlatformBottomBar (overlay, transparent chrome — z ≈ 5)
+└─ Scaffold content / background (full-bleed under tab icons)
      UnifiedSearchSheet (sibling Box, glass sheet scrim)
 ```
 

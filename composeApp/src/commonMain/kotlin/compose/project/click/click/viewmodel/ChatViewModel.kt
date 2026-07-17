@@ -2693,7 +2693,11 @@ class ChatViewModel(
                 isSent = mergedMessage.user_id == currentUserId,
             )
             _chatMessagesState.value = currentState.copy(messages = normalizeChatTimeline(updated))
-            bumpConnectionInChatList(connectionId, mergedMessage)
+            updated
+                .maxByOrNull { it.message.timeCreated }
+                ?.message
+                ?.takeIf { it.id == mergedMessage.id }
+                ?.let { bumpConnectionInChatList(connectionId, it) }
             return
         }
 
@@ -2709,7 +2713,12 @@ class ChatViewModel(
         bumpConnectionInChatList(connectionId, mergedMessage)
     }
 
-    /** Refresh list row + reorder so the active thread moves up when a message arrives or is sent. */
+    /**
+     * Refresh list row + reorder so the active thread moves up when a message arrives or is sent.
+     *
+     * Preview / `last_message_at` only move forward (or refresh the same last-message id).
+     * Older realtime UPDATEs (e.g. load-older delivery/read) must not rewrite the inbox snippet.
+     */
     private fun bumpConnectionInChatList(
         connectionId: String,
         message: Message,
@@ -2730,6 +2739,14 @@ class ChatViewModel(
         } else {
             connectionId
         }
+        val existingLast = if (rowIndex >= 0) state.chats[rowIndex].lastMessage else null
+        val isSameLastMessage = existingLast != null && existingLast.id == message.id
+        val isNewerThanLast = existingLast == null ||
+            message.timeCreated > existingLast.timeCreated ||
+            (message.timeCreated == existingLast.timeCreated && message.id >= existingLast.id)
+        if (!isSameLastMessage && !isNewerThanLast) {
+            return
+        }
         val isViewingThread = resolvedListKey == currentConnectionId
         if (isInbound) {
             _readClearedConnectionIds.update { it - resolvedListKey }
@@ -2742,11 +2759,6 @@ class ChatViewModel(
             state.chats.mapIndexed { index, chat ->
             if (index == rowIndex) {
                 val prevLastId = chat.lastMessage?.id
-                val inboundUnreadBump =
-                    isInbound &&
-                        !isViewingThread &&
-                        !message.isRead &&
-                        message.id != prevLastId
                 val nextUnread = when {
                     isViewingThread -> 0
                     isInbound && !message.isRead && message.id != prevLastId -> chat.unreadCount + 1
@@ -2758,11 +2770,15 @@ class ChatViewModel(
                 } else {
                     message
                 }
+                val nextLastAt = maxOf(
+                    chat.connection.last_message_at ?: 0L,
+                    message.timeCreated,
+                )
                 chat.copy(
                     lastMessage = previewMessage,
                     unreadCount = nextUnread,
                     connection = chat.connection.copy(
-                        last_message_at = message.timeCreated,
+                        last_message_at = nextLastAt,
                         chat = chat.connection.chat.copy(messages = listOf(previewMessage))
                     )
                 )
@@ -3493,6 +3509,10 @@ class ChatViewModel(
                 ?.takeIf { it.isNotEmpty() }
                 ?.let { rows ->
                     chatRepository.storeCachedMessageTimeline(connId, rows)
+                    // Repair inbox if an older realtime UPDATE rewrote the preview while in-thread.
+                    rows.maxByOrNull { it.timeCreated }?.let { newest ->
+                        bumpConnectionInChatList(connId, newest)
+                    }
                 }
         }
         clearSecureChatMediaCache()

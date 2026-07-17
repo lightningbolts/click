@@ -1,7 +1,7 @@
 # Click — Known Issues Audit
 
-**Date:** 2026-07-16  
-**Scope:** Codebase audit against the Issue Spec Sheet (#1–11). Docs only — fixes are follow-up work.  
+**Date:** 2026-07-17 (updated)  
+**Scope:** Codebase audit against the Issue Spec Sheet (#1–11) plus Track B+ device-filed issues (#12–23).  
 **Status legend:**
 
 | Status | Meaning |
@@ -10,9 +10,11 @@
 | **Confirmed risk** | Failure mode is reachable; needs device/multi-phone repro to quantify |
 | **Partial / misfiled** | Spec assumption incorrect; related UX/bug still exists |
 | **Needs device repro** | Path exists; crash/UX not proven from static analysis alone |
+| **Code fix landed — needs device repro** | Fix in tree; do not false-pass `[KNOWN-N]` until device confirms |
 | **Open** | Broad category; use checklist to discover specifics |
 
-Regression annotations: checklist rows tagged `[KNOWN-N]` link here.
+Regression annotations: checklist rows tagged `[KNOWN-N]` link here.  
+Continuation status: [`../handoff/functional-clarity-continuation.md`](../handoff/functional-clarity-continuation.md).
 
 ---
 
@@ -24,7 +26,7 @@ Regression annotations: checklist rows tagged `[KNOWN-N]` link here.
 | 2 | Duplicate connections | Bug | Code fix landed — needs device repro | P0 |
 | 3 | Handshake limited to groups (no 1:1 DM) | Feature / UX | Partial / misfiled (auto-clique gated) | P1 |
 | 4 | Events missing from list view | Bug | Confirmed | P1 |
-| 5 | Map not rendering in color | Bug / design ambiguity | Confirmed | P2 |
+| 5 | Map not rendering in color | Bug / design ambiguity | Confirmed (basemap code fixed — device confirm) | P2 |
 | 6 | Android calls not working | Bug | Code fix landed — needs device repro | P0 |
 | 7 | Voice message crashes Android | Bug | Code fix landed — needs device repro | P0 |
 | 8 | Group chat creation crashes app | Bug | Code fix landed — needs device repro | P0 |
@@ -42,10 +44,12 @@ Regression annotations: checklist rows tagged `[KNOWN-N]` link here.
 | 20 | Dark mode surfaces too light | UI | Code fix landed — needs device repro | P2 |
 | 21 | Chat timeline out-of-order days + duplicate bubbles | Bug | Code fix landed — needs device repro | P0 |
 | 22 | Profile sheet OLED / avatar / top spacing | UI | Code fix landed — needs device repro | P1 |
+| 23 | Nav bar opaque band (materials differ under nav) | UI | Code fix landed — needs device repro | P1 |
+| 24 | Connections list flicker after chat interactive-back | UI | Code fix landed — needs device repro | P0 |
 
-**Track B (2026-07-16):** Code fixes for P0 `#1`, `#2`, `#6`, `#7`, `#8` (and `#3` auto-clique side effect). Do **not** mark `[KNOWN-N]` checklist rows pass until verified on device.
+**Track B (2026-07-16):** Code fixes for P0 `#1`, `#2`, `#6`, `#7`, `#8` (and `#3` auto-clique side effect).  
 
-**Track B+ UI (2026-07-16):** Issues `#12`–`#16` filed from device feedback (iOS; likely Android parity).
+**Track B+ UI (2026-07-16 → 2026-07-17):** `#12`–`#23` from device feedback (chat timeline, profile, transparent nav). Do **not** mark `[KNOWN-N]` pass until verified on device.
 
 ---
 
@@ -667,6 +671,129 @@ Dark mode uses a deeper gray (not pure black).
 
 ---
 
+## 21. Chat timeline out-of-order days + duplicate bubbles
+
+| Field | Detail |
+|-------|--------|
+| **Type** | Bug |
+| **Area** | Chat timeline |
+| **Status** | Code fix landed — needs device repro |
+| **Priority** | P0 |
+
+### Expected
+
+Day separators are chronological (newest → oldest under `reverseLayout`). Each send appears once.
+
+### Evidence
+
+Screenshot showed Jul 1 → Yesterday → Apr 22 → Mar 6 → Apr 22 and duplicate icebreaker text. `buildChatTimelineEntriesNewestFirst` walked unsorted list order; merge kept `temp-…` + server UUID rows.
+
+### Fix landed (2026-07-17)
+
+- Sort by `timeCreated` before building separators.
+- `normalizeChatTimeline` + optimistic/`localSentAt` dedupe in merge.
+- `sendMessage` passes `optimisticTempId`; hot cache stores sorted timelines.
+- Disk/hot prefetch still used (no extra Supabase egress).
+
+---
+
+## 22. Profile sheet OLED / avatar / top spacing
+
+| Field | Detail |
+|-------|--------|
+| **Type** | UI |
+| **Area** | Profile bottom sheet |
+| **Status** | Code fix landed — needs device repro |
+| **Priority** | P1 |
+
+### Expected
+
+Sheet matches OLED chrome; empty avatar matches connection-list initials/color; tight spacing under grabber to “Profile”.
+
+### Fix landed (2026-07-17)
+
+- Body/tabs use `GlassSheetTokens.OledBlack()` (not `surfaceContainerHigh`).
+- Header uses `ConnectionListUserAvatarFace`.
+- Removed safe-area top inset + 24dp spacer above title.
+
+---
+
+## 23. Nav bar opaque band (materials differ under nav)
+
+| Field | Detail |
+|-------|--------|
+| **Type** | UI |
+| **Area** | App shell / bottom nav |
+| **Status** | Code fix landed — needs device repro |
+| **Priority** | P1 |
+
+### Expected
+
+Page background and cards look **identical** under the tab icons as above them — no fill, blur, or seam.
+
+### Evidence
+
+Scaffold `bottomBar` reserved a dead band; opaque/translucent platform bars tinted or hid content (iOS `#2F3131` / Material `surface`).
+
+### Fix landed (2026-07-17)
+
+- `PlatformBottomBar` overlaid outside Scaffold (full-bleed content + `rememberBottomChromePadding` for hit targets).
+- Android/iOS chrome **fully transparent** (`Color.Transparent` / `configureWithTransparentBackground()`); no top border fill band.
+- iOS tab bar pinned to view bottom so Compose paints under icons + home indicator.
+
+---
+
+## 24. Connections list flicker after chat interactive-back
+
+| Field | Detail |
+|-------|--------|
+| **Type** | UI |
+| **Area** | Connections inbox / iOS swipe-back |
+| **Status** | Code fix landed — needs device repro |
+| **Priority** | P0 |
+
+### Expected
+
+After interactive back from a chat, the Connections list is stable — no full-list flicker or “everything recomposing” flash.
+
+### Evidence
+
+On iOS the list stays mounted under the chat overlay, but gesture dismiss called `finalizeChatClose()` / `leaveChatRoom()` and `onChatOpenStateChanged(false)` synchronously. That restored the tab bar (LazyColumn `bottomChrome` jump) and applied inbox patches in the same frame as reveal. Tap-close already deferred teardown by 300ms.
+
+### Fix landed (2026-07-17)
+
+- Defer gesture teardown (`CHAT_GESTURE_CLOSE_SETTLE_MS`) like tap; restore chrome only in `finalizeChatClose`.
+- Split `LaunchedEffect(userId)` / `initialChatId` so clearing `pendingChatId` does not restart realtime via `setCurrentUser`.
+- Suppress inbox reorder `animateScrollToItem(0)` briefly after `isListObscured` clears.
+
+---
+
+## 25. Inbox preview jumps to old timestamp after scrolling up in chat
+
+| Field | Detail |
+|-------|--------|
+| **Type** | Functional |
+| **Area** | Connections inbox / chat leave |
+| **Status** | Code fix landed — needs device repro |
+| **Priority** | P0 |
+
+### Expected
+
+After opening a chat, scrolling up (load older), and returning to the list, the row preview/timestamp stay on the **newest** message (not an icebreaker from weeks ago).
+
+### Evidence
+
+Global `subscribeToMessageInserts` treated UPDATE like INSERT and `bumpConnectionInChatList` always overwrote preview. Load-older delivery/read UPDATEs rewrote the snippet to an old row; leave only revealed the damage. Paginated `fetchMessagesForChat` also **replaced** the hot timeline with the older page only. Ephemeral join held a mutex during the 8s subscribe timeout, blocking leave and amplifying simulator lag / cancel logs.
+
+### Fix landed (2026-07-17)
+
+- `bumpConnectionInChatList` + `AppDataManager` inbox/connection patches are newest-wins (same-id metadata refresh allowed).
+- Global list flow emits Insert only; Updates merge into hot cache without inbox emit.
+- Paginated fetches `mergeMessages` into hot cache; `leaveChatRoom` repairs preview from timeline max.
+- Ephemeral join/leave: generation token + subscribe outside mutex; unsubscribe on timeout/cancel; don’t swallow `CancellationException`.
+
+---
+
 ## Cross-cutting architecture notes
 
 ```mermaid
@@ -696,5 +823,9 @@ Tri-Factor is not classic NFC-only; BLE is one of three factors. Group registrat
 2. ~~**P0** Guard `MediaRecorder.start` + release (#7)~~ — code landed; device verify
 3. ~~**P0** Device-repro and fix group create crash (#8)~~ — code landed; device verify
 4. ~~**P0** Handshake match/mark + pair cardinality dedup (#1, #2)~~ — code landed; device verify
-5. **P1** Event list/map parity (#4); finish 1:1 UX (#3) on device
-6. **P2** Map color intent (#5); hazard icon (#9); visual sweep (#10)
+5. ~~**P0** Chat timeline order/dupes / picker keys / inbox preview (#17–#19, #21, #25)~~ — code landed; device verify
+6. ~~**P1** Profile sheet + transparent nav (#22, #23)~~ — code landed; device verify
+7. ~~**P0** Connections list flicker after chat back (#24)~~ — code landed; device verify
+8. **P1** Event list/map parity (#4); finish 1:1 UX (#3) on device
+9. **P2** Map color intent (#5); hazard icon (#9); visual sweep (#10)
+10. **Track C** Design-asset layout redesigns — see [`../handoff/functional-clarity-continuation.md`](../handoff/functional-clarity-continuation.md) §3

@@ -104,7 +104,15 @@ fun ConnectionsScreen(
         // Forced reload clears local inbox caches and can repaint the list; skip that on the iOS
         // gesture-dismiss path where we already avoided flashing the message surface.
         viewModel.loadChats(isForced = false)
+        if (isIOS) {
+            iosChatSwipeDragPx.floatValue = 0f
+            iosChatSwipeBehindLayers = false
+            iosChatRightToLeftPeek = null
+        }
         onChatDismissed?.invoke()
+        // Restore tab bar / bottom chrome only after settle — same frame as leaveChatRoom used to
+        // jump LazyColumn padding and look like a full inbox recompose.
+        onChatOpenStateChanged(false)
     }
 
     fun closeActiveChat(mode: ChatTransitionMode = ChatTransitionMode.Tap) {
@@ -116,33 +124,37 @@ fun ConnectionsScreen(
                 focusManager.clearFocus()
             }
             selectedChatId = null
-            if (mode == ChatTransitionMode.Tap) {
-                closeCleanupJob = screenScope.launch {
-                    delay(CHAT_TRANSITION_DURATION_MS)
-                    if (selectedChatId == null) {
-                        finalizeChatClose()
-                    }
-                    isTapCloseInFlight = false
-                    closeCleanupJob = null
+            // Defer teardown for BOTH tap and gesture. Gesture used to finalize synchronously,
+            // which raced leaveChatRoom + tab-bar restore against the list reveal and caused flicker.
+            closeCleanupJob = screenScope.launch {
+                val settleMs = if (mode == ChatTransitionMode.Tap) {
+                    CHAT_TRANSITION_DURATION_MS
+                } else {
+                    CHAT_GESTURE_CLOSE_SETTLE_MS
                 }
-            } else {
+                delay(settleMs)
+                if (selectedChatId == null) {
+                    finalizeChatClose(
+                        leaveChatClearsMessageSurface = !(isIOS && mode == ChatTransitionMode.Gesture),
+                    )
+                }
                 isTapCloseInFlight = false
-                // iOS gesture: avoid forcing ChatMessagesState.Loading while ChatView can still
-                // paint for a frame (causes a full-screen spinner flash over the list).
-                finalizeChatClose(
-                    leaveChatClearsMessageSurface = !(isIOS && mode == ChatTransitionMode.Gesture),
-                )
+                closeCleanupJob = null
             }
         }
     }
 
-    LaunchedEffect(userId, initialChatId) {
+    LaunchedEffect(userId) {
         viewModel.setCurrentUser(userId)
-        if (initialChatId != null) {
-            viewModel.loadChatMessages(initialChatId)
-            selectedChatId = initialChatId
-            viewModel.loadChats(isForced = false)
-        }
+    }
+
+    // One-shot entry only — clearing pendingChatId on dismiss must not re-run setCurrentUser
+    // (that restarts global realtime and flickers the inbox).
+    LaunchedEffect(initialChatId) {
+        val id = initialChatId ?: return@LaunchedEffect
+        viewModel.loadChatMessages(id)
+        selectedChatId = id
+        viewModel.loadChats(isForced = false)
     }
 
     DisposableEffect(Unit) {
@@ -155,16 +167,10 @@ fun ConnectionsScreen(
     }
 
     LaunchedEffect(selectedChatId) {
-        onChatOpenStateChanged(selectedChatId != null)
-    }
-
-    // Runs after recomposition when the overlay is gone — never clear swipe offset while the
-    // chat sheet can still draw (that would snap translationX to 0 and flash the chat full-screen).
-    LaunchedEffect(selectedChatId, isIOS) {
-        if (isIOS && selectedChatId == null) {
-            iosChatSwipeDragPx.floatValue = 0f
-            iosChatSwipeBehindLayers = false
-            iosChatRightToLeftPeek = null
+        // Only report open=true here. open=false is deferred to [finalizeChatClose] so chrome
+        // (bottom bar / bottomChrome padding) does not jump during interactive-back reveal.
+        if (selectedChatId != null) {
+            onChatOpenStateChanged(true)
         }
     }
 
@@ -175,8 +181,11 @@ fun ConnectionsScreen(
 
     fun openChat(chatId: String) {
         closeCleanupJob?.cancel()
+        closeCleanupJob = null
         isTapCloseInFlight = false
         chatTransitionMode = ChatTransitionMode.Tap
+        // If a deferred close was cancelled, keep chrome open for the new thread.
+        onChatOpenStateChanged(true)
         ChatNotificationDismisser.dismissForThread(chatId, chatId)
         viewModel.loadChatMessages(chatId)
         selectedChatId = chatId
@@ -528,3 +537,6 @@ internal enum class ChatTransitionMode {
 }
 
 internal const val CHAT_TRANSITION_DURATION_MS = 300L
+
+/** After interactive-back commits, wait before leaveChatRoom / tab-bar restore to avoid inbox flicker. */
+internal const val CHAT_GESTURE_CLOSE_SETTLE_MS = 64L
