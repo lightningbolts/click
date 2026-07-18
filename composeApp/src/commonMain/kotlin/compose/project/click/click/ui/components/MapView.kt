@@ -10,6 +10,8 @@ import compose.project.click.click.ui.utils.ConnectionMapPoint // pragma: allowl
 import compose.project.click.click.ui.utils.MapCluster // pragma: allowlist secret
 import compose.project.click.click.ui.utils.TimeState // pragma: allowlist secret
 import compose.project.click.click.ui.utils.beaconZIndex // pragma: allowlist secret
+import compose.project.click.click.ui.components.stableAvatarPlaceholderColor
+import androidx.compose.ui.graphics.Color
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -19,6 +21,28 @@ internal fun truncateMapPinCaption(text: String, maxChars: Int): String {
     if (t.isEmpty()) return ""
     if (t.length <= maxChars) return t
     return t.take(maxChars - 1) + "…"
+}
+
+/** Initials for circular avatar-style map pins (connections, events, hubs). */
+internal fun mapPinAvatarInitials(title: String): String {
+    val parts = title.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    return when {
+        parts.size >= 2 -> {
+            val a = parts[0].firstOrNull()?.uppercaseChar()
+            val b = parts[1].firstOrNull()?.uppercaseChar()
+            if (a != null && b != null) "$a$b" else parts[0].take(2).uppercase()
+        }
+        parts.size == 1 -> parts[0].take(2).uppercase()
+        else -> "?"
+    }
+}
+
+internal fun composeColorToArgb(color: Color): Int {
+    val a = (color.alpha * 255f + 0.5f).toInt().coerceIn(0, 255)
+    val r = (color.red * 255f + 0.5f).toInt().coerceIn(0, 255)
+    val g = (color.green * 255f + 0.5f).toInt().coerceIn(0, 255)
+    val b = (color.blue * 255f + 0.5f).toInt().coerceIn(0, 255)
+    return (a shl 24) or (r shl 16) or (g shl 8) or b
 }
 
 /**
@@ -57,12 +81,24 @@ data class MapPin(
     val caption: String? = null,
     /** > 1 when dropped during an active collaboration bump (Squad / Heavy Beat pin). */
     val squadMultiplier: Float = 1f,
+    /** 1–2 letter glyph for generated circular avatar pins when [imageUrl] is absent. */
+    val avatarInitials: String = "?",
+    /**
+     * Opaque ARGB fill for initials pins — matches [stableAvatarPlaceholderColor] for connections
+     * (and kind-stable seeds for events/hubs). When null, platforms fall back to [markerHueDegrees].
+     */
+    val avatarFillArgb: Int? = null,
 ) {
     companion object {
         /**
          * Create from ConnectionMapPoint
          */
-        fun fromConnectionPoint(point: ConnectionMapPoint, imageUrl: String? = null): MapPin {
+        fun fromConnectionPoint(
+            point: ConnectionMapPoint,
+            imageUrl: String? = null,
+            avatarSeed: String? = null,
+        ): MapPin {
+            val seed = avatarSeed?.takeIf { it.isNotBlank() } ?: point.connection.id
             val cap = truncateMapPinCaption(point.displayName, 12).takeIf { it.isNotEmpty() }
             return MapPin(
                 id = point.connection.id,
@@ -79,6 +115,8 @@ data class MapPin(
                 beaconTypeKey = null,
                 zIndex = 0f,
                 caption = cap,
+                avatarInitials = mapPinAvatarInitials(point.displayName),
+                avatarFillArgb = composeColorToArgb(stableAvatarPlaceholderColor(seed)),
             )
         }
 
@@ -141,6 +179,19 @@ data class MapPin(
                 ?.toFloatOrNull()
                 ?.takeIf { it > 1f }
                 ?: 1f
+            // Prefer cover/image from metadata when present; otherwise platform generates initials.
+            val coverUrl = beacon.metadata.raw
+                ?.get("image_url")
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?: beacon.metadata.raw
+                    ?.get("cover_url")
+                    ?.jsonPrimitive
+                    ?.contentOrNull
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
             return MapPin(
                 id = "beacon:${beacon.id}",
                 title = label,
@@ -153,12 +204,14 @@ data class MapPin(
                     beacon.kind == MapBeaconKind.SOS ||
                     beacon.kind == MapBeaconKind.HAZARD,
                 squadMultiplier = squadMultiplier,
-                imageUrl = null,
+                imageUrl = coverUrl,
                 kind = kind,
                 beaconKind = beacon.kind,
                 beaconTypeKey = beacon.sourceBeaconType,
                 zIndex = beaconZIndex(beacon),
                 caption = caption,
+                avatarInitials = mapPinAvatarInitials(label),
+                avatarFillArgb = composeColorToArgb(stableAvatarPlaceholderColor(beacon.id)),
             )
         }
 
@@ -179,6 +232,8 @@ data class MapPin(
                 beaconTypeKey = null,
                 zIndex = 15_000f,
                 caption = cap ?: "${hub.activeUserCount} here",
+                avatarInitials = mapPinAvatarInitials(hub.name),
+                avatarFillArgb = composeColorToArgb(stableAvatarPlaceholderColor(hub.hubId)),
             )
         }
     }

@@ -50,8 +50,7 @@ actual fun PlatformMap(
 ) {
     val locationService = remember { LocationService() }
     val hasLocationPermission = locationService.hasLocationPermission()
-    val canShowMyLocation = !ghostMode && mapGesturesEnabled && hasLocationPermission
-    val previewMode = !mapGesturesEnabled
+    val canShowMyLocation = !ghostMode && hasLocationPermission
     val deviceLocation by AppDataManager.lastKnownDeviceLocation.collectAsState()
     val isDarkMode = LocalIsDarkMode.current
 
@@ -72,7 +71,7 @@ actual fun PlatformMap(
 
     // One effect: lat/lon + zoom use newLatLngZoom together. A separate zoomTo effect kept the
     // old viewport center and broke cluster zoom.
-    LaunchedEffect(resolvedCenterLat, resolvedCenterLon, zoom, previewMode) {
+    LaunchedEffect(resolvedCenterLat, resolvedCenterLon, zoom, mapGesturesEnabled) {
         if (resolvedCenterLat != null && resolvedCenterLon != null) {
             val target = LatLng(resolvedCenterLat, resolvedCenterLon)
             val z = zoom.toFloat()
@@ -82,7 +81,7 @@ actual fun PlatformMap(
             val zoomChanged = abs(pos.zoom - z) > 0.05f
             if (moved || zoomChanged) {
                 val update = com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(target, z)
-                if (previewMode) {
+                if (!mapGesturesEnabled) {
                     cameraPositionState.move(update)
                 } else {
                     cameraPositionState.animate(update = update)
@@ -142,8 +141,37 @@ actual fun PlatformMap(
     }
 
     val density = LocalDensity.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     val clusterIconCache = remember { mutableMapOf<String, BitmapDescriptor>() }
     val labeledPinCache = remember { mutableMapOf<String, BitmapDescriptor>() }
+    val avatarPinCache = remember { mutableMapOf<String, BitmapDescriptor>() }
+    var loadedAvatarBitmaps by remember { mutableStateOf<Map<String, Bitmap>>(emptyMap()) }
+    val imageLoader = remember(context) { coil3.ImageLoader(context) }
+
+    LaunchedEffect(pins) {
+        val urls = pins.mapNotNull { it.imageUrl?.trim()?.takeIf { u -> u.isNotEmpty() } }.distinct()
+        urls.forEach { url ->
+            if (loadedAvatarBitmaps.containsKey(url)) return@forEach
+            val request = coil3.request.ImageRequest.Builder(context)
+                .data(url)
+                .size(128)
+                .build()
+            val result = runCatching { imageLoader.execute(request) }.getOrNull()
+            if (result is coil3.request.SuccessResult) {
+                val src = when (val img = result.image) {
+                    is coil3.BitmapImage -> img.bitmap
+                    else -> null
+                } ?: return@forEach
+                // Software copy — Google Maps markers reject hardware bitmaps.
+                val bmp = if (src.config == Bitmap.Config.HARDWARE) {
+                    src.copy(Bitmap.Config.ARGB_8888, false) ?: return@forEach
+                } else {
+                    src.copy(Bitmap.Config.ARGB_8888, false) ?: src
+                }
+                loadedAvatarBitmaps = loadedAvatarBitmaps + (url to bmp)
+            }
+        }
+    }
 
     // GoogleMap is a SurfaceView-backed AndroidView: it must receive explicit max constraints.
     // Parent scale animations (e.g. AnimatedVisibility scaleIn) also break SurfaceView compositing.
@@ -154,7 +182,7 @@ actual fun PlatformMap(
         properties = mapProperties,
         uiSettings = MapUiSettings(
             zoomControlsEnabled = false,
-            compassEnabled = showCompass && !previewMode,
+            compassEnabled = showCompass,
             myLocationButtonEnabled = canShowMyLocation,
             scrollGesturesEnabled = mapGesturesEnabled,
             zoomGesturesEnabled = mapGesturesEnabled,
@@ -162,12 +190,10 @@ actual fun PlatformMap(
             tiltGesturesEnabled = mapGesturesEnabled,
         )
     ) {
-        if (previewMode) return@GoogleMap
         pins.forEach { pin ->
-            key(pin.id) {
+            key(pin.id, pin.imageUrl, loadedAvatarBitmaps[pin.imageUrl?.trim().orEmpty()]?.generationId) {
                 val markerHue = pin.markerHueDegrees()
                 val squadScale = pin.squadMultiplier.coerceAtLeast(1f)
-                val caption = pin.caption?.trim().orEmpty()
                 val position = remember(pin.id, pin.latitude, pin.longitude) {
                     LatLng(pin.latitude, pin.longitude)
                 }
@@ -175,51 +201,32 @@ actual fun PlatformMap(
                 LaunchedEffect(pin.latitude, pin.longitude) {
                     markerState.position = LatLng(pin.latitude, pin.longitude)
                 }
-                if (caption.isEmpty()) {
-                    val squadIcon = if (squadScale > 1f) {
-                        val cacheKey = "squad|$markerHue|$squadScale"
-                        labeledPinCache.getOrPut(cacheKey) {
-                            bitmapDescriptorForSquadPin(
-                                density = density,
-                                hueDegrees = markerHue,
-                                scale = squadScale,
-                            )
-                        }
-                    } else null
-                    Marker(
-                        state = markerState,
-                        title = pin.title,
-                        alpha = pin.opacity,
-                        zIndex = pin.zIndex + if (squadScale > 1f) 500f else 0f,
-                        icon = squadIcon ?: BitmapDescriptorFactory.defaultMarker(markerHue),
-                        onClick = {
-                            onPinTapped(pin)
-                            true
-                        },
-                    )
-                } else {
-                    val cacheKey = "${pin.id}|$caption|$markerHue|${pin.opacity}"
-                    val icon = labeledPinCache.getOrPut(cacheKey) {
-                        bitmapDescriptorForLabeledPin(
-                            density = density,
-                            hueDegrees = markerHue,
-                            caption = caption,
-                            pinOpacity = pin.opacity,
-                        )
-                    }
-                    Marker(
-                        state = markerState,
-                        title = pin.title,
-                        alpha = pin.opacity,
-                        zIndex = pin.zIndex,
-                        icon = icon,
-                        anchor = Offset(0.5f, 1f),
-                        onClick = {
-                            onPinTapped(pin)
-                            true
-                        },
+                val photo = pin.imageUrl?.trim()?.takeIf { it.isNotEmpty() }
+                    ?.let { loadedAvatarBitmaps[it] }
+                val avatarCacheKey =
+                    "${pin.id}|${pin.avatarInitials}|$markerHue|${pin.avatarFillArgb}|${photo?.generationId ?: 0}|$squadScale"
+                val icon = avatarPinCache.getOrPut(avatarCacheKey) {
+                    bitmapDescriptorForCircularAvatarPin(
+                        density = density,
+                        hueDegrees = markerHue,
+                        initials = pin.avatarInitials,
+                        photo = photo,
+                        scale = if (squadScale > 1f) squadScale else 1f,
+                        fillArgb = pin.avatarFillArgb,
                     )
                 }
+                Marker(
+                    state = markerState,
+                    title = pin.title,
+                    alpha = pin.opacity,
+                    zIndex = pin.zIndex + if (squadScale > 1f) 500f else 0f,
+                    icon = icon,
+                    anchor = Offset(0.5f, 0.5f),
+                    onClick = {
+                        onPinTapped(pin)
+                        true
+                    },
+                )
             }
         }
 
@@ -265,6 +272,66 @@ actual fun PlatformMap(
         }
     }
     }
+}
+
+private fun bitmapDescriptorForCircularAvatarPin(
+    density: androidx.compose.ui.unit.Density,
+    hueDegrees: Float,
+    initials: String,
+    photo: Bitmap?,
+    scale: Float,
+    fillArgb: Int? = null,
+): BitmapDescriptor {
+    val sizePx = with(density) { (44.dp * scale).roundToPx() }.coerceAtLeast(36)
+    val borderPx = with(density) { 2.dp.toPx() }.coerceAtLeast(2f)
+    val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bmp)
+    val cx = sizePx / 2f
+    val cy = sizePx / 2f
+    val radius = sizePx / 2f - borderPx / 2f
+
+    val fillColor = fillArgb ?: run {
+        val hsv = floatArrayOf(hueDegrees, 0.72f, 0.92f)
+        android.graphics.Color.HSVToColor(hsv)
+    }
+
+    val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = fillColor
+        style = Paint.Style.FILL
+    }
+    canvas.drawCircle(cx, cy, radius, fillPaint)
+
+    if (photo != null && !photo.isRecycled) {
+        val shaderBmp = Bitmap.createScaledBitmap(photo, sizePx, sizePx, true)
+        val shader = android.graphics.BitmapShader(
+            shaderBmp,
+            android.graphics.Shader.TileMode.CLAMP,
+            android.graphics.Shader.TileMode.CLAMP,
+        )
+        val photoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.shader = shader
+        }
+        canvas.drawCircle(cx, cy, radius - borderPx * 0.25f, photoPaint)
+    } else {
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+            textAlign = Paint.Align.CENTER
+            textSize = sizePx * 0.34f
+            isFakeBoldText = true
+        }
+        val glyph = initials.take(2).ifEmpty { "?" }
+        val textY = cy - (textPaint.descent() + textPaint.ascent()) / 2f
+        canvas.drawText(glyph, cx, textY, textPaint)
+    }
+
+    val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.BLACK
+        style = Paint.Style.STROKE
+        strokeWidth = borderPx
+    }
+    canvas.drawCircle(cx, cy, radius, borderPaint)
+
+    return BitmapDescriptorFactory.fromBitmap(bmp)
 }
 
 private fun bitmapDescriptorForSquadPin(

@@ -942,10 +942,10 @@ fun App() {
             var hubVerifyInProgress by remember { mutableStateOf(false) }
             var lastHubChatArgs by remember { mutableStateOf<HubChatNavArgs?>(null) }
             var showUnifiedSearchSheet by remember { mutableStateOf(false) }
-            var mapPipExpanded by remember { mutableStateOf(false) }
+            var eventsSheetExpanded by remember { mutableStateOf(false) }
             LaunchedEffect(currentRoute) {
-                if (currentRoute != NavigationItem.Map.route && mapPipExpanded) {
-                    mapPipExpanded = false
+                if (currentRoute != NavigationItem.Map.route && eventsSheetExpanded) {
+                    eventsSheetExpanded = false
                 }
             }
 
@@ -1229,7 +1229,7 @@ fun App() {
             // Platform back handler — intercepts Android back gesture/button
             compose.project.click.click.ui.components.PlatformBackHandler(
                 enabled = (
-                    mapPipExpanded ||
+                    eventsSheetExpanded ||
                         showUnifiedSearchSheet ||
                         hubChatArgs != null ||
                         showMyQRCode ||
@@ -1241,7 +1241,7 @@ fun App() {
                     ) && !iOSSwipeOwnsBack
             ) {
                 when {
-                    mapPipExpanded -> mapPipExpanded = false
+                    eventsSheetExpanded -> eventsSheetExpanded = false
                     showUnifiedSearchSheet -> showUnifiedSearchSheet = false
                     hubChatArgs != null -> hubChatArgs = null
                     showMyQRCode -> {
@@ -1438,8 +1438,8 @@ fun App() {
                                         onJoinCommunityHub = { hubId ->
                                             launchCommunityHubJoin(hubId)
                                         },
-                                        mapPipExpanded = mapPipExpanded,
-                                        onMapPipExpandedChanged = { mapPipExpanded = it },
+                                        eventsSheetExpanded = eventsSheetExpanded,
+                                        onEventsSheetExpandedChanged = { eventsSheetExpanded = it },
                                         onOpenSearch = { showUnifiedSearchSheet = true },
                                         onOpenDisposableRoll = { cid ->
                                             openConnectionDisposableRoll(cid)

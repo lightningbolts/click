@@ -6,12 +6,16 @@ import androidx.compose.ui.viewinterop.UIKitInteropProperties
 import androidx.compose.ui.viewinterop.UIKitView
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalIsDarkMode
-import compose.project.click.click.ui.utils.BeaconPinMetrics // pragma: allowlist secret
 import compose.project.click.click.ui.utils.TimeState // pragma: allowlist secret
 import kotlinx.datetime.Clock
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
+import platform.CoreGraphics.CGRectMake
+import platform.CoreGraphics.CGSizeMake
 import platform.CoreLocation.CLLocationCoordinate2DMake
+import platform.Foundation.NSData
+import platform.Foundation.NSURL
+import platform.Foundation.dataWithContentsOfURL
 import platform.MapKit.MKAnnotationProtocol
 import platform.MapKit.MKAnnotationView
 import platform.MapKit.MKCircle
@@ -26,9 +30,22 @@ import platform.MapKit.MKStandardMapConfiguration
 import platform.MapKit.MKMapElevationStyleFlat
 import platform.MapKit.MKFeatureDisplayPriorityRequired
 import platform.MapKit.MKStandardMapEmphasisStyleMuted
+import platform.UIKit.NSTextAlignmentCenter
+import platform.UIKit.UIBezierPath
 import platform.UIKit.UIColor
+import platform.UIKit.UIFont
+import platform.UIKit.UIGraphicsBeginImageContextWithOptions
+import platform.UIKit.UIGraphicsEndImageContext
+import platform.UIKit.UIGraphicsGetImageFromCurrentImageContext
+import platform.UIKit.UIImage
+import platform.UIKit.UILabel
 import platform.UIKit.UIUserInterfaceStyle
+import platform.UIKit.drawInRect
+import platform.darwin.DISPATCH_QUEUE_PRIORITY_DEFAULT
 import platform.darwin.NSObject
+import platform.darwin.dispatch_async
+import platform.darwin.dispatch_get_global_queue
+import platform.darwin.dispatch_get_main_queue
 import kotlin.collections.filterIsInstance
 import kotlin.math.abs
 import kotlin.math.ln
@@ -117,6 +134,36 @@ actual fun PlatformMap(
             if (map.delegate !== pinTapDelegate) {
                 map.delegate = pinTapDelegate
             }
+            pinTapDelegate.mapViewRef = map
+
+            // Prefetch avatar photos for circular glyph markers (background; no main-thread I/O).
+            pins.forEach { pin ->
+                val url = pin.imageUrl?.trim()?.takeIf { it.isNotEmpty() } ?: return@forEach
+                if (pinTapDelegate.avatarImages.containsKey(url)) return@forEach
+                if (!pinTapDelegate.avatarLoadInFlight.add(url)) return@forEach
+                val nsUrl = NSURL.URLWithString(url) ?: run {
+                    pinTapDelegate.avatarLoadInFlight.remove(url)
+                    return@forEach
+                }
+                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(), 0u)) {
+                    val data = NSData.dataWithContentsOfURL(nsUrl)
+                    val image = data?.let { UIImage.imageWithData(it) }
+                    dispatch_async(dispatch_get_main_queue()) {
+                        pinTapDelegate.avatarLoadInFlight.remove(url)
+                        if (image != null) {
+                            pinTapDelegate.avatarImages[url] = image
+                            pinTapDelegate.avatarPinImageCache.clear()
+                            val mapRef = pinTapDelegate.mapViewRef ?: return@dispatch_async
+                            // Rebuild annotation views so circular photos appear.
+                            val anns = mapRef.annotations.filterIsInstance<MKPointAnnotation>()
+                            if (anns.isNotEmpty()) {
+                                mapRef.removeAnnotations(anns)
+                                mapRef.addAnnotations(anns)
+                            }
+                        }
+                    }
+                }
+            }
             
             val currentSnapshot = mapAnnotationSnapshot(pins, clusters)
             
@@ -189,6 +236,13 @@ actual fun PlatformMap(
 
 @OptIn(ExperimentalForeignApi::class)
 private fun MapPin.markerTintUIColor(): UIColor {
+    avatarFillArgb?.let { argb ->
+        val a = ((argb ushr 24) and 0xFF) / 255.0
+        val r = ((argb ushr 16) and 0xFF) / 255.0
+        val g = ((argb ushr 8) and 0xFF) / 255.0
+        val b = (argb and 0xFF) / 255.0
+        return UIColor(red = r, green = g, blue = b, alpha = a)
+    }
     val key = beaconTypeKey?.lowercase()
     return when {
         key != null -> when (key) {
@@ -245,7 +299,7 @@ private fun mapPinDisplayTitle(pin: MapPin): String =
 /** Stable fingerprint so we only touch MapKit annotations when pin/cluster data actually changes. */
 private fun mapAnnotationSnapshot(pins: List<MapPin>, clusters: List<MapClusterPin>): String {
     val pinPart = pins.sortedBy { it.id }.joinToString("|") { pin ->
-        "${pin.id}:${pin.latitude},${pin.longitude}:${pin.title}:${pin.kind}:${pin.timeState}"
+        "${pin.id}:${pin.latitude},${pin.longitude}:${pin.title}:${pin.kind}:${pin.timeState}:${pin.avatarInitials}:${pin.imageUrl.orEmpty()}:${pin.avatarFillArgb}"
     }
     val clusterPart = clusters.sortedBy { it.id }.joinToString("|") { cluster ->
         "${cluster.id}:${cluster.latitude},${cluster.longitude}:${cluster.count}"
@@ -431,6 +485,12 @@ private fun mapRegionLooksUsable(map: MKMapView): Boolean =
 private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
     var pinEntries: List<Pair<MKPointAnnotation, MapPin>> = emptyList()
     var clusterEntries: List<Pair<MKPointAnnotation, MapClusterPin>> = emptyList()
+    /** Loaded connection/event avatar photos keyed by image URL. */
+    val avatarImages: MutableMap<String, UIImage> = mutableMapOf()
+    /** URLs currently downloading — avoids duplicate prefetch storms. */
+    val avatarLoadInFlight: MutableSet<String> = mutableSetOf()
+    /** Rendered circular pin bitmaps keyed by pin id + photo/initials signature. */
+    val avatarPinImageCache: MutableMap<String, UIImage> = mutableMapOf()
     var onPin: (MapPin) -> Unit = {}
     var onCluster: (MapClusterPin) -> Unit = {}
     var pendingProgrammaticCamera: ProgrammaticCameraTarget? = null
@@ -440,6 +500,8 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
         { _, _, _, _ -> }
     var onZoomChanged: (Double) -> Unit = {}
     var onMapGesture: () -> Unit = {}
+    /** Weak map handle so avatar loads can refresh annotation views. */
+    var mapViewRef: MKMapView? = null
 
     private var lastViewportMinLat: Double? = null
     private var lastViewportMaxLat: Double? = null
@@ -631,15 +693,15 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
             pin != null -> "P|${pin.id}"
             else -> "X|orphan"
         }
-        val reused = mapView.dequeueReusableAnnotationViewWithIdentifier(identifier)
-        val view = (reused as? MKMarkerAnnotationView)
-            ?: MKMarkerAnnotationView(annotation = viewForAnnotation, reuseIdentifier = identifier)
-        view.annotation = viewForAnnotation
-        view.canShowCallout = false
-        view.setEnabled(true)
-        view.setSelected(false, animated = false)
         when {
             cluster != null -> {
+                val reused = mapView.dequeueReusableAnnotationViewWithIdentifier(identifier)
+                val view = (reused as? MKMarkerAnnotationView)
+                    ?: MKMarkerAnnotationView(annotation = viewForAnnotation, reuseIdentifier = identifier)
+                view.annotation = viewForAnnotation
+                view.canShowCallout = false
+                view.setEnabled(true)
+                view.setSelected(false, animated = false)
                 val label = if (cluster.count > 99) "99+" else cluster.count.toString()
                 view.glyphText = label
                 view.markerTintColor = when {
@@ -648,35 +710,47 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
                     else -> UIColor.orangeColor
                 }
                 view.zPriority = cluster.zIndex
+                return view
             }
             pin != null -> {
-                val isHub = pin.kind == MapPinKind.COMMUNITY_HUB
-                val isAlert = pin.beaconKind == MapBeaconKind.HAZARD ||
-                    pin.beaconKind == MapBeaconKind.SOS ||
-                    pin.kind == MapPinKind.BEACON_ALERT
-                val cap = pin.caption?.trim().orEmpty()
-                view.glyphText = when {
-                    isHub && cap.isNotEmpty() -> cap
-                    isAlert && (cap.isEmpty() || cap == BeaconPinMetrics.AlertGlyph) ->
-                        BeaconPinMetrics.AlertGlyph
-                    cap.isEmpty() -> ""
-                    cap.length <= 3 -> cap
-                    else -> cap.take(3)
+                val reused = mapView.dequeueReusableAnnotationViewWithIdentifier(identifier)
+                val view = reused ?: MKAnnotationView(annotation = viewForAnnotation, reuseIdentifier = identifier)
+                view.annotation = viewForAnnotation
+                view.canShowCallout = false
+                view.setEnabled(true)
+                view.setSelected(false, animated = false)
+                val photo = pin.imageUrl?.trim()?.takeIf { it.isNotEmpty() }?.let { avatarImages[it] }
+                val initials = pin.avatarInitials.take(2).ifEmpty { "?" }
+                val cacheKey =
+                    "${pin.id}|${pin.imageUrl.orEmpty()}|${photo != null}|$initials|${pin.avatarFillArgb}"
+                val image = avatarPinImageCache.getOrPut(cacheKey) {
+                    circularMapPinUIImage(
+                        sizePts = 44.0 * pin.squadMultiplier.coerceAtLeast(1f).toDouble(),
+                        fill = pin.markerTintUIColor(),
+                        initials = initials,
+                        photo = photo,
+                    )
                 }
-                view.markerTintColor = pin.markerTintUIColor()
+                view.image = image
+                view.centerOffset = platform.CoreGraphics.CGPointMake(0.0, 0.0)
                 view.zPriority = pin.zIndex
-                if (isHub) {
+                if (pin.kind == MapPinKind.COMMUNITY_HUB) {
                     view.displayPriority = MKFeatureDisplayPriorityRequired
-                    view.titleVisibility = platform.MapKit.MKFeatureVisibility.MKFeatureVisibilityVisible
                 }
+                return view
             }
             else -> {
+                val reused = mapView.dequeueReusableAnnotationViewWithIdentifier(identifier)
+                val view = (reused as? MKMarkerAnnotationView)
+                    ?: MKMarkerAnnotationView(annotation = viewForAnnotation, reuseIdentifier = identifier)
+                view.annotation = viewForAnnotation
+                view.canShowCallout = false
                 view.glyphText = ""
                 view.markerTintColor = UIColor.yellowColor
                 view.zPriority = 0f
+                return view
             }
         }
-        return view
     }
 
     override fun mapViewDidFinishLoadingMap(mapView: MKMapView) {
@@ -700,4 +774,55 @@ private fun metersForZoom(zoomLevel: Double): Double {
     val normalized = (maxZoom - zoomLevel).coerceIn(0.0, maxZoom)
     val meters = minMeters * 2.0.pow(normalized)
     return meters.coerceIn(minMeters, maxMeters)
+}
+
+/** Large circular avatar pin (~88pt) — matches Android bitmap markers (not tiny MKMarker glyphs). */
+@OptIn(ExperimentalForeignApi::class)
+private fun circularMapPinUIImage(
+    sizePts: Double,
+    fill: UIColor,
+    initials: String,
+    photo: UIImage?,
+): UIImage {
+    val size = sizePts.coerceAtLeast(36.0)
+    UIGraphicsBeginImageContextWithOptions(CGSizeMake(size, size), false, 0.0)
+    try {
+        val rect = CGRectMake(0.0, 0.0, size, size)
+        val path = UIBezierPath.bezierPathWithOvalInRect(rect)
+        path.addClip()
+        if (photo != null) {
+            // Aspect-fill into the circle.
+            val pw = photo.size.useContents { width }.coerceAtLeast(1.0)
+            val ph = photo.size.useContents { height }.coerceAtLeast(1.0)
+            val scale = maxOf(size / pw, size / ph)
+            val dw = pw * scale
+            val dh = ph * scale
+            val dx = (size - dw) / 2.0
+            val dy = (size - dh) / 2.0
+            photo.drawInRect(CGRectMake(dx, dy, dw, dh))
+        } else {
+            fill.setFill()
+            path.fill()
+            val glyph = initials.take(2).ifEmpty { "?" }
+            val fontSize = size * 0.34
+            val label = UILabel(frame = CGRectMake(0.0, 0.0, size, size))
+            label.text = glyph
+            label.textColor = UIColor.whiteColor
+            label.font = UIFont.boldSystemFontOfSize(fontSize)
+            label.textAlignment = NSTextAlignmentCenter
+            label.backgroundColor = UIColor.clearColor
+            label.drawTextInRect(CGRectMake(0.0, 0.0, size, size))
+        }
+        // Black border ring.
+        UIColor.blackColor.setStroke()
+        val border = UIBezierPath.bezierPathWithOvalInRect(
+            CGRectMake(1.0, 1.0, size - 2.0, size - 2.0),
+        )
+        border.lineWidth = 2.0
+        border.stroke()
+        return UIGraphicsGetImageFromCurrentImageContext()
+            ?: UIImage()
+    } finally {
+        UIGraphicsEndImageContext()
+    }
 }

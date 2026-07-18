@@ -1,6 +1,12 @@
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.*
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -13,6 +19,7 @@ import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: a
 import compose.project.click.click.ui.components.ClickSheetDialogChrome // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.AnimatedClickDialog // pragma: allowlist secret
+import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,11 +33,13 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveButton // pragma: allowlist secret
@@ -87,7 +96,7 @@ import compose.project.click.click.ui.components.GlassmorphicOverlay
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 
 /** Neighborhood zoom for the discovery PiP map preview. */
-private const val MapPipPreviewZoom = 14.5
+private const val MapDefaultUserZoom = 14.5
 
 /**
  * Map screen — Phase 2 refactor (B1, C10, C11):
@@ -114,8 +123,8 @@ fun MapScreen(
     onLayerFilterConsumed: () -> Unit = {},
     /** Proximity verify + hop into hub chat (matches Add Click hub join). */
     onJoinCommunityHub: (hubId: String) -> Unit = {},
-    mapPipExpanded: Boolean = false,
-    onMapPipExpandedChanged: (Boolean) -> Unit = {},
+    eventsSheetExpanded: Boolean = false,
+    onEventsSheetExpandedChanged: (Boolean) -> Unit = {},
     onOpenSearch: (() -> Unit)? = null,
     onOpenDisposableRoll: ((String) -> Unit)? = null,
 ) {
@@ -199,8 +208,8 @@ fun MapScreen(
         }
     }
 
-    LaunchedEffect(mapPipExpanded) {
-        if (mapPipExpanded) {
+    LaunchedEffect(eventsSheetExpanded) {
+        if (eventsSheetExpanded) {
             viewModel.refreshDiscoveryFromMapInteraction()
         }
     }
@@ -220,11 +229,14 @@ fun MapScreen(
     }
 
     DisposableEffect(Unit) {
-        onDispose { onMapPipExpandedChanged(false) }
+        onDispose { onEventsSheetExpandedChanged(false) }
     }
 
-    PlatformBackHandler(enabled = mapPipExpanded) {
-        onMapPipExpandedChanged(false)
+    var eventsListTransitionMode by remember { mutableStateOf(EventsListTransitionMode.Tap) }
+
+    PlatformBackHandler(enabled = eventsSheetExpanded) {
+        eventsListTransitionMode = EventsListTransitionMode.Tap
+        onEventsSheetExpandedChanged(false)
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -312,8 +324,6 @@ fun MapScreen(
                 is MapState.Loading -> LoadingState()
                 is MapState.Error -> ErrorState(message = state.message, onRetry = { viewModel.refresh() })
                 is MapState.Success -> {
-                    val stats = viewModel.getMapStats()
-                    val statsLine = "${stats.liveCount} live · ${stats.totalConnections} memories"
                     val feedItems = remember(
                         communityHubs,
                         mapBeacons,
@@ -329,88 +339,141 @@ fun MapScreen(
                             userLon = userLon,
                         )
                     }
-                    MapDiscoveryScreen(
-                        feedItems = feedItems,
-                        discoveryFeedPending = discoveryFeedPending,
-                        discoveryFeedRefreshing = discoveryFeedPending,
-                        onRefreshDiscovery = { viewModel.refreshDiscoveryFeed() },
-                        mapPipExpanded = mapPipExpanded,
-                        onMapPipExpandedChange = onMapPipExpandedChanged,
-                        statsLine = statsLine,
-                        onOpenSearch = onOpenSearch,
-                        onDropBeacon = {
-                            TelemetryBatcher.recordActionTaken()
-                            showBeaconDropSheet = true
-                        },
-                        mapContent = { mapModifier, mapGesturesEnabled ->
-                            Box(modifier = mapModifier) {
-                                MapContent(
-                                    modifier = Modifier.fillMaxSize(),
-                                    renderData = renderData,
-                                    communityHubs = communityHubs,
-                                    zoom = cameraTarget?.zoom ?: mapBindingZoom,
-                                    ghostMode = ghostModeEnabled,
-                                    mapGesturesEnabled = mapGesturesEnabled,
-                                    showCompass = !mapPipExpanded,
-                                    cameraTarget = cameraTarget,
-                                    userLat = effectiveUserLat,
-                                    userLon = effectiveUserLon,
-                                    onPinTapped = { pin ->
-                                        TelemetryBatcher.recordActionTaken()
-                                        if (pin.kind == MapPinKind.CONNECTION) {
-                                            selectedProfileId = pin.id
-                                        } else {
-                                            selectedProfileId = null
-                                        }
-                                        viewModel.onMapPinTapped(pin)
-                                    },
-                                    onClusterTapped = { clusterPin ->
-                                        TelemetryBatcher.recordActionTaken()
-                                        viewModel.onClusterTappedFromMap(clusterPin.id)
-                                    },
-                                    onZoomChanged = { viewModel.setZoomLevel(it) },
-                                    onVisibleBoundsChanged = { minLat, maxLat, minLon, maxLon ->
-                                        viewModel.updateVisibleBounds(minLat, maxLat, minLon, maxLon)
-                                    },
-                                    onCameraAnimationComplete = { viewModel.onCameraAnimationComplete() },
-                                    onMapGesture = { TelemetryBatcher.recordMapPan() },
-                                )
-                                GlassmorphicOverlay(
-                                    visible = frictionUi.showGrassNudge && mapGesturesEnabled,
-                                    message = "Looking for the right vibe? Try dropping a 'Looking for Coffee' intent and let the map come to you. Put your phone in your pocket and we'll vibrate when a match is nearby.",
-                                    onDismiss = { TelemetryBatcher.dismissGrassNudge() },
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-                            }
-                        },
-                        onHubClick = { hub, distanceM ->
-                            TelemetryBatcher.recordActionTaken()
-                            viewModel.onCommunityHubTapped(hub, distanceM)
-                        },
-                        onBeaconClick = { beacon, distanceM ->
-                            TelemetryBatcher.recordActionTaken()
-                            viewModel.onBeaconPinTapped(beacon.id, seedDistanceMeters = distanceM)
-                        },
-                        onConnectionClick = { point ->
-                            TelemetryBatcher.recordActionTaken()
-                            selectedProfileId = point.connection.id
-                            viewModel.onMapPinTapped(MapPin.fromConnectionPoint(point))
-                        },
-                        expandedMapChrome = {
-                            MapExpandedMapChrome(
-                                dockBottomPadding = mapFabAboveNav,
-                                layerFilters = layerFilters,
-                                onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
-                                onDropBeacon = {
-                            TelemetryBatcher.recordActionTaken()
-                            showBeaconDropSheet = true
-                        },
-                                onCollapseMap = { onMapPipExpandedChanged(false) },
-                                onZoomIn = { viewModel.zoomIn() },
-                                onZoomOut = { viewModel.zoomOut() },
+                    val eventNearbyCount = remember(feedItems) {
+                        feedItems.count {
+                            it is DiscoveryFeedItem.Beacon && it.beacon.kind == MapBeaconKind.EVENT
+                        }
+                    }
+                    val fabBottomPadding = mapFabAboveNav + EventsReopenChipClearance
+
+                    // Map layer is isolated from eventsSheetExpanded so open/close cannot
+                    // invalidate PlatformMap (gestures stay on; overlay eats touches).
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        MapContent(
+                            modifier = Modifier.fillMaxSize(),
+                            renderData = renderData,
+                            communityHubs = communityHubs,
+                            zoom = cameraTarget?.zoom ?: mapBindingZoom,
+                            ghostMode = ghostModeEnabled,
+                            mapGesturesEnabled = true,
+                            showCompass = true,
+                            cameraTarget = cameraTarget,
+                            userLat = effectiveUserLat,
+                            userLon = effectiveUserLon,
+                            currentUserId = currentUser?.id,
+                            onPinTapped = rememberMapPinTapHandler(
+                                onConnection = { pinId -> selectedProfileId = pinId },
+                                onClearConnection = { selectedProfileId = null },
+                                onPin = { viewModel.onMapPinTapped(it) },
+                            ),
+                            onClusterTapped = rememberMapClusterTapHandler {
+                                viewModel.onClusterTappedFromMap(it)
+                            },
+                            onZoomChanged = rememberStableZoomHandler { viewModel.setZoomLevel(it) },
+                            onVisibleBoundsChanged = rememberStableBoundsHandler { minLat, maxLat, minLon, maxLon ->
+                                viewModel.updateVisibleBounds(minLat, maxLat, minLon, maxLon)
+                            },
+                            onCameraAnimationComplete = rememberStableUnitHandler {
+                                viewModel.onCameraAnimationComplete()
+                            },
+                            onMapGesture = rememberStableUnitHandler {
+                                TelemetryBatcher.recordMapPan()
+                            },
+                        )
+
+                        MapAlwaysOnChrome(
+                            dockBottomPadding = fabBottomPadding,
+                            layerFilters = layerFilters,
+                            onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
+                            onDropBeacon = {
+                                TelemetryBatcher.recordActionTaken()
+                                showBeaconDropSheet = true
+                            },
+                            onZoomIn = { viewModel.zoomIn() },
+                            onZoomOut = { viewModel.zoomOut() },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .zIndex(10f)
+                                .graphicsLayer { alpha = if (eventsSheetExpanded) 0f else 1f },
+                        )
+
+                        EventsReopenChip(
+                            count = eventNearbyCount,
+                            onClick = {
+                                eventsListTransitionMode = EventsListTransitionMode.Tap
+                                onEventsSheetExpandedChanged(true)
+                            },
+                            enabled = !eventsSheetExpanded,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .zIndex(15f)
+                                .graphicsLayer { alpha = if (eventsSheetExpanded) 0f else 1f }
+                                .padding(
+                                    start = 16.dp,
+                                    end = 16.dp,
+                                    bottom = mapFabAboveNav,
+                                ),
+                        )
+
+                        GlassmorphicOverlay(
+                            visible = frictionUi.showGrassNudge && !eventsSheetExpanded,
+                            message = "Looking for the right vibe? Try dropping a 'Looking for Coffee' intent and let the map come to you. Put your phone in your pocket and we'll vibrate when a match is nearby.",
+                            onDismiss = { TelemetryBatcher.dismissGrassNudge() },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .zIndex(20f),
+                        )
+
+                        val eventsSlideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
+                        val eventsFadeSpec = tween<Float>(220, easing = LinearOutSlowInEasing)
+                        AnimatedVisibility(
+                            visible = eventsSheetExpanded,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .zIndex(40f),
+                            enter = slideInHorizontally(animationSpec = eventsSlideSpec, initialOffsetX = { it }) +
+                                fadeIn(animationSpec = eventsFadeSpec),
+                            exit = if (eventsListTransitionMode == EventsListTransitionMode.Gesture) {
+                                ExitTransition.None
+                            } else {
+                                slideOutHorizontally(animationSpec = eventsSlideSpec, targetOffsetX = { it }) +
+                                    fadeOut(animationSpec = eventsFadeSpec)
+                            },
+                            label = "events_fullscreen",
+                        ) {
+                            InteractiveSwipeBackContainer(
+                                enabled = true,
+                                opaquePreviousBackground = false,
+                                onBack = {
+                                    eventsListTransitionMode = EventsListTransitionMode.Gesture
+                                    onEventsSheetExpandedChanged(false)
+                                },
+                                previousContent = {},
+                                currentContent = {
+                                    EventsDiscoveryFullScreen(
+                                        feedItems = feedItems,
+                                        discoveryFeedPending = discoveryFeedPending,
+                                        discoveryFeedRefreshing = discoveryFeedPending,
+                                        onRefreshDiscovery = { viewModel.refreshDiscoveryFeed() },
+                                        layerFilters = layerFilters,
+                                        onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
+                                        viewModel = viewModel,
+                                        onBack = {
+                                            eventsListTransitionMode = EventsListTransitionMode.Tap
+                                            onEventsSheetExpandedChanged(false)
+                                        },
+                                        onBeaconClick = { beacon, distanceM ->
+                                            TelemetryBatcher.recordActionTaken()
+                                            viewModel.onBeaconPinTapped(
+                                                beacon.id,
+                                                seedDistanceMeters = distanceM,
+                                            )
+                                        },
+                                    )
+                                },
                             )
-                        },
-                    )
+                        }
+                    }
                 }
             }
         }
@@ -668,14 +731,14 @@ private fun buildProfileSheetState(
 }
 
 @Composable
-private fun MapExpandedMapChrome(
+private fun MapAlwaysOnChrome(
     dockBottomPadding: Dp,
     layerFilters: Set<MapLayerFilter>,
     onToggleLayerFilter: (MapLayerFilter) -> Unit,
     onDropBeacon: () -> Unit,
-    onCollapseMap: () -> Unit,
     onZoomIn: () -> Unit,
     onZoomOut: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val style = LocalPlatformStyle.current
     val glassStrength = if (style.isIOS) 0.64f else 0.4f
@@ -683,24 +746,16 @@ private fun MapExpandedMapChrome(
         WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
     )
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         Row(
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
+                .align(Alignment.TopEnd)
                 .zIndex(40f)
                 .windowInsetsPadding(topSafe)
-                .padding(top = 8.dp, start = 16.dp, end = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .padding(top = 8.dp, end = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            MapLiquidGlassIconButton(
-                icon = Icons.Filled.Close,
-                contentDescription = "Minimize map",
-                onClick = onCollapseMap,
-                glassStrength = glassStrength,
-                size = 44.dp,
-            )
             MapLayerFilterDropdown(
                 selected = layerFilters,
                 onToggle = onToggleLayerFilter,
@@ -1596,6 +1651,7 @@ private fun MapContent(
     cameraTarget: compose.project.click.click.viewmodel.CameraTarget?,
     userLat: Double? = null,
     userLon: Double? = null,
+    currentUserId: String? = null,
     onPinTapped: (MapPin) -> Unit,
     onClusterTapped: (MapClusterPin) -> Unit,
     onZoomChanged: (Double) -> Unit,
@@ -1603,32 +1659,45 @@ private fun MapContent(
     onCameraAnimationComplete: () -> Unit,
     onMapGesture: () -> Unit = {},
 ) {
-    val hubPins = communityHubs.map { MapPin.fromCommunityHub(it) }
-    val pins = when (renderData) {
-        is MapRenderData.IndividualPins -> {
-            val conn = renderData.points.map { MapPin.fromConnectionPoint(it) }
-            val bc = renderData.beacons.map { MapPin.fromBeacon(it) }
-            (conn + bc + hubPins).sortedByDescending { it.zIndex }
-        }
-        is MapRenderData.Clusters -> {
-            val standalone = renderData.standaloneBeacons.map { MapPin.fromBeacon(it) }
-            (standalone + hubPins).sortedByDescending { it.zIndex }
+    val connectedUsers by AppDataManager.connectedUsers.collectAsState()
+    val hubPins = remember(communityHubs) {
+        communityHubs.map { MapPin.fromCommunityHub(it) }
+    }
+    val pins = remember(renderData, connectedUsers, currentUserId, hubPins) {
+        when (renderData) {
+            is MapRenderData.IndividualPins -> {
+                val conn = renderData.points.map { point ->
+                    val peerId = point.connection.user_ids.firstOrNull { it != currentUserId }
+                    val peer = peerId?.let { connectedUsers[it] }
+                    MapPin.fromConnectionPoint(
+                        point,
+                        imageUrl = peer?.image,
+                        avatarSeed = peerId ?: point.connection.id,
+                    )
+                }
+                val bc = renderData.beacons.map { MapPin.fromBeacon(it) }
+                (conn + bc + hubPins).sortedByDescending { it.zIndex }
+            }
+            is MapRenderData.Clusters -> {
+                val standalone = renderData.standaloneBeacons.map { MapPin.fromBeacon(it) }
+                (standalone + hubPins).sortedByDescending { it.zIndex }
+            }
         }
     }
 
-    val clusters = when (renderData) {
-        is MapRenderData.Clusters -> renderData.clusters.map { it.toClusterPin() }
-        is MapRenderData.IndividualPins -> emptyList()
+    val clusters = remember(renderData) {
+        when (renderData) {
+            is MapRenderData.Clusters -> renderData.clusters.map { it.toClusterPin() }
+            is MapRenderData.IndividualPins -> emptyList()
+        }
     }
 
-    // Prefer an active programmatic target; otherwise frame the user's GPS (PiP + first open).
-    val previewMode = !mapGesturesEnabled
+    // Prefer an active programmatic target; otherwise frame the user's GPS.
     val mapCenterLat = cameraTarget?.latitude ?: userLat
     val mapCenterLon = cameraTarget?.longitude ?: userLon
     val mapZoom = when {
-        previewMode && mapCenterLat != null && mapCenterLon != null -> MapPipPreviewZoom
         cameraTarget != null -> zoom
-        mapCenterLat != null && mapCenterLon != null -> MapPipPreviewZoom
+        mapCenterLat != null && mapCenterLon != null -> MapDefaultUserZoom
         else -> zoom
     }
 
@@ -1649,6 +1718,66 @@ private fun MapContent(
         onCameraAnimationComplete = onCameraAnimationComplete,
         onMapGesture = onMapGesture,
     )
+}
+
+/** Stable callback identity so [MapContent] / [PlatformMap] can skip when Events opens. */
+@Composable
+private fun rememberMapPinTapHandler(
+    onConnection: (pinId: String) -> Unit,
+    onClearConnection: () -> Unit,
+    onPin: (MapPin) -> Unit,
+): (MapPin) -> Unit {
+    val onConnectionState = rememberUpdatedState(onConnection)
+    val onClearConnectionState = rememberUpdatedState(onClearConnection)
+    val onPinState = rememberUpdatedState(onPin)
+    return remember {
+        { pin: MapPin ->
+            TelemetryBatcher.recordActionTaken()
+            if (pin.kind == MapPinKind.CONNECTION) {
+                onConnectionState.value(pin.id)
+            } else {
+                onClearConnectionState.value()
+            }
+            onPinState.value(pin)
+        }
+    }
+}
+
+@Composable
+private fun rememberMapClusterTapHandler(
+    onCluster: (clusterId: String) -> Unit,
+): (MapClusterPin) -> Unit {
+    val onClusterState = rememberUpdatedState(onCluster)
+    return remember {
+        { clusterPin: MapClusterPin ->
+            TelemetryBatcher.recordActionTaken()
+            onClusterState.value(clusterPin.id)
+        }
+    }
+}
+
+@Composable
+private fun rememberStableZoomHandler(onZoom: (Double) -> Unit): (Double) -> Unit {
+    val state = rememberUpdatedState(onZoom)
+    return remember { { z: Double -> state.value(z) } }
+}
+
+@Composable
+private fun rememberStableBoundsHandler(
+    onBounds: (minLat: Double, maxLat: Double, minLon: Double, maxLon: Double) -> Unit,
+): (Double, Double, Double, Double) -> Unit {
+    val state = rememberUpdatedState(onBounds)
+    return remember {
+        { minLat: Double, maxLat: Double, minLon: Double, maxLon: Double ->
+            state.value(minLat, maxLat, minLon, maxLon)
+        }
+    }
+}
+
+@Composable
+private fun rememberStableUnitHandler(onInvoke: () -> Unit): () -> Unit {
+    val state = rememberUpdatedState(onInvoke)
+    return remember { { state.value() } }
 }
 
 @Composable
@@ -1878,4 +2007,9 @@ private fun PulsingRing() {
             .scale(scale)
             .border(3.dp, PrimaryBlue.copy(alpha = alpha), CircleShape),
     )
+}
+
+private enum class EventsListTransitionMode {
+    Tap,
+    Gesture,
 }

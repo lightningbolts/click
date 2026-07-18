@@ -13,13 +13,12 @@
 ```
 MapScreen (organism)
 ├── MapState branches: Loading | Error | Success
-├── MapDiscoveryScreen (feed + PiP map)
-│   ├── DiscoveryFloatingHeader — "Discovery", stats, Distance/Recent, search, refresh
-│   ├── LazyColumn feed sections + empty/loading rows
-│   ├── Drop beacon FAB (bottom-start)
-│   └── Map PiP preview + expand (bottom-end)
-├── Fullscreen map overlay (expanded)
-│   └── MapExpandedMapChrome — close, layer filter, drop beacon, zoom
+├── MapDiscoveryScreen (map-first canvas) — map + chrome + peek composed as siblings
+│   ├── Full-bleed interactive PlatformMap (gestures stay on; Events overlay covers touches)
+│   ├── MapAlwaysOnChrome — alpha-hidden while Events open (not disposed)
+│   └── Events reopen chip (alpha-hidden while list open)
+├── EventsDiscoveryFullScreen (slide-in + InteractiveSwipeBackContainer) — back/swipe → map/peek
+│   └── AppScreenScaffold + Liquid Glass header; search, sort, layer chips, denser event cards + RSVP
 ├── MapBeaconSheetRoot overlays (conditional)
 │   ├── BeaconDropSheetContent
 │   ├── CommunityHubBottomSheet
@@ -47,45 +46,37 @@ CreateHubModal — also reachable from BeaconDropSheet Hub category
 |----------|-------|
 | Background | Flat `background` `#f9f9f9`; ghost mode adds `surface-dim` wash + 2dp dashed `#000` overlay hint |
 | Scaffold | Zero content insets; `SnackbarHost` only |
-| Success child | `MapDiscoveryScreen` (not raw full-bleed map as primary surface) |
+| Success child | `MapDiscoveryScreen` — **full interactive map** is the primary surface |
 
 ### MapDiscoveryScreen (`MapDiscoveryLayout.kt`)
 
 | Property | Value |
 |----------|-------|
-| Feed | `LazyColumn`, 10dp row spacing, 20dp horizontal padding |
-| Top inset | Status bar + expanded floating header (~76dp) + 8dp |
-| Bottom inset | Bottom chrome + PiP height (160dp) + FAB gap + 16dp |
-| PiP map | 120×160dp, 16dp radius, 2dp `#000` border, bottom-end above tab bar |
-| Drop beacon FAB | 56dp, `primaryContainer`, bottom-start (left of PiP) |
-| Header | `DiscoveryFloatingHeader` — title `"Discovery"`, subtitle dynamic stats line |
+| Primary canvas | Full-bleed `PlatformMap` with gestures enabled on tab entry |
+| Map chrome | `MapAlwaysOnChrome` — layer filter top-end; drop-beacon FAB + zoom docked **above** reopen chip (`mapFabAboveNav + 120.dp`) |
+| Events list | **Full-screen** slide-in + `InteractiveSwipeBackContainer`. Title **Events** (peek chip same). `AppScreenScaffold` + Liquid Glass header |
+| Search | Only inside full-screen list |
+| Filters / sort | Distance/Recent segment + layer chips; refresh in header |
+| Event cards | Title, host, schedule, description, distance, attendees, RSVP. Card tap → `EventBeaconDetail` |
+| Back | Swipe / back / system back → map + peek. Map stays mounted (no marker preview wipe) |
 
-**Stats subtitle template:** `"{liveCount} live · {totalConnections} memories"`
+**Pins:** Circular avatar markers (~**44dp** Android / ~**44pt** iOS). Connections use list photos + `stableAvatarPlaceholderColor`; events/hubs generated initials.
 
-### Discovery feed sections (grouped titles)
+### Events feed (full screen)
 
-| Section title | Source kind |
-|---------------|-------------|
-| `"Community hubs"` | `DiscoveryFeedItem.Hub` |
-| `"Soundtracks"` | `MapBeaconKind.SOUNDTRACK` |
-| `"SOS beacons"` | `MapBeaconKind.SOS` |
-| `"Hazards"` | `MapBeaconKind.HAZARD` |
-| `"Utilities"` | `MapBeaconKind.UTILITY` |
-| `"Study spots"` | `MapBeaconKind.STUDY` |
-| `"Social vibes"` | `MapBeaconKind.SOCIAL_VIBE` |
-| `"Events"` | `MapBeaconKind.EVENT` |
-| `"Beacons"` | `MapBeaconKind.OTHER` |
+| Section | Source |
+|---------|--------|
+| `"Events for you"` | `DiscoveryFeedItem.Beacon` where `kind == EVENT` |
 
-Hub row subtitle template: `"Ephemeral · {activeUserCount} here"`
+Other beacon/hub kinds remain on the **map** via layer filters.
 
-### MapExpandedMapChrome
+### MapAlwaysOnChrome
 
 | Control | Position | Size |
 |---------|----------|------|
-| Close (`"Minimize map"`) | Top-start | 44dp solid bordered circle button |
-| Layer filter dropdown | Top-center-right | max 132dp trigger, 240dp menu |
-| Drop beacon (`"Drop beacon"`) | Bottom-start | 56dp |
-| Zoom in / out | Bottom-end column | 48dp each |
+| Layer filter dropdown | Top-end | max 132dp trigger |
+| Drop beacon (`"Drop beacon"`) | Bottom-start, above reopen chip clearance (`mapFabAboveNav + 120.dp`) | 56dp |
+| Zoom in / out | Bottom-end column, same clearance | 48dp each |
 
 ### BeaconDropSheet (`BeaconDropSheetContent`)
 

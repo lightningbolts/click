@@ -143,7 +143,7 @@ These are **layout / IA** workstreams, not bugfixes. Use design-asset HTML for h
 | **Settings grouping** | `settings/` | `SettingsScreen` | **Landed (2026-07-17):** profile header first; Alerts + Privacy & data clusters; standalone Sign out |
 | **Inbox density** | `chat/` + `add_click_fixed_navigation/` | `ConnectionsListView` | **Partial (2026-07-17):** Remember Me strip for Core 1:1s; circular avatar + **pill name** hit targets; list row spacing left as-is (no dense stack / overlapping rolodex cards) |
 | **Add Click hero** | `add_click_streamlined_header/` | `AddClickScreen` | **Landed (2026-07-17):** Tap to Connect first; My Code / Scan below; hub labels **Create hub** / **Join hub**; card dimensions unchanged |
-| **Events discovery** | `events_discovery_with_real_mini_map/` | `MapDiscoveryLayout` | **Next:** Events-for-you + mini-map PiP — see [`track-c-next-revamps.md`](track-c-next-revamps.md) §1 |
+| **Events discovery** | `events_discovery_with_real_mini_map/` + map-first | `MapDiscoveryLayout` | **DONE** — full map + peek chip → **full-screen** `EventsDiscoveryFullScreen` + ~88dp/pt avatar pins — see [`track-c-next-revamps.md`](track-c-next-revamps.md) §0 |
 | **Full-map events** | `map_events_full_screen_map/` | `MapScreen` | Full-map + event pin sheet |
 | **Event detail** | `event_details_expanded_dark/` | Beacon/event sheets | Expanded detail over map |
 | **Nav chrome v2** (optional) | — | `BottomBar.*`, `App.kt` | After #23 device OK: decide if floating icon-only chrome needs hit-target / readability polish without reintroducing a fill band |
@@ -189,8 +189,8 @@ Home IA (+ greeting LiquidGlassPageHeader), Settings grouping, Inbox Remember Me
 Track A done. Track B code landed — device verify only; do not false-pass [KNOWN-N].
 
 Scope for THIS chat (default):
-Events discovery — docs/design-assets/events_discovery_with_real_mini_map/ → MapDiscoveryLayout / MapScreen
-(Events-for-you + mini-map hierarchy. Layout/IA only.)
+Events discovery / map-first — DONE. Next: Event detail — docs/design-assets/event_details_expanded_dark/ → EventBeaconDetail
+(Layout/IA only.)
 
 Rules:
 - Do NOT edit the neo-brutalist plan file under .cursor/plans.
@@ -207,7 +207,7 @@ Rules:
 1. ~~**Chat A — Dark/light**~~ **DONE**
 2. ~~**Chat B — Known issues P0 + B+ UI code**~~ **DONE (device verify remains)**
 3. **Chat B device / P1 #4** — smoke + events list
-4. **Chat C — Mock layout redesigns** — next: **Events discovery** ([`track-c-next-revamps.md`](track-c-next-revamps.md))
+4. **Chat C — Mock layout redesigns** — next: **Event detail** ([`track-c-next-revamps.md`](track-c-next-revamps.md))
 
 ---
 
@@ -242,6 +242,6 @@ Rules:
 - [x] Track C **Add Click hero** (Tap first; Create hub / Join hub; dimensions unchanged) + Tap how-it-works simulator-only gate landed (2026-07-17); device smoke still open.
 - [ ] **Device verification** for Track B / B+ P0–P1 rows (incl. #4).
 - [ ] Smoke checklist on Android + iOS.
-- [ ] Remaining Track C layout redesigns completed or explicitly scheduled — **next: Events discovery**.
+- [ ] Remaining Track C layout redesigns completed or explicitly scheduled — **next: Event detail**.
 
-**Next Track C chat:** paste the prompt in [`track-c-next-revamps.md`](track-c-next-revamps.md) §2 (Events discovery). Device smoke for Track B / Home / Remember Me / Add Click can run in parallel.
+**Next Track C chat:** paste the prompt in [`track-c-next-revamps.md`](track-c-next-revamps.md) §2 (Event detail). Device smoke for Track B / Home / Remember Me / Add Click / Map-first can run in parallel.

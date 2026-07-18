@@ -8,6 +8,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -876,7 +877,7 @@ private fun parseMapBeaconRow(element: JsonElement): MapBeacon? {
         ?: (obj["created_at"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
     val expiresAt = strKey("expires_at", "expiresAt")?.let { parseEpochMs(it) }
     val showCreatorName = (obj["show_creator_name"] as? JsonPrimitive)?.let { prim ->
-        when (val raw = prim.contentOrNull?.trim()?.lowercase()) {
+        prim.booleanOrNull ?: when (prim.contentOrNull?.trim()?.lowercase()) {
             "true", "1" -> true
             "false", "0" -> false
             else -> null
@@ -900,8 +901,25 @@ private fun parseMapBeaconRow(element: JsonElement): MapBeacon? {
     )
 }
 
-private fun parseEpochMs(value: String): Long? {
-    val n = value.toLongOrNull()
-    if (n != null) return n
-    return runCatching { Instant.parse(value).toEpochMilliseconds() }.getOrNull()
+/**
+ * Accepts epoch millis strings and ISO-8601, plus common Postgres timestamptz
+ * forms like `2026-05-30 01:40:47.869682+00` (space separator, short offset).
+ */
+internal fun parseEpochMs(value: String): Long? {
+    val trimmed = value.trim()
+    if (trimmed.isEmpty()) return null
+    trimmed.toLongOrNull()?.let { return it }
+    runCatching { Instant.parse(trimmed).toEpochMilliseconds() }.getOrNull()?.let { return it }
+    val withT = trimmed.replace(' ', 'T')
+    runCatching { Instant.parse(withT).toEpochMilliseconds() }.getOrNull()?.let { return it }
+    // `…+00` / `…-07` → `…+00:00` / `…-07:00`
+    val withColonOffset = Regex("""([+-]\d{2})$""").replace(withT) { match ->
+        "${match.groupValues[1]}:00"
+    }
+    runCatching { Instant.parse(withColonOffset).toEpochMilliseconds() }.getOrNull()?.let { return it }
+    // `…+0000` → `…+00:00`
+    val withSplitOffset = Regex("""([+-])(\d{2})(\d{2})$""").replace(withColonOffset) { match ->
+        "${match.groupValues[1]}${match.groupValues[2]}:${match.groupValues[3]}"
+    }
+    return runCatching { Instant.parse(withSplitOffset).toEpochMilliseconds() }.getOrNull()
 }

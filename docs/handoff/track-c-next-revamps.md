@@ -2,13 +2,23 @@
 
 **Date:** 2026-07-17  
 **Product:** Click KMP mobile (`click/composeApp`)  
-**Previous chat:** Track C Add Click hero + Tap how-it-works gate + Remember Me name pill
+**Previous chat:** Track C map-first events discovery (full-screen Events list + avatar pins)
 
 Read this before writing code. Prefer **one primary revamp per chat**.
 
 ---
 
 ## 0. Just finished (do not redo)
+
+### Map-first events discovery — landed
+
+- Map tab opens to **full interactive map** + **Events for you** peek chip (not a modal sheet)
+- Tap peek → **full-screen** Events (slide-in + interactive swipe-back); headers say **Events**; map layer isolated (gestures stay on; overlay eats touches; stable map callbacks)
+- **Pins ~44dp/pt**; denser event cards (titleMedium / bodySmall like Connections)
+
+**Docs:** `docs/ui-ux/mobile/10-map-beacons-hubs.md`.
+
+**Still open:** device smoke for full-screen events + pin photo confirm on hardware.
 
 ### Remember Me name pill + Tap how-it-works gate — landed
 
@@ -87,22 +97,21 @@ Source of truth for prior work: [`functional-clarity-continuation.md`](functiona
 
 | Priority | Revamp | Mock / source | Screen | Intent |
 |----------|--------|---------------|--------|--------|
-| **1** | **Events discovery** | `events_discovery_with_real_mini_map/` | `MapDiscoveryLayout` / `MapScreen` | Events-for-you + mini-map (top hero vs current bottom PiP) |
-| **2** | **Full-map events** | `map_events_full_screen_map/` | `MapScreen` | Full-map + event pin sheet |
-| **3** | **Event detail** | `event_details_expanded_dark/` | Beacon/event sheets | Expanded detail over map |
+| **1** | **Event detail** | `event_details_expanded_dark/` | Beacon/event sheets | Expanded detail over map |
+| **2** | **Full-map polish** | `map_events_full_screen_map/` | `MapScreen` | Remaining full-map chrome / pin sheet polish (map-first already shipped) |
 | Later | Inbox dense / rolodex stack | `add_click_fixed_navigation/` | `ConnectionsListView` | Only if product wants overlapping cards (spacing currently intentional) |
 
 Optional later (after related device OK): Nav chrome v2, Chat composer polish, Profile memories IA — see handoff §3.
 
-**Suggested default for next chat:** Events discovery.
+**Suggested default for next chat:** Event detail.
 
-### Events discovery — brief for next chat
+### Event detail — brief for next chat
 
-**Current (code):** [`MapDiscoveryLayout.kt`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/ui/screens/MapDiscoveryLayout.kt) + [`MapScreen.kt`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/ui/screens/MapScreen.kt) — multi-section discovery feed (hubs / SOS / Events / beacons) with **bottom-end PiP** map (120×160) + expand overlay; generic `DiscoveryFeedRow` rows; header via `DiscoveryFloatingHeader`.
+**Current (code):** [`EventBeaconDetail`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/ui/screens/MapScreen.kt) inside `BeaconDetailSheetContent` — title, host, schedule, description, attendee chips, RSVP.
 
-**Target (mock):** [`docs/design-assets/events_discovery_with_real_mini_map/`](../design-assets/events_discovery_with_real_mini_map/) — **top** full-width mini-map hero (nearby-count pill); search + Filter row; **"Events for you"** + rich event cards (image, schedule, venue, attendees, RSVP). Use HTML for hierarchy/spacing intent only — do not copy markup, blur, or glass (keep Functional Clarity opaque borders).
+**Target (mock):** [`docs/design-assets/event_details_expanded_dark/`](../design-assets/event_details_expanded_dark/) — expanded detail over map (LIVE badge, start/end bento, category chips, host card, attendee stack, join CTA). Use HTML for hierarchy/spacing intent only — do not copy markup, blur, or glass.
 
-**Keep:** `MapViewModel` / `buildDiscoveryFeedItems`; beacon/hub tap → sheets; PiP expand → fullscreen chrome (may relocate map); transparent nav; `clickBorderColor()` / `LocalIsDarkMode` / `GlassSheetTokens`; `EventBeaconDetail` RSVP. Do not start Full-map events (`map_events_full_screen_map/`) in the same chat.
+**Keep:** Map-first shell + events peek → full-screen list; `MapViewModel` RSVP; transparent nav; `clickBorderColor()` / `LocalIsDarkMode` / `GlassSheetTokens`. Do not redo map-first IA in the same chat.
 
 **Update when shipping:** [`docs/ui-ux/mobile/10-map-beacons-hubs.md`](../ui-ux/mobile/10-map-beacons-hubs.md) + this handoff §0 / §4.
 
@@ -116,6 +125,7 @@ click/docs/handoff/track-c-next-revamps.md
 and click/docs/handoff/functional-clarity-continuation.md
 
 DONE — do not redo unless regressing:
+- Map-first events discovery (full map + peek → full-screen Events list; search only in list; avatar pins)
 - Home IA + Home greeting LiquidGlassPageHeader
 - Settings grouping
 - Inbox Remember Me (Core 1:1s; circular avatar; pill name hit targets)
@@ -124,11 +134,11 @@ DONE — do not redo unless regressing:
 Track A done. Track B code landed — device verify only; do not false-pass [KNOWN-N].
 
 Scope for THIS chat (default):
-Events discovery — docs/design-assets/events_discovery_with_real_mini_map/ → MapDiscoveryLayout / MapScreen
-(Events-for-you + mini-map hierarchy. Layout/IA only.)
+Event detail — docs/design-assets/event_details_expanded_dark/ → EventBeaconDetail / beacon sheets
+(Layout/IA only.)
 
-Alternate (say which if not Events discovery):
-2) Full-map events / event detail — map stack
+Alternate (say which if not Event detail):
+2) Full-map polish — remaining map chrome / pin sheet
 
 Rules:
 - Do NOT edit the neo-brutalist plan file under .cursor/plans.
@@ -151,7 +161,7 @@ Rules:
 | Settings (done) | `docs/ui-ux/mobile/14-settings-privacy.md`, `docs/design-assets/settings/` |
 | Inbox (Remember Me done) | `docs/ui-ux/mobile/07-connections-inbox.md`, `docs/design-assets/chat/` |
 | Add Click (done) | `docs/ui-ux/mobile/06-connect-handshake.md`, `docs/design-assets/add_click_streamlined_header/` |
-| **Map / events (next)** | `docs/ui-ux/mobile/10-map-beacons-hubs.md`, `MapDiscoveryLayout.kt`, design-assets `events_*` / `map_events_*` |
+| **Map / events (map-first done)** | `docs/ui-ux/mobile/10-map-beacons-hubs.md`, `MapDiscoveryLayout.kt`, design-assets `events_*` / `map_events_*` / `event_details_*` |
 | Regression | `docs/regression-testing/00-INDEX.md` (§0 gates) |
 
 ---
@@ -167,4 +177,5 @@ Rules:
 - [x] Add Click hero (Tap first; Create hub / Join hub; dimensions unchanged) shipped
 - [x] Tap how-it-works card gated to simulator / emulator only
 - [x] Next-chat handoff refreshed for **Events discovery** (§1 brief + §2 prompt)
-- [ ] Next Track C revamp (Events discovery) started in a dedicated chat using §2 prompt
+- [x] Map-first events discovery (full map + peek → full-screen Events list + avatar pins) shipped
+- [ ] Next Track C revamp (Event detail) started in a dedicated chat using §2 prompt

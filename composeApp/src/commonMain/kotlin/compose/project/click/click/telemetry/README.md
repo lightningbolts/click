@@ -95,7 +95,7 @@ object AnonymizedHexbin {
 
 ### Grass nudge
 
-When user pans the map **>4 minutes** without `recordActionTaken()`, and panned within last 45s, `showGrassNudge = true`. UI dismisses via `dismissGrassNudge()` — aligns with anti-doomscroll product goal.
+When user pans the map **>4 minutes** without `recordActionTaken()`, and panned within last 45s, `showGrassNudge = true`. UI dismisses via `dismissGrassNudge()` which **sticks for the rest of the map session** (survives `refreshUiClock` / pan updates) until `endMapSession` / `resetSession` — aligns with anti-doomscroll product goal.
 
 ### `system_friction_logs`
 
