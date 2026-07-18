@@ -6,7 +6,7 @@
 
 **Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: `click/docs/design-assets/chat/`.
 
-**Track C (2026-07-17):** Remember Me horizontal strip for Core-pinned 1:1s on Active tab; list row spacing left unchanged.
+**Track C (2026-07-17):** Remember Me horizontal strip for Core-pinned 1:1s on Active tab; list row spacing left unchanged. Avatar hit = circle; name hit = pill.
 
 ---
 
@@ -73,7 +73,7 @@ ConnectionsScreen (organism — tab shell + chat overlay)
 | Time chip | Primary fill; compact `formatRememberMeBadge` (`12h` / `2d` / …); omit if no last activity |
 | Name | First name (`firstName` or first token of display name) |
 | Labels | `"Remember Me"` then optional `"Clicks"` above the list |
-| Hit target | Circular on avatar (`CoreConnectionAvatarFrame` + `clip(CircleShape)`); name label separately tappable |
+| Hit target | Circular on avatar (`CoreConnectionAvatarFrame` + `clip(CircleShape)`); name label **pill** (`clip(RoundedCornerShape(999.dp))` + horizontal padding — not full-width square `clickable`) |
 | Duplication | Core people still appear in `ConnectionItem` rows below |
 
 ### ConnectionItem

@@ -141,7 +141,7 @@ These are **layout / IA** workstreams, not bugfixes. Use design-asset HTML for h
 |--------|---------------|---------------------|--------|
 | **Home IA** | `docs/design-assets/home/` | `HomeScreen` | **Landed (2026-07-17):** greeting first via floating `LiquidGlassPageHeader` (aligned with other tab headers); Featured Event; I'm down for → Explore → Poll-Pair/archive; reconnect with inbox avatars; insights columns; no redundant location pins; search caret fixes |
 | **Settings grouping** | `settings/` | `SettingsScreen` | **Landed (2026-07-17):** profile header first; Alerts + Privacy & data clusters; standalone Sign out |
-| **Inbox density** | `chat/` + `add_click_fixed_navigation/` | `ConnectionsListView` | **Partial (2026-07-17):** Remember Me strip for Core 1:1s + circular avatar hit targets; list row spacing left as-is (no dense stack / overlapping rolodex cards) |
+| **Inbox density** | `chat/` + `add_click_fixed_navigation/` | `ConnectionsListView` | **Partial (2026-07-17):** Remember Me strip for Core 1:1s; circular avatar + **pill name** hit targets; list row spacing left as-is (no dense stack / overlapping rolodex cards) |
 | **Add Click hero** | `add_click_streamlined_header/` | `AddClickScreen` | **Landed (2026-07-17):** Tap to Connect first; My Code / Scan below; hub labels **Create hub** / **Join hub**; card dimensions unchanged |
 | **Events discovery** | `events_discovery_with_real_mini_map/` | `MapDiscoveryLayout` | **Next:** Events-for-you + mini-map PiP — see [`track-c-next-revamps.md`](track-c-next-revamps.md) §1 |
 | **Full-map events** | `map_events_full_screen_map/` | `MapScreen` | Full-map + event pin sheet |
@@ -185,12 +185,12 @@ click/docs/handoff/track-c-next-revamps.md
 and click/docs/handoff/functional-clarity-continuation.md
 
 DONE — do not redo unless regressing:
-Home IA (+ greeting LiquidGlassPageHeader), Settings grouping, Inbox Remember Me, Add Click hero.
+Home IA (+ greeting LiquidGlassPageHeader), Settings grouping, Inbox Remember Me (pill names), Add Click hero, Tap how-it-works simulator-only.
 Track A done. Track B code landed — device verify only; do not false-pass [KNOWN-N].
 
 Scope for THIS chat (default):
-Events discovery — docs/design-assets/events_discovery_with_real_mini_map/ → MapDiscoveryLayout
-(Events-for-you + mini-map PiP. Layout/IA only.)
+Events discovery — docs/design-assets/events_discovery_with_real_mini_map/ → MapDiscoveryLayout / MapScreen
+(Events-for-you + mini-map hierarchy. Layout/IA only.)
 
 Rules:
 - Do NOT edit the neo-brutalist plan file under .cursor/plans.
@@ -238,8 +238,8 @@ Rules:
 - [x] P1 #4 events list/map parity **code** landed (device verify still open).
 - [x] Code audit residuals hardened: client 503 recover, confirm dedup, Keychain -50, 1:1 Message CTA, hazard pin metrics (2026-07-17).
 - [x] Track C **Home IA** layout + docs landed (2026-07-17); greeting later wrapped in `LiquidGlassPageHeader`; device smoke still open.
-- [x] Track C **Inbox Remember Me** strip (Core 1:1s) + circular avatar hit targets landed (2026-07-17); list spacing left as-is; device smoke still open.
-- [x] Track C **Add Click hero** (Tap first; Create hub / Join hub; dimensions unchanged) landed (2026-07-17); device smoke still open.
+- [x] Track C **Inbox Remember Me** strip (Core 1:1s) + circular avatar + **pill name** hit targets landed (2026-07-17); list spacing left as-is; device smoke still open.
+- [x] Track C **Add Click hero** (Tap first; Create hub / Join hub; dimensions unchanged) + Tap how-it-works simulator-only gate landed (2026-07-17); device smoke still open.
 - [ ] **Device verification** for Track B / B+ P0–P1 rows (incl. #4).
 - [ ] Smoke checklist on Android + iOS.
 - [ ] Remaining Track C layout redesigns completed or explicitly scheduled — **next: Events discovery**.

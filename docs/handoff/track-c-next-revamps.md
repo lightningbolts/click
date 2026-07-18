@@ -2,13 +2,20 @@
 
 **Date:** 2026-07-17  
 **Product:** Click KMP mobile (`click/composeApp`)  
-**Previous chat:** Track C Add Click hero (minimal reorder + hub labels)
+**Previous chat:** Track C Add Click hero + Tap how-it-works gate + Remember Me name pill
 
 Read this before writing code. Prefer **one primary revamp per chat**.
 
 ---
 
 ## 0. Just finished (do not redo)
+
+### Remember Me name pill + Tap how-it-works gate — landed
+
+- Remember Me **name** hit target is a **pill** (`clip(RoundedCornerShape(999.dp))` + padding); avatar stays **circular** — do not reintroduce full-column or full-width square `clickable` on the name
+- Tap to Connect idle: **"How Tap to Connect works"** card only when `MockProximityManager` / `isSimulatorOrEmulatorRuntime()` — hidden on real devices
+
+**Docs:** `docs/ui-ux/mobile/07-connections-inbox.md`, `docs/ui-ux/mobile/06-connect-handshake.md`.
 
 ### Add Click hero — landed (minimal)
 
@@ -19,7 +26,7 @@ Read this before writing code. Prefer **one primary revamp per chat**.
 
 **Docs:** `docs/ui-ux/mobile/06-connect-handshake.md`, design-asset `add_click_streamlined_header/` (hierarchy reference).
 
-**Still open:** device smoke for Add Click order + hub labels.
+**Still open:** device smoke for Add Click order + hub labels; Remember Me pills; Tap how-it-works on hardware.
 
 ### Inbox Remember Me + polish — landed (partial Inbox density)
 
@@ -27,7 +34,7 @@ Read this before writing code. Prefer **one primary revamp per chat**.
 - Chips: 56dp avatar + compact time badge (`formatRememberMeBadge`) + first name; tap opens chat
 - Section labels **Remember Me** / **Clicks**; hide when searching or core empty
 - Core people still appear in the normal list; **row spacing / ConnectionItem chrome unchanged**
-- Avatar hit target is **circular** (`CoreConnectionAvatarFrame` + `clip(CircleShape)`); name is a separate text tap — do not reintroduce full-column square `clickable`
+- Avatar hit target is **circular**; name hit target is **pill** (see above)
 - Not done: overlapping rolodex card stack from `add_click_fixed_navigation/`
 
 **Docs:** `docs/ui-ux/mobile/07-connections-inbox.md`, handoff §3 Inbox row.
@@ -80,7 +87,7 @@ Source of truth for prior work: [`functional-clarity-continuation.md`](functiona
 
 | Priority | Revamp | Mock / source | Screen | Intent |
 |----------|--------|---------------|--------|--------|
-| **1** | **Events discovery** | `events_discovery_with_real_mini_map/` | `MapDiscoveryLayout` | Events-for-you + mini-map PiP |
+| **1** | **Events discovery** | `events_discovery_with_real_mini_map/` | `MapDiscoveryLayout` / `MapScreen` | Events-for-you + mini-map (top hero vs current bottom PiP) |
 | **2** | **Full-map events** | `map_events_full_screen_map/` | `MapScreen` | Full-map + event pin sheet |
 | **3** | **Event detail** | `event_details_expanded_dark/` | Beacon/event sheets | Expanded detail over map |
 | Later | Inbox dense / rolodex stack | `add_click_fixed_navigation/` | `ConnectionsListView` | Only if product wants overlapping cards (spacing currently intentional) |
@@ -91,9 +98,11 @@ Optional later (after related device OK): Nav chrome v2, Chat composer polish, P
 
 ### Events discovery — brief for next chat
 
-**Target (mock):** [`docs/design-assets/events_discovery_with_real_mini_map/`](../design-assets/events_discovery_with_real_mini_map/) → `MapDiscoveryLayout`. Events-for-you list + mini-map PiP. Use HTML/`screen.png` for hierarchy/spacing intent only — do not copy markup.
+**Current (code):** [`MapDiscoveryLayout.kt`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/ui/screens/MapDiscoveryLayout.kt) + [`MapScreen.kt`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/ui/screens/MapScreen.kt) — multi-section discovery feed (hubs / SOS / Events / beacons) with **bottom-end PiP** map (120×160) + expand overlay; generic `DiscoveryFeedRow` rows; header via `DiscoveryFloatingHeader`.
 
-**Keep:** ViewModels / map / beacon data paths; transparent nav; `clickBorderColor()` / `LocalIsDarkMode` / `GlassSheetTokens`.
+**Target (mock):** [`docs/design-assets/events_discovery_with_real_mini_map/`](../design-assets/events_discovery_with_real_mini_map/) — **top** full-width mini-map hero (nearby-count pill); search + Filter row; **"Events for you"** + rich event cards (image, schedule, venue, attendees, RSVP). Use HTML for hierarchy/spacing intent only — do not copy markup, blur, or glass (keep Functional Clarity opaque borders).
+
+**Keep:** `MapViewModel` / `buildDiscoveryFeedItems`; beacon/hub tap → sheets; PiP expand → fullscreen chrome (may relocate map); transparent nav; `clickBorderColor()` / `LocalIsDarkMode` / `GlassSheetTokens`; `EventBeaconDetail` RSVP. Do not start Full-map events (`map_events_full_screen_map/`) in the same chat.
 
 **Update when shipping:** [`docs/ui-ux/mobile/10-map-beacons-hubs.md`](../ui-ux/mobile/10-map-beacons-hubs.md) + this handoff §0 / §4.
 
@@ -109,13 +118,14 @@ and click/docs/handoff/functional-clarity-continuation.md
 DONE — do not redo unless regressing:
 - Home IA + Home greeting LiquidGlassPageHeader
 - Settings grouping
-- Inbox Remember Me (Core 1:1s; circular avatar hit targets)
+- Inbox Remember Me (Core 1:1s; circular avatar; pill name hit targets)
 - Add Click hero (Tap first; Create hub / Join hub; dimensions unchanged)
+- Tap how-it-works card simulator-only
 Track A done. Track B code landed — device verify only; do not false-pass [KNOWN-N].
 
 Scope for THIS chat (default):
-Events discovery — docs/design-assets/events_discovery_with_real_mini_map/ → MapDiscoveryLayout
-(Events-for-you + mini-map PiP. Layout/IA only.)
+Events discovery — docs/design-assets/events_discovery_with_real_mini_map/ → MapDiscoveryLayout / MapScreen
+(Events-for-you + mini-map hierarchy. Layout/IA only.)
 
 Alternate (say which if not Events discovery):
 2) Full-map events / event detail — map stack
@@ -141,7 +151,7 @@ Rules:
 | Settings (done) | `docs/ui-ux/mobile/14-settings-privacy.md`, `docs/design-assets/settings/` |
 | Inbox (Remember Me done) | `docs/ui-ux/mobile/07-connections-inbox.md`, `docs/design-assets/chat/` |
 | Add Click (done) | `docs/ui-ux/mobile/06-connect-handshake.md`, `docs/design-assets/add_click_streamlined_header/` |
-| **Map / events (next)** | `docs/ui-ux/mobile/10-map-beacons-hubs.md`, design-assets `events_*` / `map_events_*` |
+| **Map / events (next)** | `docs/ui-ux/mobile/10-map-beacons-hubs.md`, `MapDiscoveryLayout.kt`, design-assets `events_*` / `map_events_*` |
 | Regression | `docs/regression-testing/00-INDEX.md` (§0 gates) |
 
 ---
@@ -152,7 +162,9 @@ Rules:
 - [x] Docs updated for Home order + verified-click search
 - [x] Settings grouping (profile header + preference clusters + standalone Sign out) shipped
 - [x] Inbox Remember Me strip (Core 1:1s) shipped; list spacing left as-is
-- [x] Remember Me circular hit targets + Home greeting `LiquidGlassPageHeader` polish shipped
+- [x] Remember Me circular avatar + **pill name** hit targets + Home greeting `LiquidGlassPageHeader` polish shipped
 - [x] Next-chat handoff prepared (Add Click hero brief + §2 prompt)
 - [x] Add Click hero (Tap first; Create hub / Join hub; dimensions unchanged) shipped
+- [x] Tap how-it-works card gated to simulator / emulator only
+- [x] Next-chat handoff refreshed for **Events discovery** (§1 brief + §2 prompt)
 - [ ] Next Track C revamp (Events discovery) started in a dedicated chat using §2 prompt
