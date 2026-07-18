@@ -28,7 +28,7 @@ ConnectionsScreen (organism — tab shell + chat overlay)
 │   │   ├── ActiveHubFeedRow[] (Groups tab only)
 │   │   └── ConnectionItem[] per chat
 │   ├── Empty / Loading / Error states
-│   ├── FloatingActionButton (Active tab) — "Create verified click"
+│   ├── FloatingActionButton (Active + Groups) — "Create verified click"
 │   ├── GlassToastHost (action feedback)
 │   ├── ConnectionMemberPickerSheet — verified click create
 │   ├── ConnectionActionSheet (long-press)
@@ -59,8 +59,8 @@ ConnectionsScreen (organism — tab shell + chat overlay)
 | List padding | 20dp horizontal; top = floating header collapse padding; bottom = `rememberBottomChromePadding()` |
 | Row spacing | 10dp vertical between items |
 | Header | `ConnectionsFloatingHeader` zIndex 1, `floatingHeaderStatusBarPadding` |
-| FAB | 56dp `PrimaryBlue`, bottom-end above nav (`rememberFabAboveNavPadding`) |
-| Toast | `GlassToastHost` left of FAB on Active tab |
+| FAB | 56dp `ClickCircularGlassIconButton` (same as map Drop beacon: `LiquidGlassPill` + `clickBorderColor()`), bottom-end above nav (`rememberFabAboveNavPadding`) |
+| Toast | `GlassToastHost` left of FAB on Active / Groups |
 
 ### RememberMeStrip
 
@@ -183,10 +183,11 @@ Header subtitle while loading empty: `"Loading…"`
 
 | Condition | FAB |
 |-----------|-----|
-| `selectedTabIndex == 0` && logged in | Shown |
-| Groups / Archived | Hidden |
+| Active (`selectedTabIndex == 0`) && logged in | Shown |
+| Groups (`selectedTabIndex == 1`) && logged in | Shown |
+| Archived | Hidden |
 
-FAB `contentDescription`: `"Create verified click"`
+FAB `contentDescription`: `"Create verified click"` — styled like map Drop beacon (bordered glass circle, not solid purple Material FAB).
 
 ### Verified click picker states
 
@@ -382,7 +383,7 @@ Long-press / ⋮ → HubActionSheet → Leave / Edit / Delete flows
 | List obscured (iOS) | Full-screen pointer consumer blocks list interaction under chat |
 | Search | Filters `name` on peer or group; empty state copy distinct from tab empty |
 | Pagination | Infinite scroll when within 4 items of end; disabled during active search |
-| Sort order | Core connections pinned first, then `connectionListActivityTs` descending |
+| Sort order | Core connections pinned first, then `connectionListActivityTs` descending. New activity **reorders list data** (row moves toward top via stable keys). Do **not** call `animateScrollToItem(0)` on reorder — that cancelled fling; the viewport stays where the user scrolled |
 
 **Focus order:** Floating header (title → search → tabs) → scrollable list → FAB.
 

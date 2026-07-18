@@ -22,7 +22,7 @@ Read this before writing code. Prefer **one primary revamp per chat**.
 
 **Still open / follow-ups:**
 - Device smoke for expanded event sheet + share/route/bookmark/check-in on hardware
-- Server event-info API for bookmark / check-in sync (local flags only today)
+- Server event-info API — detailed handoff: [event-engagement-api.md](event-engagement-api.md) (bookmarks, check-ins, shares, encounter link)
 - Host avatar when creator is not current user and not in `connectedUsers` (API has no `creator_avatar_url` yet)
 - **Future:** event ↔ encounter — if handshake/QR connects at a live event location/time, show that event on connection encounter info / Timeline ([10-map-beacons-hubs.md](../ui-ux/mobile/10-map-beacons-hubs.md) §7)
 
@@ -34,7 +34,7 @@ Read this before writing code. Prefer **one primary revamp per chat**.
 
 **Docs:** `docs/ui-ux/mobile/10-map-beacons-hubs.md`.
 
-**Still open:** device smoke for full-screen events + pin photo confirm on hardware.
+**Still open:** device smoke for full-screen events (bottom-up enter/exit + horizontal swipe-back) + pin photo confirm on hardware.
 
 ### Remember Me name pill + Tap how-it-works gate — landed
 

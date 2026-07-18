@@ -26,16 +26,17 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -55,14 +56,12 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -71,14 +70,19 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.LineHeightStyle
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAttachmentMenuAnchorHost // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAttachmentMenuRow // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatChromeHorizontalPadding // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatHeaderIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMediaPickerHandles // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: allowlist secret
@@ -105,6 +109,8 @@ import compose.project.click.click.ui.chat.rememberChatNativeKeyboardInsets // p
 import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
+import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.LocalGlassAlertAnimatedDismiss // pragma: allowlist secret
@@ -124,6 +130,7 @@ data class HubChatNavArgs(
     val hubCategory: String = "general",
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HubChatScreen(
     args: HubChatNavArgs,
@@ -281,17 +288,16 @@ fun HubChatScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(horizontal = 20.dp),
+                            .padding(horizontal = ChatChromeHorizontalPadding),
                         verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        IconButton(onClick = onNavigateBack) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                tint = MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(6.dp))
+                        ChatHeaderIconButton(
+                            icon = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            onClick = onNavigateBack,
+                            showBorder = true,
+                        )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = hubDetails.name,
@@ -309,66 +315,13 @@ fun HubChatScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Box {
-                            IconButton(onClick = { settingsMenuExpanded = true }) {
-                                Icon(
-                                    Icons.Filled.MoreVert,
-                                    contentDescription = "Hub settings",
-                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = settingsMenuExpanded,
-                                onDismissRequest = { settingsMenuExpanded = false },
-                            ) {
-                                val items = visibleHubSettingsMenuItems(
-                                    currentUserId = currentUserId,
-                                    creatorId = resolvedCreatorId,
-                                )
-                                if (HubSettingsMenuItem.Leave in items) {
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                "Leave Hub",
-                                                color = MaterialTheme.colorScheme.error,
-                                            )
-                                        },
-                                        onClick = {
-                                            settingsMenuExpanded = false
-                                            showLeaveConfirm = true
-                                        },
-                                        modifier = Modifier.testTag("hub_settings_leave"),
-                                    )
-                                }
-                                if (HubSettingsMenuItem.Edit in items) {
-                                    DropdownMenuItem(
-                                        text = { Text("Edit Hub") },
-                                        onClick = {
-                                            settingsMenuExpanded = false
-                                            editNameDraft = hubDetails.name
-                                            editCategoryDraft = hubDetails.category
-                                            showEditDialog = true
-                                        },
-                                        modifier = Modifier.testTag("hub_settings_edit"),
-                                    )
-                                }
-                                if (HubSettingsMenuItem.Delete in items) {
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                "Delete Hub",
-                                                color = MaterialTheme.colorScheme.error,
-                                            )
-                                        },
-                                        onClick = {
-                                            settingsMenuExpanded = false
-                                            showDeleteConfirm = true
-                                        },
-                                        modifier = Modifier.testTag("hub_settings_delete"),
-                                    )
-                                }
-                            }
-                        }
+                        ChatHeaderIconButton(
+                            icon = Icons.Filled.MoreVert,
+                            contentDescription = "Hub settings",
+                            onClick = { settingsMenuExpanded = true },
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            modifier = Modifier.testTag("hub_settings_menu"),
+                        )
                     }
                 }
 
@@ -581,6 +534,96 @@ fun HubChatScreen(
 
     }
 
+    if (settingsMenuExpanded) {
+        val menuItems = visibleHubSettingsMenuItems(
+            currentUserId = currentUserId,
+            creatorId = resolvedCreatorId,
+        )
+        ClickActionBottomSheet(
+            onDismissRequest = { settingsMenuExpanded = false },
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+                    .background(GlassSheetTokens.OledBlack())
+                    .padding(bottom = 32.dp),
+            ) {
+                Text(
+                    text = hubDetails.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = GlassSheetTokens.OnOled(),
+                    modifier = Modifier
+                        .padding(horizontal = 20.dp, vertical = 12.dp)
+                        .align(Alignment.CenterHorizontally),
+                )
+                HorizontalDivider(color = GlassSheetTokens.GlassBorder())
+
+                if (HubSettingsMenuItem.Leave in menuItems) {
+                    BentoGlassOptionRow(
+                        showBorder = false,
+                        title = "Leave Hub",
+                        subtitle = "Remove this hub from your list",
+                        onClick = {
+                            settingsMenuExpanded = false
+                            showLeaveConfirm = true
+                        },
+                        destructive = true,
+                        modifier = Modifier.testTag("hub_settings_leave"),
+                        leading = {
+                            Icon(
+                                Icons.AutoMirrored.Filled.Logout,
+                                contentDescription = null,
+                                tint = Color(0xFFFF6B6B),
+                            )
+                        },
+                    )
+                }
+                if (HubSettingsMenuItem.Edit in menuItems) {
+                    BentoGlassOptionRow(
+                        showBorder = false,
+                        title = "Edit Hub",
+                        subtitle = "Update name and category",
+                        onClick = {
+                            settingsMenuExpanded = false
+                            editNameDraft = hubDetails.name
+                            editCategoryDraft = hubDetails.category
+                            showEditDialog = true
+                        },
+                        modifier = Modifier.testTag("hub_settings_edit"),
+                        leading = {
+                            Icon(
+                                Icons.Outlined.Edit,
+                                contentDescription = null,
+                                tint = GlassSheetTokens.OnOledMuted(),
+                            )
+                        },
+                    )
+                }
+                if (HubSettingsMenuItem.Delete in menuItems) {
+                    BentoGlassOptionRow(
+                        showBorder = false,
+                        title = "Delete Hub",
+                        subtitle = "Kick all users and delete history",
+                        onClick = {
+                            settingsMenuExpanded = false
+                            showDeleteConfirm = true
+                        },
+                        destructive = true,
+                        modifier = Modifier.testTag("hub_settings_delete"),
+                        leading = {
+                            Icon(
+                                Icons.Filled.Delete,
+                                contentDescription = null,
+                                tint = Color(0xFFFF6B6B),
+                            )
+                        },
+                    )
+                }
+            }
+        }
+    }
+
     if (showEditDialog && isCreator) {
         UnifiedPopupFormDialog(
             visible = showEditDialog,
@@ -702,7 +745,7 @@ private fun HubChatInputBar(
     val composerStyle = LocalPlatformStyle.current
     val auxButtonSize = if (composerStyle.isIOS) 44.dp else 52.dp
     val composerRowVPad = if (composerStyle.isIOS) 6.dp else 8.dp
-    val composerRowHPad = 8.dp
+    val composerRowHPad = ChatChromeHorizontalPadding
     val attachIconSize = if (composerStyle.isIOS) 24.dp else 26.dp
     val sendIconSize = if (composerStyle.isIOS) 22.dp else 20.dp
     val fieldCorner = if (composerStyle.isIOS) 20.dp else 12.dp

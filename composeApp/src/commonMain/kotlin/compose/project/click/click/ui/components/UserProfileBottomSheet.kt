@@ -143,15 +143,11 @@ private fun ageFromBirthdayIso(birthday: String?): Int? {
 }
 
 private fun ConnectionEncounter.metricNoiseLabel(): String? {
-    val parts = mutableListOf<String>()
-    noiseLevel?.trim()?.takeIf { it.isNotEmpty() }?.let { raw ->
-        val friendly = runCatching { NoiseLevelCategory.valueOf(raw.uppercase().replace(' ', '_')) }
-            .getOrNull()?.let { formatNoiseCategoryForTimeline(it) }
-            ?: raw.replace('_', ' ').lowercase().replaceFirstChar { it.titlecase() }
-        parts.add(friendly)
-    }
-    exactNoiseLevelDb?.takeIf { it.isFinite() }?.let { parts.add("${it.roundToInt()} dB") }
-    return parts.joinToString(" · ").takeIf { it.isNotEmpty() }
+    val raw = noiseLevel?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val friendly = runCatching { NoiseLevelCategory.valueOf(raw.uppercase().replace(' ', '_')) }
+        .getOrNull()?.let { formatNoiseCategoryForTimeline(it) }
+        ?: raw.replace('_', ' ').lowercase().replaceFirstChar { it.titlecase() }
+    return friendly
 }
 
 private fun formatNoiseCategoryForTimeline(cat: NoiseLevelCategory): String = when (cat) {
@@ -354,18 +350,9 @@ internal fun OurTimelineSection(encounters: List<ConnectionEncounter>) {
                             enc.metricConditionLabel()?.let { add(Triple(Icons.Outlined.Cloud, Color(0xFFB0BEC5), it)) }
                             enc.metricTemperatureLabel()?.let { add(Triple(Icons.Outlined.Thermostat, Color(0xFFFFCC80), it)) }
                             enc.metricWindLabel()?.let { add(Triple(Icons.Outlined.Air, Color(0xFF81D4FA), it)) }
-                            enc.metricPressureLabel()?.let { add(Triple(Icons.Outlined.Speed, Color(0xFFCE93D8), it)) }
                             enc.metricNoiseLabel()?.let { add(Triple(Icons.Outlined.GraphicEq, Color(0xFF69F0AE), it)) }
                             enc.metricElevationLabel()?.let { add(Triple(Icons.Outlined.Terrain, LightBlue.copy(alpha = 0.95f), it)) }
-                            enc.metricLuxLabel()?.let { lbl ->
-                                val dim = enc.luxLevel != null && enc.luxLevel!! < 15.0
-                                val ic = if (dim) Icons.Outlined.NightsStay else Icons.Outlined.WbSunny
-                                val tint = if (dim) Color(0xFF90CAF9) else Color(0xFFFFE082)
-                                add(Triple(ic, tint, lbl))
-                            }
-                            enc.metricBatteryLabel()?.let { add(Triple(Icons.Outlined.BatteryStd, Color(0xFFA5D6A7), it)) }
                             enc.metricCompassAzimuthLabel()?.let { add(Triple(Icons.Outlined.Explore, Color(0xFFB39DDB), it)) }
-                            enc.metricMotionVarianceLabel()?.let { add(Triple(Icons.Outlined.DirectionsRun, Color(0xFFFFAB91), it)) }
                         }
                         if (pills.isNotEmpty()) {
                             FlowRow(

@@ -2,7 +2,9 @@ package compose.project.click.click.ui.chat
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -32,11 +34,11 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.PhotoCamera
-import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -55,15 +57,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.Image
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -71,8 +74,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import compose.project.click.click.PlatformHapticsPolicy
@@ -81,6 +82,7 @@ import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.replySnippetForMetadata
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.ui.theme.clickBorderColor
 import compose.project.click.click.utils.toImageBitmap // pragma: allowlist secret
 import compose.project.click.click.viewmodel.CHAT_STAGED_MEDIA_MAX // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
@@ -131,7 +133,7 @@ internal fun ConnectionChatMessageComposer(
     val replyBannerVisible = replyingTo != null && editingMessageId == null
     val auxButtonSize = if (composerStyle.isIOS) 44.dp else 52.dp
     val composerRowVPad = if (composerStyle.isIOS) 6.dp else 8.dp
-    val composerRowHPad = 8.dp
+    val composerRowHPad = ChatChromeHorizontalPadding
     val attachIconSize = if (composerStyle.isIOS) 24.dp else 26.dp
     val sendIconSize = if (composerStyle.isIOS) 22.dp else 20.dp
     val fieldCorner = if (composerStyle.isIOS) 20.dp else 12.dp
@@ -420,6 +422,7 @@ internal fun ConnectionChatMessageComposer(
                                 .fillMaxSize()
                                 .clip(CircleShape)
                                 .background(PrimaryBlue.copy(alpha = bgAlpha))
+                                .border(2.dp, clickBorderColor(), CircleShape)
                                 .chatSpringPressScale(attachInteraction),
                             contentAlignment = Alignment.Center,
                         ) {
@@ -499,6 +502,7 @@ internal fun ConnectionChatMessageComposer(
                         }
                     },
                 )
+                val sendShape = if (composerStyle.isIOS) CircleShape else RoundedCornerShape(fieldCorner)
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
@@ -506,8 +510,9 @@ internal fun ConnectionChatMessageComposer(
                         .zIndex(4f)
                         .focusProperties { canFocus = false }
                         .chatSpringPressScale(sendInteraction)
-                        .clip(if (composerStyle.isIOS) CircleShape else RoundedCornerShape(fieldCorner))
+                        .clip(sendShape)
                         .background(sendBackground)
+                        .border(2.dp, clickBorderColor(), sendShape)
                         .clickable(
                             interactionSource = sendInteraction,
                             indication = null,

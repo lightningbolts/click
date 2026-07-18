@@ -29,6 +29,8 @@ object EventReminderCoordinator {
         }
     }
 
+    fun beaconById(id: String): MapBeacon? = beaconsById[id]
+
     fun homeReminders(
         rsvpBeaconIds: Set<String>,
         userId: String?,

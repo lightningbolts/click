@@ -77,7 +77,9 @@ npm test
 
 High-signal unit tests to keep green: `ChatSwipeMathTest`, `ChatViewModelTest`, `ConnectionEncounterMergeTest`, `DiscoveryFeedSectionsTest`, `OfflineBootTest`, proximity codec/matching tests under `composeApp` and `click-web/__tests__/`.
 
-**Last §0 run (Track C event detail polish: dates/host avatar/maps/overflow/uniform pins, 2026-07-18):** Android compile PASS · iOS Simulator compile PASS · `EventScheduleTest` PASS. Device smoke still required on hardware.
+**Last §0 run (Home interactive-back underlay anti-flicker, 2026-07-18):** Android compile PASS · iOS Simulator compile PASS. Device smoke: iOS swipe Map/Settings/Add Click → Home should not remount/flicker Home.
+
+**Event engagement API handoff:** [../handoff/event-engagement-api.md](../handoff/event-engagement-api.md)
 ---
 
 ## Platforms & builds

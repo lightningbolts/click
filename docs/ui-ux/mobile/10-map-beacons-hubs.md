@@ -17,7 +17,7 @@ MapScreen (organism)
 │   ├── Full-bleed interactive PlatformMap (gestures stay on; Events overlay covers touches)
 │   ├── MapAlwaysOnChrome — alpha-hidden while Events open (not disposed)
 │   └── Events reopen chip (alpha-hidden while list open)
-├── EventsDiscoveryFullScreen (slide-in + InteractiveSwipeBackContainer) — back/swipe → map/peek
+├── EventsDiscoveryFullScreen (slide-up from bottom + InteractiveSwipeBackContainer) — back/swipe → map/peek
 │   └── AppScreenScaffold + Liquid Glass header; search, sort, layer chips, denser event cards + RSVP
 ├── MapBeaconSheetRoot overlays (conditional)
 │   ├── BeaconDropSheetContent
@@ -54,7 +54,7 @@ CreateHubModal — also reachable from BeaconDropSheet Hub category
 |----------|-------|
 | Primary canvas | Full-bleed `PlatformMap` with gestures enabled on tab entry |
 | Map chrome | `MapAlwaysOnChrome` — layer filter top-end; drop-beacon FAB + zoom docked **above** reopen chip (`mapFabAboveNav + 120.dp`) |
-| Events list | **Full-screen** slide-in + `InteractiveSwipeBackContainer`. Title **Events** (peek chip same). `AppScreenScaffold` + Liquid Glass header |
+| Events list | **Full-screen** slide-up / slide-down (`slideInVertically` / `slideOutVertically`) + `InteractiveSwipeBackContainer` (horizontal edge swipe still dismisses). Title **Events** (peek chip same). `AppScreenScaffold` + Liquid Glass header |
 | Search | Only inside full-screen list |
 | Filters / sort | Distance/Recent segment + layer chips; refresh in header |
 | Event cards | Title, host, schedule, description, distance, attendees, RSVP. Card tap → `EventBeaconDetail` |
@@ -124,7 +124,7 @@ Soundtrack / other kinds: creator uses the same bordered **⋯** overflow; prior
 
 | Region | Height / notes |
 |--------|----------------|
-| Solid header | 56dp + status bar; back, title, occupant subtitle, ⋮ menu; 2dp bottom `#000` border |
+| Solid header | 56dp + status bar; bordered back (`ChatHeaderIconButton(showBorder = true)`), title, occupant subtitle, borderless ⋮; 2dp bottom `#000` border |
 | Tap-to-connect banner | Primary blue surface, centered copy |
 | Lobby banner (when `inLobby`) | `primaryContainer` tint — currently disabled (`inLobby = false`) |
 | Timeline | `ChatMessageTimeline`, hub-neutral mesh |
@@ -185,7 +185,7 @@ Soundtrack / other kinds: creator uses the same bordered **⋯** overflow; prior
 |--------|--------|
 | ⋯ overflow (creator, last hero button) | Themed dropdown (opaque surface, 2dp border, zero elevation): Edit / Delete → existing dialogs |
 | Share | System text share (title, schedule, maps HTTPS link) |
-| Bookmark / Check in | Local toggle only (`EventLocalFlagsStore`) — reserved for future event-info expansion (saved events / attendance) |
+| Bookmark / Check in | Local toggle only (`EventLocalFlagsStore`) — API handoff: [../../handoff/event-engagement-api.md](../../handoff/event-engagement-api.md) |
 | Join Event Route | Opens HTTPS maps (`maps.google.com`, Apple Maps fallback). Avoid primary `geo:` on iOS |
 | Event RSVP | `"RSVP / Sign Up"` or `"Cancel RSVP"` |
 | Play preview | Audio player on soundtrack beacons |

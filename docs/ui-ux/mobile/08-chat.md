@@ -69,9 +69,10 @@ ChatView (organism — full-screen thread)
 | Property | Value |
 |----------|-------|
 | Height | 56dp below status-bar inset |
-| Surface | Solid `surface` bar with 2dp bottom `#000` border (no blur) |
-| Horizontal padding | 20dp |
-| Back | `IconButton` 48dp tap target |
+| Surface | Transparent over mesh (no blur plate required) |
+| Horizontal padding | **16dp** (`ChatChromeHorizontalPadding`) — matches composer outer edges |
+| Back | `ChatHeaderIconButton(showBorder = true)` — 40dp circular, 2dp `clickBorderColor()` |
+| Call / More / Rename | `ChatHeaderIconButton` borderless — plain icons so trailing actions do not stack as busy rings |
 | 1:1 avatar | `CoreConnectionAvatarFrame` 36dp + online indicator 9dp |
 | Group avatar | `GroupAvatar` 34dp cluster; tap → group members picker |
 | Title | `titleMedium`, semibold, 1 line ellipsis |
@@ -92,11 +93,12 @@ ChatView (organism — full-screen thread)
 
 | Property | Value |
 |----------|-------|
-| Horizontal pad | 8dp |
+| Horizontal pad | **16dp** (`ChatChromeHorizontalPadding`) — aligns with header |
 | Vertical pad | iOS 6dp / Android 8dp |
 | Aux button size | iOS 44dp / Android 52dp |
 | Field corner | iOS 20dp / Android 12dp |
 | Field insets | Flanked by attach + send circles |
+| Attach / Send | Circular fill + **2dp** `clickBorderColor()` border (same as hub composer) |
 
 ---
 

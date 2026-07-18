@@ -147,6 +147,7 @@ import compose.project.click.click.ui.components.EmojiCatalog // pragma: allowli
 import compose.project.click.click.ui.components.AppScreenDefaults // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionsFloatingHeader // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassToastHost // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickCircularGlassIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberGlassToastState // pragma: allowlist secret
 import androidx.compose.runtime.DisposableEffect
 import compose.project.click.click.ui.components.floatingHeaderStatusBarPadding // pragma: allowlist secret
@@ -558,17 +559,9 @@ fun ConnectionsListView(
     DisposableEffect(Unit) {
         onDispose { toastState.dismiss() }
     }
-    var suppressReorderScroll by remember { mutableStateOf(false) }
     LaunchedEffect(isListObscured) {
         if (isListObscured) {
             toastState.dismiss()
-            suppressReorderScroll = true
-        } else {
-            // After chat reveal, inbox patches from leaveChatRoom can reorder rows — skip the
-            // auto scroll-to-top for one settle window so swipe-back does not look like a recompose.
-            suppressReorderScroll = true
-            delay(CHAT_TRANSITION_DURATION_MS + CHAT_GESTURE_CLOSE_SETTLE_MS)
-            suppressReorderScroll = false
         }
     }
 
@@ -656,21 +649,6 @@ fun ConnectionsListView(
                     }
                 }
             } else {
-                val clicksListOrderSignature = remember(filteredChats) {
-                    filteredChats.joinToString("\u0000") {
-                        "${it.connection.id}\t${connectionListActivityTs(it)}"
-                    }
-                }
-                LaunchedEffect(clicksListOrderSignature) {
-                    if (suppressReorderScroll) return@LaunchedEffect
-                    if (filteredChats.isEmpty()) return@LaunchedEffect
-                    val nearTop = connectionsLazyListState.firstVisibleItemIndex <= 2 &&
-                        connectionsLazyListState.firstVisibleItemScrollOffset < 96
-                    if (nearTop) {
-                        connectionsLazyListState.animateScrollToItem(0)
-                    }
-                }
-
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -825,7 +803,8 @@ fun ConnectionsListView(
     }
     }
 
-    val showCreateClickFab = selectedTabIndex == 0 && currentUserId != null
+    val showCreateClickFab =
+        (selectedTabIndex == 0 || selectedTabIndex == 1) && currentUserId != null
 
     Row(
         modifier = Modifier
@@ -847,17 +826,15 @@ fun ConnectionsListView(
             )
         }
         if (showCreateClickFab) {
-            FloatingActionButton(
+            ClickCircularGlassIconButton(
+                icon = Icons.Filled.Groups,
+                contentDescription = "Create verified click",
                 onClick = {
                     selectedCliqueFriendIds = emptySet()
                     cliqueSheetVisible = true
                 },
-                modifier = Modifier.size(56.dp),
-                containerColor = PrimaryBlue,
-                contentColor = Color.White,
-            ) {
-                Icon(Icons.Filled.Groups, contentDescription = "Create verified click")
-            }
+                size = 56.dp,
+            )
         }
     }
 

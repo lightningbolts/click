@@ -184,7 +184,11 @@ App loads AppDataManager
 Tap View on Map
   → pendingBeaconId = beaconId
   → navigate Map tab
-  → MapScreen focuses beacon pin
+  → MapViewModel.focusBeaconOnMap(beaconId)
+     pans camera to event lat/lon (zoom ≈ 15), ensures EVENTS layer,
+     selects beacon sheet
+  → After animation settles, CameraTarget clears but native map **keeps** that
+     viewport (no snap back to GPS / default user zoom)
 ```
 
 ### Explore tile → Map layer

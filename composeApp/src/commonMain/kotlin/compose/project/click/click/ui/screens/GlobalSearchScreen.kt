@@ -67,11 +67,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.ui.components.GlassSheetTokens
-import compose.project.click.click.ui.theme.BackgroundDark
-import compose.project.click.click.ui.theme.BorderHardDark
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.ui.theme.SoftBlue
-import compose.project.click.click.ui.theme.SurfaceDark
+import compose.project.click.click.ui.theme.clickBorderColor
+import compose.project.click.click.ui.theme.clickCardSurface
 import compose.project.click.click.viewmodel.GlobalSearchViewModel
 import compose.project.click.click.viewmodel.SearchResult
 import compose.project.click.click.viewmodel.SearchResultCategory
@@ -117,10 +116,10 @@ fun GlobalSearchScreen(
     }
 
     Scaffold(
-        containerColor = BackgroundDark,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             Surface(
-                color = SurfaceDark,
+                color = clickCardSurface(),
                 tonalElevation = 0.dp,
                 shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp),
             ) {
@@ -138,8 +137,8 @@ fun GlobalSearchScreen(
                         Surface(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(16.dp),
-                            color = SurfaceDark,
-                            border = BorderStroke(1.dp, BorderHardDark),
+                            color = clickCardSurface(),
+                            border = BorderStroke(1.dp, clickBorderColor()),
                         ) {
                             TextField(
                                 modifier = Modifier
@@ -151,14 +150,14 @@ fun GlobalSearchScreen(
                                 placeholder = {
                                     Text(
                                         "Search people, places, interests, intents…",
-                                        color = Color.White.copy(alpha = 0.4f),
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                                     )
                                 },
                                 colors = TextFieldDefaults.colors(
                                     focusedContainerColor = Color.Transparent,
                                     unfocusedContainerColor = Color.Transparent,
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White,
+                                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                                     cursorColor = PrimaryBlue,
                                     focusedIndicatorColor = Color.Transparent,
                                     unfocusedIndicatorColor = Color.Transparent,
@@ -183,8 +182,8 @@ fun GlobalSearchScreen(
                                 label = { Text(categoryLabel(cat)) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = PrimaryBlue,
-                                    selectedLabelColor = Color.White,
-                                    containerColor = SurfaceDark,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                                    containerColor = clickCardSurface(),
                                     labelColor = GlassSheetTokens.OnOled(),
                                 ),
                             )
@@ -273,13 +272,13 @@ internal fun EmptySearchHint(
             imageVector = icon,
             contentDescription = null,
             modifier = Modifier.size(64.dp),
-            tint = Color.White.copy(if (dimmed) 0.2f else 0.35f),
+            tint = MaterialTheme.colorScheme.onSurface.copy(if (dimmed) 0.2f else 0.35f),
         )
         Spacer(Modifier.height(16.dp))
         Text(
             text = body,
             style = MaterialTheme.typography.bodyLarge,
-            color = Color.White.copy(if (dimmed) 0.4f else 0.75f),
+            color = MaterialTheme.colorScheme.onSurface.copy(if (dimmed) 0.4f else 0.75f),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
     }
@@ -296,7 +295,7 @@ internal fun UnifiedSearchResultsList(
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = bottomPadding),
+        contentPadding = PaddingValues(start = 0.dp, top = 8.dp, end = 0.dp, bottom = bottomPadding),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
@@ -304,9 +303,10 @@ internal fun UnifiedSearchResultsList(
         }
         items(results, key = { searchResultStableKey(it) }) { row ->
             Surface(
+                modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                color = SurfaceDark,
-                border = BorderStroke(1.dp, BorderHardDark),
+                color = clickCardSurface(),
+                border = BorderStroke(1.dp, clickBorderColor()),
             ) {
                 SearchResultRow(
                     result = row,
@@ -367,7 +367,7 @@ internal fun SearchResultRow(
         else -> false
     }
     val alpha = if (archivedLook) 0.7f else 1f
-    Column(Modifier.alpha(alpha)) {
+    Column(modifier = Modifier.fillMaxWidth().alpha(alpha)) {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -409,7 +409,7 @@ internal fun SearchResultRow(
             Icon(
                 imageVector = Icons.Default.ChevronRight,
                 contentDescription = null,
-                tint = Color.White.copy(alpha = 0.3f),
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
                 modifier = Modifier.size(20.dp),
             )
         }
@@ -438,8 +438,8 @@ internal fun BadgeRow(result: SearchResult) {
 internal fun TinyBadge(text: String) {
     Surface(
         shape = RoundedCornerShape(8.dp),
-        color = SurfaceDark,
-        border = BorderStroke(1.dp, BorderHardDark),
+        color = clickCardSurface(),
+        border = BorderStroke(1.dp, clickBorderColor()),
     ) {
         Text(
             text = text,
@@ -454,11 +454,11 @@ internal fun TinyBadge(text: String) {
 @Composable
 internal fun TitleAndSubtitle(result: SearchResult) {
     val titleStyle = MaterialTheme.typography.bodyLarge.copy(
-        color = Color.White,
+        color = MaterialTheme.colorScheme.onSurface,
         fontWeight = FontWeight.SemiBold,
     )
     val subtitleStyle = MaterialTheme.typography.bodySmall.copy(
-        color = Color.White.copy(alpha = 0.55f),
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
     )
     when (result) {
         is SearchResult.ActiveConnection -> {
@@ -500,7 +500,7 @@ internal fun TitleAndSubtitle(result: SearchResult) {
             Text(
                 text = formatSearchTime(result.result.message.timeCreated),
                 style = MaterialTheme.typography.labelSmall,
-                color = Color.White.copy(alpha = 0.35f),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
             )
         }
         is SearchResult.LocationBucket -> {
@@ -548,7 +548,7 @@ internal fun PersonLeadingAvatar(details: ChatWithDetails) {
         Text(
             text = initials,
             style = MaterialTheme.typography.labelLarge,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.Bold,
         )
     }
@@ -609,7 +609,7 @@ private fun SearchLeadingIconBox(content: @Composable () -> Unit) {
             .size(42.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(SoftBlue)
-            .border(1.dp, BorderHardDark, RoundedCornerShape(12.dp)),
+            .border(1.dp, clickBorderColor(), RoundedCornerShape(12.dp)),
         contentAlignment = Alignment.Center,
     ) {
         content()

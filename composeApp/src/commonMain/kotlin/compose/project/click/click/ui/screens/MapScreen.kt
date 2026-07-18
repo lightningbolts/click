@@ -5,8 +5,8 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.*
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -48,6 +48,7 @@ import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.LiquidGlassPill // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickCircularGlassIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformMap // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPin // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapClusterPin // pragma: allowlist secret
@@ -61,6 +62,7 @@ import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.events.EventReminderCoordinator
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapSelection // pragma: allowlist secret
@@ -107,9 +109,6 @@ import compose.project.click.click.ui.sheet.MapBeaconSheetRoot
 import compose.project.click.click.telemetry.TelemetryBatcher
 import compose.project.click.click.ui.components.GlassmorphicOverlay
 import compose.project.click.click.ui.theme.LocalPlatformStyle
-
-/** Neighborhood zoom for the discovery PiP map preview. */
-private const val MapDefaultUserZoom = 14.5
 
 /**
  * Map screen — Phase 2 refactor (B1, C10, C11):
@@ -230,8 +229,10 @@ fun MapScreen(
     val rawMapBeacons by viewModel.mapBeacons.collectAsState()
     LaunchedEffect(initialBeaconId, rawMapBeacons) {
         val beaconId = initialBeaconId?.trim()?.takeIf { it.isNotEmpty() } ?: return@LaunchedEffect
-        if (rawMapBeacons.none { it.id == beaconId }) return@LaunchedEffect
-        viewModel.onBeaconPinTapped(beaconId)
+        val known = rawMapBeacons.any { it.id == beaconId } ||
+            EventReminderCoordinator.beaconById(beaconId) != null
+        if (!known) return@LaunchedEffect
+        viewModel.focusBeaconOnMap(beaconId)
         onBeaconFocusConsumed()
     }
 
@@ -444,12 +445,12 @@ fun MapScreen(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .zIndex(40f),
-                            enter = slideInHorizontally(animationSpec = eventsSlideSpec, initialOffsetX = { it }) +
+                            enter = slideInVertically(animationSpec = eventsSlideSpec, initialOffsetY = { it }) +
                                 fadeIn(animationSpec = eventsFadeSpec),
                             exit = if (eventsListTransitionMode == EventsListTransitionMode.Gesture) {
                                 ExitTransition.None
                             } else {
-                                slideOutHorizontally(animationSpec = eventsSlideSpec, targetOffsetX = { it }) +
+                                slideOutVertically(animationSpec = eventsSlideSpec, targetOffsetY = { it }) +
                                     fadeOut(animationSpec = eventsFadeSpec)
                             },
                             label = "events_fullscreen",
@@ -813,24 +814,13 @@ private fun MapLiquidGlassIconButton(
     glassStrength: Float,
     size: Dp,
 ) {
-    LiquidGlassPill(
-        modifier = Modifier
-            .size(size)
-            .clickable(onClick = onClick),
-        cornerRadiusDp = (size.value / 2f).toInt().coerceAtLeast(22),
-        backgroundStrength = glassStrength,
-    ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                tint = MaterialTheme.colorScheme.onSurface,
-            )
-        }
-    }
+    ClickCircularGlassIconButton(
+        icon = icon,
+        contentDescription = contentDescription,
+        onClick = onClick,
+        size = size,
+        glassStrength = glassStrength,
+    )
 }
 
 @Composable
@@ -907,6 +897,7 @@ private fun MapLayerFilterDropdown(
     val triggerWidth = 132.dp
     val glassStrength = if (style.isIOS) 0.64f else 0.4f
 
+    val triggerShape = RoundedCornerShape(20.dp)
     Box(
         modifier = modifier
             .widthIn(max = triggerWidth)
@@ -916,6 +907,7 @@ private fun MapLayerFilterDropdown(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 40.dp, max = 48.dp)
+                .clip(triggerShape)
                 .clickable { expanded = true },
             cornerRadiusDp = 20,
             backgroundStrength = glassStrength,
@@ -2184,14 +2176,12 @@ private fun MapContent(
         }
     }
 
-    // Prefer an active programmatic target; otherwise frame the user's GPS.
-    val mapCenterLat = cameraTarget?.latitude ?: userLat
-    val mapCenterLon = cameraTarget?.longitude ?: userLon
-    val mapZoom = when {
-        cameraTarget != null -> zoom
-        mapCenterLat != null && mapCenterLon != null -> MapDefaultUserZoom
-        else -> zoom
-    }
+    // Drive the native map only while a programmatic CameraTarget is active.
+    // After onCameraAnimationComplete clears it, pass null centers so PlatformMap
+    // keeps the settled viewport (do not snap back to GPS / default user zoom).
+    val mapCenterLat = cameraTarget?.latitude
+    val mapCenterLon = cameraTarget?.longitude
+    val mapZoom = zoom
 
     PlatformMap(
         modifier = modifier,

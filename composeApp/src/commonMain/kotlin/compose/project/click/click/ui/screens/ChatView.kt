@@ -191,6 +191,8 @@ import compose.project.click.click.encounter.recentEncounterId // pragma: allowl
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import compose.project.click.click.ui.chat.connectionListActivityTs // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatCallOptionsIosSurface // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatChromeHorizontalPadding // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatHeaderIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionActionSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionMenuAction // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionSheetDialog // pragma: allowlist secret
@@ -724,20 +726,20 @@ fun ChatView(
                                 .fillMaxWidth()
                                 .padding(top = topInset)
                                 .height(56.dp)
-                                .padding(horizontal = 20.dp)
+                                .padding(horizontal = ChatChromeHorizontalPadding)
                                 .testTag(ChatGlassHeaderPlateTestTag),
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxSize(),
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                IconButton(onClick = onBackPressed) {
-                                    Icon(
-                                        Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = "Back",
-                                        tint = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
+                                ChatHeaderIconButton(
+                                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back",
+                                    onClick = onBackPressed,
+                                    showBorder = true,
+                                )
 
                                 if (isGroupChat) {
                                     val chatHeaderGroupAvatarSize = 34.dp
@@ -873,31 +875,24 @@ fun ChatView(
                                 }
 
                                 if (isGroupChat) {
-                                    IconButton(
+                                    ChatHeaderIconButton(
+                                        icon = Icons.Outlined.Edit,
+                                        contentDescription = "Rename group",
                                         onClick = {
                                             renameGroupDraft = groupTitle
                                             showRenameGroupDialog = true
                                         },
-                                    ) {
-                                        Icon(
-                                            Icons.Outlined.Edit,
-                                            contentDescription = "Rename group",
-                                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                                        )
-                                    }
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                                    )
                                 }
 
-                                Box(modifier = Modifier.size(48.dp)) {
-                                    IconButton(
+                                Box {
+                                    ChatHeaderIconButton(
+                                        icon = Icons.Filled.Call,
+                                        contentDescription = "Call options",
                                         onClick = { showCallMenu = true },
-                                        modifier = Modifier.fillMaxSize(),
-                                    ) {
-                                        Icon(
-                                            Icons.Filled.Call,
-                                            contentDescription = "Call options",
-                                            tint = PrimaryBlue.copy(alpha = 0.85f)
-                                        )
-                                    }
+                                        tint = PrimaryBlue.copy(alpha = 0.85f),
+                                    )
                                     val menuStyle = LocalPlatformStyle.current
                                     val density = LocalDensity.current
                                     val callMenuSpring = spring<Float>(
@@ -1034,13 +1029,12 @@ fun ChatView(
                                     }
                                 }
                                 // Overflow / connection options
-                                IconButton(onClick = { showConnectionSheet = true }) {
-                                    Icon(
-                                        Icons.Filled.MoreVert,
-                                        contentDescription = "More options",
-                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                    )
-                                }
+                                ChatHeaderIconButton(
+                                    icon = Icons.Filled.MoreVert,
+                                    contentDescription = "More options",
+                                    onClick = { showConnectionSheet = true },
+                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                )
                             }
                         }
 

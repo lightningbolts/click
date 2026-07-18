@@ -345,6 +345,7 @@ Scroll → collapse fraction → optional hide → content scrolls under floatin
 - Tab taps set `Tap` mode.
 - iOS swipe-back sets `GestureBack` → **no** enter/exit animation (`EnterTransition.None togetherWith ExitTransition.None`).
 - After gesture back, 80 ms delay before resetting to `Tap` (prevents double animation on Home).
+- **iOS Home underlay:** Add Click / Map / Settings keep a single `HomeScreen` composed underneath (`opaquePreviousBackground = false`, empty `previousContent`). Gesture-back reveals that instance — do **not** remount Home via `previousContent = { HomeScreen() }` (that caused post-swipe flicker).
 
 ### 6.3 States
 
@@ -403,7 +404,8 @@ targetIndex >= initialIndex? ──YES──► slide forward + fade
 
 - Full-width horizontal drag (`useFullWidthHorizontalDrag = true` default).
 - `rightToLeftPeek` optional (hub chat timestamps).
-- `opaquePreviousBackground = false` for hub chat (list persists underneath).
+- `opaquePreviousBackground = false` for hub chat, Add Click overlays, **and** primary tabs that swipe to Home (persistent Home underlay).
+- Primary → Home swipe uses the same underlay pattern as Connections chat → list (empty `previousContent` + external parallax).
 
 ### 7.3 States
 

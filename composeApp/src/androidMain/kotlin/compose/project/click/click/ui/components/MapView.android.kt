@@ -54,12 +54,11 @@ actual fun PlatformMap(
     val deviceLocation by AppDataManager.lastKnownDeviceLocation.collectAsState()
     val isDarkMode = LocalIsDarkMode.current
 
-    // Determine center position
-    val resolvedCenterLat = centerLat ?: deviceLocation?.first
-    val resolvedCenterLon = centerLon ?: deviceLocation?.second
+    // Initial frame only — device GPS / first pin. Programmatic moves use explicit centerLat/Lon.
+    val deviceLoc = deviceLocation
     val initialCenter = when {
-        resolvedCenterLat != null && resolvedCenterLon != null ->
-            LatLng(resolvedCenterLat, resolvedCenterLon)
+        centerLat != null && centerLon != null -> LatLng(centerLat, centerLon)
+        deviceLoc != null -> LatLng(deviceLoc.first, deviceLoc.second)
         pins.isNotEmpty() -> LatLng(pins.first().latitude, pins.first().longitude)
         clusters.isNotEmpty() -> LatLng(clusters.first().latitude, clusters.first().longitude)
         else -> LatLng(40.7580, -73.9855) // Default to NYC
@@ -71,13 +70,16 @@ actual fun PlatformMap(
 
     // One effect: lat/lon + zoom use newLatLngZoom together. A separate zoomTo effect kept the
     // old viewport center and broke cluster zoom.
-    LaunchedEffect(resolvedCenterLat, resolvedCenterLon, zoom, mapGesturesEnabled) {
-        if (resolvedCenterLat != null && resolvedCenterLon != null) {
-            val target = LatLng(resolvedCenterLat, resolvedCenterLon)
+    // Only animate when the ViewModel supplies an explicit center (CameraTarget). When centers
+    // clear after onCameraAnimationComplete, leave the GoogleMap where it settled — do not
+    // fall back to deviceLocation (that snapped Featured Event focus back to the user).
+    LaunchedEffect(centerLat, centerLon, zoom, mapGesturesEnabled) {
+        if (centerLat != null && centerLon != null) {
+            val target = LatLng(centerLat, centerLon)
             val z = zoom.toFloat()
             val pos = cameraPositionState.position
-            val moved = abs(pos.target.latitude - resolvedCenterLat) > 1e-5 ||
-                abs(pos.target.longitude - resolvedCenterLon) > 1e-5
+            val moved = abs(pos.target.latitude - centerLat) > 1e-5 ||
+                abs(pos.target.longitude - centerLon) > 1e-5
             val zoomChanged = abs(pos.zoom - z) > 0.05f
             if (moved || zoomChanged) {
                 val update = com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(target, z)

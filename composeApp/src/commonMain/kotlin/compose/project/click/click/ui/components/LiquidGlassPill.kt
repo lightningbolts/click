@@ -23,6 +23,8 @@ fun LiquidGlassPill(
     cornerRadiusDp: Int = 24,
     noiseDensity: Float = 0.04f,
     backgroundStrength: Float = 0f,
+    contentPaddingHorizontal: androidx.compose.ui.unit.Dp = 14.dp,
+    contentPaddingVertical: androidx.compose.ui.unit.Dp = 8.dp,
     content: @Composable () -> Unit,
 ) {
     // noiseDensity / backgroundStrength kept for signature compatibility; unused.
@@ -41,7 +43,7 @@ fun LiquidGlassPill(
             .background(scheme.surface)
             .border(borderWidth, clickBorderColor(), shape),
     ) {
-        Box(Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
+        Box(Modifier.padding(horizontal = contentPaddingHorizontal, vertical = contentPaddingVertical)) {
             content()
         }
     }

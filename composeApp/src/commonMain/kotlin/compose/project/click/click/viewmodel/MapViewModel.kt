@@ -783,9 +783,12 @@ class MapViewModel : ViewModel() {
 
         if (!seededDeviceCameraThisSession) {
             seededDeviceCameraThisSession = true
-            _cameraTarget.value = target
-            if (_zoomLevel.value <= 10.01) {
-                _zoomLevel.value = DEFAULT_USER_MAP_ZOOM
+            // Do not clobber an active programmatic target (Home Featured Event / search → beacon).
+            if (_cameraTarget.value == null && pendingProgrammaticZoomTarget == null) {
+                _cameraTarget.value = target
+                if (_zoomLevel.value <= 10.01) {
+                    _zoomLevel.value = DEFAULT_USER_MAP_ZOOM
+                }
             }
         }
     }
@@ -861,6 +864,44 @@ class MapViewModel : ViewModel() {
                 _selection.value = current.copy(distanceMeters = distance)
             }
         }
+    }
+
+    /**
+     * Pan the camera to [beaconId] and open its detail sheet (Home Featured Event / deep link).
+     * Ensures the EVENTS layer is visible so the pin isn't filtered out.
+     */
+    fun focusBeaconOnMap(beaconId: String, seedDistanceMeters: Double? = null) {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return
+        val beacon = _mapBeacons.value.firstOrNull { it.id == id }
+            ?: EventReminderCoordinator.beaconById(id)
+            ?: return
+        if (_mapBeacons.value.none { it.id == id }) {
+            _mapBeacons.update { current ->
+                if (current.any { it.id == id }) current else current + beacon
+            }
+        }
+        _selectedLayerFilters.update { filters ->
+            if (MapLayerFilter.ALL in filters || MapLayerFilter.EVENTS in filters) {
+                filters
+            } else {
+                filters + MapLayerFilter.EVENTS
+            }
+        }
+        val zoom = 15.0
+        val target = CameraTarget(
+            latitude = beacon.latitude,
+            longitude = beacon.longitude,
+            zoom = zoom,
+        )
+        // Mark device-seed done so a late GPS fix cannot overwrite this focus.
+        seededDeviceCameraThisSession = true
+        _cameraTarget.value = target
+        lastKnownCameraTarget = target
+        pendingProgrammaticZoomTarget = zoom
+        pendingProgrammaticZoomSetAtMs = Clock.System.now().toEpochMilliseconds()
+        _zoomLevel.value = zoom
+        onBeaconPinTapped(id, seedDistanceMeters)
     }
 
     /**

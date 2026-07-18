@@ -56,10 +56,9 @@ import compose.project.click.click.ui.components.rememberGlassAdaptiveSheetState
 import compose.project.click.click.ui.components.ClickLogoPulse
 import compose.project.click.click.ui.components.GlassAdaptiveBottomSheet
 import compose.project.click.click.ui.components.GlassSheetTokens
-import compose.project.click.click.ui.theme.BackgroundDark
-import compose.project.click.click.ui.theme.BorderHardDark
 import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.ui.theme.SurfaceDark
+import compose.project.click.click.ui.theme.clickBorderColor
+import compose.project.click.click.ui.theme.clickCardSurface
 import compose.project.click.click.viewmodel.GlobalSearchViewModel
 import compose.project.click.click.viewmodel.SearchResultCategory
 import kotlinx.coroutines.delay
@@ -136,15 +135,15 @@ private fun UnifiedSearchSheetContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(BackgroundDark)
+            .background(MaterialTheme.colorScheme.background)
             .imePadding()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            color = SurfaceDark,
-            border = BorderStroke(1.dp, BorderHardDark),
+            color = clickCardSurface(),
+            border = BorderStroke(1.dp, clickBorderColor()),
         ) {
             Row(
                 modifier = Modifier
@@ -278,7 +277,7 @@ private fun UnifiedSearchSheetContent(
 @Composable
 private fun searchFilterChipColors() = FilterChipDefaults.filterChipColors(
     selectedContainerColor = PrimaryBlue,
-    selectedLabelColor = GlassSheetTokens.OnOled(),
-    containerColor = SurfaceDark,
-    labelColor = GlassSheetTokens.OnOled(),
+    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+    containerColor = clickCardSurface(),
+    labelColor = MaterialTheme.colorScheme.onSurface,
 )

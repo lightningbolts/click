@@ -23,10 +23,28 @@ import platform.darwin.dispatch_get_main_queue
 import kotlin.coroutines.resume
 
 /**
+ * Retained [CLLocationManager] delegate — must stay strongly referenced while Core Location
+ * is active. Anonymous objects assigned off the main thread can trigger
+ * `NSInternalInconsistencyException: Delegate must respond to locationManager:didUpdateLocations:`.
+ */
+private class LocationFetchDelegate(
+    private val onUpdate: (List<CLLocation>) -> Unit,
+    private val onFail: (NSError) -> Unit,
+) : NSObject(), CLLocationManagerDelegateProtocol {
+    override fun locationManager(manager: CLLocationManager, didUpdateLocations: List<*>) {
+        onUpdate(didUpdateLocations.filterIsInstance<CLLocation>())
+    }
+
+    override fun locationManager(manager: CLLocationManager, didFailWithError: NSError) {
+        onFail(didFailWithError)
+    }
+}
+
+/**
  * iOS [LocationService]: permission state comes from [IosLocationAuthorizationTracker] (delegate +
  * background bootstrap), not synchronous [CLLocationManager.authorizationStatus] on the main thread.
  * [getCurrentLocation] uses a single global mutex so concurrent callers cannot clobber the shared [CLLocationManager] delegate.
- * Completion always runs on the main queue for thread safety with Compose.
+ * All [CLLocationManager] mutations run on the main queue.
  */
 actual class LocationService {
 
@@ -40,7 +58,7 @@ actual class LocationService {
     }
 
     private val locationManager = CLLocationManager()
-    private var activeDelegate: NSObject? = null
+    private var activeDelegate: LocationFetchDelegate? = null
 
     actual suspend fun getHighAccuracyLocation(timeoutMs: Long): LocationResult? {
         if (timeoutMs <= 0L) return null
@@ -54,7 +72,7 @@ actual class LocationService {
                     var timeoutJob: Job? = null
                     val session = ProgressiveLocationSession.start()
 
-                    fun cleanup() {
+                    fun cleanupOnMain() {
                         locationManager.stopUpdatingLocation()
                         locationManager.delegate = null
                         activeDelegate = null
@@ -65,7 +83,7 @@ actual class LocationService {
                             if (finished) return@dispatch_async
                             finished = true
                             timeoutJob?.cancel()
-                            cleanup()
+                            cleanupOnMain()
                             if (continuation.isActive) {
                                 continuation.resume(result)
                             }
@@ -77,10 +95,9 @@ actual class LocationService {
                         return@suspendCancellableCoroutine
                     }
 
-                    val delegate = object : NSObject(), CLLocationManagerDelegateProtocol {
-                        override fun locationManager(manager: CLLocationManager, didUpdateLocations: List<*>) {
-                            val candidates = didUpdateLocations.filterIsInstance<CLLocation>()
-                            if (candidates.isEmpty()) return
+                    val delegate = LocationFetchDelegate(
+                        onUpdate = { candidates ->
+                            if (candidates.isEmpty()) return@LocationFetchDelegate
                             for (loc in candidates) {
                                 val acc = loc.horizontalAccuracy
                                 if (acc <= 0.0 || !acc.isFinite()) continue
@@ -89,26 +106,19 @@ actual class LocationService {
                                 val accepted = session.onReading(lat, lon, acc, alt)
                                 if (accepted != null) {
                                     finishOnMain(accepted)
-                                    return
+                                    return@LocationFetchDelegate
                                 }
                             }
-                        }
-
-                        override fun locationManager(manager: CLLocationManager, didFailWithError: NSError) {
-                            finishOnMain(session.bestAtTimeout())
-                        }
-                    }
-
-                    activeDelegate = delegate
-                    locationManager.delegate = delegate
-                    locationManager.desiredAccuracy = kCLLocationAccuracyBest
+                        },
+                        onFail = { finishOnMain(session.bestAtTimeout()) },
+                    )
 
                     continuation.invokeOnCancellation {
                         dispatch_async(dispatch_get_main_queue()) {
                             if (!finished) {
                                 finished = true
                                 timeoutJob?.cancel()
-                                cleanup()
+                                cleanupOnMain()
                             }
                         }
                     }
@@ -118,7 +128,12 @@ actual class LocationService {
                         finishOnMain(session.bestAtTimeout())
                     }
 
-                    locationManager.startUpdatingLocation()
+                    launch(Dispatchers.Main.immediate) {
+                        activeDelegate = delegate
+                        locationManager.delegate = delegate
+                        locationManager.desiredAccuracy = kCLLocationAccuracyBest
+                        locationManager.startUpdatingLocation()
+                    }
                 }
             }
         }
@@ -133,21 +148,17 @@ actual class LocationService {
                 suspendCancellableCoroutine { continuation ->
                     var finished = false
 
-                    fun cleanup() {
+                    fun cleanupOnMain() {
                         locationManager.stopUpdatingLocation()
                         locationManager.delegate = null
                         activeDelegate = null
                     }
 
-                    /**
-                     * Core Location may invoke the delegate off the main thread; resume only on the main queue.
-                     * [didUpdateLocations] can fire more than once — complete at most once.
-                     */
                     fun finishOnMain(result: LocationResult?) {
                         dispatch_async(dispatch_get_main_queue()) {
                             if (finished) return@dispatch_async
                             finished = true
-                            cleanup()
+                            cleanupOnMain()
                             if (continuation.isActive) {
                                 continuation.resume(result)
                             }
@@ -159,39 +170,37 @@ actual class LocationService {
                         return@suspendCancellableCoroutine
                     }
 
-                    val delegate = object : NSObject(), CLLocationManagerDelegateProtocol {
-                        override fun locationManager(manager: CLLocationManager, didUpdateLocations: List<*>) {
-                            val candidates = didUpdateLocations.filterIsInstance<CLLocation>()
-                            if (candidates.isEmpty()) {
-                                return
-                            }
+                    val delegate = LocationFetchDelegate(
+                        onUpdate = { candidates ->
+                            if (candidates.isEmpty()) return@LocationFetchDelegate
                             val picked = pickBestLocation(candidates)
                                 ?: cachedLocationResult(maxAccuracyMeters = 5_000.0)
                             finishOnMain(picked ?: cachedLocationResult(maxAccuracyMeters = 5_000.0))
-                        }
-
-                        override fun locationManager(manager: CLLocationManager, didFailWithError: NSError) {
-                            val fallback = cachedLocationResult(maxAccuracyMeters = 5_000.0)
-                            finishOnMain(fallback)
-                        }
-                    }
-
-                    activeDelegate = delegate
-                    locationManager.delegate = delegate
-                    locationManager.desiredAccuracy = kCLLocationAccuracyBest
+                        },
+                        onFail = {
+                            finishOnMain(cachedLocationResult(maxAccuracyMeters = 5_000.0))
+                        },
+                    )
 
                     continuation.invokeOnCancellation {
                         dispatch_async(dispatch_get_main_queue()) {
                             if (!finished) {
                                 finished = true
-                                cleanup()
+                                cleanupOnMain()
                             }
                         }
                     }
 
-                    locationManager.requestLocation()
+                    // Prefer startUpdatingLocation — requestLocation() is stricter about
+                    // main-thread delegate wiring and has crashed under concurrent map polls.
+                    dispatch_async(dispatch_get_main_queue()) {
+                        activeDelegate = delegate
+                        locationManager.delegate = delegate
+                        locationManager.desiredAccuracy = kCLLocationAccuracyBest
+                        locationManager.startUpdatingLocation()
+                    }
                 }
-            } ?: run {
+            } ?: withContext(Dispatchers.Main.immediate) {
                 locationManager.stopUpdatingLocation()
                 locationManager.delegate = null
                 activeDelegate = null
