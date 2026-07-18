@@ -89,14 +89,14 @@ import kotlinx.datetime.toLocalDateTime
 import compose.project.click.click.events.EventLocalFlagsStore
 import compose.project.click.click.events.EventSchedule
 import compose.project.click.click.events.buildEventShareText
-import compose.project.click.click.events.eventMapsGeoUri
-import compose.project.click.click.events.eventMapsHttpUrl
 import compose.project.click.click.events.eventSchedule
+import compose.project.click.click.events.formatEventEndDateLabel
 import compose.project.click.click.events.formatEventEndTimeLabel
 import compose.project.click.click.events.formatEventScheduleRange
+import compose.project.click.click.events.formatEventStartDateLabel
 import compose.project.click.click.events.formatEventStartTimeLabel
-import compose.project.click.click.events.hasFiniteCoordinates
 import compose.project.click.click.events.isLive
+import compose.project.click.click.events.openEventMapsRoute
 import compose.project.click.click.platform.shareText
 import compose.project.click.click.ui.utils.displayTypeTitle
 import compose.project.click.click.ui.utils.displayDynamicTitle
@@ -1007,52 +1007,55 @@ private fun BeaconDetailSheetContent(
     var editDraft by remember(beacon.id) {
         mutableStateOf(beacon.metadata.description?.trim().orEmpty())
     }
+    val openEdit: () -> Unit = {
+        editDraft = beacon.metadata.description?.trim().orEmpty()
+        showEditDialog = true
+    }
+    val openDelete: () -> Unit = { showDeleteConfirm = true }
 
     Column(modifier = modifier) {
-        if (isCreator) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = {
-                    editDraft = beacon.metadata.description?.trim().orEmpty()
-                    showEditDialog = true
-                }) {
-                    Icon(
-                        Icons.Filled.Edit,
-                        contentDescription = "Edit beacon",
-                        // Explicit tint: the sheet's themed MaterialTheme does not set LocalContentColor,
-                        // so the default (Color.Black) made these icons invisible on the OLED sheet.
-                        tint = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-                IconButton(onClick = { showDeleteConfirm = true }) {
-                    Icon(
-                        Icons.Filled.Delete,
-                        contentDescription = "Delete beacon",
-                        tint = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-            }
-        }
         when (beacon.kind) {
-            MapBeaconKind.SOUNDTRACK -> MusicPreviewCard(
-                beacon = beacon,
-                distanceMeters = distanceMeters,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            MapBeaconKind.SOUNDTRACK -> {
+                if (isCreator) {
+                    BeaconOwnerOverflowMenu(
+                        onEdit = openEdit,
+                        onDelete = openDelete,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                    )
+                }
+                MusicPreviewCard(
+                    beacon = beacon,
+                    distanceMeters = distanceMeters,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             MapBeaconKind.EVENT -> EventBeaconDetail(
                 beacon = beacon,
                 distanceMeters = distanceMeters,
                 viewModel = viewModel,
+                isCreator = isCreator,
+                onEdit = openEdit,
+                onDelete = openDelete,
                 modifier = Modifier.fillMaxWidth(),
             )
-            else -> CommunityBeaconDetail(
-                beacon = beacon,
-                distanceMeters = distanceMeters,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            else -> {
+                if (isCreator) {
+                    BeaconOwnerOverflowMenu(
+                        onEdit = openEdit,
+                        onDelete = openDelete,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                    )
+                }
+                CommunityBeaconDetail(
+                    beacon = beacon,
+                    distanceMeters = distanceMeters,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
     }
 
@@ -1102,12 +1105,119 @@ private fun BeaconDetailSheetContent(
     }
 }
 
+@Composable
+private fun BeaconOwnerOverflowMenu(
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    val border = clickBorderColor()
+    Box(modifier = modifier, contentAlignment = Alignment.CenterEnd) {
+        EventHeroIconButton(
+            selected = menuExpanded,
+            border = border,
+            onClick = { menuExpanded = true },
+            contentDescription = "More actions",
+            icon = Icons.Filled.MoreVert,
+        )
+        BeaconOwnerDropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false },
+            onEdit = onEdit,
+            onDelete = onDelete,
+        )
+    }
+}
+
+/** Functional Clarity overflow: opaque surface, 2dp hard border, zero elevation. */
+@Composable
+private fun BeaconOwnerDropdownMenu(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val border = clickBorderColor()
+    val menuSurface = MaterialTheme.colorScheme.surface
+    val onMenu = MaterialTheme.colorScheme.onSurface
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismissRequest,
+        modifier = Modifier.widthIn(min = 180.dp),
+        shape = RoundedCornerShape(12.dp),
+        containerColor = menuSurface,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = BorderStroke(2.dp, border),
+    ) {
+        DropdownMenuItem(
+            text = {
+                Text(
+                    "Edit",
+                    color = onMenu,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            },
+            onClick = {
+                onDismissRequest()
+                onEdit()
+            },
+            leadingIcon = {
+                Icon(
+                    Icons.Filled.Edit,
+                    contentDescription = null,
+                    tint = onMenu,
+                )
+            },
+            colors = MenuDefaults.itemColors(
+                textColor = onMenu,
+                leadingIconColor = onMenu,
+            ),
+        )
+        HorizontalDivider(
+            modifier = Modifier.padding(horizontal = 12.dp),
+            thickness = 1.dp,
+            color = border.copy(alpha = 0.45f),
+        )
+        DropdownMenuItem(
+            text = {
+                Text(
+                    "Delete",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            },
+            onClick = {
+                onDismissRequest()
+                onDelete()
+            },
+            leadingIcon = {
+                Icon(
+                    Icons.Filled.Delete,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                )
+            },
+            colors = MenuDefaults.itemColors(
+                textColor = MaterialTheme.colorScheme.error,
+                leadingIconColor = MaterialTheme.colorScheme.error,
+            ),
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun EventBeaconDetail(
     beacon: MapBeacon,
     distanceMeters: Double?,
     viewModel: MapViewModel,
+    isCreator: Boolean,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val rsvpCache by viewModel.beaconRsvpById.collectAsState()
@@ -1124,6 +1234,8 @@ private fun EventBeaconDetail(
     val bookmarked = beacon.id in bookmarkedIds
     val checkedIn = beacon.id in checkedInIds
     val uriHandler = LocalUriHandler.current
+    val currentUser by AppDataManager.currentUser.collectAsState()
+    val connectedUsers by AppDataManager.connectedUsers.collectAsState()
     val schedule = beacon.eventSchedule()
     val live = schedule?.isLive() == true
     val distanceLabel = distanceMeters?.let { formatBeaconDistance(it) }
@@ -1131,6 +1243,13 @@ private fun EventBeaconDetail(
     val categories = beacon.metadata.eventCategories
     val border = clickBorderColor()
     val cardSurface = clickCardSurface()
+    val hostUserId = beacon.createdByUserId?.takeIf { it.isNotBlank() }
+    val hostUser = hostUserId?.let { id ->
+        if (id == currentUser?.id) currentUser else connectedUsers[id]
+    }
+    val hostDisplayName = beacon.creatorDisplayName?.trim()?.takeIf { it.isNotEmpty() }
+        ?: hostUser?.name?.trim()?.takeIf { it.isNotEmpty() }
+    val hostAvatarUrl = hostUser?.image?.trim()?.takeIf { it.isNotEmpty() }
 
     LaunchedEffect(beacon.id) {
         viewModel.loadBeaconRsvp(beacon.id, forceRefresh = true)
@@ -1168,6 +1287,7 @@ private fun EventBeaconDetail(
             EventHeroActions(
                 bookmarked = bookmarked,
                 checkedIn = checkedIn,
+                isCreator = isCreator,
                 onShare = {
                     shareText(
                         text = buildEventShareText(beacon, scheduleRange, distanceLabel),
@@ -1176,6 +1296,8 @@ private fun EventBeaconDetail(
                 },
                 onToggleBookmark = { EventLocalFlagsStore.toggleBookmark(beacon.id) },
                 onToggleCheckIn = { EventLocalFlagsStore.toggleCheckIn(beacon.id) },
+                onEdit = onEdit,
+                onDelete = onDelete,
             )
         }
 
@@ -1185,11 +1307,11 @@ private fun EventBeaconDetail(
             EventCategoryChips(categories = categories, border = border, cardSurface = cardSurface)
         }
 
-        if (beacon.showCreatorName && !beacon.creatorDisplayName.isNullOrBlank()) {
+        if (beacon.showCreatorName && !hostDisplayName.isNullOrBlank()) {
             EventHostCard(
-                displayName = beacon.creatorDisplayName.orEmpty(),
-                userId = beacon.createdByUserId?.takeIf { it.isNotBlank() }
-                    ?: "host:${beacon.creatorDisplayName}",
+                displayName = hostDisplayName,
+                userId = hostUserId ?: "host:$hostDisplayName",
+                avatarUrl = hostAvatarUrl,
                 border = border,
                 cardSurface = cardSurface,
             )
@@ -1210,12 +1332,12 @@ private fun EventBeaconDetail(
 
         Button(
             onClick = {
-                if (!hasFiniteCoordinates(beacon.latitude, beacon.longitude)) return@Button
-                val title = beacon.displayDynamicTitle()
-                val geo = eventMapsGeoUri(beacon.latitude, beacon.longitude, title)
-                val http = eventMapsHttpUrl(beacon.latitude, beacon.longitude)
-                runCatching { uriHandler.openUri(geo) }
-                    .onFailure { runCatching { uriHandler.openUri(http) } }
+                openEventMapsRoute(
+                    openUri = { uriHandler.openUri(it) },
+                    latitude = beacon.latitude,
+                    longitude = beacon.longitude,
+                    label = beacon.displayDynamicTitle(),
+                )
             },
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -1307,11 +1429,15 @@ private fun EventLiveBadge() {
 private fun EventHeroActions(
     bookmarked: Boolean,
     checkedIn: Boolean,
+    isCreator: Boolean,
     onShare: () -> Unit,
     onToggleBookmark: () -> Unit,
     onToggleCheckIn: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     val border = clickBorderColor()
+    var menuExpanded by remember { mutableStateOf(false) }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         EventHeroIconButton(
             selected = false,
@@ -1334,6 +1460,23 @@ private fun EventHeroActions(
             contentDescription = if (checkedIn) "Undo check in" else "Check in",
             icon = if (checkedIn) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
         )
+        if (isCreator) {
+            Box {
+                EventHeroIconButton(
+                    selected = menuExpanded,
+                    border = border,
+                    onClick = { menuExpanded = true },
+                    contentDescription = "More actions",
+                    icon = Icons.Filled.MoreVert,
+                )
+                BeaconOwnerDropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                    onEdit = onEdit,
+                    onDelete = onDelete,
+                )
+            }
+        }
     }
 }
 
@@ -1377,7 +1520,8 @@ private fun EventScheduleBento(
         EventBentoCell(
             modifier = Modifier.weight(1f),
             label = "Start Time",
-            value = formatEventStartTimeLabel(schedule),
+            date = formatEventStartDateLabel(schedule),
+            time = formatEventStartTimeLabel(schedule),
             icon = Icons.Filled.Schedule,
             border = border,
             cardSurface = cardSurface,
@@ -1385,7 +1529,8 @@ private fun EventScheduleBento(
         EventBentoCell(
             modifier = Modifier.weight(1f),
             label = "End Time",
-            value = formatEventEndTimeLabel(schedule),
+            date = formatEventEndDateLabel(schedule),
+            time = formatEventEndTimeLabel(schedule),
             icon = Icons.Filled.EventBusy,
             border = border,
             cardSurface = cardSurface,
@@ -1397,7 +1542,8 @@ private fun EventScheduleBento(
 private fun EventBentoCell(
     modifier: Modifier,
     label: String,
-    value: String,
+    date: String,
+    time: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     border: Color,
     cardSurface: Color,
@@ -1426,7 +1572,13 @@ private fun EventBentoCell(
         }
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = value,
+            text = date,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = time,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
@@ -1472,6 +1624,7 @@ private fun EventCategoryChips(
 private fun EventHostCard(
     displayName: String,
     userId: String,
+    avatarUrl: String?,
     border: Color,
     cardSurface: Color,
 ) {
@@ -1487,7 +1640,7 @@ private fun EventHostCard(
         ConnectionListUserAvatarFace(
             displayName = displayName,
             email = null,
-            avatarUrl = null,
+            avatarUrl = avatarUrl,
             userId = userId,
             modifier = Modifier
                 .size(56.dp)

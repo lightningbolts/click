@@ -203,15 +203,16 @@ actual fun PlatformMap(
                 }
                 val photo = pin.imageUrl?.trim()?.takeIf { it.isNotEmpty() }
                     ?.let { loadedAvatarBitmaps[it] }
+                // Fixed 44dp diameter for all avatar pins (squad only bumps z-index / pulse).
                 val avatarCacheKey =
-                    "${pin.id}|${pin.avatarInitials}|$markerHue|${pin.avatarFillArgb}|${photo?.generationId ?: 0}|$squadScale"
+                    "${pin.id}|${pin.avatarInitials}|$markerHue|${pin.avatarFillArgb}|${photo?.generationId ?: 0}"
                 val icon = avatarPinCache.getOrPut(avatarCacheKey) {
                     bitmapDescriptorForCircularAvatarPin(
                         density = density,
                         hueDegrees = markerHue,
                         initials = pin.avatarInitials,
                         photo = photo,
-                        scale = if (squadScale > 1f) squadScale else 1f,
+                        scale = 1f,
                         fillArgb = pin.avatarFillArgb,
                     )
                 }
@@ -250,7 +251,7 @@ actual fun PlatformMap(
                 }
             }
             val bmp = clusterIconCache.getOrPut(cacheKey) {
-                val px = with(density) { 52.dp.roundToPx() }
+                val px = with(density) { 44.dp.roundToPx() }.coerceAtLeast(36)
                 val fill = when {
                     cluster.isConnectionOnly -> android.graphics.Color.argb(230, 220, 0, 200)
                     cluster.hasLiveConnections -> android.graphics.Color.argb(230, 0, 163, 255)
@@ -263,6 +264,7 @@ actual fun PlatformMap(
                 title = "${cluster.count}",
                 zIndex = cluster.zIndex,
                 icon = bmp,
+                anchor = Offset(0.5f, 0.5f),
                 onClick = {
                     onClusterTapped(cluster)
                     true
@@ -359,7 +361,7 @@ private fun bitmapDescriptorForSquadPin(
 }
 
 private fun bitmapDescriptorFromClusterCount(count: Int, sizePx: Int, fillArgb: Int): BitmapDescriptor {
-    val d = sizePx.coerceIn(48, 128)
+    val d = sizePx.coerceIn(36, 128)
     val bmp = Bitmap.createBitmap(d, d, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bmp)
     val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
@@ -367,9 +369,9 @@ private fun bitmapDescriptorFromClusterCount(count: Int, sizePx: Int, fillArgb: 
         style = android.graphics.Paint.Style.FILL
     }
     val stroke = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.argb(255, 255, 255, 255)
+        color = android.graphics.Color.BLACK
         style = android.graphics.Paint.Style.STROKE
-        strokeWidth = d * 0.06f
+        strokeWidth = (d * 0.06f).coerceAtLeast(2f)
     }
     val r = RectF(0f, 0f, d.toFloat(), d.toFloat())
     val pad = d * 0.06f

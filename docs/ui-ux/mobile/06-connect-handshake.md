@@ -477,8 +477,15 @@ flowchart TD
 
 ---
 
+## 6. Future — event context on connect
+
+**Not built yet.** When connecting via Tap, QR, or App Clip **at** a live map event (same place + schedule window), persist the event on the encounter and show it later in connection encounter info / profile Timeline. Spec: [10-map-beacons-hubs.md](10-map-beacons-hubs.md) §7.
+
+---
+
 ## Related documents
 
 - [05-home.md](05-home.md) — post-connect home feed
 - [07-connections-inbox.md](07-connections-inbox.md) — destination after `"View Connection"`
-- [10-map-beacons-hubs.md](10-map-beacons-hubs.md) — ephemeral/community hub modals from Add Click
+- [10-map-beacons-hubs.md](10-map-beacons-hubs.md) — ephemeral/community hub modals from Add Click; future event↔encounter
+- [12-profile-memories.md](12-profile-memories.md) — encounter timeline surface for event context

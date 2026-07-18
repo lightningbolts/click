@@ -696,19 +696,28 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
         when {
             cluster != null -> {
                 val reused = mapView.dequeueReusableAnnotationViewWithIdentifier(identifier)
-                val view = (reused as? MKMarkerAnnotationView)
-                    ?: MKMarkerAnnotationView(annotation = viewForAnnotation, reuseIdentifier = identifier)
+                val view = reused ?: MKAnnotationView(annotation = viewForAnnotation, reuseIdentifier = identifier)
                 view.annotation = viewForAnnotation
                 view.canShowCallout = false
                 view.setEnabled(true)
                 view.setSelected(false, animated = false)
                 val label = if (cluster.count > 99) "99+" else cluster.count.toString()
-                view.glyphText = label
-                view.markerTintColor = when {
+                val fill = when {
                     cluster.isConnectionOnly -> UIColor.magentaColor
                     cluster.hasLiveConnections -> UIColor.blueColor
                     else -> UIColor.orangeColor
                 }
+                val cacheKey = "cluster|$label|${cluster.isConnectionOnly}|${cluster.hasLiveConnections}"
+                val image = avatarPinImageCache.getOrPut(cacheKey) {
+                    circularMapPinUIImage(
+                        sizePts = 44.0,
+                        fill = fill,
+                        initials = label,
+                        photo = null,
+                    )
+                }
+                view.image = image
+                view.centerOffset = platform.CoreGraphics.CGPointMake(0.0, 0.0)
                 view.zPriority = cluster.zIndex
                 return view
             }
@@ -724,8 +733,9 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
                 val cacheKey =
                     "${pin.id}|${pin.imageUrl.orEmpty()}|${photo != null}|$initials|${pin.avatarFillArgb}"
                 val image = avatarPinImageCache.getOrPut(cacheKey) {
+                    // Fixed 44pt for all pins so scrunched markers match cluster hubs.
                     circularMapPinUIImage(
-                        sizePts = 44.0 * pin.squadMultiplier.coerceAtLeast(1f).toDouble(),
+                        sizePts = 44.0,
                         fill = pin.markerTintUIColor(),
                         initials = initials,
                         photo = photo,
@@ -776,7 +786,7 @@ private fun metersForZoom(zoomLevel: Double): Double {
     return meters.coerceIn(minMeters, maxMeters)
 }
 
-/** Large circular avatar pin (~88pt) — matches Android bitmap markers (not tiny MKMarker glyphs). */
+/** Circular avatar / cluster pin (~44pt) — matches Android bitmap markers (not teardrop MKMarker glyphs). */
 @OptIn(ExperimentalForeignApi::class)
 private fun circularMapPinUIImage(
     sizePts: Double,

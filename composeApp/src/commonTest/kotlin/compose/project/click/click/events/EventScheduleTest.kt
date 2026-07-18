@@ -61,6 +61,8 @@ class EventScheduleTest {
         )
         assertEquals("7:00 PM", formatEventStartTimeLabel(schedule, tz))
         assertEquals("12:00 AM", formatEventEndTimeLabel(schedule, tz))
+        assertEquals("Jun 12", formatEventStartDateLabel(schedule, tz))
+        assertEquals("Jun 13", formatEventEndDateLabel(schedule, tz))
     }
 
     @Test

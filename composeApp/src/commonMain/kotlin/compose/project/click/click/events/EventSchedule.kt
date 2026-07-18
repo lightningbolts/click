@@ -105,9 +105,31 @@ fun formatEventEndTimeLabel(
     return formatEventClockLabel(end)
 }
 
+/** Start date for bento cells, e.g. `Jun 12`. */
+fun formatEventStartDateLabel(
+    schedule: EventSchedule,
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+): String {
+    val start = Instant.fromEpochMilliseconds(schedule.startEpochMs).toLocalDateTime(timeZone)
+    return formatEventDateOnlyLabel(start)
+}
+
+/** End date for bento cells, e.g. `Jun 13`. */
+fun formatEventEndDateLabel(
+    schedule: EventSchedule,
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+): String {
+    val end = Instant.fromEpochMilliseconds(schedule.endEpochMs).toLocalDateTime(timeZone)
+    return formatEventDateOnlyLabel(end)
+}
+
 private fun formatEventDateTimeLabel(dt: kotlinx.datetime.LocalDateTime): String {
+    return "${formatEventDateOnlyLabel(dt)}, ${formatEventClockLabel(dt)}"
+}
+
+private fun formatEventDateOnlyLabel(dt: kotlinx.datetime.LocalDateTime): String {
     val mon = dt.month.name.lowercase().replaceFirstChar { it.uppercase() }.take(3)
-    return "$mon ${dt.dayOfMonth}, ${formatEventClockLabel(dt)}"
+    return "$mon ${dt.dayOfMonth}"
 }
 
 fun formatEventClockLabel(dt: kotlinx.datetime.LocalDateTime): String {

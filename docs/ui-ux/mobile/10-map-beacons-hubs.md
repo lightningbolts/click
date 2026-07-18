@@ -60,7 +60,7 @@ CreateHubModal — also reachable from BeaconDropSheet Hub category
 | Event cards | Title, host, schedule, description, distance, attendees, RSVP. Card tap → `EventBeaconDetail` |
 | Back | Swipe / back / system back → map + peek. Map stays mounted (no marker preview wipe) |
 
-**Pins:** Circular avatar markers (~**44dp** Android / ~**44pt** iOS). Connections use list photos + `stableAvatarPlaceholderColor`; events/hubs generated initials.
+**Pins:** Circular avatar markers (**44dp** Android / **44pt** iOS) for connections, beacons, hubs, **and cluster hubs**. All use the same diameter when scrunched — no squad size scaling on the circle (squad still raises z-index / pulse). Cluster hubs show count glyphs on the same circular chrome (not teardrop `MKMarker` / oversized hubs). Tap cluster → zoom into members (unchanged).
 
 ### Events feed (full screen)
 
@@ -109,16 +109,16 @@ Creator toolbar: `"Edit beacon"` / `"Delete beacon"` icon buttons (creator only)
 |--------|-------|
 | LIVE badge | When schedule `isLive` (`start ≤ now < end`) |
 | Title + distance subtitle | `displayDynamicTitle()`; distance when known |
-| Hero actions | Share (system sheet) + Bookmark + Check in (local `EventLocalFlagsStore`, future event-info API) |
-| Start / End bento | Two bordered cells from `EventSchedule` |
+| Hero actions | **Share** + **Bookmark** + **Check in** + creator **⋯** last (Edit / Delete themed dropdown; local bookmark/check-in via `EventLocalFlagsStore`) |
+| Start / End bento | Two bordered cells: **date** (`Jun 12`) + **time** (`7:33 PM`) from `EventSchedule` |
 | Categories | Chips from metadata `event_categories`; hidden when empty |
-| Host card | When `showCreatorName`; avatar initials; no verified badge |
+| Host card | When `showCreatorName`; avatar from `AppDataManager` current/connected user image when available; initials fallback |
 | Description | Body copy |
 | Active Clicks | Overlapping avatar stack + `+N`; count in section label |
-| Primary CTA | `"Join Event Route"` → maps `geo:` / Google Maps HTTP |
+| Primary CTA | `"Join Event Route"` → HTTPS Google Maps (Apple Maps fallback). Do **not** use `geo:` as primary on iOS (NSOSStatus -10814) |
 | Secondary CTA | `"RSVP / Sign Up"` / `"Cancel RSVP"` via `MapViewModel` |
 
-Soundtrack / other kinds keep prior card layouts.
+Soundtrack / other kinds: creator uses the same bordered **⋯** overflow; prior card layouts otherwise.
 
 ### HubChatScreen
 
@@ -183,10 +183,10 @@ Soundtrack / other kinds keep prior card layouts.
 
 | Action | Result |
 |--------|--------|
-| Edit / Delete (creator) | `AnimatedClickDialog` flows |
-| Share | System text share (title, schedule, maps link) |
-| Bookmark / Check in | Local toggle only (`EventLocalFlagsStore`) — reserved for future event-info expansion |
-| Join Event Route | Opens maps to beacon lat/lon |
+| ⋯ overflow (creator, last hero button) | Themed dropdown (opaque surface, 2dp border, zero elevation): Edit / Delete → existing dialogs |
+| Share | System text share (title, schedule, maps HTTPS link) |
+| Bookmark / Check in | Local toggle only (`EventLocalFlagsStore`) — reserved for future event-info expansion (saved events / attendance) |
+| Join Event Route | Opens HTTPS maps (`maps.google.com`, Apple Maps fallback). Avoid primary `geo:` on iOS |
 | Event RSVP | `"RSVP / Sign Up"` or `"Cancel RSVP"` |
 | Play preview | Audio player on soundtrack beacons |
 | `"Play full song"` | Opens original media URL |
@@ -406,7 +406,7 @@ flowchart TD
 | Map expand / minimize | `"Expand map"`, `"Minimize map"` |
 | Zoom controls | `"Zoom in"`, `"Zoom out"` |
 | Soundtrack preview | `"Play preview"` / `"Pause preview"` toggle |
-| Beacon creator actions | `"Edit beacon"`, `"Delete beacon"` |
+| Beacon creator actions | `"More actions"` ⋯ → `"Edit"` / `"Delete"` in themed menu |
 | Hub chat back / menu | `"Back"`, `"Hub settings"` |
 | Layer filter | Chip shows selected state via check icon in menu items |
 | Discovery rows | Title + subtitle + distance line; icon decorative (`contentDescription = null`) |
@@ -416,3 +416,18 @@ flowchart TD
 | Join hub sheet | Single-line code field with `"Hub code"` label |
 
 **Gaps:** Discovery feed rows do not merge title/subtitle into a single semantics node. Layer filter trigger uses truncated label (`"Conn"`) which may be unclear to screen readers — full labels exist only in the dropdown menu.
+
+---
+
+## 7. Future — event ↔ encounter integration
+
+**Not built yet.** When two users connect (Tap / QR / App Clip handshake) while both are at a live event’s location and within its start–end window, attach that event to the connection encounter and surface it on profile timeline / encounter info.
+
+| Concern | Intent |
+|---------|--------|
+| Trigger | Successful handshake or QR connect while device GPS is inside the event beacon radius **and** `EventSchedule.isLive` |
+| Persist | Link `beacon_id` / event title + schedule onto the encounter / connection moment record |
+| Surface | Profile **Timeline** / encounter detail (`ProfileConnectionMoment`, connection context) — show event title, time range, optional “View on map” |
+| Non-goals for v1 of this idea | Auto-RSVP; requiring both parties to have RSVP’d first |
+
+Cross-links: [06-connect-handshake.md](06-connect-handshake.md), [12-profile-memories.md](12-profile-memories.md).

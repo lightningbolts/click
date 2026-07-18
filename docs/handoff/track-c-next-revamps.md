@@ -12,14 +12,19 @@ Read this before writing code. Prefer **one primary revamp per chat**.
 
 ### Event detail — landed
 
-- `EventBeaconDetail`: LIVE badge, start/end bento, category chips, host card, overlapping Active Clicks stack
-- Hero: Share + Bookmark + Check in (bookmark/check-in local-only via `EventLocalFlagsStore`)
-- CTAs: **Join Event Route** (maps) + **RSVP / Sign Up** / **Cancel RSVP**
+- `EventBeaconDetail`: LIVE badge, start/end bento (**date + time**), category chips, host card (reuses connected/current user avatar when available), overlapping Active Clicks stack
+- Hero: **Share** + **Bookmark** + **Check in** + creator **⋯** last (Edit/Delete themed dropdown; bookmark/check-in local-only via `EventLocalFlagsStore`)
+- CTAs: **Join Event Route** (HTTPS maps; not `geo:` primary) + **RSVP / Sign Up** / **Cancel RSVP**
 - Drop sheet: event category multi-select → metadata `event_categories`
+- Map pins/clusters: uniform **44dp/pt** circular markers when scrunched
 
 **Docs:** `docs/ui-ux/mobile/10-map-beacons-hubs.md`, design-asset `event_details_expanded_dark/`.
 
-**Still open:** device smoke for expanded event sheet + share/route on hardware.
+**Still open / follow-ups:**
+- Device smoke for expanded event sheet + share/route/bookmark/check-in on hardware
+- Server event-info API for bookmark / check-in sync (local flags only today)
+- Host avatar when creator is not current user and not in `connectedUsers` (API has no `creator_avatar_url` yet)
+- **Future:** event ↔ encounter — if handshake/QR connects at a live event location/time, show that event on connection encounter info / Timeline ([10-map-beacons-hubs.md](../ui-ux/mobile/10-map-beacons-hubs.md) §7)
 
 ### Map-first events discovery — landed
 
