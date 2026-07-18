@@ -1,8 +1,8 @@
 # Track C continuation — next revamps
 
-**Date:** 2026-07-17  
-**Product:** Click KMP mobile (`click/composeApp`)  
-**Previous chat:** Track C event detail revamp (expanded sheet + share/route/bookmark/check-in)
+**Date:** 2026-07-18  
+**Product:** Click KMP mobile (`click/composeApp`) + click-web  
+**Previous chat:** Track C event detail revamp + event engagement API (bookmarks / check-ins / insights)
 
 Read this before writing code. Prefer **one primary revamp per chat**.
 
@@ -13,7 +13,9 @@ Read this before writing code. Prefer **one primary revamp per chat**.
 ### Event detail — landed
 
 - `EventBeaconDetail`: LIVE badge, start/end bento (**date + time**), category chips, host card (reuses connected/current user avatar when available), overlapping Active Clicks stack
-- Hero: **Share** + **Bookmark** + **Check in** + creator **⋯** last (Edit/Delete themed dropdown; bookmark/check-in local-only via `EventLocalFlagsStore`)
+- Hero: **Share** + **Bookmark** + **Check in** + creator **⋯** last (Edit/Delete themed dropdown; bookmark/check-in **server-backed**)
+- Drop sheet: **Check-in area** venue-scale chips
+- Server: [event-engagement-api.md](event-engagement-api.md) + click-web `/insights/event-engagement` charts
 - CTAs: **Join Event Route** (HTTPS maps; not `geo:` primary) + **RSVP / Sign Up** / **Cancel RSVP**
 - Drop sheet: event category multi-select → metadata `event_categories`
 - Map pins/clusters: uniform **44dp/pt** circular markers when scrunched
@@ -21,10 +23,11 @@ Read this before writing code. Prefer **one primary revamp per chat**.
 **Docs:** `docs/ui-ux/mobile/10-map-beacons-hubs.md`, design-asset `event_details_expanded_dark/`.
 
 **Still open / follow-ups:**
-- Device smoke for expanded event sheet + share/route/bookmark/check-in on hardware
-- Server event-info API — detailed handoff: [event-engagement-api.md](event-engagement-api.md) (bookmarks, check-ins, shares, encounter link)
+- Device smoke for expanded event sheet + share/route/bookmark/check-in on hardware (API landed — verify on device)
 - Host avatar when creator is not current user and not in `connectedUsers` (API has no `creator_avatar_url` yet)
 - **Future:** event ↔ encounter — if handshake/QR connects at a live event location/time, show that event on connection encounter info / Timeline ([10-map-beacons-hubs.md](../ui-ux/mobile/10-map-beacons-hubs.md) §7)
+- **Future:** Home “Saved events” section (list API ready)
+- **Future:** share deep-link URL in share text
 
 ### Map-first events discovery — landed
 

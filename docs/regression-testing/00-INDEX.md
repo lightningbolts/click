@@ -73,11 +73,14 @@ From `click-web/` (API / proximity server contracts):
 
 ```bash
 npm test
+npm run build
 ```
 
-High-signal unit tests to keep green: `ChatSwipeMathTest`, `ChatViewModelTest`, `ConnectionEncounterMergeTest`, `DiscoveryFeedSectionsTest`, `OfflineBootTest`, proximity codec/matching tests under `composeApp` and `click-web/__tests__/`.
+High-signal unit tests to keep green: `ChatSwipeMathTest`, `ChatViewModelTest`, `ConnectionEncounterMergeTest`, `DiscoveryFeedSectionsTest`, `OfflineBootTest`, proximity codec/matching tests under `composeApp` and `click-web/__tests__/` (incl. `eventEngagement.test.ts`, `event-engagement.route.contract.test.ts`).
 
 **Last §0 run (Home interactive-back underlay anti-flicker, 2026-07-18):** Android compile PASS · iOS Simulator compile PASS. Device smoke: iOS swipe Map/Settings/Add Click → Home should not remount/flicker Home.
+
+**Last §0 run (Event engagement API, 2026-07-18):** Android `compileDebugKotlinAndroid` PASS · click-web `npm test` PASS (157) · `npm run build` PASS · Supabase migration `event_engagement` applied on project `click`. Device smoke: bookmark survives force-kill; far check-in reverts; venue-scale on create; location-denied snackbar; `/insights/event-engagement` demo.
 
 **Event engagement API handoff:** [../handoff/event-engagement-api.md](../handoff/event-engagement-api.md)
 ---

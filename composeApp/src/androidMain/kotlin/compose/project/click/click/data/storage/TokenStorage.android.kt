@@ -66,6 +66,7 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
         private const val KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE = "pending_proximity_handshake_queue"
         private const val KEY_ACTIVE_HUBS = "active_hubs"
         private const val KEY_BEACON_RSVP_SNAPSHOT = "beacon_rsvp_snapshot"
+        private const val KEY_BEACON_ENGAGEMENT_SNAPSHOT = "beacon_engagement_snapshot"
     }
     
     override suspend fun saveFreeThisWeek(isFree: Boolean) {
@@ -273,6 +274,21 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
         return sharedPreferences.getString(KEY_BEACON_RSVP_SNAPSHOT, null)
     }
 
+    override suspend fun saveBeaconEngagementSnapshot(snapshot: String?) {
+        sharedPreferences.edit().apply {
+            if (snapshot == null) {
+                remove(KEY_BEACON_ENGAGEMENT_SNAPSHOT)
+            } else {
+                putString(KEY_BEACON_ENGAGEMENT_SNAPSHOT, snapshot)
+            }
+            apply()
+        }
+    }
+
+    override suspend fun getBeaconEngagementSnapshot(): String? {
+        return sharedPreferences.getString(KEY_BEACON_ENGAGEMENT_SNAPSHOT, null)
+    }
+
     override suspend fun clearSessionData() {
         sharedPreferences.edit().apply {
             val sessionKeys = listOf(
@@ -283,6 +299,7 @@ class AndroidTokenStorage(private val context: Context) : TokenStorage {
                 KEY_ONBOARDING_STATE, KEY_HAS_COMPLETED_ONBOARDING, KEY_CACHED_APP_SNAPSHOT, KEY_PENDING_CONNECTION_QUEUE,
                 KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE,
                 KEY_BEACON_RSVP_SNAPSHOT,
+                KEY_BEACON_ENGAGEMENT_SNAPSHOT,
             )
             sessionKeys.forEach { remove(it) }
             apply()

@@ -87,7 +87,7 @@ Other beacon/hub kinds remain on the **map** via layer filters.
 | Category chips | Horizontal `LazyRow` |
 | Hub mode | Name field + category `FlowRow` |
 | Non-hub | Title / soundtrack URL / event picker / duration chips / description |
-| Event extras | Start/end picker + multi-select **Categories** (`Promotional` / `Social` / `School Event`) → metadata `event_categories` |
+| Event extras | Start/end picker + multi-select **Categories** (`Promotional` / `Social` / `School Event`) + **Check-in area** venue scale (`Intimate` / `Neighborhood` / `Venue` / `Campus`) → metadata `event_categories`, `venue_scale`, `check_in_radius_meters` |
 | Visibility | `"Who can see this"` chip row + `"Display my name"` switch |
 | CTA | Full-width `Button` — `"Create hub"` or `"Drop pin"` |
 
@@ -109,7 +109,7 @@ Creator toolbar: `"Edit beacon"` / `"Delete beacon"` icon buttons (creator only)
 |--------|-------|
 | LIVE badge | When schedule `isLive` (`start ≤ now < end`) |
 | Title + distance subtitle | `displayDynamicTitle()`; distance when known |
-| Hero actions | **Share** + **Bookmark** + **Check in** + creator **⋯** last (Edit / Delete themed dropdown; local bookmark/check-in via `EventLocalFlagsStore`) |
+| Hero actions | **Share** + **Bookmark** + **Check in** + creator **⋯** last (Edit / Delete themed dropdown; bookmark/check-in **server-backed** via engagement API) |
 | Start / End bento | Two bordered cells: **date** (`Jun 12`) + **time** (`7:33 PM`) from `EventSchedule` |
 | Categories | Chips from metadata `event_categories`; hidden when empty |
 | Host card | When `showCreatorName`; avatar from `AppDataManager` current/connected user image when available; initials fallback |
@@ -164,6 +164,7 @@ Soundtrack / other kinds: creator uses the same bordered **⋯** overflow; prior
 |---------|--------|
 | Category chip | Switches form mode (including `"Hub"` → hub fields) |
 | Event category chips | Multi-select → `event_categories` metadata |
+| Check-in area chips | Single-select venue scale → `venue_scale` + `check_in_radius_meters` |
 | `"Create hub"` (hub mode) | Closes drop sheet → `CreateHubModal` with prefilled name/category |
 | `"Drop pin"` | `MapViewModel.submitBeaconDrop(...)` |
 | Paste icon (soundtrack) | Paste clipboard into URL field |
@@ -185,7 +186,7 @@ Soundtrack / other kinds: creator uses the same bordered **⋯** overflow; prior
 |--------|--------|
 | ⋯ overflow (creator, last hero button) | Themed dropdown (opaque surface, 2dp border, zero elevation): Edit / Delete → existing dialogs |
 | Share | System text share (title, schedule, maps HTTPS link) |
-| Bookmark / Check in | Local toggle only (`EventLocalFlagsStore`) — API handoff: [../../handoff/event-engagement-api.md](../../handoff/event-engagement-api.md) |
+| Bookmark / Check in | Server-backed (`GET/PUT` bookmark, `GET/POST/DELETE` check-in, `GET` engagement). Check-in requires location + live window (+15m early grace) + venue-scale geofence. Snackbars: “Location access is required to check in” / “Location required to check in” / “Move closer to the event to check in” / “Check-in opens when the event starts”. Impression fired on detail open. |
 | Join Event Route | Opens HTTPS maps (`maps.google.com`, Apple Maps fallback). Avoid primary `geo:` on iOS |
 | Event RSVP | `"RSVP / Sign Up"` or `"Cancel RSVP"` |
 | Play preview | Audio player on soundtrack beacons |

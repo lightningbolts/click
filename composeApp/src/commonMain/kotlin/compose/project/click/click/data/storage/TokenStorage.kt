@@ -57,6 +57,10 @@ interface TokenStorage {
     suspend fun saveBeaconRsvpSnapshot(snapshot: String?)
     suspend fun getBeaconRsvpSnapshot(): String?
 
+    /** JSON snapshot of bookmark + check-in flags for the signed-in user. */
+    suspend fun saveBeaconEngagementSnapshot(snapshot: String?)
+    suspend fun getBeaconEngagementSnapshot(): String?
+
     suspend fun clearSessionData()
 }
 

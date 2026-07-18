@@ -88,7 +88,6 @@ import androidx.compose.foundation.verticalScroll
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import compose.project.click.click.events.EventLocalFlagsStore
 import compose.project.click.click.events.EventSchedule
 import compose.project.click.click.events.buildEventShareText
 import compose.project.click.click.events.eventSchedule
@@ -276,6 +275,14 @@ fun MapScreen(
         beaconDropFailureToast?.let { msg ->
             snackbarHostState.showSnackbar(message = msg, duration = SnackbarDuration.Long)
             viewModel.clearBeaconDropFailureToast()
+        }
+    }
+
+    val engagementSnackbar by viewModel.engagementSnackbar.collectAsState()
+    LaunchedEffect(engagementSnackbar) {
+        engagementSnackbar?.let { msg ->
+            snackbarHostState.showSnackbar(message = msg, duration = SnackbarDuration.Short)
+            viewModel.clearEngagementSnackbar()
         }
     }
 
@@ -523,7 +530,7 @@ fun MapScreen(
                     errorMessage = beaconInsertError,
                     onDismissError = { viewModel.clearBeaconInsertError() },
                     submitLocked = beaconSubmitInFlight,
-                    onSubmit = { kind, title, description, soundtrackUrl, ttlMs, showCreatorName, visibilityAudience, eventSchedule, eventCategories, onRejectedEarly ->
+                    onSubmit = { kind, title, description, soundtrackUrl, ttlMs, showCreatorName, visibilityAudience, eventSchedule, eventCategories, venueScale, onRejectedEarly ->
                         viewModel.submitBeaconDrop(
                             kind = kind,
                             title = title,
@@ -534,6 +541,7 @@ fun MapScreen(
                             visibilityAudience = visibilityAudience,
                             eventSchedule = eventSchedule,
                             eventCategories = eventCategories,
+                            venueScale = venueScale,
                             onAcceptedLocally = { showBeaconDropSheet = false },
                             onRejectedEarly = onRejectedEarly,
                             onRemoteFinished = { },
@@ -1221,10 +1229,10 @@ private fun EventBeaconDetail(
     val rsvpLoading = entry == null && beacon.id in rsvpLoadingIds
     val rsvpPending = beacon.id in rsvpPendingIds
     var rsvpError by remember(beacon.id) { mutableStateOf<String?>(null) }
-    val bookmarkedIds by EventLocalFlagsStore.bookmarkedIds.collectAsState()
-    val checkedInIds by EventLocalFlagsStore.checkedInIds.collectAsState()
-    val bookmarked = beacon.id in bookmarkedIds
-    val checkedIn = beacon.id in checkedInIds
+    val engagementCache by viewModel.beaconEngagementById.collectAsState()
+    val engagement = engagementCache[beacon.id]
+    val bookmarked = engagement?.bookmarked == true
+    val checkedIn = engagement?.checkedIn == true
     val uriHandler = LocalUriHandler.current
     val currentUser by AppDataManager.currentUser.collectAsState()
     val connectedUsers by AppDataManager.connectedUsers.collectAsState()
@@ -1245,6 +1253,8 @@ private fun EventBeaconDetail(
 
     LaunchedEffect(beacon.id) {
         viewModel.loadBeaconRsvp(beacon.id, forceRefresh = true)
+        viewModel.loadBeaconEngagement(beacon.id, forceRefresh = true)
+        viewModel.recordEventImpression(beacon.id)
     }
 
     Column(
@@ -1286,8 +1296,8 @@ private fun EventBeaconDetail(
                         subject = beacon.displayDynamicTitle(),
                     )
                 },
-                onToggleBookmark = { EventLocalFlagsStore.toggleBookmark(beacon.id) },
-                onToggleCheckIn = { EventLocalFlagsStore.toggleCheckIn(beacon.id) },
+                onToggleBookmark = { viewModel.toggleBeaconBookmark(beacon.id) },
+                onToggleCheckIn = { viewModel.toggleBeaconCheckIn(beacon.id) },
                 onEdit = onEdit,
                 onDelete = onDelete,
             )

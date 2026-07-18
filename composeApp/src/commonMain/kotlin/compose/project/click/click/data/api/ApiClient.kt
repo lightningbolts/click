@@ -1577,13 +1577,23 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         beaconId: String,
         latitude: Double? = null,
         longitude: Double? = null,
+        accuracyMeters: Double? = null,
+        platform: String? = null,
     ): Result<BeaconAttendeeDto> {
         val id = beaconId.trim()
         if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
         return try {
             val response: HttpResponse = clickWebClient.post("$clickWebAuthOrigin/api/beacons/$id/rsvp") {
                 contentType(ContentType.Application.Json)
-                setBody(BeaconRsvpPostBody(latitude = latitude, longitude = longitude))
+                setBody(
+                    BeaconRsvpPostBody(
+                        latitude = latitude,
+                        longitude = longitude,
+                        accuracyMeters = accuracyMeters,
+                        source = "mobile",
+                        platform = platform,
+                    ),
+                )
             }
             if (response.status.value in 200..299) {
                 val payload = response.body<BeaconRsvpPostResponseDto>()
@@ -1614,6 +1624,115 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         } catch (e: ClientRequestException) {
             Result.failure(Exception(readClickWebErrorMessage(e.response)))
         } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getBeaconEngagement(beaconId: String): Result<BeaconEngagementDto> {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+        return try {
+            val response: HttpResponse =
+                clickWebClient.get("$clickWebAuthOrigin/api/beacons/$id/engagement")
+            if (response.status.value in 200..299) {
+                Result.success(response.body<BeaconEngagementDto>())
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun putBeaconBookmark(
+        beaconId: String,
+        bookmarked: Boolean,
+        telemetry: EngagementTelemetryBody = EngagementTelemetryBody(),
+    ): Result<Unit> {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+        return try {
+            val response: HttpResponse =
+                clickWebClient.put("$clickWebAuthOrigin/api/beacons/$id/bookmark") {
+                    contentType(ContentType.Application.Json)
+                    setBody(telemetry.copy(bookmarked = bookmarked))
+                }
+            if (response.status.value in 200..299) Result.success(Unit)
+            else Result.failure(Exception(readClickWebErrorMessage(response)))
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun postBeaconCheckIn(
+        beaconId: String,
+        telemetry: EngagementTelemetryBody,
+    ): Result<BeaconCheckInMutationDto> {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+        return try {
+            val response: HttpResponse =
+                clickWebClient.post("$clickWebAuthOrigin/api/beacons/$id/check-in") {
+                    contentType(ContentType.Application.Json)
+                    setBody(telemetry)
+                }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<BeaconCheckInMutationDto>())
+            } else {
+                Result.failure(
+                    BeaconEngagementHttpException(
+                        status = response.status.value,
+                        message = readClickWebErrorMessage(response),
+                    ),
+                )
+            }
+        } catch (e: ClientRequestException) {
+            Result.failure(
+                BeaconEngagementHttpException(
+                    status = e.response.status.value,
+                    message = readClickWebErrorMessage(e.response),
+                ),
+            )
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteBeaconCheckIn(beaconId: String): Result<Unit> {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+        return try {
+            val response: HttpResponse =
+                clickWebClient.delete("$clickWebAuthOrigin/api/beacons/$id/check-in")
+            if (response.status.value in 200..299) Result.success(Unit)
+            else Result.failure(Exception(readClickWebErrorMessage(response)))
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun postBeaconImpression(
+        beaconId: String,
+        telemetry: EngagementTelemetryBody = EngagementTelemetryBody(surface = "detail"),
+    ): Result<Unit> {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+        return try {
+            val response: HttpResponse =
+                clickWebClient.post("$clickWebAuthOrigin/api/beacons/$id/impressions") {
+                    contentType(ContentType.Application.Json)
+                    setBody(telemetry)
+                }
+            if (response.status.value in 200..299) Result.success(Unit)
+            else Result.failure(Exception(readClickWebErrorMessage(response)))
+        } catch (e: Exception) {
+            // Fire-and-forget: soft-fail
             Result.failure(e)
         }
     }
@@ -1667,4 +1786,44 @@ data class BeaconRsvpPostResponseDto(
 data class BeaconRsvpPostBody(
     val latitude: Double? = null,
     val longitude: Double? = null,
+    @SerialName("accuracy_meters") val accuracyMeters: Double? = null,
+    @SerialName("client_occurred_at") val clientOccurredAt: String? = null,
+    val source: String? = null,
+    val platform: String? = null,
+    @SerialName("app_version") val appVersion: String? = null,
 )
+
+@Serializable
+data class EngagementTelemetryBody(
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    @SerialName("accuracy_meters") val accuracyMeters: Double? = null,
+    @SerialName("client_occurred_at") val clientOccurredAt: String? = null,
+    val source: String? = "mobile",
+    val platform: String? = null,
+    @SerialName("app_version") val appVersion: String? = null,
+    val surface: String? = null,
+    val bookmarked: Boolean? = null,
+)
+
+@Serializable
+data class BeaconEngagementDto(
+    @SerialName("beacon_id") val beaconId: String? = null,
+    val bookmarked: Boolean = false,
+    @SerialName("checked_in") val checkedIn: Boolean = false,
+    @SerialName("checked_in_at") val checkedInAt: String? = null,
+    @SerialName("check_in_count") val checkInCount: Int = 0,
+)
+
+@Serializable
+data class BeaconCheckInMutationDto(
+    val ok: Boolean = false,
+    @SerialName("checked_in") val checkedIn: Boolean = false,
+    @SerialName("checked_in_at") val checkedInAt: String? = null,
+    @SerialName("check_in_count") val checkInCount: Int = 0,
+)
+
+class BeaconEngagementHttpException(
+    val status: Int,
+    override val message: String,
+) : Exception(message)

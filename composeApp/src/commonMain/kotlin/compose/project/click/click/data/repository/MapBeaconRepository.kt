@@ -60,11 +60,34 @@ class MapBeaconRepository(
         beaconId: String,
         latitude: Double? = null,
         longitude: Double? = null,
+        accuracyMeters: Double? = null,
+        platform: String? = null,
     ): Result<BeaconAttendeeDto> =
-        apiClient.postBeaconRsvp(beaconId, latitude, longitude)
+        apiClient.postBeaconRsvp(beaconId, latitude, longitude, accuracyMeters, platform)
 
     suspend fun cancelRsvp(beaconId: String): Result<Unit> =
         apiClient.deleteBeaconRsvp(beaconId)
+
+    suspend fun fetchBeaconEngagement(beaconId: String) =
+        apiClient.getBeaconEngagement(beaconId)
+
+    suspend fun setBeaconBookmark(
+        beaconId: String,
+        bookmarked: Boolean,
+        telemetry: compose.project.click.click.data.api.EngagementTelemetryBody,
+    ) = apiClient.putBeaconBookmark(beaconId, bookmarked, telemetry)
+
+    suspend fun checkInBeacon(
+        beaconId: String,
+        telemetry: compose.project.click.click.data.api.EngagementTelemetryBody,
+    ) = apiClient.postBeaconCheckIn(beaconId, telemetry)
+
+    suspend fun checkOutBeacon(beaconId: String) = apiClient.deleteBeaconCheckIn(beaconId)
+
+    suspend fun recordBeaconImpression(
+        beaconId: String,
+        telemetry: compose.project.click.click.data.api.EngagementTelemetryBody,
+    ) = apiClient.postBeaconImpression(beaconId, telemetry)
 
     suspend fun fetchNearbyCommunityHubs(
         minLat: Double,

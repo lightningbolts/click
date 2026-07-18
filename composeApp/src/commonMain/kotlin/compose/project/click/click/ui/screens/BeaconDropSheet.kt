@@ -53,9 +53,10 @@ import compose.project.click.click.data.models.MapBeaconKind
 import compose.project.click.click.events.EventSchedule
 import compose.project.click.click.events.EventScheduleValidationError
 import compose.project.click.click.events.EVENT_CATEGORY_OPTIONS
+import compose.project.click.click.events.EventVenueScale
+import compose.project.click.click.events.defaultEventSchedule
 import compose.project.click.click.events.validateEventSchedule
 import compose.project.click.click.ui.components.EventDateTimePicker
-import compose.project.click.click.events.defaultEventSchedule
 
 /**
  * Beacon drop types exposed in the map FAB flow.
@@ -116,6 +117,7 @@ fun BeaconDropSheetContent(
         visibilityAudience: BeaconVisibilityAudience,
         eventSchedule: compose.project.click.click.events.EventSchedule?,
         eventCategories: List<String>,
+        venueScale: compose.project.click.click.events.EventVenueScale,
         onRejectedEarly: () -> Unit,
     ) -> Unit,
     onCreateHub: (name: String, category: String) -> Unit = { _, _ -> },
@@ -136,6 +138,7 @@ fun BeaconDropSheetContent(
     var eventSchedule by remember { mutableStateOf(defaultEventSchedule()) }
     var eventScheduleError by remember { mutableStateOf<EventScheduleValidationError?>(null) }
     var eventCategories by remember { mutableStateOf(setOf<String>()) }
+    var venueScale by remember { mutableStateOf(EventVenueScale.DEFAULT) }
     var submitValidationError by remember { mutableStateOf<String?>(null) }
 
     var hubNameDraft by remember { mutableStateOf("") }
@@ -339,6 +342,35 @@ fun BeaconDropSheetContent(
                         )
                     }
                 }
+                Text(
+                    text = "Check-in area",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = "How big is the place? Drop the pin near the center of the gathering.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    EventVenueScale.entries.forEach { option ->
+                        FilterChip(
+                            selected = venueScale == option,
+                            onClick = { venueScale = option },
+                            label = { Text(option.label) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = chipContainer,
+                                selectedContainerColor = chipSelected,
+                                labelColor = MaterialTheme.colorScheme.onSurface,
+                                selectedLabelColor = MaterialTheme.colorScheme.onSurface,
+                            ),
+                        )
+                    }
+                }
             } else {
                 Text(
                     text = "Visible for",
@@ -509,6 +541,7 @@ fun BeaconDropSheetContent(
                         visibilityAudience,
                         schedule,
                         if (isEvent) eventCategories.toList() else emptyList(),
+                        if (isEvent) venueScale else EventVenueScale.DEFAULT,
                     ) {
                         isSubmitting = false
                     }

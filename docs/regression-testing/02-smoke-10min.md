@@ -47,7 +47,10 @@ Full matrix: [01-full-checklist.md](01-full-checklist.md) · Known issues: [03-k
 - [ ] Map tab loads location + pins
 - [ ] `[KNOWN-5]` Basemap not stuck full grayscale unless Ghost Mode is on
 - [ ] `[KNOWN-4]` Create or find an event beacon → appears on map **and** in discovery list
-- [ ] Drop any beacon → pin appears → open detail
+- [ ] Drop event → pick **Check-in area** scale → pin appears → open detail
+- [ ] Event detail: Bookmark toggle survives app force-kill (server + disk cache)
+- [ ] Event detail: Check-in far from pin → snackbar + toggle stays off / reverts
+- [ ] Event detail: Check-in with location denied → snackbar, stays unchecked
 - [ ] `[KNOWN-9]` Hazard beacon icon not wildly oversized vs other pins
 
 ---

@@ -379,12 +379,18 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 
 - [ ] Drop beacon FAB / entry opens drop sheet
 - [ ] Create event / vibe / social / hazard beacon with required fields
+- [ ] Event create: **Check-in area** chips set venue scale (`intimate` / `neighborhood` / `venue` / `campus`)
 - [ ] Submit success adds pin; failure toast
-- [ ] Beacon detail sheet: RSVP, share, navigate
+- [ ] Beacon detail sheet: RSVP, share, navigate, bookmark, check-in
+- [ ] Bookmark toggle survives app force-kill (server-backed)
+- [ ] Check-in far from pin → snackbar + state reverts (geofence)
+- [ ] Check-in with location denied → snackbar, stays unchecked
+- [ ] Check-in before live window → “Check-in opens when the event starts”
 - [ ] `initialBeaconId` focuses correct pin on load
 - [ ] Event reminders sync (`EventReminderCoordinator`)
 - [ ] `[KNOWN-9]` Hazard beacon icon sized consistently with other pin icons (not oversized)
 - [ ] `[UI]` Beacon sheets use `PlatformSheetRoot`
+- [ ] Website: `/insights/event-engagement` loads funnel / arrival / rejects (demo or live)
 
 ---
 
