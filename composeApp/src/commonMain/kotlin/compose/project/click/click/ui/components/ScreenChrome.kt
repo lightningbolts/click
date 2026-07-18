@@ -125,6 +125,7 @@ fun Modifier.floatingHeaderStatusBarPadding(): Modifier = composed {
 fun rememberFloatingHeaderTopPadding(
     collapseFraction: Float,
     statusBarTop: Dp = rememberStatusBarTopPadding(),
+    belowHeaderSpacing: Dp = AppScreenDefaults.SectionSpacing,
 ): Pair<Dp, Modifier> {
     val density = LocalDensity.current
     var expandedHeaderBodyHeight by remember {
@@ -142,7 +143,9 @@ fun rememberFloatingHeaderTopPadding(
     }
     // Fixed expanded inset — overlay header collapses visually; do not shrink this during
     // scroll (causes jitter on both LazyColumn and verticalScroll screens).
-    val topPadding = statusBarTop + expandedHeaderBodyHeight + AppScreenDefaults.SectionSpacing
+    // [belowHeaderSpacing] may be reduced (even negative) when the LazyColumn also uses
+    // spacedBy after the inset item, so the *visible* gap under the header stays intentional.
+    val topPadding = statusBarTop + expandedHeaderBodyHeight + belowHeaderSpacing
     return topPadding to measureModifier
 }
 

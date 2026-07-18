@@ -79,6 +79,8 @@ import kotlin.time.Duration.Companion.milliseconds
 // Spacing constants matching app's consistent 20.dp horizontal padding
 private val ScreenPaddingHorizontal = 20.dp
 private val CardSpacing = 24.dp
+/** Visible gap under the floating greeting before the search pill (cancels spacedBy after inset). */
+private val HeaderToSearchGap = 8.dp
 
 @Composable
 fun HomeScreen(
@@ -222,6 +224,9 @@ fun HomeScreen(
                     title = homeGreetingTitle(firstName),
                     subtitle = HomeGreetingSubtitle,
                     showFloatingHeader = true,
+                    // spacedBy also applies after the header inset item — compensate so search
+                    // sits HeaderToSearchGap under the greeting, not CardSpacing×2.
+                    belowHeaderSpacing = HeaderToSearchGap - CardSpacing,
                     verticalArrangement = Arrangement.spacedBy(CardSpacing),
                 ) {
                         if (onOpenSearch != null) {

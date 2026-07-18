@@ -61,6 +61,13 @@ fun AppScreenScaffold(
     actions: @Composable (RowScope.() -> Unit)? = null,
     onOpenSearch: (() -> Unit)? = null,
     showFloatingHeader: Boolean = true,
+    /**
+     * Space between the floating header bottom and the first list item.
+     * When [verticalArrangement] is [Arrangement.spacedBy], that spacing is *also*
+     * inserted after the header inset item — pass `desiredGap - spacedByAmount` so the
+     * visible gap matches [desiredGap] (see Home search under greeting).
+     */
+    belowHeaderSpacing: Dp = AppScreenDefaults.SectionSpacing,
     horizontalPadding: Dp = AppScreenDefaults.HorizontalPadding,
     lazyListState: LazyListState = rememberLazyListState(),
     headerBelowContent: @Composable (() -> Unit)? = null,
@@ -77,7 +84,7 @@ fun AppScreenScaffold(
         }
     }
     val (measuredTopPadding, headerMeasureModifier) =
-        rememberFloatingHeaderTopPadding(collapseFraction, statusBarTop)
+        rememberFloatingHeaderTopPadding(collapseFraction, statusBarTop, belowHeaderSpacing)
     val topContentPadding = if (showFloatingHeader) {
         measuredTopPadding
     } else {

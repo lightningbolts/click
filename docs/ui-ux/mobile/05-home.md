@@ -68,6 +68,7 @@ HomeScreen (organism)
 | Horizontal padding | 20dp |
 | Section spacing | 24dp (`CardSpacing`) |
 | Header | Floating `LiquidGlassPageHeader` via `AppScreenScaffold` — same status-bar overlay level as Clicks/Map/etc.; title = `homeGreetingTitle`, subtitle = `"Ready to connect today?"` (no `"Home"` title) |
+| Header → search | **8dp** under greeting (`HeaderToSearchGap`; compensates list `spacedBy` after header inset) |
 | List | `LazyColumn` when `HomeState.Success` |
 | Bottom chrome | Transparent nav overlay + `rememberBottomChromePadding()` |
 
