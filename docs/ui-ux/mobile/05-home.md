@@ -6,7 +6,7 @@
 
 **Visual system:** Functional Clarity — opaque surfaces, 2dp `clickBorderColor()`, scheme primary, no glass/blur/gradients. Design-asset mock (hierarchy only): `click/docs/design-assets/home/` — see that folder’s README; product truth is this doc.
 
-**Track C (2026-07-17):** Discovery-first IA — greeting + search pill + Featured Event + dynamic nearby explore; availability + reconnect remain first-class above Explore.
+**Track C (2026-07-17):** Discovery-first IA — greeting + search pill + Featured Event + dynamic nearby explore; availability + reconnect remain first-class above Explore. Greeting uses the same floating `LiquidGlassPageHeader` overlay as other tab roots (not an in-feed item).
 
 ---
 
@@ -20,9 +20,11 @@ HomeScreen (organism)
 │   ├── "Error loading home data"
 │   ├── state.message (dynamic)
 │   └── Button "Retry"
-└── AppScreenScaffold (showFloatingHeader = false)   [Success]
-    └── LazyColumn (24dp spacing, 20dp horizontal, status-bar top inset)
-        ├── HomeGreetingBlock           // time-of-day + first name (always first)
+└── AppScreenScaffold (showFloatingHeader = true)   [Success]
+    ├── FloatingHeaderOverlay → LiquidGlassPageHeader
+    │   ├── title: homeGreetingTitle(firstName)  // "Good morning|afternoon|evening|Hello, {name}."
+    │   └── subtitle: HomeGreetingSubtitle       // "Ready to connect today?"
+    └── LazyColumn (24dp spacing, 20dp horizontal; top inset clears floating header)
         ├── HomeSearchPill              // → onOpenSearch / UnifiedSearchSheet
         ├── FeaturedEventSection (conditional)  // first HomeEventReminder
         │   └── FeaturedEventCard → "View on Map"
@@ -65,7 +67,7 @@ HomeScreen (organism)
 | Background | `MaterialTheme.colorScheme.background` |
 | Horizontal padding | 20dp |
 | Section spacing | 24dp (`CardSpacing`) |
-| Header | No floating `"Home"` title — greeting is in-feed via `HomeGreetingBlock` → `LiquidGlassPageHeader` (same bordered island as other screens) |
+| Header | Floating `LiquidGlassPageHeader` via `AppScreenScaffold` — same status-bar overlay level as Clicks/Map/etc.; title = `homeGreetingTitle`, subtitle = `"Ready to connect today?"` (no `"Home"` title) |
 | List | `LazyColumn` when `HomeState.Success` |
 | Bottom chrome | Transparent nav overlay + `rememberBottomChromePadding()` |
 
@@ -73,7 +75,7 @@ HomeScreen (organism)
 
 | Component | Role on Home |
 |-----------|----------------|
-| `HomeGreetingBlock` | Time-of-day salutation + first name + `"Ready to connect today?"` inside `LiquidGlassPageHeader` |
+| `homeGreetingTitle` / `HomeGreetingSubtitle` | Time-of-day salutation strings for the floating header |
 | `HomeSearchPill` | Bordered pill → `onOpenSearch()` |
 | `FeaturedEventSection` / `FeaturedEventCard` | Upcoming **event** hero from `homeEventReminders.firstOrNull()` |
 | `ExploreNearbyBeaconsSection` | Dynamic tiles from `prefetchedMapBeacons` + hubs (count > 0 only) |

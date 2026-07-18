@@ -48,8 +48,8 @@ private const val FloatingHeaderInsetItemKey = "__floating_header_inset__"
  * content padding so every control stays reachable. A Functional Clarity header island floats at
  * the top and collapses as the user scrolls.
  *
- * When [showFloatingHeader] is false (e.g. Home discovery IA), only status-bar top inset is
- * applied — no title island or header search icon.
+ * When [showFloatingHeader] is false, only status-bar top inset is applied — no title
+ * island. Prefer [showFloatingHeader] true for tab roots (including Home’s greeting).
  */
 @Composable
 fun AppScreenScaffold(

@@ -148,28 +148,24 @@ fun RecentClickCard(name: String, time: String, location: String) {
 }
 
 /**
- * Time-of-day greeting in the same LiquidGlass header island used on other tab roots.
+ * Time-of-day Home header title — used with [AppScreenScaffold] floating
+ * [LiquidGlassPageHeader] so vertical position matches other tab roots.
  */
-@Composable
-fun HomeGreetingBlock(
+fun homeGreetingTitle(
     firstName: String,
-    modifier: Modifier = Modifier,
-    subtitle: String = "Ready to connect today?",
-) {
-    val hour = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour
+    hour: Int = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour,
+): String {
     val salutation = when (hour) {
         in 5..11 -> "Good morning"
         in 12..16 -> "Good afternoon"
         in 17..21 -> "Good evening"
         else -> "Hello"
     }
-    Box(modifier = modifier.fillMaxWidth()) {
-        LiquidGlassPageHeader(
-            title = "$salutation, $firstName.",
-            subtitle = subtitle,
-        )
-    }
+    return "$salutation, $firstName."
 }
+
+/** Default Home header subtitle under [homeGreetingTitle]. */
+const val HomeGreetingSubtitle = "Ready to connect today?"
 
 /**
  * Bordered search pill — opens unified search (not an inline text field).

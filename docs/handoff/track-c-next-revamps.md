@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-17  
 **Product:** Click KMP mobile (`click/composeApp`)  
-**Previous chat:** Track C Inbox Remember Me strip (landed)
+**Previous chat:** Track C Inbox Remember Me + polish (landed)
 
 Read this before writing code. Prefer **one primary revamp per chat**.
 
@@ -10,17 +10,26 @@ Read this before writing code. Prefer **one primary revamp per chat**.
 
 ## 0. Just finished (do not redo)
 
-### Inbox Remember Me — landed (partial Inbox density)
+### Inbox Remember Me + polish — landed (partial Inbox density)
 
 - Active-tab **Remember Me** horizontal strip: Core-pinned **1:1** only (`coreConnectionIds`)
 - Chips: 56dp avatar + compact time badge (`formatRememberMeBadge`) + first name; tap opens chat
 - Section labels **Remember Me** / **Clicks**; hide when searching or core empty
 - Core people still appear in the normal list; **row spacing / ConnectionItem chrome unchanged**
+- Avatar hit target is **circular** (`CoreConnectionAvatarFrame` + `clip(CircleShape)`); name is a separate text tap — do not reintroduce full-column square `clickable`
 - Not done: overlapping rolodex card stack from `add_click_fixed_navigation/`
 
 **Docs:** `docs/ui-ux/mobile/07-connections-inbox.md`, handoff §3 Inbox row.
 
 **Still open:** device smoke for Remember Me visual confirm; Track B `[KNOWN-N]` device verify.
+
+### Home greeting header chrome — landed
+
+- Floating `LiquidGlassPageHeader` via `AppScreenScaffold(showFloatingHeader = true)` — **same status-bar overlay level** as Clicks / Map / other tab roots
+- Title = `homeGreetingTitle(firstName)`; subtitle = `HomeGreetingSubtitle` (`"Ready to connect today?"`)
+- Not an in-feed list item (avoids sitting too low under status-bar + spacer)
+
+**Docs:** `docs/ui-ux/mobile/05-home.md`.
 
 ### Settings grouping — landed
 
@@ -31,19 +40,18 @@ Read this before writing code. Prefer **one primary revamp per chat**.
 
 **Docs:** `docs/ui-ux/mobile/14-settings-privacy.md`, handoff §3 Settings row.
 
-**Still open:** device smoke for Settings visual confirm; Track B `[KNOWN-N]` device verify.
+**Still open:** device smoke for Settings visual confirm.
 
 ### Home IA — landed
 
-- Greeting-first feed (no floating `"Home"` title); search pill; Featured **Event**
+- Greeting-first feed; search pill; Featured **Event**
 - Explore nearby = live `MapBeaconKind` / Hub counts only (no mock Networking/Workshop tiles)
 - Feed order (current): greeting → search → Featured Event → **I'm down for…** → **Explore** → archive/Poll-Pair → Reconnect → reminders → recent → insights → stats
-- Insights row: label/value columns (Longest Connection no longer overlaps)
-- Location group cards: no redundant location-pin icon
-- Reconnect cards: `ConnectionListUserAvatarFace` (same avatar as Clicks inbox)
-- Create verified click + unified search: single-line search fields with normal caret (no tall multi-line cursor / clipped placeholder)
+- Insights row: label/value columns; location cards without redundant pin icon
+- Reconnect cards: `ConnectionListUserAvatarFace`
+- Create verified click + unified search: single-line search fields with normal caret
 
-**Docs:** `docs/ui-ux/mobile/05-home.md`, `docs/design-assets/home/README.md`, handoff §3 Home row, regression §9 / smoke, `13-availability.md`, `07-connections-inbox.md` search note.
+**Docs:** `docs/ui-ux/mobile/05-home.md`, `docs/design-assets/home/README.md`.
 
 **Still open:** device smoke for Home IA visual confirm.
 
@@ -61,7 +69,7 @@ Source of truth for prior work: [`functional-clarity-continuation.md`](functiona
 
 | Priority | Revamp | Mock / source | Screen | Intent |
 |----------|--------|---------------|--------|--------|
-| **1** | **Add Click hero** | `add_click_streamlined_header/` | `AddClickScreen` | Large Tap-to-Connect hero |
+| **1** | **Add Click hero** | `add_click_streamlined_header/` (+ `screen.png`) | `AddClickScreen` / `AddClickContent` | Large **Tap to Connect** hero first; My Code / Scan below |
 | **2** | **Events discovery** | `events_discovery_with_real_mini_map/` | `MapDiscoveryLayout` | Events-for-you + mini-map PiP |
 | **3** | **Full-map events** | `map_events_full_screen_map/` | `MapScreen` | Full-map + event pin sheet |
 | **4** | **Event detail** | `event_details_expanded_dark/` | Beacon/event sheets | Expanded detail over map |
@@ -70,6 +78,16 @@ Source of truth for prior work: [`functional-clarity-continuation.md`](functiona
 Optional later (after related device OK): Nav chrome v2, Chat composer polish, Profile memories IA — see handoff §3.
 
 **Suggested default for next chat:** Add Click hero.
+
+### Add Click hero — brief for next chat
+
+**Current (code):** [`AddClickContent`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/ui/screens/AddClickScreen.kt) puts **My Code | Scan Code** row first, then a smaller full-width **Tap to Connect** card, then hub text buttons. Shell: `AppScreenWithFloatingHeader` title `"Add Click"`.
+
+**Target (mock):** [`docs/design-assets/add_click_streamlined_header/`](../design-assets/add_click_streamlined_header/) — large Tap to Connect hero (big Bluetooth icon ~80px, headline + supporting line) **above** the 2-column QR grid; hub links stay below. Use HTML/`screen.png` for hierarchy/spacing intent only — do not copy markup.
+
+**Keep:** existing navigation callbacks (`onNavigateToNfc`, `onShowMyQRCode`, `onScanQRCode`, hub create/join sheets); ViewModels / BLE / NFC / handshake flows; transparent nav; `#12` interactive-back underlay behavior if touched.
+
+**Update when shipping:** [`docs/ui-ux/mobile/06-connect-handshake.md`](../ui-ux/mobile/06-connect-handshake.md) + this handoff §0 / §4.
 
 ---
 
@@ -80,12 +98,18 @@ Continue Click Track C using:
 click/docs/handoff/track-c-next-revamps.md
 and click/docs/handoff/functional-clarity-continuation.md
 
-Home IA + Settings grouping + Inbox Remember Me are DONE — do not redo unless regressing.
+DONE — do not redo unless regressing:
+- Home IA + Home greeting LiquidGlassPageHeader
+- Settings grouping
+- Inbox Remember Me (Core 1:1s; circular avatar hit targets)
 Track A done. Track B code landed — device verify only; do not false-pass [KNOWN-N].
 
-Scope for THIS chat (pick one primary):
-1) Add Click hero — docs/design-assets/add_click_streamlined_header/ → AddClickScreen
-2) Events discovery / full-map / event detail — map stack (say which)
+Scope for THIS chat (default):
+Add Click hero — docs/design-assets/add_click_streamlined_header/ → AddClickScreen / AddClickContent
+(Large Tap to Connect hero first; My Code / Scan grid below. Layout/IA only.)
+
+Alternate (say which if not Add Click):
+2) Events discovery / full-map / event detail — map stack
 
 Rules:
 - Do NOT edit the neo-brutalist plan file under .cursor/plans.
@@ -93,7 +117,7 @@ Rules:
 - Keep nav bar chrome transparent (no opaque fill band under icons).
 - Reuse clickBorderColor() / LocalIsDarkMode / GlassSheetTokens.*().
 - Use design-asset HTML for hierarchy/spacing intent only — do not copy markup.
-- Update relevant docs/ui-ux + handoff when shipping.
+- Update docs/ui-ux/mobile/06-connect-handshake.md + this handoff when shipping.
 - After changes: run regression-testing §0 automated gates.
 ```
 
@@ -107,7 +131,7 @@ Rules:
 | Home (done) | `docs/ui-ux/mobile/05-home.md` |
 | Settings (done) | `docs/ui-ux/mobile/14-settings-privacy.md`, `docs/design-assets/settings/` |
 | Inbox (Remember Me done) | `docs/ui-ux/mobile/07-connections-inbox.md`, `docs/design-assets/chat/` |
-| Add Click | `docs/ui-ux/mobile/06-connect-handshake.md`, `docs/design-assets/add_click_streamlined_header/` |
+| **Add Click (next)** | `docs/ui-ux/mobile/06-connect-handshake.md`, `docs/design-assets/add_click_streamlined_header/` |
 | Map / events | `docs/ui-ux/mobile/10-map-beacons-hubs.md`, design-assets `events_*` / `map_events_*` |
 | Regression | `docs/regression-testing/00-INDEX.md` (§0 gates) |
 
@@ -119,4 +143,6 @@ Rules:
 - [x] Docs updated for Home order + verified-click search
 - [x] Settings grouping (profile header + preference clusters + standalone Sign out) shipped
 - [x] Inbox Remember Me strip (Core 1:1s) shipped; list spacing left as-is
-- [ ] Next Track C revamp started in a dedicated chat using §2 prompt
+- [x] Remember Me circular hit targets + Home greeting `LiquidGlassPageHeader` polish shipped
+- [x] Next-chat handoff prepared (Add Click hero brief + §2 prompt)
+- [ ] Next Track C revamp (Add Click hero) started in a dedicated chat using §2 prompt

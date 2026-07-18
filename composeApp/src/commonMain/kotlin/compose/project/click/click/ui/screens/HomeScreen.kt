@@ -60,7 +60,8 @@ import compose.project.click.click.ui.components.ConnectionListUserAvatarFace //
 import compose.project.click.click.ui.components.ExploreNearbyBeaconsSection // pragma: allowlist secret
 import compose.project.click.click.ui.components.FeaturedEventSection // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeExploreTile // pragma: allowlist secret
-import compose.project.click.click.ui.components.HomeGreetingBlock // pragma: allowlist secret
+import compose.project.click.click.ui.components.homeGreetingTitle // pragma: allowlist secret
+import compose.project.click.click.ui.components.HomeGreetingSubtitle // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeSearchPill // pragma: allowlist secret
 import compose.project.click.click.ui.components.toHomeExploreTile // pragma: allowlist secret
 import compose.project.click.click.events.isActiveForDiscoveryFeed // pragma: allowlist secret
@@ -218,14 +219,11 @@ fun HomeScreen(
                     ?.takeIf { it.isNotBlank() }
                     ?: "there"
                 AppScreenScaffold(
-                    title = "",
-                    showFloatingHeader = false,
+                    title = homeGreetingTitle(firstName),
+                    subtitle = HomeGreetingSubtitle,
+                    showFloatingHeader = true,
                     verticalArrangement = Arrangement.spacedBy(CardSpacing),
                 ) {
-                        item(key = "home_greeting") {
-                            HomeGreetingBlock(firstName = firstName)
-                        }
-
                         if (onOpenSearch != null) {
                             item(key = "home_search_pill") {
                                 HomeSearchPill(onClick = onOpenSearch)

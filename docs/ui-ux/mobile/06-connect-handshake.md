@@ -6,6 +6,8 @@
 
 **Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: `click/docs/design-assets/add_click_streamlined_header/`.
 
+**Track C next (not landed):** reorder `AddClickContent` so **Tap to Connect** is a large hero *above* the My Code / Scan grid (mock hierarchy). Current code still places the QR row first. Handoff: [`../handoff/track-c-next-revamps.md`](../handoff/track-c-next-revamps.md) §1 Add Click hero brief.
+
 ---
 
 ## ASCII hierarchy
