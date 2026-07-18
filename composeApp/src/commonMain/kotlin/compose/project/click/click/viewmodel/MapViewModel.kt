@@ -309,6 +309,12 @@ class MapViewModel : ViewModel() {
     private val clusterThreshold = 12.0
 
     /**
+     * Must zoom out past this before leaving individual-pin mode. Prevents cluster↔pin flicker
+     * when native zoom readbacks chatter around [clusterThreshold] during pinch.
+     */
+    private val pinModeExitBelow = clusterThreshold - 0.75
+
+    /**
      * After a cluster zoom-in, native map zoom readbacks often dip below [clusterThreshold] briefly
      * or stay inconsistent with [metersForZoom]. Until the user clearly zooms out past the
      * threshold, treat the map as "pin mode" for clustering decisions so [determineMapRenderData]
@@ -316,9 +322,26 @@ class MapViewModel : ViewModel() {
      */
     private val _pinRenderZoomFloor = MutableStateFlow<Double?>(null)
 
+    /** Sticky pin mode from user pinch (enter ≥ threshold, exit only below [pinModeExitBelow]). */
+    private val _stickyPinMode = MutableStateFlow(false)
+
     private fun zoomForClusteringRender(zoom: Double): Double {
-        val floor = _pinRenderZoomFloor.value ?: return zoom
-        return maxOf(zoom, floor)
+        val floor = _pinRenderZoomFloor.value
+        if (floor != null) return maxOf(zoom, floor)
+        if (_stickyPinMode.value && zoom >= pinModeExitBelow) {
+            return maxOf(zoom, clusterThreshold)
+        }
+        return zoom
+    }
+
+    private fun updateStickyPinModeForZoom(zoom: Double) {
+        when {
+            zoom >= clusterThreshold -> _stickyPinMode.value = true
+            zoom < pinModeExitBelow -> {
+                _stickyPinMode.value = false
+                _pinRenderZoomFloor.value = null
+            }
+        }
     }
 
     /**
@@ -982,6 +1005,7 @@ class MapViewModel : ViewModel() {
         pendingProgrammaticZoomTarget = zoom
         pendingProgrammaticZoomSetAtMs = Clock.System.now().toEpochMilliseconds()
         _zoomLevel.value = zoom
+        updateStickyPinModeForZoom(zoom)
         onBeaconPinTapped(id, seedDistanceMeters)
     }
 
@@ -1677,10 +1701,7 @@ class MapViewModel : ViewModel() {
 
         if (abs(_zoomLevel.value - coerced) <= 0.01) return
         _zoomLevel.value = coerced
-
-        if (pendingProgrammaticZoomTarget == null && coerced < clusterThreshold - 0.05) {
-            _pinRenderZoomFloor.value = null
-        }
+        updateStickyPinModeForZoom(coerced)
 
         _visibleBounds.value?.let { bounds ->
             persistCameraTarget(
@@ -1801,6 +1822,7 @@ class MapViewModel : ViewModel() {
             _cameraTarget.value = CameraTarget(latitude = lat, longitude = lon, zoom = target)
         }
         _zoomLevel.value = target
+        updateStickyPinModeForZoom(target)
     }
 
     /**
@@ -1808,15 +1830,13 @@ class MapViewModel : ViewModel() {
      */
     fun zoomOut() {
         val target = maxOf(_zoomLevel.value - 1.0, 2.0)
-        if (target < clusterThreshold - 0.25) {
-            _pinRenderZoomFloor.value = null
-        }
         pendingProgrammaticZoomTarget = target
         pendingProgrammaticZoomSetAtMs = Clock.System.now().toEpochMilliseconds()
         anchorLatLonForProgrammaticCamera()?.let { (lat, lon) ->
             _cameraTarget.value = CameraTarget(latitude = lat, longitude = lon, zoom = target)
         }
         _zoomLevel.value = target
+        updateStickyPinModeForZoom(target)
     }
 
     /**
@@ -1849,6 +1869,7 @@ class MapViewModel : ViewModel() {
         val bounds = cluster.boundingBox
         val targetZoom = maxOf(clusterThreshold + 1, calculateZoomForBounds(bounds))
         _pinRenderZoomFloor.value = maxOf(clusterThreshold + 0.25, targetZoom)
+        _stickyPinMode.value = true
         
         // Animate camera to cluster center with appropriate zoom
         _cameraTarget.value = CameraTarget(
@@ -1978,6 +1999,7 @@ class MapViewModel : ViewModel() {
             if (abs(_zoomLevel.value - z) > 0.02) {
                 _zoomLevel.value = z
             }
+            updateStickyPinModeForZoom(_zoomLevel.value)
         }
     }
 
@@ -2000,6 +2022,7 @@ class MapViewModel : ViewModel() {
                 if (abs(_zoomLevel.value - target.zoom) > 0.01) {
                     _zoomLevel.value = target.zoom
                 }
+                updateStickyPinModeForZoom(_zoomLevel.value)
             }
         }
         ensureDiscoveryFeedLoaded()

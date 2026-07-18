@@ -33,8 +33,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -68,6 +66,9 @@ import compose.project.click.click.ui.components.AvailabilitySheet // pragma: al
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenScaffold
+import compose.project.click.click.ui.components.UnifiedToastHost
+import compose.project.click.click.ui.components.rememberBottomChromePadding
+import compose.project.click.click.ui.components.rememberUnifiedToastState
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.ui.theme.clickBorderColor
@@ -118,7 +119,7 @@ fun SettingsScreen(
     val requestMicrophonePermissionThen = rememberMicrophonePermissionRequester()
     val requestLocationPermissionThen = rememberLocationPermissionRequester()
     val settingsScope = rememberCoroutineScope()
-    val snackbarHostState = remember { SnackbarHostState() }
+    val toastState = rememberUnifiedToastState()
     var avatarUploading by remember { mutableStateOf(false) }
     val authRepoForAvatar = remember(tokenStorage) { AuthRepository(tokenStorage = tokenStorage) }
     val supabaseRepository = remember { SupabaseRepository() }
@@ -130,12 +131,12 @@ fun SettingsScreen(
                     authRepoForAvatar.uploadProfilePicture(bytes, mime).fold(
                         onSuccess = { url ->
                             AppDataManager.applyProfilePictureUrl(url)
-                            snackbarHostState.showSnackbar("Profile photo updated")
+                            toastState.show(settingsScope, "Profile photo updated")
                         },
                         onFailure = { e ->
                             val msg = e.message?.lines()?.firstOrNull()?.take(180)
                                 ?: "Could not update profile photo"
-                            snackbarHostState.showSnackbar(msg)
+                            toastState.show(settingsScope, msg)
                         },
                     )
                 } finally {
@@ -145,7 +146,7 @@ fun SettingsScreen(
         },
         onAudioPicked = { _, _, _ -> },
         onMediaAccessBlocked = { msg ->
-            settingsScope.launch { snackbarHostState.showSnackbar(msg) }
+            toastState.show(settingsScope, msg)
         },
     )
 
@@ -477,7 +478,7 @@ fun SettingsScreen(
                         SettingsInterestsCard(
                             userId = currentUser?.id,
                             supabaseRepository = supabaseRepository,
-                            onFeedback = { msg -> snackbarHostState.showSnackbar(msg) },
+                            onFeedback = { msg -> toastState.show(settingsScope, msg) },
                         )
                     }
                 }
@@ -600,11 +601,14 @@ fun SettingsScreen(
             )
         }
 
-        SnackbarHost(
-            hostState = snackbarHostState,
+        UnifiedToastHost(
+            state = toastState,
+            opaque = true,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 24.dp),
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = rememberBottomChromePadding() + 8.dp),
         )
 
     }

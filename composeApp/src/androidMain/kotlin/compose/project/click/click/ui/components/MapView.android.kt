@@ -193,7 +193,8 @@ actual fun PlatformMap(
         )
     ) {
         pins.forEach { pin ->
-            key(pin.id, pin.imageUrl, loadedAvatarBitmaps[pin.imageUrl?.trim().orEmpty()]?.generationId) {
+            // Stable identity — do not remount Marker when Coil finishes loading a photo.
+            key(pin.id) {
                 val markerHue = pin.markerHueDegrees()
                 val squadScale = pin.squadMultiplier.coerceAtLeast(1f)
                 val position = remember(pin.id, pin.latitude, pin.longitude) {

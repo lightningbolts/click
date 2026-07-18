@@ -105,9 +105,13 @@ import compose.project.click.click.ui.utils.displayDynamicTitle
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.PlatformBackHandler
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding
+import compose.project.click.click.ui.components.rememberBottomChromePadding
 import compose.project.click.click.ui.sheet.MapBeaconSheetRoot
 import compose.project.click.click.telemetry.TelemetryBatcher
 import compose.project.click.click.ui.components.GlassmorphicOverlay
+import compose.project.click.click.ui.components.UnifiedToastHost
+import compose.project.click.click.ui.components.UnifiedToastTokens
+import compose.project.click.click.ui.components.rememberUnifiedToastState
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 
 /**
@@ -253,28 +257,26 @@ fun MapScreen(
         onEventsSheetExpandedChanged(false)
     }
 
-    val snackbarHostState = remember { SnackbarHostState() }
+    val toastState = rememberUnifiedToastState()
+    val mapScope = rememberCoroutineScope()
 
     LaunchedEffect(ghostModeEnabled) {
         if (ghostModeEnabled) {
-            snackbarHostState.showSnackbar(
-                message = "You are off the grid",
-                duration = SnackbarDuration.Short,
-            )
+            toastState.show(mapScope, "You are off the grid")
         }
     }
 
     val nudgeResult by viewModel.nudgeResult.collectAsState()
     LaunchedEffect(nudgeResult) {
         nudgeResult?.let { msg ->
-            snackbarHostState.showSnackbar(message = msg, duration = SnackbarDuration.Short)
+            toastState.show(mapScope, msg)
             viewModel.clearNudgeResult()
         }
     }
 
     LaunchedEffect(beaconDropFailureToast) {
         beaconDropFailureToast?.let { msg ->
-            snackbarHostState.showSnackbar(message = msg, duration = SnackbarDuration.Long)
+            toastState.show(mapScope, msg, durationMs = UnifiedToastTokens.LongDurationMs)
             viewModel.clearBeaconDropFailureToast()
         }
     }
@@ -282,7 +284,7 @@ fun MapScreen(
     val engagementSnackbar by viewModel.engagementSnackbar.collectAsState()
     LaunchedEffect(engagementSnackbar) {
         engagementSnackbar?.let { msg ->
-            snackbarHostState.showSnackbar(message = msg, duration = SnackbarDuration.Short)
+            toastState.show(mapScope, msg)
             viewModel.clearEngagementSnackbar()
         }
     }
@@ -290,7 +292,7 @@ fun MapScreen(
     LaunchedEffect(beaconInsertError) {
         val err = beaconInsertError?.trim().orEmpty()
         if (err.isNotEmpty()) {
-            snackbarHostState.showSnackbar(message = err, duration = SnackbarDuration.Long)
+            toastState.show(mapScope, err, durationMs = UnifiedToastTokens.LongDurationMs)
             viewModel.clearBeaconInsertError()
         }
     }
@@ -303,7 +305,6 @@ fun MapScreen(
     var showCreateHubModal by remember { mutableStateOf(false) }
     var pendingHubName by remember { mutableStateOf("") }
     var pendingHubCategory by remember { mutableStateOf("general") }
-    val mapScope = rememberCoroutineScope()
 
     LaunchedEffect(showBeaconDropSheet) {
         if (showBeaconDropSheet) {
@@ -328,7 +329,6 @@ fun MapScreen(
     // Match App.kt: content is full-bleed under the tab bar; bottom inset is applied only on controls.
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) {
         val grayscaleModifier = if (ghostModeEnabled) Modifier.alpha(0.7f) else Modifier
 
@@ -498,6 +498,17 @@ fun MapScreen(
                     }
                 }
             }
+
+            UnifiedToastHost(
+                state = toastState,
+                opaque = true,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = rememberBottomChromePadding() + 8.dp)
+                    .zIndex(20f),
+            )
         }
         }
     }
@@ -704,9 +715,7 @@ fun MapScreen(
         initialName = pendingHubName,
         initialCategory = pendingHubCategory,
         onError = { msg ->
-            mapScope.launch {
-                snackbarHostState.showSnackbar(message = msg, duration = SnackbarDuration.Long)
-            }
+            toastState.show(mapScope, msg, durationMs = UnifiedToastTokens.LongDurationMs)
         },
     )
 }

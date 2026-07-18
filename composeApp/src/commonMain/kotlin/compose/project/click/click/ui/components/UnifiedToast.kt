@@ -13,8 +13,10 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -32,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.LocalPlatformStyle
@@ -45,33 +48,60 @@ object UnifiedToastTokens {
     const val EnterMillis = 240
     const val ExitMillis = 180
     const val DefaultDurationMs = 2_400L
+    const val LongDurationMs = 4_000L
     const val CompactCornerDp = 14
     const val OverlayCornerDp = 28
     const val MaxWidthDp = 300
 }
 
+data class UnifiedToastContent(
+    val message: String,
+    val actionLabel: String? = null,
+)
+
 @Stable
 class UnifiedToastState {
-    var message by mutableStateOf<String?>(null)
+    var content by mutableStateOf<UnifiedToastContent?>(null)
         private set
 
-    private var hideJob: Job? = null
+    val message: String? get() = content?.message
 
-    fun show(scope: CoroutineScope, text: String, durationMs: Long = UnifiedToastTokens.DefaultDurationMs) {
+    private var hideJob: Job? = null
+    private var pendingAction: (() -> Unit)? = null
+
+    fun show(
+        scope: CoroutineScope,
+        text: String,
+        durationMs: Long = UnifiedToastTokens.DefaultDurationMs,
+        actionLabel: String? = null,
+        onAction: (() -> Unit)? = null,
+    ) {
         hideJob?.cancel()
-        message = text
+        pendingAction = onAction
+        content = UnifiedToastContent(
+            message = text,
+            actionLabel = actionLabel?.trim()?.takeIf { it.isNotEmpty() },
+        )
         hideJob = scope.launch {
             delay(durationMs)
-            if (message == text) {
-                message = null
+            if (content?.message == text) {
+                content = null
+                pendingAction = null
             }
         }
+    }
+
+    fun performAction() {
+        val action = pendingAction
+        dismiss()
+        action?.invoke()
     }
 
     fun dismiss() {
         hideJob?.cancel()
         hideJob = null
-        message = null
+        content = null
+        pendingAction = null
     }
 }
 
@@ -80,6 +110,7 @@ fun rememberUnifiedToastState(): UnifiedToastState = remember { UnifiedToastStat
 
 /**
  * Compact toast pill — opaque surface + hard border (connections FAB row, chat composer feedback, etc.).
+ * Optional [UnifiedToastContent.actionLabel] renders a trailing text action.
  */
 @Composable
 fun UnifiedToastHost(
@@ -90,7 +121,7 @@ fun UnifiedToastHost(
     val platformStyle = LocalPlatformStyle.current
     val enterMs = if (platformStyle.isIOS) UnifiedToastTokens.EnterMillis + 40 else UnifiedToastTokens.EnterMillis
     val exitMs = UnifiedToastTokens.ExitMillis
-    val text = state.message
+    val toast = state.content
     val toastShape = RoundedCornerShape(UnifiedToastTokens.CompactCornerDp.dp)
 
     Box(
@@ -98,7 +129,7 @@ fun UnifiedToastHost(
         contentAlignment = if (opaque) Alignment.Center else Alignment.CenterEnd,
     ) {
         AnimatedVisibility(
-            visible = text != null,
+            visible = toast != null,
             enter = slideInVertically(
                 animationSpec = tween(enterMs, easing = FastOutSlowInEasing),
                 initialOffsetY = { it / 3 },
@@ -109,7 +140,7 @@ fun UnifiedToastHost(
             ) + fadeOut(tween(exitMs)),
             label = "unified_toast_compact",
         ) {
-            if (text != null) {
+            if (toast != null) {
                 val backgroundModifier = if (opaque) {
                     Modifier
                         .background(GlassSheetTokens.OledBlack(), toastShape)
@@ -120,15 +151,34 @@ fun UnifiedToastHost(
                         .background(GlassSheetTokens.GlassSurface(), toastShape)
                         .border(1.dp, GlassSheetTokens.GlassBorder(), toastShape)
                 }
-                Text(
-                    text = text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (opaque) GlassSheetTokens.OnOled() else MaterialTheme.colorScheme.onSurface,
+                val onSurface = if (opaque) GlassSheetTokens.OnOled() else MaterialTheme.colorScheme.onSurface
+                Row(
                     modifier = Modifier
                         .widthIn(max = UnifiedToastTokens.MaxWidthDp.dp)
                         .then(backgroundModifier)
                         .padding(horizontal = 14.dp, vertical = 10.dp),
-                )
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = toast.message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = onSurface,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    toast.actionLabel?.let { label ->
+                        TextButton(
+                            onClick = { state.performAction() },
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                        ) {
+                            Text(
+                                text = label,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                }
             }
         }
     }

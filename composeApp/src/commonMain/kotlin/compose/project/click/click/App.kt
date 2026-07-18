@@ -88,6 +88,10 @@ import compose.project.click.click.calendar.lockAvailabilityIntentForGap
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.ui.components.AppShimmerScreen
 import compose.project.click.click.ui.components.OfflineStatusBanner
+import compose.project.click.click.ui.components.UnifiedToastHost
+import compose.project.click.click.ui.components.UnifiedToastTokens
+import compose.project.click.click.ui.components.rememberBottomChromePadding
+import compose.project.click.click.ui.components.rememberUnifiedToastState
 import compose.project.click.click.ui.components.GlobalTetherOverlay
 import compose.project.click.click.encounter.EncounterTetherManager
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground
@@ -778,9 +782,11 @@ fun App() {
             } else if (onboardingStep == "loading") {
                 AppShimmerScreen(isDarkMode = isDarkMode)
             } else if (onboardingStep != "complete") {
-                val onboardingSnackbarHostState = remember { SnackbarHostState() }
+                val onboardingToastState = rememberUnifiedToastState()
                 LaunchedEffect(Unit) {
-                    AppDataManager.transientUserMessages.collect { onboardingSnackbarHostState.showSnackbar(it) }
+                    AppDataManager.transientUserMessages.collect {
+                        onboardingToastState.show(onboardingScope, it)
+                    }
                 }
                 Box(modifier = Modifier.fillMaxSize()) {
                 AnimatedContent(
@@ -854,10 +860,13 @@ fun App() {
                         }
                     }
                 }
-                SnackbarHost(
-                    hostState = onboardingSnackbarHostState,
+                UnifiedToastHost(
+                    state = onboardingToastState,
+                    opaque = true,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
                         .padding(bottom = 24.dp),
                 )
                 }
@@ -1008,18 +1017,18 @@ fun App() {
             val pendingConnectionUserId by ConnectionDeepLinkRouter.pendingConnectionUserId.collectAsState()
             val pendingEventDeepLinkBeaconId by EventDeepLinkRouter.pendingBeaconId.collectAsState()
 
-            // Snackbar for connection success/error feedback
-            val snackbarHostState = remember { SnackbarHostState() }
+            // Unified toast for connection success/error feedback
+            val toastState = rememberUnifiedToastState()
 
             LaunchedEffect(connectionViewModel) {
                 connectionViewModel.transientNotice.collect { message ->
-                    snackbarHostState.showSnackbar(message)
+                    toastState.show(connectionScope, message)
                 }
             }
 
             LaunchedEffect(Unit) {
                 AppDataManager.transientUserMessages.collect { message ->
-                    snackbarHostState.showSnackbar(message)
+                    toastState.show(connectionScope, message)
                 }
             }
 
@@ -1045,24 +1054,18 @@ fun App() {
                             shouldRequest = !locationService.hasLocationPermission()
                         )
                         if (!locationService.hasLocationPermission()) {
-                            snackbarHostState.showSnackbar(
-                                "Location permission is required to join this hub."
-                            )
+                            toastState.show(connectionScope, "Location permission is required to join this hub.")
                             return@launch
                         }
                         val loc = resolveHubGatekeeperLocationForChat()
                         if (loc == null) {
-                            snackbarHostState.showSnackbar(
-                                "Could not read your location. Try again in an open area."
-                            )
+                            toastState.show(connectionScope, "Could not read your location. Try again in an open area.")
                             return@launch
                         }
                         lastHubGatekeeperFix = loc
                         val jwt = tokenStorage.getJwt()
                         if (jwt.isNullOrBlank()) {
-                            snackbarHostState.showSnackbar(
-                                "Please sign in again to join the hub."
-                            )
+                            toastState.show(connectionScope, "Please sign in again to join the hub.")
                             return@launch
                         }
                         when (
@@ -1095,7 +1098,7 @@ fun App() {
                                 )
                             }
                             is HubVerifyResult.Failure -> {
-                                snackbarHostState.showSnackbar(outcome.userMessage)
+                                toastState.show(connectionScope, outcome.userMessage)
                             }
                         }
                     } finally {
@@ -1152,7 +1155,7 @@ fun App() {
                                 val message = error.message?.trim()?.takeIf { it.isNotEmpty() }
                                     ?.take(160)
                                     ?: "Couldn't open Click Drops"
-                                snackbarHostState.showSnackbar(message)
+                                toastState.show(connectionScope, message)
                             }
                     } finally {
                         disposableRollOpening = false
@@ -1174,7 +1177,7 @@ fun App() {
                                 val message = error.message?.trim()?.takeIf { it.isNotEmpty() }
                                     ?.take(160)
                                     ?: "Couldn't open Click Drops"
-                                snackbarHostState.showSnackbar(message)
+                                toastState.show(connectionScope, message)
                             }
                     } finally {
                         disposableRollOpening = false
@@ -1196,7 +1199,7 @@ fun App() {
                         val chatId = state.connection.id
                         if (state.connection.isPendingSync()) {
                             connectionRevealState = null
-                            snackbarHostState.showSnackbar("Connection saved offline. It will sync automatically when you're back online.")
+                            toastState.show(connectionScope, "Connection saved offline. It will sync automatically when you're back online.")
                             navigateTo(NavigationItem.Connections.route)
                         } else if (connectionRevealState != null) {
                             connectionRevealState = connectionRevealState?.copy(
@@ -1206,30 +1209,28 @@ fun App() {
                             delay(900)
                             navigateTo(NavigationItem.Connections.route)
                             connectionRevealState = null
-                            val messageResult = snackbarHostState.showSnackbar(
-                                message = "Connected with $peerName!",
+                            toastState.show(
+                                connectionScope,
+                                "Connected with $peerName!",
+                                durationMs = UnifiedToastTokens.LongDurationMs,
                                 actionLabel = "Message",
-                                duration = SnackbarDuration.Long,
+                                onAction = { pendingChatId = chatId },
                             )
-                            if (messageResult == SnackbarResult.ActionPerformed) {
-                                pendingChatId = chatId
-                            }
                         } else {
                             navigateTo(NavigationItem.Connections.route)
-                            val messageResult = snackbarHostState.showSnackbar(
-                                message = "Connected with $peerName!",
+                            toastState.show(
+                                connectionScope,
+                                "Connected with $peerName!",
+                                durationMs = UnifiedToastTokens.LongDurationMs,
                                 actionLabel = "Message",
-                                duration = SnackbarDuration.Long,
+                                onAction = { pendingChatId = chatId },
                             )
-                            if (messageResult == SnackbarResult.ActionPerformed) {
-                                pendingChatId = chatId
-                            }
                         }
                         connectionViewModel.resetConnectionState()
                     }
                     is ConnectionState.Error -> {
                         connectionRevealState = null
-                        snackbarHostState.showSnackbar(state.message)
+                        toastState.show(connectionScope, state.message)
                         connectionViewModel.resetConnectionState()
                     }
                     else -> {}
@@ -1298,7 +1299,6 @@ fun App() {
             Scaffold(
                 modifier = Modifier.fillMaxSize(),
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
-                snackbarHost = { SnackbarHost(snackbarHostState) },
             ) { paddingValues ->
                 Box(
                     modifier = Modifier
@@ -1378,9 +1378,7 @@ fun App() {
                                             launchCommunityHubJoin(hubId, knownCreatorId = currentUser.id)
                                         },
                                         onHubCreateError = { msg ->
-                                            appScope.launch {
-                                                snackbarHostState.showSnackbar(msg)
-                                            }
+                                            toastState.show(connectionScope, msg)
                                         },
                                         onStartChatting = { navigateTo(NavigationItem.Connections.route) }
                                     )
@@ -2285,6 +2283,16 @@ fun App() {
                     },
                 )
             }
+            UnifiedToastHost(
+                state = toastState,
+                opaque = true,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = rememberBottomChromePadding() + 8.dp)
+                    .zIndex(6f),
+            )
             if (showUnifiedSearchSheet) {
                 val searchUserId = when (val state = authViewModel.authState) {
                     is AuthState.Success -> state.userId

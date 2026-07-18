@@ -40,6 +40,8 @@ import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
+import compose.project.click.click.ui.components.UnifiedToastHost
+import compose.project.click.click.ui.components.rememberUnifiedToastState
 import compose.project.click.click.ui.components.PollPairCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvailabilitySheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppShimmerScreen // pragma: allowlist secret
@@ -148,7 +150,7 @@ fun HomeScreen(
         else homeEventReminders.filterNot { it.beaconId == featuredId }
     }
 
-    val snackbarHostState = remember { SnackbarHostState() }
+    val toastState = rememberUnifiedToastState()
     val scope = rememberCoroutineScope()
 
     val availabilityViewModel: AvailabilityViewModel = viewModel { AvailabilityViewModel() }
@@ -157,7 +159,7 @@ fun HomeScreen(
     LaunchedEffect(nudgeResult) {
         val result = nudgeResult
         if (result != null) {
-            scope.launch { snackbarHostState.showSnackbar(result) }
+            toastState.show(scope, result)
             viewModel.clearNudgeResult()
         }
     }
@@ -460,11 +462,14 @@ fun HomeScreen(
             )
         }
 
-        SnackbarHost(
-            hostState = snackbarHostState,
+        UnifiedToastHost(
+            state = toastState,
+            opaque = true,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = rememberBottomChromePadding() + 8.dp)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = rememberBottomChromePadding() + 8.dp),
         )
     }
 }

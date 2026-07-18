@@ -152,13 +152,29 @@ actual fun PlatformMap(
                         pinTapDelegate.avatarLoadInFlight.remove(url)
                         if (image != null) {
                             pinTapDelegate.avatarImages[url] = image
-                            pinTapDelegate.avatarPinImageCache.clear()
+                            // Drop cached glyphs that used this URL so they rebuild with the photo.
+                            val staleKeys = pinTapDelegate.avatarPinImageCache.keys.filter { key ->
+                                key.contains(url)
+                            }
+                            staleKeys.forEach { pinTapDelegate.avatarPinImageCache.remove(it) }
                             val mapRef = pinTapDelegate.mapViewRef ?: return@dispatch_async
-                            // Rebuild annotation views so circular photos appear.
-                            val anns = mapRef.annotations.filterIsInstance<MKPointAnnotation>()
-                            if (anns.isNotEmpty()) {
-                                mapRef.removeAnnotations(anns)
-                                mapRef.addAnnotations(anns)
+                            // Update only pins that use this URL — avoid remove-all/re-add flicker.
+                            pinTapDelegate.pinEntries.forEach { (ann, pin) ->
+                                if (pin.imageUrl?.trim() != url) return@forEach
+                                val view = mapRef.viewForAnnotation(ann) as? MKAnnotationView
+                                    ?: return@forEach
+                                val initials = pin.avatarInitials.take(2).ifEmpty { "?" }
+                                val cacheKey =
+                                    "${pin.id}|${pin.imageUrl.orEmpty()}|true|$initials|${pin.avatarFillArgb}"
+                                val glyph = pinTapDelegate.avatarPinImageCache.getOrPut(cacheKey) {
+                                    circularMapPinUIImage(
+                                        sizePts = 44.0,
+                                        fill = pin.markerTintUIColor(),
+                                        initials = initials,
+                                        photo = image,
+                                    )
+                                }
+                                view.image = glyph
                             }
                         }
                     }
@@ -333,18 +349,43 @@ private fun syncMapAnnotations(
         map.removeAnnotations(stale)
     }
 
-    val presentPinIds = mutableSetOf<String>()
-    val presentClusterIds = mutableSetOf<String>()
+    val presentBySubtitle = mutableMapOf<String, MKPointAnnotation>()
     map.annotations.filterIsInstance<MKPointAnnotation>().forEach { ann ->
         val sub = (ann.subtitle as? String)?.trim().orEmpty()
-        when {
-            sub.startsWith("cluster:") -> presentClusterIds += sub.removePrefix("cluster:").trim()
-            sub.isNotEmpty() -> presentPinIds += sub
-        }
+        if (sub.isNotEmpty()) presentBySubtitle[sub] = ann
     }
 
     pins.forEach { pin ->
-        if (pin.id in presentPinIds) return@forEach
+        val existing = presentBySubtitle[pin.id]
+        if (existing != null) {
+            val (lat, lon) = existing.coordinate.useContents { latitude to longitude }
+            if (abs(lat - pin.latitude) > 1e-7 || abs(lon - pin.longitude) > 1e-7) {
+                existing.setCoordinate(CLLocationCoordinate2DMake(pin.latitude, pin.longitude))
+            }
+            val desiredTitle = mapPinDisplayTitle(pin)
+            if (existing.title != desiredTitle) {
+                existing.setTitle(desiredTitle)
+            }
+            // Refresh glyph in place when metadata changed (no remove/re-add).
+            val view = map.viewForAnnotation(existing) as? MKAnnotationView
+            if (view != null) {
+                val photo = pin.imageUrl?.trim()?.takeIf { it.isNotEmpty() }
+                    ?.let { pinTapDelegate.avatarImages[it] }
+                val initials = pin.avatarInitials.take(2).ifEmpty { "?" }
+                val cacheKey =
+                    "${pin.id}|${pin.imageUrl.orEmpty()}|${photo != null}|$initials|${pin.avatarFillArgb}"
+                view.image = pinTapDelegate.avatarPinImageCache.getOrPut(cacheKey) {
+                    circularMapPinUIImage(
+                        sizePts = 44.0,
+                        fill = pin.markerTintUIColor(),
+                        initials = initials,
+                        photo = photo,
+                    )
+                }
+                view.zPriority = pin.zIndex
+            }
+            return@forEach
+        }
         val ann = MKPointAnnotation()
         ann.setTitle(mapPinDisplayTitle(pin))
         ann.setSubtitle(pin.id)
@@ -353,10 +394,41 @@ private fun syncMapAnnotations(
     }
 
     clusters.forEach { cluster ->
-        if (cluster.id in presentClusterIds) return@forEach
+        val key = "cluster:${cluster.id}"
+        val existing = presentBySubtitle[key]
+        if (existing != null) {
+            val (lat, lon) = existing.coordinate.useContents { latitude to longitude }
+            if (abs(lat - cluster.latitude) > 1e-7 || abs(lon - cluster.longitude) > 1e-7) {
+                existing.setCoordinate(CLLocationCoordinate2DMake(cluster.latitude, cluster.longitude))
+            }
+            val desiredTitle = "${cluster.count}"
+            if (existing.title != desiredTitle) {
+                existing.setTitle(desiredTitle)
+            }
+            val view = map.viewForAnnotation(existing) as? MKAnnotationView
+            if (view != null) {
+                val label = if (cluster.count > 99) "99+" else cluster.count.toString()
+                val fill = when {
+                    cluster.isConnectionOnly -> UIColor.magentaColor
+                    cluster.hasLiveConnections -> UIColor.blueColor
+                    else -> UIColor.orangeColor
+                }
+                val cacheKey = "cluster|$label|${cluster.isConnectionOnly}|${cluster.hasLiveConnections}"
+                view.image = pinTapDelegate.avatarPinImageCache.getOrPut(cacheKey) {
+                    circularMapPinUIImage(
+                        sizePts = 44.0,
+                        fill = fill,
+                        initials = label,
+                        photo = null,
+                    )
+                }
+                view.zPriority = cluster.zIndex
+            }
+            return@forEach
+        }
         val ann = MKPointAnnotation()
         ann.setTitle("${cluster.count}")
-        ann.setSubtitle("cluster:${cluster.id}")
+        ann.setSubtitle(key)
         ann.setCoordinate(CLLocationCoordinate2DMake(cluster.latitude, cluster.longitude))
         map.addAnnotation(ann)
     }
