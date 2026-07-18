@@ -84,6 +84,9 @@ fun NfcScreen(
 ) {
     val connectionState by connectionViewModel.connectionState.collectAsState()
     val supportsTap = remember(proximityManager) { proximityManager.supportsTapExchange() }
+    val showHowItWorksCard = remember(proximityManager) {
+        proximityManager is MockProximityManager || isSimulatorOrEmulatorRuntime()
+    }
     val capabilityNote = remember(proximityManager) { proximityManager.capabilityNote() }
     val ambientNoiseMonitor = AmbientNoiseMonitorProvider.current
     val barometricHeightMonitor = BarometricHeightMonitorProvider.current
@@ -226,6 +229,7 @@ fun NfcScreen(
                                     },
                                     supportsTap = supportsTap,
                                     capabilityNote = capabilityNote,
+                                    showHowItWorksCard = showHowItWorksCard,
                                     onOpenSettings = { proximityManager.openRadiosSettings() },
                                 )
                             }
@@ -709,6 +713,7 @@ private fun NfcIdleContent(
     onStartScanning: () -> Unit,
     supportsTap: Boolean,
     capabilityNote: String,
+    showHowItWorksCard: Boolean,
     onOpenSettings: () -> Unit
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "tap_idle")
@@ -799,30 +804,32 @@ private fun NfcIdleContent(
             modifier = Modifier.padding(horizontal = 20.dp)
         )
 
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            ),
-            border = BorderStroke(2.dp, clickBorderColor()),
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+        // Simulator / emulator only — real devices never show the mock capability card.
+        if (showHowItWorksCard) {
+            Spacer(modifier = Modifier.height(20.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                ),
+                border = BorderStroke(2.dp, clickBorderColor()),
             ) {
-                Text(
-                    text = "How Tap to Connect works",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = capabilityNote,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f)
-                )
+                Column(
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "How Tap to Connect works",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = capabilityNote,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f)
+                    )
+                }
             }
         }
 

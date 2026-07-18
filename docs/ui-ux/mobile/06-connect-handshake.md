@@ -203,7 +203,8 @@ Full-screen flat scrim (black @ 40%, no blur). Centered bordered card max 340dp 
 | Ready body | `"Tap Connect together with someone nearby. Both phones should enable Bluetooth and microphone access for the handshake."` |
 | Unavailable headline | `"Tap to Connect unavailable"` |
 | Unavailable body | `capabilityNote` (platform string) |
-| Info card title | `"How Tap to Connect works"` |
+| Info card title | `"How Tap to Connect works"` (simulator / emulator only; hidden on real devices) |
+| Info card body | `capabilityNote` from `MockProximityManager` when shown |
 | Primary CTA | `"Connect"` |
 | Secondary | `"Open app settings"` |
 | Unsupported CTA | `"Open Settings"` |
