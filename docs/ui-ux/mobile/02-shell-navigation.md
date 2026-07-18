@@ -345,7 +345,8 @@ Scroll → collapse fraction → optional hide → content scrolls under floatin
 - Tab taps set `Tap` mode.
 - iOS swipe-back sets `GestureBack` → **no** enter/exit animation (`EnterTransition.None togetherWith ExitTransition.None`).
 - After gesture back, 80 ms delay before resetting to `Tap` (prevents double animation on Home).
-- **iOS Home underlay:** Add Click / Map / Settings keep a single `HomeScreen` composed underneath (`opaquePreviousBackground = false`, empty `previousContent`). Gesture-back reveals that instance — do **not** remount Home via `previousContent = { HomeScreen() }` (that caused post-swipe flicker).
+- Primary tabs (Home / Add Click / Connections / Map / Settings) always use **AnimatedContent** with the **280ms crossfade** when switching via the tab bar. Do **not** put Map/Add Click/Settings in a separate Home-underlay overlay — that regressed tab motion (Home flash, corner slides).
+- iOS swipe-to-Home on Add Click / Map / Settings: `InteractiveSwipeBackContainer` with `previousContent = Home` inside the AnimatedContent child (pre-existing).
 
 ### 6.3 States
 
@@ -404,8 +405,8 @@ targetIndex >= initialIndex? ──YES──► slide forward + fade
 
 - Full-width horizontal drag (`useFullWidthHorizontalDrag = true` default).
 - `rightToLeftPeek` optional (hub chat timestamps).
-- `opaquePreviousBackground = false` for hub chat, Add Click overlays, **and** primary tabs that swipe to Home (persistent Home underlay).
-- Primary → Home swipe uses the same underlay pattern as Connections chat → list (empty `previousContent` + external parallax).
+- `opaquePreviousBackground = false` for hub chat and Add Click overlays (list / tab persists underneath).
+- Primary tab swipe-to-Home uses `previousContent = Home` inside `InteractiveSwipeBackContainer` (standard AnimatedContent child — not a persistent underlay shell).
 
 ### 7.3 States
 

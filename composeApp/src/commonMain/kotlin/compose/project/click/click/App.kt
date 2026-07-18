@@ -1303,30 +1303,16 @@ fun App() {
                         val screenKey = activeScreenKey
                         val addClickSwipeDragPx = remember { mutableFloatStateOf(0f) }
                         var addClickSwipeBehindLayers by remember { mutableStateOf(false) }
-                        val primaryHomeSwipeDragPx = remember { mutableFloatStateOf(0f) }
-                        var primaryHomeSwipeBehindLayers by remember { mutableStateOf(false) }
                         var lastAddClickOverlayKey by remember { mutableStateOf<String?>(null) }
                         var addClickOverlayTransitionMode by remember {
                             mutableStateOf(NavigationTransitionMode.Tap)
                         }
-                        // iOS: keep one Home composition under Home / Add Click / Map / Settings so
-                        // interactive-back reveals the same instance (no remount flicker).
-                        val showIosHomeUnderlay = isIOS && (
-                            currentRoute == NavigationItem.Home.route ||
-                                isIosHomeSwipeUnderlayRoute(currentRoute)
-                        )
                         LaunchedEffect(addClickOverlayKey) {
                             if (addClickOverlayKey != null) {
                                 lastAddClickOverlayKey = addClickOverlayKey
                             } else {
                                 addClickSwipeBehindLayers = false
                                 addClickSwipeDragPx.floatValue = 0f
-                            }
-                        }
-                        LaunchedEffect(showIosHomeUnderlay, currentRoute) {
-                            if (!isIosHomeSwipeUnderlayRoute(currentRoute)) {
-                                primaryHomeSwipeBehindLayers = false
-                                primaryHomeSwipeDragPx.floatValue = 0f
                             }
                         }
 
@@ -1348,28 +1334,25 @@ fun App() {
                         }
 
                         @Composable
-                        fun renderHomeScreen() {
-                            HomeScreen(
-                                onNavigateToChat = { connectionId ->
-                                    pendingChatId = connectionId
-                                    navigateTo(NavigationItem.Connections.route)
-                                },
-                                onOpenSearch = { showUnifiedSearchSheet = true },
-                                onNavigateToMap = { beaconId ->
-                                    pendingBeaconId = beaconId
-                                    navigateTo(NavigationItem.Map.route)
-                                },
-                                onNavigateToMapLayer = { filter ->
-                                    pendingMapLayerFilter = filter
-                                    navigateTo(NavigationItem.Map.route)
-                                },
-                            )
-                        }
-
-                        @Composable
-                        fun renderPrimaryScreen(route: String) {
-                            when (route) {
-                                    NavigationItem.Home.route -> renderHomeScreen()
+                        fun renderScreen(animatedScreen: String, allowInteractiveSwipeBack: Boolean = true) {
+                            @Composable
+                            fun renderPrimaryScreen(route: String) {
+                                when (route) {
+                                    NavigationItem.Home.route -> HomeScreen(
+                                        onNavigateToChat = { connectionId ->
+                                            pendingChatId = connectionId
+                                            navigateTo(NavigationItem.Connections.route)
+                                        },
+                                        onOpenSearch = { showUnifiedSearchSheet = true },
+                                        onNavigateToMap = { beaconId ->
+                                            pendingBeaconId = beaconId
+                                            navigateTo(NavigationItem.Map.route)
+                                        },
+                                        onNavigateToMapLayer = { filter ->
+                                            pendingMapLayerFilter = filter
+                                            navigateTo(NavigationItem.Map.route)
+                                        },
+                                    )
 
                                     NavigationItem.AddClick.route -> AddClickScreen(
                                         currentUserId = currentUser.id,
@@ -1475,6 +1458,27 @@ fun App() {
                                         },
                                         onSignOut = { authViewModel.signOut() }
                                     )
+                                }
+                            }
+
+                            val previousKey = NavigationItem.Home.route
+                            val interactivePrimary = allowInteractiveSwipeBack &&
+                                isIOS &&
+                                isPrimaryNavRoute(animatedScreen) &&
+                                animatedScreen != NavigationItem.Connections.route &&
+                                previousKey != animatedScreen &&
+                                !(animatedScreen == NavigationItem.Connections.route && isConnectionsChatOpen)
+
+                            if (interactivePrimary) {
+                                InteractiveSwipeBackContainer(
+                                    enabled = true,
+                                    edgeSwipeWidth = 44.dp,
+                                    onBack = { navigatePrimaryRouteBackHome(NavigationTransitionMode.GestureBack) },
+                                    previousContent = { renderScreen(previousKey, false) },
+                                    currentContent = { renderPrimaryScreen(animatedScreen) }
+                                )
+                            } else {
+                                renderPrimaryScreen(animatedScreen)
                             }
                         }
 
@@ -1491,29 +1495,6 @@ fun App() {
                         }
 
                         Box(modifier = Modifier.fillMaxSize()) {
-                            // Persistent Home under Add Click / Map / Settings (iOS). Interactive
-                            // swipe-back reveals this instance — never a cold remount in previousContent.
-                            if (showIosHomeUnderlay) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .graphicsLayer {
-                                            if (!primaryHomeSwipeBehindLayers) {
-                                                translationX = 0f
-                                                return@graphicsLayer
-                                            }
-                                            val w = size.width.coerceAtLeast(1f)
-                                            val o = primaryHomeSwipeDragPx.floatValue.coerceIn(0f, w)
-                                            val progress = (o / w).coerceIn(0f, 1f)
-                                            translationX =
-                                                -(size.width * InteractiveSwipeBackParallaxPeekRatio) *
-                                                    (1f - progress)
-                                        },
-                                ) {
-                                    renderHomeScreen()
-                                }
-                            }
-
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -1530,6 +1511,10 @@ fun App() {
                                     },
                             ) {
                         AnimatedContent(
+                            // Primary tabs (Home/AddClick/Connections/Map/Settings) all go through
+                            // this AnimatedContent with the 280ms crossfade. Do not reintroduce a
+                            // Home-underlay + Map overlay shell — it flashed Home on Map open and
+                            // broke Connections tab motion.
                             targetState = screenKey,
                             transitionSpec = {
                                 if (transitionMode == NavigationTransitionMode.GestureBack) {
@@ -1583,30 +1568,7 @@ fun App() {
                             },
                             label = "app_screen_transition"
                         ) { animatedScreen ->
-                            when {
-                                // Home lives in the persistent underlay; composing it here would
-                                // remount after gesture-back and flicker.
-                                isIOS &&
-                                    animatedScreen == NavigationItem.Home.route &&
-                                    showIosHomeUnderlay -> {
-                                    // Intentionally empty — touches hit the underlay Home.
-                                }
-                                isIOS && isIosHomeSwipeUnderlayRoute(animatedScreen) -> {
-                                    InteractiveSwipeBackContainer(
-                                        enabled = true,
-                                        edgeSwipeWidth = 44.dp,
-                                        opaquePreviousBackground = false,
-                                        externalDragOffsetPx = primaryHomeSwipeDragPx,
-                                        onBehindLayersVisibleChanged = { primaryHomeSwipeBehindLayers = it },
-                                        onBack = {
-                                            navigatePrimaryRouteBackHome(NavigationTransitionMode.GestureBack)
-                                        },
-                                        previousContent = {},
-                                        currentContent = { renderPrimaryScreen(animatedScreen) },
-                                    )
-                                }
-                                else -> renderPrimaryScreen(animatedScreen)
-                            }
+                            renderScreen(animatedScreen)
                         }
                             }
 
@@ -2370,9 +2332,3 @@ private fun isPrimaryNavRoute(route: String): Boolean {
         route == NavigationItem.Settings.route
 }
 
-/** Primary tabs that swipe-back to Home on iOS (Connections is excluded — inbox owns its stack). */
-private fun isIosHomeSwipeUnderlayRoute(route: String): Boolean {
-    return route == NavigationItem.AddClick.route ||
-        route == NavigationItem.Map.route ||
-        route == NavigationItem.Settings.route
-}

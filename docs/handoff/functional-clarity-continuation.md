@@ -61,7 +61,7 @@ Also merged earlier: **PR #44 `map_color_android`** — Android light-mode map u
 | **22** | Profile sheet OLED / avatar / top spacing | OLED body; `ConnectionListUserAvatarFace`; remove safe-area + 24dp spacer above title |
 | **23** | Nav bar opaque band / materials differ under nav | Bottom bar **overlay** (not Scaffold `bottomBar`); **fully transparent** chrome so page materials look identical under icons |
 | **24** | Connections list flicker after chat interactive-back | Defer `leaveChatRoom` + tab-bar restore after gesture settle; suppress inbox reorder scroll-to-top; don’t re-run `setCurrentUser` when `pendingChatId` clears |
-| **26** | Home flicker after Map/Settings/Add Click interactive-back | Persistent Home underlay on iOS (same pattern as #12/#24); empty `previousContent` + parallax mirror |
+| **26** | Home flicker after Map/Settings/Add Click interactive-back | **Reverted** Home-underlay overlay (caused Map→Home flash + broken tab crossfade). Restored AnimatedContent primary crossfade. Flicker fix deferred — do not reintroduce underlay without preserving tab transitions |
 | **25** | Inbox preview jumps to old (“12w ago”) after scroll-up in chat | Monotonic inbox bump; global realtime Insert-only for list events; pagination merges hot cache; leave repairs preview from newest; ephemeral join no longer holds mutex during 8s subscribe |
 
 ### 1.4 Engineering invariants preserved
