@@ -2,13 +2,24 @@
 
 **Date:** 2026-07-17  
 **Product:** Click KMP mobile (`click/composeApp`)  
-**Previous chat:** Track C Inbox Remember Me + polish (landed)
+**Previous chat:** Track C Add Click hero (minimal reorder + hub labels)
 
 Read this before writing code. Prefer **one primary revamp per chat**.
 
 ---
 
 ## 0. Just finished (do not redo)
+
+### Add Click hero — landed (minimal)
+
+- `AddClickContent` order: **Tap to Connect** → My Code | Scan → hub links
+- Hub labels: **Create hub** / **Join hub** (was Create ephemeral hub / Join community hub)
+- Card sizes, header, icons, padding, typography **unchanged** (hierarchy only; no mock restyle)
+- Callbacks / sheets / `#12` interactive-back underlay untouched
+
+**Docs:** `docs/ui-ux/mobile/06-connect-handshake.md`, design-asset `add_click_streamlined_header/` (hierarchy reference).
+
+**Still open:** device smoke for Add Click order + hub labels.
 
 ### Inbox Remember Me + polish — landed (partial Inbox density)
 
@@ -69,25 +80,22 @@ Source of truth for prior work: [`functional-clarity-continuation.md`](functiona
 
 | Priority | Revamp | Mock / source | Screen | Intent |
 |----------|--------|---------------|--------|--------|
-| **1** | **Add Click hero** | `add_click_streamlined_header/` (+ `screen.png`) | `AddClickScreen` / `AddClickContent` | Large **Tap to Connect** hero first; My Code / Scan below |
-| **2** | **Events discovery** | `events_discovery_with_real_mini_map/` | `MapDiscoveryLayout` | Events-for-you + mini-map PiP |
-| **3** | **Full-map events** | `map_events_full_screen_map/` | `MapScreen` | Full-map + event pin sheet |
-| **4** | **Event detail** | `event_details_expanded_dark/` | Beacon/event sheets | Expanded detail over map |
+| **1** | **Events discovery** | `events_discovery_with_real_mini_map/` | `MapDiscoveryLayout` | Events-for-you + mini-map PiP |
+| **2** | **Full-map events** | `map_events_full_screen_map/` | `MapScreen` | Full-map + event pin sheet |
+| **3** | **Event detail** | `event_details_expanded_dark/` | Beacon/event sheets | Expanded detail over map |
 | Later | Inbox dense / rolodex stack | `add_click_fixed_navigation/` | `ConnectionsListView` | Only if product wants overlapping cards (spacing currently intentional) |
 
 Optional later (after related device OK): Nav chrome v2, Chat composer polish, Profile memories IA — see handoff §3.
 
-**Suggested default for next chat:** Add Click hero.
+**Suggested default for next chat:** Events discovery.
 
-### Add Click hero — brief for next chat
+### Events discovery — brief for next chat
 
-**Current (code):** [`AddClickContent`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/ui/screens/AddClickScreen.kt) puts **My Code | Scan Code** row first, then a smaller full-width **Tap to Connect** card, then hub text buttons. Shell: `AppScreenWithFloatingHeader` title `"Add Click"`.
+**Target (mock):** [`docs/design-assets/events_discovery_with_real_mini_map/`](../design-assets/events_discovery_with_real_mini_map/) → `MapDiscoveryLayout`. Events-for-you list + mini-map PiP. Use HTML/`screen.png` for hierarchy/spacing intent only — do not copy markup.
 
-**Target (mock):** [`docs/design-assets/add_click_streamlined_header/`](../design-assets/add_click_streamlined_header/) — large Tap to Connect hero (big Bluetooth icon ~80px, headline + supporting line) **above** the 2-column QR grid; hub links stay below. Use HTML/`screen.png` for hierarchy/spacing intent only — do not copy markup.
+**Keep:** ViewModels / map / beacon data paths; transparent nav; `clickBorderColor()` / `LocalIsDarkMode` / `GlassSheetTokens`.
 
-**Keep:** existing navigation callbacks (`onNavigateToNfc`, `onShowMyQRCode`, `onScanQRCode`, hub create/join sheets); ViewModels / BLE / NFC / handshake flows; transparent nav; `#12` interactive-back underlay behavior if touched.
-
-**Update when shipping:** [`docs/ui-ux/mobile/06-connect-handshake.md`](../ui-ux/mobile/06-connect-handshake.md) + this handoff §0 / §4.
+**Update when shipping:** [`docs/ui-ux/mobile/10-map-beacons-hubs.md`](../ui-ux/mobile/10-map-beacons-hubs.md) + this handoff §0 / §4.
 
 ---
 
@@ -102,14 +110,15 @@ DONE — do not redo unless regressing:
 - Home IA + Home greeting LiquidGlassPageHeader
 - Settings grouping
 - Inbox Remember Me (Core 1:1s; circular avatar hit targets)
+- Add Click hero (Tap first; Create hub / Join hub; dimensions unchanged)
 Track A done. Track B code landed — device verify only; do not false-pass [KNOWN-N].
 
 Scope for THIS chat (default):
-Add Click hero — docs/design-assets/add_click_streamlined_header/ → AddClickScreen / AddClickContent
-(Large Tap to Connect hero first; My Code / Scan grid below. Layout/IA only.)
+Events discovery — docs/design-assets/events_discovery_with_real_mini_map/ → MapDiscoveryLayout
+(Events-for-you + mini-map PiP. Layout/IA only.)
 
-Alternate (say which if not Add Click):
-2) Events discovery / full-map / event detail — map stack
+Alternate (say which if not Events discovery):
+2) Full-map events / event detail — map stack
 
 Rules:
 - Do NOT edit the neo-brutalist plan file under .cursor/plans.
@@ -117,7 +126,7 @@ Rules:
 - Keep nav bar chrome transparent (no opaque fill band under icons).
 - Reuse clickBorderColor() / LocalIsDarkMode / GlassSheetTokens.*().
 - Use design-asset HTML for hierarchy/spacing intent only — do not copy markup.
-- Update docs/ui-ux/mobile/06-connect-handshake.md + this handoff when shipping.
+- Update docs/ui-ux/mobile/10-map-beacons-hubs.md + this handoff when shipping.
 - After changes: run regression-testing §0 automated gates.
 ```
 
@@ -131,8 +140,8 @@ Rules:
 | Home (done) | `docs/ui-ux/mobile/05-home.md` |
 | Settings (done) | `docs/ui-ux/mobile/14-settings-privacy.md`, `docs/design-assets/settings/` |
 | Inbox (Remember Me done) | `docs/ui-ux/mobile/07-connections-inbox.md`, `docs/design-assets/chat/` |
-| **Add Click (next)** | `docs/ui-ux/mobile/06-connect-handshake.md`, `docs/design-assets/add_click_streamlined_header/` |
-| Map / events | `docs/ui-ux/mobile/10-map-beacons-hubs.md`, design-assets `events_*` / `map_events_*` |
+| Add Click (done) | `docs/ui-ux/mobile/06-connect-handshake.md`, `docs/design-assets/add_click_streamlined_header/` |
+| **Map / events (next)** | `docs/ui-ux/mobile/10-map-beacons-hubs.md`, design-assets `events_*` / `map_events_*` |
 | Regression | `docs/regression-testing/00-INDEX.md` (§0 gates) |
 
 ---
@@ -145,4 +154,5 @@ Rules:
 - [x] Inbox Remember Me strip (Core 1:1s) shipped; list spacing left as-is
 - [x] Remember Me circular hit targets + Home greeting `LiquidGlassPageHeader` polish shipped
 - [x] Next-chat handoff prepared (Add Click hero brief + §2 prompt)
-- [ ] Next Track C revamp (Add Click hero) started in a dedicated chat using §2 prompt
+- [x] Add Click hero (Tap first; Create hub / Join hub; dimensions unchanged) shipped
+- [ ] Next Track C revamp (Events discovery) started in a dedicated chat using §2 prompt

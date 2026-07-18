@@ -142,8 +142,8 @@ These are **layout / IA** workstreams, not bugfixes. Use design-asset HTML for h
 | **Home IA** | `docs/design-assets/home/` | `HomeScreen` | **Landed (2026-07-17):** greeting first via floating `LiquidGlassPageHeader` (aligned with other tab headers); Featured Event; I'm down for → Explore → Poll-Pair/archive; reconnect with inbox avatars; insights columns; no redundant location pins; search caret fixes |
 | **Settings grouping** | `settings/` | `SettingsScreen` | **Landed (2026-07-17):** profile header first; Alerts + Privacy & data clusters; standalone Sign out |
 | **Inbox density** | `chat/` + `add_click_fixed_navigation/` | `ConnectionsListView` | **Partial (2026-07-17):** Remember Me strip for Core 1:1s + circular avatar hit targets; list row spacing left as-is (no dense stack / overlapping rolodex cards) |
-| **Add Click hero** | `add_click_streamlined_header/` | `AddClickScreen` | **Next:** Large Tap-to-Connect hero first; My Code / Scan grid below — see [`track-c-next-revamps.md`](track-c-next-revamps.md) §1 brief |
-| **Events discovery** | `events_discovery_with_real_mini_map/` | `MapDiscoveryLayout` | Events-for-you + mini-map PiP |
+| **Add Click hero** | `add_click_streamlined_header/` | `AddClickScreen` | **Landed (2026-07-17):** Tap to Connect first; My Code / Scan below; hub labels **Create hub** / **Join hub**; card dimensions unchanged |
+| **Events discovery** | `events_discovery_with_real_mini_map/` | `MapDiscoveryLayout` | **Next:** Events-for-you + mini-map PiP — see [`track-c-next-revamps.md`](track-c-next-revamps.md) §1 |
 | **Full-map events** | `map_events_full_screen_map/` | `MapScreen` | Full-map + event pin sheet |
 | **Event detail** | `event_details_expanded_dark/` | Beacon/event sheets | Expanded detail over map |
 | **Nav chrome v2** (optional) | — | `BottomBar.*`, `App.kt` | After #23 device OK: decide if floating icon-only chrome needs hit-target / readability polish without reintroducing a fill band |
@@ -185,12 +185,12 @@ click/docs/handoff/track-c-next-revamps.md
 and click/docs/handoff/functional-clarity-continuation.md
 
 DONE — do not redo unless regressing:
-Home IA (+ greeting LiquidGlassPageHeader), Settings grouping, Inbox Remember Me.
+Home IA (+ greeting LiquidGlassPageHeader), Settings grouping, Inbox Remember Me, Add Click hero.
 Track A done. Track B code landed — device verify only; do not false-pass [KNOWN-N].
 
 Scope for THIS chat (default):
-Add Click hero — docs/design-assets/add_click_streamlined_header/ → AddClickScreen
-(Large Tap to Connect hero first; My Code / Scan below. Layout/IA only.)
+Events discovery — docs/design-assets/events_discovery_with_real_mini_map/ → MapDiscoveryLayout
+(Events-for-you + mini-map PiP. Layout/IA only.)
 
 Rules:
 - Do NOT edit the neo-brutalist plan file under .cursor/plans.
@@ -198,7 +198,7 @@ Rules:
 - Keep nav bar chrome transparent (no opaque fill band under icons).
 - Reuse clickBorderColor() / LocalIsDarkMode / GlassSheetTokens.*().
 - Use design-asset HTML for hierarchy/spacing intent only — do not copy markup.
-- Update docs/ui-ux/mobile/06-connect-handshake.md + track-c-next-revamps when shipping.
+- Update docs/ui-ux/mobile/10-map-beacons-hubs.md + track-c-next-revamps when shipping.
 - After changes: run regression-testing §0 automated gates.
 ```
 
@@ -207,7 +207,7 @@ Rules:
 1. ~~**Chat A — Dark/light**~~ **DONE**
 2. ~~**Chat B — Known issues P0 + B+ UI code**~~ **DONE (device verify remains)**
 3. **Chat B device / P1 #4** — smoke + events list
-4. **Chat C — Mock layout redesigns** — next: **Add Click hero** ([`track-c-next-revamps.md`](track-c-next-revamps.md))
+4. **Chat C — Mock layout redesigns** — next: **Events discovery** ([`track-c-next-revamps.md`](track-c-next-revamps.md))
 
 ---
 
@@ -239,8 +239,9 @@ Rules:
 - [x] Code audit residuals hardened: client 503 recover, confirm dedup, Keychain -50, 1:1 Message CTA, hazard pin metrics (2026-07-17).
 - [x] Track C **Home IA** layout + docs landed (2026-07-17); greeting later wrapped in `LiquidGlassPageHeader`; device smoke still open.
 - [x] Track C **Inbox Remember Me** strip (Core 1:1s) + circular avatar hit targets landed (2026-07-17); list spacing left as-is; device smoke still open.
+- [x] Track C **Add Click hero** (Tap first; Create hub / Join hub; dimensions unchanged) landed (2026-07-17); device smoke still open.
 - [ ] **Device verification** for Track B / B+ P0–P1 rows (incl. #4).
 - [ ] Smoke checklist on Android + iOS.
-- [ ] Remaining Track C layout redesigns completed or explicitly scheduled — **next: Add Click hero**.
+- [ ] Remaining Track C layout redesigns completed or explicitly scheduled — **next: Events discovery**.
 
-**Next Track C chat:** paste the prompt in [`track-c-next-revamps.md`](track-c-next-revamps.md) §2 (Add Click hero). Device smoke for Track B / Home / Remember Me can run in parallel.
+**Next Track C chat:** paste the prompt in [`track-c-next-revamps.md`](track-c-next-revamps.md) §2 (Events discovery). Device smoke for Track B / Home / Remember Me / Add Click can run in parallel.

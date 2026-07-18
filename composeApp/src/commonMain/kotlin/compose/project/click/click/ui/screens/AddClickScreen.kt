@@ -115,6 +115,42 @@ fun AddClickContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
+        // Tap to Connect (BLE + audio + GPS) — full width card first
+        AdaptiveCard(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onNavigateToNfc
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    Icons.Filled.BluetoothSearching,
+                    contentDescription = "Tap to Connect",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(64.dp)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    "Tap to Connect",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Nearby handshake with Bluetooth and audio",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
+
         // QR Code Section - Two cards side by side
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -185,51 +221,15 @@ fun AddClickContent(
             }
         }
 
-        // Tap to Connect (BLE + audio + GPS) — full width card
-        AdaptiveCard(
-            modifier = Modifier.fillMaxWidth(),
-            onClick = onNavigateToNfc
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    Icons.Filled.BluetoothSearching,
-                    contentDescription = "Tap to Connect",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(64.dp)
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    "Tap to Connect",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "Nearby handshake with Bluetooth and audio",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center,
-                )
-            }
-        }
-
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         ) {
             TextButton(onClick = { showCreateHubModal = true }) {
-                Text("Create ephemeral hub")
+                Text("Create hub")
             }
             TextButton(onClick = { showJoinHubSheet = true }) {
-                Text("Join community hub")
+                Text("Join hub")
             }
         }
     }

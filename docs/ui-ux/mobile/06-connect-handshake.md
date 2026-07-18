@@ -6,7 +6,7 @@
 
 **Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: `click/docs/design-assets/add_click_streamlined_header/`.
 
-**Track C next (not landed):** reorder `AddClickContent` so **Tap to Connect** is a large hero *above* the My Code / Scan grid (mock hierarchy). Current code still places the QR row first. Handoff: [`../handoff/track-c-next-revamps.md`](../handoff/track-c-next-revamps.md) §1 Add Click hero brief.
+**Track C (landed):** `AddClickContent` order is **Tap to Connect** → My Code / Scan grid → hub links (`Create hub` / `Join hub`). Card dimensions unchanged; mock used for hierarchy only.
 
 ---
 
@@ -18,9 +18,9 @@ AddClickScreen (tab organism)
 │   ├── title: "Add Click"
 │   └── subtitle: "Connect with QR or Tap to Connect, or join a venue community hub"
 ├── AddClickContent | ClickedSuccessContent
-│   ├── Row: "My Code" | "Scan Code" cards
 │   ├── "Tap to Connect" card
-│   ├── "Create ephemeral hub" | "Join community hub" text buttons
+│   ├── Row: "My Code" | "Scan Code" cards
+│   ├── "Create hub" | "Join hub" text buttons
 │   ├── CreateHubModal (overlay)
 │   └── JoinCommunityHubSheet (overlay)
 │
@@ -72,8 +72,8 @@ AppClipHandshakeScreen (iOS Clip target)
 | Zone | Layout |
 |------|--------|
 | Shell | `AdaptiveBackground` + `AppScreenWithFloatingHeader` |
+| Tap card | Full-width `AdaptiveCard` first, 24dp padding |
 | QR row | Two `AdaptiveCard` 1:1 weight, aspect ratio 0.85 |
-| Tap card | Full-width `AdaptiveCard`, 24dp padding |
 | Hub links | Centered `TextButton` row, 8dp gap |
 | Success | `ClickedSuccessContent` replaces content (check icon 120dp) |
 
@@ -101,11 +101,11 @@ Full-screen flat scrim (black @ 40%, no blur). Centered bordered card max 340dp 
 
 | Control | Action |
 |---------|--------|
+| `"Tap to Connect"` card | `onNavigateToNfc()` |
 | `"My Code"` card | `onShowMyQRCode()` |
 | `"Scan Code"` card | `onScanQRCode()` |
-| `"Tap to Connect"` card | `onNavigateToNfc()` |
-| `"Create ephemeral hub"` | `showCreateHubModal = true` |
-| `"Join community hub"` | `showJoinHubSheet = true` |
+| `"Create hub"` | `showCreateHubModal = true` |
+| `"Join hub"` | `showJoinHubSheet = true` |
 | `"Start Chatting"` (success) | `onStartChatting()` |
 
 ### MyQRCodeScreen
@@ -367,8 +367,8 @@ Preset labels (emoji + label): `"🎓 Lecture / Class"`, `"📚 Study Session"`,
 | Tap title | `"Tap to Connect"` |
 | Tap subtitle | `"Nearby handshake with Bluetooth and audio"` |
 | Tap a11y | `"Tap to Connect"` |
-| Hub create | `"Create ephemeral hub"` |
-| Hub join | `"Join community hub"` |
+| Hub create | `"Create hub"` |
+| Hub join | `"Join hub"` |
 | Success title | `"Clicked with {userName}!"` |
 | Success body | `"You're now connected and can start chatting."` |
 | Success CTA | `"Start Chatting"` |

@@ -9,7 +9,7 @@
 **Regression / QA:** After major changes, run [../../regression-testing/00-INDEX.md](../../regression-testing/00-INDEX.md) (full checklist, smoke, known-issues audit). These UI/UX files describe expected behavior; they are not a test plan.
 
 **Continuation status (addressed / open / Track C):** [../../handoff/functional-clarity-continuation.md](../../handoff/functional-clarity-continuation.md).  
-**Next Track C revamp handoff:** [../../handoff/track-c-next-revamps.md](../../handoff/track-c-next-revamps.md) — suggested next: **Add Click hero**.
+**Next Track C revamp handoff:** [../../handoff/track-c-next-revamps.md](../../handoff/track-c-next-revamps.md) — suggested next: **Events discovery**.
 
 ---
 
