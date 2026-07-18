@@ -736,6 +736,8 @@ data class MapBeaconMetadata(
     val trackName: String? = null,
     val artistName: String? = null,
     val albumArtUrl: String? = null,
+    /** Event taxonomy chips from metadata `event_categories`. */
+    val eventCategories: List<String> = emptyList(),
     val raw: JsonObject? = null,
 )
 
@@ -766,8 +768,24 @@ fun parseMapBeaconMetadata(element: JsonElement?): MapBeaconMetadata {
         trackName = str("track_name"),
         artistName = str("artist_name"),
         albumArtUrl = str("album_art_url", "artworkUrl100"),
+        eventCategories = parseEventCategories(obj),
         raw = obj,
     )
+}
+
+private fun parseEventCategories(obj: JsonObject): List<String> {
+    val el = obj["event_categories"] ?: obj["eventCategories"] ?: return emptyList()
+    return when (el) {
+        is JsonArray -> el.mapNotNull { item ->
+            (item as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+        }
+        is JsonPrimitive -> el.contentOrNull
+            ?.split(',')
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            .orEmpty()
+        else -> emptyList()
+    }.distinct()
 }
 
 /** Who may see a dropped beacon on the map (mirrors `beacon_visibility_audience` on click-web). */

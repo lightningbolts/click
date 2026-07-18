@@ -77,7 +77,7 @@ npm test
 
 High-signal unit tests to keep green: `ChatSwipeMathTest`, `ChatViewModelTest`, `ConnectionEncounterMergeTest`, `DiscoveryFeedSectionsTest`, `OfflineBootTest`, proximity codec/matching tests under `composeApp` and `click-web/__tests__/`.
 
-**Last §0 run (Track C events polish: pins/swipe/theme/nudge, 2026-07-17):** Android compile PASS · iOS Simulator compile PASS. Device smoke still required on hardware.
+**Last §0 run (Track C event detail revamp, 2026-07-18):** Android compile PASS · iOS Simulator compile PASS · `EventScheduleTest` PASS. Device smoke still required on hardware.
 ---
 
 ## Platforms & builds

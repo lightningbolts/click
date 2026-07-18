@@ -67,6 +67,10 @@ fun EventSchedule.isEnded(nowEpochMs: Long = Clock.System.now().toEpochMilliseco
 fun EventSchedule.isVisible(nowEpochMs: Long = Clock.System.now().toEpochMilliseconds()): Boolean =
     !isEnded(nowEpochMs)
 
+/** True while the event window is in progress (`start ≤ now < end`). */
+fun EventSchedule.isLive(nowEpochMs: Long = Clock.System.now().toEpochMilliseconds()): Boolean =
+    nowEpochMs >= startEpochMs && nowEpochMs < endEpochMs
+
 /** Compact range for discovery cards and beacon detail sheets, e.g. `Jun 12, 7:00 PM – 9:00 PM`. */
 fun formatEventScheduleRange(
     schedule: EventSchedule,
@@ -76,19 +80,37 @@ fun formatEventScheduleRange(
     val end = Instant.fromEpochMilliseconds(schedule.endEpochMs).toLocalDateTime(timeZone)
     val startLabel = formatEventDateTimeLabel(start)
     val endLabel = if (start.date == end.date) {
-        formatEventTimeLabel(end)
+        formatEventClockLabel(end)
     } else {
         formatEventDateTimeLabel(end)
     }
     return "$startLabel – $endLabel"
 }
 
-private fun formatEventDateTimeLabel(dt: kotlinx.datetime.LocalDateTime): String {
-    val mon = dt.month.name.lowercase().replaceFirstChar { it.uppercase() }.take(3)
-    return "$mon ${dt.dayOfMonth}, ${formatEventTimeLabel(dt)}"
+/** Start clock for bento cells, e.g. `8:00 PM`. */
+fun formatEventStartTimeLabel(
+    schedule: EventSchedule,
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+): String {
+    val start = Instant.fromEpochMilliseconds(schedule.startEpochMs).toLocalDateTime(timeZone)
+    return formatEventClockLabel(start)
 }
 
-private fun formatEventTimeLabel(dt: kotlinx.datetime.LocalDateTime): String {
+/** End clock for bento cells, e.g. `12:00 AM`. */
+fun formatEventEndTimeLabel(
+    schedule: EventSchedule,
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+): String {
+    val end = Instant.fromEpochMilliseconds(schedule.endEpochMs).toLocalDateTime(timeZone)
+    return formatEventClockLabel(end)
+}
+
+private fun formatEventDateTimeLabel(dt: kotlinx.datetime.LocalDateTime): String {
+    val mon = dt.month.name.lowercase().replaceFirstChar { it.uppercase() }.take(3)
+    return "$mon ${dt.dayOfMonth}, ${formatEventClockLabel(dt)}"
+}
+
+fun formatEventClockLabel(dt: kotlinx.datetime.LocalDateTime): String {
     val hour24 = dt.hour
     val h12 = ((hour24 + 11) % 12) + 1
     val amPm = if (hour24 < 12) "AM" else "PM"

@@ -44,6 +44,26 @@ class EventScheduleTest {
     }
 
     @Test
+    fun isLive_onlyDuringWindow() {
+        val schedule = EventSchedule(startEpochMs = 100L, endEpochMs = 200L)
+        assertFalse(schedule.isLive(nowEpochMs = 99L))
+        assertTrue(schedule.isLive(nowEpochMs = 100L))
+        assertTrue(schedule.isLive(nowEpochMs = 150L))
+        assertFalse(schedule.isLive(nowEpochMs = 200L))
+    }
+
+    @Test
+    fun formatEventStartEndTimeLabels_useClockOnly() {
+        val tz = TimeZone.UTC
+        val schedule = EventSchedule(
+            startEpochMs = Instant.parse("2026-06-12T19:00:00Z").toEpochMilliseconds(),
+            endEpochMs = Instant.parse("2026-06-13T00:00:00Z").toEpochMilliseconds(),
+        )
+        assertEquals("7:00 PM", formatEventStartTimeLabel(schedule, tz))
+        assertEquals("12:00 AM", formatEventEndTimeLabel(schedule, tz))
+    }
+
+    @Test
     fun eventReminderKindsDue_includesDayOfAndOneHourBefore() {
         val start = 24L * 60 * 60_000L + 60L * 60_000L
         val schedule = EventSchedule(startEpochMs = start, endEpochMs = start + 60L * 60_000L)

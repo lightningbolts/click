@@ -2,13 +2,24 @@
 
 **Date:** 2026-07-17  
 **Product:** Click KMP mobile (`click/composeApp`)  
-**Previous chat:** Track C map-first events discovery (full-screen Events list + avatar pins)
+**Previous chat:** Track C event detail revamp (expanded sheet + share/route/bookmark/check-in)
 
 Read this before writing code. Prefer **one primary revamp per chat**.
 
 ---
 
 ## 0. Just finished (do not redo)
+
+### Event detail — landed
+
+- `EventBeaconDetail`: LIVE badge, start/end bento, category chips, host card, overlapping Active Clicks stack
+- Hero: Share + Bookmark + Check in (bookmark/check-in local-only via `EventLocalFlagsStore`)
+- CTAs: **Join Event Route** (maps) + **RSVP / Sign Up** / **Cancel RSVP**
+- Drop sheet: event category multi-select → metadata `event_categories`
+
+**Docs:** `docs/ui-ux/mobile/10-map-beacons-hubs.md`, design-asset `event_details_expanded_dark/`.
+
+**Still open:** device smoke for expanded event sheet + share/route on hardware.
 
 ### Map-first events discovery — landed
 
@@ -97,21 +108,20 @@ Source of truth for prior work: [`functional-clarity-continuation.md`](functiona
 
 | Priority | Revamp | Mock / source | Screen | Intent |
 |----------|--------|---------------|--------|--------|
-| **1** | **Event detail** | `event_details_expanded_dark/` | Beacon/event sheets | Expanded detail over map |
-| **2** | **Full-map polish** | `map_events_full_screen_map/` | `MapScreen` | Remaining full-map chrome / pin sheet polish (map-first already shipped) |
+| **1** | **Full-map polish** | `map_events_full_screen_map/` | `MapScreen` | Remaining full-map chrome / pin sheet polish (map-first already shipped) |
 | Later | Inbox dense / rolodex stack | `add_click_fixed_navigation/` | `ConnectionsListView` | Only if product wants overlapping cards (spacing currently intentional) |
 
 Optional later (after related device OK): Nav chrome v2, Chat composer polish, Profile memories IA — see handoff §3.
 
-**Suggested default for next chat:** Event detail.
+**Suggested default for next chat:** Full-map polish.
 
-### Event detail — brief for next chat
+### Full-map polish — brief for next chat
 
-**Current (code):** [`EventBeaconDetail`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/ui/screens/MapScreen.kt) inside `BeaconDetailSheetContent` — title, host, schedule, description, attendee chips, RSVP.
+**Current:** Map-first discovery + expanded event detail already shipped.
 
-**Target (mock):** [`docs/design-assets/event_details_expanded_dark/`](../design-assets/event_details_expanded_dark/) — expanded detail over map (LIVE badge, start/end bento, category chips, host card, attendee stack, join CTA). Use HTML for hierarchy/spacing intent only — do not copy markup, blur, or glass.
+**Target (mock):** [`docs/design-assets/map_events_full_screen_map/`](../design-assets/map_events_full_screen_map/) — remaining full-map chrome / pin sheet polish only. Use HTML for hierarchy/spacing intent — do not copy markup, blur, or glass.
 
-**Keep:** Map-first shell + events peek → full-screen list; `MapViewModel` RSVP; transparent nav; `clickBorderColor()` / `LocalIsDarkMode` / `GlassSheetTokens`. Do not redo map-first IA in the same chat.
+**Keep:** Events peek → full-screen list; `EventBeaconDetail` hierarchy; transparent nav; `clickBorderColor()` / `LocalIsDarkMode` / `GlassSheetTokens`. Do not redo event detail in the same chat.
 
 **Update when shipping:** [`docs/ui-ux/mobile/10-map-beacons-hubs.md`](../ui-ux/mobile/10-map-beacons-hubs.md) + this handoff §0 / §4.
 
@@ -125,6 +135,7 @@ click/docs/handoff/track-c-next-revamps.md
 and click/docs/handoff/functional-clarity-continuation.md
 
 DONE — do not redo unless regressing:
+- Event detail (LIVE, bento, categories, host, Active Clicks, Share/Bookmark/Check in, Route + RSVP)
 - Map-first events discovery (full map + peek → full-screen Events list; search only in list; avatar pins)
 - Home IA + Home greeting LiquidGlassPageHeader
 - Settings grouping
@@ -134,11 +145,8 @@ DONE — do not redo unless regressing:
 Track A done. Track B code landed — device verify only; do not false-pass [KNOWN-N].
 
 Scope for THIS chat (default):
-Event detail — docs/design-assets/event_details_expanded_dark/ → EventBeaconDetail / beacon sheets
+Full-map polish — docs/design-assets/map_events_full_screen_map/ → remaining MapScreen chrome / pin sheet
 (Layout/IA only.)
-
-Alternate (say which if not Event detail):
-2) Full-map polish — remaining map chrome / pin sheet
 
 Rules:
 - Do NOT edit the neo-brutalist plan file under .cursor/plans.
@@ -146,6 +154,7 @@ Rules:
 - Keep nav bar chrome transparent (no opaque fill band under icons).
 - Reuse clickBorderColor() / LocalIsDarkMode / GlassSheetTokens.*().
 - Use design-asset HTML for hierarchy/spacing intent only — do not copy markup.
+- Do not redo EventBeaconDetail unless regressing.
 - Update docs/ui-ux/mobile/10-map-beacons-hubs.md + this handoff when shipping.
 - After changes: run regression-testing §0 automated gates.
 ```
@@ -161,7 +170,7 @@ Rules:
 | Settings (done) | `docs/ui-ux/mobile/14-settings-privacy.md`, `docs/design-assets/settings/` |
 | Inbox (Remember Me done) | `docs/ui-ux/mobile/07-connections-inbox.md`, `docs/design-assets/chat/` |
 | Add Click (done) | `docs/ui-ux/mobile/06-connect-handshake.md`, `docs/design-assets/add_click_streamlined_header/` |
-| **Map / events (map-first done)** | `docs/ui-ux/mobile/10-map-beacons-hubs.md`, `MapDiscoveryLayout.kt`, design-assets `events_*` / `map_events_*` / `event_details_*` |
+| **Map / events (map-first + event detail done)** | `docs/ui-ux/mobile/10-map-beacons-hubs.md`, `MapDiscoveryLayout.kt`, `EventBeaconDetail`, design-assets `events_*` / `map_events_*` / `event_details_*` |
 | Regression | `docs/regression-testing/00-INDEX.md` (§0 gates) |
 
 ---
@@ -178,4 +187,5 @@ Rules:
 - [x] Tap how-it-works card gated to simulator / emulator only
 - [x] Next-chat handoff refreshed for **Events discovery** (§1 brief + §2 prompt)
 - [x] Map-first events discovery (full map + peek → full-screen Events list + avatar pins) shipped
-- [ ] Next Track C revamp (Event detail) started in a dedicated chat using §2 prompt
+- [x] Event detail revamp (LIVE, bento, categories, host, attendees, Share/Bookmark/Check in, Route + RSVP) shipped
+- [x] Next-chat handoff refreshed for **Full-map polish** (§1 brief + §2 prompt)

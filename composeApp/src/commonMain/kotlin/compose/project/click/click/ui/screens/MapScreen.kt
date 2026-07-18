@@ -10,11 +10,14 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.ui.platform.LocalUriHandler
 import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDialogChrome // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
@@ -83,8 +86,18 @@ import androidx.compose.foundation.verticalScroll
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import compose.project.click.click.events.EventLocalFlagsStore
+import compose.project.click.click.events.EventSchedule
+import compose.project.click.click.events.buildEventShareText
+import compose.project.click.click.events.eventMapsGeoUri
+import compose.project.click.click.events.eventMapsHttpUrl
 import compose.project.click.click.events.eventSchedule
+import compose.project.click.click.events.formatEventEndTimeLabel
 import compose.project.click.click.events.formatEventScheduleRange
+import compose.project.click.click.events.formatEventStartTimeLabel
+import compose.project.click.click.events.hasFiniteCoordinates
+import compose.project.click.click.events.isLive
+import compose.project.click.click.platform.shareText
 import compose.project.click.click.ui.utils.displayTypeTitle
 import compose.project.click.click.ui.utils.displayDynamicTitle
 import compose.project.click.click.ui.components.AdaptiveBackground
@@ -509,7 +522,7 @@ fun MapScreen(
                     errorMessage = beaconInsertError,
                     onDismissError = { viewModel.clearBeaconInsertError() },
                     submitLocked = beaconSubmitInFlight,
-                    onSubmit = { kind, title, description, soundtrackUrl, ttlMs, showCreatorName, visibilityAudience, eventSchedule, onRejectedEarly ->
+                    onSubmit = { kind, title, description, soundtrackUrl, ttlMs, showCreatorName, visibilityAudience, eventSchedule, eventCategories, onRejectedEarly ->
                         viewModel.submitBeaconDrop(
                             kind = kind,
                             title = title,
@@ -519,6 +532,7 @@ fun MapScreen(
                             showCreatorName = showCreatorName,
                             visibilityAudience = visibilityAudience,
                             eventSchedule = eventSchedule,
+                            eventCategories = eventCategories,
                             onAcceptedLocally = { showBeaconDropSheet = false },
                             onRejectedEarly = onRejectedEarly,
                             onRemoteFinished = { },
@@ -1088,6 +1102,7 @@ private fun BeaconDetailSheetContent(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun EventBeaconDetail(
     beacon: MapBeacon,
@@ -1104,93 +1119,115 @@ private fun EventBeaconDetail(
     val rsvpLoading = entry == null && beacon.id in rsvpLoadingIds
     val rsvpPending = beacon.id in rsvpPendingIds
     var rsvpError by remember(beacon.id) { mutableStateOf<String?>(null) }
+    val bookmarkedIds by EventLocalFlagsStore.bookmarkedIds.collectAsState()
+    val checkedInIds by EventLocalFlagsStore.checkedInIds.collectAsState()
+    val bookmarked = beacon.id in bookmarkedIds
+    val checkedIn = beacon.id in checkedInIds
+    val uriHandler = LocalUriHandler.current
+    val schedule = beacon.eventSchedule()
+    val live = schedule?.isLive() == true
+    val distanceLabel = distanceMeters?.let { formatBeaconDistance(it) }
+    val scheduleRange = schedule?.let { formatEventScheduleRange(it) }
+    val categories = beacon.metadata.eventCategories
+    val border = clickBorderColor()
+    val cardSurface = clickCardSurface()
 
-    // Always refresh from server when the sheet opens (disk cache may already be visible).
     LaunchedEffect(beacon.id) {
         viewModel.loadBeaconRsvp(beacon.id, forceRefresh = true)
     }
 
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        Text(
-            text = beacon.displayDynamicTitle(),
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                if (live) {
+                    EventLiveBadge()
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                Text(
+                    text = beacon.displayDynamicTitle(),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                distanceLabel?.let { d ->
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = d,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            EventHeroActions(
+                bookmarked = bookmarked,
+                checkedIn = checkedIn,
+                onShare = {
+                    shareText(
+                        text = buildEventShareText(beacon, scheduleRange, distanceLabel),
+                        subject = beacon.displayDynamicTitle(),
+                    )
+                },
+                onToggleBookmark = { EventLocalFlagsStore.toggleBookmark(beacon.id) },
+                onToggleCheckIn = { EventLocalFlagsStore.toggleCheckIn(beacon.id) },
+            )
+        }
+
+        schedule?.let { EventScheduleBento(schedule = it, border = border, cardSurface = cardSurface) }
+
+        if (categories.isNotEmpty()) {
+            EventCategoryChips(categories = categories, border = border, cardSurface = cardSurface)
+        }
+
         if (beacon.showCreatorName && !beacon.creatorDisplayName.isNullOrBlank()) {
-            Text(
-                text = "Hosted by ${beacon.creatorDisplayName}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary,
+            EventHostCard(
+                displayName = beacon.creatorDisplayName.orEmpty(),
+                userId = beacon.createdByUserId?.takeIf { it.isNotBlank() }
+                    ?: "host:${beacon.creatorDisplayName}",
+                border = border,
+                cardSurface = cardSurface,
             )
         }
-        beacon.eventSchedule()?.let { schedule ->
-            Text(
-                text = formatEventScheduleRange(schedule),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-        }
+
         Text(
             text = beacon.metadata.description?.trim().orEmpty().ifBlank { "No description" },
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface,
         )
-        distanceMeters?.let { d ->
-            Text(
-                text = formatBeaconDistance(d),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Text(
-            text = "Attendees",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
+
+        EventAttendeeStack(
+            attendees = attendees,
+            loading = rsvpLoading,
+            border = border,
+            cardSurface = cardSurface,
         )
-        if (rsvpLoading) {
-            CircularProgressIndicator(strokeWidth = 2.dp)
-        } else if (attendees.isEmpty()) {
-            Text(
-                text = "Be the first to RSVP.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+
+        Button(
+            onClick = {
+                if (!hasFiniteCoordinates(beacon.latitude, beacon.longitude)) return@Button
+                val title = beacon.displayDynamicTitle()
+                val geo = eventMapsGeoUri(beacon.latitude, beacon.longitude, title)
+                val http = eventMapsHttpUrl(beacon.latitude, beacon.longitude)
+                runCatching { uriHandler.openUri(geo) }
+                    .onFailure { runCatching { uriHandler.openUri(http) } }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Directions,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
             )
-        } else {
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                attendees.forEach { attendee ->
-                    Column(
-                        modifier = Modifier.widthIn(max = 56.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        ConnectionListUserAvatarFace(
-                            displayName = attendee.name,
-                            email = null,
-                            avatarUrl = attendee.avatarUrl,
-                            userId = attendee.userId,
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape),
-                        )
-                        Text(
-                            text = attendee.name,
-                            style = MaterialTheme.typography.labelSmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Join Event Route")
         }
+
         Button(
             onClick = {
                 if (rsvpPending) return@Button
@@ -1213,7 +1250,12 @@ private fun EventBeaconDetail(
                     contentColor = MaterialTheme.colorScheme.onError,
                 )
             } else {
-                ButtonDefaults.buttonColors()
+                ButtonDefaults.outlinedButtonColors()
+            },
+            border = if (!currentUserSignedUp) {
+                BorderStroke(2.dp, border)
+            } else {
+                null
             },
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -1232,6 +1274,303 @@ private fun EventBeaconDetail(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
             )
+        }
+    }
+}
+
+@Composable
+private fun EventLiveBadge() {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xFFDC2626))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(Color.White),
+        )
+        Text(
+            text = "LIVE",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+        )
+    }
+}
+
+@Composable
+private fun EventHeroActions(
+    bookmarked: Boolean,
+    checkedIn: Boolean,
+    onShare: () -> Unit,
+    onToggleBookmark: () -> Unit,
+    onToggleCheckIn: () -> Unit,
+) {
+    val border = clickBorderColor()
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        EventHeroIconButton(
+            selected = false,
+            border = border,
+            onClick = onShare,
+            contentDescription = "Share event",
+            icon = Icons.Filled.Share,
+        )
+        EventHeroIconButton(
+            selected = bookmarked,
+            border = border,
+            onClick = onToggleBookmark,
+            contentDescription = if (bookmarked) "Remove bookmark" else "Bookmark event",
+            icon = if (bookmarked) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+        )
+        EventHeroIconButton(
+            selected = checkedIn,
+            border = border,
+            onClick = onToggleCheckIn,
+            contentDescription = if (checkedIn) "Undo check in" else "Check in",
+            icon = if (checkedIn) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+        )
+    }
+}
+
+@Composable
+private fun EventHeroIconButton(
+    selected: Boolean,
+    border: Color,
+    onClick: () -> Unit,
+    contentDescription: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier
+            .size(48.dp)
+            .border(2.dp, border, CircleShape)
+            .clip(CircleShape)
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                else Color.Transparent,
+            ),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+@Composable
+private fun EventScheduleBento(
+    schedule: EventSchedule,
+    border: Color,
+    cardSurface: Color,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        EventBentoCell(
+            modifier = Modifier.weight(1f),
+            label = "Start Time",
+            value = formatEventStartTimeLabel(schedule),
+            icon = Icons.Filled.Schedule,
+            border = border,
+            cardSurface = cardSurface,
+        )
+        EventBentoCell(
+            modifier = Modifier.weight(1f),
+            label = "End Time",
+            value = formatEventEndTimeLabel(schedule),
+            icon = Icons.Filled.EventBusy,
+            border = border,
+            cardSurface = cardSurface,
+        )
+    }
+}
+
+@Composable
+private fun EventBentoCell(
+    modifier: Modifier,
+    label: String,
+    value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    border: Color,
+    cardSurface: Color,
+) {
+    Column(
+        modifier = modifier
+            .border(2.dp, border, RoundedCornerShape(12.dp))
+            .background(cardSurface, RoundedCornerShape(12.dp))
+            .padding(16.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp),
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = value,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun EventCategoryChips(
+    categories: List<String>,
+    border: Color,
+    cardSurface: Color,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = "CATEGORIES",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            categories.forEach { category ->
+                Text(
+                    text = category,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .border(2.dp, border, RoundedCornerShape(999.dp))
+                        .background(cardSurface, RoundedCornerShape(999.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EventHostCard(
+    displayName: String,
+    userId: String,
+    border: Color,
+    cardSurface: Color,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(2.dp, border, RoundedCornerShape(12.dp))
+            .background(cardSurface, RoundedCornerShape(12.dp))
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        ConnectionListUserAvatarFace(
+            displayName = displayName,
+            email = null,
+            avatarUrl = null,
+            userId = userId,
+            modifier = Modifier
+                .size(56.dp)
+                .border(2.dp, border, CircleShape)
+                .clip(CircleShape),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Host",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = displayName,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+@Composable
+private fun EventAttendeeStack(
+    attendees: List<compose.project.click.click.data.api.BeaconAttendeeDto>,
+    loading: Boolean,
+    border: Color,
+    cardSurface: Color,
+) {
+    val visible = attendees.take(4)
+    val overflow = (attendees.size - visible.size).coerceAtLeast(0)
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = "ACTIVE CLICKS (${attendees.size})",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        when {
+            loading -> CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(28.dp))
+            attendees.isEmpty() -> Text(
+                text = "Be the first to RSVP.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            else -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    visible.forEachIndexed { index, attendee ->
+                        ConnectionListUserAvatarFace(
+                            displayName = attendee.name,
+                            email = null,
+                            avatarUrl = attendee.avatarUrl,
+                            userId = attendee.userId,
+                            modifier = Modifier
+                                .offset(x = (-10 * index).dp)
+                                .zIndex((visible.size - index).toFloat())
+                                .size(48.dp)
+                                .border(2.dp, border, CircleShape)
+                                .clip(CircleShape)
+                                .background(cardSurface),
+                        )
+                    }
+                    if (overflow > 0) {
+                        Box(
+                            modifier = Modifier
+                                .offset(x = (-10 * visible.size).dp)
+                                .zIndex(0f)
+                                .size(48.dp)
+                                .border(2.dp, border, CircleShape)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "+$overflow",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }

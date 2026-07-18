@@ -52,6 +52,7 @@ import compose.project.click.click.data.models.BeaconVisibilityAudience
 import compose.project.click.click.data.models.MapBeaconKind
 import compose.project.click.click.events.EventSchedule
 import compose.project.click.click.events.EventScheduleValidationError
+import compose.project.click.click.events.EVENT_CATEGORY_OPTIONS
 import compose.project.click.click.events.validateEventSchedule
 import compose.project.click.click.ui.components.EventDateTimePicker
 import compose.project.click.click.events.defaultEventSchedule
@@ -114,6 +115,7 @@ fun BeaconDropSheetContent(
         showCreatorName: Boolean,
         visibilityAudience: BeaconVisibilityAudience,
         eventSchedule: compose.project.click.click.events.EventSchedule?,
+        eventCategories: List<String>,
         onRejectedEarly: () -> Unit,
     ) -> Unit,
     onCreateHub: (name: String, category: String) -> Unit = { _, _ -> },
@@ -133,6 +135,7 @@ fun BeaconDropSheetContent(
     val expiration = remember { mutableStateOf(BeaconDuration.THREE_HOURS) }
     var eventSchedule by remember { mutableStateOf(defaultEventSchedule()) }
     var eventScheduleError by remember { mutableStateOf<EventScheduleValidationError?>(null) }
+    var eventCategories by remember { mutableStateOf(setOf<String>()) }
     var submitValidationError by remember { mutableStateOf<String?>(null) }
 
     var hubNameDraft by remember { mutableStateOf("") }
@@ -306,6 +309,36 @@ fun BeaconDropSheetContent(
                     },
                     validationError = eventScheduleError,
                 )
+                Text(
+                    text = "Categories",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    EVENT_CATEGORY_OPTIONS.forEach { option ->
+                        FilterChip(
+                            selected = option in eventCategories,
+                            onClick = {
+                                eventCategories = if (option in eventCategories) {
+                                    eventCategories - option
+                                } else {
+                                    eventCategories + option
+                                }
+                            },
+                            label = { Text(option) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = chipContainer,
+                                selectedContainerColor = chipSelected,
+                                labelColor = MaterialTheme.colorScheme.onSurface,
+                                selectedLabelColor = MaterialTheme.colorScheme.onSurface,
+                            ),
+                        )
+                    }
+                }
             } else {
                 Text(
                     text = "Visible for",
@@ -475,6 +508,7 @@ fun BeaconDropSheetContent(
                         showCreatorName,
                         visibilityAudience,
                         schedule,
+                        if (isEvent) eventCategories.toList() else emptyList(),
                     ) {
                         isSubmitting = false
                     }

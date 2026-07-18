@@ -87,6 +87,7 @@ Other beacon/hub kinds remain on the **map** via layer filters.
 | Category chips | Horizontal `LazyRow` |
 | Hub mode | Name field + category `FlowRow` |
 | Non-hub | Title / soundtrack URL / event picker / duration chips / description |
+| Event extras | Start/end picker + multi-select **Categories** (`Promotional` / `Social` / `School Event`) → metadata `event_categories` |
 | Visibility | `"Who can see this"` chip row + `"Display my name"` switch |
 | CTA | Full-width `Button` — `"Create hub"` or `"Drop pin"` |
 
@@ -100,7 +101,24 @@ Headline hub name (`headlineSmall`), active count, distance/geofence row, join C
 
 ### BeaconDetailSheet
 
-Creator toolbar: `"Edit beacon"` / `"Delete beacon"` icon buttons (creator only). Body varies by `MapBeaconKind` (soundtrack card, event RSVP, or community detail).
+Creator toolbar: `"Edit beacon"` / `"Delete beacon"` icon buttons (creator only). Body varies by `MapBeaconKind`.
+
+**Event (`EventBeaconDetail`)** — expanded hierarchy (design-asset `event_details_expanded_dark/`):
+
+| Region | Notes |
+|--------|-------|
+| LIVE badge | When schedule `isLive` (`start ≤ now < end`) |
+| Title + distance subtitle | `displayDynamicTitle()`; distance when known |
+| Hero actions | Share (system sheet) + Bookmark + Check in (local `EventLocalFlagsStore`, future event-info API) |
+| Start / End bento | Two bordered cells from `EventSchedule` |
+| Categories | Chips from metadata `event_categories`; hidden when empty |
+| Host card | When `showCreatorName`; avatar initials; no verified badge |
+| Description | Body copy |
+| Active Clicks | Overlapping avatar stack + `+N`; count in section label |
+| Primary CTA | `"Join Event Route"` → maps `geo:` / Google Maps HTTP |
+| Secondary CTA | `"RSVP / Sign Up"` / `"Cancel RSVP"` via `MapViewModel` |
+
+Soundtrack / other kinds keep prior card layouts.
 
 ### HubChatScreen
 
@@ -145,6 +163,7 @@ Creator toolbar: `"Edit beacon"` / `"Delete beacon"` icon buttons (creator only)
 | Control | Action |
 |---------|--------|
 | Category chip | Switches form mode (including `"Hub"` → hub fields) |
+| Event category chips | Multi-select → `event_categories` metadata |
 | `"Create hub"` (hub mode) | Closes drop sheet → `CreateHubModal` with prefilled name/category |
 | `"Drop pin"` | `MapViewModel.submitBeaconDrop(...)` |
 | Paste icon (soundtrack) | Paste clipboard into URL field |
@@ -160,12 +179,14 @@ Creator toolbar: `"Edit beacon"` / `"Delete beacon"` icon buttons (creator only)
 | `null` | Spinner + `"Verifying your location…"` |
 | Always | `"Close"` dismisses |
 
-### Beacon detail (creator)
+### Beacon detail
 
 | Action | Result |
 |--------|--------|
-| Edit | `AnimatedClickDialog` `"Edit beacon"` / `"Save"` |
-| Delete | `AnimatedClickDialog` `"Delete beacon?"` / `"Delete"` |
+| Edit / Delete (creator) | `AnimatedClickDialog` flows |
+| Share | System text share (title, schedule, maps link) |
+| Bookmark / Check in | Local toggle only (`EventLocalFlagsStore`) — reserved for future event-info expansion |
+| Join Event Route | Opens maps to beacon lat/lon |
 | Event RSVP | `"RSVP / Sign Up"` or `"Cancel RSVP"` |
 | Play preview | Audio player on soundtrack beacons |
 | `"Play full song"` | Opens original media URL |

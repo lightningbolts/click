@@ -43,6 +43,10 @@ import compose.project.click.click.utils.resolveHubGatekeeperLocation
 import kotlinx.serialization.json.JsonObject // pragma: allowlist secret
 import kotlinx.serialization.json.buildJsonObject // pragma: allowlist secret
 import kotlinx.serialization.json.put // pragma: allowlist secret
+import kotlinx.serialization.json.putJsonArray // pragma: allowlist secret
+import kotlinx.serialization.json.add // pragma: allowlist secret
+import compose.project.click.click.events.EVENT_CATEGORY_OPTIONS // pragma: allowlist secret
+import compose.project.click.click.events.EVENT_CATEGORIES_METADATA_KEY // pragma: allowlist secret
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.realtime.PostgresAction
 import kotlinx.coroutines.Dispatchers
@@ -1118,6 +1122,7 @@ class MapViewModel : ViewModel() {
         showCreatorName: Boolean = false,
         visibilityAudience: BeaconVisibilityAudience = BeaconVisibilityAudience.EVERYONE,
         eventSchedule: EventSchedule? = null,
+        eventCategories: List<String> = emptyList(),
         onAcceptedLocally: () -> Unit = {},
         onRejectedEarly: () -> Unit = {},
         onRemoteFinished: (Boolean) -> Unit = {},
@@ -1193,6 +1198,15 @@ class MapViewModel : ViewModel() {
                         put("title", trimmedTitle)
                         trimmedDescription?.let { put("description", it) }
                         eventScheduleMetadata(schedule).forEach { (k, v) -> put(k, v) }
+                        val categories = eventCategories
+                            .map { it.trim() }
+                            .filter { it.isNotEmpty() && it in EVENT_CATEGORY_OPTIONS }
+                            .distinct()
+                        if (categories.isNotEmpty()) {
+                            putJsonArray(EVENT_CATEGORIES_METADATA_KEY) {
+                                categories.forEach { add(it) }
+                            }
+                        }
                     }
                 }
                 MapBeaconKind.SOS, MapBeaconKind.HAZARD, MapBeaconKind.UTILITY, MapBeaconKind.STUDY -> {
