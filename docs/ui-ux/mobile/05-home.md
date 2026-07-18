@@ -28,6 +28,8 @@ HomeScreen (organism)
         ├── HomeSearchPill              // → onOpenSearch / UnifiedSearchSheet
         ├── FeaturedEventSection (conditional)  // first HomeEventReminder
         │   └── FeaturedEventCard → "View on Map"
+        ├── Saved events (conditional)  // GET /api/me/event-bookmarks, max 5
+        │   └── SavedEventBookmarkCard[] → "View on Map"
         ├── HomeAvailabilityIntentsRow
         │   ├── SectionHeader "I'm down for…"
         │   ├── AssistChip[] per active intent

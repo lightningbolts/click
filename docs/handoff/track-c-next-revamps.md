@@ -25,9 +25,9 @@ Read this before writing code. Prefer **one primary revamp per chat**.
 **Still open / follow-ups:**
 - Device smoke for expanded event sheet + share/route/bookmark/check-in on hardware (API landed — verify on device)
 - Host avatar when creator is not current user and not in `connectedUsers` (API has no `creator_avatar_url` yet)
-- **Future:** event ↔ encounter — if handshake/QR connects at a live event location/time, show that event on connection encounter info / Timeline ([10-map-beacons-hubs.md](../ui-ux/mobile/10-map-beacons-hubs.md) §7)
-- **Future:** Home “Saved events” section (list API ready)
-- **Future:** share deep-link URL in share text
+- Device smoke: Home Saved events; share `/e/` Universal Link; Timeline event after RSVP-gated connect at live event
+
+**Shipped follow-ups (event engagement):** Home Saved events · share deep-link + analytics · RSVP-gated encounter `event_beacon_id` + Timeline — see [event-engagement-api.md](event-engagement-api.md).
 
 ### Map-first events discovery — landed
 

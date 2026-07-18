@@ -14,9 +14,11 @@ import compose.project.click.click.data.models.PollPairSuggestion // pragma: all
 import compose.project.click.click.data.models.ReconnectHelper // pragma: allowlist secret
 import compose.project.click.click.data.models.ReconnectReminder // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.api.EventBookmarkItemDto
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.MapBeaconRepository
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.BeaconRsvpPersistence
 import compose.project.click.click.data.storage.createTokenStorage
@@ -63,6 +65,7 @@ class HomeViewModel(
     private val chatRepository: ChatRepository = SupabaseChatRepository(tokenStorage = createTokenStorage()),
     private val connectionRepository: ConnectionRepository = ConnectionRepository(),
     private val supabaseRepository: SupabaseRepository = SupabaseRepository(),
+    private val mapBeaconRepository: MapBeaconRepository = MapBeaconRepository(),
 ) : ViewModel() {
 
     private val _homeState = MutableStateFlow<HomeState>(HomeState.Loading)
@@ -74,6 +77,9 @@ class HomeViewModel(
 
     private val _homeEventReminders = MutableStateFlow<List<HomeEventReminder>>(emptyList())
     val homeEventReminders: StateFlow<List<HomeEventReminder>> = _homeEventReminders.asStateFlow()
+
+    private val _savedEventBookmarks = MutableStateFlow<List<EventBookmarkItemDto>>(emptyList())
+    val savedEventBookmarks: StateFlow<List<EventBookmarkItemDto>> = _savedEventBookmarks.asStateFlow()
 
     private val _dismissedEventReminderKeys = MutableStateFlow<Set<String>>(emptySet())
     
@@ -374,6 +380,7 @@ class HomeViewModel(
 
             loadReconnectReminders(userId, connections, lastMessageByConnectionId)
             loadHomeEventReminders(userId)
+            loadSavedEventBookmarks()
             loadConnectionInsights(userId, connections, lastMessageByConnectionId)
         } catch (e: Exception) {
             println("Error preloading home derived data: ${e.redactedRestMessage()}")
@@ -427,6 +434,23 @@ class HomeViewModel(
         } catch (e: Exception) {
             println("Error loading home event reminders: ${e.redactedRestMessage()}")
             _homeEventReminders.value = emptyList()
+        }
+    }
+
+    private suspend fun loadSavedEventBookmarks() {
+        try {
+            mapBeaconRepository.fetchMyEventBookmarks(limit = 50).fold(
+                onSuccess = { response ->
+                    _savedEventBookmarks.value = response.bookmarks.take(5)
+                },
+                onFailure = { e ->
+                    println("Error loading saved event bookmarks: ${e.redactedRestMessage()}")
+                    _savedEventBookmarks.value = emptyList()
+                },
+            )
+        } catch (e: Exception) {
+            println("Error loading saved event bookmarks: ${e.redactedRestMessage()}")
+            _savedEventBookmarks.value = emptyList()
         }
     }
 

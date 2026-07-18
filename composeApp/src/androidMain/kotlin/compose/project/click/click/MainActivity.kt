@@ -21,6 +21,7 @@ import compose.project.click.click.calls.CallSessionManager
 import compose.project.click.click.notifications.ChatDeepLinkManager
 import compose.project.click.click.notifications.ChatNotificationDismisser
 import compose.project.click.click.deeplink.ConnectionDeepLinkRouter
+import compose.project.click.click.deeplink.EventDeepLinkRouter
 import compose.project.click.click.qr.toHubIdFromClickHubUrl
 import compose.project.click.click.notifications.initPushNotificationService
 import compose.project.click.click.utils.initLocationService
@@ -74,6 +75,7 @@ class MainActivity : ComponentActivity() {
         handleIncomingCallIntent(intent)
         handleChatDeepLinkIntent(intent)
         handleCommunityHubViewIntent(intent)
+        handleEventUniversalLinkIntent(intent)
         handleConnectionUniversalLinkIntent(intent)
 
         setContent {
@@ -109,6 +111,7 @@ class MainActivity : ComponentActivity() {
         handleIncomingCallIntent(intent)
         handleChatDeepLinkIntent(intent)
         handleCommunityHubViewIntent(intent)
+        handleEventUniversalLinkIntent(intent)
         handleConnectionUniversalLinkIntent(intent)
     }
 
@@ -117,6 +120,12 @@ class MainActivity : ComponentActivity() {
         val uriString = intent.dataString ?: return
         val hubId = uriString.toHubIdFromClickHubUrl() ?: return
         ChatDeepLinkManager.setPendingCommunityHub(hubId)
+    }
+
+    private fun handleEventUniversalLinkIntent(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_VIEW) return
+        val uriString = intent.dataString ?: return
+        EventDeepLinkRouter.handleIncomingUrl(uriString)
     }
 
     private fun handleConnectionUniversalLinkIntent(intent: Intent?) {

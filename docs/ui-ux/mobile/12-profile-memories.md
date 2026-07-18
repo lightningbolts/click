@@ -297,8 +297,8 @@ flowchart TD
 
 ---
 
-## 7. Future — event on encounter timeline
+## 7. Event on encounter timeline
 
-**Not built yet.** If a connection is formed (or an encounter is logged) while both people are at a map **event** (in geofence + live schedule window), that event should appear in the connection’s encounter info / Timeline — title, schedule, optional deep link back to the map beacon.
+When a connection is formed (or an encounter is logged) while both people are at a map **event** (in geofence + live schedule window) **and both have RSVPed**, that event appears on the connection Timeline — title, schedule, “View on map”, and context tag `at_event` (“At event”).
 
 See [10-map-beacons-hubs.md](10-map-beacons-hubs.md) §7 and [06-connect-handshake.md](06-connect-handshake.md).

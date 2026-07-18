@@ -109,6 +109,7 @@ import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.proximity.rememberProximityManager
 import compose.project.click.click.deeplink.ConnectionDeepLinkRouter
+import compose.project.click.click.deeplink.EventDeepLinkRouter
 import compose.project.click.click.notifications.ChatDeepLinkManager
 import compose.project.click.click.notifications.ChatNotificationDismisser
 import compose.project.click.click.sensors.AmbientNoiseMonitorProvider // pragma: allowlist secret
@@ -1005,6 +1006,7 @@ fun App() {
             val pendingCommunityHubId by ChatDeepLinkManager.pendingCommunityHubId.collectAsState()
 
             val pendingConnectionUserId by ConnectionDeepLinkRouter.pendingConnectionUserId.collectAsState()
+            val pendingEventDeepLinkBeaconId by EventDeepLinkRouter.pendingBeaconId.collectAsState()
 
             // Snackbar for connection success/error feedback
             val snackbarHostState = remember { SnackbarHostState() }
@@ -1124,6 +1126,14 @@ fun App() {
                     qrToken = null,
                     venueId = null,
                 )
+            }
+
+            LaunchedEffect(pendingEventDeepLinkBeaconId, currentUser.id) {
+                val beaconId = pendingEventDeepLinkBeaconId ?: return@LaunchedEffect
+                if (beaconId.isBlank() || currentUser.id.isBlank()) return@LaunchedEffect
+                EventDeepLinkRouter.consume()
+                pendingBeaconId = beaconId
+                navigateTo(NavigationItem.Map.route)
             }
             val connectionState by connectionViewModel.connectionState.collectAsState()
             val collaborationSessions by CollaborationSessionManager.sessions.collectAsState()

@@ -1,6 +1,7 @@
 package compose.project.click.click.events
 
 import compose.project.click.click.data.models.MapBeacon
+import compose.project.click.click.qr.CLICK_WEB_BASE_URL
 import kotlin.math.abs
 
 /** HTTPS Maps URL — preferred open target (geo: fails on iOS without a registered handler). */
@@ -43,6 +44,11 @@ fun openEventMapsRoute(
         .onFailure { runCatching { openUri(apple) } }
 }
 
+fun buildEventShareUrl(beaconId: String): String {
+    val id = beaconId.trim()
+    return "$CLICK_WEB_BASE_URL/e/$id"
+}
+
 fun buildEventShareText(
     beacon: MapBeacon,
     scheduleLabel: String?,
@@ -62,7 +68,11 @@ fun buildEventShareText(
             append(it)
         }
         append("\n")
-        append(eventMapsHttpUrl(beacon.latitude, beacon.longitude))
+        append(buildEventShareUrl(beacon.id))
+        if (hasFiniteCoordinates(beacon.latitude, beacon.longitude)) {
+            append("\n")
+            append(eventMapsHttpUrl(beacon.latitude, beacon.longitude))
+        }
     }
 }
 

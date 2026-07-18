@@ -7,6 +7,7 @@ import compose.project.click.click.data.repository.PushTokenRepository
 import compose.project.click.click.calls.CallInvite
 import compose.project.click.click.calls.CallSessionManager
 import compose.project.click.click.deeplink.ConnectionDeepLinkRouter
+import compose.project.click.click.deeplink.EventDeepLinkRouter
 import compose.project.click.click.notifications.ChatDeepLinkManager
 import compose.project.click.click.notifications.ChatNotificationDismisser
 import compose.project.click.click.notifications.ChatPushInboxBridge
@@ -91,6 +92,15 @@ fun setConnectionDeepLink(userId: String) {
 /** Parse and queue a connection URL. Returns true when recognized. */
 fun handleConnectionUniversalLink(url: String): Boolean =
     ConnectionDeepLinkRouter.handleIncomingUrl(url)
+
+/** Universal Link / deep link for `/e/{beaconId}` — queues Map event focus in [App]. */
+fun setEventDeepLink(beaconId: String) {
+    EventDeepLinkRouter.setPendingBeaconId(beaconId)
+}
+
+/** Parse and queue an event URL. Returns true when recognized. */
+fun handleEventUniversalLink(url: String): Boolean =
+    EventDeepLinkRouter.handleIncomingUrl(url)
 
 fun handleIncomingCallPush(
     callId: String,

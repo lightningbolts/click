@@ -107,6 +107,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             ClickKt.setCommunityHubDeepLink(hubId: hubId)
             return true
         }
+        if ClickKt.handleEventUniversalLink(url: url.absoluteString) {
+            return true
+        }
         if ClickKt.handleConnectionUniversalLink(url: url.absoluteString) {
             return true
         }
@@ -124,6 +127,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         }
         if let hubId = Self.communityHubId(from: url) {
             ClickKt.setCommunityHubDeepLink(hubId: hubId)
+            return true
+        }
+        if ClickKt.handleEventUniversalLink(url: url.absoluteString) {
             return true
         }
         return ClickKt.handleConnectionUniversalLink(url: url.absoluteString)

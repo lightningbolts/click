@@ -72,8 +72,13 @@ import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma:
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.data.models.ConnectionEncounter // pragma: allowlist secret
+import compose.project.click.click.data.ContextTagTaxonomy
+import compose.project.click.click.deeplink.EventDeepLinkRouter
+import compose.project.click.click.events.EventSchedule
+import compose.project.click.click.events.formatEventScheduleRange
 import compose.project.click.click.data.models.HeightCategory // pragma: allowlist secret
 import compose.project.click.click.data.models.NoiseLevelCategory // pragma: allowlist secret
+import kotlinx.datetime.Instant
 import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
 import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
@@ -123,6 +128,17 @@ internal fun ProfileAvailabilityIntentBubble.activeUntilShort(): String {
         d == tomorrow -> "Tomorrow · $timePart"
         else -> "${d.monthNumber}/${d.dayOfMonth} · $timePart"
     }
+}
+
+private fun formatEncounterEventSchedule(startIso: String?, endIso: String?): String? {
+    val startMs = startIso?.trim()?.takeIf { it.isNotEmpty() }
+        ?.let { runCatching { Instant.parse(it).toEpochMilliseconds() }.getOrNull() }
+        ?: return null
+    val endMs = endIso?.trim()?.takeIf { it.isNotEmpty() }
+        ?.let { runCatching { Instant.parse(it).toEpochMilliseconds() }.getOrNull() }
+        ?: return null
+    if (endMs <= startMs) return null
+    return formatEventScheduleRange(EventSchedule(startEpochMs = startMs, endEpochMs = endMs))
 }
 
 private fun ageFromBirthdayIso(birthday: String?): Int? {
@@ -325,6 +341,37 @@ internal fun OurTimelineSection(encounters: List<ConnectionEncounter>) {
                             color = body,
                             modifier = Modifier.padding(top = 2.dp),
                         )
+                        val eventTitle = enc.eventBeaconTitle?.trim()?.takeIf { it.isNotEmpty() }
+                        val eventBeaconId = enc.eventBeaconId?.trim()?.takeIf { it.isNotEmpty() }
+                        if (eventTitle != null || eventBeaconId != null) {
+                            val scheduleLabel = formatEncounterEventSchedule(
+                                enc.eventBeaconStartAt,
+                                enc.eventBeaconEndAt,
+                            )
+                            Text(
+                                text = eventTitle ?: "Event",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = PrimaryBlue,
+                                modifier = Modifier.padding(top = 6.dp),
+                            )
+                            if (scheduleLabel != null) {
+                                Text(
+                                    text = scheduleLabel,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = muted,
+                                    modifier = Modifier.padding(top = 2.dp),
+                                )
+                            }
+                            if (eventBeaconId != null) {
+                                TextButton(
+                                    onClick = { EventDeepLinkRouter.setPendingBeaconId(eventBeaconId) },
+                                    modifier = Modifier.padding(top = 2.dp),
+                                ) {
+                                    Text("View on map", fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                        }
                         val momentTags = enc.contextTags
                             .mapNotNull { it.trim().takeIf { s -> s.isNotEmpty() } }
                             .distinct()
@@ -338,7 +385,7 @@ internal fun OurTimelineSection(encounters: List<ConnectionEncounter>) {
                                     TimelineMetricPill(
                                         icon = Icons.Filled.AutoAwesome,
                                         iconTint = PrimaryBlue.copy(alpha = 0.9f),
-                                        text = tag,
+                                        text = ContextTagTaxonomy.displayLabel(tag),
                                         cardBorder = cardBorder,
                                         cardBg = cardBg,
                                         body = body,

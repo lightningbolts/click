@@ -1220,6 +1220,19 @@ class MapViewModel : ViewModel() {
         }
     }
 
+    fun recordEventShare(beaconId: String, shareUrl: String? = null) {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return
+        viewModelScope.launch {
+            if (!ensureClickWebAuthReady()) return@launch
+            mapBeaconRepository.recordBeaconShare(
+                id,
+                engagementTelemetry(surface = "detail"),
+                shareUrl = shareUrl,
+            )
+        }
+    }
+
     fun toggleBeaconBookmark(beaconId: String) {
         val id = beaconId.trim()
         if (id.isEmpty() || id in _beaconEngagementPendingIds.value) return

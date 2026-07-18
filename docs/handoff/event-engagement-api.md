@@ -92,11 +92,16 @@ Append-only `event_engagement_events` (service-role). Current-state rows stay ri
 
 ---
 
-## 5. Still future
+## 5. Follow-ups shipped (2026-07-18 continuation)
 
-- Share deep-link URL (`https://…/e/{beaconId}`) + richer share analytics
-- Encounter `event_beacon_id` linking + Timeline surface
-- Home “Saved events” UI (`GET /api/me/event-bookmarks` ready)
+| Item | Notes |
+|------|-------|
+| Home “Saved events” | `GET /api/me/event-bookmarks` → Home section after Featured Event |
+| Share deep-link | `https://click-us.vercel.app/e/{beaconId}` in share text; `POST /api/beacons/{id}/share`; Universal Links; insights Shares |
+| Encounter ↔ event | RSVP-gated: both in `beacon_attendees` + live geofence → `event_beacon_id` + `at_event` tag + Timeline |
+
+## 5b. Still future
+
 - Mobile operator charts (intentionally website-only)
 
 ---
@@ -108,6 +113,6 @@ cd click-web && npm test && npm run build
 cd click && ./gradlew :composeApp:compileDebugKotlinAndroid
 ```
 
-**Last green (2026-07-18):** `npm test` 157 PASS · `npm run build` PASS · Android `compileDebugKotlinAndroid` PASS · migration applied on remote Supabase.
+**Last green (2026-07-18):** engagement API base + follow-ups. Apply migration `20260718200000_encounter_event_beacon` on remote Supabase `click` if not yet applied.
 
-**Device smoke (human):** bookmark survives force-kill; far check-in reverts with snackbar; venue-scale on create; location-denied snackbar; insights page loads in demo mode.
+**Device smoke (human):** bookmark survives force-kill; far check-in reverts with snackbar; venue-scale on create; location-denied snackbar; insights page loads in demo mode; Saved events on Home; share opens `/e/` link; Timeline shows event after RSVP-gated connect.

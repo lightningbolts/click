@@ -420,15 +420,15 @@ flowchart TD
 
 ---
 
-## 7. Future — event ↔ encounter integration
+## 7. Event ↔ encounter integration
 
-**Not built yet.** When two users connect (Tap / QR / App Clip handshake) while both are at a live event’s location and within its start–end window, attach that event to the connection encounter and surface it on profile timeline / encounter info.
+When two users connect (Tap / QR / connection create / encounter log) while GPS is inside a **live** map event geofence **and both already RSVPed** (`beacon_attendees`), attach that event to the encounter.
 
 | Concern | Intent |
 |---------|--------|
-| Trigger | Successful handshake or QR connect while device GPS is inside the event beacon radius **and** `EventSchedule.isLive` |
-| Persist | Link `beacon_id` / event title + schedule onto the encounter / connection moment record |
-| Surface | Profile **Timeline** / encounter detail (`ProfileConnectionMoment`, connection context) — show event title, time range, optional “View on map” |
-| Non-goals for v1 of this idea | Auto-RSVP; requiring both parties to have RSVP’d first |
+| Trigger | Successful connect while device GPS is inside the event beacon radius **and** live window (`isEventLiveForCheckIn`) **and** both users RSVPed |
+| Persist | `event_beacon_id` + denorm title/schedule; merge context tag `at_event` |
+| Surface | Profile **Timeline** — event title, schedule, “View on map”; `at_event` chip label “At event” |
+| Non-goals | Creating RSVPs as a side effect of connecting (read-only gate) |
 
 Cross-links: [06-connect-handshake.md](06-connect-handshake.md), [12-profile-memories.md](12-profile-memories.md).

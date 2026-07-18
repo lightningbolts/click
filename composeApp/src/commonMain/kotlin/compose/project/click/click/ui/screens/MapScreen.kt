@@ -90,6 +90,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import compose.project.click.click.events.EventSchedule
 import compose.project.click.click.events.buildEventShareText
+import compose.project.click.click.events.buildEventShareUrl
 import compose.project.click.click.events.eventSchedule
 import compose.project.click.click.events.formatEventEndDateLabel
 import compose.project.click.click.events.formatEventEndTimeLabel
@@ -1291,6 +1292,8 @@ private fun EventBeaconDetail(
                 checkedIn = checkedIn,
                 isCreator = isCreator,
                 onShare = {
+                    val shareUrl = buildEventShareUrl(beacon.id)
+                    viewModel.recordEventShare(beacon.id, shareUrl = shareUrl)
                     shareText(
                         text = buildEventShareText(beacon, scheduleRange, distanceLabel),
                         subject = beacon.displayDynamicTitle(),

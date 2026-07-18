@@ -89,6 +89,15 @@ class MapBeaconRepository(
         telemetry: compose.project.click.click.data.api.EngagementTelemetryBody,
     ) = apiClient.postBeaconImpression(beaconId, telemetry)
 
+    suspend fun recordBeaconShare(
+        beaconId: String,
+        telemetry: compose.project.click.click.data.api.EngagementTelemetryBody,
+        shareUrl: String? = null,
+    ) = apiClient.postBeaconShare(beaconId, telemetry, shareUrl)
+
+    suspend fun fetchMyEventBookmarks(limit: Int = 50, cursor: String? = null) =
+        apiClient.getMyEventBookmarks(limit = limit, cursor = cursor)
+
     suspend fun fetchNearbyCommunityHubs(
         minLat: Double,
         maxLat: Double,

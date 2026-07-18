@@ -48,6 +48,7 @@ import compose.project.click.click.viewmodel.AvailabilityViewModel // pragma: al
 import compose.project.click.click.viewmodel.HomeViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.HomeState // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.api.EventBookmarkItemDto
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
@@ -93,6 +94,7 @@ fun HomeScreen(
     val homeState by viewModel.homeState.collectAsState()
     val reconnectReminders by viewModel.reconnectReminders.collectAsState()
     val homeEventReminders by viewModel.homeEventReminders.collectAsState()
+    val savedEventBookmarks by viewModel.savedEventBookmarks.collectAsState()
     val connectionInsights by viewModel.connectionInsights.collectAsState()
     val showInsightsPanel by viewModel.showInsightsPanel.collectAsState()
     val locationGroupedConnections by viewModel.locationGroupedConnections.collectAsState()
@@ -240,6 +242,18 @@ fun HomeScreen(
                                 FeaturedEventSection(
                                     reminder = reminder,
                                     onViewMap = { onNavigateToMap(reminder.beaconId) },
+                                )
+                            }
+                        }
+
+                        if (savedEventBookmarks.isNotEmpty()) {
+                            item(key = "saved_events_header") {
+                                SectionHeader(text = "Saved events")
+                            }
+                            items(savedEventBookmarks, key = { "saved-${it.beaconId}" }) { bookmark ->
+                                SavedEventBookmarkCard(
+                                    bookmark = bookmark,
+                                    onViewMap = { onNavigateToMap(bookmark.beaconId) },
                                 )
                             }
                         }
@@ -816,6 +830,87 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+}
+
+/**
+ * Bookmarked event row on Home — private saves from Map event detail.
+ */
+@Composable
+fun SavedEventBookmarkCard(
+    bookmark: EventBookmarkItemDto,
+    onViewMap: () -> Unit,
+) {
+    val title = bookmark.title?.takeIf { it.isNotBlank() } ?: "Saved event"
+    val timeBadge = bookmark.eventStartAt
+        ?.let { iso -> runCatching { Instant.parse(iso).toEpochMilliseconds() }.getOrNull() }
+        ?.let { formatSavedEventTimeBadge(it) }
+
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        usePrimaryBorder = true,
+        contentPadding = 14.dp,
+        onClick = onViewMap,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                if (timeBadge != null) {
+                    Text(
+                        text = timeBadge,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+            }
+            TextButton(
+                onClick = onViewMap,
+                modifier = Modifier.align(Alignment.End),
+            ) {
+                Text("View on Map", fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
+private fun formatSavedEventTimeBadge(startEpochMs: Long): String {
+    val now = Clock.System.now()
+    val start = Instant.fromEpochMilliseconds(startEpochMs)
+    val local = start.toLocalDateTime(TimeZone.currentSystemDefault())
+    val nowLocal = now.toLocalDateTime(TimeZone.currentSystemDefault())
+    val hour = local.hour
+    val minute = local.minute
+    val amPm = if (hour < 12) "AM" else "PM"
+    val hour12 = when {
+        hour == 0 -> 12
+        hour > 12 -> hour - 12
+        else -> hour
+    }
+    val timeStr = if (minute == 0) {
+        "$hour12 $amPm"
+    } else {
+        "$hour12:${minute.toString().padStart(2, '0')} $amPm"
+    }
+    return when {
+        local.date == nowLocal.date -> "Today $timeStr"
+        else -> "${local.month.name.take(3)} ${local.dayOfMonth} · $timeStr"
     }
 }
 

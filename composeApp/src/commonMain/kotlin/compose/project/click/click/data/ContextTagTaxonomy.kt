@@ -18,8 +18,17 @@ object ContextTagTaxonomy {
         ContextTag("conference", "Conference", "🎤"),
         ContextTag("outdoor", "Outdoors / Nature", "🌲"),
         ContextTag("dining", "Dining / Food", "🍽️"),
+        ContextTag("at_event", "At event", "📍"),
         ContextTag("custom", "Other...", "✏️")
     )
+
+    fun displayLabel(tagId: String): String {
+        val trimmed = tagId.trim()
+        if (trimmed.isEmpty()) return tagId
+        all.firstOrNull { it.id == trimmed }?.let { return it.label }
+        if (trimmed == "extended_hangout") return "Extended hangout"
+        return trimmed
+    }
 
     fun suggest(locationName: String?, hourOfDay: Int): List<ContextTag> {
         val suggestions = linkedSetOf<ContextTag>()

@@ -1737,6 +1737,60 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         }
     }
 
+    suspend fun postBeaconShare(
+        beaconId: String,
+        telemetry: EngagementTelemetryBody = EngagementTelemetryBody(surface = "detail"),
+        shareUrl: String? = null,
+    ): Result<Unit> {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+        return try {
+            val response: HttpResponse =
+                clickWebClient.post("$clickWebAuthOrigin/api/beacons/$id/share") {
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        ShareTelemetryBody(
+                            latitude = telemetry.latitude,
+                            longitude = telemetry.longitude,
+                            accuracyMeters = telemetry.accuracyMeters,
+                            clientOccurredAt = telemetry.clientOccurredAt,
+                            source = telemetry.source,
+                            platform = telemetry.platform,
+                            appVersion = telemetry.appVersion,
+                            surface = telemetry.surface,
+                            shareUrl = shareUrl,
+                        ),
+                    )
+                }
+            if (response.status.value in 200..299) Result.success(Unit)
+            else Result.failure(Exception(readClickWebErrorMessage(response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getMyEventBookmarks(
+        limit: Int = 50,
+        cursor: String? = null,
+    ): Result<EventBookmarksResponseDto> {
+        return try {
+            val response: HttpResponse =
+                clickWebClient.get("$clickWebAuthOrigin/api/me/event-bookmarks") {
+                    parameter("limit", limit.coerceIn(1, 100))
+                    cursor?.trim()?.takeIf { it.isNotEmpty() }?.let { parameter("cursor", it) }
+                }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<EventBookmarksResponseDto>())
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     fun close() {
         client.close()
         clickWebClient.close()
@@ -1807,12 +1861,43 @@ data class EngagementTelemetryBody(
 )
 
 @Serializable
+data class ShareTelemetryBody(
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    @SerialName("accuracy_meters") val accuracyMeters: Double? = null,
+    @SerialName("client_occurred_at") val clientOccurredAt: String? = null,
+    val source: String? = "mobile",
+    val platform: String? = null,
+    @SerialName("app_version") val appVersion: String? = null,
+    val surface: String? = null,
+    @SerialName("share_url") val shareUrl: String? = null,
+)
+
+@Serializable
 data class BeaconEngagementDto(
     @SerialName("beacon_id") val beaconId: String? = null,
     val bookmarked: Boolean = false,
     @SerialName("checked_in") val checkedIn: Boolean = false,
     @SerialName("checked_in_at") val checkedInAt: String? = null,
     @SerialName("check_in_count") val checkInCount: Int = 0,
+)
+
+@Serializable
+data class EventBookmarkItemDto(
+    @SerialName("beacon_id") val beaconId: String,
+    @SerialName("bookmarked_at") val bookmarkedAt: String? = null,
+    val title: String? = null,
+    @SerialName("event_start_at") val eventStartAt: String? = null,
+    @SerialName("event_end_at") val eventEndAt: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    @SerialName("expires_at") val expiresAt: String? = null,
+)
+
+@Serializable
+data class EventBookmarksResponseDto(
+    val bookmarks: List<EventBookmarkItemDto> = emptyList(),
+    @SerialName("next_cursor") val nextCursor: String? = null,
 )
 
 @Serializable
