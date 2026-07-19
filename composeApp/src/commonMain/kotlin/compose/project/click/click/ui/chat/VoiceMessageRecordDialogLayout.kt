@@ -178,6 +178,7 @@ fun VoiceMessageRecordDialogLayout(
     onStopRecording: () -> Unit,
     onReRecord: () -> Unit,
     onSend: () -> Unit,
+    errorMessage: String? = null,
 ) {
     val style = LocalPlatformStyle.current
     val m = (displaySeconds / 60).toInt()
@@ -238,6 +239,13 @@ fun VoiceMessageRecordDialogLayout(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (!errorMessage.isNullOrBlank()) {
+            Text(
+                text = errorMessage,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
