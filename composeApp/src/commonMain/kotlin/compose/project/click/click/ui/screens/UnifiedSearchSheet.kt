@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
@@ -15,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
@@ -55,7 +53,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.ui.components.rememberGlassAdaptiveSheetState
 import compose.project.click.click.ui.components.ClickLogoPulse
 import compose.project.click.click.ui.components.GlassAdaptiveBottomSheet
-import compose.project.click.click.ui.components.GlassSheetTokens
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.ui.theme.clickBorderColor
 import compose.project.click.click.ui.theme.clickCardSurface
@@ -156,7 +153,7 @@ private fun UnifiedSearchSheetContent(
                 Icon(
                     Icons.Default.Search,
                     contentDescription = null,
-                    tint = GlassSheetTokens.OnOledMuted(),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(22.dp),
                 )
                 BasicTextField(
@@ -164,7 +161,7 @@ private fun UnifiedSearchSheetContent(
                     onValueChange = { viewModel.search(it, userId) },
                     singleLine = true,
                     textStyle = MaterialTheme.typography.bodyLarge.copy(
-                        color = GlassSheetTokens.OnOled(),
+                        color = MaterialTheme.colorScheme.onSurface,
                     ),
                     cursorBrush = SolidColor(PrimaryBlue),
                     modifier = Modifier
@@ -180,7 +177,7 @@ private fun UnifiedSearchSheetContent(
                                 Text(
                                     text = "Search people, places, beacons…",
                                     style = MaterialTheme.typography.bodyLarge,
-                                    color = GlassSheetTokens.OnOledMuted(),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
@@ -221,9 +218,7 @@ private fun UnifiedSearchSheetContent(
         Box(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth()
-                .consumeWindowInsets(WindowInsets.ime)
-                .imePadding(),
+                .fillMaxWidth(),
         ) {
             when {
                 isSearching -> {

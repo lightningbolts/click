@@ -10,11 +10,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.text.style.TextOverflow
@@ -110,11 +108,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.text.AnnotatedString
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
-import compose.project.click.click.getPlatform // pragma: allowlist secret
 import compose.project.click.click.calls.CallSessionManager // pragma: allowlist secret
 import compose.project.click.click.data.ActiveHubEntry // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
@@ -148,6 +144,7 @@ import compose.project.click.click.ui.components.AppScreenDefaults // pragma: al
 import compose.project.click.click.ui.components.ConnectionsFloatingHeader // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassToastHost // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickCircularGlassIconButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.AppEmptyState
 import compose.project.click.click.ui.components.rememberGlassToastState // pragma: allowlist secret
 import androidx.compose.runtime.DisposableEffect
 import compose.project.click.click.ui.components.floatingHeaderStatusBarPadding // pragma: allowlist secret
@@ -672,32 +669,21 @@ fun ConnectionsListView(
                                     .padding(horizontal = 20.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(
-                                        if (searchQuery.isNotBlank()) Icons.Filled.SearchOff else Icons.Filled.ChatBubbleOutline,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(64.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    Text(
-                                        if (searchQuery.isNotBlank()) "No matches found"
-                                        else if (selectedTabIndex == 1) "No group chats"
-                                        else if (selectedTabIndex == 2) "No archived connections"
-                                        else "No connections yet",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text(
-                                        if (searchQuery.isNotBlank()) "Try a different search term"
-                                        else if (selectedTabIndex == 1) "Group clicks will appear here"
-                                        else if (selectedTabIndex == 2) "Archived chats will appear here"
-                                        else "Start clicking with people nearby!",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
+                                AppEmptyState(
+                                    icon = if (searchQuery.isNotBlank()) {
+                                        Icons.Filled.SearchOff
+                                    } else {
+                                        Icons.Filled.ChatBubbleOutline
+                                    },
+                                    title = if (searchQuery.isNotBlank()) "No matches found"
+                                    else if (selectedTabIndex == 1) "No group chats"
+                                    else if (selectedTabIndex == 2) "No archived connections"
+                                    else "No connections yet",
+                                    body = if (searchQuery.isNotBlank()) "Try a different search term"
+                                    else if (selectedTabIndex == 1) "Group clicks will appear here"
+                                    else if (selectedTabIndex == 2) "Archived chats will appear here"
+                                    else "Start clicking with people nearby!",
+                                )
                             }
                         }
                     } else {
@@ -713,7 +699,7 @@ fun ConnectionsListView(
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             if (showRememberMeStrip) {
-                                item(key = "remember_me_strip") {
+                                item(key = "remember_me_strip", contentType = "remember_me") {
                                     RememberMeStrip(
                                         chats = rememberMeChats,
                                         onChatSelected = onChatSelected,
@@ -727,7 +713,8 @@ fun ConnectionsListView(
                                     activeHubs.filter { hub ->
                                         searchQuery.isBlank() || hub.name.contains(searchQuery, ignoreCase = true)
                                     },
-                                    key = { "hub_${it.hubId}" }
+                                    key = { "hub_${it.hubId}" },
+                                    contentType = { "hub" },
                                 ) { hub ->
                                     ActiveHubFeedRow(
                                         hub = hub,
@@ -739,7 +726,8 @@ fun ConnectionsListView(
                             }
                             items(
                                 displayedChats,
-                                key = { it.connection.id }
+                                key = { it.connection.id },
+                                contentType = { "connection" },
                             ) { chatDetails ->
                                 val connectionId = chatDetails.connection.id
                                 val cachedThread = cachedChatThreads[connectionId]
@@ -786,7 +774,7 @@ fun ConnectionsListView(
                     .fillMaxWidth()
                     .then(headerMeasureModifier),
             ) {
-                ConnectionsFloatingHeader(
+                    ConnectionsFloatingHeader(
                     collapseFraction = collapseFraction,
                     title = "Clicks",
                     subtitle = headerSubtitle.takeIf { it.isNotBlank() },
@@ -797,6 +785,7 @@ fun ConnectionsListView(
                     archivedCount = archivedCount,
                     showTabs = effectiveChats.isNotEmpty(),
                     onOpenSearch = onOpenSearch,
+                    isScrollInProgress = connectionsLazyListState.isScrollInProgress,
                 )
             }
         }
@@ -1311,30 +1300,16 @@ private fun ActiveHubFeedRow(
     onOpenMenu: () -> Unit,
     onLongPress: () -> Unit,
 ) {
-    val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
     val rowInteraction = remember { MutableInteractionSource() }
-    val pressed by rowInteraction.collectIsPressedAsState()
-    val rowTapModifier = if (isIOS) {
-        Modifier.pointerInput(onClick, onLongPress) {
-            detectTapGestures(
-                onTap = { onClick() },
-                onLongPress = {
-                    PlatformHapticsPolicy.heavyImpact()
-                    onLongPress()
-                },
-            )
-        }
-    } else {
-        Modifier.combinedClickable(
-            interactionSource = rowInteraction,
-            indication = null,
-            onClick = onClick,
-            onLongClick = {
-                PlatformHapticsPolicy.heavyImpact()
-                onLongPress()
-            },
-        )
-    }
+    val rowTapModifier = Modifier.combinedClickable(
+        interactionSource = rowInteraction,
+        indication = null,
+        onClick = onClick,
+        onLongClick = {
+            PlatformHapticsPolicy.heavyImpact()
+            onLongPress()
+        },
+    )
 
     Row(
         modifier = Modifier

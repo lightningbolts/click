@@ -151,10 +151,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
@@ -220,6 +216,9 @@ import compose.project.click.click.ui.chat.LoadingSubtitlePlaceholder // pragma:
 import compose.project.click.click.ui.chat.ReplySwipeSideIcon // pragma: allowlist secret
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatTimelineShouldFollowInbound // pragma: allowlist secret
+import compose.project.click.click.ui.chat.scrollChatTimelineToLatest // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatDismissKeyboardAfterScrollConnection // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatComposerChromeFadeUnderlay // pragma: allowlist secret
@@ -348,27 +347,16 @@ fun ChatView(
     /** Skips IME dismiss while [listState.scrollToItem] snaps the newest-first timeline (not user-driven). */
     val suppressKeyboardDismissWhileProgrammaticTimelineScroll = remember { mutableStateOf(false) }
     /**
-     * Dismisses the IME only on deliberate user scrolling of the timeline (not programmatic scroll).
-     * A tiny threshold avoids spurious [clearFocus] calls when the IME opens/closes and the
-     * reverse [LazyColumn] reports small consumed deltas — a common source of simulator jank.
+     * Dismisses the IME after the user finishes a scroll gesture — never mid-drag / mid-fling.
+     * Clearing focus while coasting resizes keyboard insets and kills LazyColumn fling physics.
      */
     val keyboardDismissScrollThresholdPx = remember(density) { with(density) { 16.dp.toPx() } }
     val dismissKeyboardOnUserMessageScroll = remember(keyboardDismissScrollThresholdPx) {
-        object : NestedScrollConnection {
-            override fun onPostScroll(
-                consumed: Offset,
-                available: Offset,
-                source: NestedScrollSource,
-            ): Offset {
-                if (suppressKeyboardDismissWhileProgrammaticTimelineScroll.value) return Offset.Zero
-                if (source == NestedScrollSource.UserInput &&
-                    kotlin.math.abs(consumed.y) > keyboardDismissScrollThresholdPx
-                ) {
-                    focusManagerState.value.clearFocus()
-                }
-                return Offset.Zero
-            }
-        }
+        chatDismissKeyboardAfterScrollConnection(
+            thresholdPx = keyboardDismissScrollThresholdPx,
+            isSuppressed = { suppressKeyboardDismissWhileProgrammaticTimelineScroll.value },
+            onDismiss = { focusManagerState.value.clearFocus() },
+        )
     }
 
     var imeClearedForInteractiveBackSwipe by remember { mutableStateOf(false) }
@@ -445,29 +433,22 @@ fun ChatView(
         }
     }
 
-    suspend fun scrollChatTimelineToLatest() {
-        repeat(8) {
-            if (listState.layoutInfo.totalItemsCount > 0) {
-                suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = true
-                listState.scrollToItem(0)
-                delay(48)
-                suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = false
-                return
-            }
-            delay(16L)
-        }
-    }
-
     LaunchedEffect(chatId, successMessages.isNotEmpty()) {
         if (successMessages.isEmpty() || initialTimelineScrollDone) return@LaunchedEffect
         initialTimelineScrollDone = true
-        scrollChatTimelineToLatest()
+        scrollChatTimelineToLatest(
+            listState = listState,
+            suppressKeyboardDismiss = suppressKeyboardDismissWhileProgrammaticTimelineScroll,
+        )
     }
 
     LaunchedEffect(peerNewestMessageId) {
-        if (peerNewestMessageId == null || !initialTimelineScrollDone) return@LaunchedEffect
-        if (listState.firstVisibleItemIndex <= 2) {
-            scrollChatTimelineToLatest()
+        if (peerNewestMessageId == null) return@LaunchedEffect
+        if (chatTimelineShouldFollowInbound(listState.firstVisibleItemIndex, initialTimelineScrollDone)) {
+            scrollChatTimelineToLatest(
+                listState = listState,
+                suppressKeyboardDismiss = suppressKeyboardDismissWhileProgrammaticTimelineScroll,
+            )
         }
     }
 

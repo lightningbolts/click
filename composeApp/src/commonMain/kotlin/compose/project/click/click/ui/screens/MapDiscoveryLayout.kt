@@ -62,6 +62,7 @@ import compose.project.click.click.events.eventSchedule
 import compose.project.click.click.events.formatEventScheduleRange
 import compose.project.click.click.events.isActiveForDiscoveryFeed
 import compose.project.click.click.ui.components.AppScreenScaffold
+import compose.project.click.click.ui.components.AppEmptyState
 import compose.project.click.click.ui.components.ClickLogoPulse
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
 import compose.project.click.click.ui.components.DiscoverySortSegmentBar
@@ -426,11 +427,11 @@ internal fun EventsDiscoveryFullScreen(
                 }
                 eventItems.isEmpty() -> {
                     item(key = "events_empty") {
-                        Text(
-                            text = "Drop a beacon or check back soon for nearby events.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 12.dp),
+                        AppEmptyState(
+                            icon = Icons.Default.Event,
+                            title = "No nearby events",
+                            body = "Drop a beacon or check back soon for nearby events.",
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
                 }
@@ -438,6 +439,7 @@ internal fun EventsDiscoveryFullScreen(
                     items(
                         items = eventItems,
                         key = { it.key },
+                        contentType = { "event" },
                     ) { item ->
                         DiscoveryEventCard(
                             item = item,

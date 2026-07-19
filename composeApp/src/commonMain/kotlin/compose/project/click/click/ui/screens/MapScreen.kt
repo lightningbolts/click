@@ -809,7 +809,7 @@ private fun MapAlwaysOnChrome(
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            MapLiquidGlassIconButton(
+            ClickCircularGlassIconButton(
                 icon = Icons.Filled.AddLocationAlt,
                 contentDescription = "Drop beacon",
                 onClick = onDropBeacon,
@@ -827,23 +827,6 @@ private fun MapAlwaysOnChrome(
 }
 
 @Composable
-private fun MapLiquidGlassIconButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    contentDescription: String,
-    onClick: () -> Unit,
-    glassStrength: Float,
-    size: Dp,
-) {
-    ClickCircularGlassIconButton(
-        icon = icon,
-        contentDescription = contentDescription,
-        onClick = onClick,
-        size = size,
-        glassStrength = glassStrength,
-    )
-}
-
-@Composable
 private fun MapZoomGlassControls(
     modifier: Modifier = Modifier,
     onZoomIn: () -> Unit,
@@ -854,14 +837,14 @@ private fun MapZoomGlassControls(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        MapLiquidGlassIconButton(
+        ClickCircularGlassIconButton(
             icon = Icons.Filled.Add,
             contentDescription = "Zoom in",
             onClick = onZoomIn,
             glassStrength = glassStrength,
             size = 48.dp,
         )
-        MapLiquidGlassIconButton(
+        ClickCircularGlassIconButton(
             icon = Icons.Filled.Remove,
             contentDescription = "Zoom out",
             onClick = onZoomOut,

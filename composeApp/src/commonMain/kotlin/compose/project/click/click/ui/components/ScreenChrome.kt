@@ -173,6 +173,11 @@ fun rememberComposerBottomPadding(extra: Dp = 0.dp): Dp {
  * The bottom chrome padding is static. Android keeps Compose's optimized IME inset placement,
  * while iOS can pass a native keyboard lift and move the already-measured block on a graphics
  * layer, avoiding per-frame chat relayout.
+ *
+ * This is the single lift authority for chat thread roots. Do not combine it with `imePadding`,
+ * `WindowInsets.ime` padding, or a second offset at a call site. Forms and sheets intentionally
+ * use `imePadding` instead. Keeping that boundary explicit prevents rapid keyboard toggles from
+ * leaving the composer and timeline at different residual insets.
  */
 private fun Modifier.chatBottomInsetUnion(
     extraBottom: Dp = 0.dp,
@@ -185,15 +190,20 @@ private fun Modifier.chatBottomInsetUnion(
     val navBottomPx = navInsets.getBottom(density)
     val navBottomDp = with(density) { navBottomPx.toDp() }
 
-    if (style.isIOS && nativeKeyboardLiftPx != null) {
+    if (style.isIOS) {
+        // iOS never falls through to Compose IME insets. A missing native value means no lift,
+        // which is safer than briefly double-lifting while the notification provider hydrates.
+        val liftPx = nativeKeyboardLiftPx?.coerceAtLeast(0f) ?: 0f
         return@composed Modifier
             .padding(bottom = navBottomDp + extraBottom)
             .clipToBounds()
             .graphicsLayer {
-                translationY = -nativeKeyboardLiftPx.coerceAtLeast(0f)
+                translationY = -liftPx
             }
     }
 
+    // Android remains directly driven by WindowInsets.ime. Reading inside offset's placement
+    // lambda lets inset animation reposition the dock without rebuilding the chat composition.
     Modifier
         .padding(bottom = navBottomDp + extraBottom)
         .clipToBounds()
@@ -206,16 +216,14 @@ private fun Modifier.chatBottomInsetUnion(
 }
 
 /**
- * Pins the chat composer above the tab bar. On iOS uses [maxOf] tab stack height and IME inset.
+ * Pins non-thread composer chrome above the tab bar.
+ *
+ * This helper deliberately does not react to the keyboard. Chat threads must use
+ * [chatThreadKeyboardDock]; forms and sheets must use `imePadding`.
  */
 fun Modifier.chatComposerDock(extraBottom: Dp = 0.dp): Modifier = composed {
-    val style = LocalPlatformStyle.current
     val tabStack = rememberTabBarOverlayHeight() + extraBottom
-    if (!style.isIOS) {
-        return@composed Modifier.padding(bottom = tabStack)
-    }
-    val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
-    Modifier.padding(bottom = maxOf(tabStack, imeBottom))
+    Modifier.padding(bottom = tabStack)
 }
 
 /**
@@ -227,7 +235,11 @@ fun Modifier.chatThreadKeyboardDock(
     nativeKeyboardLiftPx: Float? = null,
 ): Modifier = chatBottomInsetUnion(extraBottom, nativeKeyboardLiftPx)
 
-/** @see chatThreadKeyboardDock */
+/**
+ * Edge-to-edge chat dock. On iOS callers that need keyboard movement must use
+ * [chatThreadKeyboardDock] and supply the native lift; this overload intentionally resolves to
+ * zero native lift so it can never fall back to Compose IME handling.
+ */
 fun Modifier.chatComposerDockEdgeToEdge(extraBottom: Dp = 0.dp): Modifier =
     chatBottomInsetUnion(extraBottom)
 

@@ -10,6 +10,7 @@
 
 **Continuation status (addressed / open / Track C):** [../../handoff/functional-clarity-continuation.md](../../handoff/functional-clarity-continuation.md).  
 **Next Track C revamp handoff:** [../../handoff/track-c-next-revamps.md](../../handoff/track-c-next-revamps.md) — suggested next: **Events discovery** (`MapDiscoveryLayout` / `MapScreen`).
+**Interaction polish (post-theme):** [../polish/00-INDEX.md](../polish/00-INDEX.md) — motion, IME, swipe-back continuity (**P0: Home back-gesture flicker still open**), liquid-glass tab bar, chat/calls/connect delight, component reuse. **One-shot Fable plan** → Grok implementation.
 
 ---
 

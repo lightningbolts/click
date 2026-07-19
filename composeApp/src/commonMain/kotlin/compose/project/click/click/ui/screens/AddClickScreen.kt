@@ -26,6 +26,7 @@ import compose.project.click.click.ui.components.AdaptiveCard
 import compose.project.click.click.ui.components.CreateHubModal // pragma: allowlist secret
 import compose.project.click.click.ui.components.JoinCommunityHubSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenWithFloatingHeader
+import compose.project.click.click.ui.components.SuccessBeat
 
 @Composable
 fun AddClickScreen(
@@ -242,12 +243,16 @@ fun ClickedSuccessContent(
     userName: String,
     onStartChatting: () -> Unit
 ) {
-    Column(
-        modifier = modifier
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+    SuccessBeat(
+        trigger = userName,
+        modifier = modifier,
+        hapticsEnabled = false,
     ) {
+        Column(
+            modifier = Modifier.padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
         Box(
             modifier = Modifier
                 .size(120.dp)
@@ -284,8 +289,9 @@ fun ClickedSuccessContent(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        AdaptiveButton(onClick = onStartChatting) {
-            Text("Start Chatting")
+            AdaptiveButton(onClick = onStartChatting) {
+                Text("Start Chatting")
+            }
         }
     }
 }

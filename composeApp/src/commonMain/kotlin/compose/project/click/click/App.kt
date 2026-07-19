@@ -40,6 +40,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.zIndex
@@ -55,9 +56,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.graphicsLayer
 import compose.project.click.click.navigation.NavigationItem
 import compose.project.click.click.navigation.bottomNavItems
+import compose.project.click.click.navigation.shouldRenderHomeSwipeUnderlay
 import compose.project.click.click.ui.components.PlatformBottomBar
 import compose.project.click.click.calls.ActiveCallOverlay
 import compose.project.click.click.calls.CallOverlayState
+import compose.project.click.click.calls.CallOverlayTransitionPolicy
 import compose.project.click.click.calls.CallPreviewOverlay
 import compose.project.click.click.calls.CallSessionManager
 import compose.project.click.click.calls.CallState
@@ -106,12 +109,14 @@ import compose.project.click.click.util.redactedRestMessage
 import compose.project.click.click.viewmodel.AuthViewModel
 import compose.project.click.click.viewmodel.AuthState
 import compose.project.click.click.viewmodel.ChatViewModel
+import compose.project.click.click.viewmodel.HomeViewModel
 import compose.project.click.click.viewmodel.MapViewModel
 import compose.project.click.click.viewmodel.MapLayerFilter
 import compose.project.click.click.viewmodel.OnboardingViewModel
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.proximity.rememberProximityManager
+import compose.project.click.click.platform.rememberReduceMotionEnabled
 import compose.project.click.click.deeplink.ConnectionDeepLinkRouter
 import compose.project.click.click.deeplink.EventDeepLinkRouter
 import compose.project.click.click.notifications.ChatDeepLinkManager
@@ -137,6 +142,7 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -157,6 +163,7 @@ import compose.project.click.click.data.hub.HubVerifyResult
 fun App() {
     // Functional Clarity: light-first until persisted preference is loaded.
     var isDarkMode by remember { mutableStateOf(false) }
+    val reduceMotion = rememberReduceMotionEnabled()
 
     // Ktor client
     val client = remember {
@@ -589,6 +596,20 @@ fun App() {
             val globalCallOverlayState by CallSessionManager.overlayState.collectAsState()
             val globalCallState by CallSessionManager.callState.collectAsState()
             val activeInvite by CallSessionManager.activeInvite.collectAsState()
+            var callOwnsNativeChrome by remember { mutableStateOf(false) }
+            LaunchedEffect(globalCallOverlayState, globalCallState) {
+                if (
+                    globalCallOverlayState !is CallOverlayState.Idle ||
+                    globalCallState !is CallState.Idle
+                ) {
+                    callOwnsNativeChrome = true
+                } else {
+                    // The native iOS tab bar sits outside Compose z-order. Keep it hidden until
+                    // the final call-card fade has cleared, then restore the preserved tab.
+                    delay(220)
+                    callOwnsNativeChrome = false
+                }
+            }
             // While [AnimatedVisibility] exits, [globalCallState] may already be [CallState.Idle]; keep the
             // last in-room state so [ActiveCallOverlay] does not snap to an empty Idle layout mid-fade.
             val lastActiveCallPresentedState = remember { mutableStateOf<CallState>(CallState.Idle) }
@@ -946,11 +967,29 @@ fun App() {
             }
 
             val focusManager = LocalFocusManager.current
+            val homeViewModel: HomeViewModel = viewModel { HomeViewModel() }
             val mapViewModel: MapViewModel = viewModel { MapViewModel() }
             val chatViewModel: ChatViewModel = viewModel { ChatViewModel() }
             var hubChatArgs by remember { mutableStateOf<HubChatNavArgs?>(null) }
             var hubVerifyInProgress by remember { mutableStateOf(false) }
             var lastHubChatArgs by remember { mutableStateOf<HubChatNavArgs?>(null) }
+            var hubChatTransitionMode by remember { mutableStateOf(NavigationTransitionMode.Tap) }
+            var hubChatCloseJob by remember { mutableStateOf<Job?>(null) }
+            fun closeHubChat(mode: NavigationTransitionMode) {
+                hubChatCloseJob?.cancel()
+                hubChatTransitionMode = mode
+                if (mode == NavigationTransitionMode.GestureBack) {
+                    // Keep route ownership and bottom chrome stable through the gesture's final
+                    // frame; otherwise the revealed tab resizes while the foreground is settling.
+                    hubChatCloseJob = appScope.launch {
+                        delay(64)
+                        hubChatArgs = null
+                        hubChatCloseJob = null
+                    }
+                } else {
+                    hubChatArgs = null
+                }
+            }
             var showUnifiedSearchSheet by remember { mutableStateOf(false) }
             var eventsSheetExpanded by remember { mutableStateOf(false) }
             LaunchedEffect(currentRoute) {
@@ -967,6 +1006,8 @@ fun App() {
                     showNfcScreen = false
                     showQRScanner = false
                     showMyQRCode = false
+                    hubChatCloseJob?.cancel()
+                    hubChatCloseJob = null
                     hubChatArgs = null
                     connectionRevealState = null
                     pendingChatId = null
@@ -1034,6 +1075,8 @@ fun App() {
 
             fun launchCommunityHubJoin(hubId: String, knownCreatorId: String? = null) {
                 if (hubId.isBlank() || currentUser.id.isBlank()) return
+                hubChatCloseJob?.cancel()
+                hubChatCloseJob = null
                 // If we already have cached args for this hub, skip verification and re-enter.
                 val cached = lastHubChatArgs
                 if (cached != null && cached.hubId == hubId) {
@@ -1254,7 +1297,7 @@ fun App() {
                 when {
                     eventsSheetExpanded -> eventsSheetExpanded = false
                     showUnifiedSearchSheet -> showUnifiedSearchSheet = false
-                    hubChatArgs != null -> hubChatArgs = null
+                    hubChatArgs != null -> closeHubChat(NavigationTransitionMode.Tap)
                     showMyQRCode -> {
                         transitionMode = NavigationTransitionMode.GestureBack
                         showMyQRCode = false
@@ -1280,7 +1323,8 @@ fun App() {
                 isConnectionsChatOpen ||
                     hubChatArgs != null ||
                     showConnectionDisposableRoll ||
-                    disposableRollOpening
+                    disposableRollOpening ||
+                    callOwnsNativeChrome
 
             // Wrap Scaffold in a Box to allow search overlay to be positioned at true screen bottom
             Box(modifier = Modifier.fillMaxSize()) {
@@ -1326,14 +1370,6 @@ fun App() {
                             }
                         }
 
-                        LaunchedEffect(screenKey, transitionMode) {
-                            if (transitionMode == NavigationTransitionMode.GestureBack) {
-                                // Let gesture-driven render settle before returning to tap mode;
-                                // immediate reset can trigger an extra animated pass on Home.
-                                delay(80)
-                                transitionMode = NavigationTransitionMode.Tap
-                            }
-                        }
                         LaunchedEffect(addClickOverlayKey, addClickOverlayTransitionMode) {
                             if (addClickOverlayKey == null &&
                                 addClickOverlayTransitionMode == NavigationTransitionMode.GestureBack
@@ -1343,29 +1379,48 @@ fun App() {
                             }
                         }
 
+                        val primaryTabStateHolder = rememberSaveableStateHolder()
+                        val latestHomeContent = rememberUpdatedState<@Composable () -> Unit> {
+                            HomeScreen(
+                                homeViewModel = homeViewModel,
+                                mapViewModel = mapViewModel,
+                                onNavigateToChat = { connectionId ->
+                                    pendingChatId = connectionId
+                                    navigateTo(NavigationItem.Connections.route)
+                                },
+                                onOpenSearch = { showUnifiedSearchSheet = true },
+                                onNavigateToMap = { beaconId ->
+                                    pendingBeaconId = beaconId
+                                    navigateTo(NavigationItem.Map.route)
+                                },
+                                onNavigateToMapLayer = { filter ->
+                                    pendingMapLayerFilter = filter
+                                    navigateTo(NavigationItem.Map.route)
+                                },
+                            )
+                        }
+                        val movableHomeContent = remember {
+                            movableContentOf {
+                                primaryTabStateHolder.SaveableStateProvider(NavigationItem.Home.route) {
+                                    latestHomeContent.value()
+                                }
+                            }
+                        }
+
                         @Composable
                         fun renderScreen(animatedScreen: String, allowInteractiveSwipeBack: Boolean = true) {
                             @Composable
                             fun renderPrimaryScreen(route: String) {
-                                when (route) {
-                                    NavigationItem.Home.route -> HomeScreen(
-                                        mapViewModel = mapViewModel,
-                                        onNavigateToChat = { connectionId ->
-                                            pendingChatId = connectionId
-                                            navigateTo(NavigationItem.Connections.route)
-                                        },
-                                        onOpenSearch = { showUnifiedSearchSheet = true },
-                                        onNavigateToMap = { beaconId ->
-                                            pendingBeaconId = beaconId
-                                            navigateTo(NavigationItem.Map.route)
-                                        },
-                                        onNavigateToMapLayer = { filter ->
-                                            pendingMapLayerFilter = filter
-                                            navigateTo(NavigationItem.Map.route)
-                                        },
-                                    )
+                                if (route == NavigationItem.Home.route) {
+                                    movableHomeContent()
+                                    return
+                                }
 
-                                    NavigationItem.AddClick.route -> AddClickScreen(
+                                primaryTabStateHolder.SaveableStateProvider(route) {
+                                    when (route) {
+                                        NavigationItem.Home.route -> Unit
+
+                                        NavigationItem.AddClick.route -> AddClickScreen(
                                         currentUserId = currentUser.id,
                                         currentUsername = currentUser.name,
                                         locationService = locationService,
@@ -1384,7 +1439,7 @@ fun App() {
                                         onStartChatting = { navigateTo(NavigationItem.Connections.route) }
                                     )
 
-                                    NavigationItem.Connections.route -> {
+                                        NavigationItem.Connections.route -> {
                                         val userId = when (val state = authViewModel.authState) {
                                             is AuthState.Success -> state.userId
                                             else -> ""
@@ -1434,7 +1489,7 @@ fun App() {
                                         }
                                     }
 
-                                    NavigationItem.Map.route -> MapScreen(
+                                        NavigationItem.Map.route -> MapScreen(
                                         viewModel = mapViewModel,
                                         onNavigateToChat = { connectionId ->
                                             pendingChatId = connectionId
@@ -1455,7 +1510,7 @@ fun App() {
                                         },
                                     )
 
-                                    NavigationItem.Settings.route -> SettingsScreen(
+                                        NavigationItem.Settings.route -> SettingsScreen(
                                         isDarkMode = isDarkMode,
                                         onOpenSearch = { showUnifiedSearchSheet = true },
                                         onToggleDarkMode = {
@@ -1467,6 +1522,7 @@ fun App() {
                                         },
                                         onSignOut = { authViewModel.signOut() }
                                     )
+                                    }
                                 }
                             }
 
@@ -1483,7 +1539,14 @@ fun App() {
                                     enabled = true,
                                     edgeSwipeWidth = 44.dp,
                                     onBack = { navigatePrimaryRouteBackHome(NavigationTransitionMode.GestureBack) },
-                                    previousContent = { renderScreen(previousKey, false) },
+                                    previousContent = {
+                                        // Exactly one slot owns movable Home. On commit currentRoute
+                                        // flips before AnimatedContent disposes this outgoing route,
+                                        // so relinquish the underlay in that same recomposition.
+                                        if (shouldRenderHomeSwipeUnderlay(currentRoute)) {
+                                            renderPrimaryScreen(previousKey)
+                                        }
+                                    },
                                     currentContent = { renderPrimaryScreen(animatedScreen) }
                                 )
                             } else {
@@ -1491,7 +1554,6 @@ fun App() {
                             }
                         }
 
-                        var hubChatTransitionMode by remember { mutableStateOf(NavigationTransitionMode.Tap) }
                         var hubChatRightToLeftPeek by remember {
                             mutableStateOf<InteractiveSwipeBackRightToLeftPeek?>(null)
                         }
@@ -1528,6 +1590,9 @@ fun App() {
                             transitionSpec = {
                                 if (transitionMode == NavigationTransitionMode.GestureBack) {
                                     EnterTransition.None togetherWith ExitTransition.None
+                                } else if (reduceMotion) {
+                                    fadeIn(animationSpec = tween(120))
+                                        .togetherWith(fadeOut(animationSpec = tween(90)))
                                 } else {
                                 val routeOrder = listOf(
                                     NavigationItem.Home.route,
@@ -1601,10 +1666,16 @@ fun App() {
                             AnimatedVisibility(
                                 visible = addClickOverlayKey != null,
                                 modifier = Modifier.fillMaxSize(),
-                                enter = slideInHorizontally(animationSpec = addClickSlideSpec, initialOffsetX = { it }) +
-                                    fadeIn(animationSpec = addClickFadeSpec),
+                                enter = if (reduceMotion) {
+                                    fadeIn(animationSpec = tween(120))
+                                } else {
+                                    slideInHorizontally(animationSpec = addClickSlideSpec, initialOffsetX = { it }) +
+                                        fadeIn(animationSpec = addClickFadeSpec)
+                                },
                                 exit = if (addClickOverlayTransitionMode == NavigationTransitionMode.GestureBack) {
                                     ExitTransition.None
+                                } else if (reduceMotion) {
+                                    fadeOut(animationSpec = tween(90))
                                 } else {
                                     slideOutHorizontally(animationSpec = addClickSlideSpec, targetOffsetX = { it }) +
                                         fadeOut(animationSpec = addClickFadeSpec)
@@ -1714,10 +1785,16 @@ fun App() {
                         androidx.compose.animation.AnimatedVisibility(
                             visible = hubChatArgs != null,
                             modifier = Modifier.fillMaxSize(),
-                            enter = slideInHorizontally(animationSpec = hubSlideSpec, initialOffsetX = { it }) +
-                                fadeIn(animationSpec = hubFadeSpec),
+                            enter = if (reduceMotion) {
+                                fadeIn(animationSpec = tween(120))
+                            } else {
+                                slideInHorizontally(animationSpec = hubSlideSpec, initialOffsetX = { it }) +
+                                    fadeIn(animationSpec = hubFadeSpec)
+                            },
                             exit = if (hubChatTransitionMode == NavigationTransitionMode.GestureBack) {
                                 ExitTransition.None
+                            } else if (reduceMotion) {
+                                fadeOut(animationSpec = tween(90))
                             } else {
                                 slideOutHorizontally(animationSpec = hubSlideSpec, targetOffsetX = { it }) +
                                     fadeOut(animationSpec = hubFadeSpec)
@@ -1738,8 +1815,7 @@ fun App() {
                                         opaquePreviousBackground = false,
                                         onBack = {
                                             hubFocusManager.clearFocus()
-                                            hubChatTransitionMode = NavigationTransitionMode.GestureBack
-                                            hubChatArgs = null
+                                            closeHubChat(NavigationTransitionMode.GestureBack)
                                         },
                                         rightToLeftPeek = hubChatRightToLeftPeek,
                                         previousContent = {},
@@ -1748,8 +1824,7 @@ fun App() {
                                                 args = activeHubArgs,
                                                 currentUserId = hubUserId,
                                                 onNavigateBack = {
-                                                    hubChatTransitionMode = NavigationTransitionMode.Tap
-                                                    hubChatArgs = null
+                                                    closeHubChat(NavigationTransitionMode.Tap)
                                                 },
                                                 resolveHubGatekeeperLocation = { resolveHubGatekeeperLocationForChat() },
                                                 integrateTimestampPeekWithSwipeBackContainer = true,
@@ -1764,8 +1839,7 @@ fun App() {
                                         args = activeHubArgs,
                                         currentUserId = hubUserId,
                                         onNavigateBack = {
-                                            hubChatTransitionMode = NavigationTransitionMode.Tap
-                                            hubChatArgs = null
+                                            closeHubChat(NavigationTransitionMode.Tap)
                                         },
                                         resolveHubGatekeeperLocation = { resolveHubGatekeeperLocationForChat() },
                                         integrateTimestampPeekWithSwipeBackContainer = false,
@@ -2134,16 +2208,6 @@ fun App() {
                         }
 
                         val overlayState = globalCallOverlayState
-                        val inPreviewOnlyOverlay =
-                            overlayState is CallOverlayState.Outgoing ||
-                                overlayState is CallOverlayState.Incoming ||
-                                overlayState is CallOverlayState.Connecting
-                        // In-call / hang-up: use [CallState] (incl. a short [CallState.Ended] tail from
-                        // [CallManager.endCall]) so the active layer can exit while the room tears down.
-                        // [inPreviewOnlyOverlay] keeps the ring / connect card on the preview layer.
-                        val activeCallVisible =
-                            !inPreviewOnlyOverlay &&
-                                (globalCallState is CallState.Connected || globalCallState is CallState.Ended)
                         LaunchedEffect(overlayState, globalCallState) {
                             if (
                                 overlayState is CallOverlayState.Ended &&
@@ -2157,31 +2221,47 @@ fun App() {
                                 suppressEndedPreviewAfterActiveCall = false
                             }
                         }
+                        val suppressEndedForPresentation =
+                            suppressEndedPreviewAfterActiveCall ||
+                                (
+                                    overlayState is CallOverlayState.Ended &&
+                                        (
+                                            lastActiveCallPresentedState.value is CallState.Connected ||
+                                                lastActiveCallPresentedState.value is CallState.Ended
+                                            )
+                                    )
+                        val callPresentation = CallOverlayTransitionPolicy.presentationFor(
+                            overlayState = overlayState,
+                            callState = globalCallState,
+                            suppressEndedPreviewAfterActiveCall = suppressEndedForPresentation,
+                        )
+                        val activeCallVisible =
+                            callPresentation == CallOverlayTransitionPolicy.Presentation.Active
                         val callPreviewVisible =
-                            !activeCallVisible &&
-                                (overlayState is CallOverlayState.Outgoing ||
-                                    overlayState is CallOverlayState.Incoming ||
-                                    overlayState is CallOverlayState.Connecting ||
-                                    (
-                                        overlayState is CallOverlayState.Ended &&
-                                            !suppressEndedPreviewAfterActiveCall
-                                        ))
+                            callPresentation == CallOverlayTransitionPolicy.Presentation.Preview
                         val previewOverlayUiState =
                             if (overlayState !is CallOverlayState.Idle) overlayState
                             else lastPreviewOverlayPresentedState.value
                         val callPreviewAlpha by animateFloatAsState(
                             targetValue = if (callPreviewVisible) 1f else 0f,
-                            animationSpec = tween(420, easing = LinearOutSlowInEasing),
+                            animationSpec = if (reduceMotion) {
+                                tween(100)
+                            } else if (callPreviewVisible) {
+                                MotionTokens.softEnterSpec()
+                            } else {
+                                MotionTokens.softExitSpec()
+                            },
                             label = "callPreviewOverlayAlpha",
-                        )
-                        val callPreviewScale by animateFloatAsState(
-                            targetValue = if (callPreviewVisible) 1f else 0.96f,
-                            animationSpec = tween(420, easing = LinearOutSlowInEasing),
-                            label = "callPreviewOverlayScale",
                         )
                         val activeCallAlpha by animateFloatAsState(
                             targetValue = if (activeCallVisible) 1f else 0f,
-                            animationSpec = tween(420, easing = LinearOutSlowInEasing),
+                            animationSpec = if (reduceMotion) {
+                                tween(100)
+                            } else if (activeCallVisible) {
+                                MotionTokens.softEnterSpec()
+                            } else {
+                                MotionTokens.softExitSpec()
+                            },
                             label = "activeCallOverlayAlpha",
                         )
                         LaunchedEffect(
@@ -2214,8 +2294,6 @@ fun App() {
                                         .fillMaxSize()
                                         .graphicsLayer {
                                             alpha = callPreviewAlpha
-                                            scaleX = callPreviewScale
-                                            scaleY = callPreviewScale
                                         },
                                 ) {
                                     CallPreviewOverlay(
@@ -2271,11 +2349,9 @@ fun App() {
                     currentRoute = currentRoute,
                     visible = !hideMainBottomBar,
                     onItemSelected = { item ->
-                        if (item.route == NavigationItem.AddClick.route) {
-                            PlatformHapticsPolicy.heavyImpact()
-                            PlatformHapticsPolicy.successNotification()
-                        }
                         navigateTo(item.route)
+                        hubChatCloseJob?.cancel()
+                        hubChatCloseJob = null
                         hubChatArgs = null
                         showMyQRCode = false
                         showQRScanner = false

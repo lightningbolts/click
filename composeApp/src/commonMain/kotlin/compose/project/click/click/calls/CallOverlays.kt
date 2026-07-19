@@ -1,15 +1,13 @@
 package compose.project.click.click.calls
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -54,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -62,13 +61,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.getPlatform
-import compose.project.click.click.ui.components.GlassSheetTokens
+import compose.project.click.click.PlatformHapticsPolicy
+import compose.project.click.click.ui.components.StateCardTransition
+import compose.project.click.click.ui.components.rememberWaitingPulse
 import compose.project.click.click.ui.theme.BackgroundDark
 import compose.project.click.click.ui.theme.BorderHardDark
 import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.ui.theme.SurfaceDark
 import kotlin.math.roundToInt
+import kotlin.math.abs
+import kotlin.math.sign
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 
 @Composable
@@ -90,24 +93,12 @@ fun CallPreviewOverlay(
     val otherUserName = invite?.counterpartName(currentUserId) ?: "Connection"
     val isVideoCall = invite?.videoEnabled == true
 
-    val transition = rememberInfiniteTransition(label = "call_preview")
-    val pulseOuter by transition.animateFloat(
-        initialValue = 0.88f,
-        targetValue = 1.18f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1600, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "call_preview_outer",
-    )
-    val pulseInner by transition.animateFloat(
-        initialValue = 0.94f,
-        targetValue = 1.08f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1200, easing = LinearOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "call_preview_inner",
+    val pulseActive = overlayState !is CallOverlayState.Ended
+    val pulse = rememberWaitingPulse(
+        active = pulseActive,
+        durationMillis = 1_200,
+        scaleMax = 1.08f,
+        alphaMin = 0.94f,
     )
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
@@ -117,10 +108,11 @@ fun CallPreviewOverlay(
             .padding(start = 16.dp, end = 16.dp, top = topInset + 10.dp, bottom = 20.dp),
         contentAlignment = Alignment.TopCenter,
     ) {
-        Surface(
-            modifier = Modifier
-                .widthIn(max = 324.dp)
-                .fillMaxWidth(),
+        StateCardTransition(visible = true) {
+            Surface(
+                modifier = Modifier
+                    .widthIn(max = 324.dp)
+                    .fillMaxWidth(),
             shape = RoundedCornerShape(28.dp),
             color = BackgroundDark,
             border = androidx.compose.foundation.BorderStroke(1.dp, BorderHardDark),
@@ -150,12 +142,12 @@ fun CallPreviewOverlay(
                         .clip(RoundedCornerShape(36.dp))
                         .background(PrimaryBlue)
                         .border(1.dp, BorderHardDark, RoundedCornerShape(36.dp))
-                        .alpha(pulseInner),
+                        .alpha(pulse.alpha),
                     contentAlignment = Alignment.Center,
                 ) {
                     Box(
                         modifier = Modifier
-                            .size((92.dp * pulseOuter))
+                            .size((92.dp * pulse.scale))
                             .clip(RoundedCornerShape(46.dp))
                             .background(PrimaryBlue.copy(alpha = 0.08f))
                     )
@@ -194,7 +186,10 @@ fun CallPreviewOverlay(
                     is CallOverlayState.Connecting,
                     -> {
                         IconButton(
-                            onClick = onCancel,
+                            onClick = {
+                                PlatformHapticsPolicy.heavyImpact()
+                                onCancel()
+                            },
                             modifier = Modifier
                                 .size(52.dp)
                                 .clip(RoundedCornerShape(26.dp))
@@ -214,7 +209,10 @@ fun CallPreviewOverlay(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             IconButton(
-                                onClick = onDecline,
+                                onClick = {
+                                    PlatformHapticsPolicy.heavyImpact()
+                                    onDecline()
+                                },
                                 modifier = Modifier
                                     .size(52.dp)
                                     .clip(RoundedCornerShape(26.dp))
@@ -227,7 +225,10 @@ fun CallPreviewOverlay(
                                 )
                             }
                             IconButton(
-                                onClick = onAccept,
+                                onClick = {
+                                    PlatformHapticsPolicy.lightImpact()
+                                    onAccept()
+                                },
                                 modifier = Modifier
                                     .size(52.dp)
                                     .clip(RoundedCornerShape(26.dp))
@@ -244,7 +245,10 @@ fun CallPreviewOverlay(
 
                     is CallOverlayState.Ended -> {
                         IconButton(
-                            onClick = onDismissEnded,
+                            onClick = {
+                                PlatformHapticsPolicy.lightImpact()
+                                onDismissEnded()
+                            },
                             modifier = Modifier
                                 .size(52.dp)
                                 .clip(RoundedCornerShape(26.dp))
@@ -260,6 +264,7 @@ fun CallPreviewOverlay(
 
                     CallOverlayState.Idle -> Unit
                 }
+            }
             }
         }
     }
@@ -287,6 +292,7 @@ fun ActiveCallOverlay(
     val density = LocalDensity.current
     var dragOffsetX by remember { mutableFloatStateOf(0f) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    var dragging by remember { androidx.compose.runtime.mutableStateOf(false) }
 
     BoxWithConstraints(
         modifier = Modifier
@@ -296,23 +302,58 @@ fun ActiveCallOverlay(
     ) {
         val maxHorizontalOffset = with(density) { ((maxWidth - 220.dp) / 2).toPx().coerceAtLeast(0f) }
         val maxVerticalOffset = with(density) { (maxHeight / 2).toPx().coerceAtLeast(0f) }
+        val renderedOffsetX by animateFloatAsState(
+            targetValue = dragOffsetX,
+            animationSpec = spring(
+                dampingRatio = if (dragging) 0.9f else Spring.DampingRatioMediumBouncy,
+                stiffness = if (dragging) Spring.StiffnessHigh else Spring.StiffnessMediumLow,
+            ),
+            label = "active_call_drag_x",
+        )
+        val renderedOffsetY by animateFloatAsState(
+            targetValue = dragOffsetY,
+            animationSpec = spring(
+                dampingRatio = if (dragging) 0.9f else Spring.DampingRatioMediumBouncy,
+                stiffness = if (dragging) Spring.StiffnessHigh else Spring.StiffnessMediumLow,
+            ),
+            label = "active_call_drag_y",
+        )
 
-        Surface(
+        StateCardTransition(visible = true) {
+            Surface(
             modifier = Modifier
                 .widthIn(max = 380.dp)
                 .fillMaxWidth(0.94f)
                 .offset {
                     IntOffset(
-                        x = dragOffsetX.roundToInt(),
-                        y = dragOffsetY.roundToInt(),
+                        x = renderedOffsetX.roundToInt(),
+                        y = renderedOffsetY.roundToInt(),
                     )
                 }
                 .pointerInput(maxHorizontalOffset, maxVerticalOffset) {
-                    detectDragGestures { change, dragAmount ->
-                        change.consume()
-                        dragOffsetX = (dragOffsetX + dragAmount.x).coerceIn(-maxHorizontalOffset, maxHorizontalOffset)
-                        dragOffsetY = (dragOffsetY + dragAmount.y).coerceIn(0f, maxVerticalOffset)
-                    }
+                    detectDragGestures(
+                        onDragStart = { dragging = true },
+                        onDragEnd = {
+                            dragging = false
+                            dragOffsetX = if (
+                                maxHorizontalOffset > 0f &&
+                                abs(dragOffsetX) >= maxHorizontalOffset * 0.35f
+                            ) {
+                                sign(dragOffsetX) * maxHorizontalOffset
+                            } else {
+                                0f
+                            }
+                        },
+                        onDragCancel = { dragging = false },
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            val damping = 0.86f
+                            dragOffsetX = (dragOffsetX + dragAmount.x * damping)
+                                .coerceIn(-maxHorizontalOffset, maxHorizontalOffset)
+                            dragOffsetY = (dragOffsetY + dragAmount.y * damping)
+                                .coerceIn(0f, maxVerticalOffset)
+                        },
+                    )
                 },
             shape = RoundedCornerShape(28.dp),
             color = BackgroundDark,
@@ -430,14 +471,29 @@ fun ActiveCallOverlay(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                val micInteraction = remember { MutableInteractionSource() }
+                val speakerInteraction = remember { MutableInteractionSource() }
+                val cameraInteraction = remember { MutableInteractionSource() }
+                val endInteraction = remember { MutableInteractionSource() }
+                val micPressed by micInteraction.collectIsPressedAsState()
+                val speakerPressed by speakerInteraction.collectIsPressedAsState()
+                val cameraPressed by cameraInteraction.collectIsPressedAsState()
+                val endPressed by endInteraction.collectIsPressedAsState()
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     FilledTonalIconButton(
-                        onClick = { callManager.setMicrophoneEnabled(isMuted) },
-                        modifier = Modifier.size(48.dp)
+                        onClick = {
+                            PlatformHapticsPolicy.lightImpact()
+                            callManager.setMicrophoneEnabled(isMuted)
+                        },
+                        interactionSource = micInteraction,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .scale(if (micPressed) 0.94f else 1f),
                     ) {
                         Icon(
                             imageVector = if (isMuted) Icons.Filled.MicOff else Icons.Filled.Mic,
@@ -447,7 +503,10 @@ fun ActiveCallOverlay(
                     }
                     FilledTonalIconButton(
                         onClick = { callManager.setSpeakerEnabled(!isSpeakerEnabled) },
-                        modifier = Modifier.size(48.dp)
+                        interactionSource = speakerInteraction,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .scale(if (speakerPressed) 0.94f else 1f),
                     ) {
                         Icon(
                             imageVector = Icons.Filled.SpeakerPhone,
@@ -457,7 +516,10 @@ fun ActiveCallOverlay(
                     }
                     FilledTonalIconButton(
                         onClick = { callManager.setCameraEnabled(!isVideoEnabled) },
-                        modifier = Modifier.size(48.dp)
+                        interactionSource = cameraInteraction,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .scale(if (cameraPressed) 0.94f else 1f),
                     ) {
                         Icon(
                             imageVector = if (isVideoEnabled) Icons.Filled.Videocam else Icons.Filled.VideocamOff,
@@ -466,9 +528,14 @@ fun ActiveCallOverlay(
                         )
                     }
                     IconButton(
-                        onClick = onEndCall,
+                        onClick = {
+                            PlatformHapticsPolicy.heavyImpact()
+                            onEndCall()
+                        },
+                        interactionSource = endInteraction,
                         modifier = Modifier
                             .size(56.dp)
+                            .scale(if (endPressed) 0.92f else 1f)
                             .clip(RoundedCornerShape(28.dp))
                             .background(MaterialTheme.colorScheme.error)
                     ) {
@@ -479,6 +546,7 @@ fun ActiveCallOverlay(
                         )
                     }
                 }
+            }
             }
         }
     }

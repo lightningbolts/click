@@ -109,6 +109,12 @@ fun HomeScreen(
     onNavigateToMapLayer: (MapLayerFilter) -> Unit = {},
 ) {
     val homeState by homeViewModel.homeState.collectAsState()
+    var lastSuccessfulHomeState by remember { mutableStateOf<HomeState.Success?>(null) }
+    if (homeState is HomeState.Success) {
+        SideEffect { lastSuccessfulHomeState = homeState as HomeState.Success }
+    }
+    val renderedHomeState: HomeState =
+        if (homeState is HomeState.Loading) lastSuccessfulHomeState ?: homeState else homeState
     val reconnectReminders by homeViewModel.reconnectReminders.collectAsState()
     val homeEventReminders by homeViewModel.homeEventReminders.collectAsState()
     val savedEventBookmarks by homeViewModel.savedEventBookmarks.collectAsState()
@@ -193,7 +199,7 @@ fun HomeScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        when (val state = homeState) {
+        when (val state = renderedHomeState) {
             is HomeState.Loading -> {
                 AppShimmerScreen(
                     isDarkMode = MaterialTheme.colorScheme.background.luminance() < 0.5f,
@@ -356,7 +362,11 @@ fun HomeScreen(
                                 }
                             }
 
-                            items(reconnectReminders, key = { it.connectionId }) { reminder ->
+                            items(
+                                reconnectReminders,
+                                key = { it.connectionId },
+                                contentType = { "reconnect_reminder" },
+                            ) { reminder ->
                                 val peer = connectedUsers[reminder.userId]
                                 ReconnectReminderCard(
                                     reminder = reminder,
@@ -375,6 +385,7 @@ fun HomeScreen(
                             items(
                                 remainingEventReminders,
                                 key = { "${it.beaconId}:${it.kind.name}" },
+                                contentType = { "event_reminder" },
                             ) { reminder ->
                                 HomeEventReminderCard(
                                     reminder = reminder,
@@ -390,7 +401,11 @@ fun HomeScreen(
                             item(key = "recent_connections_header") {
                                 SectionHeader(text = "Recent Connections")
                             }
-                            items(locationGroupedConnections.entries.toList(), key = { it.key }) { (location, connections) ->
+                            items(
+                                locationGroupedConnections.entries.toList(),
+                                key = { it.key },
+                                contentType = { "location_group" },
+                            ) { (location, connections) ->
                                 val isExpanded = location in expandedLocations
                                 LocationGroupCard(
                                     location = location,

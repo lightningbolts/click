@@ -7,6 +7,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -15,6 +16,18 @@ import compose.project.click.click.platform.KeyboardHeightProvider
 import compose.project.click.click.platform.rememberKeyboardHeightProvider
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.util.collectAsStateLifecycleAware
+
+/**
+ * Chat IME ownership rule:
+ *
+ * - Android chat threads use `WindowInsets.ime` only, in `chatThreadKeyboardDock`.
+ * - iOS chat threads use `KeyboardHeightProvider` notifications only.
+ * - Forms and sheets use `imePadding`; chat surfaces must never add it.
+ *
+ * Mixing either chat path with `imePadding` double-applies the keyboard lift. Keep the timeline
+ * list itself free of inset modifiers: iOS receives only scrollable bottom space, while the
+ * composer follows the native keyboard on a graphics layer.
+ */
 
 /** Extra visual breathing room above the composer; the composer itself is measured by the layout. */
 internal val ChatComposerStripReserve = 0.dp
@@ -44,6 +57,14 @@ fun rememberChatNativeKeyboardInsets(
 ): ChatNativeKeyboardInsets {
     val density = LocalDensity.current
     val platformStyle = LocalPlatformStyle.current
+
+    // A chat can mount after the keyboard notification that opened it (sheet-to-chat focus
+    // transfer), or return after a call/multitask interruption. Rehydrate the provider before
+    // trusting its flow so a newly mounted composer cannot retain a stale zero/non-zero lift.
+    LaunchedEffect(keyboardHeightProvider, platformStyle.isIOS) {
+        if (platformStyle.isIOS) keyboardHeightProvider.syncFromSystem()
+    }
+
     val nativeKeyboardHeightPoints by keyboardHeightProvider.keyboardHeight.collectAsStateLifecycleAware()
     val nativeKeyboardDurationMillis by keyboardHeightProvider.animationDurationMillis.collectAsStateLifecycleAware()
     val nativeKeyboardAnimationCurve by keyboardHeightProvider.animationCurve.collectAsStateLifecycleAware()
@@ -57,7 +78,7 @@ fun rememberChatNativeKeyboardInsets(
     val animatedNativeKeyboardLiftPx by animateFloatAsState(
         targetValue = nativeKeyboardLiftTargetPx,
         animationSpec = tween(
-            durationMillis = nativeKeyboardDurationMillis,
+            durationMillis = nativeKeyboardDurationMillis.coerceAtLeast(0),
             easing = nativeKeyboardAnimationCurve.toUIKitKeyboardEasing(),
         ),
         label = "native_keyboard_lift",

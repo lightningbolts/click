@@ -8,14 +8,20 @@ import platform.Foundation.NSNotificationCenter
  * iOS actual: bridges a native edge-swipe gesture notification into compose back handling.
  */
 @Composable
-actual fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit) {
-    DisposableEffect(enabled, onBack) {
+actual fun PlatformBackHandler(
+    enabled: Boolean,
+    onBackProgress: (Float) -> Unit,
+    onBackCancelled: () -> Unit,
+    onBack: () -> Unit,
+) {
+    DisposableEffect(enabled, onBackProgress, onBackCancelled, onBack) {
         val observer = NSNotificationCenter.defaultCenter.addObserverForName(
             name = IOS_BACK_SWIPE_NOTIFICATION,
             `object` = null,
             queue = null
         ) {
             if (enabled) {
+                onBackProgress(1f)
                 onBack()
             }
         }
