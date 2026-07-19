@@ -90,6 +90,27 @@
                     android:pathPrefix="/c"/>
             </intent-filter>
 
+            <!-- Event share Universal Link: https://click-us.vercel.app/e/{beaconId} -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="https"
+                    android:host="click-us.vercel.app"
+                    android:pathPrefix="/e"/>
+            </intent-filter>
+
+            <!-- Event share custom scheme: click://e/{beaconId} -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="click"
+                    android:host="e"/>
+            </intent-filter>
+
             <!-- Legacy connect deep link -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>

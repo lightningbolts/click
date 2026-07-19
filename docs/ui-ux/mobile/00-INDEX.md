@@ -4,9 +4,13 @@
 **Scope:** Kotlin Multiplatform mobile app (`click/`) — Android + iOS Compose UI, App Clip handshake, CallKit/PushKit overlays.  
 **Out of scope:** Web companion (`click-web/`), B2B Insights, Admin, business signup, backend/APIs/Edge Functions/RLS. Network and permission failures appear only as **user-visible** states.  
 **Source of truth:** Functional Clarity target-state Compose UI (neo-brutalist revamp) — opaque surfaces, 2px `#000` borders, primary `#630ed4`; not as-built glass. Design tokens: [../../design-assets/functional_clarity/DESIGN.md](../../design-assets/functional_clarity/DESIGN.md).  
-**Date:** 2026-07-16  
+**Date:** 2026-07-17  
 
 **Regression / QA:** After major changes, run [../../regression-testing/00-INDEX.md](../../regression-testing/00-INDEX.md) (full checklist, smoke, known-issues audit). These UI/UX files describe expected behavior; they are not a test plan.
+
+**Continuation status (addressed / open / Track C):** [../../handoff/functional-clarity-continuation.md](../../handoff/functional-clarity-continuation.md).  
+**Next Track C revamp handoff:** [../../handoff/track-c-next-revamps.md](../../handoff/track-c-next-revamps.md) — suggested next: **Events discovery** (`MapDiscoveryLayout` / `MapScreen`).
+**Interaction polish (post-theme):** [../polish/00-INDEX.md](../polish/00-INDEX.md) — motion, IME, swipe-back continuity (**P0: Home back-gesture flicker still open**), liquid-glass tab bar, chat/calls/connect delight, component reuse. **One-shot Fable plan** → Grok implementation.
 
 ---
 
@@ -33,7 +37,7 @@ Touch platforms have no Hover; **Pressed/Highlighted** stands in for Hover.
 | [02-shell-navigation.md](02-shell-navigation.md) | App gates, 5-tab shell, swipe-back, global overlays |
 | [03-auth.md](03-auth.md) | Login, Sign Up, OAuth, validation, auth errors |
 | [04-onboarding-gates.md](04-onboarding-gates.md) | Profile basics, Welcome, Interests, Avatar; legacy permission screens |
-| [05-home.md](05-home.md) | Home feed, reconnect, archive banner, stats, availability entry |
+| [05-home.md](05-home.md) | Home IA: greeting, Featured Event, dynamic explore, reconnect, availability, stats |
 | [06-connect-handshake.md](06-connect-handshake.md) | Add Click, QR, Tap/NFC, App Clip, context sheet, reveal |
 | [07-connections-inbox.md](07-connections-inbox.md) | Clicks inbox, segments, action sheets, verified click create |
 | [08-chat.md](08-chat.md) | 1:1 & group chat, composer, bubbles, icebreaker, vibe check |
@@ -124,7 +128,7 @@ HTML/PNG mocks under `click/docs/design-assets/` map to feature docs as visual r
 | Design-asset folder | Feature doc(s) | Notes |
 |---------------------|----------------|-------|
 | `functional_clarity/` | [01-design-system.md](01-design-system.md) | Token source of truth (`DESIGN.md`) |
-| `home/` | [05-home.md](05-home.md) | Home feed, stats, reconnect cards |
+| `home/` | [05-home.md](05-home.md) | Greeting, Featured Event, dynamic explore; mock is hierarchy-only (see `home/README.md`) |
 | `settings/` | [14-settings-privacy.md](14-settings-privacy.md) | Settings sections, toggles |
 | `chat/` | [07-connections-inbox.md](07-connections-inbox.md), [08-chat.md](08-chat.md) | Inbox rows + thread chrome |
 | `add_click_streamlined_header/`, `add_click_fixed_navigation/` | [06-connect-handshake.md](06-connect-handshake.md) | Add Click hub, QR/Tap entry |

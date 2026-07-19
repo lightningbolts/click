@@ -294,3 +294,11 @@ flowchart TD
 | Empty states | Icon decorative; title + body text readable |
 
 **Gaps:** Media preview overlay should expose dismiss control when enhanced. Group member list uses `"No members"` count string internally for semantics in places — verify when auditing group sheets.
+
+---
+
+## 7. Event on encounter timeline
+
+When a connection is formed (or an encounter is logged) while both people are at a map **event** (in geofence + live schedule window) **and both have RSVPed**, that event appears on the connection Timeline — title, schedule, “View on map”, and context tag `at_event` (“At event”).
+
+See [10-map-beacons-hubs.md](10-map-beacons-hubs.md) §7 and [06-connect-handshake.md](06-connect-handshake.md).

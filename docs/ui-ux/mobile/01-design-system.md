@@ -33,13 +33,13 @@
 
 - **Brand tokens** (Functional Clarity): `primary` `#630ed4`, `on-primary` `#ffffff`, `primary-container` `#7c3aed`, `on-primary-container` `#ede0ff`, `surface-tint` `#732ee4`.
 - **Light mode**: `background` `#f9f9f9`, `surface` `#ffffff`, `surface-container-low` `#f3f3f4`, `surface-container` `#eeeeee`, `on-surface` `#1a1c1c`, `on-surface-variant` `#4a4455`, `outline` `#7b7487`.
-- **Dark mode (inverse)**: `background` `#1a1c1c`, `surface` `#2f3131`, `surface-container` `#3a3c3c`, `on-surface` `#f0f1f1`, `on-surface-variant` `#ccc3d8` — **opaque surfaces + hard borders**, not OLED glass or translucent frost.
-- **Structural border**: **2dp** hard edge — `#000000` (`BorderHard`) in light mode, `#FFFFFF` (`BorderHardDark`) in dark mode — on cards, sheets, inputs, and tab bar top edge. Use `clickBorderColor()` / `LocalIsDarkMode`.
-- **No glass primitives**: no `GlassWhite` alpha fills, no `GlassBorder` hairlines, no backdrop blur.
+- **Dark mode (inverse)**: `background` `#101212`, `surface` `#1a1c1c`, `surface-container` `#242626`, `surface-variant` `#2a2c2c`, `on-surface` `#f0f1f1`, `on-surface-variant` `#d6d9d9` — **opaque product surfaces + hard borders**; tab bar chrome is **transparent** so content under icons matches content above.
+- **Structural border**: **2dp** hard edge — `#000000` (`BorderHard`) in light mode, `#FFFFFF` (`BorderHardDark`) in dark mode — on cards, sheets, and inputs. Use `clickBorderColor()` / `LocalIsDarkMode`. Tab bar does **not** draw a filled top border band (see known issue `#23`).
+- **No glass primitives**: no `GlassWhite` alpha fills, no `GlassBorder` hairlines, no backdrop blur on product chrome.
 - **No gradient text**: headings use solid `on-surface` or `primary`; no `GradientTextStart`/`End` usage.
 - **Material color scheme** (`PlatformTheme.kt` `clickColorScheme`):
-  - Light: `primary` = `#630ed4`, `background` = `#f9f9f9`, `surface` = `#ffffff`, `onSurface` = `#1a1c1c`, `primaryContainer` = `#7c3aed`, `onPrimaryContainer` = `#ede0ff`, `surfaceVariant` = `#e2e2e2`.
-  - Dark: `primary` = `#630ed4`, `background` = `#1a1c1c`, `surface` = `#2f3131`, `onSurface` = `#f0f1f1`, `primaryContainer` = `#5a00c6`, `onPrimaryContainer` = `#eaddff`, `surfaceVariant` = `#3a3c3c`.
+  - Light: `primary` = `#630ed4`, `background` = `#f9f9f9`, `surface` = `#ffffff`, `onSurface` = `#1a1c1c`, `primaryContainer` = `#ede0ff`, `onPrimaryContainer` = `#5a00c6`.
+  - Dark: `primary` = `#630ed4`, `background` = `#101212`, `surface` = `#1a1c1c`, `onSurface` = `#f0f1f1`, `onSurfaceVariant` = `#d6d9d9`, `surfaceVariant` = `#2a2c2c`.
 - **App root background** (`App.kt`): flat `background` color only — **no radial gradient** overlay in dark mode.
 - **Map basemap**: light app theme → default color map tiles; dark app theme → dark / zinc style; ghost mode → grayscale (Android) or muted emphasis (iOS).
 
@@ -53,7 +53,7 @@
 
 | State | Light | Dark |
 |-------|-------|------|
-| **Default** | Background `#f9f9f9`, Surface `#ffffff`, OnSurface `#1a1c1c` | Background `#1a1c1c`, Surface `#2f3131`, OnSurface `#f0f1f1` |
+| **Default** | Background `#f9f9f9`, Surface `#ffffff`, OnSurface `#1a1c1c` | Background `#101212`, Surface `#1a1c1c`, OnSurface `#f0f1f1` |
 | **Pressed/Highlighted** | **2dp translate** down-right + **instant 10% darken** on fill (no animation curve) | Same mechanical press |
 | **Active** | `primary` fill or `primary-container` for selected tabs/chips | Same |
 | **Focus** | **2dp** `#630ed4` focus ring on inputs (no soft glow) | Same |

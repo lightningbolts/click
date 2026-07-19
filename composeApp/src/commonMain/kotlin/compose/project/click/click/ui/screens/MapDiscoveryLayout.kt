@@ -1,108 +1,84 @@
 package compose.project.click.click.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddLocationAlt
-import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.OpenInFull
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.graphicsLayer
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
-import androidx.compose.ui.unit.IntOffset
-import kotlin.math.roundToInt
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.statusBars
+import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.data.models.MapBeaconKind
-import compose.project.click.click.ui.components.AppScreenDefaults
-import compose.project.click.click.ui.components.ClickLogoPulse
-import compose.project.click.click.ui.components.DiscoveryFloatingHeader
-import compose.project.click.click.ui.components.GlassSheetTokens
-import compose.project.click.click.ui.components.headerCollapseFraction
-import compose.project.click.click.ui.components.rememberBottomChromePadding
-import compose.project.click.click.ui.components.rememberFabAboveNavPadding
-import compose.project.click.click.ui.theme.LocalPlatformStyle
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.ui.theme.clickBorderColor
-import compose.project.click.click.ui.utils.CommunityHubPin
-import compose.project.click.click.ui.utils.ConnectionMapPoint
-import compose.project.click.click.ui.utils.MapRenderData
 import compose.project.click.click.events.eventSchedule
 import compose.project.click.click.events.formatEventScheduleRange
 import compose.project.click.click.events.isActiveForDiscoveryFeed
+import compose.project.click.click.ui.components.AppScreenScaffold
+import compose.project.click.click.ui.components.AppEmptyState
+import compose.project.click.click.ui.components.ClickLogoPulse
+import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
+import compose.project.click.click.ui.components.DiscoverySortSegmentBar
+import compose.project.click.click.ui.components.GlassSheetTokens
+import compose.project.click.click.ui.components.HeaderRefreshIconButton
+import compose.project.click.click.ui.components.rememberFabAboveNavPadding
+import compose.project.click.click.ui.theme.clickBorderColor
+import compose.project.click.click.ui.theme.clickCardSurface
+import compose.project.click.click.ui.utils.CommunityHubPin
+import compose.project.click.click.ui.utils.ConnectionMapPoint
+import compose.project.click.click.ui.utils.MapRenderData
 import compose.project.click.click.ui.utils.displayDynamicTitle
 import compose.project.click.click.ui.utils.discoveryFeedSubtitle
 import compose.project.click.click.ui.utils.haversineDistance
+import compose.project.click.click.viewmodel.MapLayerFilter
+import compose.project.click.click.viewmodel.MapViewModel
 import kotlinx.datetime.Clock
 
 internal enum class DiscoverySortMode {
@@ -212,11 +188,6 @@ internal data class DiscoveryFeedSection(
 internal fun groupDiscoveryFeedIntoSections(items: List<DiscoveryFeedItem>): List<DiscoveryFeedSection> {
     if (items.isEmpty()) return emptyList()
     val sections = mutableListOf<DiscoveryFeedSection>()
-    // Connections section hidden — surfaced on the Clicks tab instead.
-    // val connections = items.filterIsInstance<DiscoveryFeedItem.Connection>()
-    // if (connections.isNotEmpty()) {
-    //     sections += DiscoveryFeedSection(title = "Connections", items = connections)
-    // }
     val hubs = items.filterIsInstance<DiscoveryFeedItem.Hub>()
     if (hubs.isNotEmpty()) {
         sections += DiscoveryFeedSection(title = "Community hubs", items = hubs)
@@ -256,9 +227,8 @@ internal fun sortDiscoveryFeedItems(
         DiscoverySortMode.Recent -> items.sortedByDescending { it.sortRecentEpochMs }
     }
 
-private val PipPreviewWidth = 120.dp
-private val PipPreviewHeight = 160.dp
-private val PipDockExtraGap = AppScreenDefaults.FabGapAboveTabBar
+/** Approximate bottom inset so FABs sit clearly above the reopen chip (chip ~72dp + gap). */
+internal val EventsReopenChipClearance: Dp = 120.dp
 
 @Composable
 private fun DiscoveryFeedLoadingPulse(modifier: Modifier = Modifier) {
@@ -270,587 +240,571 @@ private fun DiscoveryFeedLoadingPulse(modifier: Modifier = Modifier) {
     }
 }
 
-@Composable
-private fun DiscoveryFeedPullRefreshIndicator(
-    isRefreshing: Boolean,
-    pullProgress: Float,
-) {
-    val progress = pullProgress.coerceIn(0f, 1f)
-    val scale = 0.76f + 0.24f * progress
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (isRefreshing || progress > 0.04f) {
-            val alpha = if (isRefreshing) 1f else 0.3f + 0.7f * progress
-            Box(
-                modifier = Modifier.graphicsLayer {
-                    this.alpha = alpha
-                    scaleX = if (isRefreshing) 1f else scale
-                    scaleY = if (isRefreshing) 1f else scale
-                },
-            ) {
-                ClickLogoPulse(logoSize = if (isRefreshing) 56.dp else 44.dp)
-            }
-        }
-    }
-}
-
-private fun rubberBandPullOffset(current: Float, delta: Float, maxPull: Float): Float {
-    if (delta <= 0f) return current
-    val resistance = 1f - (current / maxPull).coerceIn(0f, 0.9f)
-    return (current + delta * resistance.coerceAtLeast(0.15f)).coerceIn(0f, maxPull)
-}
-
+/**
+ * Map-first canvas: full interactive map + chrome + peek reopen chip.
+ * Full-screen events list is [EventsDiscoveryFullScreen] mounted by MapScreen.
+ */
 @Composable
 internal fun MapDiscoveryScreen(
-    feedItems: List<DiscoveryFeedItem>,
-    discoveryFeedPending: Boolean,
-    discoveryFeedRefreshing: Boolean,
-    onRefreshDiscovery: () -> Unit,
-    mapPipExpanded: Boolean,
-    onMapPipExpandedChange: (Boolean) -> Unit,
-    statsLine: String,
-    onOpenSearch: (() -> Unit)?,
-    onDropBeacon: () -> Unit,
-    mapContent: @Composable (Modifier, Boolean) -> Unit,
-    expandedMapChrome: @Composable () -> Unit,
-    onHubClick: (CommunityHubPin, distanceMeters: Double?) -> Unit,
-    onBeaconClick: (MapBeacon, distanceMeters: Double?) -> Unit,
-    onConnectionClick: (ConnectionMapPoint) -> Unit,
+    eventsListVisible: Boolean,
+    onOpenEventsList: () -> Unit,
+    eventNearbyCount: Int,
+    mapContent: @Composable (Modifier) -> Unit,
+    mapChrome: @Composable () -> Unit,
 ) {
-    val platformStyle = LocalPlatformStyle.current
-    var sortMode by remember { mutableIntStateOf(0) }
-    val discoverySortMode = if (sortMode == 0) DiscoverySortMode.Distance else DiscoverySortMode.Recent
-    val feedSections = remember(feedItems, discoverySortMode) {
-        groupDiscoveryFeedIntoSections(feedItems).map { section ->
-            DiscoveryFeedSection(
-                title = section.title,
-                items = sortDiscoveryFeedItems(section.items, discoverySortMode),
-            )
-        }
-    }
-    val sortedFeed = remember(feedSections) {
-        feedSections.flatMap { it.items }
-    }
-
-    val listState = remember { LazyListState(0, 0) }
-    val sortContentOffsetX = remember { Animatable(0f) }
-    val sortContentAlpha = remember { Animatable(1f) }
-    var previousSortModeForAnim by remember { mutableStateOf(sortMode) }
-    var hasInitializedSortAnimation by remember { mutableStateOf(false) }
-    LaunchedEffect(sortMode) {
-        if (!hasInitializedSortAnimation) {
-            hasInitializedSortAnimation = true
-            previousSortModeForAnim = sortMode
-            return@LaunchedEffect
-        }
-        val direction = if (sortMode >= previousSortModeForAnim) 1f else -1f
-        previousSortModeForAnim = sortMode
-        sortContentOffsetX.snapTo(direction * 36f)
-        sortContentAlpha.snapTo(0.88f)
-        coroutineScope {
-            launch {
-                sortContentOffsetX.animateTo(
-                    targetValue = 0f,
-                    animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
-                )
-            }
-            launch {
-                sortContentAlpha.animateTo(
-                    targetValue = 1f,
-                    animationSpec = tween(durationMillis = 220, easing = LinearOutSlowInEasing),
-                )
-            }
-        }
-    }
-
-    // Scroll to top only on first composition (tab entry). Do not reset when beacons arrive
-    // or GPS settles — that hid soundtrack rows below the fold after async feed updates.
-    LaunchedEffect(Unit) {
-        listState.scrollToItem(0, 0)
-    }
-
-    val collapseFraction by remember(listState) {
-        derivedStateOf { listState.headerCollapseFraction() }
-    }
-    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val bottomChrome = rememberBottomChromePadding()
-    val dockBottom = rememberFabAboveNavPadding()
-
-    // Fixed top padding — always uses the fully-expanded header height.
-    // The header overlay floats above the list; the list itself always has room for the
-    // full expanded header so it starts at the top with items visible below the header.
-    // Scrolling collapses the header visually but the padding never shrinks, preventing
-    // a circular dependency (padding → scroll offset → collapseFraction → padding).
-    val expandedHeaderH = AppScreenDefaults.FloatingHeaderLargeHeight
-    val listTopPadding = statusBarTop + expandedHeaderH + 76.dp + 8.dp
-
-    val pipShape = RoundedCornerShape(16.dp)
-    val pipInteraction = remember { MutableInteractionSource() }
-    val expandMap: () -> Unit = { onMapPipExpandedChange(true) }
-
-    val density = LocalDensity.current
-    val scope = rememberCoroutineScope()
-    val pullRefreshThresholdPx = remember(density) { with(density) { 72.dp.toPx() } }
-    val pullRefreshMaxPx = remember(density) { with(density) { 120.dp.toPx() } }
-    val pullRefreshHoldPx = remember(density) { with(density) { 52.dp.toPx() } }
-    var pullOffsetPx by remember { mutableFloatStateOf(0f) }
-    var pullRefreshTriggered by remember { mutableStateOf(false) }
-    var pullSettleJob by remember { mutableStateOf<Job?>(null) }
-
-    fun launchSettlePullOffset(target: Float) {
-        pullSettleJob?.cancel()
-        pullSettleJob = scope.launch {
-            val anim = Animatable(pullOffsetPx)
-            anim.animateTo(
-                targetValue = target,
-                animationSpec = spring(
-                    dampingRatio = 0.88f,
-                    stiffness = 320f,
-                ),
-            ) {
-                pullOffsetPx = value
-            }
-        }
-    }
-
-    fun atListTop(): Boolean =
-        listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
-
-    val pullRefreshConnection = object : NestedScrollConnection {
-            override fun onPreScroll(
-                available: Offset,
-                source: NestedScrollSource,
-            ): Offset {
-                if (source != NestedScrollSource.UserInput || discoveryFeedRefreshing) return Offset.Zero
-                if (available.y < 0f && pullOffsetPx > 0f) {
-                    pullSettleJob?.cancel()
-                    val newOffset = (pullOffsetPx + available.y).coerceAtLeast(0f)
-                    val consumed = pullOffsetPx - newOffset
-                    pullOffsetPx = newOffset
-                    return Offset(0f, -consumed)
-                }
-                if (!atListTop() && pullOffsetPx > 0f) {
-                    pullOffsetPx = 0f
-                }
-                return Offset.Zero
-            }
-
-            override fun onPostScroll(
-                consumed: Offset,
-                available: Offset,
-                source: NestedScrollSource,
-            ): Offset {
-                if (source != NestedScrollSource.UserInput || discoveryFeedRefreshing) return Offset.Zero
-                if (!atListTop() || available.y <= 0f) return Offset.Zero
-                pullSettleJob?.cancel()
-                pullOffsetPx = rubberBandPullOffset(pullOffsetPx, available.y, pullRefreshMaxPx)
-                return Offset(0f, available.y)
-            }
-
-            override suspend fun onPreFling(available: Velocity): Velocity {
-                if (discoveryFeedRefreshing) return Velocity.Zero
-                if (pullOffsetPx >= pullRefreshThresholdPx && !pullRefreshTriggered) {
-                    pullRefreshTriggered = true
-                    onRefreshDiscovery()
-                } else {
-                    launchSettlePullOffset(0f)
-                }
-                return Velocity.Zero
-            }
-        }
-
-    LaunchedEffect(discoveryFeedRefreshing) {
-        pullSettleJob?.cancel()
-        if (!discoveryFeedRefreshing) {
-            pullRefreshTriggered = false
-        }
-        val target = if (discoveryFeedRefreshing) pullRefreshHoldPx else 0f
-        val anim = Animatable(pullOffsetPx)
-        anim.animateTo(
-            targetValue = target,
-            animationSpec = spring(
-                dampingRatio = 0.88f,
-                stiffness = 320f,
-            ),
-        ) {
-            pullOffsetPx = value
-        }
-    }
-
-    val pullProgress = (pullOffsetPx / pullRefreshThresholdPx).coerceIn(0f, 1f)
-    val listPullOffsetPx = pullOffsetPx.roundToInt()
-
+    val fabAboveNav = rememberFabAboveNavPadding()
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(GlassSheetTokens.OledBlack()),
     ) {
-        LazyColumn(
-            state = listState,
+        // Map stays mounted for the lifetime of this screen — peek/events overlay must not
+        // remount PlatformMap (Android SurfaceView + marker flash).
+        mapContent(Modifier.fillMaxSize())
+
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .offset { IntOffset(0, listPullOffsetPx) }
-                .nestedScroll(pullRefreshConnection)
-                .graphicsLayer {
-                    translationX = sortContentOffsetX.value
-                    alpha = sortContentAlpha.value
-                },
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(
-                start = AppScreenDefaults.HorizontalPadding,
-                end = AppScreenDefaults.HorizontalPadding,
-                top = listTopPadding,
-                bottom = bottomChrome + PipPreviewHeight + PipDockExtraGap + 16.dp,
-            ),
+                .zIndex(10f),
         ) {
-            if (sortedFeed.isEmpty() && !discoveryFeedPending) {
-                item(key = "discovery_empty") {
-                    DiscoveryFeedRow(
-                        title = "Nothing nearby yet",
-                        subtitle = "Drop a beacon or join a hub from the map preview.",
-                        icon = Icons.Filled.Place,
-                        onClick = onDropBeacon,
+            // Keep chrome composed under the events overlay (covered, not disposed).
+            mapChrome()
+        }
+
+        // Peek stays composed; hide when list is open so we do not leave/enter composition.
+        EventsReopenChip(
+            count = eventNearbyCount,
+            onClick = onOpenEventsList,
+            enabled = !eventsListVisible,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .zIndex(15f)
+                .graphicsLayer { alpha = if (eventsListVisible) 0f else 1f }
+                .padding(start = 16.dp, end = 16.dp, bottom = fabAboveNav),
+        )
+    }
+}
+
+@Composable
+internal fun EventsReopenChip(
+    count: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    val shape = RoundedCornerShape(16.dp)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .border(2.dp, clickBorderColor(), shape)
+            .background(clickCardSurface())
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = "Events",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (count > 0) {
+                Text(
+                    text = count.toString(),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Icon(
+                Icons.Filled.Event,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+}
+
+/**
+ * Full-screen Events for you (not a modal sheet). Back returns to map + peek chip.
+ * Uses the same floating Liquid Glass header / scaffold chrome as Home & Connections.
+ */
+@Composable
+internal fun EventsDiscoveryFullScreen(
+    feedItems: List<DiscoveryFeedItem>,
+    discoveryFeedPending: Boolean,
+    discoveryFeedRefreshing: Boolean,
+    onRefreshDiscovery: () -> Unit,
+    layerFilters: Set<MapLayerFilter>,
+    onToggleLayerFilter: (MapLayerFilter) -> Unit,
+    viewModel: MapViewModel,
+    onBack: () -> Unit,
+    onBeaconClick: (MapBeacon, distanceMeters: Double?) -> Unit,
+) {
+    var sortMode by remember { mutableIntStateOf(0) }
+    val discoverySortMode = if (sortMode == 0) DiscoverySortMode.Distance else DiscoverySortMode.Recent
+    var eventsQuery by remember { mutableStateOf("") }
+
+    val eventItems = remember(feedItems, discoverySortMode, eventsQuery) {
+        val events = feedItems
+            .filterIsInstance<DiscoveryFeedItem.Beacon>()
+            .filter { it.beacon.kind == MapBeaconKind.EVENT }
+        val sorted = sortDiscoveryFeedItems(events, discoverySortMode)
+            .filterIsInstance<DiscoveryFeedItem.Beacon>()
+        val q = eventsQuery.trim()
+        if (q.isEmpty()) {
+            sorted
+        } else {
+            sorted.filter { item ->
+                item.beacon.displayDynamicTitle().contains(q, ignoreCase = true) ||
+                    item.ttlLabel.contains(q, ignoreCase = true) ||
+                    item.beacon.metadata.description.orEmpty().contains(q, ignoreCase = true) ||
+                    item.beacon.creatorDisplayName.orEmpty().contains(q, ignoreCase = true)
+            }
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+    ) {
+        AppScreenScaffold(
+            title = "Events",
+            subtitle = null,
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back to map",
+                        tint = MaterialTheme.colorScheme.onSurface,
                     )
                 }
-            } else if (sortedFeed.isEmpty() && discoveryFeedPending) {
-                item(key = "discovery_loading_center") {
-                    DiscoveryFeedLoadingPulse(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 48.dp, bottom = 32.dp),
-                    )
-                }
-            } else {
-                feedSections.forEachIndexed { sectionIndex, section ->
-                    item(key = "discovery_section_${section.title}") {
-                        DiscoverySectionHeader(
-                            text = section.title,
-                            modifier = Modifier.padding(
-                                top = if (sectionIndex == 0) 0.dp else 8.dp,
-                                bottom = 4.dp,
-                            ),
+            },
+            actions = {
+                HeaderRefreshIconButton(
+                    onClick = onRefreshDiscovery,
+                    enabled = !discoveryFeedRefreshing,
+                )
+            },
+            belowHeaderSpacing = 8.dp,
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            item(key = "events_search") {
+                EventsSheetSearchField(
+                    query = eventsQuery,
+                    onQueryChange = { eventsQuery = it },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            item(key = "events_sort") {
+                DiscoverySortSegmentBar(
+                    selectedTabIndex = sortMode,
+                    onTabSelected = { sortMode = it },
+                )
+            }
+            item(key = "events_layers") {
+                EventsSheetLayerChips(
+                    layerFilters = layerFilters,
+                    onToggleLayerFilter = onToggleLayerFilter,
+                )
+            }
+            when {
+                eventItems.isEmpty() && discoveryFeedPending -> {
+                    item(key = "events_loading") {
+                        DiscoveryFeedLoadingPulse(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp),
                         )
                     }
+                }
+                eventItems.isEmpty() -> {
+                    item(key = "events_empty") {
+                        AppEmptyState(
+                            icon = Icons.Default.Event,
+                            title = "No nearby events",
+                            body = "Drop a beacon or check back soon for nearby events.",
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+                else -> {
                     items(
-                        items = section.items,
+                        items = eventItems,
                         key = { it.key },
-                        contentType = { "discovery_row" },
+                        contentType = { "event" },
                     ) { item ->
-                        DiscoveryFeedRow(
+                        DiscoveryEventCard(
                             item = item,
-                            onClick = {
-                                when (item) {
-                                    is DiscoveryFeedItem.Hub -> onHubClick(
-                                        item.hub,
-                                        item.distanceM.takeIf { it.isFinite() && it < Double.MAX_VALUE },
-                                    )
-                                    is DiscoveryFeedItem.Beacon -> onBeaconClick(
-                                        item.beacon,
-                                        item.distanceM.takeIf { it.isFinite() && it < Double.MAX_VALUE },
-                                    )
-                                    is DiscoveryFeedItem.Connection -> onConnectionClick(item.point)
-                                }
+                            viewModel = viewModel,
+                            onOpen = {
+                                onBeaconClick(
+                                    item.beacon,
+                                    item.distanceM.takeIf {
+                                        it.isFinite() && it < Double.MAX_VALUE
+                                    },
+                                )
                             },
                         )
                     }
                 }
-                if (discoveryFeedPending) {
-                    item(key = "discovery_loading_footer") {
-                        DiscoveryFeedLoadingPulse(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 20.dp, bottom = 12.dp),
-                        )
-                    }
-                }
-            }
-        }
-
-        if (pullOffsetPx > 0f || discoveryFeedRefreshing) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .fillMaxWidth()
-                    .padding(
-                        start = AppScreenDefaults.HorizontalPadding,
-                        end = AppScreenDefaults.HorizontalPadding,
-                        top = listTopPadding,
-                    )
-                    .offset {
-                        val travel = (pullOffsetPx * 0.45f).roundToInt()
-                        IntOffset(0, travel.coerceAtLeast(0))
-                    }
-                    .zIndex(0.5f),
-            ) {
-                DiscoveryFeedPullRefreshIndicator(
-                    isRefreshing = discoveryFeedRefreshing,
-                    pullProgress = pullProgress,
-                )
-            }
-        }
-
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .zIndex(1f)
-                .fillMaxWidth()
-                .padding(
-                    start = AppScreenDefaults.HorizontalPadding,
-                    end = AppScreenDefaults.HorizontalPadding,
-                    top = statusBarTop,
-                ),
-        ) {
-            DiscoveryFloatingHeader(
-                collapseFraction = collapseFraction,
-                title = "Discovery",
-                subtitle = statsLine,
-                selectedSortIndex = sortMode,
-                onSortSelected = { index ->
-                    if (index == sortMode) return@DiscoveryFloatingHeader
-                    sortMode = index
-                    listState.requestScrollToItem(0, 0)
-                },
-                onOpenSearch = onOpenSearch,
-                onRefresh = onRefreshDiscovery,
-                isRefreshing = discoveryFeedRefreshing,
-            )
-        }
-
-        if (!mapPipExpanded) {
-            Row(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .zIndex(10f)
-                    .padding(
-                        start = 16.dp,
-                        end = 16.dp + PipPreviewWidth + 12.dp,
-                        bottom = dockBottom,
-                    ),
-                verticalAlignment = Alignment.Bottom,
-            ) {
-                FloatingActionButton(
-                    onClick = onDropBeacon,
-                    modifier = Modifier.size(56.dp),
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                ) {
-                    Icon(Icons.Filled.AddLocationAlt, contentDescription = "Drop beacon")
-                }
-            }
-
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 16.dp, bottom = dockBottom)
-                    .size(width = PipPreviewWidth, height = PipPreviewHeight)
-                    .zIndex(11f)
-                    .clip(pipShape)
-                    .border(2.dp, clickBorderColor(), pipShape)
-                    .clickable(
-                        interactionSource = pipInteraction,
-                        indication = ripple(bounded = true),
-                        onClick = expandMap,
-                    )
-                    .pointerInput(Unit) {
-                        detectTapGestures(onTap = { expandMap() })
-                    },
-            ) {
-                mapContent(Modifier.fillMaxSize(), false)
-                // PiP hosts a lite GoogleMap (SurfaceView); this layer keeps expand taps on Compose.
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .zIndex(2f)
-                        .clickable(
-                            interactionSource = pipInteraction,
-                            indication = null,
-                            onClick = expandMap,
-                        ),
-                )
-                IconButton(
-                    onClick = expandMap,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(6.dp)
-                        .zIndex(4f)
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .border(2.dp, clickBorderColor(), RoundedCornerShape(12.dp))
-                        .background(GlassSheetTokens.GlassSurface()),
-                ) {
-                    Icon(
-                        Icons.Filled.OpenInFull,
-                        contentDescription = "Expand map",
-                        tint = GlassSheetTokens.OnOled(),
-                    )
-                }
-            }
-        }
-
-        // GoogleMap on Android is SurfaceView-backed; scale transforms from scaleIn/scaleOut
-        // leave the map blank. iOS MapKit tolerates the PiP expand animation.
-        val mapOverlayEnter = fadeIn(tween(220, easing = FastOutSlowInEasing)) +
-            if (platformStyle.isIOS) {
-                scaleIn(
-                    animationSpec = tween(300, easing = FastOutSlowInEasing),
-                    initialScale = 0.88f,
-                    transformOrigin = TransformOrigin(0.92f, 0.92f),
-                )
-            } else {
-                EnterTransition.None
-            }
-        val mapOverlayExit = fadeOut(tween(280, easing = FastOutSlowInEasing)) +
-            if (platformStyle.isIOS) {
-                scaleOut(
-                    animationSpec = tween(320, easing = FastOutSlowInEasing),
-                    targetScale = 0.72f,
-                    transformOrigin = TransformOrigin(0.92f, 0.92f),
-                )
-            } else {
-                ExitTransition.None
-            }
-
-        AnimatedVisibility(
-            visible = mapPipExpanded,
-            enter = mapOverlayEnter,
-            exit = mapOverlayExit,
-            modifier = Modifier
-                .fillMaxSize()
-                .zIndex(30f),
-            label = "map_fullscreen_overlay",
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(GlassSheetTokens.OledBlack()),
-            ) {
-                mapContent(Modifier.fillMaxSize(), true)
-                expandedMapChrome()
             }
         }
     }
 }
 
 @Composable
-private fun DiscoverySectionHeader(
-    text: String,
+private fun EventsSheetSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val shape = RoundedCornerShape(16.dp)
+    Row(
+        modifier = modifier
+            .clip(shape)
+            .background(clickCardSurface())
+            .border(2.dp, clickBorderColor(), shape)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(
+            Icons.Filled.Search,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(22.dp),
+        )
+        BasicTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+            ),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            modifier = Modifier.weight(1f),
+            decorationBox = { inner ->
+                if (query.isEmpty()) {
+                    Text(
+                        text = "Search events near you…",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                inner()
+            },
+        )
+    }
+}
+
+@Composable
+private fun EventsSheetLayerChips(
+    layerFilters: Set<MapLayerFilter>,
+    onToggleLayerFilter: (MapLayerFilter) -> Unit,
+) {
+    val scroll = rememberScrollState()
+    val chips = listOf(
+        MapLayerFilter.EVENTS,
+        MapLayerFilter.COMMUNITY_HUBS,
+        MapLayerFilter.SOCIAL_VIBES,
+        MapLayerFilter.SOUNDTRACKS,
+        MapLayerFilter.ALERTS_UTILITIES,
+        MapLayerFilter.MY_CONNECTIONS,
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(scroll),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        chips.forEach { filter ->
+            val selected = MapLayerFilter.ALL in layerFilters || filter in layerFilters
+            FilterChipPill(
+                label = filter.label,
+                selected = selected,
+                onClick = { onToggleLayerFilter(filter) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun FilterChipPill(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(12.dp)
+    val bg = if (selected) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surface
+    }
+    val fg = if (selected) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val outline = if (selected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        clickBorderColor()
+    }
     Text(
-        text = text,
-        modifier = modifier,
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold,
-        color = GlassSheetTokens.OnOled(),
+        text = label,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+        color = fg,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(shape)
+            .border(2.dp, outline, shape)
+            .background(bg)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
     )
 }
 
 @Composable
-private fun DiscoveryFeedRow(
-    item: DiscoveryFeedItem,
-    onClick: () -> Unit,
+private fun DiscoveryEventCard(
+    item: DiscoveryFeedItem.Beacon,
+    viewModel: MapViewModel,
+    onOpen: () -> Unit,
 ) {
-    val title = when (item) {
-        is DiscoveryFeedItem.Hub -> item.hub.name
-        is DiscoveryFeedItem.Beacon -> item.beacon.displayDynamicTitle()
-        is DiscoveryFeedItem.Connection -> item.point.displayName
+    val beacon = item.beacon
+    val rsvpCache by viewModel.beaconRsvpById.collectAsState()
+    val rsvpLoadingIds by viewModel.beaconRsvpLoadingIds.collectAsState()
+    val rsvpPendingIds by viewModel.beaconRsvpPendingIds.collectAsState()
+    val entry = rsvpCache[beacon.id]
+    val attendees = entry?.attendees.orEmpty()
+    val currentUserSignedUp = entry?.currentUserSignedUp == true
+    val rsvpLoading = entry == null && beacon.id in rsvpLoadingIds
+    val rsvpPending = beacon.id in rsvpPendingIds
+
+    LaunchedEffect(beacon.id) {
+        viewModel.loadBeaconRsvp(beacon.id, forceRefresh = false)
     }
-    val subtitle = when (item) {
-        is DiscoveryFeedItem.Hub -> item.ttlLabel
-        is DiscoveryFeedItem.Beacon -> item.ttlLabel
-        is DiscoveryFeedItem.Connection -> item.point.locationLabel
-    }
-    val icon = when (item) {
-        is DiscoveryFeedItem.Hub -> Icons.Filled.Groups
-        is DiscoveryFeedItem.Beacon -> when (item.beacon.kind) {
-            MapBeaconKind.SOUNDTRACK -> Icons.Filled.MusicNote
-            else -> Icons.Filled.Place
-        }
-        is DiscoveryFeedItem.Connection -> Icons.Filled.Person
+
+    val shape = RoundedCornerShape(16.dp)
+    val title = beacon.displayDynamicTitle()
+    val schedule = beacon.eventSchedule()?.let { formatEventScheduleRange(it) }
+    val rawDescription = beacon.metadata.description?.trim()?.takeIf { it.isNotEmpty() }
+    // Avoid duplicating description when it was promoted to the title.
+    val description = rawDescription?.takeIf { it != title }
+    val host = beacon.creatorDisplayName?.trim()?.takeIf {
+        beacon.showCreatorName && it.isNotEmpty()
+    } ?: beacon.createdByUserId?.takeIf { beacon.showCreatorName }?.let { creatorId ->
+        AppDataManager.getConnectedUser(creatorId)?.name?.trim()?.takeIf { it.isNotEmpty() }
     }
     val distanceText = if (item.sortDistanceM < Double.MAX_VALUE / 2) {
         formatDiscoveryDistance(item.sortDistanceM)
     } else {
         null
     }
-    DiscoveryFeedRow(
-        title = title,
-        subtitle = subtitle,
-        icon = icon,
-        distanceText = distanceText,
-        reserveDistanceLine = true,
-        onClick = onClick,
-    )
-}
 
-@Composable
-private fun DiscoveryFeedRow(
-    title: String,
-    subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit,
-    distanceText: String? = null,
-    reserveDistanceLine: Boolean = false,
-) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner))
-            .border(
-                width = 2.dp,
-                color = clickBorderColor(),
-                shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
-            )
-            .background(GlassSheetTokens.GlassSurface())
-            .clickable(onClick = onClick)
-            .padding(start = 16.dp, top = 10.dp, bottom = 10.dp, end = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .clip(shape)
+            .background(clickCardSurface())
+            .border(2.dp, clickBorderColor(), shape)
+            .clickable(onClick = onOpen),
     ) {
         Box(
             modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.primaryContainer),
+                .fillMaxWidth()
+                .height(96.dp)
+                .background(MaterialTheme.colorScheme.surfaceContainerLow),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(imageVector = icon, contentDescription = null, tint = PrimaryBlue)
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = GlassSheetTokens.OnOled(),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+            Icon(
+                Icons.Filled.Event,
+                contentDescription = null,
+                modifier = Modifier.size(36.dp),
+                tint = MaterialTheme.colorScheme.primary,
             )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = GlassSheetTokens.OnOledMuted(),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (reserveDistanceLine || distanceText != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(10.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.primary)
+                    .border(2.dp, clickBorderColor(), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            ) {
                 Text(
-                    text = distanceText ?: "\u00A0",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = GlassSheetTokens.OnOledMuted().copy(alpha = if (distanceText != null) 0.8f else 0f),
-                    maxLines = 1,
+                    text = "Event",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimary,
                 )
             }
         }
-        Icon(
-            Icons.Filled.LocationOn,
-            contentDescription = null,
-            tint = GlassSheetTokens.OnOledMuted().copy(alpha = 0.5f),
-            modifier = Modifier.size(20.dp),
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (host != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.Person,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Hosted by $host",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            if (schedule != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.Event,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = schedule,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            if (description != null) {
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (distanceText != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.Place,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = distanceText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
+            }
+            when {
+                rsvpLoading -> {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                    )
+                }
+                attendees.isNotEmpty() -> {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        attendees.take(6).forEach { attendee ->
+                            ConnectionListUserAvatarFace(
+                                displayName = attendee.name,
+                                email = null,
+                                avatarUrl = attendee.avatarUrl,
+                                userId = attendee.userId,
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape),
+                                useCompactTypography = true,
+                            )
+                        }
+                        if (attendees.size > 6) {
+                            Text(
+                                text = "+${attendees.size - 6}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .align(Alignment.CenterVertically)
+                                    .padding(start = 4.dp),
+                            )
+                        }
+                    }
+                }
+            }
+            if (currentUserSignedUp) {
+                OutlinedButton(
+                    onClick = { viewModel.cancelRsvpToBeacon(beacon.id) {} },
+                    enabled = !rsvpPending && !rsvpLoading,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(2.dp, clickBorderColor()),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    ),
+                    contentPadding = PaddingValues(vertical = 10.dp),
+                ) {
+                    Text(
+                        text = if (rsvpPending) "Updating…" else "Cancel RSVP",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            } else {
+                Button(
+                    onClick = { viewModel.rsvpToBeacon(beacon.id) {} },
+                    enabled = !rsvpPending && !rsvpLoading,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
+                    contentPadding = PaddingValues(vertical = 10.dp),
+                ) {
+                    Text(
+                        text = if (rsvpPending) "Updating…" else "RSVP",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+        }
     }
 }
 

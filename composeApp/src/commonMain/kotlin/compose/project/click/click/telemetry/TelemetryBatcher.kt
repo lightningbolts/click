@@ -21,7 +21,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
@@ -60,6 +59,8 @@ object TelemetryBatcher {
 
     private var session = FrictionSession()
     private var mapSessionActive = false
+    /** Once the user taps Got it, do not re-show the nudge until the map session ends. */
+    private var grassNudgeDismissed = false
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -132,7 +133,8 @@ object TelemetryBatcher {
     }
 
     fun dismissGrassNudge() {
-        _uiState.update { it.copy(showGrassNudge = false) }
+        grassNudgeDismissed = true
+        publishUi()
     }
 
     /** Re-evaluates nudge visibility (e.g. when the 4-minute threshold elapses without a new pan). */
@@ -170,6 +172,7 @@ object TelemetryBatcher {
 
     private fun resetSession() {
         mapSessionActive = false
+        grassNudgeDismissed = false
         session = FrictionSession()
         publishUi()
     }
@@ -183,7 +186,8 @@ object TelemetryBatcher {
         }
         val recentlyPanning = session.lastPanAtMs > 0L &&
             (now - session.lastPanAtMs) <= ACTIVE_PAN_WINDOW_MS
-        val showNudge = session.actionTakenCount == 0 &&
+        val showNudge = !grassNudgeDismissed &&
+            session.actionTakenCount == 0 &&
             session.mapPanCount > 0 &&
             elapsedSec >= GRASS_NUDGE_MIN_DURATION_SEC &&
             recentlyPanning

@@ -7,18 +7,20 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -27,11 +29,10 @@ import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -43,18 +44,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.ui.components.rememberGlassAdaptiveSheetState
 import compose.project.click.click.ui.components.ClickLogoPulse
 import compose.project.click.click.ui.components.GlassAdaptiveBottomSheet
-import compose.project.click.click.ui.components.GlassSheetTokens
-import compose.project.click.click.ui.theme.BackgroundDark
-import compose.project.click.click.ui.theme.BorderHardDark
 import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.ui.theme.SurfaceDark
+import compose.project.click.click.ui.theme.clickBorderColor
+import compose.project.click.click.ui.theme.clickCardSurface
 import compose.project.click.click.viewmodel.GlobalSearchViewModel
 import compose.project.click.click.viewmodel.SearchResultCategory
 import kotlinx.coroutines.delay
@@ -131,41 +132,63 @@ private fun UnifiedSearchSheetContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(BackgroundDark)
+            .background(MaterialTheme.colorScheme.background)
             .imePadding()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            color = SurfaceDark,
-            border = BorderStroke(1.dp, BorderHardDark),
+            color = clickCardSurface(),
+            border = BorderStroke(1.dp, clickBorderColor()),
         ) {
-            TextField(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .focusRequester(focusRequester),
-                value = query,
-                onValueChange = { viewModel.search(it, userId) },
-                singleLine = true,
-                placeholder = {
-                    Text(
-                        "Search people, places, beacons, intents…",
-                        color = GlassSheetTokens.OnOledMuted(),
-                    )
-                },
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedTextColor = GlassSheetTokens.OnOled(),
-                    unfocusedTextColor = GlassSheetTokens.OnOled(),
-                    cursorColor = PrimaryBlue,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                ),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-            )
+                    .height(52.dp)
+                    .padding(horizontal = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(
+                    Icons.Default.Search,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp),
+                )
+                BasicTextField(
+                    value = query,
+                    onValueChange = { viewModel.search(it, userId) },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                        color = MaterialTheme.colorScheme.onSurface,
+                    ),
+                    cursorBrush = SolidColor(PrimaryBlue),
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .focusRequester(focusRequester),
+                    decorationBox = { innerTextField ->
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            if (query.isEmpty()) {
+                                Text(
+                                    text = "Search people, places, beacons…",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            innerTextField()
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                )
+            }
         }
 
         Row(
@@ -195,9 +218,7 @@ private fun UnifiedSearchSheetContent(
         Box(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth()
-                .consumeWindowInsets(WindowInsets.ime)
-                .imePadding(),
+                .fillMaxWidth(),
         ) {
             when {
                 isSearching -> {
@@ -251,7 +272,7 @@ private fun UnifiedSearchSheetContent(
 @Composable
 private fun searchFilterChipColors() = FilterChipDefaults.filterChipColors(
     selectedContainerColor = PrimaryBlue,
-    selectedLabelColor = GlassSheetTokens.OnOled(),
-    containerColor = SurfaceDark,
-    labelColor = GlassSheetTokens.OnOled(),
+    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+    containerColor = clickCardSurface(),
+    labelColor = MaterialTheme.colorScheme.onSurface,
 )

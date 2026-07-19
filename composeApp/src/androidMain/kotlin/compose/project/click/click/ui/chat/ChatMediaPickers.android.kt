@@ -26,6 +26,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import compose.project.click.click.calls.CallSessionManager
+import compose.project.click.click.calls.CallState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -135,6 +137,13 @@ actual fun rememberChatMediaPickers(
     }
 
     fun openVoiceRecorder() {
+        val activeCall = CallSessionManager.callState.value
+        if (activeCall is CallState.Connecting || activeCall is CallState.Connected) {
+            onMediaAccessBlocked(
+                "Microphone is in use for a call. End the call before recording a voice message.",
+            )
+            return
+        }
         when {
             ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
                 PackageManager.PERMISSION_GRANTED -> {
@@ -150,6 +159,9 @@ actual fun rememberChatMediaPickers(
             onFinished = { bytes, durationSec ->
                 showVoiceDialog = false
                 onAudioPicked(bytes, "audio/mp4", durationSec)
+            },
+            onRecordBlocked = { message ->
+                onMediaAccessBlocked(message)
             },
         )
     }
@@ -170,6 +182,7 @@ actual fun rememberChatMediaPickers(
 private fun VoiceRecordDialog(
     onDismiss: () -> Unit,
     onFinished: (ByteArray, Long?) -> Unit,
+    onRecordBlocked: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -239,7 +252,7 @@ private fun VoiceRecordDialog(
         },
         title = { },
         text = {
-            androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth()) {
+            Box(Modifier.fillMaxWidth()) {
             VoiceMessageRecordDialogLayout(
                 phase = phase,
                 displaySeconds = displaySeconds,
@@ -254,6 +267,16 @@ private fun VoiceRecordDialog(
                     onDismiss()
                 },
                 onRecord = {
+                    if (recorder != null) {
+                        detachAndReleaseRecorder()
+                    }
+                    val activeCall = CallSessionManager.callState.value
+                    if (activeCall is CallState.Connecting || activeCall is CallState.Connected) {
+                        onRecordBlocked(
+                            "Microphone is in use for a call. End the call before recording a voice message.",
+                        )
+                        return@VoiceMessageRecordDialogLayout
+                    }
                     outputFile.parentFile?.mkdirs()
                     if (outputFile.exists()) outputFile.delete()
                     recordError = null

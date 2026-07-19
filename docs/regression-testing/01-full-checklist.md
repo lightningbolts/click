@@ -342,15 +342,17 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 
 ## 9. Home dashboard (`HomeScreen`)
 
-- [ ] Recent connections grouped by location; tap opens chat
-- [ ] "I'm down for…" availability intents strip
+- [ ] Time-of-day greeting + first name visible (no competing `"Home"` title)
+- [ ] Search pill opens unified search
+- [ ] Featured Event (when reminder exists) → View on Map focuses beacon
+- [ ] Explore nearby tiles only for kinds/hubs with nearby count > 0 (no fake Networking/Workshop tiles)
+- [ ] "I'm down for…" availability intents strip (after Featured Event, before Explore)
 - [ ] Post new availability intent from Home
-- [ ] Reconnect reminders: reconnect + dismiss
-- [ ] Event reminder cards (day-of, one-hour-before) — dismiss + tap navigates
-- [ ] `CalendarOverlapBentoCard` when calendar overlaps (if shown)
+- [ ] Reconnect reminders: Message + dismiss
+- [ ] Recent connections grouped by location; tap opens chat
+- [ ] Event reminder cards (day-of, one-hour-before) — dismiss + View on Map; featured beacon not duplicated
 - [ ] Connection insights card when data available
-- [ ] Discovery / quick entry chips navigate correctly
-- [ ] `ConnectionArchiveWarningBanner` from home path if applicable
+- [ ] `ConnectionArchiveWarningBanner` / Poll-Pair from home path if applicable
 - [ ] Pull-to-refresh or refresh affordance updates data
 
 ---
@@ -377,12 +379,18 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 
 - [ ] Drop beacon FAB / entry opens drop sheet
 - [ ] Create event / vibe / social / hazard beacon with required fields
+- [ ] Event create: **Check-in area** chips set venue scale (`intimate` / `neighborhood` / `venue` / `campus`)
 - [ ] Submit success adds pin; failure toast
-- [ ] Beacon detail sheet: RSVP, share, navigate
+- [ ] Beacon detail sheet: RSVP, share, navigate, bookmark, check-in
+- [ ] Bookmark toggle survives app force-kill (server-backed)
+- [ ] Check-in far from pin → snackbar + state reverts (geofence)
+- [ ] Check-in with location denied → snackbar, stays unchecked
+- [ ] Check-in before live window → “Check-in opens when the event starts”
 - [ ] `initialBeaconId` focuses correct pin on load
 - [ ] Event reminders sync (`EventReminderCoordinator`)
 - [ ] `[KNOWN-9]` Hazard beacon icon sized consistently with other pin icons (not oversized)
 - [ ] `[UI]` Beacon sheets use `PlatformSheetRoot`
+- [ ] Website: `/insights/event-engagement` loads funnel / arrival / rejects (demo or live)
 
 ---
 

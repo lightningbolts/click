@@ -1,5 +1,6 @@
 package compose.project.click.click.calls
 
+import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.repository.SupabaseChatRepository
@@ -147,8 +148,11 @@ object CallSessionManager {
                 val overlayBeforeUpdate = _overlayState.value
                 when (state) {
                     is CallState.Connected -> {
-                        callConnectedAtMs = Clock.System.now().toEpochMilliseconds()
-                        completedCallLogInserted = false
+                        if (previousCallState !is CallState.Connected) {
+                            PlatformHapticsPolicy.lightImpact()
+                            callConnectedAtMs = Clock.System.now().toEpochMilliseconds()
+                            completedCallLogInserted = false
+                        }
                         CallRingtonePlayer.stop()
                         activeInviteValue?.let { invite ->
                             PlatformIncomingCallUi.dismissIncomingCall(invite.callId)
@@ -355,6 +359,10 @@ object CallSessionManager {
             return
         }
         if (distinctMembers.size > MAX_GROUP_CALL_MEMBERS) {
+            failCall(
+                invite = null,
+                reason = "Group calls are limited to $MAX_GROUP_CALL_MEMBERS people",
+            )
             return
         }
 

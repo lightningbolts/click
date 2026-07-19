@@ -8,6 +8,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -735,6 +736,8 @@ data class MapBeaconMetadata(
     val trackName: String? = null,
     val artistName: String? = null,
     val albumArtUrl: String? = null,
+    /** Event taxonomy chips from metadata `event_categories`. */
+    val eventCategories: List<String> = emptyList(),
     val raw: JsonObject? = null,
 )
 
@@ -745,7 +748,16 @@ private val beaconMetadataJson = Json {
 
 fun parseMapBeaconMetadata(element: JsonElement?): MapBeaconMetadata {
     if (element == null) return MapBeaconMetadata()
-    val obj = element as? JsonObject ?: return MapBeaconMetadata()
+    val obj = when (element) {
+        is JsonObject -> element
+        is JsonPrimitive -> {
+            val text = element.contentOrNull?.trim().orEmpty()
+            if (text.isEmpty()) return MapBeaconMetadata()
+            runCatching { beaconMetadataJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                ?: return MapBeaconMetadata()
+        }
+        else -> return MapBeaconMetadata()
+    }
     fun str(vararg keys: String): String? {
         for (k in keys) {
             val p = obj[k] as? JsonPrimitive ?: continue
@@ -765,8 +777,24 @@ fun parseMapBeaconMetadata(element: JsonElement?): MapBeaconMetadata {
         trackName = str("track_name"),
         artistName = str("artist_name"),
         albumArtUrl = str("album_art_url", "artworkUrl100"),
+        eventCategories = parseEventCategories(obj),
         raw = obj,
     )
+}
+
+private fun parseEventCategories(obj: JsonObject): List<String> {
+    val el = obj["event_categories"] ?: obj["eventCategories"] ?: return emptyList()
+    return when (el) {
+        is JsonArray -> el.mapNotNull { item ->
+            (item as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+        }
+        is JsonPrimitive -> el.contentOrNull
+            ?.split(',')
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            .orEmpty()
+        else -> emptyList()
+    }.distinct()
 }
 
 /** Who may see a dropped beacon on the map (mirrors `beacon_visibility_audience` on click-web). */
@@ -876,7 +904,7 @@ private fun parseMapBeaconRow(element: JsonElement): MapBeacon? {
         ?: (obj["created_at"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
     val expiresAt = strKey("expires_at", "expiresAt")?.let { parseEpochMs(it) }
     val showCreatorName = (obj["show_creator_name"] as? JsonPrimitive)?.let { prim ->
-        when (val raw = prim.contentOrNull?.trim()?.lowercase()) {
+        prim.booleanOrNull ?: when (prim.contentOrNull?.trim()?.lowercase()) {
             "true", "1" -> true
             "false", "0" -> false
             else -> null
@@ -900,8 +928,25 @@ private fun parseMapBeaconRow(element: JsonElement): MapBeacon? {
     )
 }
 
-private fun parseEpochMs(value: String): Long? {
-    val n = value.toLongOrNull()
-    if (n != null) return n
-    return runCatching { Instant.parse(value).toEpochMilliseconds() }.getOrNull()
+/**
+ * Accepts epoch millis strings and ISO-8601, plus common Postgres timestamptz
+ * forms like `2026-05-30 01:40:47.869682+00` (space separator, short offset).
+ */
+internal fun parseEpochMs(value: String): Long? {
+    val trimmed = value.trim()
+    if (trimmed.isEmpty()) return null
+    trimmed.toLongOrNull()?.let { return it }
+    runCatching { Instant.parse(trimmed).toEpochMilliseconds() }.getOrNull()?.let { return it }
+    val withT = trimmed.replace(' ', 'T')
+    runCatching { Instant.parse(withT).toEpochMilliseconds() }.getOrNull()?.let { return it }
+    // `…+00` / `…-07` → `…+00:00` / `…-07:00`
+    val withColonOffset = Regex("""([+-]\d{2})$""").replace(withT) { match ->
+        "${match.groupValues[1]}:00"
+    }
+    runCatching { Instant.parse(withColonOffset).toEpochMilliseconds() }.getOrNull()?.let { return it }
+    // `…+0000` → `…+00:00`
+    val withSplitOffset = Regex("""([+-])(\d{2})(\d{2})$""").replace(withColonOffset) { match ->
+        "${match.groupValues[1]}${match.groupValues[2]}:${match.groupValues[3]}"
+    }
+    return runCatching { Instant.parse(withSplitOffset).toEpochMilliseconds() }.getOrNull()
 }

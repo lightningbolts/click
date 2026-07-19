@@ -1,10 +1,12 @@
 # 05 — Home
 
 **Scope:** Kotlin Multiplatform mobile — `HomeScreen`, `HomeComponents`, `ConnectionArchiveWarningBanner`, `AvailabilitySheet` entry from Home.  
-**Source:** `ui/screens/HomeScreen.kt`, `ui/components/HomeComponents.kt`, `ui/components/ConnectionArchiveWarningBanner.kt`, `viewmodel/HomeViewModel.kt`  
-**Out of scope:** Web, backend APIs, redesign.
+**Source:** `ui/screens/HomeScreen.kt`, `ui/components/HomeComponents.kt`, `ui/components/ConnectionArchiveWarningBanner.kt`, `ui/components/AppScreenScaffold.kt`, `viewmodel/HomeViewModel.kt`  
+**Out of scope:** Web, backend APIs.
 
-**Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: `click/docs/design-assets/home/`.
+**Visual system:** Functional Clarity — opaque surfaces, 2dp `clickBorderColor()`, scheme primary, no glass/blur/gradients. Design-asset mock (hierarchy only): `click/docs/design-assets/home/` — see that folder’s README; product truth is this doc.
+
+**Track C (2026-07-17):** Discovery-first IA — greeting + search pill + Featured Event + dynamic nearby explore; availability + reconnect remain first-class above Explore. Greeting uses the same floating `LiquidGlassPageHeader` overlay as other tab roots (not an in-feed item).
 
 ---
 
@@ -18,34 +20,40 @@ HomeScreen (organism)
 │   ├── "Error loading home data"
 │   ├── state.message (dynamic)
 │   └── Button "Retry"
-└── AppScreenScaffold                   [Success]
-    ├── title: "Home"
-    ├── subtitle: "Welcome back, {name}!"
-    ├── search action (optional)
-    └── LazyColumn (24dp vertical spacing, 20dp horizontal via scaffold)
-        ├── ConnectionArchiveWarningBanner (conditional)
-        ├── PollPairCard (conditional)
+└── AppScreenScaffold (showFloatingHeader = true)   [Success]
+    ├── FloatingHeaderOverlay → LiquidGlassPageHeader
+    │   ├── title: homeGreetingTitle(firstName)  // "Good morning|afternoon|evening|Hello, {name}."
+    │   └── subtitle: HomeGreetingSubtitle       // "Ready to connect today?"
+    └── LazyColumn (24dp spacing, 20dp horizontal; top inset clears floating header)
+        ├── HomeSearchPill              // → onOpenSearch / UnifiedSearchSheet
+        ├── FeaturedEventSection (conditional)  // first HomeEventReminder
+        │   └── FeaturedEventCard → "View on Map"
         ├── HomeAvailabilityIntentsRow
-        │   ├── GradientSectionHeader "I'm down for…"
+        │   ├── SectionHeader "I'm down for…"
         │   ├── AssistChip[] per active intent
         │   ├── AssistChip "Set what you're down for" | "Edit intents"
-        │   └── overlap lines (gold #FFE8A8)
+        │   └── overlap lines (scheme tertiary)
+        ├── Saved events (conditional)  // GET /api/me/event-bookmarks, max 5
+        │   └── SavedEventsSection category tiles → EventBeaconDetail sheet (stays on Home)
+        ├── ExploreNearbyBeaconsSection (conditional)
+        │   └── tiles for nearby MapBeaconKind / Hub counts only
+        ├── ConnectionArchiveWarningBanner (conditional)  // stay-in-touch after explore
+        ├── PollPairCard (conditional)
         ├── Reconnect section (conditional)
-        │   ├── GradientSectionHeader "Reconnect"
+        │   ├── SectionHeader "Reconnect"
         │   ├── subtitle "Connections you haven't talked to in a while"
-        │   └── ReconnectReminderCard[]
-        ├── Event reminders (conditional)
-        │   ├── GradientSectionHeader "Event reminders"
-        │   └── HomeEventReminderCard[]
+        │   └── ReconnectReminderCard[]  // "Message" / "Dismiss"; ConnectionListUserAvatarFace
+        ├── Event reminders (conditional, deduped vs Featured)
+        │   └── HomeEventReminderCard[]  // Dismiss + View on Map
         ├── Recent Connections | Empty
-        │   ├── GradientSectionHeader "Recent Connections"
-        │   ├── LocationGroupCard[] (expandable)
+        │   ├── SectionHeader "Recent Connections"
+        │   ├── LocationGroupCard[] (expandable; no redundant location pin)
         │   │   └── ConnectionRowItem[]
         │   └── bordered card empty state
-        ├── ConnectionInsightsCard (conditional)
+        ├── ConnectionInsightsCard (conditional; label/value columns)
         └── Your Stats
-            ├── GradientSectionHeader "Your Stats"
-            └── bordered stat card × 2 ("Total Clicks", "Locations")
+            ├── SectionHeader "Your Stats"
+            └── HomeStatCard × 2 ("Total Clicks", "Locations")
 ├── AvailabilitySheet (modal overlay, conditional)
 └── SnackbarHost (nudge / icebreaker feedback)
 ```
@@ -58,28 +66,41 @@ HomeScreen (organism)
 
 | Property | Value |
 |----------|-------|
-| Background | `MaterialTheme.colorScheme.background` (`#f9f9f9` light) |
-| Horizontal padding | 20dp (`ScreenPaddingHorizontal`) |
+| Background | `MaterialTheme.colorScheme.background` |
+| Horizontal padding | 20dp |
 | Section spacing | 24dp (`CardSpacing`) |
-| Header | `AppScreenScaffold` — title `"Home"`, subtitle dynamic |
-| List | `LazyColumn` inside scaffold when `HomeState.Success` |
+| Header | Floating `LiquidGlassPageHeader` via `AppScreenScaffold` — same status-bar overlay level as Clicks/Map/etc.; title = `homeGreetingTitle`, subtitle = `"Ready to connect today?"` (no `"Home"` title) |
+| Header → search | **8dp** under greeting (`HeaderToSearchGap`; compensates list `spacedBy` after header inset) |
+| List | `LazyColumn` when `HomeState.Success` |
+| Bottom chrome | Transparent nav overlay + `rememberBottomChromePadding()` |
 
 ### HomeComponents (shared molecules)
 
 | Component | Role on Home |
 |-----------|----------------|
-| `PollPairCard` | Hero reconnect suggestion (oldest stale 1:1 chat) |
-| `StatCard` | Legacy stat card (not used on Home; Home uses inline bordered stat cards) |
-| `OnlineFriendItem` | Not mounted on current HomeScreen |
-| `RecentClickCard` | Not mounted on current HomeScreen |
+| `homeGreetingTitle` / `HomeGreetingSubtitle` | Time-of-day salutation strings for the floating header |
+| `HomeSearchPill` | Bordered pill → `onOpenSearch()` |
+| `FeaturedEventSection` / `FeaturedEventCard` | Upcoming **event** hero from `homeEventReminders.firstOrNull()` |
+| `ExploreNearbyBeaconsSection` | Dynamic tiles from `prefetchedMapBeacons` + hubs (count > 0 only) |
+| `PollPairCard` | Urgency reconnect suggestion (oldest stale 1:1) |
+| `StatCard` | Legacy; Home uses `HomeStatCard` |
+
+### Explore categories (not hardcoded mock labels)
+
+Tiles use the **beacon create taxonomy** (`MapBeaconKind` labels / Hub), grouped from live nearby data:
+
+- Soundtrack, Hazard, Utility, SOS, Study, Event, Social vibe, Beacon — only if nearby count > 0
+- Hub — if `prefetchedCommunityHubs` is non-empty
+
+Tap → Map with `MapLayerFilter` preset (`applyHomeLayerPreset`). Never pad with Networking / Workshop / Co-working.
 
 ### ConnectionArchiveWarningBanner
 
-Bordered card with 2dp `#000` border (matches `PollPairCard` visual language). 16dp outer radius, 18dp inner padding. Merged semantics: `"{headline}. {body}. Open chat. Send icebreaker."`
+Bordered card: 16dp radius, 16dp padding, `clickCardSurface()` + 2dp `clickBorderColor()`. Merged semantics: `"{headline}. {body}. Open chat. Send icebreaker."`
 
 ### AvailabilitySheet entry
 
-Triggered from `HomeAvailabilityIntentsRow` chip taps. Full-screen `ClickFormBottomSheet` overlay; see [13-availability.md](13-availability.md) for sheet internals. Home only opens it and refreshes intents on dismiss.
+Triggered from `HomeAvailabilityIntentsRow` chip taps. See [13-availability.md](13-availability.md). Strip sits **after Featured Event**, **immediately before Explore nearby**. Archive / Poll-Pair stay-in-touch cards sit **after Explore**.
 
 ---
 
@@ -87,26 +108,21 @@ Triggered from `HomeAvailabilityIntentsRow` chip taps. Full-screen `ClickFormBot
 
 | Element | Gesture | Result |
 |---------|---------|--------|
-| Scaffold search icon | Tap | `onOpenSearch()` → `UnifiedSearchSheet` |
+| Search pill | Tap | `onOpenSearch()` → `UnifiedSearchSheet` |
+| Featured Event / `"View Map"` / `"View on Map"` | Tap | `onNavigateToMap(beaconId)` → Map focuses beacon |
+| Explore tile | Tap | `onNavigateToMapLayer(filter)` → Map applies layer preset |
 | Archive banner | Tap `"Open chat"` | `onNavigateToChat(connectionId)` |
 | Archive banner | Tap `"Icebreaker"` | `sendArchiveBannerIcebreaker` (15s cooldown shared with Poll-Pair) |
-| Poll-Pair card | Tap `"Open chat"` | Navigate to chat |
-| Poll-Pair card | Tap `"Icebreaker"` | Send contextual icebreaker message |
-| Availability chips | Tap any chip | `resetAvailabilityIntentSheet()` → show `AvailabilitySheet` |
-| `"Edit intents"` / `"Set what you're down for"` chip | Tap | Same as above |
-| Reconnect card | Tap `"Say hi"` | Open chat for that connection |
-| Reconnect card | Tap `"Dismiss"` | Remove reminder from list |
-| Event reminder card | Tap `"Dismiss"` | Dismiss beacon reminder |
-| Location group card | Tap header | Toggle expand/collapse (`toggleLocationExpanded`) |
-| Connection row | Tap row / chat icon | Open chat |
-| Connection row | Tap nudge icon | Send nudge (`sendNudgeByConnectionId`) |
-| Connection Insights card | Tap anywhere on card | Toggle expanded insights panel |
-| Error state | Tap `"Retry"` | `viewModel.refresh()` → `AppDataManager.refresh(force = true)` |
-| Snackbar | Auto-dismiss | After `nudgeResult` shown and cleared |
+| Poll-Pair card | Tap `"Open chat"` / `"Icebreaker"` | Chat or icebreaker |
+| Availability chips | Tap any chip | Open `AvailabilitySheet` |
+| Reconnect card | Tap `"Message"` | Open chat |
+| Reconnect card | Tap `"Dismiss"` | Remove reminder |
+| Event reminder | Tap `"Dismiss"` / `"View on Map"` | Dismiss or map focus |
+| Location group / connection row | Tap | Expand / open chat / nudge |
+| Connection Insights | Tap | Toggle expand |
+| Error `"Retry"` | Tap | `viewModel.refresh()` |
 
-**Haptics:** None on Home except system defaults on buttons.
-
-**Icebreaker cooldown:** 15 seconds after successful send; button shows `"Icebreaker ({n}s)"` and is disabled.
+**Icebreaker cooldown:** 15s; button shows `"Icebreaker ({n}s)"` when disabled.
 
 ---
 
@@ -116,271 +132,96 @@ Triggered from `HomeAvailabilityIntentsRow` chip taps. Full-screen `ClickFormBot
 
 | State | UI | Entry condition |
 |-------|-----|-----------------|
-| **Loading** | `AppShimmerScreen` (dark/light from background luminance) | `!isDataLoaded && isLoading` and no cached active connections |
-| **Error** | Centered error column + `"Retry"` | No render-ready user data; message from `AppDataManager.error` or session |
-| **Success** | Full `AppScreenScaffold` feed | Authenticated user + data hydrated |
+| **Loading** | `AppShimmerScreen` | Loading without cached connections |
+| **Error** | Centered error + `"Retry"` | No render-ready user data |
+| **Success** | Feed (no floating Home title) | Authenticated + data hydrated |
 
-#### Error micro-copy (dynamic `state.message`)
-
-| Condition | Quoted string |
-|-----------|---------------|
-| Offline | `"No internet connection. Your data will appear when you're back online."` |
-| Session | `"Session expired. Please log in again."` |
-
-Static error chrome: `"Error loading home data"` + primary `"Retry"` button.
-
-### Success sub-states (sections independent)
+### Success sub-states
 
 | Section | Empty | Populated |
 |---------|-------|-----------|
-| Archive banner | Hidden (`mostUrgentArchiveNotice` null) | Single most-urgent connection warning |
-| Poll-Pair | Hidden | One `PollPairSuggestion` |
-| I'm down for… | Only `"Set what you're down for"` chip | Intent chips + `"Edit intents"` |
-| Overlap lines | Hidden | `"You and {firstName} are both available right now!"` per peer |
-| Reconnect | Hidden | Up to 3 `ReconnectReminderCard` |
-| Event reminders | Hidden | `HomeEventReminderCard` per due RSVP beacon |
-| Recent Connections | bordered card empty state | Up to 5 connections grouped by location |
-| Connection Insights | Hidden if `totalConnections == 0` or null insights | Collapsed/expanded card |
-| Stats | Always shown in Success | Two bordered stat card values |
-
-### LocationGroupCard
-
-| State | Visual |
-|-------|--------|
-| Collapsed | Chevron 0°, primary border off |
-| Expanded | Chevron 90°, `usePrimaryBorder = true`, animated child rows |
-
-### ConnectionArchiveWarningBanner urgency
-
-| `notice.urgent` | Gradient border alpha |
-|-----------------|----------------------|
-| `true` | 0.85 |
-| `false` | 0.65 |
-
-### Poll-Pair / Icebreaker button
-
-| State | Label |
-|-------|-------|
-| Enabled | `"Icebreaker"` |
-| Cooldown | `"Icebreaker ({sec}s)"` |
-| Disabled | Same as cooldown (outlined, dimmed icon) |
+| Archive / Poll-Pair | Hidden | Urgency cards above greeting |
+| Greeting / search | Always (search if `onOpenSearch` set) | — |
+| Featured Event | Hidden | First `HomeEventReminder` |
+| I'm down for… | `"Set what you're down for"` chip | Intent chips + `"Edit intents"` |
+| Reconnect | Hidden | Up to 3 cards with `ConnectionListUserAvatarFace` (same as Clicks inbox) |
+| Explore nearby | Hidden | One tile per kind/hub with count > 0 |
+| Event reminders | Hidden / deduped vs featured | Remaining reminders |
+| Recent Connections | Empty bordered card | Location groups |
+| Insights | Hidden if no connections | Collapsed/expanded |
+| Stats | Always | Two stat cards |
 
 ---
 
-## 4. Micro-copy (quoted from code)
+## 4. Micro-copy
 
-### Scaffold & headers
-
-| Key | String |
-|-----|--------|
-| Tab route title | `"Home"` |
-| Welcome subtitle | `"Welcome back, {user.name ?: "User"}!"` |
-| Section: availability | `"I'm down for…"` |
-| Section: reconnect | `"Reconnect"` |
-| Reconnect helper | `"Connections you haven't talked to in a while"` |
-| Section: events | `"Event reminders"` |
-| Section: recent | `"Recent Connections"` |
-| Section: stats | `"Your Stats"` |
-| Stat label 1 | `"Total Clicks"` |
-| Stat label 2 | `"Locations"` |
-
-### Empty recent connections
-
-| Element | String |
-|---------|--------|
-| Title | `"No Connections Yet"` |
-| Body | `"Start making connections by tapping Add Click"` |
-
-### Availability strip
-
-| Element | String |
-|---------|--------|
-| Empty CTA chip | `"Set what you're down for"` |
-| With intents | `"Edit intents"` |
-| Fallback intent label | `"Intent"` |
-| Overlap line | `"You and {name} are both available right now!"` |
-| Peer fallback | `"them"` |
-
-### Poll-Pair card (`PollPairCard`)
-
-| Element | String |
-|---------|--------|
-| Eyebrow | `"Poll-Pair"` |
-| Headline | `"It's been a while! Say hi to {displayName}"` |
-| `displayName` fallback | `"your click"` |
-| Subtitle (0 days) | `"No recent messages — say hi?"` |
-| Subtitle (1 day) | `"1 day since you last chatted"` |
-| Subtitle (N days) | `"{N} days since you last chatted"` |
-| Primary CTA | `"Open chat"` |
-| Secondary CTA | `"Icebreaker"` / `"Icebreaker ({n}s)"` |
-
-### ConnectionArchiveWarningBanner
-
-| Element | String |
-|---------|--------|
-| Headline (pending, urgent) | `"Say hi soon"` |
-| Headline (pending, normal) | `"New connection"` |
-| Headline (active idle, urgent) | `"Reconnect soon"` |
-| Headline (active idle, normal) | `"Stay in touch"` |
-| Title line | `"Check in with {chatLabel}"` |
-| Body template (pending) | `"About {time} left until your connection with {who} is archived if no one sends a message."` |
-| Body template (idle) | `"About {time} left until your chat with {who} may be archived without new messages."` |
-| `who` fallback | `"this connection"` |
-| Primary CTA | `"Open chat"` |
-| Secondary CTA | `"Icebreaker"` / `"Icebreaker ({n}s)"` |
-
-### ReconnectReminderCard
-
-| Element | String |
-|---------|--------|
-| Name fallback | `"Someone"` |
-| Subtitle | `"{daysSinceContact} days since last chat"` |
-| Dismiss | `"Dismiss"` |
-| Primary | `"Say hi"` |
-
-### HomeEventReminderCard
-
-| Kind | Title (`eventReminderTitle`) | Body (`eventReminderBody`) |
-|------|------------------------------|----------------------------|
-| Day-of | `"Event today"` | `"{label} starts today — tap to view on the map."` |
-| One hour before | `"Event starting soon"` | `"{label} starts in about an hour."` |
-| Label fallback | — | `"Your event"` |
-| Dismiss | `"Dismiss"` | — |
-
-### LocationGroupCard
-
-| Element | String |
-|---------|--------|
-| Connection count | `"{n} connection"` / `"{n} connections"` |
-| Location fallback | `"Somewhere New"` |
-| Chevron a11y | `"Collapse"` / `"Expand"` |
-
-### ConnectionRowItem
-
-| Element | String |
-|---------|--------|
-| Time: &lt;1 min | `"Just now"` |
-| Time: minutes | `"{n}m ago"` |
-| Time: hours | `"{n}h ago"` |
-| Time: days (&lt;7) | `"{n}d ago"` |
-| Time: older | `"{Mon} {day}"` |
-| Name fallback | `"Connection"` |
-| Nudge target fallback | `"them"` |
-| Nudge icon a11y | `"Nudge"` |
-| Chat icon a11y | `"Open chat"` |
-
-### ConnectionInsightsCard
-
-| Element | String |
-|---------|--------|
-| Title | `"Connection Insights"` |
-| Collapse a11y | `"Collapse"` / `"Expand"` |
-| Quick stat labels | `"Keep Rate"`, `"Active"`, `"Need Attention"` |
-| Detail rows | `"Total Connections"`, `"Connections Kept"`, `"Longest Connection"`, `"New This Week"`, `"New This Month"` |
-| Longest value | `"{days} days"` optional `" ({name})"` |
-
-### Snackbar / toast messages (`HomeViewModel.nudgeResult`)
-
-| Trigger | String |
-|---------|--------|
-| Nudge success | `"Nudge sent to {otherUserName}! 👋"` |
-| Nudge fail | `"Failed to send nudge"` |
-| Chat not found | `"Unable to send nudge — chat not found"` |
-| Icebreaker success | `"Icebreaker sent to {name}!"` |
-| Icebreaker fail | `"Failed to send icebreaker"` |
-| Icebreaker cooldown | `"Icebreaker on cooldown — {n}s"` |
-| Chat open fail | `"Couldn't open chat"` |
-
-### AvailabilitySheet entry (from Home)
-
-Home opens sheet with strings documented in AvailabilitySheet: `"Share availability"` / `"Edit availability"`, `"Post"` / `"Save"` / `"Saving…"`, etc.
+| Surface | Copy |
+|---------|------|
+| Greeting | `"Good morning|afternoon|evening|Hello, {firstName}."` |
+| Greeting subtitle | `"Ready to connect today?"` |
+| Search pill | `"Search people, places, events…"` |
+| Featured section | `"Featured Event"`, `"View Map"`, `"View on Map"` |
+| Explore | `"Explore nearby"`, `"{n} nearby"` / `"1 nearby"` |
+| Availability | `"I'm down for…"`, `"Set what you're down for"`, `"Edit intents"` |
+| Reconnect | `"Reconnect"`, `"Connections you haven't talked to in a while"`, `"Message"`, `"Dismiss"` |
+| Empty connections | `"No Connections Yet"`, `"Start making connections by tapping Add Click"` |
+| Stats | `"Your Stats"`, `"Total Clicks"`, `"Locations"` |
 
 ---
 
 ## 5. Flow Sequence
 
-### Happy path — returning user
+### Cold open → Success
 
 ```
-Open Home tab
-  → Loading shimmer (brief)
-  → Success scaffold: "Welcome back, {name}!"
-  → Scroll feed: archive banner → poll-pair → intents → reconnect → events → recent → insights → stats
+App loads AppDataManager
+  → Loading shimmer (if needed)
+  → Success: greeting + search (+ Featured Event if reminder)
+  → Availability + Reconnect remain reachable without scrolling past Explore when present
 ```
 
-### Availability intent edit
+### Featured Event → Map
 
 ```
-Tap any "I'm down for…" chip or "Edit intents"
-  → availabilityViewModel.resetAvailabilityIntentSheet()
-  → AvailabilitySheet modal
-  → User posts/edits intent → dismiss
-  → refreshHomeAvailabilityIntents()
-  → Chips + overlap lines update
+Tap View on Map
+  → pendingBeaconId = beaconId
+  → navigate Map tab
+  → MapViewModel.focusBeaconOnMap(beaconId)
+     pans camera to event lat/lon (zoom ≈ 15), ensures EVENTS layer,
+     selects beacon sheet
+  → After animation settles, CameraTarget clears but native map **keeps** that
+     viewport (no snap back to GPS / default user zoom)
 ```
 
-### Nudge from recent connection row
+### Explore tile → Map layer
 
 ```
-Expand location group → tap Nudge icon
-  → sendNudgeByConnectionId
-  → Snackbar: "Nudge sent to {name}! 👋"
-  → Message content in chat: "👋 {currentUser.name} nudged you!"
+Tap kind/hub tile
+  → pendingMapLayerFilter = matching MapLayerFilter
+  → navigate Map
+  → MapViewModel.applyHomeLayerPreset(filter)
 ```
 
-### Icebreaker from Poll-Pair or archive banner
+### Availability
 
 ```
-Tap "Icebreaker" (cooldown == 0)
-  → Fetch/ensure chat → pick contextual prompt → sendMessage
-  → Snackbar: "Icebreaker sent to {name}!"
-  → 15s cooldown arms on both Poll-Pair and archive banner buttons
-```
-
-### Error recovery
-
-```
-HomeState.Error
-  → User reads message (offline or session)
-  → Tap "Retry"
-  → AppDataManager.refresh(force = true)
-  → Re-enter Loading → Success when data returns
-```
-
-### Archive banner priority
-
-```
-Every 60s tick + connection list change
-  → mostUrgentArchiveNotice among active connections
-  → Show single banner for shortest remaining archive window
-  → urgent if ≤12h remaining
+Tap chip → AvailabilitySheet → dismiss → refreshHomeAvailabilityIntents()
 ```
 
 ---
 
 ## 6. A11y & Responsive
 
-| Area | Behavior |
-|------|----------|
-| Archive banner | `semantics(mergeDescendants = true)` with full action summary |
-| Section headers | Gradient text; no separate heading role — rely on visual hierarchy |
-| Location expand | `contentDescription` on chevron: `"Expand"` / `"Collapse"` |
-| Nudge / chat icons | Explicit `contentDescription` on `ConnectionRowItem` |
-| Error icon | `contentDescription = null` (decorative; title carries meaning) |
-| Empty state icon | `contentDescription = null` |
-| Snackbar | Material `SnackbarHost` at bottom center, 16dp above safe area |
-| iOS vs Android | `LocalPlatformStyle` on row corners (14dp iOS / 12dp Android); archive/Poll-Pair shadow elevation Android-only |
-| Horizontal scroll | Availability chips use `horizontalScroll` — swipe accessible on both platforms |
-| Reduced motion | Chevron and expand animations use standard Compose tweens; no reduced-motion gate in code |
-
-**Focus order (Success):** Top scaffold actions → scrollable list top-to-bottom → floating snackbar when shown.
-
-**Screen reader:** Welcome subtitle is visible text in scaffold header. Dynamic counts in location groups are plain text, not live regions.
+- Archive banner merges semantics for VoiceOver/TalkBack.
+- Borders use `clickBorderColor()` (black light / white dark).
+- Transparent bottom nav: content uses `rememberBottomChromePadding()`.
+- iOS vs Android: `LocalPlatformStyle` on nested connection row corners.
 
 ---
 
-## Related documents
+## Related
 
-- [06-connect-handshake.md](06-connect-handshake.md) — Add Click entry from empty state CTA
-- [07-connections-inbox.md](07-connections-inbox.md) — chat destination from row taps
-- [13-availability.md](13-availability.md) — full AvailabilitySheet spec
+- [13-availability.md](13-availability.md) — intent sheet
+- [10-map-beacons-hubs.md](10-map-beacons-hubs.md) — map layers / beacon kinds
+- [11-search.md](11-search.md) — unified search
+- Design mock note: [../../design-assets/home/README.md](../../design-assets/home/README.md)

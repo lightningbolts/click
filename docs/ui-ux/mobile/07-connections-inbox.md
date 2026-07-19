@@ -1,10 +1,12 @@
 # 07 — Connections Inbox (Clicks)
 
-**Scope:** `ConnectionsScreen`, `ConnectionsListView`, `ConnectionItem`, `ConnectionsTabControls` / `ConnectionsFloatingHeader`, `ConnectionActionSheet`, `ConnectionSheetDialogs`, verified-click FAB, hub feed rows.  
-**Source:** `ui/screens/ConnectionsScreen.kt`, `ConnectionsListView.kt`, `ui/chat/ConnectionItem.kt`, `ui/components/ConnectionsTabControls.kt`, `ui/chat/ConnectionActionSheet.kt`, `ui/chat/ConnectionSheetDialogs.kt`  
+**Scope:** `ConnectionsScreen`, `ConnectionsListView`, `ConnectionItem`, `RememberMeStrip`, `ConnectionsTabControls` / `ConnectionsFloatingHeader`, `ConnectionActionSheet`, `ConnectionSheetDialogs`, verified-click FAB, hub feed rows.  
+**Source:** `ui/screens/ConnectionsScreen.kt`, `ConnectionsListView.kt`, `ui/chat/ConnectionItem.kt`, `ui/chat/RememberMeStrip.kt`, `ui/components/ConnectionsTabControls.kt`, `ui/chat/ConnectionActionSheet.kt`, `ui/chat/ConnectionSheetDialogs.kt`  
 **Out of scope:** Web, backend, full `ChatView` spec (see [08-chat.md](08-chat.md)).
 
 **Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: `click/docs/design-assets/chat/`.
+
+**Track C (2026-07-17):** Remember Me horizontal strip for Core-pinned 1:1s on Active tab; list row spacing left unchanged. Avatar hit = circle; name hit = pill.
 
 ---
 
@@ -19,10 +21,14 @@ ConnectionsScreen (organism — tab shell + chat overlay)
 │   │   ├── ConnectionsSegmentBar: Active | Groups | Archived
 │   │   └── compact: ConnectionsTabFilterMenuChip dropdown
 │   ├── LazyColumn
+│   │   ├── RememberMeStrip (Active tab, no search, Core 1:1s non-empty)
+│   │   │   ├── label: "Remember Me"
+│   │   │   ├── LazyRow chips (avatar + time badge + first name)
+│   │   │   └── label: "Clicks"
 │   │   ├── ActiveHubFeedRow[] (Groups tab only)
 │   │   └── ConnectionItem[] per chat
 │   ├── Empty / Loading / Error states
-│   ├── FloatingActionButton (Active tab) — "Create verified click"
+│   ├── FloatingActionButton (Active + Groups) — "Create verified click"
 │   ├── GlassToastHost (action feedback)
 │   ├── ConnectionMemberPickerSheet — verified click create
 │   ├── ConnectionActionSheet (long-press)
@@ -53,8 +59,22 @@ ConnectionsScreen (organism — tab shell + chat overlay)
 | List padding | 20dp horizontal; top = floating header collapse padding; bottom = `rememberBottomChromePadding()` |
 | Row spacing | 10dp vertical between items |
 | Header | `ConnectionsFloatingHeader` zIndex 1, `floatingHeaderStatusBarPadding` |
-| FAB | 56dp `PrimaryBlue`, bottom-end above nav (`rememberFabAboveNavPadding`) |
-| Toast | `GlassToastHost` left of FAB on Active tab |
+| FAB | 56dp `ClickCircularGlassIconButton` (same as map Drop beacon: `LiquidGlassPill` + `clickBorderColor()`), bottom-end above nav (`rememberFabAboveNavPadding`) |
+| Toast | `GlassToastHost` left of FAB on Active / Groups |
+
+### RememberMeStrip
+
+| Property | Value |
+|----------|-------|
+| Membership | Core-pinned **1:1** only (`connection.id in coreConnectionIds`, `groupClique == null`) |
+| Visibility | Active tab; hide when searching or core empty |
+| Sort | Activity desc (`connectionListActivityTs`) |
+| Avatar | 56dp `ConnectionListUserAvatarFace` in `CoreConnectionAvatarFrame`; 2dp `clickBorderColor()` |
+| Time chip | Primary fill; compact `formatRememberMeBadge` (`12h` / `2d` / …); omit if no last activity |
+| Name | First name (`firstName` or first token of display name) |
+| Labels | `"Remember Me"` then optional `"Clicks"` above the list |
+| Hit target | Circular on avatar (`CoreConnectionAvatarFrame` + `clip(CircleShape)`); name label **pill** (`clip(RoundedCornerShape(999.dp))` + horizontal padding — not full-width square `clickable`) |
+| Duplication | Core people still appear in `ConnectionItem` rows below |
 
 ### ConnectionItem
 
@@ -78,6 +98,7 @@ Three equal segments: `"Active ({n})"`, `"Groups ({n})"`, `"Archived ({n})"`. Co
 
 | Gesture | Target | Action |
 |---------|--------|--------|
+| Tap chip | `RememberMeStrip` chip | `onChatSelected(chatId)` |
 | Tap row | `ConnectionItem` | `onChatSelected(chatId)` |
 | Long-press row | `ConnectionItem` | Open `ConnectionActionSheet` |
 | Tap 1:1 avatar | Avatar | `TabbedUserProfileSheet` |
@@ -162,10 +183,11 @@ Header subtitle while loading empty: `"Loading…"`
 
 | Condition | FAB |
 |-----------|-----|
-| `selectedTabIndex == 0` && logged in | Shown |
-| Groups / Archived | Hidden |
+| Active (`selectedTabIndex == 0`) && logged in | Shown |
+| Groups (`selectedTabIndex == 1`) && logged in | Shown |
+| Archived | Hidden |
 
-FAB `contentDescription`: `"Create verified click"`
+FAB `contentDescription`: `"Create verified click"` — styled like map Drop beacon (bordered glass circle, not solid purple Material FAB).
 
 ### Verified click picker states
 
@@ -185,6 +207,7 @@ FAB `contentDescription`: `"Create verified click"`
 |---------|--------|
 | Title | `"Create verified click"` |
 | Subtitle | `"Pick friends who are all connected to each other. Eligibility is verified on the server."` |
+| Search placeholder | `"Search connections"` — vertically centered in `ConnectionPickerSearchBar` (`BasicTextField`, not clipped) |
 | Primary | `"Create"` |
 | Add-to-group variant title | `"Add to group"` |
 | Add subtitle | `"Choose verified connections who are connected to everyone in this click."` |
@@ -360,7 +383,7 @@ Long-press / ⋮ → HubActionSheet → Leave / Edit / Delete flows
 | List obscured (iOS) | Full-screen pointer consumer blocks list interaction under chat |
 | Search | Filters `name` on peer or group; empty state copy distinct from tab empty |
 | Pagination | Infinite scroll when within 4 items of end; disabled during active search |
-| Sort order | Core connections pinned first, then `connectionListActivityTs` descending |
+| Sort order | Core connections pinned first, then `connectionListActivityTs` descending. New activity **reorders list data** (row moves toward top via stable keys). Do **not** call `animateScrollToItem(0)` on reorder — that cancelled fling; the viewport stays where the user scrolled |
 
 **Focus order:** Floating header (title → search → tabs) → scrollable list → FAB.
 

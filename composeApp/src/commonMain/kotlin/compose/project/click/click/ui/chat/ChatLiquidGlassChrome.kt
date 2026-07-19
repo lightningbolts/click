@@ -1,8 +1,6 @@
 package compose.project.click.click.ui.chat
 
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -17,10 +15,49 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.ui.theme.LocalPlatformStyle
+import compose.project.click.click.ui.components.ClickCircularIconButton
+
+/** Shared horizontal inset for chat header row and composer strip (outer edges align). */
+internal val ChatChromeHorizontalPadding: Dp = 16.dp
+
+/**
+ * Circular header action for chat / hub threads.
+ *
+ * Prefer [showBorder]=true only for the primary back control. Trailing actions (edit / call / ⋮)
+ * stay borderless so a row of 40dp rings does not crowd the title. Composer +/send keep their
+ * own borders in [ConnectionChatMessageComposer] / hub input.
+ */
+@Composable
+internal fun ChatHeaderIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    tint: Color = MaterialTheme.colorScheme.onSurface,
+    size: Dp = 40.dp,
+    iconSize: Dp = 22.dp,
+    showBorder: Boolean = false,
+) {
+    ClickCircularIconButton(
+        icon = icon,
+        contentDescription = contentDescription,
+        onClick = onClick,
+        modifier = modifier,
+        enabled = enabled,
+        tint = tint,
+        size = size,
+        iconSize = iconSize,
+        showBorder = showBorder,
+    )
+}
 
 /**
  * Opaque Functional Clarity plate for chat chrome (no blur).
@@ -61,17 +98,14 @@ internal fun ChatComposerChromeFadeUnderlay(
 @Composable
 internal fun Modifier.chatSpringPressScale(interactionSource: MutableInteractionSource): Modifier {
     val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.95f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium,
-        ),
-        label = "chat_icon_press_scale",
+    val offset by animateDpAsState(
+        targetValue = if (pressed) LocalPlatformStyle.current.pressOffset else 0.dp,
+        label = "chat_icon_press_offset",
     )
+    val density = LocalDensity.current
     return this.graphicsLayer {
-        scaleX = scale
-        scaleY = scale
+        translationY = with(density) { offset.toPx() }
+        alpha = if (pressed) 0.92f else 1f
     }
 }
 

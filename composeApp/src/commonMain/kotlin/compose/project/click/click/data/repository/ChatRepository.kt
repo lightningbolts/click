@@ -183,7 +183,8 @@ interface ChatRepository {
 
     /**
      * Realtime INSERT on [messages] rows the current session may read. Emits [MessageListInsertEvent]
-     * with [MessageListInsertEvent.connectionId] resolved from [chats].
+     * with [MessageListInsertEvent.connectionId] resolved from [chats]. UPDATE rows are merged into
+     * the hot timeline cache but are not emitted (inbox bumps are insert-only / newest-wins).
      */
     suspend fun subscribeToMessageInserts(): Pair<ChatMessageSubscription, Flow<MessageListInsertEvent>>
 

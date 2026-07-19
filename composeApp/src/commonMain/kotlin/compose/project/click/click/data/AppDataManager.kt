@@ -33,6 +33,8 @@ import compose.project.click.click.data.repository.UserConnectionsSnapshot
 import compose.project.click.click.data.repository.MapBeaconRepository
 import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.data.api.CommunityHubNearbyDto
+import compose.project.click.click.data.api.toEventBookmarkItemDto
+import compose.project.click.click.data.api.toStoredEventBookmark
 import compose.project.click.click.utils.LocationService
 import compose.project.click.click.auth.LocalSessionCache
 import compose.project.click.click.network.NetworkConnectivityMonitor
@@ -135,6 +137,20 @@ object AppDataManager {
 
     private val _prefetchedCommunityHubs = MutableStateFlow<List<CommunityHubNearbyDto>>(emptyList())
     val prefetchedCommunityHubs: StateFlow<List<CommunityHubNearbyDto>> = _prefetchedCommunityHubs.asStateFlow()
+
+    /** Saved event bookmarks restored from disk for instant Home paint. */
+    private val _cachedEventBookmarks =
+        MutableStateFlow<List<compose.project.click.click.data.api.EventBookmarkItemDto>>(emptyList())
+    val cachedEventBookmarks:
+        StateFlow<List<compose.project.click.click.data.api.EventBookmarkItemDto>> =
+        _cachedEventBookmarks.asStateFlow()
+
+    fun updateCachedEventBookmarks(
+        bookmarks: List<compose.project.click.click.data.api.EventBookmarkItemDto>,
+    ) {
+        _cachedEventBookmarks.value = bookmarks.take(5)
+        schedulePersistSnapshot()
+    }
 
     /** True after the startup beacon/hub prefetch attempt finishes (success, empty, or failure). */
     private val _discoveryMapPrefetchComplete = MutableStateFlow(false)
@@ -550,6 +566,22 @@ object AppDataManager {
         if (connectionId.isBlank()) return
         val updated = _inboxFeedChats.value.map { row ->
             if (row.connection.id != connectionId) return@map row
+            val existing = row.lastMessage
+            val shouldReplacePreview = existing == null ||
+                lastMessagePreview.id == existing.id ||
+                lastMessagePreview.timeCreated > existing.timeCreated ||
+                (lastMessagePreview.timeCreated == existing.timeCreated &&
+                    lastMessagePreview.id >= existing.id)
+            if (!shouldReplacePreview) {
+                return@map row.copy(
+                    connection = row.connection.copy(
+                        last_message_at = listOfNotNull(
+                            row.connection.last_message_at,
+                            lastMessagePreview.timeCreated,
+                        ).maxOrNull(),
+                    ),
+                )
+            }
             row.copy(
                 lastMessage = lastMessagePreview,
                 connection = row.connection.copy(
@@ -1170,6 +1202,7 @@ object AppDataManager {
         beaconPrefetchJob = null
         _prefetchedMapBeacons.value = emptyList()
         _prefetchedCommunityHubs.value = emptyList()
+        _cachedEventBookmarks.value = emptyList()
         _discoveryMapPrefetchComplete.value = false
         _lastKnownDeviceLocation.value = null
         queuedProfilePrefetchIds = emptySet()
@@ -1353,7 +1386,17 @@ object AppDataManager {
             if (c.id != connectionId) return@map c
             val mergedAt = listOfNotNull(c.last_message_at, lastMessageAt).maxOrNull()
             val newChat = if (lastMessagePreview != null) {
-                c.chat.copy(messages = listOf(lastMessagePreview))
+                val existingPreview = c.chat.messages.firstOrNull()
+                val shouldReplacePreview = existingPreview == null ||
+                    lastMessagePreview.id == existingPreview.id ||
+                    lastMessagePreview.timeCreated > existingPreview.timeCreated ||
+                    (lastMessagePreview.timeCreated == existingPreview.timeCreated &&
+                        lastMessagePreview.id >= existingPreview.id)
+                if (shouldReplacePreview) {
+                    c.chat.copy(messages = listOf(lastMessagePreview))
+                } else {
+                    c.chat
+                }
             } else {
                 c.chat
             }
@@ -1985,7 +2028,18 @@ object AppDataManager {
             _cachedHubThreads.value = snapshot.cachedHubThreads.associateBy { it.hubId }
             _inboxFeedChats.value = snapshot.inboxFeedChats
             if (snapshot.cachedMapBeacons.isNotEmpty()) {
-                _prefetchedMapBeacons.value = snapshot.cachedMapBeacons.map { it.toMapBeacon() }
+                // Drop null-island rows poisoned by GET /api/beacons/{id} location-parse fallback.
+                val restored = snapshot.cachedMapBeacons
+                    .map { it.toMapBeacon() }
+                    .filter { beacon ->
+                        beacon.latitude.isFinite() &&
+                            beacon.longitude.isFinite() &&
+                            !(beacon.latitude == 0.0 && beacon.longitude == 0.0)
+                    }
+                _prefetchedMapBeacons.value = restored
+                if (restored.size < snapshot.cachedMapBeacons.size) {
+                    schedulePersistSnapshot()
+                }
             }
             if (snapshot.cachedCommunityHubs.isNotEmpty()) {
                 _prefetchedCommunityHubs.value = snapshot.cachedCommunityHubs.map { hub ->
@@ -1999,6 +2053,10 @@ object AppDataManager {
                         distanceMeters = hub.reportedDistanceMeters ?: 0.0,
                     )
                 }
+            }
+            if (snapshot.cachedEventBookmarks.isNotEmpty()) {
+                _cachedEventBookmarks.value =
+                    snapshot.cachedEventBookmarks.map { it.toEventBookmarkItemDto() }
             }
             supabaseRepository.seedCachedUserPublicProfiles(snapshot.cachedUserPublicProfiles)
             supabaseRepository.seedCachedProfileTimelines(snapshot.cachedProfileTimelines)
@@ -2050,6 +2108,7 @@ object AppDataManager {
                     reportedDistanceMeters = dto.distanceMeters,
                 )
             },
+            cachedEventBookmarks = _cachedEventBookmarks.value.map { it.toStoredEventBookmark() },
             snapshotSavedAtMs = Clock.System.now().toEpochMilliseconds(),
         )
         runCatching {

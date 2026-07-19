@@ -86,8 +86,8 @@ private class MapIosHalfSheetManager(
     ) {
         schemeState.value = scheme
         typographyState.value = typography
-        // Beacon/map sheets pass OLED black — force dark sheet chrome even when app theme is light.
-        isChromeDark = scheme.background.luminance() < 0.5f || container.luminance() < 0.12f
+        // Follow app color scheme — sheet surfaces are theme-aware (no forced OLED dark).
+        isChromeDark = scheme.background.luminance() < 0.5f
         containerColor = container
         applyTheme(isChromeDark)
         applyContainerColor(container)

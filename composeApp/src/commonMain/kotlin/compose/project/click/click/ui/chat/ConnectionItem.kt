@@ -1,10 +1,8 @@
 package compose.project.click.click.ui.chat // pragma: allowlist secret
 
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -206,7 +204,11 @@ fun ConnectionItem(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight()
-                .connectionRowPressGestures(onClick = onClick, onLongPress = onLongPress),
+                .connectionRowPressGestures(
+                    interactionSource = rowInteraction,
+                    onClick = onClick,
+                    onLongPress = onLongPress,
+                ),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -272,25 +274,20 @@ fun ConnectionItem(
                     } else {
                         rawPreview
                     }
-                    Crossfade(
-                        targetState = previewText,
-                        animationSpec = tween(durationMillis = 300),
+                    // Instant text swap — Crossfade on recycled rows fights LazyColumn fling.
+                    Text(
+                        previewText,
                         modifier = Modifier.weight(1f),
-                        label = "preview_fade",
-                    ) { text ->
-                        Text(
-                            text,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (unreadCount > 0) {
-                                MaterialTheme.colorScheme.onSurface
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            fontWeight = if (unreadCount > 0) FontWeight.Medium else FontWeight.Normal,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (unreadCount > 0) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        fontWeight = if (unreadCount > 0) FontWeight.Medium else FontWeight.Normal,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
 
                 if (unreadCount > 0) {

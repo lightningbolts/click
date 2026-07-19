@@ -15,19 +15,18 @@ SettingsScreen (tab route "settings")
 ├── AppScreenScaffold
 │   ├── PageHeader title: "Settings"
 │   │   └── Search action → UnifiedSearchSheet
-│   └── LazyColumn (14dp section spacing)
-│       ├── Section "Availability"
-│       ├── Section "Notifications"
-│       ├── Section "Sound & microphone"
-│       ├── Section "Your Data"
-│       ├── Section "Privacy & permissions"
-│       ├── Section "Interests"
+│   └── LazyColumn (24dp cluster spacing)
+│       ├── SettingsProfileHeader (avatar, name, email, Edit Profile)
+│       ├── Cluster "Availability"
+│       ├── Cluster "Alerts" (notifications + ambient sound)
+│       ├── Cluster "Privacy & data" (Your Data toggles + Permissions Hub)
+│       ├── Cluster "Interests"
 │       │   └── SettingsInterestsCard (hidden when userId blank)
-│       ├── Section "Appearance"
-│       └── Section "Account"
+│       ├── Cluster "Appearance"
+│       └── SettingsSignOutButton (standalone)
 ├── AvailabilitySheet (modal)
 ├── Remove availability? dialog
-├── Edit name dialog
+├── Edit name dialog (from Edit Profile)
 └── Local SnackbarHost (avatar, interests, media errors)
 ```
 
@@ -44,12 +43,23 @@ SettingsScreen (tab route "settings")
 | Root | `AdaptiveBackground` + `AppScreenScaffold` |
 | Page title | `"Settings"` |
 | Header | Floating solid header bar with 2dp bottom `#000` border; lazy scroll content |
-| Section spacing | 14dp between section headers and cards |
+| Cluster spacing | 24dp between preference clusters; 8dp between cluster header and card |
 | Search | Header magnifier → `onOpenSearch` → `UnifiedSearchSheet` |
 | Local snackbar | Bottom-centered, 24dp padding — avatar, interests, media errors |
 | Global snackbar | App-level `Scaffold.snackbarHost` — name-update errors, notification save errors |
 
-### Section: Availability
+### Profile header
+
+| Element | String / style |
+|---------|----------------|
+| Composable | `SettingsProfileHeader` — first LazyColumn item |
+| Avatar | Centered tap target; initials fallback `"?"`; camera badge |
+| Display name | First + last (fallback `User.name`, else `"—"`) |
+| Email | Shown when `User.email` non-blank |
+| Avatar helper | `"Tap photo to change · auto-compressed if needed"` |
+| Primary CTA | `"Edit Profile"` → existing Edit name dialog |
+
+### Cluster: Availability
 
 | Element | Position / style |
 |---------|------------------|
@@ -60,28 +70,22 @@ SettingsScreen (tab route "settings")
 | Per-intent row | Tag label (fallback `"—"`), detail `{timeframe} · {activeUntilLabel}`, actions `"Edit"` / `"Remove"` |
 | `activeUntilLabel` formats | `"Today · HH:MM"`, `"Tomorrow · HH:MM"`, `"M/D · HH:MM"` |
 
-### Section: Notifications
+### Cluster: Alerts
 
 | Element | String |
 |---------|--------|
-| Section header | `"Notifications"` |
+| Section header | `"Alerts"` |
 | Toggle 1 | `"Message notifications"` (no subtitle) |
 | Toggle 2 | `"Call alerts"` (no subtitle) |
-
-### Section: Sound & microphone
-
-| Element | String |
-|---------|--------|
-| Section header | `"Sound & microphone"` |
-| Toggle | `"Ambient sound enrichment"` |
-| Subtitle | `"Short mic sample at connect time for a noise category only. No recordings stored."` |
+| Toggle 3 | `"Ambient sound enrichment"` |
+| Subtitle 3 | `"Short mic sample at connect time for a noise category only. No recordings stored."` |
 | Conditional error (mic off + opt-in on) | `"Microphone access is off — enable it in system settings to use ambient enrichment."` |
 
-### Section: Your Data
+### Cluster: Privacy & data
 
 | Element | String |
 |---------|--------|
-| Section header | `"Your Data"` |
+| Section header | `"Privacy & data"` |
 | Toggle 1 | `"Ghost Mode"` |
 | Subtitle 1 | `"Go off the grid — hide your location, pause matching, and mute presence."` |
 | Active banner (ghost on) | `"Ghost mode is on — location not shared."` |
@@ -91,6 +95,9 @@ SettingsScreen (tab route "settings")
 | Subtitle 3 | `"Personal only, never shared"` |
 | Toggle 4 | `"Business insights"` |
 | Subtitle 4 | `"Anonymized venue trends"` |
+| Collapsible hub header | `"Permissions Hub"` |
+| Hub subtitle | `"Review & fix microphone, location, and Bluetooth access."` |
+| Chevron a11y | `"Collapse"` / `"Expand"` |
 
 **Location snap hints** (shown only when snap ON):
 
@@ -104,15 +111,6 @@ Hint colors: error (denied), amber `#F59E0B` (not set).
 
 **Note:** Unlike onboarding, Settings does not disable Memory Map / Business insights when Location snap is off — all four toggles are independently enabled.
 
-### Section: Privacy & permissions
-
-| Element | String |
-|---------|--------|
-| Section header | `"Privacy & permissions"` |
-| Collapsible hub header | `"Permissions Hub"` |
-| Hub subtitle | `"Review & fix microphone, location, and Bluetooth access."` |
-| Chevron a11y | `"Collapse"` / `"Expand"` |
-
 **Inline panel rows** (`InlinePermissionsPanel`):
 
 | Permission | Title | Description | Badge labels | Primary CTA |
@@ -123,31 +121,26 @@ Hint colors: error (denied), amber `#F59E0B` (not set).
 
 Bottom button: `"System Settings"`.
 
-### Section: Interests
+### Cluster: Interests
 
 | Element | Detail |
 |---------|--------|
 | Section header | `"Interests"` — always shown |
 | Card | `SettingsInterestsCard` — rendered only when `userId` non-blank; if no user, header appears with no card |
 
-### Section: Appearance
+### Cluster: Appearance
 
 | Element | String |
 |---------|--------|
 | Section header | `"Appearance"` |
 | Toggle | `"Dark mode"` |
 
-### Section: Account
+### Sign out
 
 | Element | String / style |
 |---------|----------------|
-| Section header | `"Account"` |
-| Avatar | Tap target; initials fallback `"?"` |
-| Avatar helper | `"Tap to change photo · auto-compressed if needed"` |
-| Name label | `"Name"` |
-| Field labels | `"First name"`, `"Last name"` |
-| Empty name display | `"—"` |
-| Sign out button | `"Sign out"` — iOS: error tint on light error background; Android: solid error fill |
+| Composable | `SettingsSignOutButton` — standalone after Appearance |
+| Label | `"Sign out"` — iOS: error tint on light error background + error border; Android: solid error fill + `clickBorderColor()` border |
 
 ### SettingsInterestsCard layout
 
@@ -239,7 +232,7 @@ Bottom button: `"System Settings"`.
 | Has active intent(s) | Tag + timeframe + Edit/Remove per row |
 | Delete fail | Inline red error via `formatAvailabilityIntentSaveError` |
 
-### Notifications / Sound / Your Data / Appearance
+### Alerts / Privacy & data / Appearance
 
 | State | UI |
 |-------|-----|
@@ -273,12 +266,12 @@ Bottom button: `"System Settings"`.
 
 **Save rules:** No min/max tag count (`minTags=null`, `maxTags=null`). Save enabled only when `tagsDirty && !tagsSaving`.
 
-### Account
+### Profile header / Account
 
 | State | UI |
 |-------|-----|
-| Default | Shows name fields or `"—"` |
-| Photo uploading | Avatar updates on success |
+| Default | Display name or `"—"`; email when present |
+| Photo uploading | Spinner overlay on avatar |
 | Photo success | Local snackbar `"Profile photo updated"` |
 | Photo fail | Server msg or `"Could not update profile photo"` |
 | Media blocked | Platform-specific photo access string |
@@ -351,28 +344,22 @@ Bottom button: `"System Settings"`.
 | Remove dialog body | `Stop showing "{label}" as your active availability.` |
 | Remove confirm | `"Remove"` |
 
-### Notifications
+### Alerts
 
 | Key | String |
 |-----|--------|
-| Section | `"Notifications"` |
+| Section | `"Alerts"` |
 | Messages | `"Message notifications"` |
 | Calls | `"Call alerts"` |
-
-### Sound & microphone
-
-| Key | String |
-|-----|--------|
-| Section | `"Sound & microphone"` |
-| Toggle | `"Ambient sound enrichment"` |
-| Subtitle | `"Short mic sample at connect time for a noise category only. No recordings stored."` |
+| Ambient toggle | `"Ambient sound enrichment"` |
+| Ambient subtitle | `"Short mic sample at connect time for a noise category only. No recordings stored."` |
 | Mic off error | `"Microphone access is off — enable it in system settings to use ambient enrichment."` |
 
-### Your Data
+### Privacy & data
 
 | Key | String |
 |-----|--------|
-| Section | `"Your Data"` |
+| Section | `"Privacy & data"` |
 | Ghost Mode | `"Ghost Mode"` |
 | Ghost subtitle | `"Go off the grid — hide your location, pause matching, and mute presence."` |
 | Ghost banner | `"Ghost mode is on — location not shared."` |
@@ -382,12 +369,6 @@ Bottom button: `"System Settings"`.
 | Memory Map subtitle | `"Personal only, never shared"` |
 | Business insights | `"Business insights"` |
 | Business insights subtitle | `"Anonymized venue trends"` |
-
-### Privacy & permissions
-
-| Key | String |
-|-----|--------|
-| Section | `"Privacy & permissions"` |
 | Hub title | `"Permissions Hub"` |
 | Hub subtitle | `"Review & fix microphone, location, and Bluetooth access."` |
 | Microphone | `"Microphone"` |
@@ -452,18 +433,17 @@ Bottom button: `"System Settings"`.
 | Section | `"Appearance"` |
 | Toggle | `"Dark mode"` |
 
-### Account
+### Profile header / Sign out
 
 | Key | String |
 |-----|--------|
-| Section | `"Account"` |
-| Avatar helper | `"Tap to change photo · auto-compressed if needed"` |
-| Name label | `"Name"` |
-| First name | `"First name"` |
-| Last name | `"Last name"` |
-| Empty | `"—"` |
+| Edit Profile CTA | `"Edit Profile"` |
+| Avatar helper | `"Tap photo to change · auto-compressed if needed"` |
+| Empty name | `"—"` |
 | Sign out | `"Sign out"` |
 | Edit dialog title | `"Edit name"` |
+| First name | `"First name"` |
+| Last name | `"Last name"` |
 | Initials fallback | `"?"` |
 
 ---
@@ -493,7 +473,7 @@ View "Active availability post"
 ### Privacy / location
 
 ```
-Your Data section
+Privacy & data cluster
   → Toggle Ghost Mode / Location snap / Memory Map / Business insights
   → Enabling Location snap without permission → OS location dialog
   → Location snap hints guide to Permissions Hub or System Settings
@@ -502,7 +482,7 @@ Your Data section
 ### Permissions Hub
 
 ```
-Privacy & permissions → tap "Permissions Hub" to expand
+Privacy & data → tap "Permissions Hub" to expand
   → Review badge status per permission
   → "Allow microphone" / "Allow location" → OS dialogs
   → Denied location → "Open settings" on row or "System Settings" button
@@ -517,14 +497,13 @@ Interests section → wait for load (spinner if cold)
   → Success snackbar "Saved {N} interests" + button shows "Saved"
 ```
 
-### Account
+### Profile / Sign out
 
 ```
 Tap avatar or camera icon → photo library → upload → "Profile photo updated"
-Tap edit pencil → "Edit name" dialog → "Save" (first name required)
+Tap "Edit Profile" → "Edit name" dialog → "Save" (first name required)
 "Sign out" → auth cleared, returns to login
 ```
-
 ### Appearance
 
 ```
@@ -541,7 +520,7 @@ Toggle "Dark mode" → persisted to token storage
 | Permissions chevron | `"Collapse"` / `"Expand"` |
 | Profile photo (image) | `"Profile photo"` |
 | Change photo FAB | `"Change profile photo"` |
-| Edit name button | `"Edit name"` |
+| Edit Profile button | Visible label `"Edit Profile"` |
 | Sign out icon | `null` (decorative) |
 | Section row icons (toggles, permissions) | `null` |
 | InterestEditor expand icons | `null` |

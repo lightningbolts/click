@@ -1,6 +1,7 @@
 package compose.project.click.click.ui.chat
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -13,8 +14,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -337,29 +336,48 @@ internal fun LoadingSubtitlePlaceholder(modifier: Modifier = Modifier) {
 }
 
 /**
- * Wraps a chat bubble's content in a short fade+slide+scale enter and
- * exit animation keyed off [bubbleStabilityKey] (must stay constant when an
- * optimistic row is reconciled with the server-assigned message id).
+ * Draw-phase enter for newly sent bubbles only.
+ *
+ * Critical: do **not** use [AnimatedVisibility] here. LazyColumn recycles items during fling;
+ * a layout-affecting enter (height 0 → full) on every recycled row absorbs coast velocity and
+ * makes the timeline feel like it hard-stops. [graphicsLayer] keeps measured size stable so
+ * fling physics stay intact; only optimistic outbound rows animate (iMessage-style pop-in).
  */
 @Composable
 internal fun AnimatedVisibilityChatBubble(
     bubbleStabilityKey: String,
     isSent: Boolean,
+    animateEnter: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    @Suppress("UNUSED_PARAMETER") val unusedIsSent = isSent
-    var visible by remember(bubbleStabilityKey) { mutableStateOf(false) }
-    LaunchedEffect(bubbleStabilityKey) {
-        visible = true
+    // Capture at first composition of this stable key — recycle must not re-animate.
+    val playEnter = remember(bubbleStabilityKey) { animateEnter && isSent }
+    if (!playEnter) {
+        content()
+        return
     }
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(ChatChromeMotion.ShortFade) +
-            slideInVertically(animationSpec = ChatChromeMotion.ShortSlide, initialOffsetY = { it / 10 }) +
-            scaleIn(ChatChromeMotion.ShortFade, initialScale = 0.97f),
-        exit = fadeOut(animationSpec = tween(140, easing = FastOutSlowInEasing)) +
-            slideOutVertically(animationSpec = ChatChromeMotion.ShortSlide, targetOffsetY = { it / 12 }) +
-            scaleOut(animationSpec = ChatChromeMotion.ShortFade, targetScale = 0.96f),
+
+    val progress = remember(bubbleStabilityKey) { Animatable(0f) }
+    LaunchedEffect(bubbleStabilityKey) {
+        progress.snapTo(0f)
+        progress.animateTo(
+            targetValue = 1f,
+            animationSpec = spring(
+                dampingRatio = 0.78f,
+                stiffness = 700f,
+            ),
+        )
+    }
+    Box(
+        modifier = Modifier.graphicsLayer {
+            val t = progress.value
+            alpha = t
+            val scale = 0.92f + 0.08f * t
+            scaleX = scale
+            scaleY = scale
+            // Rise from the composer without changing layout size.
+            translationY = (1f - t) * 28f
+        },
     ) {
         content()
     }

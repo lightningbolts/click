@@ -109,7 +109,7 @@ object MessageCrypto {
             for (member in members) {
                 val wrapPeer = if (member == creator) anchor else creator
                 val edge = resolveEdge(member, wrapPeer)
-                    ?: error("Missing verified connection for a member")
+                    ?: throw IllegalStateException("Missing verified connection for a member")
                 val keys = deriveKeysForConnection(edge.first, edge.second)
                 encrypted[member] = encryptContent(b64, keys)
             }

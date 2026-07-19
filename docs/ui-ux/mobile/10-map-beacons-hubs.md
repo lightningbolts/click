@@ -13,13 +13,12 @@
 ```
 MapScreen (organism)
 ├── MapState branches: Loading | Error | Success
-├── MapDiscoveryScreen (feed + PiP map)
-│   ├── DiscoveryFloatingHeader — "Discovery", stats, Distance/Recent, search, refresh
-│   ├── LazyColumn feed sections + empty/loading rows
-│   ├── Drop beacon FAB (bottom-start)
-│   └── Map PiP preview + expand (bottom-end)
-├── Fullscreen map overlay (expanded)
-│   └── MapExpandedMapChrome — close, layer filter, drop beacon, zoom
+├── MapDiscoveryScreen (map-first canvas) — map + chrome + peek composed as siblings
+│   ├── Full-bleed interactive PlatformMap (gestures stay on; Events overlay covers touches)
+│   ├── MapAlwaysOnChrome — alpha-hidden while Events open (not disposed)
+│   └── Events reopen chip (alpha-hidden while list open)
+├── EventsDiscoveryFullScreen (slide-up from bottom + InteractiveSwipeBackContainer) — back/swipe → map/peek
+│   └── AppScreenScaffold + Liquid Glass header; search, sort, layer chips, denser event cards + RSVP
 ├── MapBeaconSheetRoot overlays (conditional)
 │   ├── BeaconDropSheetContent
 │   ├── CommunityHubBottomSheet
@@ -47,45 +46,37 @@ CreateHubModal — also reachable from BeaconDropSheet Hub category
 |----------|-------|
 | Background | Flat `background` `#f9f9f9`; ghost mode adds `surface-dim` wash + 2dp dashed `#000` overlay hint |
 | Scaffold | Zero content insets; `SnackbarHost` only |
-| Success child | `MapDiscoveryScreen` (not raw full-bleed map as primary surface) |
+| Success child | `MapDiscoveryScreen` — **full interactive map** is the primary surface |
 
 ### MapDiscoveryScreen (`MapDiscoveryLayout.kt`)
 
 | Property | Value |
 |----------|-------|
-| Feed | `LazyColumn`, 10dp row spacing, 20dp horizontal padding |
-| Top inset | Status bar + expanded floating header (~76dp) + 8dp |
-| Bottom inset | Bottom chrome + PiP height (160dp) + FAB gap + 16dp |
-| PiP map | 120×160dp, 16dp radius, 2dp `#000` border, bottom-end above tab bar |
-| Drop beacon FAB | 56dp, `primaryContainer`, bottom-start (left of PiP) |
-| Header | `DiscoveryFloatingHeader` — title `"Discovery"`, subtitle dynamic stats line |
+| Primary canvas | Full-bleed `PlatformMap` with gestures enabled on tab entry |
+| Map chrome | `MapAlwaysOnChrome` — layer filter top-end; drop-beacon FAB + zoom docked **above** reopen chip (`mapFabAboveNav + 120.dp`) |
+| Events list | **Full-screen** slide-up / slide-down (`slideInVertically` / `slideOutVertically`) + `InteractiveSwipeBackContainer` (horizontal edge swipe still dismisses). Title **Events** (peek chip same). `AppScreenScaffold` + Liquid Glass header |
+| Search | Only inside full-screen list |
+| Filters / sort | Distance/Recent segment + layer chips; refresh in header |
+| Event cards | Title, host, schedule, description, distance, attendees, RSVP. Card tap → `EventBeaconDetail` |
+| Back | Swipe / back / system back → map + peek. Map stays mounted (no marker preview wipe) |
 
-**Stats subtitle template:** `"{liveCount} live · {totalConnections} memories"`
+**Pins:** Circular avatar markers (**44dp** Android / **44pt** iOS) for connections, beacons, hubs, **and cluster hubs**. All use the same diameter when scrunched — no squad size scaling on the circle (squad still raises z-index / pulse). Cluster hubs show count glyphs on the same circular chrome (not teardrop `MKMarker` / oversized hubs). Tap cluster → zoom into members (unchanged).
 
-### Discovery feed sections (grouped titles)
+### Events feed (full screen)
 
-| Section title | Source kind |
-|---------------|-------------|
-| `"Community hubs"` | `DiscoveryFeedItem.Hub` |
-| `"Soundtracks"` | `MapBeaconKind.SOUNDTRACK` |
-| `"SOS beacons"` | `MapBeaconKind.SOS` |
-| `"Hazards"` | `MapBeaconKind.HAZARD` |
-| `"Utilities"` | `MapBeaconKind.UTILITY` |
-| `"Study spots"` | `MapBeaconKind.STUDY` |
-| `"Social vibes"` | `MapBeaconKind.SOCIAL_VIBE` |
-| `"Events"` | `MapBeaconKind.EVENT` |
-| `"Beacons"` | `MapBeaconKind.OTHER` |
+| Section | Source |
+|---------|--------|
+| `"Events for you"` | `DiscoveryFeedItem.Beacon` where `kind == EVENT` |
 
-Hub row subtitle template: `"Ephemeral · {activeUserCount} here"`
+Other beacon/hub kinds remain on the **map** via layer filters.
 
-### MapExpandedMapChrome
+### MapAlwaysOnChrome
 
 | Control | Position | Size |
 |---------|----------|------|
-| Close (`"Minimize map"`) | Top-start | 44dp solid bordered circle button |
-| Layer filter dropdown | Top-center-right | max 132dp trigger, 240dp menu |
-| Drop beacon (`"Drop beacon"`) | Bottom-start | 56dp |
-| Zoom in / out | Bottom-end column | 48dp each |
+| Layer filter dropdown | Top-end | max 132dp trigger |
+| Drop beacon (`"Drop beacon"`) | Bottom-start, above reopen chip clearance (`mapFabAboveNav + 120.dp`) | 56dp |
+| Zoom in / out | Bottom-end column, same clearance | 48dp each |
 
 ### BeaconDropSheet (`BeaconDropSheetContent`)
 
@@ -96,6 +87,7 @@ Hub row subtitle template: `"Ephemeral · {activeUserCount} here"`
 | Category chips | Horizontal `LazyRow` |
 | Hub mode | Name field + category `FlowRow` |
 | Non-hub | Title / soundtrack URL / event picker / duration chips / description |
+| Event extras | Start/end picker + multi-select **Categories** (`Promotional` / `Social` / `School Event`) + **Check-in area** venue scale (`Intimate` / `Neighborhood` / `Venue` / `Campus`) → metadata `event_categories`, `venue_scale`, `check_in_radius_meters` |
 | Visibility | `"Who can see this"` chip row + `"Display my name"` switch |
 | CTA | Full-width `Button` — `"Create hub"` or `"Drop pin"` |
 
@@ -109,13 +101,30 @@ Headline hub name (`headlineSmall`), active count, distance/geofence row, join C
 
 ### BeaconDetailSheet
 
-Creator toolbar: `"Edit beacon"` / `"Delete beacon"` icon buttons (creator only). Body varies by `MapBeaconKind` (soundtrack card, event RSVP, or community detail).
+Creator toolbar: `"Edit beacon"` / `"Delete beacon"` icon buttons (creator only). Body varies by `MapBeaconKind`.
+
+**Event (`EventBeaconDetail`)** — expanded hierarchy (design-asset `event_details_expanded_dark/`):
+
+| Region | Notes |
+|--------|-------|
+| LIVE badge | When schedule `isLive` (`start ≤ now < end`) |
+| Title + distance subtitle | `displayDynamicTitle()`; distance when known |
+| Hero actions | **Share** + **Bookmark** + **Check in** + creator **⋯** last (Edit / Delete themed dropdown; bookmark/check-in **server-backed** via engagement API) |
+| Start / End bento | Two bordered cells: **date** (`Jun 12`) + **time** (`7:33 PM`) from `EventSchedule` |
+| Categories | Chips from metadata `event_categories`; hidden when empty |
+| Host card | When `showCreatorName`; avatar from `AppDataManager` current/connected user image when available; initials fallback |
+| Description | Body copy |
+| Active Clicks | Overlapping avatar stack + `+N`; count in section label |
+| Primary CTA | `"Join Event Route"` → HTTPS Google Maps (Apple Maps fallback). Do **not** use `geo:` as primary on iOS (NSOSStatus -10814) |
+| Secondary CTA | `"RSVP / Sign Up"` / `"Cancel RSVP"` via `MapViewModel` |
+
+Soundtrack / other kinds: creator uses the same bordered **⋯** overflow; prior card layouts otherwise.
 
 ### HubChatScreen
 
 | Region | Height / notes |
 |--------|----------------|
-| Solid header | 56dp + status bar; back, title, occupant subtitle, ⋮ menu; 2dp bottom `#000` border |
+| Solid header | 56dp + status bar; bordered back (`ChatHeaderIconButton(showBorder = true)`), title, occupant subtitle, borderless ⋮; 2dp bottom `#000` border |
 | Tap-to-connect banner | Primary blue surface, centered copy |
 | Lobby banner (when `inLobby`) | `primaryContainer` tint — currently disabled (`inLobby = false`) |
 | Timeline | `ChatMessageTimeline`, hub-neutral mesh |
@@ -154,6 +163,8 @@ Creator toolbar: `"Edit beacon"` / `"Delete beacon"` icon buttons (creator only)
 | Control | Action |
 |---------|--------|
 | Category chip | Switches form mode (including `"Hub"` → hub fields) |
+| Event category chips | Multi-select → `event_categories` metadata |
+| Check-in area chips | Single-select venue scale → `venue_scale` + `check_in_radius_meters` |
 | `"Create hub"` (hub mode) | Closes drop sheet → `CreateHubModal` with prefilled name/category |
 | `"Drop pin"` | `MapViewModel.submitBeaconDrop(...)` |
 | Paste icon (soundtrack) | Paste clipboard into URL field |
@@ -169,12 +180,14 @@ Creator toolbar: `"Edit beacon"` / `"Delete beacon"` icon buttons (creator only)
 | `null` | Spinner + `"Verifying your location…"` |
 | Always | `"Close"` dismisses |
 
-### Beacon detail (creator)
+### Beacon detail
 
 | Action | Result |
 |--------|--------|
-| Edit | `AnimatedClickDialog` `"Edit beacon"` / `"Save"` |
-| Delete | `AnimatedClickDialog` `"Delete beacon?"` / `"Delete"` |
+| ⋯ overflow (creator, last hero button) | Themed dropdown (opaque surface, 2dp border, zero elevation): Edit / Delete → existing dialogs |
+| Share | System text share (title, schedule, maps HTTPS link) |
+| Bookmark / Check in | Server-backed (`GET/PUT` bookmark, `GET/POST/DELETE` check-in, `GET` engagement). Check-in requires location + live window (+15m early grace) + venue-scale geofence. Snackbars: “Location access is required to check in” / “Location required to check in” / “Move closer to the event to check in” / “Check-in opens when the event starts”. Impression fired on detail open. |
+| Join Event Route | Opens HTTPS maps (`maps.google.com`, Apple Maps fallback). Avoid primary `geo:` on iOS |
 | Event RSVP | `"RSVP / Sign Up"` or `"Cancel RSVP"` |
 | Play preview | Audio player on soundtrack beacons |
 | `"Play full song"` | Opens original media URL |
@@ -394,7 +407,7 @@ flowchart TD
 | Map expand / minimize | `"Expand map"`, `"Minimize map"` |
 | Zoom controls | `"Zoom in"`, `"Zoom out"` |
 | Soundtrack preview | `"Play preview"` / `"Pause preview"` toggle |
-| Beacon creator actions | `"Edit beacon"`, `"Delete beacon"` |
+| Beacon creator actions | `"More actions"` ⋯ → `"Edit"` / `"Delete"` in themed menu |
 | Hub chat back / menu | `"Back"`, `"Hub settings"` |
 | Layer filter | Chip shows selected state via check icon in menu items |
 | Discovery rows | Title + subtitle + distance line; icon decorative (`contentDescription = null`) |
@@ -404,3 +417,18 @@ flowchart TD
 | Join hub sheet | Single-line code field with `"Hub code"` label |
 
 **Gaps:** Discovery feed rows do not merge title/subtitle into a single semantics node. Layer filter trigger uses truncated label (`"Conn"`) which may be unclear to screen readers — full labels exist only in the dropdown menu.
+
+---
+
+## 7. Event ↔ encounter integration
+
+When two users connect (Tap / QR / connection create / encounter log) while GPS is inside a **live** map event geofence **and both already RSVPed** (`beacon_attendees`), attach that event to the encounter.
+
+| Concern | Intent |
+|---------|--------|
+| Trigger | Successful connect while device GPS is inside the event beacon radius **and** live window (`isEventLiveForCheckIn`) **and** both users RSVPed |
+| Persist | `event_beacon_id` + denorm title/schedule; merge context tag `at_event` |
+| Surface | Profile **Timeline** — event title, schedule, “View on map”; `at_event` chip label “At event” |
+| Non-goals | Creating RSVPs as a side effect of connecting (read-only gate) |
+
+Cross-links: [06-connect-handshake.md](06-connect-handshake.md), [12-profile-memories.md](12-profile-memories.md).

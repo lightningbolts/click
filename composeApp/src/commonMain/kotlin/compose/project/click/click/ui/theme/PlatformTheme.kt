@@ -134,8 +134,8 @@ fun clickColorScheme(isDarkMode: Boolean) =
             onSurface = OnSurfaceDark,
             primaryContainer = LightBlue,
             onPrimaryContainer = SoftBlue,
-            surfaceVariant = Color(0xFF3A3C3C),
-            onSurfaceVariant = OutlineVariant,
+            surfaceVariant = SurfaceVariantDark,
+            onSurfaceVariant = Color(0xFFD6D9D9),
             outline = OutlineMuted,
             error = Color(0xFFBA1A1A),
         )

@@ -30,6 +30,26 @@ internal fun formatConnectionListTimestamp(timestamp: Long): String {
     }
 }
 
+/**
+ * Compact elapsed badge for the Remember Me strip (`12h`, `2d`, …).
+ * Returns null when [timestamp] is null so the chip can be omitted.
+ * `nowMs` is exposed for deterministic tests.
+ */
+internal fun formatRememberMeBadge(
+    timestamp: Long?,
+    nowMs: Long = Clock.System.now().toEpochMilliseconds(),
+): String? {
+    if (timestamp == null) return null
+    val diff = (nowMs - timestamp).coerceAtLeast(0L)
+    return when {
+        diff < 60_000 -> "1m"
+        diff < 3_600_000 -> "${diff / 60_000}m"
+        diff < 86_400_000 -> "${diff / 3_600_000}h"
+        diff < 604_800_000 -> "${diff / 86_400_000}d"
+        else -> "${diff / 604_800_000}w"
+    }
+}
+
 /** 12-hour clock "H:MM AM/PM" for an individual chat message timestamp. */
 internal fun formatMessageTime(timestamp: Long): String {
     val instant = Instant.fromEpochMilliseconds(timestamp)

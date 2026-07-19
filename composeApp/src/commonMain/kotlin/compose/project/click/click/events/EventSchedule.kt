@@ -49,15 +49,27 @@ fun eventScheduleMetadata(
         put("event_end_at", Instant.fromEpochMilliseconds(schedule.endEpochMs).toString())
     }
 
+/** Overlay [schedule] onto existing metadata without dropping other keys. */
+fun mergeEventScheduleIntoRaw(
+    base: JsonObject?,
+    schedule: EventSchedule,
+): JsonObject =
+    buildJsonObject {
+        base?.forEach { (k, v) -> put(k, v) }
+        eventScheduleMetadata(schedule).forEach { (k, v) -> put(k, v) }
+    }
+
 fun parseEventScheduleFromMetadata(raw: JsonObject?): EventSchedule? {
     if (raw == null) return null
     fun parseInstant(key: String): Long? {
         val text = raw[key]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
             ?: return null
-        return runCatching { Instant.parse(text).toEpochMilliseconds() }.getOrNull()
+        // Same lenient path as beacon row timestamps (ISO + Postgres timestamptz forms).
+        return compose.project.click.click.data.models.parseEpochMs(text)
     }
     val start = parseInstant("event_start_at") ?: parseInstant("eventStartAt") ?: return null
     val end = parseInstant("event_end_at") ?: parseInstant("eventEndAt") ?: return null
+    if (end <= start) return null
     return EventSchedule(startEpochMs = start, endEpochMs = end)
 }
 
@@ -66,6 +78,19 @@ fun EventSchedule.isEnded(nowEpochMs: Long = Clock.System.now().toEpochMilliseco
 
 fun EventSchedule.isVisible(nowEpochMs: Long = Clock.System.now().toEpochMilliseconds()): Boolean =
     !isEnded(nowEpochMs)
+
+/** True while the event window is in progress (`start ≤ now < end`). */
+fun EventSchedule.isLive(nowEpochMs: Long = Clock.System.now().toEpochMilliseconds()): Boolean =
+    nowEpochMs >= startEpochMs && nowEpochMs < endEpochMs
+
+/** Compact posted/created label, e.g. `Jun 12, 7:33 PM`. */
+fun formatEventPostedAtLabel(
+    createdAtEpochMs: Long,
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+): String {
+    val dt = Instant.fromEpochMilliseconds(createdAtEpochMs).toLocalDateTime(timeZone)
+    return formatEventDateTimeLabel(dt)
+}
 
 /** Compact range for discovery cards and beacon detail sheets, e.g. `Jun 12, 7:00 PM – 9:00 PM`. */
 fun formatEventScheduleRange(
@@ -76,19 +101,59 @@ fun formatEventScheduleRange(
     val end = Instant.fromEpochMilliseconds(schedule.endEpochMs).toLocalDateTime(timeZone)
     val startLabel = formatEventDateTimeLabel(start)
     val endLabel = if (start.date == end.date) {
-        formatEventTimeLabel(end)
+        formatEventClockLabel(end)
     } else {
         formatEventDateTimeLabel(end)
     }
     return "$startLabel – $endLabel"
 }
 
-private fun formatEventDateTimeLabel(dt: kotlinx.datetime.LocalDateTime): String {
-    val mon = dt.month.name.lowercase().replaceFirstChar { it.uppercase() }.take(3)
-    return "$mon ${dt.dayOfMonth}, ${formatEventTimeLabel(dt)}"
+/** Start clock for bento cells, e.g. `8:00 PM`. */
+fun formatEventStartTimeLabel(
+    schedule: EventSchedule,
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+): String {
+    val start = Instant.fromEpochMilliseconds(schedule.startEpochMs).toLocalDateTime(timeZone)
+    return formatEventClockLabel(start)
 }
 
-private fun formatEventTimeLabel(dt: kotlinx.datetime.LocalDateTime): String {
+/** End clock for bento cells, e.g. `12:00 AM`. */
+fun formatEventEndTimeLabel(
+    schedule: EventSchedule,
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+): String {
+    val end = Instant.fromEpochMilliseconds(schedule.endEpochMs).toLocalDateTime(timeZone)
+    return formatEventClockLabel(end)
+}
+
+/** Start date for bento cells, e.g. `Jun 12`. */
+fun formatEventStartDateLabel(
+    schedule: EventSchedule,
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+): String {
+    val start = Instant.fromEpochMilliseconds(schedule.startEpochMs).toLocalDateTime(timeZone)
+    return formatEventDateOnlyLabel(start)
+}
+
+/** End date for bento cells, e.g. `Jun 13`. */
+fun formatEventEndDateLabel(
+    schedule: EventSchedule,
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+): String {
+    val end = Instant.fromEpochMilliseconds(schedule.endEpochMs).toLocalDateTime(timeZone)
+    return formatEventDateOnlyLabel(end)
+}
+
+private fun formatEventDateTimeLabel(dt: kotlinx.datetime.LocalDateTime): String {
+    return "${formatEventDateOnlyLabel(dt)}, ${formatEventClockLabel(dt)}"
+}
+
+private fun formatEventDateOnlyLabel(dt: kotlinx.datetime.LocalDateTime): String {
+    val mon = dt.month.name.lowercase().replaceFirstChar { it.uppercase() }.take(3)
+    return "$mon ${dt.dayOfMonth}"
+}
+
+fun formatEventClockLabel(dt: kotlinx.datetime.LocalDateTime): String {
     val hour24 = dt.hour
     val h12 = ((hour24 + 11) % 12) + 1
     val amPm = if (hour24 < 12) "AM" else "PM"

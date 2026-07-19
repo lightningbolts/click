@@ -46,6 +46,14 @@ data class ConnectionEncounter(
     val batteryLevel: Int? = null,
     @SerialName("context_tags")
     val contextTags: List<String> = emptyList(),
+    @SerialName("event_beacon_id")
+    val eventBeaconId: String? = null,
+    @SerialName("event_beacon_title")
+    val eventBeaconTitle: String? = null,
+    @SerialName("event_beacon_start_at")
+    val eventBeaconStartAt: String? = null,
+    @SerialName("event_beacon_end_at")
+    val eventBeaconEndAt: String? = null,
 ) {
     fun encounteredAtInstant(): Instant? =
         encounteredAt.trim().takeIf { it.isNotEmpty() }?.let { runCatching { Instant.parse(it) }.getOrNull() }
@@ -68,6 +76,7 @@ private fun ConnectionEncounter.richnessScore(): Int {
     if (compassAzimuth != null) score += 1
     if (batteryLevel != null) score += 1
     score += contextTags.size
+    if (!eventBeaconId.isNullOrBlank()) score += 3
     return score
 }
 
@@ -102,6 +111,10 @@ private fun mergeEncounterRows(rows: List<ConnectionEncounter>): ConnectionEncou
         compassAzimuth = ranked.firstValue { it.compassAzimuth?.takeIf { v -> v.isFinite() } },
         batteryLevel = ranked.firstValue { it.batteryLevel?.takeIf { v -> v in 0..100 } },
         contextTags = tags,
+        eventBeaconId = ranked.firstValue { it.eventBeaconId.ifPresent() },
+        eventBeaconTitle = ranked.firstValue { it.eventBeaconTitle.ifPresent() },
+        eventBeaconStartAt = ranked.firstValue { it.eventBeaconStartAt.ifPresent() },
+        eventBeaconEndAt = ranked.firstValue { it.eventBeaconEndAt.ifPresent() },
     )
 }
 

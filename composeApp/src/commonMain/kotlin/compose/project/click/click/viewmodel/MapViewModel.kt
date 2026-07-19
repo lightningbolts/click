@@ -14,17 +14,28 @@ import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlis
 import compose.project.click.click.data.api.BeaconAttendeeDto
 import compose.project.click.click.data.api.MapBeaconPatchBody
 import compose.project.click.click.data.models.parseMapBeaconMetadata // pragma: allowlist secret
+import compose.project.click.click.data.models.parseEpochMs
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.MapBeaconRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.BeaconRsvpPersistence // pragma: allowlist secret
+import compose.project.click.click.data.storage.BeaconEngagementPersistence
+import compose.project.click.click.data.api.BeaconEngagementHttpException
+import compose.project.click.click.data.api.EngagementTelemetryBody
+import compose.project.click.click.getPlatform
+import compose.project.click.click.events.EventVenueScale
+import compose.project.click.click.events.EVENT_VENUE_SCALE_METADATA_KEY
+import compose.project.click.click.events.EVENT_CHECK_IN_RADIUS_METADATA_KEY
 import compose.project.click.click.events.EventReminderCoordinator
 import compose.project.click.click.events.EventSchedule
+import compose.project.click.click.events.eventSchedule
 import compose.project.click.click.events.eventScheduleMetadata
+import compose.project.click.click.events.mergeEventScheduleIntoRaw
 import compose.project.click.click.events.isVisibleEventBeacon
 import compose.project.click.click.events.validateEventSchedule
+import compose.project.click.click.ui.utils.mergeMapBeaconLists
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import io.github.jan.supabase.auth.auth
@@ -43,6 +54,10 @@ import compose.project.click.click.utils.resolveHubGatekeeperLocation
 import kotlinx.serialization.json.JsonObject // pragma: allowlist secret
 import kotlinx.serialization.json.buildJsonObject // pragma: allowlist secret
 import kotlinx.serialization.json.put // pragma: allowlist secret
+import kotlinx.serialization.json.putJsonArray // pragma: allowlist secret
+import kotlinx.serialization.json.add // pragma: allowlist secret
+import compose.project.click.click.events.EVENT_CATEGORY_OPTIONS // pragma: allowlist secret
+import compose.project.click.click.events.EVENT_CATEGORIES_METADATA_KEY // pragma: allowlist secret
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.realtime.PostgresAction
 import kotlinx.coroutines.Dispatchers
@@ -105,6 +120,13 @@ sealed class MapSelection {
 data class BeaconRsvpCacheEntry(
     val attendees: List<BeaconAttendeeDto>,
     val currentUserSignedUp: Boolean,
+)
+
+data class BeaconEngagementCacheEntry(
+    val bookmarked: Boolean = false,
+    val checkedIn: Boolean = false,
+    val checkedInAt: String? = null,
+    val checkInCount: Int = 0,
 )
 
 /**
@@ -216,6 +238,22 @@ class MapViewModel : ViewModel() {
     private val _beaconRsvpPendingIds = MutableStateFlow<Set<String>>(emptySet())
     val beaconRsvpPendingIds: StateFlow<Set<String>> = _beaconRsvpPendingIds.asStateFlow()
 
+    private val _beaconEngagementById =
+        MutableStateFlow<Map<String, BeaconEngagementCacheEntry>>(emptyMap())
+    val beaconEngagementById: StateFlow<Map<String, BeaconEngagementCacheEntry>> =
+        _beaconEngagementById.asStateFlow()
+
+    private val _beaconEngagementPendingIds = MutableStateFlow<Set<String>>(emptySet())
+    val beaconEngagementPendingIds: StateFlow<Set<String>> =
+        _beaconEngagementPendingIds.asStateFlow()
+
+    private val _engagementSnackbar = MutableStateFlow<String?>(null)
+    val engagementSnackbar: StateFlow<String?> = _engagementSnackbar.asStateFlow()
+
+    fun clearEngagementSnackbar() {
+        _engagementSnackbar.value = null
+    }
+
     /**
      * False until startup prefetch or the first map-tab proximity fetch finishes.
      * Silent map refreshes do not reset this.
@@ -275,6 +313,12 @@ class MapViewModel : ViewModel() {
     private val clusterThreshold = 12.0
 
     /**
+     * Must zoom out past this before leaving individual-pin mode. Prevents cluster↔pin flicker
+     * when native zoom readbacks chatter around [clusterThreshold] during pinch.
+     */
+    private val pinModeExitBelow = clusterThreshold - 0.75
+
+    /**
      * After a cluster zoom-in, native map zoom readbacks often dip below [clusterThreshold] briefly
      * or stay inconsistent with [metersForZoom]. Until the user clearly zooms out past the
      * threshold, treat the map as "pin mode" for clustering decisions so [determineMapRenderData]
@@ -282,9 +326,26 @@ class MapViewModel : ViewModel() {
      */
     private val _pinRenderZoomFloor = MutableStateFlow<Double?>(null)
 
+    /** Sticky pin mode from user pinch (enter ≥ threshold, exit only below [pinModeExitBelow]). */
+    private val _stickyPinMode = MutableStateFlow(false)
+
     private fun zoomForClusteringRender(zoom: Double): Double {
-        val floor = _pinRenderZoomFloor.value ?: return zoom
-        return maxOf(zoom, floor)
+        val floor = _pinRenderZoomFloor.value
+        if (floor != null) return maxOf(zoom, floor)
+        if (_stickyPinMode.value && zoom >= pinModeExitBelow) {
+            return maxOf(zoom, clusterThreshold)
+        }
+        return zoom
+    }
+
+    private fun updateStickyPinModeForZoom(zoom: Double) {
+        when {
+            zoom >= clusterThreshold -> _stickyPinMode.value = true
+            zoom < pinModeExitBelow -> {
+                _stickyPinMode.value = false
+                _pinRenderZoomFloor.value = null
+            }
+        }
     }
 
     /**
@@ -328,11 +389,13 @@ class MapViewModel : ViewModel() {
         seedFromAppDataPrefetch()
         viewModelScope.launch {
             hydrateBeaconRsvpFromDisk()
+            hydrateBeaconEngagementFromDisk()
         }
         viewModelScope.launch {
             AppDataManager.currentUser.collect { user ->
                 if (user != null) {
                     hydrateBeaconRsvpFromDisk(user.id)
+                    hydrateBeaconEngagementFromDisk(user.id)
                     warmDiscoveryFeed()
                 }
             }
@@ -430,6 +493,55 @@ class MapViewModel : ViewModel() {
         persistBeaconRsvpCache()
     }
 
+    private suspend fun hydrateBeaconEngagementFromDisk(userId: String? = null) {
+        val uid = userId?.trim()?.takeIf { it.isNotEmpty() }
+            ?: SupabaseConfig.client.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
+            ?: AppDataManager.currentUser.value?.id?.trim()?.takeIf { it.isNotEmpty() }
+            ?: return
+        val restored = BeaconEngagementPersistence.load(tokenStorage, uid)
+        if (restored.isEmpty()) return
+        _beaconEngagementById.update { current -> current + restored }
+    }
+
+    private fun persistBeaconEngagementCache() {
+        viewModelScope.launch {
+            val uid = SupabaseConfig.client.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
+                ?: AppDataManager.currentUser.value?.id?.trim()?.takeIf { it.isNotEmpty() }
+                ?: return@launch
+            BeaconEngagementPersistence.save(tokenStorage, uid, _beaconEngagementById.value)
+        }
+    }
+
+    private fun updateBeaconEngagementCache(
+        transform: (Map<String, BeaconEngagementCacheEntry>) -> Map<String, BeaconEngagementCacheEntry>,
+    ) {
+        _beaconEngagementById.update(transform)
+        persistBeaconEngagementCache()
+    }
+
+    private fun engagementTelemetry(
+        latitude: Double? = null,
+        longitude: Double? = null,
+        surface: String? = null,
+        bookmarked: Boolean? = null,
+    ): EngagementTelemetryBody {
+        val platform = getPlatform().name.lowercase().let { name ->
+            when {
+                name.contains("android") -> "android"
+                name.contains("ios") || name.contains("iphone") -> "ios"
+                else -> name.take(32)
+            }
+        }
+        return EngagementTelemetryBody(
+            latitude = latitude,
+            longitude = longitude,
+            source = "mobile",
+            platform = platform,
+            surface = surface,
+            bookmarked = bookmarked,
+        )
+    }
+
     /**
      * Hydrate map state immediately from [AppDataManager]'s eager beacon/hub prefetch so the map is
      * already populated on first render (prefetch runs in parallel with connections at app load).
@@ -437,11 +549,56 @@ class MapViewModel : ViewModel() {
     private fun seedFromAppDataPrefetch() {
         applyPrefetchedBeacons(AppDataManager.prefetchedMapBeacons.value)
         applyPrefetchedHubs(AppDataManager.prefetchedCommunityHubs.value)
+        seedEventPinsFromCachedBookmarks(AppDataManager.cachedEventBookmarks.value)
         viewModelScope.launch {
             AppDataManager.prefetchedMapBeacons.collect { applyPrefetchedBeacons(it) }
         }
         viewModelScope.launch {
             AppDataManager.prefetchedCommunityHubs.collect { applyPrefetchedHubs(it) }
+        }
+        viewModelScope.launch {
+            AppDataManager.cachedEventBookmarks.collect { seedEventPinsFromCachedBookmarks(it) }
+        }
+    }
+
+    /**
+     * Saved-event bookmarks carry denormalized lat/lng. After null-island cache purge, use them
+     * so event pins still paint until proximity returns the same rows.
+     * Only fills **missing** ids / rescues null-island — never replaces a richer proximity row.
+     */
+    private fun seedEventPinsFromCachedBookmarks(
+        bookmarks: List<compose.project.click.click.data.api.EventBookmarkItemDto>,
+    ) {
+        if (bookmarks.isEmpty()) return
+        _mapBeacons.update { current ->
+            val byId = current.associateBy { it.id }
+            val seeds = bookmarks.mapNotNull { bookmark ->
+                val lat = bookmark.latitude ?: return@mapNotNull null
+                val lng = bookmark.longitude ?: return@mapNotNull null
+                if (!lat.isFinite() || !lng.isFinite() || (lat == 0.0 && lng == 0.0)) {
+                    return@mapNotNull null
+                }
+                val existing = byId[bookmark.beaconId]
+                if (existing != null && existing.hasUsableMapCoordinates()) {
+                    // Already have a real pin — do not overwrite host/posted/creator fields.
+                    return@mapNotNull null
+                }
+                val scheduleRaw = buildJsonObject {
+                    bookmark.title?.takeIf { it.isNotBlank() }?.let { put("title", it) }
+                    bookmark.eventStartAt?.takeIf { it.isNotBlank() }?.let { put("event_start_at", it) }
+                    bookmark.eventEndAt?.takeIf { it.isNotBlank() }?.let { put("event_end_at", it) }
+                }
+                MapBeacon(
+                    id = bookmark.beaconId,
+                    kind = MapBeaconKind.EVENT,
+                    latitude = lat,
+                    longitude = lng,
+                    metadata = parseMapBeaconMetadata(scheduleRaw),
+                    expiresAtEpochMs = bookmark.expiresAt?.let { parseEpochMs(it) },
+                    sourceBeaconType = "event",
+                )
+            }
+            if (seeds.isEmpty()) current else mergeMapBeaconLists(current, seeds)
         }
     }
 
@@ -450,8 +607,10 @@ class MapViewModel : ViewModel() {
     }
 
     private fun applyPrefetchedBeacons(list: List<MapBeacon>) {
-        if (list.isEmpty()) return
+        // Always run through merge so in-memory null-island pins from a prior bad GET are purged
+        // even when the incoming prefetch list is empty after cache heal.
         _mapBeacons.update { current -> mergeMapBeaconLists(current, list) }
+        if (list.isEmpty()) return
         AppDataManager.mergeCachedMapBeacons(list)
         markDiscoveryProximityFetchCompleted()
     }
@@ -684,7 +843,11 @@ class MapViewModel : ViewModel() {
         beacons: List<MapBeacon>,
         layers: Set<MapLayerFilter>,
     ): List<MapBeacon> {
-        if (layers.contains(MapLayerFilter.ALL)) return beacons
+        // Always apply event schedule visibility so map pins match the discovery feed
+        // (feed also uses isActiveForDiscoveryFeed → isVisibleEventBeacon for EVENT).
+        if (layers.contains(MapLayerFilter.ALL)) {
+            return beacons.filter { it.isVisibleEventBeacon() }
+        }
         val out = mutableListOf<MapBeacon>()
         for (b in beacons) {
             val include = when (b.kind) {
@@ -775,9 +938,12 @@ class MapViewModel : ViewModel() {
 
         if (!seededDeviceCameraThisSession) {
             seededDeviceCameraThisSession = true
-            _cameraTarget.value = target
-            if (_zoomLevel.value <= 10.01) {
-                _zoomLevel.value = DEFAULT_USER_MAP_ZOOM
+            // Do not clobber an active programmatic target (Home Featured Event / search → beacon).
+            if (_cameraTarget.value == null && pendingProgrammaticZoomTarget == null) {
+                _cameraTarget.value = target
+                if (_zoomLevel.value <= 10.01) {
+                    _zoomLevel.value = DEFAULT_USER_MAP_ZOOM
+                }
             }
         }
     }
@@ -815,6 +981,17 @@ class MapViewModel : ViewModel() {
         prefetchDiscoveryProximityData(showPulse = false, markInitialComplete = false)
     }
 
+    /** Home explore tile: focus map on a single layer preset (not a toggle). */
+    fun applyHomeLayerPreset(filter: MapLayerFilter) {
+        _pinRenderZoomFloor.value = null
+        _selectedLayerFilters.value = when (filter) {
+            MapLayerFilter.ALL -> defaultMapLayerFilters()
+            else -> setOf(filter)
+        }
+        _visibleBounds.value?.let { scheduleBeaconFetchForBounds(it, debounceMs = 0L) }
+        prefetchDiscoveryProximityData(showPulse = false, markInitialComplete = false)
+    }
+
     fun clearBeaconInsertError() {
         _beaconInsertError.value = null
     }
@@ -842,6 +1019,138 @@ class MapViewModel : ViewModel() {
                 _selection.value = current.copy(distanceMeters = distance)
             }
         }
+    }
+
+    /** Beacon ids that already received a successful detail GET this session. */
+    private val eventDetailHydratedIds = mutableSetOf<String>()
+
+    /**
+     * Detail-sheet only: fetch the full beacon when schedule, Posted (`created_at`), or creator
+     * attribution is missing — and at least once per id when the sheet opens, so bookmark /
+     * proximity stubs that already have a schedule still pick up Host + Posted.
+     *
+     * [seed] is required when opening from Home with a synthetic/bookmark beacon that is not yet
+     * in [_mapBeacons] or [MapSelection].
+     */
+    fun ensureEventBeaconDetail(beaconId: String, seed: MapBeacon? = null) {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return
+        val current = _mapBeacons.value.firstOrNull { it.id == id }
+            ?: (_selection.value as? MapSelection.BeaconSelected)?.beacon?.takeIf { it.id == id }
+            ?: seed?.takeIf { it.id == id && it.kind == MapBeaconKind.EVENT }
+            ?: return
+        if (current.kind != MapBeaconKind.EVENT) return
+        val needsSchedule = current.eventSchedule() == null
+        val needsPosted = current.createdAtEpochMs == null
+        val needsCreator = current.createdByUserId.isNullOrBlank()
+        val needsHostName = current.creatorDisplayName.isNullOrBlank()
+        val alreadyHydrated = id in eventDetailHydratedIds
+        if (alreadyHydrated && !needsSchedule && !needsPosted && !needsCreator && !needsHostName) {
+            return
+        }
+        // First open always hits the network once so Host / Posted can't stay blank forever.
+        if (alreadyHydrated && !needsSchedule && !needsPosted && !needsCreator) {
+            return
+        }
+        viewModelScope.launch(Dispatchers.Default) {
+            mapBeaconRepository.fetchBeacon(id).fold(
+                onSuccess = { full ->
+                    fun MapBeacon.withHydratedDetail(): MapBeacon {
+                        val schedule = eventSchedule() ?: full.eventSchedule()
+                        val keepCoords = hasUsableMapCoordinates()
+                        return copy(
+                            latitude = if (keepCoords) latitude else full.latitude,
+                            longitude = if (keepCoords) longitude else full.longitude,
+                            metadata = metadata.copy(
+                                title = metadata.title ?: full.metadata.title,
+                                description = metadata.description ?: full.metadata.description,
+                                eventCategories = metadata.eventCategories.ifEmpty {
+                                    full.metadata.eventCategories
+                                },
+                                raw = if (schedule != null) {
+                                    mergeEventScheduleIntoRaw(metadata.raw, schedule)
+                                } else {
+                                    metadata.raw ?: full.metadata.raw
+                                },
+                            ),
+                            createdByUserId = createdByUserId ?: full.createdByUserId,
+                            createdAtEpochMs = createdAtEpochMs ?: full.createdAtEpochMs,
+                            expiresAtEpochMs = expiresAtEpochMs ?: full.expiresAtEpochMs,
+                            showCreatorName = showCreatorName || full.showCreatorName,
+                            creatorDisplayName = creatorDisplayName ?: full.creatorDisplayName,
+                            sourceBeaconType = sourceBeaconType ?: full.sourceBeaconType,
+                        )
+                    }
+                    _mapBeacons.update { list ->
+                        var found = false
+                        val mapped = list.map { b ->
+                            if (b.id == id) {
+                                found = true
+                                b.withHydratedDetail()
+                            } else {
+                                b
+                            }
+                        }
+                        if (found) {
+                            mapped
+                        } else {
+                            mergeMapBeaconLists(list, listOf(current.withHydratedDetail()))
+                        }
+                    }
+                    val patched = _mapBeacons.value.firstOrNull { it.id == id }
+                        ?: current.withHydratedDetail()
+                    eventDetailHydratedIds += id
+                    AppDataManager.mergeCachedMapBeacons(listOf(patched))
+                    val sel = _selection.value as? MapSelection.BeaconSelected
+                    if (sel != null && sel.beacon.id == id) {
+                        _selection.value = sel.copy(beacon = patched)
+                    }
+                },
+                onFailure = { /* keep sheet open with whatever we have */ },
+            )
+        }
+    }
+
+    /** @deprecated Use [ensureEventBeaconDetail]. */
+    fun ensureEventBeaconSchedule(beaconId: String) = ensureEventBeaconDetail(beaconId)
+
+    /**
+     * Pan the camera to [beaconId] and open its detail sheet (Home Featured Event / deep link).
+     * Ensures the EVENTS layer is visible so the pin isn't filtered out.
+     */
+    fun focusBeaconOnMap(beaconId: String, seedDistanceMeters: Double? = null) {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return
+        val beacon = _mapBeacons.value.firstOrNull { it.id == id }
+            ?: EventReminderCoordinator.beaconById(id)
+            ?: return
+        if (_mapBeacons.value.none { it.id == id }) {
+            _mapBeacons.update { current ->
+                if (current.any { it.id == id }) current else current + beacon
+            }
+        }
+        _selectedLayerFilters.update { filters ->
+            if (MapLayerFilter.ALL in filters || MapLayerFilter.EVENTS in filters) {
+                filters
+            } else {
+                filters + MapLayerFilter.EVENTS
+            }
+        }
+        val zoom = 15.0
+        val target = CameraTarget(
+            latitude = beacon.latitude,
+            longitude = beacon.longitude,
+            zoom = zoom,
+        )
+        // Mark device-seed done so a late GPS fix cannot overwrite this focus.
+        seededDeviceCameraThisSession = true
+        _cameraTarget.value = target
+        lastKnownCameraTarget = target
+        pendingProgrammaticZoomTarget = zoom
+        pendingProgrammaticZoomSetAtMs = Clock.System.now().toEpochMilliseconds()
+        _zoomLevel.value = zoom
+        updateStickyPinModeForZoom(zoom)
+        onBeaconPinTapped(id, seedDistanceMeters)
     }
 
     /**
@@ -1043,12 +1352,193 @@ class MapViewModel : ViewModel() {
         }
     }
 
+    fun loadBeaconEngagement(beaconId: String, forceRefresh: Boolean = false) {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return
+        viewModelScope.launch(Dispatchers.Default) {
+            if (!ensureClickWebAuthReady()) return@launch
+            if (!forceRefresh && _beaconEngagementById.value.containsKey(id)) return@launch
+            if (id in _beaconEngagementPendingIds.value) return@launch
+            mapBeaconRepository.fetchBeaconEngagement(id).fold(
+                onSuccess = { payload ->
+                    if (id in _beaconEngagementPendingIds.value) return@fold
+                    updateBeaconEngagementCache { current ->
+                        current + (id to BeaconEngagementCacheEntry(
+                            bookmarked = payload.bookmarked,
+                            checkedIn = payload.checkedIn,
+                            checkedInAt = payload.checkedInAt,
+                            checkInCount = payload.checkInCount,
+                        ))
+                    }
+                },
+                onFailure = { /* keep disk cache */ },
+            )
+        }
+    }
+
+    fun recordEventImpression(beaconId: String) {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return
+        viewModelScope.launch {
+            if (!ensureClickWebAuthReady()) return@launch
+            mapBeaconRepository.recordBeaconImpression(
+                id,
+                engagementTelemetry(surface = "detail"),
+            )
+        }
+    }
+
+    fun recordEventShare(beaconId: String, shareUrl: String? = null) {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return
+        viewModelScope.launch {
+            if (!ensureClickWebAuthReady()) return@launch
+            mapBeaconRepository.recordBeaconShare(
+                id,
+                engagementTelemetry(surface = "detail"),
+                shareUrl = shareUrl,
+            )
+        }
+    }
+
+    fun toggleBeaconBookmark(beaconId: String) {
+        val id = beaconId.trim()
+        if (id.isEmpty() || id in _beaconEngagementPendingIds.value) return
+        val previous = _beaconEngagementById.value[id]
+        val nextBookmarked = !(previous?.bookmarked ?: false)
+        _beaconEngagementPendingIds.update { it + id }
+        updateBeaconEngagementCache { current ->
+            val base = current[id] ?: BeaconEngagementCacheEntry()
+            current + (id to base.copy(bookmarked = nextBookmarked))
+        }
+        PlatformHapticsPolicy.successNotification()
+        viewModelScope.launch {
+            if (!ensureClickWebAuthReady()) {
+                restoreEngagementSnapshot(id, previous)
+                _beaconEngagementPendingIds.update { it - id }
+                return@launch
+            }
+            mapBeaconRepository.setBeaconBookmark(
+                id,
+                nextBookmarked,
+                engagementTelemetry(bookmarked = nextBookmarked),
+            ).fold(
+                onSuccess = {
+                    _beaconEngagementPendingIds.update { it - id }
+                },
+                onFailure = {
+                    restoreEngagementSnapshot(id, previous)
+                    _beaconEngagementPendingIds.update { it - id }
+                    _engagementSnackbar.value = "Couldn't update bookmark"
+                },
+            )
+        }
+    }
+
+    fun toggleBeaconCheckIn(beaconId: String) {
+        val id = beaconId.trim()
+        if (id.isEmpty() || id in _beaconEngagementPendingIds.value) return
+        val previous = _beaconEngagementById.value[id]
+        val currentlyCheckedIn = previous?.checkedIn == true
+        if (currentlyCheckedIn) {
+            _beaconEngagementPendingIds.update { it + id }
+            updateBeaconEngagementCache { current ->
+                val base = current[id] ?: BeaconEngagementCacheEntry()
+                current + (id to base.copy(checkedIn = false, checkedInAt = null))
+            }
+            PlatformHapticsPolicy.successNotification()
+            viewModelScope.launch {
+                if (!ensureClickWebAuthReady()) {
+                    restoreEngagementSnapshot(id, previous)
+                    _beaconEngagementPendingIds.update { it - id }
+                    return@launch
+                }
+                mapBeaconRepository.checkOutBeacon(id).fold(
+                    onSuccess = { _beaconEngagementPendingIds.update { it - id } },
+                    onFailure = {
+                        restoreEngagementSnapshot(id, previous)
+                        _beaconEngagementPendingIds.update { it - id }
+                        _engagementSnackbar.value = "Couldn't undo check-in"
+                    },
+                )
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            if (!locationService.hasLocationPermission()) {
+                _engagementSnackbar.value = "Location access is required to check in"
+                if (ensureClickWebAuthReady()) {
+                    mapBeaconRepository.checkInBeacon(id, engagementTelemetry())
+                }
+                return@launch
+            }
+            val loc = resolveBeaconDropLocation()
+            if (loc == null ||
+                !loc.latitude.isFinite() ||
+                !loc.longitude.isFinite() ||
+                (loc.latitude == 0.0 && loc.longitude == 0.0)
+            ) {
+                _engagementSnackbar.value = "Location required to check in"
+                if (ensureClickWebAuthReady()) {
+                    mapBeaconRepository.checkInBeacon(id, engagementTelemetry())
+                }
+                return@launch
+            }
+            if (!ensureClickWebAuthReady()) {
+                _engagementSnackbar.value = "Couldn't check in — try again"
+                return@launch
+            }
+            _beaconEngagementPendingIds.update { it + id }
+            updateBeaconEngagementCache { current ->
+                val base = current[id] ?: BeaconEngagementCacheEntry()
+                current + (id to base.copy(checkedIn = true))
+            }
+            PlatformHapticsPolicy.successNotification()
+            mapBeaconRepository.checkInBeacon(
+                id,
+                engagementTelemetry(latitude = loc.latitude, longitude = loc.longitude),
+            ).fold(
+                onSuccess = { payload ->
+                    updateBeaconEngagementCache { current ->
+                        current + (id to BeaconEngagementCacheEntry(
+                            bookmarked = current[id]?.bookmarked ?: false,
+                            checkedIn = payload.checkedIn,
+                            checkedInAt = payload.checkedInAt,
+                            checkInCount = payload.checkInCount,
+                        ))
+                    }
+                    _beaconEngagementPendingIds.update { it - id }
+                },
+                onFailure = { err ->
+                    restoreEngagementSnapshot(id, previous)
+                    _beaconEngagementPendingIds.update { it - id }
+                    val http = err as? BeaconEngagementHttpException
+                    _engagementSnackbar.value = when (http?.status) {
+                        403 -> "Move closer to the event to check in"
+                        409 -> "Check-in opens when the event starts"
+                        400 -> "Location required to check in"
+                        else -> http?.message ?: "Couldn't check in"
+                    }
+                },
+            )
+        }
+    }
+
+    private fun restoreEngagementSnapshot(beaconId: String, previous: BeaconEngagementCacheEntry?) {
+        updateBeaconEngagementCache { current ->
+            if (previous == null) current - beaconId
+            else current + (beaconId to previous)
+        }
+    }
+
     fun deleteOwnedBeacon(beaconId: String, onFinished: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             mapBeaconRepository.deleteBeacon(beaconId).fold(
                 onSuccess = {
                     _mapBeacons.update { list -> list.filterNot { it.id == beaconId } }
                     updateBeaconRsvpCache { it - beaconId }
+                    updateBeaconEngagementCache { it - beaconId }
                     if (_selection.value is MapSelection.BeaconSelected &&
                         (_selection.value as MapSelection.BeaconSelected).beacon.id == beaconId
                     ) {
@@ -1076,12 +1566,11 @@ class MapViewModel : ViewModel() {
             )
             mapBeaconRepository.updateBeacon(beaconId, patch).fold(
                 onSuccess = { updated ->
-                    _mapBeacons.update { list ->
-                        list.map { if (it.id == beaconId) updated else it }
-                    }
+                    _mapBeacons.update { list -> mergeMapBeaconLists(list, listOf(updated)) }
+                    val merged = _mapBeacons.value.firstOrNull { it.id == beaconId } ?: updated
                     val sel = _selection.value
                     if (sel is MapSelection.BeaconSelected && sel.beacon.id == beaconId) {
-                        _selection.value = sel.copy(beacon = updated)
+                        _selection.value = sel.copy(beacon = merged)
                     }
                     PlatformHapticsPolicy.successNotification()
                     onFinished(true)
@@ -1103,6 +1592,8 @@ class MapViewModel : ViewModel() {
         showCreatorName: Boolean = false,
         visibilityAudience: BeaconVisibilityAudience = BeaconVisibilityAudience.EVERYONE,
         eventSchedule: EventSchedule? = null,
+        eventCategories: List<String> = emptyList(),
+        venueScale: EventVenueScale = EventVenueScale.DEFAULT,
         onAcceptedLocally: () -> Unit = {},
         onRejectedEarly: () -> Unit = {},
         onRemoteFinished: (Boolean) -> Unit = {},
@@ -1178,6 +1669,17 @@ class MapViewModel : ViewModel() {
                         put("title", trimmedTitle)
                         trimmedDescription?.let { put("description", it) }
                         eventScheduleMetadata(schedule).forEach { (k, v) -> put(k, v) }
+                        val categories = eventCategories
+                            .map { it.trim() }
+                            .filter { it.isNotEmpty() && it in EVENT_CATEGORY_OPTIONS }
+                            .distinct()
+                        if (categories.isNotEmpty()) {
+                            putJsonArray(EVENT_CATEGORIES_METADATA_KEY) {
+                                categories.forEach { add(it) }
+                            }
+                        }
+                        put(EVENT_VENUE_SCALE_METADATA_KEY, venueScale.apiValue)
+                        put(EVENT_CHECK_IN_RADIUS_METADATA_KEY, venueScale.radiusMeters)
                     }
                 }
                 MapBeaconKind.SOS, MapBeaconKind.HAZARD, MapBeaconKind.UTILITY, MapBeaconKind.STUDY -> {
@@ -1278,17 +1780,27 @@ class MapViewModel : ViewModel() {
             val insertResult = mapBeaconRepository.insertBeacon(insert)
             insertResult.fold(
                 onSuccess = { serverBeacon ->
+                    val confirmed = if (
+                        serverBeacon.latitude.isFinite() &&
+                        serverBeacon.longitude.isFinite() &&
+                        !(serverBeacon.latitude == 0.0 && serverBeacon.longitude == 0.0)
+                    ) {
+                        serverBeacon
+                    } else {
+                        // Insert response can lack parseable PostGIS location — keep drop GPS.
+                        serverBeacon.copy(latitude = loc.latitude, longitude = loc.longitude)
+                    }
                     _mapBeacons.update { current ->
                         mergeMapBeaconLists(
                             current.filter { it.id != optimisticId },
-                            listOf(serverBeacon),
+                            listOf(confirmed),
                         )
                     }
-                    EventReminderCoordinator.rememberBeacon(serverBeacon)
+                    EventReminderCoordinator.rememberBeacon(confirmed)
                     refreshBeaconsAfterDrop(
                         latitude = loc.latitude,
                         longitude = loc.longitude,
-                        confirmedBeacon = serverBeacon,
+                        confirmedBeacon = confirmed,
                     )
                     onRemoteFinished(true)
                     PlatformHapticsPolicy.heavyImpact()
@@ -1342,10 +1854,7 @@ class MapViewModel : ViewModel() {
 
         if (abs(_zoomLevel.value - coerced) <= 0.01) return
         _zoomLevel.value = coerced
-
-        if (pendingProgrammaticZoomTarget == null && coerced < clusterThreshold - 0.05) {
-            _pinRenderZoomFloor.value = null
-        }
+        updateStickyPinModeForZoom(coerced)
 
         _visibleBounds.value?.let { bounds ->
             persistCameraTarget(
@@ -1466,6 +1975,7 @@ class MapViewModel : ViewModel() {
             _cameraTarget.value = CameraTarget(latitude = lat, longitude = lon, zoom = target)
         }
         _zoomLevel.value = target
+        updateStickyPinModeForZoom(target)
     }
 
     /**
@@ -1473,15 +1983,13 @@ class MapViewModel : ViewModel() {
      */
     fun zoomOut() {
         val target = maxOf(_zoomLevel.value - 1.0, 2.0)
-        if (target < clusterThreshold - 0.25) {
-            _pinRenderZoomFloor.value = null
-        }
         pendingProgrammaticZoomTarget = target
         pendingProgrammaticZoomSetAtMs = Clock.System.now().toEpochMilliseconds()
         anchorLatLonForProgrammaticCamera()?.let { (lat, lon) ->
             _cameraTarget.value = CameraTarget(latitude = lat, longitude = lon, zoom = target)
         }
         _zoomLevel.value = target
+        updateStickyPinModeForZoom(target)
     }
 
     /**
@@ -1514,6 +2022,7 @@ class MapViewModel : ViewModel() {
         val bounds = cluster.boundingBox
         val targetZoom = maxOf(clusterThreshold + 1, calculateZoomForBounds(bounds))
         _pinRenderZoomFloor.value = maxOf(clusterThreshold + 0.25, targetZoom)
+        _stickyPinMode.value = true
         
         // Animate camera to cluster center with appropriate zoom
         _cameraTarget.value = CameraTarget(
@@ -1643,6 +2152,7 @@ class MapViewModel : ViewModel() {
             if (abs(_zoomLevel.value - z) > 0.02) {
                 _zoomLevel.value = z
             }
+            updateStickyPinModeForZoom(_zoomLevel.value)
         }
     }
 
@@ -1665,6 +2175,7 @@ class MapViewModel : ViewModel() {
                 if (abs(_zoomLevel.value - target.zoom) > 0.01) {
                     _zoomLevel.value = target.zoom
                 }
+                updateStickyPinModeForZoom(_zoomLevel.value)
             }
         }
         ensureDiscoveryFeedLoaded()

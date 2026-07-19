@@ -192,6 +192,55 @@ class ChatTimelineTest {
     }
 
     @Test
+    fun newestFirst_keysRemainUniqueWhenDaysOscillate() {
+        // Unsorted / clock-skewed timestamps can revisit the same calendar day
+        // more than once while walking newest→oldest. Separator keys used to be
+        // only "separator-nf-$dayKey", which crashed LazyColumn on interactive back.
+        val dayAMorning = tsLocal(2026, 4, 22, 9, 0)
+        val dayB = tsLocal(2026, 4, 23, 9, 0)
+        val dayAEvening = tsLocal(2026, 4, 22, 21, 0)
+        val entries = buildChatTimelineEntriesNewestFirst(
+            listOf(
+                mwu("a", dayAMorning),
+                mwu("b", dayB),
+                mwu("c", dayAEvening),
+            )
+        )
+        val keys = entries.map { it.key }
+        assertEquals(keys.toSet().size, keys.size, "Keys must be unique, got $keys")
+        assertTrue(
+            keys.any { it.contains("separator-nf-") && it.contains(messageDayKey(dayAEvening)) },
+            "Expected a day-A separator among $keys",
+        )
+    }
+
+    @Test
+    fun newestFirst_sortsUnsortedInputSoDaySeparatorsStayChronological() {
+        // Same oscillation pattern that previously produced Apr 22 → Mar 6 → Apr 22
+        // on screen. Builder must sort before walking newest→oldest.
+        val apr22Morning = tsLocal(2026, 4, 22, 9, 0)
+        val mar6 = tsLocal(2026, 3, 6, 12, 0)
+        val apr22Evening = tsLocal(2026, 4, 22, 21, 0)
+        val entries = buildChatTimelineEntriesNewestFirst(
+            listOf(
+                mwu("a", apr22Morning),
+                mwu("b", mar6),
+                mwu("c", apr22Evening),
+            ),
+        )
+        val labels = entries.filterIsInstance<ChatTimelineEntry.DaySeparator>().map { it.label }
+        // reverseLayout: newest day first among separators walking newest→oldest
+        assertEquals(2, labels.size, "Expected one separator per distinct day, got $labels")
+        assertTrue(
+            labels.none { label -> labels.count { it == label } > 1 },
+            "Duplicate day labels should not appear: $labels",
+        )
+        val messageOrder = entries.filterIsInstance<ChatTimelineEntry.MessageEntry>()
+            .map { it.messageWithUser.message.id }
+        assertEquals(listOf("c", "a", "b"), messageOrder)
+    }
+
+    @Test
     fun stableRowKey_matchesOptimisticAndDeliveredOutboundWithSameLocalSentAt() {
         val t = 1_700_000_000_000L
         val optimistic = MessageWithUser(

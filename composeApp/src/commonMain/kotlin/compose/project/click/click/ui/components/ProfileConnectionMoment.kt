@@ -250,9 +250,6 @@ private fun formatWeatherSnapshotLine(ws: WeatherSnapshot): String? {
         val dir = ws.windDirectionDegrees?.takeIf { it in 0..359 }?.let { d -> " ${windCompassAbbrev(d)}" } ?: ""
         parts.add("${k.roundToInt()} km/h$dir")
     }
-    ws.pressureMslHpa?.takeIf { it.isFinite() }?.let { p ->
-        parts.add("${p.roundToInt()} hPa")
-    }
     return parts.joinToString(" · ").takeIf { it.isNotEmpty() }
 }
 
@@ -287,13 +284,6 @@ fun Connection.profileNoiseLine(): String? {
             else rawCat.replace('_', ' ').lowercase().replaceFirstChar { it.titlecase() }
         )
     }
-    val exactNoise = if (origin != null) {
-        origin.exactNoiseLevelDb?.takeIf { it.isFinite() }
-    } else {
-        exactNoiseLevelDb?.takeIf { it.isFinite() }
-            ?: memoryCapsule?.exactNoiseLevelDb?.takeIf { it.isFinite() }
-    }
-    exactNoise?.let { parts.add("${it.roundToInt()} dB") }
     if (parts.isEmpty()) return null
     return parts.joinToString(" · ")
 }
@@ -390,22 +380,9 @@ fun ConnectionHardwareVibeBadgesRow(
     modifier: Modifier = Modifier,
 ) {
     if (encounter == null) return
-    val luxVal = encounter.luxLevel?.takeIf { it.isFinite() && it >= 0 }
-    val isDim = luxVal != null && luxVal < 15.0
-    val luxIcon = if (isDim) Icons.Outlined.NightsStay else Icons.Outlined.WbSunny
-    val luxTint = if (isDim) Color(0xFF90CAF9) else Color(0xFFFFE082)
     val pills = buildList<Triple<ImageVector, Color, String>> {
-        encounter.metricLuxLabel()?.let { lbl ->
-            add(Triple(luxIcon, luxTint, lbl))
-        }
-        encounter.metricBatteryLabel()?.let { lbl ->
-            add(Triple(Icons.Outlined.BatteryStd, Color(0xFFA5D6A7), lbl))
-        }
         encounter.metricCompassAzimuthLabel()?.let { lbl ->
             add(Triple(Icons.Outlined.Explore, Color(0xFFB39DDB), lbl))
-        }
-        encounter.metricMotionVarianceLabel()?.let { lbl ->
-            add(Triple(Icons.Outlined.DirectionsRun, Color(0xFFFFAB91), lbl))
         }
     }
     if (pills.isEmpty()) return

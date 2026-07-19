@@ -53,6 +53,7 @@ class FakeTokenStorage(
     override suspend fun getActiveHubs(): String? = activeHubsJson
 
     private var beaconRsvpSnapshot: String? = null
+    private var beaconEngagementSnapshot: String? = null
 
     override suspend fun saveBeaconRsvpSnapshot(snapshot: String?) {
         beaconRsvpSnapshot = snapshot
@@ -60,8 +61,15 @@ class FakeTokenStorage(
 
     override suspend fun getBeaconRsvpSnapshot(): String? = beaconRsvpSnapshot
 
+    override suspend fun saveBeaconEngagementSnapshot(snapshot: String?) {
+        beaconEngagementSnapshot = snapshot
+    }
+
+    override suspend fun getBeaconEngagementSnapshot(): String? = beaconEngagementSnapshot
+
     override suspend fun clearSessionData() {
         beaconRsvpSnapshot = null
+        beaconEngagementSnapshot = null
         pendingEncounterQueueJson = null
     }
 }

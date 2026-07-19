@@ -116,6 +116,8 @@ class SupabaseChatRepository(
 
     private val ephemeralMutex = Mutex()
     private val ephemeralSessions = mutableMapOf<String, ChatEphemeralSession>()
+    /** Bumped on leave / supersede so an in-flight join does not reinstall a disposed session. */
+    private val ephemeralJoinGeneration = mutableMapOf<String, Int>()
 
     private val globalPresenceMutex = Mutex()
     private var globalPresenceSession: GlobalPresenceSession? = null
@@ -495,6 +497,9 @@ class SupabaseChatRepository(
         ephemeralMutex.withLock {
             val sessions = ephemeralSessions.values.toList()
             ephemeralSessions.clear()
+            for (chatId in ephemeralJoinGeneration.keys.toList()) {
+                ephemeralJoinGeneration[chatId] = (ephemeralJoinGeneration[chatId] ?: 0) + 1
+            }
             for (session in sessions) {
                 disposeEphemeralSession(session)
             }
@@ -1214,7 +1219,13 @@ class SupabaseChatRepository(
                 rows.map { decryptMessageOnCurrentThread(it, crypto) }
             }
             resolveListKeyForChat(chatId)?.let { connectionId ->
-                storeCachedMessageTimeline(connectionId, decrypted)
+                // Pagination returns an older page only — merge into hot cache instead of
+                // replacing the full timeline (which would drop newer messages until leave).
+                if (beforeTimeCreated != null) {
+                    ChatSessionCaches.messageTimelineCache.mergeMessages(connectionId, decrypted)
+                } else {
+                    storeCachedMessageTimeline(connectionId, decrypted)
+                }
             }
             decrypted
         } catch (e: Exception) {
@@ -1496,11 +1507,16 @@ class SupabaseChatRepository(
         val flow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "messages"
         }.transform { action ->
-            val row = when (action) {
-                is PostgresAction.Insert -> runCatching { action.decodeRecord<MessageRow>() }.getOrNull()
-                is PostgresAction.Update -> runCatching { action.decodeRecord<MessageRow>() }.getOrNull()
-                else -> null
-            } ?: return@transform
+            val (row, emitToInbox) = when (action) {
+                // Inbox list bumps are Insert-only. Updates (read/delivered on older rows after
+                // load-older) must not emit as list events — they regress preview/"Nw ago".
+                // Per-chat subscribeToMessages still handles Update for the open thread.
+                is PostgresAction.Insert ->
+                    (runCatching { action.decodeRecord<MessageRow>() }.getOrNull() ?: return@transform) to true
+                is PostgresAction.Update ->
+                    (runCatching { action.decodeRecord<MessageRow>() }.getOrNull() ?: return@transform) to false
+                else -> return@transform
+            }
             val listKey = resolveListKeyForChat(row.chatId)
                 ?: ChatSessionCaches.peekListKeyForChatSync(row.chatId)
                 ?: row.chatId
@@ -1519,7 +1535,9 @@ class SupabaseChatRepository(
                 else -> rawMessage
             }
             mergeCachedTimelineMessage(listKey, message)
-            emit(MessageListInsertEvent(connectionId = listKey, chatId = row.chatId, message = message))
+            if (emitToInbox) {
+                emit(MessageListInsertEvent(connectionId = listKey, chatId = row.chatId, message = message))
+            }
         }
         return SupabaseMessageSubscription(channel) to flow
     }
@@ -1849,104 +1867,125 @@ class SupabaseChatRepository(
     override suspend fun getTypingUsers(chatId: String): List<String> = emptyList()
 
     override suspend fun joinChatEphemeralChannel(chatId: String, currentUserId: String, peerUserId: String) {
-        ephemeralMutex.withLock {
+        val generation = ephemeralMutex.withLock {
             ephemeralSessions[chatId]?.let { existing ->
                 if (existing.peerUserId == peerUserId) return
                 disposeEphemeralSession(existing)
                 ephemeralSessions.remove(chatId)
             }
+            val next = (ephemeralJoinGeneration[chatId] ?: 0) + 1
+            ephemeralJoinGeneration[chatId] = next
+            next
+        }
 
-            val channel = supabase.channel("chat:$chatId") {
-                broadcast {
-                    receiveOwnBroadcasts = false
-                }
-                presence {
-                    key = currentUserId
-                }
+        val channel = supabase.channel("chat:$chatId") {
+            broadcast {
+                receiveOwnBroadcasts = false
             }
-
-            val typingFlow = MutableSharedFlow<TypingStatus>(
-                extraBufferCapacity = 32,
-                onBufferOverflow = BufferOverflow.DROP_OLDEST
-            )
-            val peerOnline = MutableStateFlow(false)
-            /** Presence keys are configured as each client's user id; diff joins/leaves are authoritative. */
-            val presenceKeysOnline = mutableSetOf<String>()
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            val broadcastFlow = channel.broadcastFlow<TypingBroadcastPayload>(event = "typing")
-            val presenceFlow = channel.presenceChangeFlow()
-
-            val presenceJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                try {
-                    presenceFlow.collect { action ->
-                        action.leaves.keys.forEach { key -> presenceKeysOnline.remove(key) }
-                        action.joins.keys.forEach { key -> presenceKeysOnline.add(key) }
-                        action.joins.values.forEach { p ->
-                            userIdFromPresence(p)?.let { presenceKeysOnline.add(it) }
-                        }
-                        action.leaves.values.forEach { p ->
-                            userIdFromPresence(p)?.let { presenceKeysOnline.remove(it) }
-                        }
-                        peerOnline.value = peerUserId in presenceKeysOnline
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    println("ChatRepository: ephemeral presence flow failed: ${e.redactedRestMessage()}")
-                }
+            presence {
+                key = currentUserId
             }
+        }
 
+        val typingFlow = MutableSharedFlow<TypingStatus>(
+            extraBufferCapacity = 32,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST
+        )
+        val peerOnline = MutableStateFlow(false)
+        /** Presence keys are configured as each client's user id; diff joins/leaves are authoritative. */
+        val presenceKeysOnline = mutableSetOf<String>()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val broadcastFlow = channel.broadcastFlow<TypingBroadcastPayload>(event = "typing")
+        val presenceFlow = channel.presenceChangeFlow()
+
+        val presenceJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
             try {
-                if (!channel.subscribeWithTimeout()) {
-                    println("ChatRepository: join chat ephemeral subscribe timed out")
-                    presenceJob.cancel()
-                    scope.cancel()
-                    return
+                presenceFlow.collect { action ->
+                    action.leaves.keys.forEach { key -> presenceKeysOnline.remove(key) }
+                    action.joins.keys.forEach { key -> presenceKeysOnline.add(key) }
+                    action.joins.values.forEach { p ->
+                        userIdFromPresence(p)?.let { presenceKeysOnline.add(it) }
+                    }
+                    action.leaves.values.forEach { p ->
+                        userIdFromPresence(p)?.let { presenceKeysOnline.remove(it) }
+                    }
+                    peerOnline.value = peerUserId in presenceKeysOnline
                 }
-                channel.track(buildJsonObject { put("userId", currentUserId) })
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                println("ChatRepository: join chat ephemeral failed: ${e.redactedRestMessage()}")
-                presenceJob.cancel()
-                scope.cancel()
+                println("ChatRepository: ephemeral presence flow failed: ${e.redactedRestMessage()}")
+            }
+        }
+
+        suspend fun abandonJoin() {
+            presenceJob.cancel()
+            scope.cancel()
+            runCatching { channel.unsubscribe() }
+        }
+
+        try {
+            // Subscribe outside the mutex so leaveChatEphemeralChannel is not blocked for 8s.
+            if (!channel.subscribeWithTimeout()) {
+                println("ChatRepository: join chat ephemeral subscribe timed out")
+                abandonJoin()
                 return
             }
+            channel.track(buildJsonObject { put("userId", currentUserId) })
+        } catch (e: CancellationException) {
+            abandonJoin()
+            throw e
+        } catch (e: Exception) {
+            println("ChatRepository: join chat ephemeral failed: ${e.redactedRestMessage()}")
+            abandonJoin()
+            return
+        }
 
-            val broadcastJob = scope.launch {
-                try {
-                    broadcastFlow.collect { payload ->
-                        if (payload.userId != currentUserId) {
-                            typingFlow.emit(TypingStatus(userId = payload.userId, isTyping = true))
-                        }
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    println("ChatRepository: typing broadcast flow failed: ${e.redactedRestMessage()}")
-                }
-            }
-
-            val presenceRefreshJob = scope.launch {
-                while (isActive) {
-                    delay(PRESENCE_TRACK_REFRESH_MS)
-                    runCatching {
-                        channel.track(buildJsonObject { put("userId", currentUserId) })
+        val broadcastJob = scope.launch {
+            try {
+                broadcastFlow.collect { payload ->
+                    if (payload.userId != currentUserId) {
+                        typingFlow.emit(TypingStatus(userId = payload.userId, isTyping = true))
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                println("ChatRepository: typing broadcast flow failed: ${e.redactedRestMessage()}")
             }
+        }
 
-            ephemeralSessions[chatId] = ChatEphemeralSession(
-                channel = channel,
-                peerUserId = peerUserId,
-                typingFlow = typingFlow,
-                peerOnline = peerOnline,
-                scope = scope,
-                jobs = listOf(broadcastJob, presenceJob, presenceRefreshJob),
-            )
+        val presenceRefreshJob = scope.launch {
+            while (isActive) {
+                delay(PRESENCE_TRACK_REFRESH_MS)
+                runCatching {
+                    channel.track(buildJsonObject { put("userId", currentUserId) })
+                }
+            }
+        }
+
+        val session = ChatEphemeralSession(
+            channel = channel,
+            peerUserId = peerUserId,
+            typingFlow = typingFlow,
+            peerOnline = peerOnline,
+            scope = scope,
+            jobs = listOf(broadcastJob, presenceJob, presenceRefreshJob),
+        )
+
+        ephemeralMutex.withLock {
+            if (ephemeralJoinGeneration[chatId] != generation) {
+                disposeEphemeralSession(session)
+                return
+            }
+            ephemeralSessions[chatId]?.let { disposeEphemeralSession(it) }
+            ephemeralSessions[chatId] = session
         }
     }
 
     override suspend fun leaveChatEphemeralChannel(chatId: String) {
         ephemeralMutex.withLock {
+            ephemeralJoinGeneration[chatId] = (ephemeralJoinGeneration[chatId] ?: 0) + 1
             val session = ephemeralSessions.remove(chatId) ?: return
             disposeEphemeralSession(session)
         }
@@ -2235,11 +2274,17 @@ class SupabaseChatRepository(
     private fun decodeUuidScalarFromRpc(body: String): String {
         val t = body.trim()
         if (t.length in 32..40 && t.count { it == '-' } == 4) return t
-        val el = Json.parseToJsonElement(t)
+        val el = runCatching { Json.parseToJsonElement(t) }.getOrElse {
+            throw IllegalStateException("Unexpected RPC payload: $t")
+        }
         return when (el) {
             is JsonPrimitive -> el.content.trim().trim('"')
-            is JsonArray -> el.first().jsonPrimitive.content.trim().trim('"')
-            else -> error("Unexpected RPC payload: $t")
+            is JsonArray -> {
+                val first = el.firstOrNull()
+                    ?: throw IllegalStateException("Unexpected empty RPC payload")
+                first.jsonPrimitive.content.trim().trim('"')
+            }
+            else -> throw IllegalStateException("Unexpected RPC payload: $t")
         }
     }
 

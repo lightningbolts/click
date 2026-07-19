@@ -684,17 +684,15 @@ fun ProfileBottomSheet(
         modifier = Modifier
             .fillMaxWidth()
             .fillMaxHeight()
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+            .background(GlassSheetTokens.OledBlack())
             .padding(horizontal = 20.dp)
-            .padding(top = 4.dp, bottom = 12.dp),
+            .padding(top = 8.dp, bottom = 12.dp),
     ) {
-        Spacer(Modifier.height(24.dp))
         Text(
             text = "Profile",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = GlassSheetTokens.OnOled(),
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .fillMaxWidth()
@@ -704,6 +702,8 @@ fun ProfileBottomSheet(
             displayName = state.displayName,
             subtitle = state.subtitle,
             avatarUrl = state.avatarUrl,
+            userId = state.userId,
+            email = state.email ?: state.subtitle,
             statusBadge = state.statusBadge,
             onAvatarClick = onAvatarClick,
             avatarUploading = avatarUploading,
@@ -723,8 +723,8 @@ fun ProfileBottomSheet(
 
         ScrollableTabRow(
             selectedTabIndex = pagerState.currentPage,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            contentColor = MaterialTheme.colorScheme.onSurface,
+            containerColor = GlassSheetTokens.OledBlack(),
+            contentColor = GlassSheetTokens.OnOled(),
             edgePadding = 0.dp,
         ) {
             visibleTabs.forEachIndexed { index, tab ->
@@ -1043,6 +1043,8 @@ data class ProfileSheetState(
     val files: List<ProfileSheetFile> = emptyList(),
     /** Peer user id — when non-blank, Timeline subtab hydrates interests / encounters. */
     val userId: String? = null,
+    /** Email for connection-list-matching avatar initials when [avatarUrl] is blank. */
+    val email: String? = null,
     /** Viewer user id — needed to compute shared interests + mutual connection. */
     val viewerUserId: String? = null,
     /** Optional connection/chat id retained for callers that want contextual actions. */
@@ -1158,6 +1160,8 @@ private fun ProfileSheetHeader(
     displayName: String,
     subtitle: String?,
     avatarUrl: String?,
+    userId: String?,
+    email: String?,
     statusBadge: ProfileSheetBadge?,
     onAvatarClick: (() -> Unit)? = null,
     avatarUploading: Boolean = false,
@@ -1178,25 +1182,16 @@ private fun ProfileSheetHeader(
                 modifier = Modifier
                     .align(Alignment.Center)
                     .size(68.dp)
-                    .clip(CircleShape)
-                    .background(PrimaryBlue),
+                    .clip(CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                if (!avatarUrl.isNullOrBlank()) {
-                    AsyncImage(
-                        model = avatarUrl,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                } else {
-                    Text(
-                        displayName.firstOrNull()?.uppercase() ?: "?",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                    )
-                }
+                ConnectionListUserAvatarFace(
+                    displayName = displayName,
+                    email = email,
+                    avatarUrl = avatarUrl,
+                    userId = userId?.takeIf { it.isNotBlank() } ?: displayName,
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
             if (avatarUploading) {
                 Box(
@@ -1204,7 +1199,7 @@ private fun ProfileSheetHeader(
                         .align(Alignment.Center)
                         .size(68.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f)),
+                        .background(GlassSheetTokens.OledBlack().copy(alpha = 0.55f)),
                     contentAlignment = Alignment.Center,
                 ) {
                     CircularProgressIndicator(
@@ -1236,7 +1231,7 @@ private fun ProfileSheetHeader(
                 displayName,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = GlassSheetTokens.OnOled(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1244,7 +1239,7 @@ private fun ProfileSheetHeader(
                 Text(
                     subtitle,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = GlassSheetTokens.OnOledMuted(),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -2840,6 +2835,8 @@ fun TabbedUserProfileSheet(
             links = emptyList(),
             files = emptyList(),
             userId = userId,
+            email = resolved?.email?.takeIf { it.isNotBlank() }
+                ?: hintedUser?.email?.takeIf { it.isNotBlank() },
             viewerUserId = viewerUserId,
             connectionId = profileConnectionId,
             localMessages = localMessages,
@@ -2849,27 +2846,25 @@ fun TabbedUserProfileSheet(
     ClickFormBottomSheet(
         onDismissRequest = onDismiss,
     ) {
-        OledSheetTheme {
-            ProfileBottomSheet(
-                state = state,
-                onMessage = {
-                    onMessage?.invoke()
-                    onDismiss()
-                },
-                onNudge = {
-                    onNudge?.invoke()
-                    onDismiss()
-                },
-                onOpenDisposableRoll = profileConnectionId?.let { cid ->
-                    onOpenDisposableRoll?.let { open ->
-                        {
-                            open(cid)
-                            onDismiss()
-                        }
+        ProfileBottomSheet(
+            state = state,
+            onMessage = {
+                onMessage?.invoke()
+                onDismiss()
+            },
+            onNudge = {
+                onNudge?.invoke()
+                onDismiss()
+            },
+            onOpenDisposableRoll = profileConnectionId?.let { cid ->
+                onOpenDisposableRoll?.let { open ->
+                    {
+                        open(cid)
+                        onDismiss()
                     }
-                },
-            )
-        }
+                }
+            },
+        )
     }
 }
 
@@ -2963,7 +2958,7 @@ fun TabbedGroupProfileSheet(
             media = emptyList(),
             links = emptyList(),
             files = emptyList(),
-            userId = null,
+            userId = resolvedGroupId.takeIf { it.isNotBlank() } ?: resolvedChatId,
             viewerUserId = viewerUserId,
             connectionId = resolvedChatId,
             isGroup = true,
@@ -2980,30 +2975,28 @@ fun TabbedGroupProfileSheet(
     ClickFormBottomSheet(
         onDismissRequest = onDismiss,
     ) {
-        OledSheetTheme {
-            ProfileBottomSheet(
-                state = state,
-                onMessage = {
-                    onMessage?.invoke()
+        ProfileBottomSheet(
+            state = state,
+            onMessage = {
+                onMessage?.invoke()
+                onDismiss()
+            },
+            onNudge = {
+                onNudge?.invoke()
+                onDismiss()
+            },
+            onOpenDisposableRoll = onOpenDisposableRoll?.let { open ->
+                {
+                    open(resolvedChatId)
                     onDismiss()
-                },
-                onNudge = {
-                    onNudge?.invoke()
-                    onDismiss()
-                },
-                onOpenDisposableRoll = onOpenDisposableRoll?.let { open ->
-                    {
-                        open(resolvedChatId)
-                        onDismiss()
-                    }
-                },
-                onAvatarClick = if (resolvedGroupId.isNotBlank()) {
-                    { mediaPickers.openPhotoLibrary() }
-                } else {
-                    null
-                },
-                avatarUploading = avatarUploading,
-            )
-        }
+                }
+            },
+            onAvatarClick = if (resolvedGroupId.isNotBlank()) {
+                { mediaPickers.openPhotoLibrary() }
+            } else {
+                null
+            },
+            avatarUploading = avatarUploading,
+        )
     }
 }

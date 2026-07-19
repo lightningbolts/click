@@ -99,6 +99,8 @@ data class ConnectionCreateOutcome(
 internal fun Throwable.isRetryableForProximityBind(): Boolean {
     if (this is TimeoutCancellationException) return true
     if (this is CancellationException) return false
+    // 503 with pending_handshake_id is handled as PendingMatch in ApiClient; bare 503 still queues.
+    if (this is ClickWebRequestException && statusCode == 503) return true
     val name = this::class.simpleName.orEmpty()
     if (name.contains("HttpRequestTimeout", ignoreCase = true)) return true
     if (name.contains("ConnectTimeout", ignoreCase = true)) return true
@@ -116,7 +118,18 @@ internal fun Throwable.isRetryableForProximityBind(): Boolean {
         m.contains("connection reset") ||
         m.contains("connection refused") ||
         m.contains("no address associated") ||
-        m.contains("host") && m.contains("unreachable")
+        m.contains("host") && m.contains("unreachable") ||
+        m.contains("connection_unavailable") ||
+        m.contains("pairwise_connection_unavailable") ||
+        m.contains("service unavailable")
+}
+
+internal fun Throwable.isDuplicateConnectionKeyError(): Boolean {
+    val m = message?.lowercase().orEmpty()
+    return m.contains("duplicate key") ||
+        m.contains("unique_user_pair") ||
+        m.contains("unique constraint") ||
+        m.contains("23505")
 }
 
 data class PendingProximityHandshakeSyncResult(
@@ -1106,6 +1119,23 @@ class ConnectionRepository(
             val preflightEncounterId = redeemedToken?.encounterId
             val preflightCollaborationTtl = redeemedToken?.collaborationTtl
 
+            // Prefer server-issued connection id from proximity bind before any insert.
+            val byPreflightId = preflightConnectionId
+                ?.takeIf { it.isNotBlank() }
+                ?.let { fetchConnectionById(it) }
+            if (byPreflightId != null) {
+                return restoreExistingConnection(
+                    request = request,
+                    scannedUserId = scannedUserId,
+                    existing = byPreflightId,
+                    resolvedTokenAgeMs = resolvedTokenAgeMs,
+                    preflightConnectionId = preflightConnectionId,
+                    preflightEncounterLogged = preflightEncounterLogged,
+                    preflightEncounterId = preflightEncounterId,
+                    preflightCollaborationTtl = preflightCollaborationTtl,
+                )
+            }
+
             val existingConnection = findConnectionRowForUserPair(
                 request.userId1,
                 scannedUserId
@@ -1205,6 +1235,24 @@ class ConnectionRepository(
                 return Result.failure(
                     Exception("Could not read the new connection from the server. Try refreshing your connections."),
                 )
+            } catch (e: Exception) {
+                if (e.isDuplicateConnectionKeyError()) {
+                    val raced = findConnectionRowForUserPair(request.userId1, scannedUserId)
+                        ?: preflightConnectionId?.takeIf { it.isNotBlank() }?.let { fetchConnectionById(it) }
+                    if (raced != null) {
+                        return restoreExistingConnection(
+                            request = request,
+                            scannedUserId = scannedUserId,
+                            existing = raced,
+                            resolvedTokenAgeMs = resolvedTokenAgeMs,
+                            preflightConnectionId = preflightConnectionId,
+                            preflightEncounterLogged = preflightEncounterLogged,
+                            preflightEncounterId = preflightEncounterId,
+                            preflightCollaborationTtl = preflightCollaborationTtl,
+                        )
+                    }
+                }
+                return Result.failure(e)
             }
 
             var semanticLocationName: String? = null
@@ -1709,7 +1757,9 @@ class ConnectionRepository(
                 .decodeList<Connection>()
                 .map { it.withEncountersSortedNewestFirst() }
                 .firstOrNull { conn ->
-                    userId1 in conn.user_ids && userId2 in conn.user_ids
+                    conn.user_ids.size == 2 &&
+                        userId1 in conn.user_ids &&
+                        userId2 in conn.user_ids
                 }
         } catch (e: Exception) {
             println("Error checking connection: ${e.redactedRestMessage()}")

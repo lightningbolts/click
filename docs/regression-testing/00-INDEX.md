@@ -2,7 +2,7 @@
 
 **Product:** Click mobile (Kotlin Multiplatform) — Android + iOS  
 **Purpose:** Verify that **all** shipped features still work after major UI, platform, crypto, proximity, or map changes.  
-**Date:** 2026-07-16  
+**Date:** 2026-07-17  
 
 ---
 
@@ -25,8 +25,10 @@
 |------|------|
 | [01-full-checklist.md](01-full-checklist.md) | Canonical ~200-item manual QA matrix (25 sections) |
 | [02-smoke-10min.md](02-smoke-10min.md) | Fast pre-merge sanity (~10 minutes) |
-| [03-known-issues-audit.md](03-known-issues-audit.md) | Issue sheet #1–11 with code evidence and status |
+| [03-known-issues-audit.md](03-known-issues-audit.md) | Issue sheet #1–23 with code evidence and status |
 | [04-android-focus.md](04-android-focus.md) | Android-only failure matrix (calls, voice, BLE, map) |
+
+**Continuation / what’s next:** [../handoff/functional-clarity-continuation.md](../handoff/functional-clarity-continuation.md) — addressed, still open, Track C revamps.
 
 **Expected UX (not a test plan):** [../ui-ux/mobile/00-INDEX.md](../ui-ux/mobile/00-INDEX.md) — feature blueprints 01–17.
 
@@ -71,11 +73,16 @@ From `click-web/` (API / proximity server contracts):
 
 ```bash
 npm test
+npm run build
 ```
 
-High-signal unit tests to keep green: `ChatSwipeMathTest`, `ChatViewModelTest`, `ConnectionEncounterMergeTest`, `DiscoveryFeedSectionsTest`, `OfflineBootTest`, proximity codec/matching tests under `composeApp` and `click-web/__tests__/`.
+High-signal unit tests to keep green: `ChatSwipeMathTest`, `ChatViewModelTest`, `ConnectionEncounterMergeTest`, `DiscoveryFeedSectionsTest`, `OfflineBootTest`, proximity codec/matching tests under `composeApp` and `click-web/__tests__/` (incl. `eventEngagement.test.ts`, `event-engagement.route.contract.test.ts`).
 
-**Last §0 run (Track A dark/light, 2026-07-16):** Android compile + `testDebugUnitTest` PASS · iOS Simulator compile + `iosSimulatorArm64Test` PASS · `click-web` `npm test` 22 suites / 145 tests PASS. Device smoke ([02-smoke-10min.md](02-smoke-10min.md)), full checklist, known-issues audit, and Android focus matrix still required on hardware before release merge.
+**Last §0 run (Home interactive-back underlay anti-flicker, 2026-07-18):** Android compile PASS · iOS Simulator compile PASS. Device smoke: iOS swipe Map/Settings/Add Click → Home should not remount/flicker Home.
+
+**Last §0 run (Event engagement API, 2026-07-18):** Android `compileDebugKotlinAndroid` PASS · click-web `npm test` PASS (157) · `npm run build` PASS · Supabase migration `event_engagement` applied on project `click`. Device smoke: bookmark survives force-kill; far check-in reverts; venue-scale on create; location-denied snackbar; `/insights/event-engagement` demo.
+
+**Event engagement API handoff:** [../handoff/event-engagement-api.md](../handoff/event-engagement-api.md)
 ---
 
 ## Platforms & builds

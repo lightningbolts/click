@@ -194,6 +194,7 @@ fun CoreConnectionAvatarFrame(
     Box(
         modifier = modifier
             .size(outerSize)
+            .clip(CircleShape)
             .then(clickModifier)
             .then(
                 if (isCore) {

@@ -403,36 +403,45 @@ class ChatViewModel(
 
     /** List rows may omit prefetch; still reuse any [prefetchedChatPayloads] so refresh never blanks the thread. */
     private fun bootstrapMessagesFromPrefetch(connectionId: String): List<MessageWithUser> =
-        prefetchedChatPayloads[connectionId]?.messages
-            ?: messagesWithUsersFromHotTimeline(connectionId)
-            ?: payloadFromLocalCache(connectionId)?.messages
-            ?: emptyList()
+        normalizeChatTimeline(
+            prefetchedChatPayloads[connectionId]?.messages
+                ?: messagesWithUsersFromHotTimeline(connectionId)
+                ?: payloadFromLocalCache(connectionId)?.messages
+                ?: emptyList(),
+        )
 
     private fun messagesWithUsersFromHotTimeline(connectionId: String): List<MessageWithUser>? {
         val userId = _currentUserId.value ?: return null
         val raw = chatRepository.peekCachedMessageTimeline(connectionId) ?: return null
         if (raw.isEmpty()) return null
-        return raw.map { message ->
-            MessageWithUser(
-                message = message,
-                user = AppDataManager.getConnectedUser(message.user_id)
-                    ?: User(id = message.user_id, name = "Unknown", createdAt = 0L),
-                isSent = message.user_id == userId,
-            )
-        }
+        return normalizeChatTimeline(
+            raw.map { message ->
+                MessageWithUser(
+                    message = message,
+                    user = AppDataManager.getConnectedUser(message.user_id)
+                        ?: User(id = message.user_id, name = "Unknown", createdAt = 0L),
+                    isSent = message.user_id == userId,
+                )
+            },
+        )
     }
 
     private fun syncPrefetchFromHotTimeline(connectionId: String) {
         val hot = messagesWithUsersFromHotTimeline(connectionId) ?: return
         val existing = prefetchedChatPayloads[connectionId]
+        val messages = if (existing?.messages?.isNotEmpty() == true) {
+            mergeMessageTimelinesPreservingLiveState(existing.messages, hot)
+        } else {
+            normalizeChatTimeline(hot)
+        }
         val hotTs = hot.maxOfOrNull { it.message.timeCreated } ?: 0L
         val existingTs = existing?.messages?.maxOfOrNull { it.message.timeCreated } ?: 0L
-        if (existing == null || hotTs >= existingTs) {
+        if (existing == null || hotTs >= existingTs || messages.size > (existing.messages.size)) {
             prefetchedChatPayloads[connectionId] = PrefetchedChatPayload(
-                messages = hot,
+                messages = messages,
                 reactionsByMessageId = existing?.reactionsByMessageId.orEmpty(),
                 icebreakerPrompts = existing?.icebreakerPrompts.orEmpty(),
-                showIcebreakerPanel = existing?.showIcebreakerPanel ?: (hot.size < 5),
+                showIcebreakerPanel = existing?.showIcebreakerPanel ?: (messages.size < 5),
             )
         }
     }
@@ -1389,6 +1398,30 @@ class ChatViewModel(
         )
     }
 
+    private fun normalizeChatTimeline(messages: List<MessageWithUser>): List<MessageWithUser> {
+        if (messages.isEmpty()) return messages
+        val byId = linkedMapOf<String, MessageWithUser>()
+        for (mwu in messages) {
+            byId[mwu.message.id] = mwu
+        }
+        val values = byId.values.toList()
+        val deliveredStamps = values.mapNotNull { mwu ->
+            val m = mwu.message
+            if (m.id.startsWith("temp-")) return@mapNotNull null
+            val stamp = m.localSentAt ?: return@mapNotNull null
+            (m.user_id to stamp)
+        }.toSet()
+        val cleaned = values.filterNot { mwu ->
+            val m = mwu.message
+            m.id.startsWith("temp-") &&
+                m.localSentAt != null &&
+                (m.user_id to m.localSentAt) in deliveredStamps
+        }
+        return cleaned.sortedWith(
+            compareBy({ it.message.timeCreated }, { it.message.id }),
+        )
+    }
+
     private fun mergeMessageTimelinesPreservingLiveState(
         current: List<MessageWithUser>,
         incoming: List<MessageWithUser>,
@@ -1408,11 +1441,19 @@ class ChatViewModel(
                 byId[mwu.message.id] = mwu
             }
         }
-        val merged = byId.values.sortedBy { it.message.timeCreated }
+        val merged = byId.values.toList()
+        // Drop temp rows already represented by a server row (same sender + localSentAt),
+        // otherwise icebreaker / send races show duplicate bubbles with different ids.
         val extras = pendingOptimistic.filter { opt ->
-            merged.none { it.message.id == opt.message.id }
+            val stamp = opt.message.localSentAt
+            merged.none { server ->
+                !server.message.id.startsWith("temp-") &&
+                    server.message.user_id == opt.message.user_id &&
+                    stamp != null &&
+                    server.message.localSentAt == stamp
+            } && merged.none { it.message.id == opt.message.id }
         }
-        return (merged + extras).sortedBy { it.message.timeCreated }
+        return normalizeChatTimeline(merged + extras)
     }
 
     private fun applyHotTimelineToOpenChatIfNewer(connectionId: String) {
@@ -1503,11 +1544,20 @@ class ChatViewModel(
                 _messageReactions.value = mergedPrefetch.reactionsByMessageId
                 _icebreakerPrompts.value = mergedPrefetch.icebreakerPrompts
                 _showIcebreakerPanel.value = mergedPrefetch.showIcebreakerPanel
+                val liveForMerge = (_chatMessagesState.value as? ChatMessagesState.Success)
+                    ?.takeIf { it.chatDetails.connection.id == connectionId }
+                    ?.messages
+                    .orEmpty()
+                val messagesForUi = if (liveForMerge.isNotEmpty()) {
+                    mergeMessageTimelinesPreservingLiveState(liveForMerge, mergedPrefetch.messages)
+                } else {
+                    normalizeChatTimeline(mergedPrefetch.messages)
+                }
                 viewModelScope.launch {
-                    warmSecureMediaForTimeline(mergedPrefetch.messages)
+                    warmSecureMediaForTimeline(messagesForUi)
                 }
                 _chatMessagesState.value = ChatMessagesState.Success(
-                    messages = mergedPrefetch.messages,
+                    messages = messagesForUi,
                     chatDetails = rowForDisk,
                     isLoadingMessages = false,
                 )
@@ -1581,16 +1631,27 @@ class ChatViewModel(
             _messageReactions.value = prefetchedPayload.reactionsByMessageId
             _icebreakerPrompts.value = prefetchedPayload.icebreakerPrompts
             _showIcebreakerPanel.value = prefetchedPayload.showIcebreakerPanel
+            // Merge with live timeline so a bounded disk/hot prefetch (80 msgs) never
+            // truncates an already-loaded longer window (load-older / realtime).
+            val liveForMerge = currentState
+                ?.takeIf { it.chatDetails.connection.id == connectionId }
+                ?.messages
+                .orEmpty()
+            val messagesForUi = if (liveForMerge.isNotEmpty()) {
+                mergeMessageTimelinesPreservingLiveState(liveForMerge, prefetchedPayload.messages)
+            } else {
+                normalizeChatTimeline(prefetchedPayload.messages)
+            }
             viewModelScope.launch {
-                warmSecureMediaForTimeline(prefetchedPayload.messages)
+                warmSecureMediaForTimeline(messagesForUi)
             }
             _chatMessagesState.value = ChatMessagesState.Success(
-                messages = prefetchedPayload.messages,
+                messages = messagesForUi,
                 chatDetails = cachedChat,
-                isLoadingMessages = !hasCachedTimeline,
+                isLoadingMessages = !hasCachedTimeline && liveForMerge.isEmpty(),
             )
             _hasMoreOlderMessages.value =
-                prefetchedPayload.messages.size >= INITIAL_CHAT_MESSAGE_FETCH_LIMIT
+                messagesForUi.size >= INITIAL_CHAT_MESSAGE_FETCH_LIMIT
         } else if (hasRenderableStateForTarget && currentState != null && !switchingConnection) {
             // Keep current content visible while refreshing the same thread in background.
             _chatMessagesState.value = currentState.copy(
@@ -2575,10 +2636,12 @@ class ChatViewModel(
         val currentState = _chatMessagesState.value as? ChatMessagesState.Success ?: return
         val connectionId = currentState.chatDetails.connection.id
         _chatMessagesState.value = currentState.copy(
-            messages = currentState.messages + MessageWithUser(
-                message = message,
-                user = currentUser,
-                isSent = true,
+            messages = normalizeChatTimeline(
+                currentState.messages + MessageWithUser(
+                    message = message,
+                    user = currentUser,
+                    isSent = true,
+                ),
             ),
         )
         bumpConnectionInChatList(connectionId, message)
@@ -2614,7 +2677,7 @@ class ChatViewModel(
                     user = user,
                     isSent = mergedMessage.user_id == currentUserId,
                 )
-                _chatMessagesState.value = currentState.copy(messages = replaced)
+                _chatMessagesState.value = currentState.copy(messages = normalizeChatTimeline(replaced))
                 bumpConnectionInChatList(connectionId, mergedMessage)
                 return
             }
@@ -2629,22 +2692,33 @@ class ChatViewModel(
                 user = user,
                 isSent = mergedMessage.user_id == currentUserId,
             )
-            _chatMessagesState.value = currentState.copy(messages = updated)
-            bumpConnectionInChatList(connectionId, mergedMessage)
+            _chatMessagesState.value = currentState.copy(messages = normalizeChatTimeline(updated))
+            updated
+                .maxByOrNull { it.message.timeCreated }
+                ?.message
+                ?.takeIf { it.id == mergedMessage.id }
+                ?.let { bumpConnectionInChatList(connectionId, it) }
             return
         }
 
         _chatMessagesState.value = currentState.copy(
-            messages = baseList + MessageWithUser(
-                message = mergedMessage,
-                user = user,
-                isSent = mergedMessage.user_id == currentUserId,
+            messages = normalizeChatTimeline(
+                baseList + MessageWithUser(
+                    message = mergedMessage,
+                    user = user,
+                    isSent = mergedMessage.user_id == currentUserId,
+                ),
             ),
         )
         bumpConnectionInChatList(connectionId, mergedMessage)
     }
 
-    /** Refresh list row + reorder so the active thread moves up when a message arrives or is sent. */
+    /**
+     * Refresh list row + reorder so the active thread moves up when a message arrives or is sent.
+     *
+     * Preview / `last_message_at` only move forward (or refresh the same last-message id).
+     * Older realtime UPDATEs (e.g. load-older delivery/read) must not rewrite the inbox snippet.
+     */
     private fun bumpConnectionInChatList(
         connectionId: String,
         message: Message,
@@ -2665,6 +2739,14 @@ class ChatViewModel(
         } else {
             connectionId
         }
+        val existingLast = if (rowIndex >= 0) state.chats[rowIndex].lastMessage else null
+        val isSameLastMessage = existingLast != null && existingLast.id == message.id
+        val isNewerThanLast = existingLast == null ||
+            message.timeCreated > existingLast.timeCreated ||
+            (message.timeCreated == existingLast.timeCreated && message.id >= existingLast.id)
+        if (!isSameLastMessage && !isNewerThanLast) {
+            return
+        }
         val isViewingThread = resolvedListKey == currentConnectionId
         if (isInbound) {
             _readClearedConnectionIds.update { it - resolvedListKey }
@@ -2677,11 +2759,6 @@ class ChatViewModel(
             state.chats.mapIndexed { index, chat ->
             if (index == rowIndex) {
                 val prevLastId = chat.lastMessage?.id
-                val inboundUnreadBump =
-                    isInbound &&
-                        !isViewingThread &&
-                        !message.isRead &&
-                        message.id != prevLastId
                 val nextUnread = when {
                     isViewingThread -> 0
                     isInbound && !message.isRead && message.id != prevLastId -> chat.unreadCount + 1
@@ -2693,11 +2770,15 @@ class ChatViewModel(
                 } else {
                     message
                 }
+                val nextLastAt = maxOf(
+                    chat.connection.last_message_at ?: 0L,
+                    message.timeCreated,
+                )
                 chat.copy(
                     lastMessage = previewMessage,
                     unreadCount = nextUnread,
                     connection = chat.connection.copy(
-                        last_message_at = message.timeCreated,
+                        last_message_at = nextLastAt,
                         chat = chat.connection.chat.copy(messages = listOf(previewMessage))
                     )
                 )
@@ -2854,7 +2935,7 @@ class ChatViewModel(
                     )
                     if (message != null) {
                         _replyingTo.value = null
-                        applyInsertedMessage(message, currentUser, userId)
+                        applyInsertedMessage(message, currentUser, userId, optimisticTempId = tempId)
                         activateConnectionIfPending(connectionId)
                     } else {
                         if (offlineAtSend || !connectivityMonitor.isOnline.value) {
@@ -3423,9 +3504,16 @@ class ChatViewModel(
              onUserStoppedTyping(chatId)
         }
         departingConnectionId?.let { connId ->
-            departingState?.messages?.map { it.message }?.takeIf { it.isNotEmpty() }?.let { rows ->
-                chatRepository.storeCachedMessageTimeline(connId, rows)
-            }
+            departingState?.messages?.map { it.message }
+                ?.sortedWith(compareBy({ it.timeCreated }, { it.id }))
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { rows ->
+                    chatRepository.storeCachedMessageTimeline(connId, rows)
+                    // Repair inbox if an older realtime UPDATE rewrote the preview while in-thread.
+                    rows.maxByOrNull { it.timeCreated }?.let { newest ->
+                        bumpConnectionInChatList(connId, newest)
+                    }
+                }
         }
         clearSecureChatMediaCache()
         realtimeJob?.cancel()
@@ -3952,24 +4040,40 @@ class ChatViewModel(
         }
         viewModelScope.launch {
             try {
+                AppDataManager.refresh(force = true)
+                // Allow the forced refresh to settle so key-wrap sees current edges.
+                delay(450)
+                val connections = AppDataManager.connections.value
                 val initialName = buildInitialVerifiedCliqueDisplayName(members, userId)
                 val rpc = VerifiedCliqueCreation.createVerifiedCliqueWithWrappedKeys(
                     chatRepository = chatRepository,
-                    connections = AppDataManager.connections.value,
+                    connections = connections,
                     currentUserId = userId,
                     memberUserIds = members,
                     initialGroupName = initialName,
                 )
-                val payload = rpc.getOrNull()
-                if (payload != null) {
-                    val chatId = chatRepository.resolveChatIdForGroupId(payload.groupId)
-                    if (chatId != null) {
-                        chatRepository.cacheGroupMasterKey(chatId, payload.masterKey32)
-                    }
-                    loadChats(isForced = true)
-                    PlatformHapticsPolicy.successNotification()
+                val payload = rpc.getOrElse { err ->
+                    onResult(Result.failure(err))
+                    return@launch
                 }
-                onResult(rpc.map { it.groupId })
+                val chatId = chatRepository.resolveChatIdForGroupId(payload.groupId)
+                if (chatId == null) {
+                    loadChats(isForced = true)
+                    onResult(
+                        Result.failure(
+                            IllegalStateException(
+                                "Click created but chat is not ready yet. Pull to refresh.",
+                            ),
+                        ),
+                    )
+                    return@launch
+                }
+                chatRepository.cacheGroupMasterKey(chatId, payload.masterKey32)
+                loadChats(isForced = true)
+                PlatformHapticsPolicy.successNotification()
+                onResult(Result.success(payload.groupId))
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 onResult(Result.failure(e))
             }

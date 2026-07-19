@@ -83,6 +83,7 @@ ViewModels are the **orchestration layer** between `ui/` and `data/`.
 - Global inbox previews depend on `RealtimeCoordinator.messageInserts` (`subscribeToMessageInserts`); `postgresChangeFlow` must be registered before channel subscribe.
 - `ChatPushInboxBridge.inboxPushEvents` and `RealtimeCoordinator.inboxVersion` patch connection-list previews without a full `loadChats` round-trip.
 - `bumpConnectionInChatList` paints `_chatListState` before patching `AppDataManager` so the connections collector cannot clobber a fresh preview.
+- Inbox bumps are **newest-wins** (same last-message id may refresh metadata). Global `messageInserts` are **Insert-only**; Updates merge hot cache without rewriting the list snippet.
 - `mergeChatRowWithCache` keeps the freshest `lastMessage` even when DB `last_message_at` is slightly ahead of `message.timeCreated` (trigger clock skew).
 - `resolveListKeyForChat` seeds routing from `AppDataManager` before any network lookup so global `messageInserts` are not dropped pre-open-chat.
 - `connections` UPDATE bumps `inboxVersion` only (no debounced inbox reload); junction tables still trigger archive/hide refresh.
@@ -130,7 +131,7 @@ Multi-Tap emits `VerifiedCliqueProximityIntent` for UI autofill into group membe
 - **Inbox freshness** — `loadChats(isForced = false)` skips network when `AppDataManager.isInboxFeedFresh()` (30s SSOT window + `inboxVersion` match); forced reloads and `chatListRefreshEpoch` bypass.
 - **Chat open fast path** — disk/hot cache paints immediately; stale threads use `scheduleBackgroundChatPayloadRefresh` which **merges** server rows into live UI (never clobbers Realtime inserts).
 - **Realtime priority** — `RealtimeCoordinator.messageInserts` vaults media and calls `applyInsertedMessage` on the open thread; per-chat channel handles updates/deletes/reactions.
-- **Message pagination** — initial fetch **80** messages; scroll-up loads **40** older via `fetchMessagesForChat(beforeTimeCreated=…)`; reactions scoped to visible message ids.
+- **Message pagination** — initial fetch **80** messages; scroll-up loads **40** older via `fetchMessagesForChat(beforeTimeCreated=…)`; older pages **merge** into hot cache (never replace); reactions scoped to visible message ids.
 - **Inbox UI pagination** — `connectionsDisplayLimit` starts at **50**, +50 per scroll (`ConnectionsListView`).
 - **E2EE** — `MessageCrypto` + `AttachmentCrypto` for text and media; group threads use wrapped master keys via `VerifiedCliqueCreation`.
 - **Realtime** — `SupabaseChatRepository` subscriptions for messages, reactions, typing, connection `last_message_at`.

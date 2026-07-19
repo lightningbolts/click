@@ -2,51 +2,45 @@ package compose.project.click.click.ui.chat
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.PhotoCamera
-import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,26 +49,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.Image
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.LineHeightStyle
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.MessageWithUser
@@ -111,34 +93,15 @@ internal fun ConnectionChatMessageComposer(
     val isSending by viewModel.isSending.collectAsState()
     val stagedChatImages by viewModel.stagedChatImages.collectAsState()
     var attachmentMenuExpanded by remember { mutableStateOf(false) }
-    val composerFocusRequester = remember { FocusRequester() }
-    var hadSubmitInFlight by remember { mutableStateOf(false) }
-
-    LaunchedEffect(isSending) {
-        if (isSending) {
-            hadSubmitInFlight = true
-            return@LaunchedEffect
-        }
-        if (!hadSubmitInFlight) return@LaunchedEffect
-        hadSubmitInFlight = false
-        // Keep the IME session stable during rapid sends — avoid show() + extra frames that delay bubbles.
-        composerFocusRequester.requestFocus()
-    }
 
     val composerStyle = LocalPlatformStyle.current
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val replyBannerVisible = replyingTo != null && editingMessageId == null
-    val auxButtonSize = if (composerStyle.isIOS) 44.dp else 52.dp
     val composerRowVPad = if (composerStyle.isIOS) 6.dp else 8.dp
-    val composerRowHPad = 8.dp
-    val attachIconSize = if (composerStyle.isIOS) 24.dp else 26.dp
-    val sendIconSize = if (composerStyle.isIOS) 22.dp else 20.dp
-    val fieldCorner = if (composerStyle.isIOS) 20.dp else 12.dp
+    val composerRowHPad = ChatChromeHorizontalPadding
     val replyShape = RoundedCornerShape(if (composerStyle.isIOS) 12.dp else 14.dp)
     val composerStripInteraction = remember { MutableInteractionSource() }
-    val fieldColors = rememberChatComposerFieldColors()
-    val composerInputTextStyle = MaterialTheme.typography.bodyMedium
     Box(modifier = Modifier.fillMaxWidth().graphicsLayer { clip = true }) {
         Box(
             modifier = Modifier
@@ -303,7 +266,11 @@ internal fun ConnectionChatMessageComposer(
             }
             messageSendError?.let { err ->
                 Text(
-                    text = err,
+                    text = if ("saved on this device" in err) {
+                        err
+                    } else {
+                        "$err · Review and tap send to retry"
+                    },
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier
@@ -311,128 +278,26 @@ internal fun ConnectionChatMessageComposer(
                         .padding(bottom = 4.dp),
                 )
             }
-            val composerGap = if (composerStyle.isIOS) 6.dp else 8.dp
-            val fieldSideInset = auxButtonSize + composerGap
             val attachTint = PrimaryBlue.copy(alpha = 0.92f)
-            val attachInteraction = remember { MutableInteractionSource() }
-            val sendInteraction = remember { MutableInteractionSource() }
-            val canSend = messageInput.trim().isNotEmpty()
-            val sendBackground = if (canSend) {
-                PrimaryBlue
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant
-            }
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = auxButtonSize),
-            ) {
-                val composerFieldInteraction = remember { MutableInteractionSource() }
-                val fieldShape = RoundedCornerShape(fieldCorner)
-                val composerTextStyleCentered = composerInputTextStyle.merge(
-                    TextStyle(
-                        lineHeightStyle = LineHeightStyle(
-                            alignment = LineHeightStyle.Alignment.Center,
-                            trim = LineHeightStyle.Trim.Both,
-                        ),
-                    ),
-                )
-                val approxLineBodyDp = 24.dp
-                val innerVerticalPad =
-                    ((auxButtonSize - approxLineBodyDp) / 2).coerceIn(6.dp, 12.dp)
-                val innerHorizontalPad = 12.dp
-                val fieldDecorPadding = PaddingValues(
-                    start = innerHorizontalPad,
-                    end = innerHorizontalPad,
-                    top = innerVerticalPad,
-                    bottom = innerVerticalPad,
-                )
-                BasicTextField(
-                    value = messageInput,
-                    onValueChange = { viewModel.updateMessageInput(it) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = fieldSideInset, end = fieldSideInset)
-                        .heightIn(min = auxButtonSize)
-                        .align(Alignment.BottomCenter)
-                        .focusRequester(composerFocusRequester),
-                    enabled = true,
-                    textStyle = composerTextStyleCentered.merge(
-                        TextStyle(color = MaterialTheme.colorScheme.onSurface),
-                    ),
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.Sentences,
-                        keyboardType = KeyboardType.Text,
-                        imeAction = ImeAction.None,
-                    ),
-                    singleLine = false,
-                    minLines = 1,
-                    maxLines = 10,
-                    interactionSource = composerFieldInteraction,
-                    cursorBrush = SolidColor(PrimaryBlue),
-                    decorationBox = { innerTextField ->
-                        OutlinedTextFieldDefaults.DecorationBox(
-                            value = messageInput,
-                            innerTextField = innerTextField,
-                            enabled = true,
-                            singleLine = false,
-                            visualTransformation = VisualTransformation.None,
-                            interactionSource = composerFieldInteraction,
-                            placeholder = {
-                                Text(
-                                    when {
-                                        editingMessageId != null -> "Edit message…"
-                                        isGroupChat -> "Message the group…"
-                                        else -> "Message ${chatDetails.otherUser.name}…"
-                                    },
-                                    style = composerTextStyleCentered,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                )
-                            },
-                            colors = fieldColors,
-                            contentPadding = fieldDecorPadding,
-                            container = {
-                                OutlinedTextFieldDefaults.Container(
-                                    enabled = true,
-                                    isError = false,
-                                    interactionSource = composerFieldInteraction,
-                                    modifier = Modifier,
-                                    colors = fieldColors,
-                                    shape = fieldShape,
-                                )
-                            },
-                        )
-                    },
-                )
-                ChatAttachmentMenuAnchorHost(
-                    expanded = attachmentMenuExpanded,
-                    onExpandedChange = { attachmentMenuExpanded = it },
-                    anchorSize = auxButtonSize,
-                    anchorInteraction = attachInteraction,
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .zIndex(4f)
-                        .focusProperties { canFocus = false },
-                    anchor = {
-                        val bgAlpha = if (isSending) 0.12f else 0.24f
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(CircleShape)
-                                .background(PrimaryBlue.copy(alpha = bgAlpha))
-                                .chatSpringPressScale(attachInteraction),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                Icons.Filled.Add,
-                                contentDescription = "Attach",
-                                tint = attachTint,
-                                modifier = Modifier.size(attachIconSize),
-                            )
-                        }
-                    },
-                    menuContent = {
-                        Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+            ChatComposerStrip(
+                value = messageInput,
+                onValueChange = viewModel::updateMessageInput,
+                placeholder = when {
+                    editingMessageId != null -> "Edit message…"
+                    isGroupChat -> "Message the group…"
+                    else -> "Message ${chatDetails.otherUser.name}…"
+                },
+                enabled = true,
+                externallySending = isSending,
+                sendIcon = if (editingMessageId != null) Icons.Filled.Check else Icons.AutoMirrored.Filled.Send,
+                sendContentDescription = if (editingMessageId != null) "Confirm edit" else "Send",
+                onSend = viewModel::sendMessage,
+                attachmentMenuExpanded = attachmentMenuExpanded,
+                onAttachmentMenuExpandedChange = { attachmentMenuExpanded = it },
+                attachBackground = PrimaryBlue.copy(alpha = if (isSending) 0.12f else 0.24f),
+                attachTint = attachTint,
+                attachmentMenuContent = {
+                    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                             ChatAttachmentMenuRow(
                                 label = "Click Drops",
                                 icon = Icons.Filled.PhotoCamera,
@@ -496,45 +361,9 @@ internal fun ConnectionChatMessageComposer(
                                     mediaPickers.openFilePicker()
                                 },
                             )
-                        }
-                    },
-                )
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .size(auxButtonSize)
-                        .zIndex(4f)
-                        .focusProperties { canFocus = false }
-                        .chatSpringPressScale(sendInteraction)
-                        .clip(if (composerStyle.isIOS) CircleShape else RoundedCornerShape(fieldCorner))
-                        .background(sendBackground)
-                        .clickable(
-                            interactionSource = sendInteraction,
-                            indication = null,
-                            enabled = canSend,
-                            onClick = {
-                                PlatformHapticsPolicy.lightImpact()
-                                viewModel.sendMessage()
-                            },
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        if (editingMessageId != null) {
-                            Icons.Filled.Check
-                        } else {
-                            Icons.AutoMirrored.Filled.Send
-                        },
-                        contentDescription = if (editingMessageId != null) "Confirm edit" else "Send",
-                        tint = if (canSend) {
-                            Color.White
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-                        },
-                        modifier = Modifier.size(sendIconSize),
-                    )
-                }
-            }
+                    }
+                },
+            )
         }
     }
 }

@@ -25,6 +25,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,15 +36,19 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import androidx.compose.runtime.*
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
@@ -51,9 +56,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.graphicsLayer
 import compose.project.click.click.navigation.NavigationItem
 import compose.project.click.click.navigation.bottomNavItems
+import compose.project.click.click.navigation.shouldRenderHomeSwipeUnderlay
 import compose.project.click.click.ui.components.PlatformBottomBar
 import compose.project.click.click.calls.ActiveCallOverlay
 import compose.project.click.click.calls.CallOverlayState
+import compose.project.click.click.calls.CallOverlayTransitionPolicy
 import compose.project.click.click.calls.CallPreviewOverlay
 import compose.project.click.click.calls.CallSessionManager
 import compose.project.click.click.calls.CallState
@@ -75,6 +82,7 @@ import compose.project.click.click.ui.components.ConnectionRevealOverlay
 import compose.project.click.click.ui.components.ConnectionRevealPhase
 import compose.project.click.click.ui.components.ConnectionRevealUiState
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
+import compose.project.click.click.ui.components.InteractiveSwipeBackParallaxPeekRatio
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
 import compose.project.click.click.ui.components.ConnectionContextPresentation
 import compose.project.click.click.ui.components.ConnectionContextSheet
@@ -83,6 +91,10 @@ import compose.project.click.click.calendar.lockAvailabilityIntentForGap
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.ui.components.AppShimmerScreen
 import compose.project.click.click.ui.components.OfflineStatusBanner
+import compose.project.click.click.ui.components.UnifiedToastHost
+import compose.project.click.click.ui.components.UnifiedToastTokens
+import compose.project.click.click.ui.components.rememberBottomChromePadding
+import compose.project.click.click.ui.components.rememberUnifiedToastState
 import compose.project.click.click.ui.components.GlobalTetherOverlay
 import compose.project.click.click.encounter.EncounterTetherManager
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground
@@ -97,12 +109,16 @@ import compose.project.click.click.util.redactedRestMessage
 import compose.project.click.click.viewmodel.AuthViewModel
 import compose.project.click.click.viewmodel.AuthState
 import compose.project.click.click.viewmodel.ChatViewModel
+import compose.project.click.click.viewmodel.HomeViewModel
 import compose.project.click.click.viewmodel.MapViewModel
+import compose.project.click.click.viewmodel.MapLayerFilter
 import compose.project.click.click.viewmodel.OnboardingViewModel
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.proximity.rememberProximityManager
+import compose.project.click.click.platform.rememberReduceMotionEnabled
 import compose.project.click.click.deeplink.ConnectionDeepLinkRouter
+import compose.project.click.click.deeplink.EventDeepLinkRouter
 import compose.project.click.click.notifications.ChatDeepLinkManager
 import compose.project.click.click.notifications.ChatNotificationDismisser
 import compose.project.click.click.sensors.AmbientNoiseMonitorProvider // pragma: allowlist secret
@@ -126,6 +142,7 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -146,6 +163,7 @@ import compose.project.click.click.data.hub.HubVerifyResult
 fun App() {
     // Functional Clarity: light-first until persisted preference is loaded.
     var isDarkMode by remember { mutableStateOf(false) }
+    val reduceMotion = rememberReduceMotionEnabled()
 
     // Ktor client
     val client = remember {
@@ -578,6 +596,20 @@ fun App() {
             val globalCallOverlayState by CallSessionManager.overlayState.collectAsState()
             val globalCallState by CallSessionManager.callState.collectAsState()
             val activeInvite by CallSessionManager.activeInvite.collectAsState()
+            var callOwnsNativeChrome by remember { mutableStateOf(false) }
+            LaunchedEffect(globalCallOverlayState, globalCallState) {
+                if (
+                    globalCallOverlayState !is CallOverlayState.Idle ||
+                    globalCallState !is CallState.Idle
+                ) {
+                    callOwnsNativeChrome = true
+                } else {
+                    // The native iOS tab bar sits outside Compose z-order. Keep it hidden until
+                    // the final call-card fade has cleared, then restore the preserved tab.
+                    delay(220)
+                    callOwnsNativeChrome = false
+                }
+            }
             // While [AnimatedVisibility] exits, [globalCallState] may already be [CallState.Idle]; keep the
             // last in-room state so [ActiveCallOverlay] does not snap to an empty Idle layout mid-fade.
             val lastActiveCallPresentedState = remember { mutableStateOf<CallState>(CallState.Idle) }
@@ -771,9 +803,11 @@ fun App() {
             } else if (onboardingStep == "loading") {
                 AppShimmerScreen(isDarkMode = isDarkMode)
             } else if (onboardingStep != "complete") {
-                val onboardingSnackbarHostState = remember { SnackbarHostState() }
+                val onboardingToastState = rememberUnifiedToastState()
                 LaunchedEffect(Unit) {
-                    AppDataManager.transientUserMessages.collect { onboardingSnackbarHostState.showSnackbar(it) }
+                    AppDataManager.transientUserMessages.collect {
+                        onboardingToastState.show(onboardingScope, it)
+                    }
                 }
                 Box(modifier = Modifier.fillMaxSize()) {
                 AnimatedContent(
@@ -847,10 +881,13 @@ fun App() {
                         }
                     }
                 }
-                SnackbarHost(
-                    hostState = onboardingSnackbarHostState,
+                UnifiedToastHost(
+                    state = onboardingToastState,
+                    opaque = true,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
                         .padding(bottom = 24.dp),
                 )
                 }
@@ -884,6 +921,7 @@ fun App() {
             var showNfcScreen by remember { mutableStateOf(false) }
             var pendingChatId by remember { mutableStateOf<String?>(null) }
             var pendingBeaconId by remember { mutableStateOf<String?>(null) }
+            var pendingMapLayerFilter by remember { mutableStateOf<MapLayerFilter?>(null) }
             var isConnectionsChatOpen by remember { mutableStateOf(false) }
             var verifiedCliqueProximityAutofillIntent by remember { mutableStateOf<VerifiedCliqueProximityIntent?>(null) }
             fun navigateTo(route: String) {
@@ -924,20 +962,39 @@ fun App() {
                 isConnectionsChatOpen = false
                 pendingChatId = null
                 pendingBeaconId = null
+                pendingMapLayerFilter = null
                 return true
             }
 
             val focusManager = LocalFocusManager.current
+            val homeViewModel: HomeViewModel = viewModel { HomeViewModel() }
             val mapViewModel: MapViewModel = viewModel { MapViewModel() }
             val chatViewModel: ChatViewModel = viewModel { ChatViewModel() }
             var hubChatArgs by remember { mutableStateOf<HubChatNavArgs?>(null) }
             var hubVerifyInProgress by remember { mutableStateOf(false) }
             var lastHubChatArgs by remember { mutableStateOf<HubChatNavArgs?>(null) }
+            var hubChatTransitionMode by remember { mutableStateOf(NavigationTransitionMode.Tap) }
+            var hubChatCloseJob by remember { mutableStateOf<Job?>(null) }
+            fun closeHubChat(mode: NavigationTransitionMode) {
+                hubChatCloseJob?.cancel()
+                hubChatTransitionMode = mode
+                if (mode == NavigationTransitionMode.GestureBack) {
+                    // Keep route ownership and bottom chrome stable through the gesture's final
+                    // frame; otherwise the revealed tab resizes while the foreground is settling.
+                    hubChatCloseJob = appScope.launch {
+                        delay(64)
+                        hubChatArgs = null
+                        hubChatCloseJob = null
+                    }
+                } else {
+                    hubChatArgs = null
+                }
+            }
             var showUnifiedSearchSheet by remember { mutableStateOf(false) }
-            var mapPipExpanded by remember { mutableStateOf(false) }
+            var eventsSheetExpanded by remember { mutableStateOf(false) }
             LaunchedEffect(currentRoute) {
-                if (currentRoute != NavigationItem.Map.route && mapPipExpanded) {
-                    mapPipExpanded = false
+                if (currentRoute != NavigationItem.Map.route && eventsSheetExpanded) {
+                    eventsSheetExpanded = false
                 }
             }
 
@@ -949,27 +1006,30 @@ fun App() {
                     showNfcScreen = false
                     showQRScanner = false
                     showMyQRCode = false
+                    hubChatCloseJob?.cancel()
+                    hubChatCloseJob = null
                     hubChatArgs = null
                     connectionRevealState = null
                     pendingChatId = null
                 }
             }
-            val activeScreenKey = when {
+            val addClickOverlayKey = when {
                 showMyQRCode -> "my_qr"
                 showQRScanner -> "qr_scanner"
                 showNfcScreen -> "nfc"
-                else -> currentRoute
+                else -> null
             }
+            // Keep AnimatedContent on the primary tab so Add Click is not destroyed while
+            // My Code / Scan / Tap overlays are open (avoids per-card remount flicker on swipe-back).
+            val activeScreenKey = currentRoute
             val canSwipeBackMainRoute = isIOS &&
                 isPrimaryNavRoute(currentRoute) &&
                 currentRoute != NavigationItem.Home.route &&
-                !showMyQRCode &&
-                !showQRScanner &&
-                !showNfcScreen &&
+                addClickOverlayKey == null &&
                 !isConnectionsChatOpen &&
                 hubChatArgs == null
             val iOSSwipeOwnsBack = isIOS && (
-                isSwipeBackScreen(activeScreenKey) ||
+                addClickOverlayKey != null ||
                     (currentRoute == NavigationItem.Connections.route && isConnectionsChatOpen) ||
                     hubChatArgs != null ||
                     canSwipeBackMainRoute
@@ -996,24 +1056,27 @@ fun App() {
             val pendingCommunityHubId by ChatDeepLinkManager.pendingCommunityHubId.collectAsState()
 
             val pendingConnectionUserId by ConnectionDeepLinkRouter.pendingConnectionUserId.collectAsState()
+            val pendingEventDeepLinkBeaconId by EventDeepLinkRouter.pendingBeaconId.collectAsState()
 
-            // Snackbar for connection success/error feedback
-            val snackbarHostState = remember { SnackbarHostState() }
+            // Unified toast for connection success/error feedback
+            val toastState = rememberUnifiedToastState()
 
             LaunchedEffect(connectionViewModel) {
                 connectionViewModel.transientNotice.collect { message ->
-                    snackbarHostState.showSnackbar(message)
+                    toastState.show(connectionScope, message)
                 }
             }
 
             LaunchedEffect(Unit) {
                 AppDataManager.transientUserMessages.collect { message ->
-                    snackbarHostState.showSnackbar(message)
+                    toastState.show(connectionScope, message)
                 }
             }
 
             fun launchCommunityHubJoin(hubId: String, knownCreatorId: String? = null) {
                 if (hubId.isBlank() || currentUser.id.isBlank()) return
+                hubChatCloseJob?.cancel()
+                hubChatCloseJob = null
                 // If we already have cached args for this hub, skip verification and re-enter.
                 val cached = lastHubChatArgs
                 if (cached != null && cached.hubId == hubId) {
@@ -1034,24 +1097,18 @@ fun App() {
                             shouldRequest = !locationService.hasLocationPermission()
                         )
                         if (!locationService.hasLocationPermission()) {
-                            snackbarHostState.showSnackbar(
-                                "Location permission is required to join this hub."
-                            )
+                            toastState.show(connectionScope, "Location permission is required to join this hub.")
                             return@launch
                         }
                         val loc = resolveHubGatekeeperLocationForChat()
                         if (loc == null) {
-                            snackbarHostState.showSnackbar(
-                                "Could not read your location. Try again in an open area."
-                            )
+                            toastState.show(connectionScope, "Could not read your location. Try again in an open area.")
                             return@launch
                         }
                         lastHubGatekeeperFix = loc
                         val jwt = tokenStorage.getJwt()
                         if (jwt.isNullOrBlank()) {
-                            snackbarHostState.showSnackbar(
-                                "Please sign in again to join the hub."
-                            )
+                            toastState.show(connectionScope, "Please sign in again to join the hub.")
                             return@launch
                         }
                         when (
@@ -1084,7 +1141,7 @@ fun App() {
                                 )
                             }
                             is HubVerifyResult.Failure -> {
-                                snackbarHostState.showSnackbar(outcome.userMessage)
+                                toastState.show(connectionScope, outcome.userMessage)
                             }
                         }
                     } finally {
@@ -1116,6 +1173,14 @@ fun App() {
                     venueId = null,
                 )
             }
+
+            LaunchedEffect(pendingEventDeepLinkBeaconId, currentUser.id) {
+                val beaconId = pendingEventDeepLinkBeaconId ?: return@LaunchedEffect
+                if (beaconId.isBlank() || currentUser.id.isBlank()) return@LaunchedEffect
+                EventDeepLinkRouter.consume()
+                pendingBeaconId = beaconId
+                navigateTo(NavigationItem.Map.route)
+            }
             val connectionState by connectionViewModel.connectionState.collectAsState()
             val collaborationSessions by CollaborationSessionManager.sessions.collectAsState()
             val openConnectionDisposableRoll: (String?) -> Unit = openConnectionDisposableRoll@{ connectionId ->
@@ -1133,7 +1198,7 @@ fun App() {
                                 val message = error.message?.trim()?.takeIf { it.isNotEmpty() }
                                     ?.take(160)
                                     ?: "Couldn't open Click Drops"
-                                snackbarHostState.showSnackbar(message)
+                                toastState.show(connectionScope, message)
                             }
                     } finally {
                         disposableRollOpening = false
@@ -1155,7 +1220,7 @@ fun App() {
                                 val message = error.message?.trim()?.takeIf { it.isNotEmpty() }
                                     ?.take(160)
                                     ?: "Couldn't open Click Drops"
-                                snackbarHostState.showSnackbar(message)
+                                toastState.show(connectionScope, message)
                             }
                     } finally {
                         disposableRollOpening = false
@@ -1173,26 +1238,42 @@ fun App() {
                 when (val state = connectionState) {
                     is ConnectionState.Success ->  {
                         revealConnectionId = state.connection.id
+                        val peerName = state.connectedUser.name?.trim()?.takeIf { it.isNotEmpty() } ?: "user"
+                        val chatId = state.connection.id
                         if (state.connection.isPendingSync()) {
                             connectionRevealState = null
-                            snackbarHostState.showSnackbar("Connection saved offline. It will sync automatically when you're back online.")
+                            toastState.show(connectionScope, "Connection saved offline. It will sync automatically when you're back online.")
                             navigateTo(NavigationItem.Connections.route)
                         } else if (connectionRevealState != null) {
                             connectionRevealState = connectionRevealState?.copy(
                                 phase = ConnectionRevealPhase.Success,
-                                connectedName = state.connectedUser.name
+                                connectedName = peerName
                             )
                             delay(900)
                             navigateTo(NavigationItem.Connections.route)
                             connectionRevealState = null
+                            toastState.show(
+                                connectionScope,
+                                "Connected with $peerName!",
+                                durationMs = UnifiedToastTokens.LongDurationMs,
+                                actionLabel = "Message",
+                                onAction = { pendingChatId = chatId },
+                            )
                         } else {
-                            snackbarHostState.showSnackbar("Connected with ${state.connectedUser.name ?: "user"}!")
+                            navigateTo(NavigationItem.Connections.route)
+                            toastState.show(
+                                connectionScope,
+                                "Connected with $peerName!",
+                                durationMs = UnifiedToastTokens.LongDurationMs,
+                                actionLabel = "Message",
+                                onAction = { pendingChatId = chatId },
+                            )
                         }
                         connectionViewModel.resetConnectionState()
                     }
                     is ConnectionState.Error -> {
                         connectionRevealState = null
-                        snackbarHostState.showSnackbar(state.message)
+                        toastState.show(connectionScope, state.message)
                         connectionViewModel.resetConnectionState()
                     }
                     else -> {}
@@ -1202,7 +1283,7 @@ fun App() {
             // Platform back handler — intercepts Android back gesture/button
             compose.project.click.click.ui.components.PlatformBackHandler(
                 enabled = (
-                    mapPipExpanded ||
+                    eventsSheetExpanded ||
                         showUnifiedSearchSheet ||
                         hubChatArgs != null ||
                         showMyQRCode ||
@@ -1214,12 +1295,21 @@ fun App() {
                     ) && !iOSSwipeOwnsBack
             ) {
                 when {
-                    mapPipExpanded -> mapPipExpanded = false
+                    eventsSheetExpanded -> eventsSheetExpanded = false
                     showUnifiedSearchSheet -> showUnifiedSearchSheet = false
-                    hubChatArgs != null -> hubChatArgs = null
-                    showMyQRCode -> showMyQRCode = false
-                    showQRScanner -> showQRScanner = false
-                    showNfcScreen -> showNfcScreen = false
+                    hubChatArgs != null -> closeHubChat(NavigationTransitionMode.Tap)
+                    showMyQRCode -> {
+                        transitionMode = NavigationTransitionMode.GestureBack
+                        showMyQRCode = false
+                    }
+                    showQRScanner -> {
+                        transitionMode = NavigationTransitionMode.GestureBack
+                        showQRScanner = false
+                    }
+                    showNfcScreen -> {
+                        transitionMode = NavigationTransitionMode.GestureBack
+                        showNfcScreen = false
+                    }
                     connectionState is ConnectionState.TaggingContext && !showNfcScreen ->
                         connectionViewModel.resetConnectionState()
                     connectionState is ConnectionState.QrAwaitingContext && !showNfcScreen ->
@@ -1233,7 +1323,8 @@ fun App() {
                 isConnectionsChatOpen ||
                     hubChatArgs != null ||
                     showConnectionDisposableRoll ||
-                    disposableRollOpening
+                    disposableRollOpening ||
+                    callOwnsNativeChrome
 
             // Wrap Scaffold in a Box to allow search overlay to be positioned at true screen bottom
             Box(modifier = Modifier.fillMaxSize()) {
@@ -1252,26 +1343,6 @@ fun App() {
             Scaffold(
                 modifier = Modifier.fillMaxSize(),
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
-                snackbarHost = { SnackbarHost(snackbarHostState) },
-                bottomBar = {
-                    PlatformBottomBar(
-                        items = bottomNavItems,
-                        currentRoute = currentRoute,
-                        visible = !hideMainBottomBar,
-                        onItemSelected = { item ->
-                            if (item.route == NavigationItem.AddClick.route) {
-                                PlatformHapticsPolicy.heavyImpact()
-                                PlatformHapticsPolicy.successNotification()
-                            }
-                            navigateTo(item.route)
-                            hubChatArgs = null
-                            showMyQRCode = false
-                            showQRScanner = false
-                            showNfcScreen = false
-                            focusManager.clearFocus()
-                        },
-                    )
-                },
             ) { paddingValues ->
                 Box(
                     modifier = Modifier
@@ -1284,14 +1355,55 @@ fun App() {
                         color = MaterialTheme.colorScheme.background
                     ) {
                         val screenKey = activeScreenKey
-                        val swipeBackEnabled = isIOS && isSwipeBackScreen(screenKey)
+                        val addClickSwipeDragPx = remember { mutableFloatStateOf(0f) }
+                        var addClickSwipeBehindLayers by remember { mutableStateOf(false) }
+                        var lastAddClickOverlayKey by remember { mutableStateOf<String?>(null) }
+                        var addClickOverlayTransitionMode by remember {
+                            mutableStateOf(NavigationTransitionMode.Tap)
+                        }
+                        LaunchedEffect(addClickOverlayKey) {
+                            if (addClickOverlayKey != null) {
+                                lastAddClickOverlayKey = addClickOverlayKey
+                            } else {
+                                addClickSwipeBehindLayers = false
+                                addClickSwipeDragPx.floatValue = 0f
+                            }
+                        }
 
-                        LaunchedEffect(screenKey, transitionMode) {
-                            if (transitionMode == NavigationTransitionMode.GestureBack) {
-                                // Let gesture-driven render settle before returning to tap mode;
-                                // immediate reset can trigger an extra animated pass on Home.
+                        LaunchedEffect(addClickOverlayKey, addClickOverlayTransitionMode) {
+                            if (addClickOverlayKey == null &&
+                                addClickOverlayTransitionMode == NavigationTransitionMode.GestureBack
+                            ) {
                                 delay(80)
-                                transitionMode = NavigationTransitionMode.Tap
+                                addClickOverlayTransitionMode = NavigationTransitionMode.Tap
+                            }
+                        }
+
+                        val primaryTabStateHolder = rememberSaveableStateHolder()
+                        val latestHomeContent = rememberUpdatedState<@Composable () -> Unit> {
+                            HomeScreen(
+                                homeViewModel = homeViewModel,
+                                mapViewModel = mapViewModel,
+                                onNavigateToChat = { connectionId ->
+                                    pendingChatId = connectionId
+                                    navigateTo(NavigationItem.Connections.route)
+                                },
+                                onOpenSearch = { showUnifiedSearchSheet = true },
+                                onNavigateToMap = { beaconId ->
+                                    pendingBeaconId = beaconId
+                                    navigateTo(NavigationItem.Map.route)
+                                },
+                                onNavigateToMapLayer = { filter ->
+                                    pendingMapLayerFilter = filter
+                                    navigateTo(NavigationItem.Map.route)
+                                },
+                            )
+                        }
+                        val movableHomeContent = remember {
+                            movableContentOf {
+                                primaryTabStateHolder.SaveableStateProvider(NavigationItem.Home.route) {
+                                    latestHomeContent.value()
+                                }
                             }
                         }
 
@@ -1299,16 +1411,16 @@ fun App() {
                         fun renderScreen(animatedScreen: String, allowInteractiveSwipeBack: Boolean = true) {
                             @Composable
                             fun renderPrimaryScreen(route: String) {
-                                when (route) {
-                                    NavigationItem.Home.route -> HomeScreen(
-                                        onNavigateToChat = { connectionId ->
-                                            pendingChatId = connectionId
-                                            navigateTo(NavigationItem.Connections.route)
-                                        },
-                                        onOpenSearch = { showUnifiedSearchSheet = true },
-                                    )
+                                if (route == NavigationItem.Home.route) {
+                                    movableHomeContent()
+                                    return
+                                }
 
-                                    NavigationItem.AddClick.route -> AddClickScreen(
+                                primaryTabStateHolder.SaveableStateProvider(route) {
+                                    when (route) {
+                                        NavigationItem.Home.route -> Unit
+
+                                        NavigationItem.AddClick.route -> AddClickScreen(
                                         currentUserId = currentUser.id,
                                         currentUsername = currentUser.name,
                                         locationService = locationService,
@@ -1322,14 +1434,12 @@ fun App() {
                                             launchCommunityHubJoin(hubId, knownCreatorId = currentUser.id)
                                         },
                                         onHubCreateError = { msg ->
-                                            appScope.launch {
-                                                snackbarHostState.showSnackbar(msg)
-                                            }
+                                            toastState.show(connectionScope, msg)
                                         },
                                         onStartChatting = { navigateTo(NavigationItem.Connections.route) }
                                     )
 
-                                    NavigationItem.Connections.route -> {
+                                        NavigationItem.Connections.route -> {
                                         val userId = when (val state = authViewModel.authState) {
                                             is AuthState.Success -> state.userId
                                             else -> ""
@@ -1379,7 +1489,7 @@ fun App() {
                                         }
                                     }
 
-                                    NavigationItem.Map.route -> MapScreen(
+                                        NavigationItem.Map.route -> MapScreen(
                                         viewModel = mapViewModel,
                                         onNavigateToChat = { connectionId ->
                                             pendingChatId = connectionId
@@ -1387,18 +1497,20 @@ fun App() {
                                         },
                                         initialBeaconId = pendingBeaconId,
                                         onBeaconFocusConsumed = { pendingBeaconId = null },
+                                        initialLayerFilter = pendingMapLayerFilter,
+                                        onLayerFilterConsumed = { pendingMapLayerFilter = null },
                                         onJoinCommunityHub = { hubId ->
                                             launchCommunityHubJoin(hubId)
                                         },
-                                        mapPipExpanded = mapPipExpanded,
-                                        onMapPipExpandedChanged = { mapPipExpanded = it },
+                                        eventsSheetExpanded = eventsSheetExpanded,
+                                        onEventsSheetExpandedChanged = { eventsSheetExpanded = it },
                                         onOpenSearch = { showUnifiedSearchSheet = true },
                                         onOpenDisposableRoll = { cid ->
                                             openConnectionDisposableRoll(cid)
                                         },
                                     )
 
-                                    NavigationItem.Settings.route -> SettingsScreen(
+                                        NavigationItem.Settings.route -> SettingsScreen(
                                         isDarkMode = isDarkMode,
                                         onOpenSearch = { showUnifiedSearchSheet = true },
                                         onToggleDarkMode = {
@@ -1410,181 +1522,38 @@ fun App() {
                                         },
                                         onSignOut = { authViewModel.signOut() }
                                     )
+                                    }
                                 }
                             }
 
-                            when (animatedScreen) {
-                                "my_qr" -> {
-                                    val previousKey = currentRoute
-                                    val interactive = allowInteractiveSwipeBack &&
-                                        swipeBackEnabled &&
-                                        previousKey != animatedScreen
+                            val previousKey = NavigationItem.Home.route
+                            val interactivePrimary = allowInteractiveSwipeBack &&
+                                isIOS &&
+                                isPrimaryNavRoute(animatedScreen) &&
+                                animatedScreen != NavigationItem.Connections.route &&
+                                previousKey != animatedScreen &&
+                                !(animatedScreen == NavigationItem.Connections.route && isConnectionsChatOpen)
 
-                                    val content: @Composable () -> Unit = {
-                                        MyQRCodeScreen(
-                                            userId = currentUser.id,
-                                            username = currentUser.name,
-                                            locationService = locationService,
-                                            onNavigateBack = {
-                                                transitionMode = NavigationTransitionMode.Tap
-                                                showMyQRCode = false
-                                            }
-                                        )
-                                    }
-
-                                    if (interactive) {
-                                        InteractiveSwipeBackContainer(
-                                            enabled = true,
-                                            edgeSwipeWidth = 44.dp,
-                                            onBack = {
-                                                transitionMode = NavigationTransitionMode.GestureBack
-                                                showMyQRCode = false
-                                            },
-                                            previousContent = { renderScreen(previousKey, false) },
-                                            currentContent = content
-                                        )
-                                    } else {
-                                        content()
-                                    }
-                                }
-
-                                "qr_scanner" -> {
-                                    val previousKey = currentRoute
-                                    val interactive = allowInteractiveSwipeBack &&
-                                        swipeBackEnabled &&
-                                        previousKey != animatedScreen
-
-                                    val content: @Composable () -> Unit = {
-                                        QRScannerScreen(
-                                            onQRCodeScanned = { userId ->
-                                                showQRScanner = false
-                                                if (userId.isNotEmpty() && currentUser.id.isNotEmpty()) {
-                                                    connectionViewModel.presentQrContextSheetFromScan(
-                                                        scannedUserId = userId,
-                                                        qrToken = null,
-                                                        venueId = null,
-                                                    )
-                                                }
-                                            },
-                                            onQRCodeScannedWithToken = { userId, qrToken, venueId ->
-                                                showQRScanner = false
-                                                if (userId.isNotEmpty() && currentUser.id.isNotEmpty()) {
-                                                    connectionViewModel.presentQrContextSheetFromScan(
-                                                        scannedUserId = userId,
-                                                        qrToken = qrToken,
-                                                        venueId = venueId?.takeIf { it.isNotBlank() },
-                                                    )
-                                                }
-                                            },
-                                            onCommunityHubScanned = { hubId ->
-                                                showQRScanner = false
-                                                launchCommunityHubJoin(hubId)
-                                            },
-                                            onNavigateBack = {
-                                                transitionMode = NavigationTransitionMode.Tap
-                                                showQRScanner = false
-                                            }
-                                        )
-                                    }
-
-                                    if (interactive) {
-                                        InteractiveSwipeBackContainer(
-                                            enabled = true,
-                                            edgeSwipeWidth = 44.dp,
-                                            onBack = {
-                                                transitionMode = NavigationTransitionMode.GestureBack
-                                                showQRScanner = false
-                                            },
-                                            previousContent = { renderScreen(previousKey, false) },
-                                            currentContent = content
-                                        )
-                                    } else {
-                                        content()
-                                    }
-                                }
-
-                                "nfc" -> {
-                                    val previousKey = currentRoute
-                                    val interactive = allowInteractiveSwipeBack &&
-                                        swipeBackEnabled &&
-                                        previousKey != animatedScreen
-
-                                    val content: @Composable () -> Unit = {
-                                        val userId = when (val state = authViewModel.authState) {
-                                            is AuthState.Success -> state.userId
-                                            else -> ""
+                            if (interactivePrimary) {
+                                InteractiveSwipeBackContainer(
+                                    enabled = true,
+                                    edgeSwipeWidth = 44.dp,
+                                    onBack = { navigatePrimaryRouteBackHome(NavigationTransitionMode.GestureBack) },
+                                    previousContent = {
+                                        // Exactly one slot owns movable Home. On commit currentRoute
+                                        // flips before AnimatedContent disposes this outgoing route,
+                                        // so relinquish the underlay in that same recomposition.
+                                        if (shouldRenderHomeSwipeUnderlay(currentRoute)) {
+                                            renderPrimaryScreen(previousKey)
                                         }
-                                        val authToken by produceState(initialValue = "") {
-                                            value = tokenStorage.getJwt() ?: ""
-                                        }
-
-                                        val proximityManager = rememberProximityManager()
-
-                                        NfcScreen(
-                                            userId = userId,
-                                            authToken = authToken,
-                                            httpClient = client,
-                                            proximityManager = proximityManager,
-                                            connectionViewModel = connectionViewModel,
-                                            onConnectionCreated = {
-                                                connectionViewModel.resetConnectionState()
-                                                showNfcScreen = false
-                                                navigateTo(NavigationItem.Connections.route)
-                                            },
-                                            onBackPressed = {
-                                                transitionMode = NavigationTransitionMode.Tap
-                                                showNfcScreen = false
-                                            },
-                                            onProximityFinalizeStart = {
-                                                connectionRevealState = ConnectionRevealUiState(
-                                                    methodLabel = "Tap",
-                                                    phase = ConnectionRevealPhase.Connecting,
-                                                )
-                                            },
-                                        )
-                                    }
-
-                                    if (interactive) {
-                                        InteractiveSwipeBackContainer(
-                                            enabled = true,
-                                            edgeSwipeWidth = 44.dp,
-                                            onBack = {
-                                                transitionMode = NavigationTransitionMode.GestureBack
-                                                showNfcScreen = false
-                                            },
-                                            previousContent = { renderScreen(previousKey, false) },
-                                            currentContent = content
-                                        )
-                                    } else {
-                                        content()
-                                    }
-                                }
-
-                                else -> {
-                                    val previousKey = NavigationItem.Home.route
-                                    val interactivePrimary = allowInteractiveSwipeBack &&
-                                        isIOS &&
-                                        isPrimaryNavRoute(animatedScreen) &&
-                                        animatedScreen != NavigationItem.Connections.route &&
-                                        previousKey != animatedScreen &&
-                                        !(animatedScreen == NavigationItem.Connections.route && isConnectionsChatOpen)
-
-                                    if (interactivePrimary) {
-                                        InteractiveSwipeBackContainer(
-                                            enabled = true,
-                                            edgeSwipeWidth = 44.dp,
-                                            onBack = { navigatePrimaryRouteBackHome(NavigationTransitionMode.GestureBack) },
-                                            previousContent = { renderScreen(previousKey, false) },
-                                            currentContent = { renderPrimaryScreen(animatedScreen) }
-                                        )
-                                    } else {
-                                        renderPrimaryScreen(animatedScreen)
-                                    }
-                                }
+                                    },
+                                    currentContent = { renderPrimaryScreen(animatedScreen) }
+                                )
+                            } else {
+                                renderPrimaryScreen(animatedScreen)
                             }
                         }
 
-                        var hubChatTransitionMode by remember { mutableStateOf(NavigationTransitionMode.Tap) }
                         var hubChatRightToLeftPeek by remember {
                             mutableStateOf<InteractiveSwipeBackRightToLeftPeek?>(null)
                         }
@@ -1596,11 +1565,34 @@ fun App() {
                             }
                         }
 
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer {
+                                        if (!addClickSwipeBehindLayers) {
+                                            translationX = 0f
+                                            return@graphicsLayer
+                                        }
+                                        val w = size.width.coerceAtLeast(1f)
+                                        val o = addClickSwipeDragPx.floatValue.coerceIn(0f, w)
+                                        val progress = (o / w).coerceIn(0f, 1f)
+                                        translationX =
+                                            -(size.width * InteractiveSwipeBackParallaxPeekRatio) * (1f - progress)
+                                    },
+                            ) {
                         AnimatedContent(
+                            // Primary tabs (Home/AddClick/Connections/Map/Settings) all go through
+                            // this AnimatedContent with the 280ms crossfade. Do not reintroduce a
+                            // Home-underlay + Map overlay shell — it flashed Home on Map open and
+                            // broke Connections tab motion.
                             targetState = screenKey,
                             transitionSpec = {
                                 if (transitionMode == NavigationTransitionMode.GestureBack) {
                                     EnterTransition.None togetherWith ExitTransition.None
+                                } else if (reduceMotion) {
+                                    fadeIn(animationSpec = tween(120))
+                                        .togetherWith(fadeOut(animationSpec = tween(90)))
                                 } else {
                                 val routeOrder = listOf(
                                     NavigationItem.Home.route,
@@ -1608,9 +1600,6 @@ fun App() {
                                     NavigationItem.Connections.route,
                                     NavigationItem.Map.route,
                                     NavigationItem.Settings.route,
-                                    "my_qr",
-                                    "qr_scanner",
-                                    "nfc",
                                 )
 
                                 val initialIndex = routeOrder.indexOf(initialState).let { if (it >= 0) it else 0 }
@@ -1655,6 +1644,140 @@ fun App() {
                         ) { animatedScreen ->
                             renderScreen(animatedScreen)
                         }
+                            }
+
+                            if (addClickOverlayKey != null) {
+                                Box(
+                                    Modifier
+                                        .fillMaxSize()
+                                        .pointerInput(Unit) {
+                                            awaitEachGesture {
+                                                while (true) {
+                                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                                    event.changes.forEach { it.consume() }
+                                                }
+                                            }
+                                        },
+                                )
+                            }
+
+                            val addClickSlideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
+                            val addClickFadeSpec = tween<Float>(220, easing = LinearOutSlowInEasing)
+                            AnimatedVisibility(
+                                visible = addClickOverlayKey != null,
+                                modifier = Modifier.fillMaxSize(),
+                                enter = if (reduceMotion) {
+                                    fadeIn(animationSpec = tween(120))
+                                } else {
+                                    slideInHorizontally(animationSpec = addClickSlideSpec, initialOffsetX = { it }) +
+                                        fadeIn(animationSpec = addClickFadeSpec)
+                                },
+                                exit = if (addClickOverlayTransitionMode == NavigationTransitionMode.GestureBack) {
+                                    ExitTransition.None
+                                } else if (reduceMotion) {
+                                    fadeOut(animationSpec = tween(90))
+                                } else {
+                                    slideOutHorizontally(animationSpec = addClickSlideSpec, targetOffsetX = { it }) +
+                                        fadeOut(animationSpec = addClickFadeSpec)
+                                },
+                                label = "add_click_overlay",
+                            ) {
+                                val overlayKey = lastAddClickOverlayKey
+                                if (overlayKey != null) {
+                                    fun dismissAddClickOverlay(mode: NavigationTransitionMode) {
+                                        addClickOverlayTransitionMode = mode
+                                        transitionMode = mode
+                                        when (overlayKey) {
+                                            "my_qr" -> showMyQRCode = false
+                                            "qr_scanner" -> showQRScanner = false
+                                            "nfc" -> showNfcScreen = false
+                                        }
+                                    }
+                                    InteractiveSwipeBackContainer(
+                                        enabled = isIOS,
+                                        edgeSwipeWidth = 44.dp,
+                                        onBack = { dismissAddClickOverlay(NavigationTransitionMode.GestureBack) },
+                                        opaquePreviousBackground = false,
+                                        externalDragOffsetPx = addClickSwipeDragPx,
+                                        onBehindLayersVisibleChanged = { addClickSwipeBehindLayers = it },
+                                        previousContent = {},
+                                        currentContent = {
+                                            when (overlayKey) {
+                                                "my_qr" -> MyQRCodeScreen(
+                                                    userId = currentUser.id,
+                                                    username = currentUser.name,
+                                                    locationService = locationService,
+                                                    onNavigateBack = {
+                                                        dismissAddClickOverlay(NavigationTransitionMode.Tap)
+                                                    },
+                                                )
+                                                "qr_scanner" -> QRScannerScreen(
+                                                    onQRCodeScanned = { userId ->
+                                                        showQRScanner = false
+                                                        if (userId.isNotEmpty() && currentUser.id.isNotEmpty()) {
+                                                            connectionViewModel.presentQrContextSheetFromScan(
+                                                                scannedUserId = userId,
+                                                                qrToken = null,
+                                                                venueId = null,
+                                                            )
+                                                        }
+                                                    },
+                                                    onQRCodeScannedWithToken = { userId, qrToken, venueId ->
+                                                        showQRScanner = false
+                                                        if (userId.isNotEmpty() && currentUser.id.isNotEmpty()) {
+                                                            connectionViewModel.presentQrContextSheetFromScan(
+                                                                scannedUserId = userId,
+                                                                qrToken = qrToken,
+                                                                venueId = venueId?.takeIf { it.isNotBlank() },
+                                                            )
+                                                        }
+                                                    },
+                                                    onCommunityHubScanned = { hubId ->
+                                                        showQRScanner = false
+                                                        launchCommunityHubJoin(hubId)
+                                                    },
+                                                    onNavigateBack = {
+                                                        dismissAddClickOverlay(NavigationTransitionMode.Tap)
+                                                    },
+                                                )
+                                                "nfc" -> {
+                                                    val userId = when (val state = authViewModel.authState) {
+                                                        is AuthState.Success -> state.userId
+                                                        else -> ""
+                                                    }
+                                                    val authToken by produceState(initialValue = "") {
+                                                        value = tokenStorage.getJwt() ?: ""
+                                                    }
+                                                    val proximityManager = rememberProximityManager()
+                                                    NfcScreen(
+                                                        userId = userId,
+                                                        authToken = authToken,
+                                                        httpClient = client,
+                                                        proximityManager = proximityManager,
+                                                        connectionViewModel = connectionViewModel,
+                                                        onConnectionCreated = {
+                                                            connectionViewModel.resetConnectionState()
+                                                            showNfcScreen = false
+                                                            navigateTo(NavigationItem.Connections.route)
+                                                        },
+                                                        onBackPressed = {
+                                                            dismissAddClickOverlay(NavigationTransitionMode.Tap)
+                                                        },
+                                                        onProximityFinalizeStart = {
+                                                            connectionRevealState = ConnectionRevealUiState(
+                                                                methodLabel = "Tap",
+                                                                phase = ConnectionRevealPhase.Connecting,
+                                                            )
+                                                        },
+                                                    )
+                                                }
+                                            }
+                                        },
+                                    )
+                                }
+                            }
+                        }
+
 
                         // ── Hub Chat Overlay (mirrors ConnectionsScreen iOS chat overlay) ──
                         val hubSlideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
@@ -1662,10 +1785,16 @@ fun App() {
                         androidx.compose.animation.AnimatedVisibility(
                             visible = hubChatArgs != null,
                             modifier = Modifier.fillMaxSize(),
-                            enter = slideInHorizontally(animationSpec = hubSlideSpec, initialOffsetX = { it }) +
-                                fadeIn(animationSpec = hubFadeSpec),
+                            enter = if (reduceMotion) {
+                                fadeIn(animationSpec = tween(120))
+                            } else {
+                                slideInHorizontally(animationSpec = hubSlideSpec, initialOffsetX = { it }) +
+                                    fadeIn(animationSpec = hubFadeSpec)
+                            },
                             exit = if (hubChatTransitionMode == NavigationTransitionMode.GestureBack) {
                                 ExitTransition.None
+                            } else if (reduceMotion) {
+                                fadeOut(animationSpec = tween(90))
                             } else {
                                 slideOutHorizontally(animationSpec = hubSlideSpec, targetOffsetX = { it }) +
                                     fadeOut(animationSpec = hubFadeSpec)
@@ -1686,8 +1815,7 @@ fun App() {
                                         opaquePreviousBackground = false,
                                         onBack = {
                                             hubFocusManager.clearFocus()
-                                            hubChatTransitionMode = NavigationTransitionMode.GestureBack
-                                            hubChatArgs = null
+                                            closeHubChat(NavigationTransitionMode.GestureBack)
                                         },
                                         rightToLeftPeek = hubChatRightToLeftPeek,
                                         previousContent = {},
@@ -1696,8 +1824,7 @@ fun App() {
                                                 args = activeHubArgs,
                                                 currentUserId = hubUserId,
                                                 onNavigateBack = {
-                                                    hubChatTransitionMode = NavigationTransitionMode.Tap
-                                                    hubChatArgs = null
+                                                    closeHubChat(NavigationTransitionMode.Tap)
                                                 },
                                                 resolveHubGatekeeperLocation = { resolveHubGatekeeperLocationForChat() },
                                                 integrateTimestampPeekWithSwipeBackContainer = true,
@@ -1712,8 +1839,7 @@ fun App() {
                                         args = activeHubArgs,
                                         currentUserId = hubUserId,
                                         onNavigateBack = {
-                                            hubChatTransitionMode = NavigationTransitionMode.Tap
-                                            hubChatArgs = null
+                                            closeHubChat(NavigationTransitionMode.Tap)
                                         },
                                         resolveHubGatekeeperLocation = { resolveHubGatekeeperLocationForChat() },
                                         integrateTimestampPeekWithSwipeBackContainer = false,
@@ -2082,16 +2208,6 @@ fun App() {
                         }
 
                         val overlayState = globalCallOverlayState
-                        val inPreviewOnlyOverlay =
-                            overlayState is CallOverlayState.Outgoing ||
-                                overlayState is CallOverlayState.Incoming ||
-                                overlayState is CallOverlayState.Connecting
-                        // In-call / hang-up: use [CallState] (incl. a short [CallState.Ended] tail from
-                        // [CallManager.endCall]) so the active layer can exit while the room tears down.
-                        // [inPreviewOnlyOverlay] keeps the ring / connect card on the preview layer.
-                        val activeCallVisible =
-                            !inPreviewOnlyOverlay &&
-                                (globalCallState is CallState.Connected || globalCallState is CallState.Ended)
                         LaunchedEffect(overlayState, globalCallState) {
                             if (
                                 overlayState is CallOverlayState.Ended &&
@@ -2105,31 +2221,47 @@ fun App() {
                                 suppressEndedPreviewAfterActiveCall = false
                             }
                         }
+                        val suppressEndedForPresentation =
+                            suppressEndedPreviewAfterActiveCall ||
+                                (
+                                    overlayState is CallOverlayState.Ended &&
+                                        (
+                                            lastActiveCallPresentedState.value is CallState.Connected ||
+                                                lastActiveCallPresentedState.value is CallState.Ended
+                                            )
+                                    )
+                        val callPresentation = CallOverlayTransitionPolicy.presentationFor(
+                            overlayState = overlayState,
+                            callState = globalCallState,
+                            suppressEndedPreviewAfterActiveCall = suppressEndedForPresentation,
+                        )
+                        val activeCallVisible =
+                            callPresentation == CallOverlayTransitionPolicy.Presentation.Active
                         val callPreviewVisible =
-                            !activeCallVisible &&
-                                (overlayState is CallOverlayState.Outgoing ||
-                                    overlayState is CallOverlayState.Incoming ||
-                                    overlayState is CallOverlayState.Connecting ||
-                                    (
-                                        overlayState is CallOverlayState.Ended &&
-                                            !suppressEndedPreviewAfterActiveCall
-                                        ))
+                            callPresentation == CallOverlayTransitionPolicy.Presentation.Preview
                         val previewOverlayUiState =
                             if (overlayState !is CallOverlayState.Idle) overlayState
                             else lastPreviewOverlayPresentedState.value
                         val callPreviewAlpha by animateFloatAsState(
                             targetValue = if (callPreviewVisible) 1f else 0f,
-                            animationSpec = tween(420, easing = LinearOutSlowInEasing),
+                            animationSpec = if (reduceMotion) {
+                                tween(100)
+                            } else if (callPreviewVisible) {
+                                MotionTokens.softEnterSpec()
+                            } else {
+                                MotionTokens.softExitSpec()
+                            },
                             label = "callPreviewOverlayAlpha",
-                        )
-                        val callPreviewScale by animateFloatAsState(
-                            targetValue = if (callPreviewVisible) 1f else 0.96f,
-                            animationSpec = tween(420, easing = LinearOutSlowInEasing),
-                            label = "callPreviewOverlayScale",
                         )
                         val activeCallAlpha by animateFloatAsState(
                             targetValue = if (activeCallVisible) 1f else 0f,
-                            animationSpec = tween(420, easing = LinearOutSlowInEasing),
+                            animationSpec = if (reduceMotion) {
+                                tween(100)
+                            } else if (activeCallVisible) {
+                                MotionTokens.softEnterSpec()
+                            } else {
+                                MotionTokens.softExitSpec()
+                            },
                             label = "activeCallOverlayAlpha",
                         )
                         LaunchedEffect(
@@ -2162,8 +2294,6 @@ fun App() {
                                         .fillMaxSize()
                                         .graphicsLayer {
                                             alpha = callPreviewAlpha
-                                            scaleX = callPreviewScale
-                                            scaleY = callPreviewScale
                                         },
                                 ) {
                                     CallPreviewOverlay(
@@ -2207,6 +2337,39 @@ fun App() {
                     }
                 }
             }
+            // Overlay (not Scaffold bottomBar) so tab content scrolls under a translucent bar.
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .zIndex(5f),
+            ) {
+                PlatformBottomBar(
+                    items = bottomNavItems,
+                    currentRoute = currentRoute,
+                    visible = !hideMainBottomBar,
+                    onItemSelected = { item ->
+                        navigateTo(item.route)
+                        hubChatCloseJob?.cancel()
+                        hubChatCloseJob = null
+                        hubChatArgs = null
+                        showMyQRCode = false
+                        showQRScanner = false
+                        showNfcScreen = false
+                        focusManager.clearFocus()
+                    },
+                )
+            }
+            UnifiedToastHost(
+                state = toastState,
+                opaque = true,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = rememberBottomChromePadding() + 8.dp)
+                    .zIndex(6f),
+            )
             if (showUnifiedSearchSheet) {
                 val searchUserId = when (val state = authViewModel.authState) {
                     is AuthState.Success -> state.userId
@@ -2256,12 +2419,6 @@ private enum class NavigationTransitionMode {
     GestureBack
 }
 
-private fun isSwipeBackScreen(screenKey: String): Boolean {
-    return screenKey == "my_qr" ||
-        screenKey == "qr_scanner" ||
-        screenKey == "nfc"
-}
-
 private fun isPrimaryNavRoute(route: String): Boolean {
     return route == NavigationItem.Home.route ||
         route == NavigationItem.AddClick.route ||
@@ -2269,3 +2426,4 @@ private fun isPrimaryNavRoute(route: String): Boolean {
         route == NavigationItem.Map.route ||
         route == NavigationItem.Settings.route
 }
+

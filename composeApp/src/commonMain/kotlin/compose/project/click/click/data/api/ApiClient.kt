@@ -273,11 +273,19 @@ data class ProximityBindOkResponseDto(
 @Serializable
 data class ProximityBindPendingResponseDto(
     val success: Boolean = true,
-    val status: String,
+    val status: String = "pending",
     @SerialName("pending_handshake_id") val pendingHandshakeId: String,
-    @SerialName("expires_at") val expiresAt: String,
+    @SerialName("expires_at") val expiresAt: String = "",
     @SerialName("encounter_logged") val encounterLogged: Boolean = false,
     val matches: List<User> = emptyList(),
+)
+
+/** HTTP 503 — connection create failed; handshake left unmatched for GET recovery. */
+@Serializable
+private data class ProximityBindUnavailableResponseDto(
+    val error: String? = null,
+    @SerialName("pending_handshake_id") val pendingHandshakeId: String? = null,
+    @SerialName("expires_at") val expiresAt: String? = null,
 )
 
 /** HTTP 200 — server ignored an empty peer-evidence payload (no DB row). */
@@ -1127,6 +1135,29 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         }
     }
 
+    /** `GET /api/beacons/{beaconId}` — full beacon row (metadata incl. event schedule). */
+    suspend fun getMapBeacon(beaconId: String): Result<MapBeacon> {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+        return try {
+            val response: HttpResponse = clickWebClient.get("$clickWebAuthOrigin/api/beacons/$id")
+            if (response.status.value in 200..299) {
+                val payload = response.body<MapBeaconPostResponseDto>()
+                val beaconObj = payload.beacon
+                    ?: return Result.failure(Exception("Beacon payload was missing"))
+                val beacon = parseMapBeaconRows(beaconObj).firstOrNull()
+                    ?: return Result.failure(Exception("Beacon payload was malformed"))
+                Result.success(beacon)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     /** `POST /api/beacons` — insert a map beacon (soundtrack rows enriched server-side). */
     suspend fun postMapBeacon(insert: MapBeaconInsert): Result<MapBeacon> {
         return try {
@@ -1261,8 +1292,9 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
 
     /**
      * POST `/api/connections/proximity` — tri-factor proximity bind (JWT bearer).
-     * Returns [ProximityHandshakePostResult.InstantMatch] on HTTP 200 or
-     * [ProximityHandshakePostResult.PendingMatch] on HTTP 202 (peer not online yet).
+     * Returns [ProximityHandshakePostResult.InstantMatch] on HTTP 200,
+     * [ProximityHandshakePostResult.PendingMatch] on HTTP 202 (peer not online yet),
+     * or HTTP 503 with `pending_handshake_id` (connection create failed; GET recovery).
      */
     suspend fun postProximityHandshake(
         body: ProximityHandshakePostBody,
@@ -1296,9 +1328,50 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
                     val dto = response.body<ProximityBindPendingResponseDto>()
                     Result.success(ProximityHandshakePostResult.PendingMatch(dto))
                 }
+                503 -> {
+                    val raw = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
+                    val unavailable = runCatching {
+                        json.decodeFromString(ProximityBindUnavailableResponseDto.serializer(), raw)
+                    }.getOrNull()
+                    val pendingId = unavailable?.pendingHandshakeId?.trim().orEmpty()
+                    if (pendingId.isNotEmpty()) {
+                        Result.success(
+                            ProximityHandshakePostResult.PendingMatch(
+                                ProximityBindPendingResponseDto(
+                                    success = false,
+                                    status = unavailable?.error ?: "connection_unavailable",
+                                    pendingHandshakeId = pendingId,
+                                    expiresAt = unavailable?.expiresAt.orEmpty(),
+                                ),
+                            ),
+                        )
+                    } else {
+                        clickWebFailure(response)
+                    }
+                }
                 else -> clickWebFailure(response)
             }
         } catch (e: ClientRequestException) {
+            val status = e.response.status.value
+            if (status == 503) {
+                val raw = runCatching { e.response.bodyAsText() }.getOrNull().orEmpty()
+                val unavailable = runCatching {
+                    json.decodeFromString(ProximityBindUnavailableResponseDto.serializer(), raw)
+                }.getOrNull()
+                val pendingId = unavailable?.pendingHandshakeId?.trim().orEmpty()
+                if (pendingId.isNotEmpty()) {
+                    return Result.success(
+                        ProximityHandshakePostResult.PendingMatch(
+                            ProximityBindPendingResponseDto(
+                                success = false,
+                                status = unavailable?.error ?: "connection_unavailable",
+                                pendingHandshakeId = pendingId,
+                                expiresAt = unavailable?.expiresAt.orEmpty(),
+                            ),
+                        ),
+                    )
+                }
+            }
             clickWebFailure(e.response)
         } catch (e: Exception) {
             Result.failure(e)
@@ -1527,13 +1600,23 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         beaconId: String,
         latitude: Double? = null,
         longitude: Double? = null,
+        accuracyMeters: Double? = null,
+        platform: String? = null,
     ): Result<BeaconAttendeeDto> {
         val id = beaconId.trim()
         if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
         return try {
             val response: HttpResponse = clickWebClient.post("$clickWebAuthOrigin/api/beacons/$id/rsvp") {
                 contentType(ContentType.Application.Json)
-                setBody(BeaconRsvpPostBody(latitude = latitude, longitude = longitude))
+                setBody(
+                    BeaconRsvpPostBody(
+                        latitude = latitude,
+                        longitude = longitude,
+                        accuracyMeters = accuracyMeters,
+                        source = "mobile",
+                        platform = platform,
+                    ),
+                )
             }
             if (response.status.value in 200..299) {
                 val payload = response.body<BeaconRsvpPostResponseDto>()
@@ -1558,6 +1641,169 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
             val response: HttpResponse = clickWebClient.delete("$clickWebAuthOrigin/api/beacons/$id/rsvp")
             if (response.status.value in 200..299) {
                 Result.success(Unit)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getBeaconEngagement(beaconId: String): Result<BeaconEngagementDto> {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+        return try {
+            val response: HttpResponse =
+                clickWebClient.get("$clickWebAuthOrigin/api/beacons/$id/engagement")
+            if (response.status.value in 200..299) {
+                Result.success(response.body<BeaconEngagementDto>())
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun putBeaconBookmark(
+        beaconId: String,
+        bookmarked: Boolean,
+        telemetry: EngagementTelemetryBody = EngagementTelemetryBody(),
+    ): Result<Unit> {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+        return try {
+            val response: HttpResponse =
+                clickWebClient.put("$clickWebAuthOrigin/api/beacons/$id/bookmark") {
+                    contentType(ContentType.Application.Json)
+                    setBody(telemetry.copy(bookmarked = bookmarked))
+                }
+            if (response.status.value in 200..299) Result.success(Unit)
+            else Result.failure(Exception(readClickWebErrorMessage(response)))
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun postBeaconCheckIn(
+        beaconId: String,
+        telemetry: EngagementTelemetryBody,
+    ): Result<BeaconCheckInMutationDto> {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+        return try {
+            val response: HttpResponse =
+                clickWebClient.post("$clickWebAuthOrigin/api/beacons/$id/check-in") {
+                    contentType(ContentType.Application.Json)
+                    setBody(telemetry)
+                }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<BeaconCheckInMutationDto>())
+            } else {
+                Result.failure(
+                    BeaconEngagementHttpException(
+                        status = response.status.value,
+                        message = readClickWebErrorMessage(response),
+                    ),
+                )
+            }
+        } catch (e: ClientRequestException) {
+            Result.failure(
+                BeaconEngagementHttpException(
+                    status = e.response.status.value,
+                    message = readClickWebErrorMessage(e.response),
+                ),
+            )
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteBeaconCheckIn(beaconId: String): Result<Unit> {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+        return try {
+            val response: HttpResponse =
+                clickWebClient.delete("$clickWebAuthOrigin/api/beacons/$id/check-in")
+            if (response.status.value in 200..299) Result.success(Unit)
+            else Result.failure(Exception(readClickWebErrorMessage(response)))
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun postBeaconImpression(
+        beaconId: String,
+        telemetry: EngagementTelemetryBody = EngagementTelemetryBody(surface = "detail"),
+    ): Result<Unit> {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+        return try {
+            val response: HttpResponse =
+                clickWebClient.post("$clickWebAuthOrigin/api/beacons/$id/impressions") {
+                    contentType(ContentType.Application.Json)
+                    setBody(telemetry)
+                }
+            if (response.status.value in 200..299) Result.success(Unit)
+            else Result.failure(Exception(readClickWebErrorMessage(response)))
+        } catch (e: Exception) {
+            // Fire-and-forget: soft-fail
+            Result.failure(e)
+        }
+    }
+
+    suspend fun postBeaconShare(
+        beaconId: String,
+        telemetry: EngagementTelemetryBody = EngagementTelemetryBody(surface = "detail"),
+        shareUrl: String? = null,
+    ): Result<Unit> {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+        return try {
+            val response: HttpResponse =
+                clickWebClient.post("$clickWebAuthOrigin/api/beacons/$id/share") {
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        ShareTelemetryBody(
+                            latitude = telemetry.latitude,
+                            longitude = telemetry.longitude,
+                            accuracyMeters = telemetry.accuracyMeters,
+                            clientOccurredAt = telemetry.clientOccurredAt,
+                            source = telemetry.source,
+                            platform = telemetry.platform,
+                            appVersion = telemetry.appVersion,
+                            surface = telemetry.surface,
+                            shareUrl = shareUrl,
+                        ),
+                    )
+                }
+            if (response.status.value in 200..299) Result.success(Unit)
+            else Result.failure(Exception(readClickWebErrorMessage(response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getMyEventBookmarks(
+        limit: Int = 50,
+        cursor: String? = null,
+    ): Result<EventBookmarksResponseDto> {
+        return try {
+            val response: HttpResponse =
+                clickWebClient.get("$clickWebAuthOrigin/api/me/event-bookmarks") {
+                    parameter("limit", limit.coerceIn(1, 100))
+                    cursor?.trim()?.takeIf { it.isNotEmpty() }?.let { parameter("cursor", it) }
+                }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<EventBookmarksResponseDto>())
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }
@@ -1617,4 +1863,99 @@ data class BeaconRsvpPostResponseDto(
 data class BeaconRsvpPostBody(
     val latitude: Double? = null,
     val longitude: Double? = null,
+    @SerialName("accuracy_meters") val accuracyMeters: Double? = null,
+    @SerialName("client_occurred_at") val clientOccurredAt: String? = null,
+    val source: String? = null,
+    val platform: String? = null,
+    @SerialName("app_version") val appVersion: String? = null,
 )
+
+@Serializable
+data class EngagementTelemetryBody(
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    @SerialName("accuracy_meters") val accuracyMeters: Double? = null,
+    @SerialName("client_occurred_at") val clientOccurredAt: String? = null,
+    val source: String? = "mobile",
+    val platform: String? = null,
+    @SerialName("app_version") val appVersion: String? = null,
+    val surface: String? = null,
+    val bookmarked: Boolean? = null,
+)
+
+@Serializable
+data class ShareTelemetryBody(
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    @SerialName("accuracy_meters") val accuracyMeters: Double? = null,
+    @SerialName("client_occurred_at") val clientOccurredAt: String? = null,
+    val source: String? = "mobile",
+    val platform: String? = null,
+    @SerialName("app_version") val appVersion: String? = null,
+    val surface: String? = null,
+    @SerialName("share_url") val shareUrl: String? = null,
+)
+
+@Serializable
+data class BeaconEngagementDto(
+    @SerialName("beacon_id") val beaconId: String? = null,
+    val bookmarked: Boolean = false,
+    @SerialName("checked_in") val checkedIn: Boolean = false,
+    @SerialName("checked_in_at") val checkedInAt: String? = null,
+    @SerialName("check_in_count") val checkInCount: Int = 0,
+)
+
+@Serializable
+data class EventBookmarkItemDto(
+    @SerialName("beacon_id") val beaconId: String,
+    @SerialName("bookmarked_at") val bookmarkedAt: String? = null,
+    val title: String? = null,
+    @SerialName("event_start_at") val eventStartAt: String? = null,
+    @SerialName("event_end_at") val eventEndAt: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    @SerialName("expires_at") val expiresAt: String? = null,
+)
+
+fun EventBookmarkItemDto.toStoredEventBookmark(): compose.project.click.click.data.models.StoredEventBookmark =
+    compose.project.click.click.data.models.StoredEventBookmark(
+        beaconId = beaconId,
+        bookmarkedAt = bookmarkedAt,
+        title = title,
+        eventStartAt = eventStartAt,
+        eventEndAt = eventEndAt,
+        latitude = latitude,
+        longitude = longitude,
+        expiresAt = expiresAt,
+    )
+
+fun compose.project.click.click.data.models.StoredEventBookmark.toEventBookmarkItemDto(): EventBookmarkItemDto =
+    EventBookmarkItemDto(
+        beaconId = beaconId,
+        bookmarkedAt = bookmarkedAt,
+        title = title,
+        eventStartAt = eventStartAt,
+        eventEndAt = eventEndAt,
+        latitude = latitude,
+        longitude = longitude,
+        expiresAt = expiresAt,
+    )
+
+@Serializable
+data class EventBookmarksResponseDto(
+    val bookmarks: List<EventBookmarkItemDto> = emptyList(),
+    @SerialName("next_cursor") val nextCursor: String? = null,
+)
+
+@Serializable
+data class BeaconCheckInMutationDto(
+    val ok: Boolean = false,
+    @SerialName("checked_in") val checkedIn: Boolean = false,
+    @SerialName("checked_in_at") val checkedInAt: String? = null,
+    @SerialName("check_in_count") val checkInCount: Int = 0,
+)
+
+class BeaconEngagementHttpException(
+    val status: Int,
+    override val message: String,
+) : Exception(message)

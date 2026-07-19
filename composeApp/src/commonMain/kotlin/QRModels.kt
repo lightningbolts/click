@@ -90,6 +90,8 @@ private val HTTP_C_PATTERN = Regex("""https?://[^/]+/c/$UUID_CAPTURE""")
 private val DEEP_LINK_C_PATTERN = Regex("""click://c/$UUID_CAPTURE""")
 private val HTTP_CONNECT_PATTERN = Regex("""https?://[^/]+/connect/$UUID_CAPTURE""")
 private val DEEP_LINK_PATTERN = Regex("""click://connect/$UUID_CAPTURE""")
+private val HTTP_E_PATTERN = Regex("""https?://[^/]+/e/$UUID_CAPTURE""")
+private val DEEP_LINK_E_PATTERN = Regex("""click://e/$UUID_CAPTURE""")
 
 /** Ephemeral community hub: click://hub/{hub_id} or https://…/hub/{hub_id} */
 private val HUB_ID_SEGMENT = """([a-zA-Z0-9][a-zA-Z0-9_\-]{0,127})"""
@@ -99,6 +101,12 @@ private val DEEP_LINK_HUB_PATTERN = Regex("""click://hub/$HUB_ID_SEGMENT""")
 fun String.toHubIdFromClickHubUrl(): String? {
     DEEP_LINK_HUB_PATTERN.find(this)?.groupValues?.getOrNull(1)?.let { return it }
     HTTP_HUB_PATTERN.find(this)?.groupValues?.getOrNull(1)?.let { return it }
+    return null
+}
+
+fun String.toBeaconIdFromClickEventUrl(): String? {
+    DEEP_LINK_E_PATTERN.find(this)?.groupValues?.getOrNull(1)?.let { return it }
+    HTTP_E_PATTERN.find(this)?.groupValues?.getOrNull(1)?.let { return it }
     return null
 }
 

@@ -1,18 +1,28 @@
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.*
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.ui.platform.LocalUriHandler
 import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDialogChrome // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.AnimatedClickDialog // pragma: allowlist secret
+import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,16 +36,19 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.LiquidGlassPill // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickCircularGlassIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformMap // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPin // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapClusterPin // pragma: allowlist secret
@@ -49,11 +62,13 @@ import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.events.EventReminderCoordinator
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapSelection // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
+import compose.project.click.click.data.models.withPreservedEventScheduleFrom
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.media.rememberChatAudioPlayer // pragma: allowlist secret
@@ -74,20 +89,32 @@ import androidx.compose.foundation.verticalScroll
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import compose.project.click.click.events.EventSchedule
+import compose.project.click.click.events.buildEventShareText
+import compose.project.click.click.events.buildEventShareUrl
 import compose.project.click.click.events.eventSchedule
+import compose.project.click.click.events.formatEventEndDateLabel
+import compose.project.click.click.events.formatEventEndTimeLabel
 import compose.project.click.click.events.formatEventScheduleRange
+import compose.project.click.click.events.formatEventStartDateLabel
+import compose.project.click.click.events.formatEventPostedAtLabel
+import compose.project.click.click.events.formatEventStartTimeLabel
+import compose.project.click.click.events.isLive
+import compose.project.click.click.events.openEventMapsRoute
+import compose.project.click.click.platform.shareText
 import compose.project.click.click.ui.utils.displayTypeTitle
 import compose.project.click.click.ui.utils.displayDynamicTitle
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.PlatformBackHandler
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding
+import compose.project.click.click.ui.components.rememberBottomChromePadding
 import compose.project.click.click.ui.sheet.MapBeaconSheetRoot
 import compose.project.click.click.telemetry.TelemetryBatcher
 import compose.project.click.click.ui.components.GlassmorphicOverlay
+import compose.project.click.click.ui.components.UnifiedToastHost
+import compose.project.click.click.ui.components.UnifiedToastTokens
+import compose.project.click.click.ui.components.rememberUnifiedToastState
 import compose.project.click.click.ui.theme.LocalPlatformStyle
-
-/** Neighborhood zoom for the discovery PiP map preview. */
-private const val MapPipPreviewZoom = 14.5
 
 /**
  * Map screen — Phase 2 refactor (B1, C10, C11):
@@ -109,10 +136,13 @@ fun MapScreen(
     /** When set, focuses the matching beacon pin once map beacons have loaded. */
     initialBeaconId: String? = null,
     onBeaconFocusConsumed: () -> Unit = {},
+    /** Home explore: apply a single map layer preset once when navigating from Home. */
+    initialLayerFilter: MapLayerFilter? = null,
+    onLayerFilterConsumed: () -> Unit = {},
     /** Proximity verify + hop into hub chat (matches Add Click hub join). */
     onJoinCommunityHub: (hubId: String) -> Unit = {},
-    mapPipExpanded: Boolean = false,
-    onMapPipExpandedChanged: (Boolean) -> Unit = {},
+    eventsSheetExpanded: Boolean = false,
+    onEventsSheetExpandedChanged: (Boolean) -> Unit = {},
     onOpenSearch: (() -> Unit)? = null,
     onOpenDisposableRoll: ((String) -> Unit)? = null,
 ) {
@@ -196,8 +226,8 @@ fun MapScreen(
         }
     }
 
-    LaunchedEffect(mapPipExpanded) {
-        if (mapPipExpanded) {
+    LaunchedEffect(eventsSheetExpanded) {
+        if (eventsSheetExpanded) {
             viewModel.refreshDiscoveryFromMapInteraction()
         }
     }
@@ -205,49 +235,66 @@ fun MapScreen(
     val rawMapBeacons by viewModel.mapBeacons.collectAsState()
     LaunchedEffect(initialBeaconId, rawMapBeacons) {
         val beaconId = initialBeaconId?.trim()?.takeIf { it.isNotEmpty() } ?: return@LaunchedEffect
-        if (rawMapBeacons.none { it.id == beaconId }) return@LaunchedEffect
-        viewModel.onBeaconPinTapped(beaconId)
+        val known = rawMapBeacons.any { it.id == beaconId } ||
+            EventReminderCoordinator.beaconById(beaconId) != null
+        if (!known) return@LaunchedEffect
+        viewModel.focusBeaconOnMap(beaconId)
         onBeaconFocusConsumed()
     }
 
+    LaunchedEffect(initialLayerFilter) {
+        val filter = initialLayerFilter ?: return@LaunchedEffect
+        viewModel.applyHomeLayerPreset(filter)
+        onLayerFilterConsumed()
+    }
+
     DisposableEffect(Unit) {
-        onDispose { onMapPipExpandedChanged(false) }
+        onDispose { onEventsSheetExpandedChanged(false) }
     }
 
-    PlatformBackHandler(enabled = mapPipExpanded) {
-        onMapPipExpandedChanged(false)
+    var eventsListTransitionMode by remember { mutableStateOf(EventsListTransitionMode.Tap) }
+
+    PlatformBackHandler(enabled = eventsSheetExpanded) {
+        eventsListTransitionMode = EventsListTransitionMode.Tap
+        onEventsSheetExpandedChanged(false)
     }
 
-    val snackbarHostState = remember { SnackbarHostState() }
+    val toastState = rememberUnifiedToastState()
+    val mapScope = rememberCoroutineScope()
 
     LaunchedEffect(ghostModeEnabled) {
         if (ghostModeEnabled) {
-            snackbarHostState.showSnackbar(
-                message = "You are off the grid",
-                duration = SnackbarDuration.Short,
-            )
+            toastState.show(mapScope, "You are off the grid")
         }
     }
 
     val nudgeResult by viewModel.nudgeResult.collectAsState()
     LaunchedEffect(nudgeResult) {
         nudgeResult?.let { msg ->
-            snackbarHostState.showSnackbar(message = msg, duration = SnackbarDuration.Short)
+            toastState.show(mapScope, msg)
             viewModel.clearNudgeResult()
         }
     }
 
     LaunchedEffect(beaconDropFailureToast) {
         beaconDropFailureToast?.let { msg ->
-            snackbarHostState.showSnackbar(message = msg, duration = SnackbarDuration.Long)
+            toastState.show(mapScope, msg, durationMs = UnifiedToastTokens.LongDurationMs)
             viewModel.clearBeaconDropFailureToast()
+        }
+    }
+
+    val engagementSnackbar by viewModel.engagementSnackbar.collectAsState()
+    LaunchedEffect(engagementSnackbar) {
+        engagementSnackbar?.let { msg ->
+            toastState.show(mapScope, msg)
+            viewModel.clearEngagementSnackbar()
         }
     }
 
     LaunchedEffect(beaconInsertError) {
         val err = beaconInsertError?.trim().orEmpty()
         if (err.isNotEmpty()) {
-            snackbarHostState.showSnackbar(message = err, duration = SnackbarDuration.Long)
+            toastState.show(mapScope, err, durationMs = UnifiedToastTokens.LongDurationMs)
             viewModel.clearBeaconInsertError()
         }
     }
@@ -260,7 +307,6 @@ fun MapScreen(
     var showCreateHubModal by remember { mutableStateOf(false) }
     var pendingHubName by remember { mutableStateOf("") }
     var pendingHubCategory by remember { mutableStateOf("general") }
-    val mapScope = rememberCoroutineScope()
 
     LaunchedEffect(showBeaconDropSheet) {
         if (showBeaconDropSheet) {
@@ -285,7 +331,6 @@ fun MapScreen(
     // Match App.kt: content is full-bleed under the tab bar; bottom inset is applied only on controls.
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) {
         val grayscaleModifier = if (ghostModeEnabled) Modifier.alpha(0.7f) else Modifier
 
@@ -303,8 +348,6 @@ fun MapScreen(
                 is MapState.Loading -> LoadingState()
                 is MapState.Error -> ErrorState(message = state.message, onRetry = { viewModel.refresh() })
                 is MapState.Success -> {
-                    val stats = viewModel.getMapStats()
-                    val statsLine = "${stats.liveCount} live · ${stats.totalConnections} memories"
                     val feedItems = remember(
                         communityHubs,
                         mapBeacons,
@@ -320,90 +363,154 @@ fun MapScreen(
                             userLon = userLon,
                         )
                     }
-                    MapDiscoveryScreen(
-                        feedItems = feedItems,
-                        discoveryFeedPending = discoveryFeedPending,
-                        discoveryFeedRefreshing = discoveryFeedPending,
-                        onRefreshDiscovery = { viewModel.refreshDiscoveryFeed() },
-                        mapPipExpanded = mapPipExpanded,
-                        onMapPipExpandedChange = onMapPipExpandedChanged,
-                        statsLine = statsLine,
-                        onOpenSearch = onOpenSearch,
-                        onDropBeacon = {
-                            TelemetryBatcher.recordActionTaken()
-                            showBeaconDropSheet = true
-                        },
-                        mapContent = { mapModifier, mapGesturesEnabled ->
-                            Box(modifier = mapModifier) {
-                                MapContent(
-                                    modifier = Modifier.fillMaxSize(),
-                                    renderData = renderData,
-                                    communityHubs = communityHubs,
-                                    zoom = cameraTarget?.zoom ?: mapBindingZoom,
-                                    ghostMode = ghostModeEnabled,
-                                    mapGesturesEnabled = mapGesturesEnabled,
-                                    showCompass = !mapPipExpanded,
-                                    cameraTarget = cameraTarget,
-                                    userLat = effectiveUserLat,
-                                    userLon = effectiveUserLon,
-                                    onPinTapped = { pin ->
-                                        TelemetryBatcher.recordActionTaken()
-                                        if (pin.kind == MapPinKind.CONNECTION) {
-                                            selectedProfileId = pin.id
-                                        } else {
-                                            selectedProfileId = null
-                                        }
-                                        viewModel.onMapPinTapped(pin)
-                                    },
-                                    onClusterTapped = { clusterPin ->
-                                        TelemetryBatcher.recordActionTaken()
-                                        viewModel.onClusterTappedFromMap(clusterPin.id)
-                                    },
-                                    onZoomChanged = { viewModel.setZoomLevel(it) },
-                                    onVisibleBoundsChanged = { minLat, maxLat, minLon, maxLon ->
-                                        viewModel.updateVisibleBounds(minLat, maxLat, minLon, maxLon)
-                                    },
-                                    onCameraAnimationComplete = { viewModel.onCameraAnimationComplete() },
-                                    onMapGesture = { TelemetryBatcher.recordMapPan() },
-                                )
-                                GlassmorphicOverlay(
-                                    visible = frictionUi.showGrassNudge && mapGesturesEnabled,
-                                    message = "Looking for the right vibe? Try dropping a 'Looking for Coffee' intent and let the map come to you. Put your phone in your pocket and we'll vibrate when a match is nearby.",
-                                    onDismiss = { TelemetryBatcher.dismissGrassNudge() },
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-                            }
-                        },
-                        onHubClick = { hub, distanceM ->
-                            TelemetryBatcher.recordActionTaken()
-                            viewModel.onCommunityHubTapped(hub, distanceM)
-                        },
-                        onBeaconClick = { beacon, distanceM ->
-                            TelemetryBatcher.recordActionTaken()
-                            viewModel.onBeaconPinTapped(beacon.id, seedDistanceMeters = distanceM)
-                        },
-                        onConnectionClick = { point ->
-                            TelemetryBatcher.recordActionTaken()
-                            selectedProfileId = point.connection.id
-                            viewModel.onMapPinTapped(MapPin.fromConnectionPoint(point))
-                        },
-                        expandedMapChrome = {
-                            MapExpandedMapChrome(
-                                dockBottomPadding = mapFabAboveNav,
-                                layerFilters = layerFilters,
-                                onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
-                                onDropBeacon = {
-                            TelemetryBatcher.recordActionTaken()
-                            showBeaconDropSheet = true
-                        },
-                                onCollapseMap = { onMapPipExpandedChanged(false) },
-                                onZoomIn = { viewModel.zoomIn() },
-                                onZoomOut = { viewModel.zoomOut() },
+                    val eventNearbyCount = remember(feedItems) {
+                        feedItems.count {
+                            it is DiscoveryFeedItem.Beacon && it.beacon.kind == MapBeaconKind.EVENT
+                        }
+                    }
+                    val fabBottomPadding = mapFabAboveNav + EventsReopenChipClearance
+
+                    // Map layer is isolated from eventsSheetExpanded so open/close cannot
+                    // invalidate PlatformMap (gestures stay on; overlay eats touches).
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        MapContent(
+                            modifier = Modifier.fillMaxSize(),
+                            renderData = renderData,
+                            communityHubs = communityHubs,
+                            zoom = cameraTarget?.zoom ?: mapBindingZoom,
+                            ghostMode = ghostModeEnabled,
+                            mapGesturesEnabled = true,
+                            showCompass = true,
+                            cameraTarget = cameraTarget,
+                            userLat = effectiveUserLat,
+                            userLon = effectiveUserLon,
+                            currentUserId = currentUser?.id,
+                            onPinTapped = rememberMapPinTapHandler(
+                                onConnection = { pinId -> selectedProfileId = pinId },
+                                onClearConnection = { selectedProfileId = null },
+                                onPin = { viewModel.onMapPinTapped(it) },
+                            ),
+                            onClusterTapped = rememberMapClusterTapHandler {
+                                viewModel.onClusterTappedFromMap(it)
+                            },
+                            onZoomChanged = rememberStableZoomHandler { viewModel.setZoomLevel(it) },
+                            onVisibleBoundsChanged = rememberStableBoundsHandler { minLat, maxLat, minLon, maxLon ->
+                                viewModel.updateVisibleBounds(minLat, maxLat, minLon, maxLon)
+                            },
+                            onCameraAnimationComplete = rememberStableUnitHandler {
+                                viewModel.onCameraAnimationComplete()
+                            },
+                            onMapGesture = rememberStableUnitHandler {
+                                TelemetryBatcher.recordMapPan()
+                            },
+                        )
+
+                        MapAlwaysOnChrome(
+                            dockBottomPadding = fabBottomPadding,
+                            layerFilters = layerFilters,
+                            onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
+                            onDropBeacon = {
+                                TelemetryBatcher.recordActionTaken()
+                                showBeaconDropSheet = true
+                            },
+                            onZoomIn = { viewModel.zoomIn() },
+                            onZoomOut = { viewModel.zoomOut() },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .zIndex(10f)
+                                .graphicsLayer { alpha = if (eventsSheetExpanded) 0f else 1f },
+                        )
+
+                        EventsReopenChip(
+                            count = eventNearbyCount,
+                            onClick = {
+                                eventsListTransitionMode = EventsListTransitionMode.Tap
+                                onEventsSheetExpandedChanged(true)
+                            },
+                            enabled = !eventsSheetExpanded,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .zIndex(15f)
+                                .graphicsLayer { alpha = if (eventsSheetExpanded) 0f else 1f }
+                                .padding(
+                                    start = 16.dp,
+                                    end = 16.dp,
+                                    bottom = mapFabAboveNav,
+                                ),
+                        )
+
+                        GlassmorphicOverlay(
+                            visible = frictionUi.showGrassNudge && !eventsSheetExpanded,
+                            message = "Looking for the right vibe? Try dropping a 'Looking for Coffee' intent and let the map come to you. Put your phone in your pocket and we'll vibrate when a match is nearby.",
+                            onDismiss = { TelemetryBatcher.dismissGrassNudge() },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .zIndex(20f),
+                        )
+
+                        val eventsSlideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
+                        val eventsFadeSpec = tween<Float>(220, easing = LinearOutSlowInEasing)
+                        AnimatedVisibility(
+                            visible = eventsSheetExpanded,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .zIndex(40f),
+                            enter = slideInVertically(animationSpec = eventsSlideSpec, initialOffsetY = { it }) +
+                                fadeIn(animationSpec = eventsFadeSpec),
+                            exit = if (eventsListTransitionMode == EventsListTransitionMode.Gesture) {
+                                ExitTransition.None
+                            } else {
+                                slideOutVertically(animationSpec = eventsSlideSpec, targetOffsetY = { it }) +
+                                    fadeOut(animationSpec = eventsFadeSpec)
+                            },
+                            label = "events_fullscreen",
+                        ) {
+                            InteractiveSwipeBackContainer(
+                                enabled = true,
+                                opaquePreviousBackground = false,
+                                onBack = {
+                                    eventsListTransitionMode = EventsListTransitionMode.Gesture
+                                    onEventsSheetExpandedChanged(false)
+                                },
+                                previousContent = {},
+                                currentContent = {
+                                    EventsDiscoveryFullScreen(
+                                        feedItems = feedItems,
+                                        discoveryFeedPending = discoveryFeedPending,
+                                        discoveryFeedRefreshing = discoveryFeedPending,
+                                        onRefreshDiscovery = { viewModel.refreshDiscoveryFeed() },
+                                        layerFilters = layerFilters,
+                                        onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
+                                        viewModel = viewModel,
+                                        onBack = {
+                                            eventsListTransitionMode = EventsListTransitionMode.Tap
+                                            onEventsSheetExpandedChanged(false)
+                                        },
+                                        onBeaconClick = { beacon, distanceM ->
+                                            TelemetryBatcher.recordActionTaken()
+                                            viewModel.onBeaconPinTapped(
+                                                beacon.id,
+                                                seedDistanceMeters = distanceM,
+                                            )
+                                        },
+                                    )
+                                },
                             )
-                        },
-                    )
+                        }
+                    }
                 }
             }
+
+            UnifiedToastHost(
+                state = toastState,
+                opaque = true,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = rememberBottomChromePadding() + 8.dp)
+                    .zIndex(20f),
+            )
         }
         }
     }
@@ -437,7 +544,7 @@ fun MapScreen(
                     errorMessage = beaconInsertError,
                     onDismissError = { viewModel.clearBeaconInsertError() },
                     submitLocked = beaconSubmitInFlight,
-                    onSubmit = { kind, title, description, soundtrackUrl, ttlMs, showCreatorName, visibilityAudience, eventSchedule, onRejectedEarly ->
+                    onSubmit = { kind, title, description, soundtrackUrl, ttlMs, showCreatorName, visibilityAudience, eventSchedule, eventCategories, venueScale, onRejectedEarly ->
                         viewModel.submitBeaconDrop(
                             kind = kind,
                             title = title,
@@ -447,6 +554,8 @@ fun MapScreen(
                             showCreatorName = showCreatorName,
                             visibilityAudience = visibilityAudience,
                             eventSchedule = eventSchedule,
+                            eventCategories = eventCategories,
+                            venueScale = venueScale,
                             onAcceptedLocally = { showBeaconDropSheet = false },
                             onRejectedEarly = onRejectedEarly,
                             onRemoteFinished = { },
@@ -608,9 +717,7 @@ fun MapScreen(
         initialName = pendingHubName,
         initialCategory = pendingHubCategory,
         onError = { msg ->
-            mapScope.launch {
-                snackbarHostState.showSnackbar(message = msg, duration = SnackbarDuration.Long)
-            }
+            toastState.show(mapScope, msg, durationMs = UnifiedToastTokens.LongDurationMs)
         },
     )
 }
@@ -650,6 +757,7 @@ private fun buildProfileSheetState(
         links = emptyList(),
         files = emptyList(),
         userId = otherUser?.id,
+        email = otherUser?.email?.takeIf { it.isNotBlank() },
         viewerUserId = viewerUserId,
         // Drives the BFF-owned Media / Files hydration inside [ProfileBottomSheet]
         // via `ConnectionRepository.fetchConnectionTabs`.
@@ -658,14 +766,14 @@ private fun buildProfileSheetState(
 }
 
 @Composable
-private fun MapExpandedMapChrome(
+private fun MapAlwaysOnChrome(
     dockBottomPadding: Dp,
     layerFilters: Set<MapLayerFilter>,
     onToggleLayerFilter: (MapLayerFilter) -> Unit,
     onDropBeacon: () -> Unit,
-    onCollapseMap: () -> Unit,
     onZoomIn: () -> Unit,
     onZoomOut: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val style = LocalPlatformStyle.current
     val glassStrength = if (style.isIOS) 0.64f else 0.4f
@@ -673,24 +781,16 @@ private fun MapExpandedMapChrome(
         WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
     )
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         Row(
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
+                .align(Alignment.TopEnd)
                 .zIndex(40f)
                 .windowInsetsPadding(topSafe)
-                .padding(top = 8.dp, start = 16.dp, end = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .padding(top = 8.dp, end = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            MapLiquidGlassIconButton(
-                icon = Icons.Filled.Close,
-                contentDescription = "Minimize map",
-                onClick = onCollapseMap,
-                glassStrength = glassStrength,
-                size = 44.dp,
-            )
             MapLayerFilterDropdown(
                 selected = layerFilters,
                 onToggle = onToggleLayerFilter,
@@ -709,7 +809,7 @@ private fun MapExpandedMapChrome(
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            MapLiquidGlassIconButton(
+            ClickCircularGlassIconButton(
                 icon = Icons.Filled.AddLocationAlt,
                 contentDescription = "Drop beacon",
                 onClick = onDropBeacon,
@@ -727,34 +827,6 @@ private fun MapExpandedMapChrome(
 }
 
 @Composable
-private fun MapLiquidGlassIconButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    contentDescription: String,
-    onClick: () -> Unit,
-    glassStrength: Float,
-    size: Dp,
-) {
-    LiquidGlassPill(
-        modifier = Modifier
-            .size(size)
-            .clickable(onClick = onClick),
-        cornerRadiusDp = (size.value / 2f).toInt().coerceAtLeast(22),
-        backgroundStrength = glassStrength,
-    ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                tint = MaterialTheme.colorScheme.onSurface,
-            )
-        }
-    }
-}
-
-@Composable
 private fun MapZoomGlassControls(
     modifier: Modifier = Modifier,
     onZoomIn: () -> Unit,
@@ -765,14 +837,14 @@ private fun MapZoomGlassControls(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        MapLiquidGlassIconButton(
+        ClickCircularGlassIconButton(
             icon = Icons.Filled.Add,
             contentDescription = "Zoom in",
             onClick = onZoomIn,
             glassStrength = glassStrength,
             size = 48.dp,
         )
-        MapLiquidGlassIconButton(
+        ClickCircularGlassIconButton(
             icon = Icons.Filled.Remove,
             contentDescription = "Zoom out",
             onClick = onZoomOut,
@@ -828,6 +900,7 @@ private fun MapLayerFilterDropdown(
     val triggerWidth = 132.dp
     val glassStrength = if (style.isIOS) 0.64f else 0.4f
 
+    val triggerShape = RoundedCornerShape(20.dp)
     Box(
         modifier = modifier
             .widthIn(max = triggerWidth)
@@ -837,6 +910,7 @@ private fun MapLayerFilterDropdown(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 40.dp, max = 48.dp)
+                .clip(triggerShape)
                 .clickable { expanded = true },
             cornerRadiusDp = 20,
             backgroundStrength = glassStrength,
@@ -928,52 +1002,55 @@ private fun BeaconDetailSheetContent(
     var editDraft by remember(beacon.id) {
         mutableStateOf(beacon.metadata.description?.trim().orEmpty())
     }
+    val openEdit: () -> Unit = {
+        editDraft = beacon.metadata.description?.trim().orEmpty()
+        showEditDialog = true
+    }
+    val openDelete: () -> Unit = { showDeleteConfirm = true }
 
     Column(modifier = modifier) {
-        if (isCreator) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = {
-                    editDraft = beacon.metadata.description?.trim().orEmpty()
-                    showEditDialog = true
-                }) {
-                    Icon(
-                        Icons.Filled.Edit,
-                        contentDescription = "Edit beacon",
-                        // Explicit tint: the sheet's themed MaterialTheme does not set LocalContentColor,
-                        // so the default (Color.Black) made these icons invisible on the OLED sheet.
-                        tint = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-                IconButton(onClick = { showDeleteConfirm = true }) {
-                    Icon(
-                        Icons.Filled.Delete,
-                        contentDescription = "Delete beacon",
-                        tint = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-            }
-        }
         when (beacon.kind) {
-            MapBeaconKind.SOUNDTRACK -> MusicPreviewCard(
-                beacon = beacon,
-                distanceMeters = distanceMeters,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            MapBeaconKind.SOUNDTRACK -> {
+                if (isCreator) {
+                    BeaconOwnerOverflowMenu(
+                        onEdit = openEdit,
+                        onDelete = openDelete,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                    )
+                }
+                MusicPreviewCard(
+                    beacon = beacon,
+                    distanceMeters = distanceMeters,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             MapBeaconKind.EVENT -> EventBeaconDetail(
                 beacon = beacon,
                 distanceMeters = distanceMeters,
                 viewModel = viewModel,
+                isCreator = isCreator,
+                onEdit = openEdit,
+                onDelete = openDelete,
                 modifier = Modifier.fillMaxWidth(),
             )
-            else -> CommunityBeaconDetail(
-                beacon = beacon,
-                distanceMeters = distanceMeters,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            else -> {
+                if (isCreator) {
+                    BeaconOwnerOverflowMenu(
+                        onEdit = openEdit,
+                        onDelete = openDelete,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                    )
+                }
+                CommunityBeaconDetail(
+                    beacon = beacon,
+                    distanceMeters = distanceMeters,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
     }
 
@@ -1024,10 +1101,118 @@ private fun BeaconDetailSheetContent(
 }
 
 @Composable
-private fun EventBeaconDetail(
+private fun BeaconOwnerOverflowMenu(
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    val border = clickBorderColor()
+    Box(modifier = modifier, contentAlignment = Alignment.CenterEnd) {
+        EventHeroIconButton(
+            selected = menuExpanded,
+            border = border,
+            onClick = { menuExpanded = true },
+            contentDescription = "More actions",
+            icon = Icons.Filled.MoreVert,
+        )
+        BeaconOwnerDropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false },
+            onEdit = onEdit,
+            onDelete = onDelete,
+        )
+    }
+}
+
+/** Functional Clarity overflow: opaque surface, 2dp hard border, zero elevation. */
+@Composable
+private fun BeaconOwnerDropdownMenu(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val border = clickBorderColor()
+    val menuSurface = MaterialTheme.colorScheme.surface
+    val onMenu = MaterialTheme.colorScheme.onSurface
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismissRequest,
+        modifier = Modifier.widthIn(min = 180.dp),
+        shape = RoundedCornerShape(12.dp),
+        containerColor = menuSurface,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = BorderStroke(2.dp, border),
+    ) {
+        DropdownMenuItem(
+            text = {
+                Text(
+                    "Edit",
+                    color = onMenu,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            },
+            onClick = {
+                onDismissRequest()
+                onEdit()
+            },
+            leadingIcon = {
+                Icon(
+                    Icons.Filled.Edit,
+                    contentDescription = null,
+                    tint = onMenu,
+                )
+            },
+            colors = MenuDefaults.itemColors(
+                textColor = onMenu,
+                leadingIconColor = onMenu,
+            ),
+        )
+        HorizontalDivider(
+            modifier = Modifier.padding(horizontal = 12.dp),
+            thickness = 1.dp,
+            color = border.copy(alpha = 0.45f),
+        )
+        DropdownMenuItem(
+            text = {
+                Text(
+                    "Delete",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            },
+            onClick = {
+                onDismissRequest()
+                onDelete()
+            },
+            leadingIcon = {
+                Icon(
+                    Icons.Filled.Delete,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                )
+            },
+            colors = MenuDefaults.itemColors(
+                textColor = MaterialTheme.colorScheme.error,
+                leadingIconColor = MaterialTheme.colorScheme.error,
+            ),
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+internal fun EventBeaconDetail(
     beacon: MapBeacon,
     distanceMeters: Double?,
     viewModel: MapViewModel,
+    isCreator: Boolean,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val rsvpCache by viewModel.beaconRsvpById.collectAsState()
@@ -1039,120 +1224,220 @@ private fun EventBeaconDetail(
     val rsvpLoading = entry == null && beacon.id in rsvpLoadingIds
     val rsvpPending = beacon.id in rsvpPendingIds
     var rsvpError by remember(beacon.id) { mutableStateOf<String?>(null) }
+    val engagementCache by viewModel.beaconEngagementById.collectAsState()
+    val engagement = engagementCache[beacon.id]
+    val bookmarked = engagement?.bookmarked == true
+    val checkedIn = engagement?.checkedIn == true
+    val uriHandler = LocalUriHandler.current
+    val currentUser by AppDataManager.currentUser.collectAsState()
+    val connectedUsers by AppDataManager.connectedUsers.collectAsState()
+    val mapBeacons by viewModel.mapBeacons.collectAsState()
+    val displayBeacon = remember(beacon, mapBeacons) {
+        val fromMap = mapBeacons.firstOrNull { it.id == beacon.id }
+        when {
+            fromMap == null -> beacon
+            else -> fromMap.withPreservedEventScheduleFrom(beacon)
+                .let { merged ->
+                    // Prefer whichever side still has schedule if merge left it null.
+                    when {
+                        merged.eventSchedule() != null -> merged
+                        beacon.eventSchedule() != null ->
+                            beacon.copy(
+                                latitude = merged.latitude,
+                                longitude = merged.longitude,
+                            )
+                        else -> merged
+                    }
+                }
+        }
+    }
+    val schedule = displayBeacon.eventSchedule()
+    val live = schedule?.isLive() == true
+    val distanceLabel = distanceMeters?.let { formatBeaconDistance(it) }
+    val scheduleRange = schedule?.let { formatEventScheduleRange(it) }
+    val categories = displayBeacon.metadata.eventCategories
+    val border = clickBorderColor()
+    val cardSurface = clickCardSurface()
+    val hostUserId = displayBeacon.createdByUserId?.takeIf { it.isNotBlank() }
+    val hostUser = hostUserId?.let { id ->
+        if (id == currentUser?.id) currentUser else connectedUsers[id]
+    }
+    val hostDisplayName = displayBeacon.creatorDisplayName?.trim()?.takeIf { it.isNotEmpty() }
+        ?: hostUser?.name?.trim()?.takeIf { it.isNotEmpty() }
+    val hostAvatarUrl = hostUser?.image?.trim()?.takeIf { it.isNotEmpty() }
 
-    // Always refresh from server when the sheet opens (disk cache may already be visible).
-    LaunchedEffect(beacon.id) {
-        viewModel.loadBeaconRsvp(beacon.id, forceRefresh = true)
+    LaunchedEffect(displayBeacon.id) {
+        viewModel.loadBeaconRsvp(displayBeacon.id, forceRefresh = true)
+        viewModel.loadBeaconEngagement(displayBeacon.id, forceRefresh = true)
+        viewModel.recordEventImpression(displayBeacon.id)
+        // Always hydrate missing Posted / Host / creator / schedule — bookmark & proximity rows
+        // often already have schedule, so the old schedule-only gate skipped host+posted forever.
+        viewModel.ensureEventBeaconDetail(displayBeacon.id, seed = displayBeacon)
     }
 
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        Text(
-            text = beacon.displayDynamicTitle(),
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        if (beacon.showCreatorName && !beacon.creatorDisplayName.isNullOrBlank()) {
-            Text(
-                text = "Hosted by ${beacon.creatorDisplayName}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary,
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                if (live) {
+                    EventLiveBadge()
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                Text(
+                    text = displayBeacon.displayDynamicTitle(),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                distanceLabel?.let { d ->
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = d,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            EventHeroActions(
+                bookmarked = bookmarked,
+                checkedIn = checkedIn,
+                isCreator = isCreator ||
+                    (!currentUser?.id.isNullOrBlank() && displayBeacon.createdByUserId == currentUser?.id),
+                onShare = {
+                    val shareUrl = buildEventShareUrl(displayBeacon.id)
+                    viewModel.recordEventShare(displayBeacon.id, shareUrl = shareUrl)
+                    shareText(
+                        text = buildEventShareText(displayBeacon, scheduleRange, distanceLabel),
+                        subject = displayBeacon.displayDynamicTitle(),
+                    )
+                },
+                onToggleBookmark = { viewModel.toggleBeaconBookmark(displayBeacon.id) },
+                onToggleCheckIn = { viewModel.toggleBeaconCheckIn(displayBeacon.id) },
+                onEdit = onEdit,
+                onDelete = onDelete,
             )
         }
-        beacon.eventSchedule()?.let { schedule ->
-            Text(
-                text = formatEventScheduleRange(schedule),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
+
+        schedule?.let { EventScheduleBento(schedule = it, border = border, cardSurface = cardSurface) }
+
+        if (categories.isNotEmpty()) {
+            EventCategoryChips(categories = categories, border = border, cardSurface = cardSurface)
+        }
+
+        if (displayBeacon.showCreatorName && !hostDisplayName.isNullOrBlank()) {
+            EventHostCard(
+                displayName = hostDisplayName,
+                userId = hostUserId ?: "host:$hostDisplayName",
+                avatarUrl = hostAvatarUrl,
+                border = border,
+                cardSurface = cardSurface,
             )
         }
+
         Text(
-            text = beacon.metadata.description?.trim().orEmpty().ifBlank { "No description" },
+            text = displayBeacon.metadata.description?.trim().orEmpty().ifBlank { "No description" },
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface,
         )
-        distanceMeters?.let { d ->
+
+        displayBeacon.createdAtEpochMs?.let { createdMs ->
             Text(
-                text = formatBeaconDistance(d),
-                style = MaterialTheme.typography.bodySmall,
+                text = "Posted ${formatEventPostedAtLabel(createdMs)}",
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Text(
-            text = "Attendees",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
+
+        EventAttendeeStack(
+            attendees = attendees,
+            loading = rsvpLoading,
+            border = border,
+            cardSurface = cardSurface,
         )
-        if (rsvpLoading) {
-            CircularProgressIndicator(strokeWidth = 2.dp)
-        } else if (attendees.isEmpty()) {
-            Text(
-                text = "Be the first to RSVP.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                attendees.forEach { attendee ->
-                    Column(
-                        modifier = Modifier.widthIn(max = 56.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        ConnectionListUserAvatarFace(
-                            displayName = attendee.name,
-                            email = null,
-                            avatarUrl = attendee.avatarUrl,
-                            userId = attendee.userId,
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape),
-                        )
-                        Text(
-                            text = attendee.name,
-                            style = MaterialTheme.typography.labelSmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            }
-        }
+
+        val actionShape = RoundedCornerShape(12.dp)
         Button(
             onClick = {
-                if (rsvpPending) return@Button
-                rsvpError = null
-                val onFinished: (Boolean) -> Unit = { ok ->
-                    if (!ok) {
-                        rsvpError = "Could not update RSVP. Please try again."
-                    }
-                }
-                if (currentUserSignedUp) {
-                    viewModel.cancelRsvpToBeacon(beacon.id, onFinished)
-                } else {
-                    viewModel.rsvpToBeacon(beacon.id, onFinished)
-                }
-            },
-            enabled = !rsvpPending,
-            colors = if (currentUserSignedUp) {
-                ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error,
-                    contentColor = MaterialTheme.colorScheme.onError,
+                openEventMapsRoute(
+                    openUri = { uriHandler.openUri(it) },
+                    latitude = displayBeacon.latitude,
+                    longitude = displayBeacon.longitude,
+                    label = displayBeacon.displayDynamicTitle(),
                 )
-            } else {
-                ButtonDefaults.buttonColors()
             },
             modifier = Modifier.fillMaxWidth(),
+            shape = actionShape,
+            border = BorderStroke(2.dp, border),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ),
+            contentPadding = PaddingValues(vertical = 14.dp),
         ) {
-            Text(if (currentUserSignedUp) "Cancel RSVP" else "RSVP / Sign Up")
+            Icon(
+                imageVector = Icons.Filled.Directions,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Join Event Route", fontWeight = FontWeight.SemiBold)
+        }
+
+        if (currentUserSignedUp) {
+            Button(
+                onClick = {
+                    if (rsvpPending) return@Button
+                    rsvpError = null
+                    viewModel.cancelRsvpToBeacon(displayBeacon.id) { ok ->
+                        if (!ok) rsvpError = "Could not update RSVP. Please try again."
+                    }
+                },
+                enabled = !rsvpPending,
+                modifier = Modifier.fillMaxWidth(),
+                shape = actionShape,
+                border = BorderStroke(2.dp, MaterialTheme.colorScheme.error),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = Color.White,
+                    disabledContainerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.45f),
+                    disabledContentColor = Color.White.copy(alpha = 0.7f),
+                ),
+                contentPadding = PaddingValues(vertical = 14.dp),
+            ) {
+                Text(
+                    text = if (rsvpPending) "Updating…" else "Cancel RSVP",
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        } else {
+            OutlinedButton(
+                onClick = {
+                    if (rsvpPending) return@OutlinedButton
+                    rsvpError = null
+                    viewModel.rsvpToBeacon(displayBeacon.id) { ok ->
+                        if (!ok) rsvpError = "Could not update RSVP. Please try again."
+                    }
+                },
+                enabled = !rsvpPending,
+                modifier = Modifier.fillMaxWidth(),
+                shape = actionShape,
+                border = BorderStroke(2.dp, border),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                ),
+                contentPadding = PaddingValues(vertical = 14.dp),
+            ) {
+                Text(
+                    text = if (rsvpPending) "Updating…" else "RSVP / Sign Up",
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
         }
         if (rsvpPending) {
             Text(
@@ -1167,6 +1452,334 @@ private fun EventBeaconDetail(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
             )
+        }
+    }
+}
+
+@Composable
+private fun EventLiveBadge() {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xFFDC2626))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(Color.White),
+        )
+        Text(
+            text = "LIVE",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+        )
+    }
+}
+
+@Composable
+private fun EventHeroActions(
+    bookmarked: Boolean,
+    checkedIn: Boolean,
+    isCreator: Boolean,
+    onShare: () -> Unit,
+    onToggleBookmark: () -> Unit,
+    onToggleCheckIn: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val border = clickBorderColor()
+    var menuExpanded by remember { mutableStateOf(false) }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        EventHeroIconButton(
+            selected = false,
+            border = border,
+            onClick = onShare,
+            contentDescription = "Share event",
+            icon = Icons.Filled.Share,
+        )
+        EventHeroIconButton(
+            selected = bookmarked,
+            border = border,
+            onClick = onToggleBookmark,
+            contentDescription = if (bookmarked) "Remove bookmark" else "Bookmark event",
+            icon = if (bookmarked) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+        )
+        EventHeroIconButton(
+            selected = checkedIn,
+            border = border,
+            onClick = onToggleCheckIn,
+            contentDescription = if (checkedIn) "Undo check in" else "Check in",
+            icon = if (checkedIn) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+        )
+        if (isCreator) {
+            Box {
+                EventHeroIconButton(
+                    selected = menuExpanded,
+                    border = border,
+                    onClick = { menuExpanded = true },
+                    contentDescription = "More actions",
+                    icon = Icons.Filled.MoreVert,
+                )
+                BeaconOwnerDropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                    onEdit = onEdit,
+                    onDelete = onDelete,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EventHeroIconButton(
+    selected: Boolean,
+    border: Color,
+    onClick: () -> Unit,
+    contentDescription: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier
+            .size(48.dp)
+            .border(2.dp, border, CircleShape)
+            .clip(CircleShape)
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                else Color.Transparent,
+            ),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+@Composable
+private fun EventScheduleBento(
+    schedule: EventSchedule,
+    border: Color,
+    cardSurface: Color,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        EventBentoCell(
+            modifier = Modifier.weight(1f),
+            label = "Start Time",
+            date = formatEventStartDateLabel(schedule),
+            time = formatEventStartTimeLabel(schedule),
+            icon = Icons.Filled.Schedule,
+            border = border,
+            cardSurface = cardSurface,
+        )
+        EventBentoCell(
+            modifier = Modifier.weight(1f),
+            label = "End Time",
+            date = formatEventEndDateLabel(schedule),
+            time = formatEventEndTimeLabel(schedule),
+            icon = Icons.Filled.EventBusy,
+            border = border,
+            cardSurface = cardSurface,
+        )
+    }
+}
+
+@Composable
+private fun EventBentoCell(
+    modifier: Modifier,
+    label: String,
+    date: String,
+    time: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    border: Color,
+    cardSurface: Color,
+) {
+    Column(
+        modifier = modifier
+            .border(2.dp, border, RoundedCornerShape(12.dp))
+            .background(cardSurface, RoundedCornerShape(12.dp))
+            .padding(16.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp),
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = date,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = time,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun EventCategoryChips(
+    categories: List<String>,
+    border: Color,
+    cardSurface: Color,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = "CATEGORIES",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            categories.forEach { category ->
+                Text(
+                    text = category,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .border(2.dp, border, RoundedCornerShape(999.dp))
+                        .background(cardSurface, RoundedCornerShape(999.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EventHostCard(
+    displayName: String,
+    userId: String,
+    avatarUrl: String?,
+    border: Color,
+    cardSurface: Color,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(2.dp, border, RoundedCornerShape(12.dp))
+            .background(cardSurface, RoundedCornerShape(12.dp))
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        ConnectionListUserAvatarFace(
+            displayName = displayName,
+            email = null,
+            avatarUrl = avatarUrl,
+            userId = userId,
+            modifier = Modifier
+                .size(56.dp)
+                .border(2.dp, border, CircleShape)
+                .clip(CircleShape),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Host",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = displayName,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+@Composable
+private fun EventAttendeeStack(
+    attendees: List<compose.project.click.click.data.api.BeaconAttendeeDto>,
+    loading: Boolean,
+    border: Color,
+    cardSurface: Color,
+) {
+    val visible = attendees.take(4)
+    val overflow = (attendees.size - visible.size).coerceAtLeast(0)
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = "ACTIVE CLICKS (${attendees.size})",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        when {
+            loading -> CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(28.dp))
+            attendees.isEmpty() -> Text(
+                text = "Be the first to RSVP.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            else -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    visible.forEachIndexed { index, attendee ->
+                        ConnectionListUserAvatarFace(
+                            displayName = attendee.name,
+                            email = null,
+                            avatarUrl = attendee.avatarUrl,
+                            userId = attendee.userId,
+                            modifier = Modifier
+                                .offset(x = (-10 * index).dp)
+                                .zIndex((visible.size - index).toFloat())
+                                .size(48.dp)
+                                .border(2.dp, border, CircleShape)
+                                .clip(CircleShape)
+                                .background(cardSurface),
+                        )
+                    }
+                    if (overflow > 0) {
+                        Box(
+                            modifier = Modifier
+                                .offset(x = (-10 * visible.size).dp)
+                                .zIndex(0f)
+                                .size(48.dp)
+                                .border(2.dp, border, CircleShape)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "+$overflow",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -1586,6 +2199,7 @@ private fun MapContent(
     cameraTarget: compose.project.click.click.viewmodel.CameraTarget?,
     userLat: Double? = null,
     userLon: Double? = null,
+    currentUserId: String? = null,
     onPinTapped: (MapPin) -> Unit,
     onClusterTapped: (MapClusterPin) -> Unit,
     onZoomChanged: (Double) -> Unit,
@@ -1593,34 +2207,45 @@ private fun MapContent(
     onCameraAnimationComplete: () -> Unit,
     onMapGesture: () -> Unit = {},
 ) {
-    val hubPins = communityHubs.map { MapPin.fromCommunityHub(it) }
-    val pins = when (renderData) {
-        is MapRenderData.IndividualPins -> {
-            val conn = renderData.points.map { MapPin.fromConnectionPoint(it) }
-            val bc = renderData.beacons.map { MapPin.fromBeacon(it) }
-            (conn + bc + hubPins).sortedByDescending { it.zIndex }
-        }
-        is MapRenderData.Clusters -> {
-            val standalone = renderData.standaloneBeacons.map { MapPin.fromBeacon(it) }
-            (standalone + hubPins).sortedByDescending { it.zIndex }
+    val connectedUsers by AppDataManager.connectedUsers.collectAsState()
+    val hubPins = remember(communityHubs) {
+        communityHubs.map { MapPin.fromCommunityHub(it) }
+    }
+    val pins = remember(renderData, connectedUsers, currentUserId, hubPins) {
+        when (renderData) {
+            is MapRenderData.IndividualPins -> {
+                val conn = renderData.points.map { point ->
+                    val peerId = point.connection.user_ids.firstOrNull { it != currentUserId }
+                    val peer = peerId?.let { connectedUsers[it] }
+                    MapPin.fromConnectionPoint(
+                        point,
+                        imageUrl = peer?.image,
+                        avatarSeed = peerId ?: point.connection.id,
+                    )
+                }
+                val bc = renderData.beacons.map { MapPin.fromBeacon(it) }
+                (conn + bc + hubPins).sortedByDescending { it.zIndex }
+            }
+            is MapRenderData.Clusters -> {
+                val standalone = renderData.standaloneBeacons.map { MapPin.fromBeacon(it) }
+                (standalone + hubPins).sortedByDescending { it.zIndex }
+            }
         }
     }
 
-    val clusters = when (renderData) {
-        is MapRenderData.Clusters -> renderData.clusters.map { it.toClusterPin() }
-        is MapRenderData.IndividualPins -> emptyList()
+    val clusters = remember(renderData) {
+        when (renderData) {
+            is MapRenderData.Clusters -> renderData.clusters.map { it.toClusterPin() }
+            is MapRenderData.IndividualPins -> emptyList()
+        }
     }
 
-    // Prefer an active programmatic target; otherwise frame the user's GPS (PiP + first open).
-    val previewMode = !mapGesturesEnabled
-    val mapCenterLat = cameraTarget?.latitude ?: userLat
-    val mapCenterLon = cameraTarget?.longitude ?: userLon
-    val mapZoom = when {
-        previewMode && mapCenterLat != null && mapCenterLon != null -> MapPipPreviewZoom
-        cameraTarget != null -> zoom
-        mapCenterLat != null && mapCenterLon != null -> MapPipPreviewZoom
-        else -> zoom
-    }
+    // Drive the native map only while a programmatic CameraTarget is active.
+    // After onCameraAnimationComplete clears it, pass null centers so PlatformMap
+    // keeps the settled viewport (do not snap back to GPS / default user zoom).
+    val mapCenterLat = cameraTarget?.latitude
+    val mapCenterLon = cameraTarget?.longitude
+    val mapZoom = zoom
 
     PlatformMap(
         modifier = modifier,
@@ -1639,6 +2264,66 @@ private fun MapContent(
         onCameraAnimationComplete = onCameraAnimationComplete,
         onMapGesture = onMapGesture,
     )
+}
+
+/** Stable callback identity so [MapContent] / [PlatformMap] can skip when Events opens. */
+@Composable
+private fun rememberMapPinTapHandler(
+    onConnection: (pinId: String) -> Unit,
+    onClearConnection: () -> Unit,
+    onPin: (MapPin) -> Unit,
+): (MapPin) -> Unit {
+    val onConnectionState = rememberUpdatedState(onConnection)
+    val onClearConnectionState = rememberUpdatedState(onClearConnection)
+    val onPinState = rememberUpdatedState(onPin)
+    return remember {
+        { pin: MapPin ->
+            TelemetryBatcher.recordActionTaken()
+            if (pin.kind == MapPinKind.CONNECTION) {
+                onConnectionState.value(pin.id)
+            } else {
+                onClearConnectionState.value()
+            }
+            onPinState.value(pin)
+        }
+    }
+}
+
+@Composable
+private fun rememberMapClusterTapHandler(
+    onCluster: (clusterId: String) -> Unit,
+): (MapClusterPin) -> Unit {
+    val onClusterState = rememberUpdatedState(onCluster)
+    return remember {
+        { clusterPin: MapClusterPin ->
+            TelemetryBatcher.recordActionTaken()
+            onClusterState.value(clusterPin.id)
+        }
+    }
+}
+
+@Composable
+private fun rememberStableZoomHandler(onZoom: (Double) -> Unit): (Double) -> Unit {
+    val state = rememberUpdatedState(onZoom)
+    return remember { { z: Double -> state.value(z) } }
+}
+
+@Composable
+private fun rememberStableBoundsHandler(
+    onBounds: (minLat: Double, maxLat: Double, minLon: Double, maxLon: Double) -> Unit,
+): (Double, Double, Double, Double) -> Unit {
+    val state = rememberUpdatedState(onBounds)
+    return remember {
+        { minLat: Double, maxLat: Double, minLon: Double, maxLon: Double ->
+            state.value(minLat, maxLat, minLon, maxLon)
+        }
+    }
+}
+
+@Composable
+private fun rememberStableUnitHandler(onInvoke: () -> Unit): () -> Unit {
+    val state = rememberUpdatedState(onInvoke)
+    return remember { { state.value() } }
 }
 
 @Composable
@@ -1868,4 +2553,9 @@ private fun PulsingRing() {
             .scale(scale)
             .border(3.dp, PrimaryBlue.copy(alpha = alpha), CircleShape),
     )
+}
+
+private enum class EventsListTransitionMode {
+    Tap,
+    Gesture,
 }

@@ -29,6 +29,8 @@ object EventReminderCoordinator {
         }
     }
 
+    fun beaconById(id: String): MapBeacon? = beaconsById[id]
+
     fun homeReminders(
         rsvpBeaconIds: Set<String>,
         userId: String?,
@@ -64,6 +66,7 @@ fun MapBeacon.eventSchedule(): EventSchedule? =
 
 fun MapBeacon.isVisibleEventBeacon(nowEpochMs: Long = Clock.System.now().toEpochMilliseconds()): Boolean {
     if (kind != MapBeaconKind.EVENT) return true
+    // Prefer explicit schedule; never treat created_at as the event start for visibility.
     eventSchedule()?.let { return it.isVisible(nowEpochMs) }
     val exp = expiresAtEpochMs ?: return true
     return exp > nowEpochMs

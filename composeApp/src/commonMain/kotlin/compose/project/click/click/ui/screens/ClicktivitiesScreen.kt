@@ -122,7 +122,7 @@ fun ClicktivitiesScreen() {
                     }
                 }
 
-                items(clicktivities) { activity ->
+                items(clicktivities, key = { "${it.category}:${it.title}" }) { activity ->
                     ClicktivityCard(activity)
                 }
 

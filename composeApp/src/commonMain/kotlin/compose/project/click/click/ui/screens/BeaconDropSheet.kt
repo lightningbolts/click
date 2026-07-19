@@ -52,9 +52,11 @@ import compose.project.click.click.data.models.BeaconVisibilityAudience
 import compose.project.click.click.data.models.MapBeaconKind
 import compose.project.click.click.events.EventSchedule
 import compose.project.click.click.events.EventScheduleValidationError
+import compose.project.click.click.events.EVENT_CATEGORY_OPTIONS
+import compose.project.click.click.events.EventVenueScale
+import compose.project.click.click.events.defaultEventSchedule
 import compose.project.click.click.events.validateEventSchedule
 import compose.project.click.click.ui.components.EventDateTimePicker
-import compose.project.click.click.events.defaultEventSchedule
 
 /**
  * Beacon drop types exposed in the map FAB flow.
@@ -114,6 +116,8 @@ fun BeaconDropSheetContent(
         showCreatorName: Boolean,
         visibilityAudience: BeaconVisibilityAudience,
         eventSchedule: compose.project.click.click.events.EventSchedule?,
+        eventCategories: List<String>,
+        venueScale: compose.project.click.click.events.EventVenueScale,
         onRejectedEarly: () -> Unit,
     ) -> Unit,
     onCreateHub: (name: String, category: String) -> Unit = { _, _ -> },
@@ -133,6 +137,8 @@ fun BeaconDropSheetContent(
     val expiration = remember { mutableStateOf(BeaconDuration.THREE_HOURS) }
     var eventSchedule by remember { mutableStateOf(defaultEventSchedule()) }
     var eventScheduleError by remember { mutableStateOf<EventScheduleValidationError?>(null) }
+    var eventCategories by remember { mutableStateOf(setOf<String>()) }
+    var venueScale by remember { mutableStateOf(EventVenueScale.DEFAULT) }
     var submitValidationError by remember { mutableStateOf<String?>(null) }
 
     var hubNameDraft by remember { mutableStateOf("") }
@@ -306,6 +312,65 @@ fun BeaconDropSheetContent(
                     },
                     validationError = eventScheduleError,
                 )
+                Text(
+                    text = "Categories",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    EVENT_CATEGORY_OPTIONS.forEach { option ->
+                        FilterChip(
+                            selected = option in eventCategories,
+                            onClick = {
+                                eventCategories = if (option in eventCategories) {
+                                    eventCategories - option
+                                } else {
+                                    eventCategories + option
+                                }
+                            },
+                            label = { Text(option) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = chipContainer,
+                                selectedContainerColor = chipSelected,
+                                labelColor = MaterialTheme.colorScheme.onSurface,
+                                selectedLabelColor = MaterialTheme.colorScheme.onSurface,
+                            ),
+                        )
+                    }
+                }
+                Text(
+                    text = "Check-in area",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = "How big is the place? Drop the pin near the center of the gathering.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    EventVenueScale.entries.forEach { option ->
+                        FilterChip(
+                            selected = venueScale == option,
+                            onClick = { venueScale = option },
+                            label = { Text(option.label) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = chipContainer,
+                                selectedContainerColor = chipSelected,
+                                labelColor = MaterialTheme.colorScheme.onSurface,
+                                selectedLabelColor = MaterialTheme.colorScheme.onSurface,
+                            ),
+                        )
+                    }
+                }
             } else {
                 Text(
                     text = "Visible for",
@@ -475,6 +540,8 @@ fun BeaconDropSheetContent(
                         showCreatorName,
                         visibilityAudience,
                         schedule,
+                        if (isEvent) eventCategories.toList() else emptyList(),
+                        if (isEvent) venueScale else EventVenueScale.DEFAULT,
                     ) {
                         isSubmitting = false
                     }

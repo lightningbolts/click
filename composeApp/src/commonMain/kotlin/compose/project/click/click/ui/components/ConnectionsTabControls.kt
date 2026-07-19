@@ -24,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,8 +58,19 @@ fun ConnectionsFloatingHeader(
     showTabs: Boolean,
     onOpenSearch: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    /**
+     * When true, hold the current expanded/compact chrome so [AnimatedContent] does not run
+     * mid-fling (layout swaps during coast kill LazyColumn velocity).
+     */
+    isScrollInProgress: Boolean = false,
 ) {
-    val compact = showTabs && collapseFraction > 0.42f
+    val wantCompact = showTabs && collapseFraction > 0.42f
+    var compact by remember { mutableStateOf(wantCompact) }
+    LaunchedEffect(wantCompact, isScrollInProgress) {
+        if (!isScrollInProgress) {
+            compact = wantCompact
+        }
+    }
     AnimatedContent(
         targetState = compact,
         modifier = modifier.fillMaxWidth(),
@@ -435,7 +447,11 @@ fun DiscoverySortSegmentBar(
                     text = label,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                    color = if (selected) LightBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                 )
             }
         }
@@ -492,7 +508,11 @@ fun ConnectionsSegmentBar(
                     modifier = Modifier.fillMaxWidth(),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                    color = if (selected) LightBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,

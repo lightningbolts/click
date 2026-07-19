@@ -151,10 +151,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
@@ -191,6 +187,8 @@ import compose.project.click.click.encounter.recentEncounterId // pragma: allowl
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import compose.project.click.click.ui.chat.connectionListActivityTs // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatCallOptionsIosSurface // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatChromeHorizontalPadding // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatHeaderIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionActionSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionMenuAction // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionSheetDialog // pragma: allowlist secret
@@ -218,6 +216,9 @@ import compose.project.click.click.ui.chat.LoadingSubtitlePlaceholder // pragma:
 import compose.project.click.click.ui.chat.ReplySwipeSideIcon // pragma: allowlist secret
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatTimelineShouldFollowInbound // pragma: allowlist secret
+import compose.project.click.click.ui.chat.scrollChatTimelineToLatest // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatDismissKeyboardAfterScrollConnection // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatComposerChromeFadeUnderlay // pragma: allowlist secret
@@ -346,27 +347,16 @@ fun ChatView(
     /** Skips IME dismiss while [listState.scrollToItem] snaps the newest-first timeline (not user-driven). */
     val suppressKeyboardDismissWhileProgrammaticTimelineScroll = remember { mutableStateOf(false) }
     /**
-     * Dismisses the IME only on deliberate user scrolling of the timeline (not programmatic scroll).
-     * A tiny threshold avoids spurious [clearFocus] calls when the IME opens/closes and the
-     * reverse [LazyColumn] reports small consumed deltas — a common source of simulator jank.
+     * Dismisses the IME after the user finishes a scroll gesture — never mid-drag / mid-fling.
+     * Clearing focus while coasting resizes keyboard insets and kills LazyColumn fling physics.
      */
     val keyboardDismissScrollThresholdPx = remember(density) { with(density) { 16.dp.toPx() } }
     val dismissKeyboardOnUserMessageScroll = remember(keyboardDismissScrollThresholdPx) {
-        object : NestedScrollConnection {
-            override fun onPostScroll(
-                consumed: Offset,
-                available: Offset,
-                source: NestedScrollSource,
-            ): Offset {
-                if (suppressKeyboardDismissWhileProgrammaticTimelineScroll.value) return Offset.Zero
-                if (source == NestedScrollSource.UserInput &&
-                    kotlin.math.abs(consumed.y) > keyboardDismissScrollThresholdPx
-                ) {
-                    focusManagerState.value.clearFocus()
-                }
-                return Offset.Zero
-            }
-        }
+        chatDismissKeyboardAfterScrollConnection(
+            thresholdPx = keyboardDismissScrollThresholdPx,
+            isSuppressed = { suppressKeyboardDismissWhileProgrammaticTimelineScroll.value },
+            onDismiss = { focusManagerState.value.clearFocus() },
+        )
     }
 
     var imeClearedForInteractiveBackSwipe by remember { mutableStateOf(false) }
@@ -418,36 +408,47 @@ fun ChatView(
         }
     }
 
-    // Newest-first + reverseLayout pins latest messages next to the composer; snap to index 0 after layout
+    // Newest-first + reverseLayout pins latest messages next to the composer.
+    // Snap only on open and when a peer message arrives while already near the bottom —
+    // never on every size change (load-older / prefetch merge), which caused lag + teleports.
     val successMessages = (chatMessagesState as? ChatMessagesState.Success)?.messages.orEmpty()
-    val scrollAnchor = successMessages.lastOrNull()?.message?.id to successMessages.size
-    LaunchedEffect(listState, hasMoreOlderMessages, isLoadingOlderMessages) {
+    val peerNewestMessageId = successMessages.lastOrNull()?.takeIf { !it.isSent }?.message?.id
+    var initialTimelineScrollDone by remember(chatId) { mutableStateOf(false) }
+
+    LaunchedEffect(listState) {
         snapshotFlow {
             val info = listState.layoutInfo
             val total = info.totalItemsCount
             val maxVisibleIndex = info.visibleItemsInfo.maxOfOrNull { it.index } ?: 0
-            maxVisibleIndex to total
-        }.collect { (maxVisibleIndex, total) ->
+            Triple(maxVisibleIndex, total, listState.firstVisibleItemIndex)
+        }.collect { (maxVisibleIndex, total, firstVisible) ->
             if (total > 0 &&
                 hasMoreOlderMessages &&
                 !isLoadingOlderMessages &&
+                firstVisible > 0 &&
                 maxVisibleIndex >= total - 3
             ) {
                 viewModel.loadOlderMessages()
             }
         }
     }
-    LaunchedEffect(chatId, scrollAnchor) {
-        if (successMessages.isEmpty()) return@LaunchedEffect
-        repeat(50) {
-            if (listState.layoutInfo.totalItemsCount > 0) {
-                suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = true
-                listState.scrollToItem(0)
-                delay(120)
-                suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = false
-                return@LaunchedEffect
-            }
-            delay(16L)
+
+    LaunchedEffect(chatId, successMessages.isNotEmpty()) {
+        if (successMessages.isEmpty() || initialTimelineScrollDone) return@LaunchedEffect
+        initialTimelineScrollDone = true
+        scrollChatTimelineToLatest(
+            listState = listState,
+            suppressKeyboardDismiss = suppressKeyboardDismissWhileProgrammaticTimelineScroll,
+        )
+    }
+
+    LaunchedEffect(peerNewestMessageId) {
+        if (peerNewestMessageId == null) return@LaunchedEffect
+        if (chatTimelineShouldFollowInbound(listState.firstVisibleItemIndex, initialTimelineScrollDone)) {
+            scrollChatTimelineToLatest(
+                listState = listState,
+                suppressKeyboardDismiss = suppressKeyboardDismissWhileProgrammaticTimelineScroll,
+            )
         }
     }
 
@@ -706,20 +707,20 @@ fun ChatView(
                                 .fillMaxWidth()
                                 .padding(top = topInset)
                                 .height(56.dp)
-                                .padding(horizontal = 20.dp)
+                                .padding(horizontal = ChatChromeHorizontalPadding)
                                 .testTag(ChatGlassHeaderPlateTestTag),
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxSize(),
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                IconButton(onClick = onBackPressed) {
-                                    Icon(
-                                        Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = "Back",
-                                        tint = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
+                                ChatHeaderIconButton(
+                                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back",
+                                    onClick = onBackPressed,
+                                    showBorder = true,
+                                )
 
                                 if (isGroupChat) {
                                     val chatHeaderGroupAvatarSize = 34.dp
@@ -855,31 +856,24 @@ fun ChatView(
                                 }
 
                                 if (isGroupChat) {
-                                    IconButton(
+                                    ChatHeaderIconButton(
+                                        icon = Icons.Outlined.Edit,
+                                        contentDescription = "Rename group",
                                         onClick = {
                                             renameGroupDraft = groupTitle
                                             showRenameGroupDialog = true
                                         },
-                                    ) {
-                                        Icon(
-                                            Icons.Outlined.Edit,
-                                            contentDescription = "Rename group",
-                                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                                        )
-                                    }
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                                    )
                                 }
 
-                                Box(modifier = Modifier.size(48.dp)) {
-                                    IconButton(
+                                Box {
+                                    ChatHeaderIconButton(
+                                        icon = Icons.Filled.Call,
+                                        contentDescription = "Call options",
                                         onClick = { showCallMenu = true },
-                                        modifier = Modifier.fillMaxSize(),
-                                    ) {
-                                        Icon(
-                                            Icons.Filled.Call,
-                                            contentDescription = "Call options",
-                                            tint = PrimaryBlue.copy(alpha = 0.85f)
-                                        )
-                                    }
+                                        tint = PrimaryBlue.copy(alpha = 0.85f),
+                                    )
                                     val menuStyle = LocalPlatformStyle.current
                                     val density = LocalDensity.current
                                     val callMenuSpring = spring<Float>(
@@ -1016,13 +1010,12 @@ fun ChatView(
                                     }
                                 }
                                 // Overflow / connection options
-                                IconButton(onClick = { showConnectionSheet = true }) {
-                                    Icon(
-                                        Icons.Filled.MoreVert,
-                                        contentDescription = "More options",
-                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                    )
-                                }
+                                ChatHeaderIconButton(
+                                    icon = Icons.Filled.MoreVert,
+                                    contentDescription = "More options",
+                                    onClick = { showConnectionSheet = true },
+                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                )
                             }
                         }
 

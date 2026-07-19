@@ -32,6 +32,14 @@ class ChatTimelineCacheTest {
     }
 
     @Test
+    fun mergeMessages_keepsNewerRowsWhenMergingOlderPage() {
+        val cache = ChatTimelineCache()
+        cache.store("conn-1", listOf(message("new", 100L), message("mid", 50L)))
+        cache.mergeMessages("conn-1", listOf(message("old", 10L), message("mid", 50L)))
+        assertEquals(listOf("old", "mid", "new"), cache.peek("conn-1")?.map { it.id })
+    }
+
+    @Test
     fun clear_removesAllTimelines() {
         val cache = ChatTimelineCache(maxConnections = 2)
         cache.store("c1", listOf(message("m1", 1L)))

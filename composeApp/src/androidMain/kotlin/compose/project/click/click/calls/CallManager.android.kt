@@ -7,7 +7,6 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.view.View
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import io.livekit.android.ConnectOptions
 import io.livekit.android.LiveKit
@@ -29,11 +28,20 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.lang.ref.WeakReference
 
-private const val CALL_PERMISSION_REQUEST_CODE = 4013
+internal data class PendingCallStart(
+    val roomName: String,
+    val token: String,
+    val wsUrl: String,
+    val videoEnabled: Boolean,
+)
 
 internal object AndroidCallRuntime {
     private var applicationContext: Context? = null
     private var currentActivityRef: WeakReference<Activity>? = null
+    private var permissionRequester: ((Array<String>) -> Unit)? = null
+    private var pendingCallStart: PendingCallStart? = null
+    private var onPermissionGranted: ((PendingCallStart) -> Unit)? = null
+    private var onPermissionDenied: (() -> Unit)? = null
 
     fun init(context: Context, activity: Activity? = null) {
         applicationContext = context.applicationContext
@@ -45,6 +53,45 @@ internal object AndroidCallRuntime {
     fun currentActivity(): Activity? = currentActivityRef?.get()
 
     fun appContext(): Context? = applicationContext
+
+    fun registerPermissionRequester(requester: ((Array<String>) -> Unit)?) {
+        permissionRequester = requester
+    }
+
+    fun requestCallPermissions(
+        permissions: Array<String>,
+        pending: PendingCallStart,
+        onGranted: (PendingCallStart) -> Unit,
+        onDenied: () -> Unit,
+    ): Boolean {
+        val requester = permissionRequester
+        if (requester == null) {
+            return false
+        }
+        pendingCallStart = pending
+        onPermissionGranted = onGranted
+        onPermissionDenied = onDenied
+        requester(permissions)
+        return true
+    }
+
+    fun handlePermissionResult(allGranted: Boolean) {
+        val pending = pendingCallStart
+        val grantedCb = onPermissionGranted
+        val deniedCb = onPermissionDenied
+        clearPendingPermissionRequest()
+        if (allGranted && pending != null && grantedCb != null) {
+            grantedCb(pending)
+        } else {
+            deniedCb?.invoke()
+        }
+    }
+
+    fun clearPendingPermissionRequest() {
+        pendingCallStart = null
+        onPermissionGranted = null
+        onPermissionDenied = null
+    }
 }
 
 actual class CallManager {
@@ -79,19 +126,37 @@ actual class CallManager {
         }
 
         if (missingPermissions.isNotEmpty()) {
-            activity.runOnUiThread {
-                ActivityCompat.requestPermissions(
-                    activity,
-                    missingPermissions.toTypedArray(),
-                    CALL_PERMISSION_REQUEST_CODE
-                )
+            val pending = PendingCallStart(
+                roomName = roomName,
+                token = token,
+                wsUrl = wsUrl,
+                videoEnabled = videoEnabled,
+            )
+            _callState.value = CallState.Connecting(videoRequested = videoEnabled)
+            val requested = AndroidCallRuntime.requestCallPermissions(
+                permissions = missingPermissions.toTypedArray(),
+                pending = pending,
+                onGranted = { granted ->
+                    startCall(
+                        roomName = granted.roomName,
+                        token = granted.token,
+                        wsUrl = granted.wsUrl,
+                        videoEnabled = granted.videoEnabled,
+                    )
+                },
+                onDenied = {
+                    _callState.value = CallState.Ended("Camera or microphone permission required")
+                },
+            )
+            if (!requested) {
+                _callState.value = CallState.Ended("Camera or microphone permission required")
             }
-            _callState.value = CallState.Ended("Camera or microphone permission required")
             return
         }
 
         deferIdleAfterEndJob?.cancel()
         deferIdleAfterEndJob = null
+        AndroidCallRuntime.clearPendingPermissionRequest()
         cleanupRoom()
         microphoneEnabled = true
         speakerEnabled = videoEnabled
@@ -189,6 +254,7 @@ actual class CallManager {
 
     actual fun endCall() {
         deferIdleAfterEndJob?.cancel()
+        AndroidCallRuntime.clearPendingPermissionRequest()
         cleanupRoom()
         _callState.value = CallState.Ended("Call ended")
         deferIdleAfterEndJob = scope.launch {

@@ -39,7 +39,7 @@ GlobalSearchScreen (@Deprecated — full-screen scaffold, same VM + row componen
 | Shell | `GlassAdaptiveBottomSheet` + `rememberGlassAdaptiveSheetState` (renders opaque bordered sheet) |
 | Background | Solid `surface` `#ffffff` / dark `#2f3131` |
 | Padding | 12dp horizontal, 8dp vertical |
-| Search field | `Surface` 8dp radius, solid `surface-container` fill; 2dp `#000` border; borderless inner `TextField` |
+| Search field | 52dp single-line `BasicTextField` in bordered `Surface` (16dp radius); normal caret; placeholder does not wrap |
 | Filter row | Horizontal scroll, 8dp chip spacing, 8dp top / 4dp bottom padding |
 | Results list | `LazyColumn`, 16dp horizontal padding, 10dp row spacing |
 | Bottom pad | Navigation bar inset + 12dp |
@@ -125,7 +125,7 @@ Rows with archived channel context render at **0.7 alpha** (`ArchivedConnection`
 
 **Placeholder**
 
-- `"Search people, places, beacons, intents…"`
+- `"Search people, places, beacons…"` — single-line `BasicTextField` (52dp row); cursor is a normal caret, not a tall multi-line bar
 
 **Filter chips**
 
@@ -234,7 +234,7 @@ flowchart TD
 
 | Element | Notes |
 |---------|-------|
-| Query field | Single-line; placeholder describes searchable domains |
+| Query field | Single-line `BasicTextField`; placeholder `"Search people, places, beacons…"` (ellipsis if needed; never wraps) |
 | Filter chips | `FilterChip` selected state conveyed visually (tint); no custom semantics merge |
 | Empty hints | Centered `Text` — full string read as one block (includes `\n` line breaks) |
 | Result rows | Entire row is one `clickable`; title (semibold) + subtitle read sequentially |

@@ -4,6 +4,7 @@ import compose.project.click.click.data.models.Connection // pragma: allowlist s
 import compose.project.click.click.data.models.GeoLocation // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.data.models.withPreservedEventScheduleFrom
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.isResolvedDisplayName // pragma: allowlist secret
 import compose.project.click.click.data.models.resolveDisplayName // pragma: allowlist secret
@@ -140,24 +141,64 @@ internal fun mergeCommunityHubLists(
     return byId.values.toList()
 }
 
+/** True for missing/non-finite coords or PostGIS parse fallback at null island. */
+internal fun MapBeacon.hasUsableMapCoordinates(): Boolean =
+    latitude.isFinite() &&
+        longitude.isFinite() &&
+        !(latitude == 0.0 && longitude == 0.0)
+
+/**
+ * Prefer [donor] lat/lng when [this] is null-island / non-finite and [donor] is usable.
+ */
+internal fun MapBeacon.withPreservedMapCoordinatesFrom(donor: MapBeacon?): MapBeacon {
+    if (donor == null || id != donor.id) return this
+    if (hasUsableMapCoordinates()) return this
+    if (!donor.hasUsableMapCoordinates()) return this
+    return copy(latitude = donor.latitude, longitude = donor.longitude)
+}
+
 /**
  * Unions proximity beacon fetches by id and drops expired rows.
  * Keeps optimistically dropped pins until the server echoes them.
+ * Never lets a (0,0) GET/cache row wipe a usable pin, and never keeps orphan null-island rows.
  */
 internal fun mergeMapBeaconLists(
     existing: List<MapBeacon>,
     incoming: List<MapBeacon>,
 ): List<MapBeacon> {
-    if (incoming.isEmpty() && existing.isNotEmpty()) return existing
+    if (incoming.isEmpty() && existing.isNotEmpty()) {
+        val healed = existing.filter { it.hasUsableMapCoordinates() && it.isActiveForDiscoveryFeed() }
+        if (healed.size != existing.size) {
+            EventReminderCoordinator.syncBeacons(healed)
+            return healed
+        }
+        return existing
+    }
     val byId = LinkedHashMap<String, MapBeacon>()
+    // Keep null-island existing rows temporarily so schedule metadata can donate to a good
+    // proximity row; final filter drops any remaining (0,0) pins.
     for (beacon in existing) {
         byId[beacon.id] = beacon
     }
     for (beacon in incoming) {
-        byId[beacon.id] = beacon
+        val previous = byId[beacon.id]
+        var next = beacon
+            .withPreservedEventScheduleFrom(previous)
+            .withPreservedMapCoordinatesFrom(previous)
+        if (!next.hasUsableMapCoordinates()) {
+            // Do not replace a usable pin with poison, and do not insert orphan null-island.
+            if (previous != null && previous.hasUsableMapCoordinates()) {
+                next = previous.withPreservedEventScheduleFrom(next)
+            } else {
+                continue
+            }
+        }
+        byId[beacon.id] = next
     }
     val now = Clock.System.now().toEpochMilliseconds()
-    val merged = byId.values.filter { beacon -> beacon.isActiveForDiscoveryFeed(now) }
+    val merged = byId.values.filter { beacon ->
+        beacon.hasUsableMapCoordinates() && beacon.isActiveForDiscoveryFeed(now)
+    }
     EventReminderCoordinator.syncBeacons(merged)
     return merged
 }
@@ -186,7 +227,7 @@ data class BoundingBox(
  */
 sealed class MapRenderData {
     /**
-     * @param standaloneBeacons High-priority beacons (soundtrack, hazard, utility) that stay
+     * @param standaloneBeacons High-priority beacons (soundtrack, hazard, utility, event) that stay
      * as individual pins while zoomed out so they are not absorbed into connection clusters.
      */
     data class Clusters(
@@ -398,7 +439,9 @@ fun determineMapRenderData(
     val standaloneKinds = setOf(
         MapBeaconKind.SOUNDTRACK,
         MapBeaconKind.HAZARD,
+        MapBeaconKind.SOS,
         MapBeaconKind.UTILITY,
+        MapBeaconKind.EVENT,
     )
     val points = connections.mapNotNull { conn ->
         try {

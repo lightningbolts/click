@@ -6,6 +6,8 @@
 
 **Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: `click/docs/design-assets/add_click_streamlined_header/`.
 
+**Track C (landed):** `AddClickContent` order is **Tap to Connect** → My Code / Scan grid → hub links (`Create hub` / `Join hub`). Card dimensions unchanged; mock used for hierarchy only.
+
 ---
 
 ## ASCII hierarchy
@@ -16,9 +18,9 @@ AddClickScreen (tab organism)
 │   ├── title: "Add Click"
 │   └── subtitle: "Connect with QR or Tap to Connect, or join a venue community hub"
 ├── AddClickContent | ClickedSuccessContent
-│   ├── Row: "My Code" | "Scan Code" cards
 │   ├── "Tap to Connect" card
-│   ├── "Create ephemeral hub" | "Join community hub" text buttons
+│   ├── Row: "My Code" | "Scan Code" cards
+│   ├── "Create hub" | "Join hub" text buttons
 │   ├── CreateHubModal (overlay)
 │   └── JoinCommunityHubSheet (overlay)
 │
@@ -70,8 +72,8 @@ AppClipHandshakeScreen (iOS Clip target)
 | Zone | Layout |
 |------|--------|
 | Shell | `AdaptiveBackground` + `AppScreenWithFloatingHeader` |
+| Tap card | Full-width `AdaptiveCard` first, 24dp padding |
 | QR row | Two `AdaptiveCard` 1:1 weight, aspect ratio 0.85 |
-| Tap card | Full-width `AdaptiveCard`, 24dp padding |
 | Hub links | Centered `TextButton` row, 8dp gap |
 | Success | `ClickedSuccessContent` replaces content (check icon 120dp) |
 
@@ -99,11 +101,11 @@ Full-screen flat scrim (black @ 40%, no blur). Centered bordered card max 340dp 
 
 | Control | Action |
 |---------|--------|
+| `"Tap to Connect"` card | `onNavigateToNfc()` |
 | `"My Code"` card | `onShowMyQRCode()` |
 | `"Scan Code"` card | `onScanQRCode()` |
-| `"Tap to Connect"` card | `onNavigateToNfc()` |
-| `"Create ephemeral hub"` | `showCreateHubModal = true` |
-| `"Join community hub"` | `showJoinHubSheet = true` |
+| `"Create hub"` | `showCreateHubModal = true` |
+| `"Join hub"` | `showJoinHubSheet = true` |
 | `"Start Chatting"` (success) | `onStartChatting()` |
 
 ### MyQRCodeScreen
@@ -201,7 +203,8 @@ Full-screen flat scrim (black @ 40%, no blur). Centered bordered card max 340dp 
 | Ready body | `"Tap Connect together with someone nearby. Both phones should enable Bluetooth and microphone access for the handshake."` |
 | Unavailable headline | `"Tap to Connect unavailable"` |
 | Unavailable body | `capabilityNote` (platform string) |
-| Info card title | `"How Tap to Connect works"` |
+| Info card title | `"How Tap to Connect works"` (simulator / emulator only; hidden on real devices) |
+| Info card body | `capabilityNote` from `MockProximityManager` when shown |
 | Primary CTA | `"Connect"` |
 | Secondary | `"Open app settings"` |
 | Unsupported CTA | `"Open Settings"` |
@@ -365,8 +368,8 @@ Preset labels (emoji + label): `"🎓 Lecture / Class"`, `"📚 Study Session"`,
 | Tap title | `"Tap to Connect"` |
 | Tap subtitle | `"Nearby handshake with Bluetooth and audio"` |
 | Tap a11y | `"Tap to Connect"` |
-| Hub create | `"Create ephemeral hub"` |
-| Hub join | `"Join community hub"` |
+| Hub create | `"Create hub"` |
+| Hub join | `"Join hub"` |
 | Success title | `"Clicked with {userName}!"` |
 | Success body | `"You're now connected and can start chatting."` |
 | Success CTA | `"Start Chatting"` |
@@ -474,8 +477,15 @@ flowchart TD
 
 ---
 
+## 6. Future — event context on connect
+
+**Not built yet.** When connecting via Tap, QR, or App Clip **at** a live map event (same place + schedule window), persist the event on the encounter and show it later in connection encounter info / profile Timeline. Spec: [10-map-beacons-hubs.md](10-map-beacons-hubs.md) §7.
+
+---
+
 ## Related documents
 
 - [05-home.md](05-home.md) — post-connect home feed
 - [07-connections-inbox.md](07-connections-inbox.md) — destination after `"View Connection"`
-- [10-map-beacons-hubs.md](10-map-beacons-hubs.md) — ephemeral/community hub modals from Add Click
+- [10-map-beacons-hubs.md](10-map-beacons-hubs.md) — ephemeral/community hub modals from Add Click; future event↔encounter
+- [12-profile-memories.md](12-profile-memories.md) — encounter timeline surface for event context

@@ -53,6 +53,9 @@ class IosTokenStorage : TokenStorage {
         private const val KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE = "pending_proximity_handshake_queue"
         private const val KEY_ACTIVE_HUBS = "active_hubs"
         private const val KEY_BEACON_RSVP_SNAPSHOT = "beacon_rsvp_snapshot"
+        private const val KEY_BEACON_ENGAGEMENT_SNAPSHOT = "beacon_engagement_snapshot"
+        /** OSStatus errSecParam — invalid Keychain query/value parameters. */
+        private const val ERR_SEC_PARAM = -50
     }
 
     // NSUserDefaults - reliable for normal app lifecycle
@@ -74,15 +77,24 @@ class IosTokenStorage : TokenStorage {
         }
         userDefaults.synchronize()
 
-        // Also save to Keychain (for update persistence)
-        setKeychainItem(KEY_JWT, jwt)
-        setKeychainItem(KEY_REFRESH_TOKEN, refreshToken)
-
-        if (expiresAt != null) {
+        // Also save to Keychain (for update persistence). Defaults already saved; warn if Keychain fails.
+        val jwtOk = setKeychainItem(KEY_JWT, jwt)
+        val refreshOk = setKeychainItem(KEY_REFRESH_TOKEN, refreshToken)
+        val expiresOk = if (expiresAt != null) {
             setKeychainItem(KEY_EXPIRES_AT, expiresAt.toString())
+        } else {
+            true
         }
-        if (tokenType != null) {
+        val typeOk = if (tokenType != null) {
             setKeychainItem(KEY_TOKEN_TYPE, tokenType)
+        } else {
+            true
+        }
+        if (!jwtOk || !refreshOk || !expiresOk || !typeOk) {
+            println(
+                "IosTokenStorage: NSUserDefaults saved but Keychain write incomplete " +
+                    "(jwt=$jwtOk refresh=$refreshOk expires=$expiresOk type=$typeOk) — session may not survive app update",
+            )
         }
     }
 
@@ -343,6 +355,19 @@ class IosTokenStorage : TokenStorage {
         return userDefaults.stringForKey(KEY_BEACON_RSVP_SNAPSHOT)
     }
 
+    override suspend fun saveBeaconEngagementSnapshot(snapshot: String?) {
+        if (snapshot == null) {
+            userDefaults.removeObjectForKey(KEY_BEACON_ENGAGEMENT_SNAPSHOT)
+        } else {
+            userDefaults.setObject(snapshot, KEY_BEACON_ENGAGEMENT_SNAPSHOT)
+        }
+        userDefaults.synchronize()
+    }
+
+    override suspend fun getBeaconEngagementSnapshot(): String? {
+        return userDefaults.stringForKey(KEY_BEACON_ENGAGEMENT_SNAPSHOT)
+    }
+
     override suspend fun clearSessionData() {
         val sessionKeys = listOf(
             KEY_JWT, KEY_REFRESH_TOKEN, KEY_EXPIRES_AT, KEY_TOKEN_TYPE,
@@ -352,6 +377,7 @@ class IosTokenStorage : TokenStorage {
             KEY_ONBOARDING_STATE, KEY_HAS_COMPLETED_ONBOARDING, KEY_CACHED_APP_SNAPSHOT, KEY_PENDING_CONNECTION_QUEUE,
             KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE,
             KEY_BEACON_RSVP_SNAPSHOT,
+            KEY_BEACON_ENGAGEMENT_SNAPSHOT,
         )
         sessionKeys.forEach { userDefaults.removeObjectForKey(it) }
         userDefaults.synchronize()
@@ -365,33 +391,67 @@ class IosTokenStorage : TokenStorage {
     // ============ Keychain Helpers ============
 
     private fun setKeychainItem(key: String, value: String): Boolean {
-        // First delete any existing item
-        deleteKeychainItem(key)
-
         val nsString = NSString.create(string = value)
         val valueData = nsString.dataUsingEncoding(NSUTF8StringEncoding) ?: run {
             println("IosTokenStorage: Failed to encode value for key '$key'")
             return false
         }
 
-        // AfterFirstUnlock*: session reads succeed after first device unlock each boot (background refresh / post-update).
-        // ThisDeviceOnly: tokens are not included in iTunes/Finder backups. Updates use delete+add (no SecItemUpdate path).
-        val query = mapOf<Any?, Any?>(
+        // AfterFirstUnlock*: session reads succeed after first device unlock each boot.
+        // ThisDeviceOnly: tokens are not included in iTunes/Finder backups.
+        val baseQuery = mapOf<Any?, Any?>(
             kSecClass to kSecClassGenericPassword,
             kSecAttrService to SERVICE_NAME,
             kSecAttrAccount to key,
+        )
+        val attrs = mapOf<Any?, Any?>(
             kSecValueData to valueData,
-            kSecAttrAccessible to kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            kSecAttrAccessible to kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         )
 
         @Suppress("UNCHECKED_CAST")
-        val cfQuery = CFBridgingRetain(query) as CFDictionaryRef
+        val cfBase = CFBridgingRetain(baseQuery) as CFDictionaryRef
+        @Suppress("UNCHECKED_CAST")
+        val cfAttrs = CFBridgingRetain(attrs) as CFDictionaryRef
+        var status = SecItemUpdate(cfBase, cfAttrs)
+        CFBridgingRelease(cfAttrs)
 
-        val status = SecItemAdd(cfQuery, null)
-        CFBridgingRelease(cfQuery)
+        if (status == errSecItemNotFound) {
+            val addQuery = baseQuery + attrs
+            @Suppress("UNCHECKED_CAST")
+            val cfAdd = CFBridgingRetain(addQuery) as CFDictionaryRef
+            status = SecItemAdd(cfAdd, null)
+            CFBridgingRelease(cfAdd)
+            // Race / stale item: retry update after duplicate or param error.
+            if (status == errSecDuplicateItem || status.toInt() == ERR_SEC_PARAM) {
+                @Suppress("UNCHECKED_CAST")
+                val cfRetryAttrs = CFBridgingRetain(attrs) as CFDictionaryRef
+                status = SecItemUpdate(cfBase, cfRetryAttrs)
+                CFBridgingRelease(cfRetryAttrs)
+            }
+        } else if (status.toInt() == ERR_SEC_PARAM || status == errSecDuplicateItem) {
+            // Param errors often come from delete+add races; force update with fresh data.
+            deleteKeychainItem(key)
+            val addQuery = baseQuery + attrs
+            @Suppress("UNCHECKED_CAST")
+            val cfAdd = CFBridgingRetain(addQuery) as CFDictionaryRef
+            status = SecItemAdd(cfAdd, null)
+            CFBridgingRelease(cfAdd)
+            if (status != errSecSuccess) {
+                @Suppress("UNCHECKED_CAST")
+                val cfRetryAttrs = CFBridgingRetain(attrs) as CFDictionaryRef
+                status = SecItemUpdate(cfBase, cfRetryAttrs)
+                CFBridgingRelease(cfRetryAttrs)
+            }
+        }
+
+        CFBridgingRelease(cfBase)
 
         if (status != errSecSuccess) {
-            println("IosTokenStorage: Keychain set failed for '$key', status: $status")
+            println(
+                "IosTokenStorage: Keychain set failed for '$key', status: $status" +
+                    if (status.toInt() == ERR_SEC_PARAM) " (errSecParam)" else "",
+            )
         }
         return status == errSecSuccess
     }

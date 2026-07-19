@@ -1,7 +1,7 @@
 # Click — Known Issues Audit
 
-**Date:** 2026-07-16  
-**Scope:** Codebase audit against the Issue Spec Sheet (#1–11). Docs only — fixes are follow-up work.  
+**Date:** 2026-07-17 (updated)  
+**Scope:** Codebase audit against the Issue Spec Sheet (#1–11) plus Track B+ device-filed issues (#12–25) and iOS Keychain.  
 **Status legend:**
 
 | Status | Meaning |
@@ -10,9 +10,11 @@
 | **Confirmed risk** | Failure mode is reachable; needs device/multi-phone repro to quantify |
 | **Partial / misfiled** | Spec assumption incorrect; related UX/bug still exists |
 | **Needs device repro** | Path exists; crash/UX not proven from static analysis alone |
+| **Code fix landed — needs device repro** | Fix in tree; do not false-pass `[KNOWN-N]` until device confirms |
 | **Open** | Broad category; use checklist to discover specifics |
 
-Regression annotations: checklist rows tagged `[KNOWN-N]` link here.
+Regression annotations: checklist rows tagged `[KNOWN-N]` link here.  
+Continuation status: [`../handoff/functional-clarity-continuation.md`](../handoff/functional-clarity-continuation.md).
 
 ---
 
@@ -20,17 +22,38 @@ Regression annotations: checklist rows tagged `[KNOWN-N]` link here.
 
 | # | Title | Type | Status | Priority |
 |---|--------|------|--------|----------|
-| 1 | Incomplete group registration (Bluetooth handshake) | Bug | Confirmed risk | P0 |
-| 2 | Duplicate connections | Bug | Confirmed risk | P0 |
-| 3 | Handshake limited to groups (no 1:1 DM) | Feature / UX | Partial / misfiled | P1 |
-| 4 | Events missing from list view | Bug | Confirmed | P1 |
-| 5 | Map not rendering in color | Bug / design ambiguity | Confirmed | P2 |
-| 6 | Android calls not working | Bug | Confirmed | P0 |
-| 7 | Voice message crashes Android | Bug | Confirmed risk | P0 |
-| 8 | Group chat creation crashes app | Bug | Needs device repro | P0 |
-| 9 | Hazard beacon icon oversized | UI bug | Confirmed inconsistency | P2 |
+| 1 | Incomplete group registration (Bluetooth handshake) | Bug | Code fix landed — needs device repro (client 503 recover hardened 2026-07-17) | P0 |
+| 2 | Duplicate connections | Bug | Code fix landed — needs device repro (confirm fetch-by-id + dup-key hardened 2026-07-17) | P0 |
+| 3 | Handshake limited to groups (no 1:1 DM) | Feature / UX | Code fix landed — needs device repro (auto-clique + Message CTA) | P1 |
+| 4 | Events missing from list view | Bug | Code fix landed — needs device repro | P1 |
+| 5 | Map not rendering in color | Bug / design ambiguity | Confirmed (basemap code fixed — device confirm) | P2 |
+| 6 | Android calls not working | Bug | Code fix landed — needs device repro | P0 |
+| 7 | Voice message crashes Android | Bug | Code fix landed — needs device repro | P0 |
+| 8 | Group chat creation crashes app | Bug | Code fix landed — needs device repro | P0 |
+| 9 | Hazard beacon icon oversized | UI bug | Code fix landed — needs device repro (`BeaconPinMetrics`) | P2 |
 | 10 | General visual bugs | UI | Open | P2 |
 | 11 | Android-specific bugs (roll-up) | Bug | Open (see #6–7 + matrix) | P0–P2 |
+| 12 | Add Click interactive-back card flicker | UI bug | Code fix landed — needs device repro | P1 |
+| 13 | Profile sheets dark/light inconsistency | UI bug | Partial (profile OLED OK; UnifiedSearch forced dark) | P1 |
+| 14 | Create verified click dialog crash (scroll/click) | Bug | Code fix landed — needs device repro | P0 |
+| 15 | Segment tabs highlight covers text | UI bug | Code fix landed — needs device repro | P1 |
+| 16 | Dark mode text contrast | UI | Code fix landed — needs device repro | P1 |
+| 17 | Chat interactive-back LazyColumn duplicate key crash | Bug | Code fix landed — needs device repro | P0 |
+| 18 | Verified click picker duplicate LazyColumn UUID keys | Bug | Code fix landed — needs device repro | P0 |
+| 19 | Chat scroll lag / teleport on load-older | Bug | Code fix landed — needs device repro | P0 |
+| 20 | Dark mode surfaces too light | UI | Partial (`surfaceContainer` not fully wired) | P2 |
+| 21 | Chat timeline out-of-order days + duplicate bubbles | Bug | Code fix landed — needs device repro | P0 |
+| 22 | Profile sheet OLED / avatar / top spacing | UI | Code fix landed — needs device repro | P1 |
+| 23 | Nav bar opaque band (materials differ under nav) | UI | Code fix landed — needs device repro | P1 |
+| 24 | Connections list flicker after chat interactive-back | UI | Code fix landed — needs device repro | P0 |
+| 25 | Inbox preview jumps to old timestamp after scroll-up | Bug | Code fix landed — needs device repro | P0 |
+| — | iOS Keychain `status: -50` | Bug | Code fix landed — needs device repro | P1 |
+
+**Track B (2026-07-16):** Code fixes for P0 `#1`, `#2`, `#6`, `#7`, `#8` (and `#3` auto-clique side effect).  
+
+**Track B+ UI (2026-07-16 → 2026-07-17):** `#12`–`#25` from device feedback (chat timeline, profile, transparent nav, inbox preview). Do **not** mark `[KNOWN-N]` pass until verified on device.
+
+**Code audit hardenings (2026-07-17):** client 503 → `recoverPendingProximityHandshake`; confirm path fetch-by-`preflightConnectionId` + duplicate-key re-lookup; Success “Message” CTA; `BeaconPinMetrics` + SOS standalone; Keychain `SecItemUpdate` / `-50` retry.
 
 ---
 
@@ -64,6 +87,17 @@ Every participant present during a group handshake is registered on the group co
 ### Suspected root cause
 
 Server marks handshake rows matched without a durable connection for the full BFS component; coalesce + evidence graph can exclude a phone that was physically present but lacked mutual BLE/ultrasonic evidence within the window.
+
+### Fix landed (code — 2026-07-16 Track B)
+
+- `bindProximityHandshake`: on `ensureConnectionForMemberSet` failure, return 503 and **do not** call `markPendingHandshakesMatched` (leaves GET recovery viable).
+- Pairwise clique edge ensure failures for N>2 return 503 instead of silent warn.
+- Pairwise edges created during group bind use `forceActive: true` (promote `pending` → `active`).
+
+### Client hardening (2026-07-17 code audit)
+
+- `ApiClient.postProximityHandshake` treats HTTP **503** with `pending_handshake_id` as recoverable pending (same path as HTTP 202).
+- `ConnectionViewModel` starts `recoverPendingProximityHandshake` instead of hard `Error` when the server leaves the handshake unmatched.
 
 ### Suggested regression cases
 
@@ -108,6 +142,17 @@ A connection between two users is created exactly once (for that member set), re
 
 Dedup is incomplete across server/client paths and group-vs-pair cardinality; group taps produce multiple legitimate rows that may be reported as duplicates.
 
+### Fix landed (code — 2026-07-16 Track B)
+
+- Recent-connection lock now covers 1:1 as well as groups.
+- Client: 12s re-tap debounce + in-flight guard; confirm path passes `preflightConnectionId` from bind.
+- `findConnectionRowForUserPair` requires `user_ids.size == 2`.
+
+### Client hardening (2026-07-17 code audit)
+
+- `createConnectionOnline` restores by `preflightConnectionId` via `fetchConnectionById` **before** insert.
+- Insert races that hit unique pair constraints re-lookup the pair and restore instead of failing/duplicating.
+
 ### Suggested regression cases
 
 - [ ] 1:1 tap twice → still one Active 1:1 row for that pair
@@ -140,7 +185,7 @@ Handshake flow should let users create a direct message connection, not just a g
 ### Why it may feel “groups only”
 
 1. Coalesce delays 2-user GPS-only matches (waiting for a third).  
-2. After context save, [`ConnectionViewModel.saveContextTags`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/viewmodel/ConnectionViewModel.kt) runs `createVerifiedClique` when `memberUserIds.size >= 2` — **including 1:1** — which can create a 2-person group row alongside the DM.  
+2. After context save, success previously only snackbar’d / navigated to Connections Active — **no open-chat CTA**.  
 3. Multi-phone rooms bias toward group clique UX.
 
 ### Suggested regression cases
@@ -148,11 +193,19 @@ Handshake flow should let users create a direct message connection, not just a g
 - [ ] Exactly two phones tap → Active shows a **1:1** thread; chat is DM-shaped
 - [ ] No unexpected “Groups” membership for a pure 1:1 tap (or document if 2-person clique is intentional)
 - [ ] Three phones → group path as designed
+- [ ] After 1:1 Success, snackbar **Message** opens the new chat
 
 ### Product clarification
 
 Treat as **UX/product fix**: keep server 1:1; stop auto-clique for size==2 unless `tagging.isGroup`; optionally add explicit “Create DM vs Group” if product wants a chooser.
 
+### Fix landed (code — 2026-07-16 Track B)
+
+- `saveContextTags` auto-clique gated to `tagging.isGroup && memberUserIds.size >= 3` (no 2-person clique after 1:1 tap).
+
+### UX hardening (2026-07-17 code audit)
+
+- `ConnectionState.Success` snackbar offers **Message** action → `pendingChatId` deep-link into Connections chat.
 ---
 
 ## 4. Events missing from list view
@@ -161,7 +214,7 @@ Treat as **UX/product fix**: keep server 1:1; stop auto-clique for size==2 unles
 |-------|--------|
 | **Type** | Bug |
 | **Area** | Map / Events |
-| **Status** | Confirmed |
+| **Status** | Code fix landed — needs device repro |
 | **Priority** | P1 |
 
 ### Expected
@@ -170,11 +223,17 @@ Any event visible on the map appears in the list (discovery feed).
 
 ### Evidence
 
-1. **Map clustering** — [`MapUtils.determineMapRenderData`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/ui/utils/MapUtils.kt): at zoom &lt; 12, `standaloneKinds` includes `SOUNDTRACK`, `HAZARD`, `UTILITY` but **not `EVENT`**. Events cluster with connections on the map while the feed lists them individually — counts/visibility diverge.
+1. **Map clustering** — [`MapUtils.determineMapRenderData`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/ui/utils/MapUtils.kt): at zoom &lt; 12, `standaloneKinds` previously included `SOUNDTRACK`, `HAZARD`, `UTILITY` but **not `EVENT`**. Events clustered with connections on the map while the feed listed them individually — counts/visibility diverged.
 
 2. **Feed section gap** — [`MapDiscoveryLayout`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/ui/screens/MapDiscoveryLayout.kt): `buildDiscoveryFeedItems` includes connections, but Connections section in `groupDiscoveryFeedIntoSections` is commented out (dead path; not events directly, but feed/map parity debt).
 
-3. **Visibility rules** — Events use `isVisible` until `endEpochMs` ([`EventSchedule`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/events/EventSchedule.kt)); layer filters apply to both paths via `discoveryFeedBeacons` — so pure filter mismatch is less likely than clustering / stale viewport cache.
+3. **Visibility rules** — Events use `isVisible` until `endEpochMs` ([`EventSchedule`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/events/EventSchedule.kt)); `filterBeaconsForLayers` previously skipped `isVisibleEventBeacon` when `ALL` was selected, so ended events could remain on the map while the feed dropped them.
+
+### Fix landed (code — 2026-07-17)
+
+- `EVENT` added to `standaloneKinds` so zoomed-out events stay individual pins (not absorbed into connection clusters).
+- `filterBeaconsForLayers` applies `isVisibleEventBeacon()` for `MapLayerFilter.ALL` as well as per-layer paths.
+- Unit coverage: `MapRenderDataTest`.
 
 ### Suggested regression cases
 
@@ -259,6 +318,12 @@ Incoming: [`PlatformIncomingCallUi.android.kt`](../../composeApp/src/androidMain
 
 Await permission result, then continue `startCall`; or use Activity Result API + queue pending invite.
 
+### Fix landed (code — 2026-07-16 Track B)
+
+- `AndroidCallRuntime` queues pending call + Activity Result launcher in `MainActivity`; grant resumes `startCall` without ending first.
+- Activity ref refreshed in `MainActivity.onResume`.
+- Group call >8 surfaces `CallOverlayState.Ended` with limit message.
+
 ---
 
 ## 7. Voice message crashes Android app
@@ -290,6 +355,11 @@ Voice messages send and play without crashing.
 ### Repro steps
 
 TBD: open chat on Android → hold voice → if crash, capture Logcat stack around `MediaRecorder.start`.
+
+### Fix landed (code — 2026-07-16 Track B)
+
+- `prepare`/`start` wrapped; failures toast and stay Idle (no UI-thread crash).
+- Voice record blocked while call is Connecting/Connected.
 
 ---
 
@@ -332,6 +402,12 @@ Proximity auto-create swallows failures via `getOrNull()`.
 - [ ] Ineligible selection disabled / toast, no crash
 - [ ] Immediately after proximity multi-tap autofill create
 
+### Fix landed (code — 2026-07-16 Track B)
+
+- `createVerifiedClique` refreshes connections before wrap; requires chat id after RPC; failures stay `Result`/toast.
+- Proximity pairwise edges promoted to `active` for clique eligibility (server).
+- `decodeUuidScalarFromRpc` / wrap-key paths throw `IllegalStateException` instead of bare `error()`.
+
 ---
 
 ## 9. Hazard beacon icon oversized
@@ -355,13 +431,19 @@ Hazard icon sized consistently with other UI / map icons.
 | Android | Default / labeled pin with ~10.dp radius colored dot — no fixed ⚠ |
 | iOS | `MKMarkerAnnotationView`; `glyphText` = first 3 chars of **caption**, not ⚠; title has ⚠️ but callout disabled |
 
-Also: SOS shares high z-index with HAZARD but is **not** in `standaloneKinds` (can cluster away at low zoom).
+Also: SOS shares high z-index with HAZARD but was **not** in `standaloneKinds` (could cluster away at low zoom).
+
+### Fix landed (2026-07-17 code audit)
+
+- Shared [`BeaconPinMetrics`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/ui/utils/BeaconPinMetrics.kt): compact circle radius + alert glyph `⚠`.
+- Hazard/SOS pins default caption to alert glyph so Android uses labeled compact circles (not oversized `defaultMarker`) and iOS `glyphText` shows `⚠`.
+- `SOS` added to `standaloneKinds` alongside `HAZARD`.
 
 ### Suggested regression cases
 
 - [ ] Drop hazard → pin size matches event/utility pins visually
 - [ ] Compare Android / iOS / web side-by-side against design asset
-
+- [ ] SOS remains standalone when zoomed out
 ---
 
 ## 10. General visual bugs
@@ -413,6 +495,364 @@ Open-ended investigation — track concrete items here and in [04-android-focus.
 
 ---
 
+## 12. Add Click interactive-back card flicker
+
+| Field | Detail |
+|-------|--------|
+| **Type** | Bug (UI) |
+| **Area** | Add Click / navigation (iOS swipe-back; Android risk) |
+| **Status** | Confirmed |
+| **Priority** | P1 |
+
+### Expected
+
+Interactive back from My Code / Scan / Tap-to-Connect reveals a stable Add Click screen without per-card flashes.
+
+### Evidence
+
+`App.kt` swaps `AnimatedContent` to `my_qr` / `qr_scanner` / `nfc`, destroying `AddClickScreen`. `InteractiveSwipeBackContainer` then remounts `previousContent = { renderScreen("add_click") }` mid-gesture, so the three `AdaptiveCard` boxes compose from scratch under the scrim.
+
+### Fix direction
+
+Persistent Add Click underlay + overlay sub-routes (same pattern as `ConnectionsScreen` chat overlay): empty `previousContent`, parallax mirrored onto the base layer.
+
+---
+
+## 13. Profile bottom sheets dark/light inconsistency
+
+| Field | Detail |
+|-------|--------|
+| **Type** | Bug (UI) |
+| **Area** | Profile sheets |
+| **Status** | Confirmed |
+| **Priority** | P1 |
+
+### Expected
+
+Profile sheets match app dark/light on every entry point (Clicks tab and Map).
+
+### Evidence
+
+`TabbedUserProfileSheet` wraps `OledSheetTheme`; Map pin path (`MapScreen`) uses `ClickSheetDialogChrome` without `OledSheetTheme`. Picker search bar hard-codes `Color.White.copy(alpha = 0.08f)`.
+
+### Fix direction
+
+Apply `OledSheetTheme` on Map profile path; theme-aware search field fill; drop light-only hard-codes.
+
+---
+
+## 14. Create verified click dialog crash (scroll / click)
+
+| Field | Detail |
+|-------|--------|
+| **Type** | Bug |
+| **Area** | Groups / FAB picker |
+| **Status** | Confirmed |
+| **Priority** | P0 |
+
+### Expected
+
+Scrolling and tapping members in Create verified click never crashes.
+
+### Evidence
+
+`ConnectionMemberPickerSheet` uses `Column(fillMaxHeight)` + `LazyColumn(weight(1f))` while `ClickFormBottomSheet`’s intermediate `Column` is only `fillMaxWidth()` → unbounded max height → classic LazyColumn infinity crash on measure.
+
+### Fix direction
+
+`ClickBottomSheet` inner column `fillMaxHeight()` / `fillMaxSize()`.
+
+---
+
+## 15. Segment tab highlight covers text
+
+| Field | Detail |
+|-------|--------|
+| **Type** | Bug (UI) |
+| **Area** | Clicks + Map headers |
+| **Status** | Confirmed |
+| **Priority** | P1 |
+
+### Expected
+
+Selected Active / Groups / Archived and Distance / Recent labels stay readable.
+
+### Evidence
+
+`ConnectionsSegmentBar` / `DiscoverySortSegmentBar` use `primaryContainer` fill with `LightBlue` text. In dark mode `primaryContainer == LightBlue`, so label vanishes into the highlight.
+
+### Fix direction
+
+Selected text → `onPrimaryContainer` (or `onPrimary` on solid primary fill).
+
+---
+
+## 16. Dark mode text contrast
+
+| Field | Detail |
+|-------|--------|
+| **Type** | Bug (UI) |
+| **Area** | Theme / typography |
+| **Status** | Confirmed |
+| **Priority** | P1 |
+
+### Expected
+
+Secondary and variant text remains clearly readable on dark surfaces.
+
+### Evidence
+
+Dark `onSurfaceVariant` was tied to purple-tinted `OutlineVariant`; muted labels and segment bugs compound low contrast.
+
+### Fix direction
+
+Brighter dark `onSurfaceVariant`; ensure sheets/segments use scheme on-surface tokens.
+
+---
+
+## 17. Chat interactive-back LazyColumn duplicate key crash
+
+| Field | Detail |
+|-------|--------|
+| **Type** | Bug |
+| **Area** | Chat / iOS swipe-back |
+| **Status** | Code fix landed — needs device repro |
+| **Priority** | P0 |
+
+### Expected
+
+Interactive back from an open chat never crashes.
+
+### Evidence
+
+`IllegalArgumentException: Key "separator-nf-2026-4-22" was already used` in the chat `LazyColumn`. [`buildChatTimelineEntriesNewestFirst`](../../composeApp/src/commonMain/kotlin/compose/project/click/click/ui/chat/ChatTimeline.kt) used day-only separator keys (`separator-nf-$dayKey`); unsorted or oscillating day buckets reused the same key and crashed Compose during swipe-back remasure.
+
+### Fix landed (2026-07-17)
+
+- Separator keys include a monotonic seq (`separator-nf-$seq-$dayKey`).
+- `ensureUniqueTimelineKeys` last-resort dedupe before LazyColumn.
+
+---
+
+## 18. Verified click picker duplicate LazyColumn UUID keys
+
+| Field | Detail |
+|-------|--------|
+| **Type** | Bug |
+| **Area** | Groups / Create verified click |
+| **Status** | Code fix landed — needs device repro |
+| **Priority** | P0 |
+
+### Expected
+
+Opening Create verified click and scrolling the member picker never crashes.
+
+### Evidence
+
+`IllegalArgumentException: Key "<uuid>" was already used`. Multiple 1:1 inbox rows for the same peer produced duplicate `User.id` keys in `ConnectionMemberPickerSheet`’s `LazyColumn`.
+
+### Fix landed (2026-07-17)
+
+- `cliquePickerCandidates` / sheet candidates `distinctBy { it.id }`.
+- Lazy keys `picker-${user.id}-$index` via `itemsIndexed`.
+
+---
+
+## 19. Chat scroll lag / teleport on load-older
+
+| Field | Detail |
+|-------|--------|
+| **Type** | Bug |
+| **Area** | Chat timeline |
+| **Status** | Code fix landed — needs device repro |
+| **Priority** | P0 |
+
+### Expected
+
+Scrolling older messages stays where you are; new peer messages only auto-scroll when near the bottom. Disk/hot cache still used (no extra Supabase egress).
+
+### Evidence
+
+`LaunchedEffect(newestId to size)` called `scrollToItem(0)` on every size change (including load-older). Prefetch also overwrote a longer live window with a bounded ~80-msg cache.
+
+### Fix landed (2026-07-17)
+
+- Open once + peer-newest-while-near-bottom scroll policy (hub-style).
+- Prefetch merges via `mergeMessageTimelinesPreservingLiveState` (cache preserved).
+
+---
+
+## 20. Dark mode surfaces too light
+
+| Field | Detail |
+|-------|--------|
+| **Type** | UI |
+| **Area** | Theme |
+| **Status** | Code fix landed — needs device repro |
+| **Priority** | P2 |
+
+### Expected
+
+Dark mode uses a deeper gray (not pure black).
+
+### Fix landed (2026-07-17)
+
+- `BackgroundDark` `#101212`, `SurfaceDark` `#1A1C1C`, container tiers `#242626` / `#2A2C2C`.
+
+---
+
+## 21. Chat timeline out-of-order days + duplicate bubbles
+
+| Field | Detail |
+|-------|--------|
+| **Type** | Bug |
+| **Area** | Chat timeline |
+| **Status** | Code fix landed — needs device repro |
+| **Priority** | P0 |
+
+### Expected
+
+Day separators are chronological (newest → oldest under `reverseLayout`). Each send appears once.
+
+### Evidence
+
+Screenshot showed Jul 1 → Yesterday → Apr 22 → Mar 6 → Apr 22 and duplicate icebreaker text. `buildChatTimelineEntriesNewestFirst` walked unsorted list order; merge kept `temp-…` + server UUID rows.
+
+### Fix landed (2026-07-17)
+
+- Sort by `timeCreated` before building separators.
+- `normalizeChatTimeline` + optimistic/`localSentAt` dedupe in merge.
+- `sendMessage` passes `optimisticTempId`; hot cache stores sorted timelines.
+- Disk/hot prefetch still used (no extra Supabase egress).
+
+---
+
+## 22. Profile sheet OLED / avatar / top spacing
+
+| Field | Detail |
+|-------|--------|
+| **Type** | UI |
+| **Area** | Profile bottom sheet |
+| **Status** | Code fix landed — needs device repro |
+| **Priority** | P1 |
+
+### Expected
+
+Sheet matches OLED chrome; empty avatar matches connection-list initials/color; tight spacing under grabber to “Profile”.
+
+### Fix landed (2026-07-17)
+
+- Body/tabs use `GlassSheetTokens.OledBlack()` (not `surfaceContainerHigh`).
+- Header uses `ConnectionListUserAvatarFace`.
+- Removed safe-area top inset + 24dp spacer above title.
+
+---
+
+## 23. Nav bar opaque band (materials differ under nav)
+
+| Field | Detail |
+|-------|--------|
+| **Type** | UI |
+| **Area** | App shell / bottom nav |
+| **Status** | Code fix landed — needs device repro |
+| **Priority** | P1 |
+
+### Expected
+
+Page background and cards look **identical** under the tab icons as above them — no fill, blur, or seam.
+
+### Evidence
+
+Scaffold `bottomBar` reserved a dead band; opaque/translucent platform bars tinted or hid content (iOS `#2F3131` / Material `surface`).
+
+### Fix landed (2026-07-17)
+
+- `PlatformBottomBar` overlaid outside Scaffold (full-bleed content + `rememberBottomChromePadding` for hit targets).
+- Android/iOS chrome **fully transparent** (`Color.Transparent` / `configureWithTransparentBackground()`); no top border fill band.
+- iOS tab bar pinned to view bottom so Compose paints under icons + home indicator.
+
+---
+
+## 24. Connections list flicker after chat interactive-back
+
+| Field | Detail |
+|-------|--------|
+| **Type** | UI |
+| **Area** | Connections inbox / iOS swipe-back |
+| **Status** | Code fix landed — needs device repro |
+| **Priority** | P0 |
+
+### Expected
+
+After interactive back from a chat, the Connections list is stable — no full-list flicker or “everything recomposing” flash.
+
+### Evidence
+
+On iOS the list stays mounted under the chat overlay, but gesture dismiss called `finalizeChatClose()` / `leaveChatRoom()` and `onChatOpenStateChanged(false)` synchronously. That restored the tab bar (LazyColumn `bottomChrome` jump) and applied inbox patches in the same frame as reveal. Tap-close already deferred teardown by 300ms.
+
+### Fix landed (2026-07-17)
+
+- Defer gesture teardown (`CHAT_GESTURE_CLOSE_SETTLE_MS`) like tap; restore chrome only in `finalizeChatClose`.
+- Split `LaunchedEffect(userId)` / `initialChatId` so clearing `pendingChatId` does not restart realtime via `setCurrentUser`.
+- Suppress inbox reorder `animateScrollToItem(0)` briefly after `isListObscured` clears.
+
+---
+
+## 25. Inbox preview jumps to old timestamp after scrolling up in chat
+
+| Field | Detail |
+|-------|--------|
+| **Type** | Functional |
+| **Area** | Connections inbox / chat leave |
+| **Status** | Code fix landed — needs device repro |
+| **Priority** | P0 |
+
+### Expected
+
+After opening a chat, scrolling up (load older), and returning to the list, the row preview/timestamp stay on the **newest** message (not an icebreaker from weeks ago).
+
+### Evidence
+
+Global `subscribeToMessageInserts` treated UPDATE like INSERT and `bumpConnectionInChatList` always overwrote preview. Load-older delivery/read UPDATEs rewrote the snippet to an old row; leave only revealed the damage. Paginated `fetchMessagesForChat` also **replaced** the hot timeline with the older page only. Ephemeral join held a mutex during the 8s subscribe timeout, blocking leave and amplifying simulator lag / cancel logs.
+
+### Fix landed (2026-07-17)
+
+- `bumpConnectionInChatList` + `AppDataManager` inbox/connection patches are newest-wins (same-id metadata refresh allowed).
+- Global list flow emits Insert only; Updates merge into hot cache without inbox emit.
+- Paginated fetches `mergeMessages` into hot cache; `leaveChatRoom` repairs preview from timeline max.
+- Ephemeral join/leave: generation token + subscribe outside mutex; unsubscribe on timeout/cancel; don’t swallow `CancellationException`.
+
+---
+
+## iOS Keychain `status: -50` (errSecParam)
+
+| Field | Detail |
+|-------|--------|
+| **Type** | Bug |
+| **Area** | Auth / iOS token persistence |
+| **Status** | Code fix landed — needs device repro |
+| **Priority** | P1 |
+
+### Expected
+
+JWT / refresh tokens persist to Keychain across app updates; set failures are handled without silent Keychain miss.
+
+### Evidence
+
+[`IosTokenStorage`](../../composeApp/src/iosMain/kotlin/compose/project/click/click/data/storage/TokenStorage.ios.kt) previously used delete+`SecItemAdd` only; on failure logged `status: $status` (including `-50` / `errSecParam`) and still treated NSUserDefaults as success.
+
+### Fix landed (2026-07-17 code audit)
+
+- Prefer `SecItemUpdate`, fall back to `SecItemAdd`; on duplicate / param error retry update.
+- Log structured Keychain failures; warn when defaults saved but Keychain write failed.
+
+### Suggested regression cases
+
+- [ ] Sign in on iOS → Keychain holds JWT (no `-50` spam in console)
+- [ ] App update / relaunch → session restores from Keychain
+
+---
+
 ## Cross-cutting architecture notes
 
 ```mermaid
@@ -438,9 +878,14 @@ Tri-Factor is not classic NFC-only; BLE is one of three factors. Group registrat
 
 ## Recommended fix order (follow-up engineering)
 
-1. **P0** Android call permission retry (#6)  
-2. **P0** Guard `MediaRecorder.start` + release (#7)  
-3. **P0** Device-repro and fix group create crash (#8)  
-4. **P0** Handshake match/mark + pair cardinality dedup (#1, #2)  
-5. **P1** Event list/map parity (#4); 1:1 vs clique UX (#3)  
-6. **P2** Map color intent (#5); hazard icon (#9); visual sweep (#10)
+1. ~~**P0** Android call permission retry (#6)~~ — code landed; device verify
+2. ~~**P0** Guard `MediaRecorder.start` + release (#7)~~ — code landed; device verify
+3. ~~**P0** Device-repro and fix group create crash (#8)~~ — code landed; device verify
+4. ~~**P0** Handshake match/mark + pair cardinality dedup (#1, #2)~~ — code landed; device verify
+5. ~~**P0** Chat timeline order/dupes / picker keys / inbox preview (#17–#19, #21, #25)~~ — code landed; device verify
+6. ~~**P1** Profile sheet + transparent nav (#22, #23)~~ — code landed; device verify
+7. ~~**P0** Connections list flicker after chat back (#24)~~ — code landed; device verify
+8. ~~**P1** Event list/map parity (#4)~~ — code landed; device verify; finish 1:1 UX (#3) on device
+9. ~~**P1** Client 503 recover / confirm dedup / Keychain -50 / Message CTA / hazard pins~~ — code hardened 2026-07-17; device verify
+10. **P2** Map color intent (#5); hazard visual confirm (#9); visual sweep (#10); theme PARTIAL (#13/#20)
+11. **Track C** Design-asset layout redesigns — see [`../handoff/functional-clarity-continuation.md`](../handoff/functional-clarity-continuation.md) §3

@@ -155,6 +155,7 @@ class ConnectionViewModel : ViewModel() {
         private val SIMULATOR_MOCK_HEARD_TOKENS: List<String> = listOf("5678")
         private const val PENDING_MATCH_RECOVERY_ATTEMPTS: Int = 12
         private const val PENDING_MATCH_RECOVERY_DELAY_MS: Long = 2_500L
+        private const val TAP_PROXIMITY_DEBOUNCE_MS: Long = 12_000L
     }
 
     private val _transientNotice = MutableSharedFlow<String>(extraBufferCapacity = 1)
@@ -174,8 +175,24 @@ class ConnectionViewModel : ViewModel() {
     private var lastProximityLng: Double? = null
     private var lastProximityAltitudeMeters: Double? = null
     private var lastProximityHardwareVibe: HardwareVibeSnapshot? = null
+    private var lastTapProximityStartedAtMs: Long = 0L
 
     fun lastProximityCoordinates(): Pair<Double?, Double?> = lastProximityLat to lastProximityLng
+
+    private fun isProximityHandshakeInFlight(): Boolean {
+        return when (_connectionState.value) {
+            is ConnectionState.ProximityFetchingLocation,
+            is ConnectionState.ProximityHandshaking,
+            is ConnectionState.ProximityResolving,
+            is ConnectionState.ProximityHandshakePendingMatch,
+            is ConnectionState.Loading,
+            is ConnectionState.SecuringConnection,
+            is ConnectionState.PendingConfirmation,
+            is ConnectionState.TaggingContext,
+            -> true
+            else -> false
+        }
+    }
 
     private suspend fun <T> Deferred<T>.awaitWithin(timeoutMs: Long): T? =
         withTimeoutOrNull(timeoutMs) { await() }
@@ -403,6 +420,15 @@ class ConnectionViewModel : ViewModel() {
             _connectionState.value = ConnectionState.Error(proximityManager.capabilityNote())
             return
         }
+        if (isProximityHandshakeInFlight()) {
+            return
+        }
+        val nowMs = Clock.System.now().toEpochMilliseconds()
+        if (nowMs - lastTapProximityStartedAtMs < TAP_PROXIMITY_DEBOUNCE_MS) {
+            _transientNotice.tryEmit("Tap already registered. Wait a moment before tapping again.")
+            return
+        }
+        lastTapProximityStartedAtMs = nowMs
         viewModelScope.launch {
             try {
                 lastProximityEncounterLoggedAggregate = true
@@ -981,6 +1007,8 @@ class ConnectionViewModel : ViewModel() {
                         batteryLevel = vibe?.batteryLevel?.takeIf { it in 0..100 },
                         weatherSnapshotLabel = weatherSnapshotLabel?.trim()?.takeIf { it.isNotEmpty() },
                         skipEncounterInsert = peer.encounterPersistedOnBind,
+                        preflightConnectionId = peer.connectionId?.takeIf { it.isNotBlank() },
+                        preflightEncounterLogged = if (peer.encounterPersistedOnBind) true else null,
                     )
                     val result = withContext(Dispatchers.Default) {
                         repository.createConnection(request)
@@ -1094,7 +1122,8 @@ class ConnectionViewModel : ViewModel() {
                 if (selfId != null && targetProfiles.size >= 1) {
                     val memberUserIds = (tagging.memberUserIds.takeIf { it.isNotEmpty() }
                         ?: (listOf(selfId) + targetProfiles.map { it.id })).distinct().sorted()
-                    if (memberUserIds.size >= 2) {
+                    // Only auto-create verified clique for true multi-person groups (not 1:1 DMs).
+                    if (tagging.isGroup && memberUserIds.size >= 3) {
                         _connectionState.value = ConnectionState.SecuringConnection
                         val selfProfile = AppDataManager.currentUser.value?.toUserProfile()
                         val nameParts = if (selfProfile != null) {

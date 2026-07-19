@@ -10,15 +10,18 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import compose.project.click.click.data.storage.initTokenStorage
+import compose.project.click.click.calls.AndroidCallRuntime
 import compose.project.click.click.calls.initCallManager
 import compose.project.click.click.calls.CallInvite
 import compose.project.click.click.calls.CallSessionManager
 import compose.project.click.click.notifications.ChatDeepLinkManager
 import compose.project.click.click.notifications.ChatNotificationDismisser
 import compose.project.click.click.deeplink.ConnectionDeepLinkRouter
+import compose.project.click.click.deeplink.EventDeepLinkRouter
 import compose.project.click.click.qr.toHubIdFromClickHubUrl
 import compose.project.click.click.notifications.initPushNotificationService
 import compose.project.click.click.utils.initLocationService
@@ -32,10 +35,17 @@ import com.google.android.gms.maps.MapsInitializer
 import io.github.jan.supabase.auth.handleDeeplinks
 
 class MainActivity : ComponentActivity() {
+    private val callPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { results ->
+        AndroidCallRuntime.handlePermissionResult(results.isNotEmpty() && results.values.all { it })
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        unlockHighestRefreshRate()
 
         MapsInitializer.initialize(applicationContext)
 
@@ -56,6 +66,9 @@ class MainActivity : ComponentActivity() {
         AppSystemSettings.isDebugMode =
             (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
+        AndroidCallRuntime.registerPermissionRequester { permissions ->
+            callPermissionLauncher.launch(permissions)
+        }
         initCallManager(applicationContext, this)
 
         initPushNotificationService(applicationContext, this)
@@ -63,6 +76,7 @@ class MainActivity : ComponentActivity() {
         handleIncomingCallIntent(intent)
         handleChatDeepLinkIntent(intent)
         handleCommunityHubViewIntent(intent)
+        handleEventUniversalLinkIntent(intent)
         handleConnectionUniversalLinkIntent(intent)
 
         setContent {
@@ -72,6 +86,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        initCallManager(applicationContext, this)
         compose.project.click.click.notifications.AndroidPushNotificationRuntime.setAppInForeground(true)
         onApplicationDidBecomeActive()
     }
@@ -82,6 +97,13 @@ class MainActivity : ComponentActivity() {
         super.onPause()
     }
 
+    override fun onDestroy() {
+        if (isFinishing) {
+            AndroidCallRuntime.registerPermissionRequester(null)
+        }
+        super.onDestroy()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -90,6 +112,7 @@ class MainActivity : ComponentActivity() {
         handleIncomingCallIntent(intent)
         handleChatDeepLinkIntent(intent)
         handleCommunityHubViewIntent(intent)
+        handleEventUniversalLinkIntent(intent)
         handleConnectionUniversalLinkIntent(intent)
     }
 
@@ -98,6 +121,12 @@ class MainActivity : ComponentActivity() {
         val uriString = intent.dataString ?: return
         val hubId = uriString.toHubIdFromClickHubUrl() ?: return
         ChatDeepLinkManager.setPendingCommunityHub(hubId)
+    }
+
+    private fun handleEventUniversalLinkIntent(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_VIEW) return
+        val uriString = intent.dataString ?: return
+        EventDeepLinkRouter.handleIncomingUrl(uriString)
     }
 
     private fun handleConnectionUniversalLinkIntent(intent: Intent?) {
@@ -150,6 +179,24 @@ class MainActivity : ComponentActivity() {
             ACTION_ACCEPT_CALL -> CallSessionManager.receiveIncomingPush(invite, autoAnswer = true)
             ACTION_DECLINE_CALL -> CallSessionManager.receiveIncomingPush(invite, autoDecline = true)
             ACTION_VIEW_CALL -> CallSessionManager.receiveIncomingPush(invite)
+        }
+    }
+
+    /**
+     * Prefer the display's highest refresh mode (90/120Hz) so Compose scroll/animation
+     * is not stuck on the default 60Hz mode many OEMs leave unset until requested.
+     */
+    private fun unlockHighestRefreshRate() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        val display = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            display
+        } else {
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay
+        } ?: return
+        val best = display.supportedModes.maxByOrNull { it.refreshRate } ?: return
+        window.attributes = window.attributes.apply {
+            preferredDisplayModeId = best.modeId
         }
     }
 
