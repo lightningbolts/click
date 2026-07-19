@@ -1,5 +1,6 @@
 package compose.project.click.click.ui.chat
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -52,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import compose.project.click.click.data.models.mediaUrlLooksLikePlaintextWebChatMediaUpload
 import compose.project.click.click.getPlatform
 import compose.project.click.click.media.rememberChatAudioPlayer
+import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue
 
@@ -357,16 +359,25 @@ fun ChatAudioBubble(
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onClick = { player.togglePlayPause() },
+                    onClick = {
+                        PlatformHapticsPolicy.lightImpact()
+                        player.togglePlayPause()
+                    },
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                contentDescription = if (playing) "Pause" else "Play",
-                tint = palette.playIcon,
-                modifier = Modifier.size(chatBubbleScaledDp(30f)),
-            )
+            Crossfade(
+                targetState = playing,
+                animationSpec = androidx.compose.animation.core.tween(120),
+                label = "voicePlayPause",
+            ) { isPlaying ->
+                Icon(
+                    imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    contentDescription = if (isPlaying) "Pause" else "Play",
+                    tint = palette.playIcon,
+                    modifier = Modifier.size(chatBubbleScaledDp(30f)),
+                )
+            }
         }
         Column(Modifier.weight(1f)) {
             AudioSeekTrack(

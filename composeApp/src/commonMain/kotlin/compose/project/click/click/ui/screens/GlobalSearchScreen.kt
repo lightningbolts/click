@@ -80,6 +80,7 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import compose.project.click.click.ui.components.ClickLogoPulse
+import compose.project.click.click.ui.components.AppEmptyState
 import compose.project.click.click.ui.components.rememberBottomChromePadding
 
 /**
@@ -264,24 +265,12 @@ internal fun EmptySearchHint(
     body: String,
     dimmed: Boolean = true,
 ) {
-    Column(
-        modifier = modifier.padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            modifier = Modifier.size(64.dp),
-            tint = MaterialTheme.colorScheme.onSurface.copy(if (dimmed) 0.2f else 0.35f),
-        )
-        Spacer(Modifier.height(16.dp))
-        Text(
-            text = body,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface.copy(if (dimmed) 0.4f else 0.75f),
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        )
-    }
+    AppEmptyState(
+        icon = icon,
+        body = body,
+        modifier = modifier,
+        emphasized = !dimmed,
+    )
 }
 
 @Composable
@@ -301,7 +290,11 @@ internal fun UnifiedSearchResultsList(
         item {
             SearchSectionHeader(label = "Results")
         }
-        items(results, key = { searchResultStableKey(it) }) { row ->
+        items(
+            results,
+            key = { searchResultStableKey(it) },
+            contentType = { "search_result" },
+        ) { row ->
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),

@@ -21,13 +21,18 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.uikit.LocalUIViewController
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.navigation.NavigationItem
+import compose.project.click.click.platform.rememberReduceTransparencyEnabled
 import compose.project.click.click.ui.theme.LocalIsDarkMode
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
+import platform.Foundation.NSProcessInfo
 import platform.UIKit.NSLayoutConstraint
 import platform.UIKit.UIColor
 import platform.UIKit.UIImage
+import platform.UIKit.UIBlurEffect
+import platform.UIKit.UIBlurEffectStyle
 import platform.UIKit.UITabBar
 import platform.UIKit.UITabBarAppearance
 import platform.UIKit.UITabBarDelegateProtocol
@@ -46,7 +51,12 @@ actual fun PlatformBottomBar(
     val viewController = LocalUIViewController.current
     val onItemSelectedState by rememberUpdatedState(onItemSelected)
     val currentItems by rememberUpdatedState(items)
+    val currentRouteState by rememberUpdatedState(currentRoute)
     val isDarkMode = LocalIsDarkMode.current
+    val reduceTransparency = rememberReduceTransparencyEnabled()
+    val usesNativeLiquidGlass = remember {
+        NSProcessInfo.processInfo.operatingSystemVersion.useContents { majorVersion >= 26 }
+    }
 
     val tabBar = remember {
         UITabBar().apply {
@@ -55,12 +65,10 @@ actual fun PlatformBottomBar(
         }
     }
 
-    // Fully clear chrome so Compose materials under the icons match materials above —
-    // no fill, blur, or hairline that would create a different "material" band.
     SideEffect {
         val clear = UIColor.clearColor
         val selectedColor = if (isDarkMode) {
-            // NeonPurple #D2BBFF — readable over dark page content without a bar fill
+            // NeonPurple #D2BBFF — readable over dark page content and distinctly Click.
             UIColor.colorWithRed(0xD2 / 255.0, green = 0xBB / 255.0, blue = 0xFF / 255.0, alpha = 1.0)
         } else {
             UIColor.colorWithRed(0x63 / 255.0, green = 0x0E / 255.0, blue = 0xD4 / 255.0, alpha = 1.0)
@@ -70,6 +78,16 @@ actual fun PlatformBottomBar(
         } else {
             UIColor.colorWithRed(0x4A / 255.0, green = 0x44 / 255.0, blue = 0x55 / 255.0, alpha = 1.0)
         }
+        val clickTint = if (isDarkMode) {
+            UIColor.colorWithRed(0x63 / 255.0, green = 0x0E / 255.0, blue = 0xD4 / 255.0, alpha = 0.10)
+        } else {
+            UIColor.colorWithRed(0x63 / 255.0, green = 0x0E / 255.0, blue = 0xD4 / 255.0, alpha = 0.06)
+        }
+        val accessibleMaterial = if (isDarkMode) {
+            UIColor.colorWithRed(0x10 / 255.0, green = 0x12 / 255.0, blue = 0x12 / 255.0, alpha = 0.96)
+        } else {
+            UIColor.colorWithRed(0xF9 / 255.0, green = 0xF9 / 255.0, blue = 0xF9 / 255.0, alpha = 0.96)
+        }
 
         // Match page BackgroundDark so any uncovered gap is not pure black.
         viewController.view.backgroundColor = if (isDarkMode) {
@@ -78,22 +96,32 @@ actual fun PlatformBottomBar(
             UIColor.colorWithRed(0xF9 / 255.0, green = 0xF9 / 255.0, blue = 0xF9 / 255.0, alpha = 1.0)
         }
 
-        tabBar.barTintColor = clear
-        tabBar.backgroundColor = clear
         tabBar.tintColor = selectedColor
         tabBar.unselectedItemTintColor = unselectedColor
-        tabBar.backgroundImage = UIImage()
-        tabBar.shadowImage = UIImage()
         tabBar.setTranslucent(true)
 
-        val appearance = UITabBarAppearance().apply {
-            configureWithTransparentBackground()
-            backgroundColor = clear
-            backgroundEffect = null
-            shadowColor = clear
+        if (!usesNativeLiquidGlass) {
+            // iOS 13–25: system material samples the Compose-backed UIView below this native bar.
+            // The low-alpha Click tint keeps content continuity while avoiding a stock gray material.
+            tabBar.barTintColor = clear
+            tabBar.backgroundColor = clear
+            tabBar.backgroundImage = UIImage()
+            tabBar.shadowImage = UIImage()
+            val materialStyle = if (isDarkMode) {
+                UIBlurEffectStyle.UIBlurEffectStyleSystemMaterialDark
+            } else {
+                UIBlurEffectStyle.UIBlurEffectStyleSystemMaterialLight
+            }
+            val appearance = UITabBarAppearance().apply {
+                configureWithTransparentBackground()
+                backgroundColor = if (reduceTransparency) accessibleMaterial else clickTint
+                backgroundEffect = if (reduceTransparency) null else UIBlurEffect.effectWithStyle(materialStyle)
+                shadowColor = clear
+            }
+            tabBar.standardAppearance = appearance
+            tabBar.scrollEdgeAppearance = appearance
         }
-        tabBar.standardAppearance = appearance
-        tabBar.scrollEdgeAppearance = appearance
+        // iOS 26+: leave UIBarAppearance untouched so UIKit supplies native Liquid Glass.
     }
 
     val delegate = remember {
@@ -101,7 +129,12 @@ actual fun PlatformBottomBar(
             override fun tabBar(tabBar: UITabBar, didSelectItem: UITabBarItem) {
                 tabBar.selectedItem = didSelectItem
                 val idx = didSelectItem.tag.toInt()
-                currentItems.getOrNull(idx)?.let { onItemSelectedState(it) }
+                currentItems.getOrNull(idx)?.let { item ->
+                    if (item.route != currentRouteState) {
+                        PlatformHapticsPolicy.lightImpact()
+                    }
+                    onItemSelectedState(item)
+                }
             }
         }
     }

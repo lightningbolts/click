@@ -347,7 +347,6 @@ internal fun AnimatedVisibilityChatBubble(
     isSent: Boolean,
     content: @Composable () -> Unit,
 ) {
-    @Suppress("UNUSED_PARAMETER") val unusedIsSent = isSent
     var visible by remember(bubbleStabilityKey) { mutableStateOf(false) }
     LaunchedEffect(bubbleStabilityKey) {
         visible = true
@@ -355,8 +354,14 @@ internal fun AnimatedVisibilityChatBubble(
     AnimatedVisibility(
         visible = visible,
         enter = fadeIn(ChatChromeMotion.ShortFade) +
-            slideInVertically(animationSpec = ChatChromeMotion.ShortSlide, initialOffsetY = { it / 10 }) +
-            scaleIn(ChatChromeMotion.ShortFade, initialScale = 0.97f),
+            slideInVertically(
+                animationSpec = ChatChromeMotion.ShortSlide,
+                initialOffsetY = { height -> height / if (isSent) 7 else 10 },
+            ) +
+            scaleIn(
+                animationSpec = ChatChromeMotion.ShortFade,
+                initialScale = if (isSent) 0.955f else 0.975f,
+            ),
         exit = fadeOut(animationSpec = tween(140, easing = FastOutSlowInEasing)) +
             slideOutVertically(animationSpec = ChatChromeMotion.ShortSlide, targetOffsetY = { it / 12 }) +
             scaleOut(animationSpec = ChatChromeMotion.ShortFade, targetScale = 0.96f),

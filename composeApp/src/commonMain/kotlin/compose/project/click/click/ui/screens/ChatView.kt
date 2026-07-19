@@ -220,6 +220,8 @@ import compose.project.click.click.ui.chat.LoadingSubtitlePlaceholder // pragma:
 import compose.project.click.click.ui.chat.ReplySwipeSideIcon // pragma: allowlist secret
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatTimelineShouldFollowInbound // pragma: allowlist secret
+import compose.project.click.click.ui.chat.scrollChatTimelineToLatest // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatComposerChromeFadeUnderlay // pragma: allowlist secret
@@ -445,29 +447,22 @@ fun ChatView(
         }
     }
 
-    suspend fun scrollChatTimelineToLatest() {
-        repeat(8) {
-            if (listState.layoutInfo.totalItemsCount > 0) {
-                suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = true
-                listState.scrollToItem(0)
-                delay(48)
-                suppressKeyboardDismissWhileProgrammaticTimelineScroll.value = false
-                return
-            }
-            delay(16L)
-        }
-    }
-
     LaunchedEffect(chatId, successMessages.isNotEmpty()) {
         if (successMessages.isEmpty() || initialTimelineScrollDone) return@LaunchedEffect
         initialTimelineScrollDone = true
-        scrollChatTimelineToLatest()
+        scrollChatTimelineToLatest(
+            listState = listState,
+            suppressKeyboardDismiss = suppressKeyboardDismissWhileProgrammaticTimelineScroll,
+        )
     }
 
     LaunchedEffect(peerNewestMessageId) {
-        if (peerNewestMessageId == null || !initialTimelineScrollDone) return@LaunchedEffect
-        if (listState.firstVisibleItemIndex <= 2) {
-            scrollChatTimelineToLatest()
+        if (peerNewestMessageId == null) return@LaunchedEffect
+        if (chatTimelineShouldFollowInbound(listState.firstVisibleItemIndex, initialTimelineScrollDone)) {
+            scrollChatTimelineToLatest(
+                listState = listState,
+                suppressKeyboardDismiss = suppressKeyboardDismissWhileProgrammaticTimelineScroll,
+            )
         }
     }
 

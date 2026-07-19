@@ -31,7 +31,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -90,9 +89,6 @@ internal fun MessageActionSheet(
     ClickActionBottomSheet(
         onDismissRequest = onDismiss,
     ) {
-        LaunchedEffect(Unit) {
-            PlatformHapticsPolicy.lightImpact()
-        }
         val sheetBg = GlassSheetTokens.OledBlack()
         val onSurface = GlassSheetTokens.OnOled()
         val onVariant = GlassSheetTokens.OnOledMuted()

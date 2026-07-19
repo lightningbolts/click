@@ -6,7 +6,6 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -20,17 +19,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import click.composeapp.generated.resources.Res
 import click.composeapp.generated.resources.click_logo
+import compose.project.click.click.platform.rememberReduceMotionEnabled
 import org.jetbrains.compose.resources.painterResource
 
 private const val LogoPulseDurationMs = 2_400
 private const val LogoAlphaMin = 0.42f
 private const val LogoAlphaMax = 1f
-
-private const val HandshakePulseDurationMs = 800
-private const val HandshakeScaleMin = 1f
-private const val HandshakeScaleMax = 1.15f
-private const val HandshakeAlphaMin = 0.88f
-private const val HandshakeAlphaMax = 1f
 
 /**
  * Scale + opacity pulse for tri-factor handshake (Scanning / Connecting).
@@ -38,28 +32,13 @@ private const val HandshakeAlphaMax = 1f
  */
 @Composable
 fun rememberConnectionHandshakePulse(active: Boolean): Pair<Float, Float> {
-    if (!active) return HandshakeScaleMin to HandshakeAlphaMax
-
-    val transition = rememberInfiniteTransition(label = "connection_handshake_pulse")
-    val scale by transition.animateFloat(
-        initialValue = HandshakeScaleMin,
-        targetValue = HandshakeScaleMax,
-        animationSpec = infiniteRepeatable(
-            animation = tween(HandshakePulseDurationMs, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "handshake_scale",
+    val pulse = rememberWaitingPulse(
+        active = active,
+        durationMillis = 800,
+        scaleMax = 1.15f,
+        alphaMin = 0.88f,
     )
-    val alpha by transition.animateFloat(
-        initialValue = HandshakeAlphaMin,
-        targetValue = HandshakeAlphaMax,
-        animationSpec = infiniteRepeatable(
-            animation = tween(HandshakePulseDurationMs, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "handshake_alpha",
-    )
-    return scale to alpha
+    return pulse.scale to pulse.alpha
 }
 
 /** Centered Click logo with a gentle opacity pulse — shared loading indicator. */
@@ -68,6 +47,18 @@ fun ClickLogoPulse(
     modifier: Modifier = Modifier,
     logoSize: Dp = 88.dp,
 ) {
+    val reduceMotion = rememberReduceMotionEnabled()
+    if (reduceMotion) {
+        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+            Image(
+                painter = painterResource(Res.drawable.click_logo),
+                contentDescription = "Loading",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.size(logoSize),
+            )
+        }
+        return
+    }
     val halfCycle = LogoPulseDurationMs / 2
     val transition = rememberInfiniteTransition(label = "click_logo_loading")
     val logoAlpha by transition.animateFloat(

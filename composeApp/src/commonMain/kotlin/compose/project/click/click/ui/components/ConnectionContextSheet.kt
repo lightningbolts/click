@@ -22,13 +22,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -47,17 +44,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.zIndex
-import coil3.compose.AsyncImage
 import compose.project.click.click.data.ContextTagTaxonomy
+import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.data.models.ContextTag
 import compose.project.click.click.data.models.UserProfile
 import androidx.compose.material3.CircularProgressIndicator
@@ -132,28 +128,13 @@ private fun ProfileAvatarBubble(
         color = MaterialTheme.colorScheme.surfaceVariant,
         border = BorderStroke(2.dp, borderColor),
     ) {
-        if (!profile.avatarUrl.isNullOrBlank()) {
-            AsyncImage(
-                model = profile.avatarUrl,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(size)
-                    .clip(CircleShape),
-            )
-        } else {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Default.Person,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size((size.value * 0.55f).dp),
-                )
-            }
-        }
+        ConnectionListUserAvatarFace(
+            displayName = profile.displayName,
+            email = null,
+            avatarUrl = profile.avatarUrl,
+            userId = profile.id,
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 
@@ -435,6 +416,13 @@ fun ConnectionContextSheet(
                 ),
                 label = "connection_ctx_primary",
             )
+            val reconnectPulse = rememberWaitingPulse(
+                active = presentation == ConnectionContextPresentation.ReconnectEncounter &&
+                    encounterSaveInProgress,
+                durationMillis = 900,
+                scaleMax = 1.025f,
+                alphaMin = 0.9f,
+            )
 
             if (showTagPickers) {
                 Text(
@@ -570,10 +558,14 @@ fun ConnectionContextSheet(
                     }
                     if (presentation == ConnectionContextPresentation.ReconnectEncounter) {
                         Button(
-                            onClick = { onSaveEncounter?.invoke() },
+                            onClick = {
+                                PlatformHapticsPolicy.lightImpact()
+                                onSaveEncounter?.invoke()
+                            },
                             modifier = Modifier
                                 .weight(1f)
-                                .scale(springBtn),
+                                .scale(springBtn * reconnectPulse.scale)
+                                .alpha(reconnectPulse.alpha),
                             enabled = !encounterSaveInProgress && onSaveEncounter != null,
                         ) {
                             if (encounterSaveInProgress) {
@@ -587,7 +579,10 @@ fun ConnectionContextSheet(
                         }
                     } else {
                         Button(
-                            onClick = { onConfirm(resolveSelectedTag(), ambientNoiseOptIn) },
+                            onClick = {
+                                PlatformHapticsPolicy.lightImpact()
+                                onConfirm(resolveSelectedTag(), ambientNoiseOptIn)
+                            },
                             modifier = Modifier
                                 .weight(1f)
                                 .scale(springBtn),

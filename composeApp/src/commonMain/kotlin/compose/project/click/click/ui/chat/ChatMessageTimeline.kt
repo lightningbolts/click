@@ -15,6 +15,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableFloatState
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,6 +28,35 @@ import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState
 import compose.project.click.click.viewmodel.SecureChatMediaHost
+import kotlinx.coroutines.delay
+
+internal fun chatTimelineShouldFollowInbound(
+    firstVisibleItemIndex: Int,
+    initialTimelineScrollDone: Boolean,
+): Boolean = initialTimelineScrollDone && firstVisibleItemIndex <= 2
+
+/**
+ * Shared reverse-layout snap used only for initial paint and near-bottom inbound messages.
+ * Deliberately uses [scrollToItem], not placement animation, to preserve the anti-teleport policy.
+ */
+internal suspend fun scrollChatTimelineToLatest(
+    listState: LazyListState,
+    suppressKeyboardDismiss: MutableState<Boolean>,
+) {
+    repeat(12) {
+        if (listState.layoutInfo.totalItemsCount > 0) {
+            suppressKeyboardDismiss.value = true
+            try {
+                listState.scrollToItem(0)
+                delay(48)
+            } finally {
+                suppressKeyboardDismiss.value = false
+            }
+            return
+        }
+        delay(16)
+    }
+}
 
 /**
  * Isolated message list for chat screens. Kept separate from [compose.project.click.click.ui.screens.ChatView]
