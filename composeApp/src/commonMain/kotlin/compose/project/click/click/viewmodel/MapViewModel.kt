@@ -14,6 +14,7 @@ import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlis
 import compose.project.click.click.data.api.BeaconAttendeeDto
 import compose.project.click.click.data.api.MapBeaconPatchBody
 import compose.project.click.click.data.models.parseMapBeaconMetadata // pragma: allowlist secret
+import compose.project.click.click.data.models.parseEpochMs
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
@@ -548,12 +549,49 @@ class MapViewModel : ViewModel() {
     private fun seedFromAppDataPrefetch() {
         applyPrefetchedBeacons(AppDataManager.prefetchedMapBeacons.value)
         applyPrefetchedHubs(AppDataManager.prefetchedCommunityHubs.value)
+        seedEventPinsFromCachedBookmarks(AppDataManager.cachedEventBookmarks.value)
         viewModelScope.launch {
             AppDataManager.prefetchedMapBeacons.collect { applyPrefetchedBeacons(it) }
         }
         viewModelScope.launch {
             AppDataManager.prefetchedCommunityHubs.collect { applyPrefetchedHubs(it) }
         }
+        viewModelScope.launch {
+            AppDataManager.cachedEventBookmarks.collect { seedEventPinsFromCachedBookmarks(it) }
+        }
+    }
+
+    /**
+     * Saved-event bookmarks carry denormalized lat/lng. After null-island cache purge, use them
+     * so event pins still paint until proximity returns the same rows.
+     */
+    private fun seedEventPinsFromCachedBookmarks(
+        bookmarks: List<compose.project.click.click.data.api.EventBookmarkItemDto>,
+    ) {
+        if (bookmarks.isEmpty()) return
+        val seeds = bookmarks.mapNotNull { bookmark ->
+            val lat = bookmark.latitude ?: return@mapNotNull null
+            val lng = bookmark.longitude ?: return@mapNotNull null
+            if (!lat.isFinite() || !lng.isFinite() || (lat == 0.0 && lng == 0.0)) {
+                return@mapNotNull null
+            }
+            val scheduleRaw = buildJsonObject {
+                bookmark.title?.takeIf { it.isNotBlank() }?.let { put("title", it) }
+                bookmark.eventStartAt?.takeIf { it.isNotBlank() }?.let { put("event_start_at", it) }
+                bookmark.eventEndAt?.takeIf { it.isNotBlank() }?.let { put("event_end_at", it) }
+            }
+            MapBeacon(
+                id = bookmark.beaconId,
+                kind = MapBeaconKind.EVENT,
+                latitude = lat,
+                longitude = lng,
+                metadata = parseMapBeaconMetadata(scheduleRaw),
+                expiresAtEpochMs = bookmark.expiresAt?.let { parseEpochMs(it) },
+                sourceBeaconType = "event",
+            )
+        }
+        if (seeds.isEmpty()) return
+        _mapBeacons.update { current -> mergeMapBeaconLists(current, seeds) }
     }
 
     private fun markDiscoveryProximityFetchCompleted() {
@@ -561,8 +599,10 @@ class MapViewModel : ViewModel() {
     }
 
     private fun applyPrefetchedBeacons(list: List<MapBeacon>) {
-        if (list.isEmpty()) return
+        // Always run through merge so in-memory null-island pins from a prior bad GET are purged
+        // even when the incoming prefetch list is empty after cache heal.
         _mapBeacons.update { current -> mergeMapBeaconLists(current, list) }
+        if (list.isEmpty()) return
         AppDataManager.mergeCachedMapBeacons(list)
         markDiscoveryProximityFetchCompleted()
     }
@@ -1471,12 +1511,11 @@ class MapViewModel : ViewModel() {
             )
             mapBeaconRepository.updateBeacon(beaconId, patch).fold(
                 onSuccess = { updated ->
-                    _mapBeacons.update { list ->
-                        list.map { if (it.id == beaconId) updated else it }
-                    }
+                    _mapBeacons.update { list -> mergeMapBeaconLists(list, listOf(updated)) }
+                    val merged = _mapBeacons.value.firstOrNull { it.id == beaconId } ?: updated
                     val sel = _selection.value
                     if (sel is MapSelection.BeaconSelected && sel.beacon.id == beaconId) {
-                        _selection.value = sel.copy(beacon = updated)
+                        _selection.value = sel.copy(beacon = merged)
                     }
                     PlatformHapticsPolicy.successNotification()
                     onFinished(true)
@@ -1686,17 +1725,27 @@ class MapViewModel : ViewModel() {
             val insertResult = mapBeaconRepository.insertBeacon(insert)
             insertResult.fold(
                 onSuccess = { serverBeacon ->
+                    val confirmed = if (
+                        serverBeacon.latitude.isFinite() &&
+                        serverBeacon.longitude.isFinite() &&
+                        !(serverBeacon.latitude == 0.0 && serverBeacon.longitude == 0.0)
+                    ) {
+                        serverBeacon
+                    } else {
+                        // Insert response can lack parseable PostGIS location — keep drop GPS.
+                        serverBeacon.copy(latitude = loc.latitude, longitude = loc.longitude)
+                    }
                     _mapBeacons.update { current ->
                         mergeMapBeaconLists(
                             current.filter { it.id != optimisticId },
-                            listOf(serverBeacon),
+                            listOf(confirmed),
                         )
                     }
-                    EventReminderCoordinator.rememberBeacon(serverBeacon)
+                    EventReminderCoordinator.rememberBeacon(confirmed)
                     refreshBeaconsAfterDrop(
                         latitude = loc.latitude,
                         longitude = loc.longitude,
-                        confirmedBeacon = serverBeacon,
+                        confirmedBeacon = confirmed,
                     )
                     onRemoteFinished(true)
                     PlatformHapticsPolicy.heavyImpact()

@@ -141,33 +141,64 @@ internal fun mergeCommunityHubLists(
     return byId.values.toList()
 }
 
+/** True for missing/non-finite coords or PostGIS parse fallback at null island. */
+internal fun MapBeacon.hasUsableMapCoordinates(): Boolean =
+    latitude.isFinite() &&
+        longitude.isFinite() &&
+        !(latitude == 0.0 && longitude == 0.0)
+
+/**
+ * Prefer [donor] lat/lng when [this] is null-island / non-finite and [donor] is usable.
+ */
+internal fun MapBeacon.withPreservedMapCoordinatesFrom(donor: MapBeacon?): MapBeacon {
+    if (donor == null || id != donor.id) return this
+    if (hasUsableMapCoordinates()) return this
+    if (!donor.hasUsableMapCoordinates()) return this
+    return copy(latitude = donor.latitude, longitude = donor.longitude)
+}
+
 /**
  * Unions proximity beacon fetches by id and drops expired rows.
  * Keeps optimistically dropped pins until the server echoes them.
+ * Never lets a (0,0) GET/cache row wipe a usable pin, and never keeps orphan null-island rows.
  */
 internal fun mergeMapBeaconLists(
     existing: List<MapBeacon>,
     incoming: List<MapBeacon>,
 ): List<MapBeacon> {
-    if (incoming.isEmpty() && existing.isNotEmpty()) return existing
+    if (incoming.isEmpty() && existing.isNotEmpty()) {
+        val healed = existing.filter { it.hasUsableMapCoordinates() && it.isActiveForDiscoveryFeed() }
+        if (healed.size != existing.size) {
+            EventReminderCoordinator.syncBeacons(healed)
+            return healed
+        }
+        return existing
+    }
     val byId = LinkedHashMap<String, MapBeacon>()
+    // Keep null-island existing rows temporarily so schedule metadata can donate to a good
+    // proximity row; final filter drops any remaining (0,0) pins.
     for (beacon in existing) {
         byId[beacon.id] = beacon
     }
     for (beacon in incoming) {
         val previous = byId[beacon.id]
-        var next = beacon.withPreservedEventScheduleFrom(previous)
-        // GET /api/beacons/{id} can fall back to 0,0 when location parse fails — never wipe a good pin.
-        if (previous != null &&
-            next.latitude == 0.0 && next.longitude == 0.0 &&
-            (previous.latitude != 0.0 || previous.longitude != 0.0)
-        ) {
-            next = next.copy(latitude = previous.latitude, longitude = previous.longitude)
+        var next = beacon
+            .withPreservedEventScheduleFrom(previous)
+            .withPreservedMapCoordinatesFrom(previous)
+        if (!next.hasUsableMapCoordinates()) {
+            // Do not replace a usable pin with poison, and do not insert orphan null-island.
+            if (previous != null && previous.hasUsableMapCoordinates()) {
+                next = previous.withPreservedEventScheduleFrom(next)
+            } else {
+                continue
+            }
         }
         byId[beacon.id] = next
     }
     val now = Clock.System.now().toEpochMilliseconds()
-    val merged = byId.values.filter { beacon -> beacon.isActiveForDiscoveryFeed(now) }
+    val merged = byId.values.filter { beacon ->
+        beacon.hasUsableMapCoordinates() && beacon.isActiveForDiscoveryFeed(now)
+    }
     EventReminderCoordinator.syncBeacons(merged)
     return merged
 }

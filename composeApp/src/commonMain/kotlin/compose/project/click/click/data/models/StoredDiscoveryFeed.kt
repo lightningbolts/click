@@ -119,11 +119,29 @@ private fun storedEventScheduleRaw(
 
 /**
  * When [incoming] lost schedule fields (e.g. disk projection), keep [existing]'s event window.
+ * Also keep [existing] lat/lng when [this] is null-island (GET location-parse poison).
  */
 internal fun MapBeacon.withPreservedEventScheduleFrom(existing: MapBeacon?): MapBeacon {
     if (existing == null || id != existing.id) return this
-    if (eventSchedule() != null) return this
-    val donor = existing.eventSchedule() ?: return this
+    val usableExistingCoords =
+        existing.latitude.isFinite() &&
+            existing.longitude.isFinite() &&
+            !(existing.latitude == 0.0 && existing.longitude == 0.0)
+    val needsCoordRescue =
+        usableExistingCoords &&
+            (
+                !latitude.isFinite() ||
+                    !longitude.isFinite() ||
+                    (latitude == 0.0 && longitude == 0.0)
+            )
+    val rescuedLat = if (needsCoordRescue) existing.latitude else latitude
+    val rescuedLng = if (needsCoordRescue) existing.longitude else longitude
+
+    if (eventSchedule() != null) {
+        return if (needsCoordRescue) copy(latitude = rescuedLat, longitude = rescuedLng) else this
+    }
+    val donor = existing.eventSchedule()
+        ?: return if (needsCoordRescue) copy(latitude = rescuedLat, longitude = rescuedLng) else this
     val baseRaw = metadata.raw
     val mergedRaw = buildJsonObject {
         baseRaw?.forEach { (k, v) -> put(k, v) }
@@ -131,6 +149,8 @@ internal fun MapBeacon.withPreservedEventScheduleFrom(existing: MapBeacon?): Map
         put("event_end_at", JsonPrimitive(Instant.fromEpochMilliseconds(donor.endEpochMs).toString()))
     }
     return copy(
+        latitude = rescuedLat,
+        longitude = rescuedLng,
         metadata = metadata.copy(
             title = metadata.title ?: existing.metadata.title,
             description = metadata.description ?: existing.metadata.description,

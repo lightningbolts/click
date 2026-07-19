@@ -80,6 +80,38 @@ class StoredDiscoveryFeedTest {
     }
 
     @Test
+    fun withPreservedEventScheduleFrom_rescuesNullIslandWhenIncomingHasSchedule() {
+        val existing = MapBeacon(
+            id = "a",
+            kind = MapBeaconKind.EVENT,
+            latitude = 37.77,
+            longitude = -122.42,
+            metadata = MapBeaconMetadata(title = "party"),
+            expiresAtEpochMs = 1_900_000_000_000L,
+            sourceBeaconType = "event",
+        )
+        val incoming = MapBeacon(
+            id = "a",
+            kind = MapBeaconKind.EVENT,
+            latitude = 0.0,
+            longitude = 0.0,
+            metadata = MapBeaconMetadata(
+                title = "party",
+                raw = buildJsonObject {
+                    put("event_start_at", JsonPrimitive("2026-07-22T16:00:00Z"))
+                    put("event_end_at", JsonPrimitive("2026-07-22T23:00:00Z"))
+                },
+            ),
+            expiresAtEpochMs = 1_900_000_000_000L,
+            sourceBeaconType = "event",
+        )
+        val merged = incoming.withPreservedEventScheduleFrom(existing)
+        assertEquals(37.77, merged.latitude)
+        assertEquals(-122.42, merged.longitude)
+        assertNotNull(merged.eventSchedule())
+    }
+
+    @Test
     fun mergeMapBeaconLists_keepsExistingWhenIncomingEmpty() {
         val existing = listOf(
             MapBeacon(

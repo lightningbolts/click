@@ -2028,7 +2028,18 @@ object AppDataManager {
             _cachedHubThreads.value = snapshot.cachedHubThreads.associateBy { it.hubId }
             _inboxFeedChats.value = snapshot.inboxFeedChats
             if (snapshot.cachedMapBeacons.isNotEmpty()) {
-                _prefetchedMapBeacons.value = snapshot.cachedMapBeacons.map { it.toMapBeacon() }
+                // Drop null-island rows poisoned by GET /api/beacons/{id} location-parse fallback.
+                val restored = snapshot.cachedMapBeacons
+                    .map { it.toMapBeacon() }
+                    .filter { beacon ->
+                        beacon.latitude.isFinite() &&
+                            beacon.longitude.isFinite() &&
+                            !(beacon.latitude == 0.0 && beacon.longitude == 0.0)
+                    }
+                _prefetchedMapBeacons.value = restored
+                if (restored.size < snapshot.cachedMapBeacons.size) {
+                    schedulePersistSnapshot()
+                }
             }
             if (snapshot.cachedCommunityHubs.isNotEmpty()) {
                 _prefetchedCommunityHubs.value = snapshot.cachedCommunityHubs.map { hub ->
