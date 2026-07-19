@@ -112,6 +112,44 @@ class StoredDiscoveryFeedTest {
     }
 
     @Test
+    fun withPreservedEventScheduleFrom_keepsHostAndPostedWhenIncomingIsSparse() {
+        val rich = MapBeacon(
+            id = "a",
+            kind = MapBeaconKind.EVENT,
+            latitude = 37.77,
+            longitude = -122.42,
+            metadata = MapBeaconMetadata(title = "party"),
+            createdByUserId = "user-1",
+            createdAtEpochMs = 1_718_200_000_000L,
+            expiresAtEpochMs = 1_900_000_000_000L,
+            sourceBeaconType = "event",
+            showCreatorName = true,
+            creatorDisplayName = "Kairui Cheng",
+        )
+        val sparse = MapBeacon(
+            id = "a",
+            kind = MapBeaconKind.EVENT,
+            latitude = 37.77,
+            longitude = -122.42,
+            metadata = MapBeaconMetadata(
+                title = "party",
+                raw = buildJsonObject {
+                    put("event_start_at", JsonPrimitive("2026-07-22T16:00:00Z"))
+                    put("event_end_at", JsonPrimitive("2026-07-22T23:00:00Z"))
+                },
+            ),
+            expiresAtEpochMs = 1_900_000_000_000L,
+            sourceBeaconType = "event",
+        )
+        val merged = sparse.withPreservedEventScheduleFrom(rich)
+        assertEquals("user-1", merged.createdByUserId)
+        assertEquals(1_718_200_000_000L, merged.createdAtEpochMs)
+        assertEquals(true, merged.showCreatorName)
+        assertEquals("Kairui Cheng", merged.creatorDisplayName)
+        assertNotNull(merged.eventSchedule())
+    }
+
+    @Test
     fun mergeMapBeaconLists_keepsExistingWhenIncomingEmpty() {
         val existing = listOf(
             MapBeacon(

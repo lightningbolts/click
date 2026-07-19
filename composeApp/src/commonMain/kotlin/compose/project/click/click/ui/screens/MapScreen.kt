@@ -68,6 +68,7 @@ import compose.project.click.click.viewmodel.MapState // pragma: allowlist secre
 import compose.project.click.click.viewmodel.MapSelection // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
+import compose.project.click.click.data.models.withPreservedEventScheduleFrom
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.media.rememberChatAudioPlayer // pragma: allowlist secret
@@ -1252,9 +1253,19 @@ internal fun EventBeaconDetail(
         val fromMap = mapBeacons.firstOrNull { it.id == beacon.id }
         when {
             fromMap == null -> beacon
-            fromMap.eventSchedule() != null -> fromMap
-            beacon.eventSchedule() != null -> beacon
-            else -> fromMap
+            else -> fromMap.withPreservedEventScheduleFrom(beacon)
+                .let { merged ->
+                    // Prefer whichever side still has schedule if merge left it null.
+                    when {
+                        merged.eventSchedule() != null -> merged
+                        beacon.eventSchedule() != null ->
+                            beacon.copy(
+                                latitude = merged.latitude,
+                                longitude = merged.longitude,
+                            )
+                        else -> merged
+                    }
+                }
         }
     }
     val schedule = displayBeacon.eventSchedule()
@@ -1276,9 +1287,9 @@ internal fun EventBeaconDetail(
         viewModel.loadBeaconRsvp(displayBeacon.id, forceRefresh = true)
         viewModel.loadBeaconEngagement(displayBeacon.id, forceRefresh = true)
         viewModel.recordEventImpression(displayBeacon.id)
-        if (displayBeacon.eventSchedule() == null) {
-            viewModel.ensureEventBeaconSchedule(displayBeacon.id)
-        }
+        // Always hydrate missing Posted / Host / creator / schedule — bookmark & proximity rows
+        // often already have schedule, so the old schedule-only gate skipped host+posted forever.
+        viewModel.ensureEventBeaconDetail(displayBeacon.id, seed = displayBeacon)
     }
 
     Column(
@@ -1313,7 +1324,8 @@ internal fun EventBeaconDetail(
             EventHeroActions(
                 bookmarked = bookmarked,
                 checkedIn = checkedIn,
-                isCreator = isCreator,
+                isCreator = isCreator ||
+                    (!currentUser?.id.isNullOrBlank() && displayBeacon.createdByUserId == currentUser?.id),
                 onShare = {
                     val shareUrl = buildEventShareUrl(displayBeacon.id)
                     viewModel.recordEventShare(displayBeacon.id, shareUrl = shareUrl)

@@ -564,34 +564,42 @@ class MapViewModel : ViewModel() {
     /**
      * Saved-event bookmarks carry denormalized lat/lng. After null-island cache purge, use them
      * so event pins still paint until proximity returns the same rows.
+     * Only fills **missing** ids / rescues null-island — never replaces a richer proximity row.
      */
     private fun seedEventPinsFromCachedBookmarks(
         bookmarks: List<compose.project.click.click.data.api.EventBookmarkItemDto>,
     ) {
         if (bookmarks.isEmpty()) return
-        val seeds = bookmarks.mapNotNull { bookmark ->
-            val lat = bookmark.latitude ?: return@mapNotNull null
-            val lng = bookmark.longitude ?: return@mapNotNull null
-            if (!lat.isFinite() || !lng.isFinite() || (lat == 0.0 && lng == 0.0)) {
-                return@mapNotNull null
+        _mapBeacons.update { current ->
+            val byId = current.associateBy { it.id }
+            val seeds = bookmarks.mapNotNull { bookmark ->
+                val lat = bookmark.latitude ?: return@mapNotNull null
+                val lng = bookmark.longitude ?: return@mapNotNull null
+                if (!lat.isFinite() || !lng.isFinite() || (lat == 0.0 && lng == 0.0)) {
+                    return@mapNotNull null
+                }
+                val existing = byId[bookmark.beaconId]
+                if (existing != null && existing.hasUsableMapCoordinates()) {
+                    // Already have a real pin — do not overwrite host/posted/creator fields.
+                    return@mapNotNull null
+                }
+                val scheduleRaw = buildJsonObject {
+                    bookmark.title?.takeIf { it.isNotBlank() }?.let { put("title", it) }
+                    bookmark.eventStartAt?.takeIf { it.isNotBlank() }?.let { put("event_start_at", it) }
+                    bookmark.eventEndAt?.takeIf { it.isNotBlank() }?.let { put("event_end_at", it) }
+                }
+                MapBeacon(
+                    id = bookmark.beaconId,
+                    kind = MapBeaconKind.EVENT,
+                    latitude = lat,
+                    longitude = lng,
+                    metadata = parseMapBeaconMetadata(scheduleRaw),
+                    expiresAtEpochMs = bookmark.expiresAt?.let { parseEpochMs(it) },
+                    sourceBeaconType = "event",
+                )
             }
-            val scheduleRaw = buildJsonObject {
-                bookmark.title?.takeIf { it.isNotBlank() }?.let { put("title", it) }
-                bookmark.eventStartAt?.takeIf { it.isNotBlank() }?.let { put("event_start_at", it) }
-                bookmark.eventEndAt?.takeIf { it.isNotBlank() }?.let { put("event_end_at", it) }
-            }
-            MapBeacon(
-                id = bookmark.beaconId,
-                kind = MapBeaconKind.EVENT,
-                latitude = lat,
-                longitude = lng,
-                metadata = parseMapBeaconMetadata(scheduleRaw),
-                expiresAtEpochMs = bookmark.expiresAt?.let { parseEpochMs(it) },
-                sourceBeaconType = "event",
-            )
+            if (seeds.isEmpty()) current else mergeMapBeaconLists(current, seeds)
         }
-        if (seeds.isEmpty()) return
-        _mapBeacons.update { current -> mergeMapBeaconLists(current, seeds) }
     }
 
     private fun markDiscoveryProximityFetchCompleted() {
@@ -1013,44 +1021,88 @@ class MapViewModel : ViewModel() {
         }
     }
 
+    /** Beacon ids that already received a successful detail GET this session. */
+    private val eventDetailHydratedIds = mutableSetOf<String>()
+
     /**
-     * Detail-sheet only: when proximity/cache rows lack schedule metadata, fetch the full beacon
-     * and **patch schedule onto the existing pin** (never replace lat/lng — GET fallback coords
-     * were wiping pins off the local map).
+     * Detail-sheet only: fetch the full beacon when schedule, Posted (`created_at`), or creator
+     * attribution is missing — and at least once per id when the sheet opens, so bookmark /
+     * proximity stubs that already have a schedule still pick up Host + Posted.
+     *
+     * [seed] is required when opening from Home with a synthetic/bookmark beacon that is not yet
+     * in [_mapBeacons] or [MapSelection].
      */
-    fun ensureEventBeaconSchedule(beaconId: String) {
+    fun ensureEventBeaconDetail(beaconId: String, seed: MapBeacon? = null) {
         val id = beaconId.trim()
         if (id.isEmpty()) return
         val current = _mapBeacons.value.firstOrNull { it.id == id }
             ?: (_selection.value as? MapSelection.BeaconSelected)?.beacon?.takeIf { it.id == id }
+            ?: seed?.takeIf { it.id == id && it.kind == MapBeaconKind.EVENT }
             ?: return
         if (current.kind != MapBeaconKind.EVENT) return
-        if (current.eventSchedule() != null) return
+        val needsSchedule = current.eventSchedule() == null
+        val needsPosted = current.createdAtEpochMs == null
+        val needsCreator = current.createdByUserId.isNullOrBlank()
+        val needsHostName = current.creatorDisplayName.isNullOrBlank()
+        val alreadyHydrated = id in eventDetailHydratedIds
+        if (alreadyHydrated && !needsSchedule && !needsPosted && !needsCreator && !needsHostName) {
+            return
+        }
+        // First open always hits the network once so Host / Posted can't stay blank forever.
+        if (alreadyHydrated && !needsSchedule && !needsPosted && !needsCreator) {
+            return
+        }
         viewModelScope.launch(Dispatchers.Default) {
             mapBeaconRepository.fetchBeacon(id).fold(
                 onSuccess = { full ->
-                    val schedule = full.eventSchedule() ?: return@fold
-                    fun MapBeacon.withHydratedSchedule(): MapBeacon = copy(
-                        metadata = metadata.copy(
-                            title = metadata.title ?: full.metadata.title,
-                            description = metadata.description ?: full.metadata.description,
-                            eventCategories = metadata.eventCategories.ifEmpty {
-                                full.metadata.eventCategories
-                            },
-                            raw = mergeEventScheduleIntoRaw(metadata.raw, schedule),
-                        ),
-                        createdAtEpochMs = createdAtEpochMs ?: full.createdAtEpochMs,
-                        expiresAtEpochMs = expiresAtEpochMs ?: full.expiresAtEpochMs,
-                        showCreatorName = showCreatorName || full.showCreatorName,
-                        creatorDisplayName = creatorDisplayName ?: full.creatorDisplayName,
-                    )
-                    _mapBeacons.update { list ->
-                        list.map { b -> if (b.id == id) b.withHydratedSchedule() else b }
+                    fun MapBeacon.withHydratedDetail(): MapBeacon {
+                        val schedule = eventSchedule() ?: full.eventSchedule()
+                        val keepCoords = hasUsableMapCoordinates()
+                        return copy(
+                            latitude = if (keepCoords) latitude else full.latitude,
+                            longitude = if (keepCoords) longitude else full.longitude,
+                            metadata = metadata.copy(
+                                title = metadata.title ?: full.metadata.title,
+                                description = metadata.description ?: full.metadata.description,
+                                eventCategories = metadata.eventCategories.ifEmpty {
+                                    full.metadata.eventCategories
+                                },
+                                raw = if (schedule != null) {
+                                    mergeEventScheduleIntoRaw(metadata.raw, schedule)
+                                } else {
+                                    metadata.raw ?: full.metadata.raw
+                                },
+                            ),
+                            createdByUserId = createdByUserId ?: full.createdByUserId,
+                            createdAtEpochMs = createdAtEpochMs ?: full.createdAtEpochMs,
+                            expiresAtEpochMs = expiresAtEpochMs ?: full.expiresAtEpochMs,
+                            showCreatorName = showCreatorName || full.showCreatorName,
+                            creatorDisplayName = creatorDisplayName ?: full.creatorDisplayName,
+                            sourceBeaconType = sourceBeaconType ?: full.sourceBeaconType,
+                        )
                     }
-                    val patched = _mapBeacons.value.firstOrNull { it.id == id } ?: current.withHydratedSchedule()
+                    _mapBeacons.update { list ->
+                        var found = false
+                        val mapped = list.map { b ->
+                            if (b.id == id) {
+                                found = true
+                                b.withHydratedDetail()
+                            } else {
+                                b
+                            }
+                        }
+                        if (found) {
+                            mapped
+                        } else {
+                            mergeMapBeaconLists(list, listOf(current.withHydratedDetail()))
+                        }
+                    }
+                    val patched = _mapBeacons.value.firstOrNull { it.id == id }
+                        ?: current.withHydratedDetail()
+                    eventDetailHydratedIds += id
                     AppDataManager.mergeCachedMapBeacons(listOf(patched))
-                    val sel = _selection.value as? MapSelection.BeaconSelected ?: return@fold
-                    if (sel.beacon.id == id) {
+                    val sel = _selection.value as? MapSelection.BeaconSelected
+                    if (sel != null && sel.beacon.id == id) {
                         _selection.value = sel.copy(beacon = patched)
                     }
                 },
@@ -1058,6 +1110,9 @@ class MapViewModel : ViewModel() {
             )
         }
     }
+
+    /** @deprecated Use [ensureEventBeaconDetail]. */
+    fun ensureEventBeaconSchedule(beaconId: String) = ensureEventBeaconDetail(beaconId)
 
     /**
      * Pan the camera to [beaconId] and open its detail sheet (Home Featured Event / deep link).

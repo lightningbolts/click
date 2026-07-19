@@ -118,8 +118,8 @@ private fun storedEventScheduleRaw(
 }
 
 /**
- * When [incoming] lost schedule fields (e.g. disk projection), keep [existing]'s event window.
- * Also keep [existing] lat/lng when [this] is null-island (GET location-parse poison).
+ * When merging beacon rows, keep schedule / coords / host / posted metadata that [incoming]
+ * dropped (bookmark seeds, disk projections, partial GET patches).
  */
 internal fun MapBeacon.withPreservedEventScheduleFrom(existing: MapBeacon?): MapBeacon {
     if (existing == null || id != existing.id) return this
@@ -137,27 +137,40 @@ internal fun MapBeacon.withPreservedEventScheduleFrom(existing: MapBeacon?): Map
     val rescuedLat = if (needsCoordRescue) existing.latitude else latitude
     val rescuedLng = if (needsCoordRescue) existing.longitude else longitude
 
-    if (eventSchedule() != null) {
-        return if (needsCoordRescue) copy(latitude = rescuedLat, longitude = rescuedLng) else this
+    val schedule = eventSchedule() ?: existing.eventSchedule()
+    val mergedRaw = if (schedule != null && eventSchedule() == null) {
+        buildJsonObject {
+            metadata.raw?.forEach { (k, v) -> put(k, v) }
+            put("event_start_at", JsonPrimitive(Instant.fromEpochMilliseconds(schedule.startEpochMs).toString()))
+            put("event_end_at", JsonPrimitive(Instant.fromEpochMilliseconds(schedule.endEpochMs).toString()))
+        }
+    } else {
+        metadata.raw
     }
-    val donor = existing.eventSchedule()
-        ?: return if (needsCoordRescue) copy(latitude = rescuedLat, longitude = rescuedLng) else this
-    val baseRaw = metadata.raw
-    val mergedRaw = buildJsonObject {
-        baseRaw?.forEach { (k, v) -> put(k, v) }
-        put("event_start_at", JsonPrimitive(Instant.fromEpochMilliseconds(donor.startEpochMs).toString()))
-        put("event_end_at", JsonPrimitive(Instant.fromEpochMilliseconds(donor.endEpochMs).toString()))
-    }
+
     return copy(
         latitude = rescuedLat,
         longitude = rescuedLng,
         metadata = metadata.copy(
             title = metadata.title ?: existing.metadata.title,
             description = metadata.description ?: existing.metadata.description,
-            raw = mergedRaw,
+            eventCategories = metadata.eventCategories.ifEmpty { existing.metadata.eventCategories },
+            raw = mergedRaw ?: existing.metadata.raw,
         ),
+        createdByUserId = createdByUserId ?: existing.createdByUserId,
         createdAtEpochMs = createdAtEpochMs ?: existing.createdAtEpochMs,
         expiresAtEpochMs = expiresAtEpochMs ?: existing.expiresAtEpochMs,
+        sourceBeaconType = sourceBeaconType ?: existing.sourceBeaconType,
+        showCreatorName = showCreatorName || existing.showCreatorName,
+        creatorDisplayName = creatorDisplayName ?: existing.creatorDisplayName,
+        visibilityAudience = if (
+            visibilityAudience == BeaconVisibilityAudience.EVERYONE &&
+            existing.visibilityAudience != BeaconVisibilityAudience.EVERYONE
+        ) {
+            existing.visibilityAudience
+        } else {
+            visibilityAudience
+        },
     )
 }
 
