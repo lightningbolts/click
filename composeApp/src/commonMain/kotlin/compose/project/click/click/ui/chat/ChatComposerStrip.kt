@@ -1,15 +1,12 @@
 package compose.project.click.click.ui.chat
 
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,7 +19,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -55,22 +51,20 @@ import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.ui.theme.clickBorderColor
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 internal fun chatComposerCanSubmit(
     value: String,
     enabled: Boolean,
-    externallySending: Boolean,
     submitGuarded: Boolean,
-): Boolean = enabled && value.isNotBlank() && !externallySending && !submitGuarded
+): Boolean = enabled && value.isNotBlank() && !submitGuarded
 
 /**
  * Shared text/attach/send row for connection and hub chat.
  *
- * [submitGuarded] bridges the frame between a tap and the ViewModel's sending state update, so a
- * double tap cannot enqueue the same draft twice. The field pulse is visual only: [onSend] still
- * runs synchronously, preserving optimistic append and cache behavior.
+ * Send stays an icon — never a progress spinner. [submitGuarded] only blocks a double-tap on the
+ * same draft for one frame; the ViewModel clears input synchronously so the next message can be
+ * typed immediately (iMessage / Instagram style).
  */
 @Composable
 internal fun ChatComposerStrip(
@@ -104,12 +98,12 @@ internal fun ChatComposerStrip(
     val fieldInteraction = remember { MutableInteractionSource() }
     val focusRequester = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
-    val fieldPulse = remember { Animatable(1f) }
+    val sendPress = remember { Animatable(1f) }
     var submitGuarded by remember { mutableStateOf(false) }
 
-    LaunchedEffect(externallySending, submitGuarded) {
-        if (submitGuarded && !externallySending) {
-            delay(180)
+    // Release the one-frame double-tap guard once the draft has cleared (optimistic send).
+    LaunchedEffect(value, submitGuarded) {
+        if (submitGuarded && value.isBlank()) {
             submitGuarded = false
             focusRequester.requestFocus()
         }
@@ -118,10 +112,8 @@ internal fun ChatComposerStrip(
     val canSend = chatComposerCanSubmit(
         value = value,
         enabled = enabled,
-        externallySending = externallySending,
         submitGuarded = submitGuarded,
     )
-    val showSending = externallySending || submitGuarded
     val textStyle = MaterialTheme.typography.bodyMedium.merge(
         TextStyle(
             lineHeightStyle = LineHeightStyle(
@@ -132,6 +124,7 @@ internal fun ChatComposerStrip(
     )
     val fieldColors = rememberChatComposerFieldColors()
     val innerVerticalPad = ((auxButtonSize - 24.dp) / 2).coerceIn(6.dp, 12.dp)
+    val attachDimmed = !enabled || externallySending
 
     Box(
         modifier = modifier
@@ -146,11 +139,7 @@ internal fun ChatComposerStrip(
                 .padding(start = fieldSideInset, end = fieldSideInset)
                 .heightIn(min = auxButtonSize)
                 .align(Alignment.BottomCenter)
-                .focusRequester(focusRequester)
-                .graphicsLayer {
-                    alpha = fieldPulse.value
-                    scaleX = 0.985f + (0.015f * fieldPulse.value)
-                },
+                .focusRequester(focusRequester),
             enabled = enabled,
             textStyle = textStyle.merge(TextStyle(color = MaterialTheme.colorScheme.onSurface)),
             keyboardOptions = KeyboardOptions(
@@ -202,7 +191,7 @@ internal fun ChatComposerStrip(
             onExpandedChange = onAttachmentMenuExpandedChange,
             anchorSize = auxButtonSize,
             anchorInteraction = attachInteraction,
-            anchorEnabled = enabled && !showSending,
+            anchorEnabled = !attachDimmed,
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .zIndex(4f)
@@ -220,7 +209,7 @@ internal fun ChatComposerStrip(
                     Icon(
                         Icons.Filled.Add,
                         contentDescription = "Attach",
-                        tint = attachTint.copy(alpha = if (enabled && !showSending) 1f else 0.35f),
+                        tint = attachTint.copy(alpha = if (attachDimmed) 0.35f else 1f),
                         modifier = Modifier.size(attachIconSize),
                     )
                 }
@@ -234,9 +223,14 @@ internal fun ChatComposerStrip(
                 .size(auxButtonSize)
                 .zIndex(4f)
                 .focusProperties { canFocus = false }
+                .graphicsLayer {
+                    val s = sendPress.value
+                    scaleX = s
+                    scaleY = s
+                }
                 .chatSpringPressScale(sendInteraction)
                 .clip(sendShape)
-                .background(if (canSend || showSending) PrimaryBlue else MaterialTheme.colorScheme.surfaceVariant)
+                .background(if (canSend) PrimaryBlue else MaterialTheme.colorScheme.surfaceVariant)
                 .border(2.dp, clickBorderColor(), sendShape)
                 .clickable(
                     interactionSource = sendInteraction,
@@ -247,40 +241,29 @@ internal fun ChatComposerStrip(
                         PlatformHapticsPolicy.lightImpact()
                         onSend()
                         scope.launch {
-                            fieldPulse.snapTo(0.62f)
-                            fieldPulse.animateTo(
+                            sendPress.snapTo(0.88f)
+                            sendPress.animateTo(
                                 targetValue = 1f,
-                                animationSpec = tween(170, easing = FastOutSlowInEasing),
+                                animationSpec = spring(
+                                    dampingRatio = 0.62f,
+                                    stiffness = 900f,
+                                ),
                             )
                         }
                     },
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            Crossfade(
-                targetState = showSending,
-                animationSpec = tween(120),
-                label = "chatSendState",
-            ) { sending ->
-                if (sending) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(sendIconSize),
-                        strokeWidth = 2.dp,
-                        color = Color.White,
-                    )
+            Icon(
+                sendIcon,
+                contentDescription = sendContentDescription,
+                tint = if (canSend) {
+                    Color.White
                 } else {
-                    Icon(
-                        sendIcon,
-                        contentDescription = sendContentDescription,
-                        tint = if (canSend) {
-                            Color.White
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-                        },
-                        modifier = Modifier.size(sendIconSize),
-                    )
-                }
-            }
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+                },
+                modifier = Modifier.size(sendIconSize),
+            )
         }
     }
 }

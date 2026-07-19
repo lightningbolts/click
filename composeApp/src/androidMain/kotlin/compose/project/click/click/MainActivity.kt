@@ -45,6 +45,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        unlockHighestRefreshRate()
 
         MapsInitializer.initialize(applicationContext)
 
@@ -178,6 +179,24 @@ class MainActivity : ComponentActivity() {
             ACTION_ACCEPT_CALL -> CallSessionManager.receiveIncomingPush(invite, autoAnswer = true)
             ACTION_DECLINE_CALL -> CallSessionManager.receiveIncomingPush(invite, autoDecline = true)
             ACTION_VIEW_CALL -> CallSessionManager.receiveIncomingPush(invite)
+        }
+    }
+
+    /**
+     * Prefer the display's highest refresh mode (90/120Hz) so Compose scroll/animation
+     * is not stuck on the default 60Hz mode many OEMs leave unset until requested.
+     */
+    private fun unlockHighestRefreshRate() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        val display = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            display
+        } else {
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay
+        } ?: return
+        val best = display.supportedModes.maxByOrNull { it.refreshRate } ?: return
+        window.attributes = window.attributes.apply {
+            preferredDisplayModeId = best.modeId
         }
     }
 

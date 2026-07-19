@@ -16,18 +16,16 @@ class ChatInteractionPolicyTest {
     }
 
     @Test
-    fun composerSubmitPolicyRejectsBlankDisabledSendingAndGuardedStates() {
+    fun composerSubmitPolicyRejectsBlankDisabledAndGuardedStates() {
         assertTrue(
             chatComposerCanSubmit(
                 value = "hello",
                 enabled = true,
-                externallySending = false,
                 submitGuarded = false,
             ),
         )
-        assertFalse(chatComposerCanSubmit("   ", true, false, false))
-        assertFalse(chatComposerCanSubmit("hello", false, false, false))
-        assertFalse(chatComposerCanSubmit("hello", true, true, false))
-        assertFalse(chatComposerCanSubmit("hello", true, false, true))
+        assertFalse(chatComposerCanSubmit("   ", true, false))
+        assertFalse(chatComposerCanSubmit("hello", false, false))
+        assertFalse(chatComposerCanSubmit("hello", true, true))
     }
 }

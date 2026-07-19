@@ -10,11 +10,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.text.style.TextOverflow
@@ -110,11 +108,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.text.AnnotatedString
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
-import compose.project.click.click.getPlatform // pragma: allowlist secret
 import compose.project.click.click.calls.CallSessionManager // pragma: allowlist secret
 import compose.project.click.click.data.ActiveHubEntry // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
@@ -778,7 +774,7 @@ fun ConnectionsListView(
                     .fillMaxWidth()
                     .then(headerMeasureModifier),
             ) {
-                ConnectionsFloatingHeader(
+                    ConnectionsFloatingHeader(
                     collapseFraction = collapseFraction,
                     title = "Clicks",
                     subtitle = headerSubtitle.takeIf { it.isNotBlank() },
@@ -789,6 +785,7 @@ fun ConnectionsListView(
                     archivedCount = archivedCount,
                     showTabs = effectiveChats.isNotEmpty(),
                     onOpenSearch = onOpenSearch,
+                    isScrollInProgress = connectionsLazyListState.isScrollInProgress,
                 )
             }
         }
@@ -1303,30 +1300,16 @@ private fun ActiveHubFeedRow(
     onOpenMenu: () -> Unit,
     onLongPress: () -> Unit,
 ) {
-    val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
     val rowInteraction = remember { MutableInteractionSource() }
-    val pressed by rowInteraction.collectIsPressedAsState()
-    val rowTapModifier = if (isIOS) {
-        Modifier.pointerInput(onClick, onLongPress) {
-            detectTapGestures(
-                onTap = { onClick() },
-                onLongPress = {
-                    PlatformHapticsPolicy.heavyImpact()
-                    onLongPress()
-                },
-            )
-        }
-    } else {
-        Modifier.combinedClickable(
-            interactionSource = rowInteraction,
-            indication = null,
-            onClick = onClick,
-            onLongClick = {
-                PlatformHapticsPolicy.heavyImpact()
-                onLongPress()
-            },
-        )
-    }
+    val rowTapModifier = Modifier.combinedClickable(
+        interactionSource = rowInteraction,
+        indication = null,
+        onClick = onClick,
+        onLongClick = {
+            PlatformHapticsPolicy.heavyImpact()
+            onLongPress()
+        },
+    )
 
     Row(
         modifier = Modifier

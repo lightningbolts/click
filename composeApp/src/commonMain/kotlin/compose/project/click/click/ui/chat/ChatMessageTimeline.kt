@@ -19,9 +19,12 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.MessageReaction
@@ -29,6 +32,7 @@ import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState
 import compose.project.click.click.viewmodel.SecureChatMediaHost
 import kotlinx.coroutines.delay
+import kotlin.math.abs
 
 internal fun chatTimelineShouldFollowInbound(
     firstVisibleItemIndex: Int,
@@ -55,6 +59,43 @@ internal suspend fun scrollChatTimelineToLatest(
             return
         }
         delay(16)
+    }
+}
+
+/**
+ * Dismiss IME only after the user's fling has finished.
+ *
+ * Clearing focus (and shrinking keyboard insets / timeline padding) mid-drag or mid-coast
+ * resizes the LazyColumn while velocity is still applied — that is what made chat scroll
+ * feel like it abruptly stopped. Mark dismiss during drag; run it in [onPostFling].
+ */
+internal fun chatDismissKeyboardAfterScrollConnection(
+    thresholdPx: Float,
+    isSuppressed: () -> Boolean,
+    onDismiss: () -> Unit,
+): NestedScrollConnection = object : NestedScrollConnection {
+    private var dismissAfterFling = false
+
+    override fun onPostScroll(
+        consumed: Offset,
+        available: Offset,
+        source: NestedScrollSource,
+    ): Offset {
+        if (isSuppressed()) return Offset.Zero
+        if (source == NestedScrollSource.UserInput && abs(consumed.y) > thresholdPx) {
+            dismissAfterFling = true
+        }
+        return Offset.Zero
+    }
+
+    override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+        if (dismissAfterFling && !isSuppressed()) {
+            dismissAfterFling = false
+            onDismiss()
+        } else {
+            dismissAfterFling = false
+        }
+        return Velocity.Zero
     }
 }
 
@@ -192,9 +233,15 @@ internal fun ChatMessageTimeline(
                                 if (isCallLog) {
                                     bubble()
                                 } else {
+                                    val stabilityKey = chatBubbleStableRowKey(messageWithUser)
+                                    // Optimistic outbound only — layout-stable pop-in. Never animate
+                                    // recycled history rows (that kills LazyColumn fling coast).
+                                    val isOptimisticOutbound = messageWithUser.isSent &&
+                                        messageWithUser.message.id.startsWith("temp-")
                                     AnimatedVisibilityChatBubble(
-                                        bubbleStabilityKey = chatBubbleStableRowKey(messageWithUser),
+                                        bubbleStabilityKey = stabilityKey,
                                         isSent = messageWithUser.isSent,
+                                        animateEnter = isOptimisticOutbound,
                                         content = bubble,
                                     )
                                 }

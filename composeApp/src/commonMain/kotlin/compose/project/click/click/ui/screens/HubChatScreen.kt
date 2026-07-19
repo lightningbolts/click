@@ -14,9 +14,6 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -92,6 +89,7 @@ import compose.project.click.click.ui.chat.ChatLiquidGlassPlate // pragma: allow
 import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimelineShouldFollowInbound // pragma: allowlist secret
 import compose.project.click.click.ui.chat.scrollChatTimelineToLatest // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatDismissKeyboardAfterScrollConnection // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatSpringPressScale // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatInterMessageHubBaseCompact // pragma: allowlist secret
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
@@ -191,21 +189,11 @@ fun HubChatScreen(
     val suppressKeyboardDismissWhileProgrammaticTimelineScroll = remember { mutableStateOf(false) }
     val keyboardDismissScrollThresholdPx = remember(density) { with(density) { 16.dp.toPx() } }
     val dismissKeyboardOnUserMessageScroll = remember(keyboardDismissScrollThresholdPx) {
-        object : NestedScrollConnection {
-            override fun onPostScroll(
-                consumed: Offset,
-                available: Offset,
-                source: NestedScrollSource,
-            ): Offset {
-                if (suppressKeyboardDismissWhileProgrammaticTimelineScroll.value) return Offset.Zero
-                if (source == NestedScrollSource.UserInput &&
-                    kotlin.math.abs(consumed.y) > keyboardDismissScrollThresholdPx
-                ) {
-                    focusManagerState.value.clearFocus()
-                }
-                return Offset.Zero
-            }
-        }
+        chatDismissKeyboardAfterScrollConnection(
+            thresholdPx = keyboardDismissScrollThresholdPx,
+            isSuppressed = { suppressKeyboardDismissWhileProgrammaticTimelineScroll.value },
+            onDismiss = { focusManagerState.value.clearFocus() },
+        )
     }
 
     val initialTimelineScrollDone = remember(args.realtimeChannel) { mutableStateOf(false) }
