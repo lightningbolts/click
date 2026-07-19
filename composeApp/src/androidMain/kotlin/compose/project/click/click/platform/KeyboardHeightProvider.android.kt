@@ -16,5 +16,9 @@ actual class KeyboardHeightProvider actual constructor() {
 
     actual fun syncFromSystem() = Unit
 
+    actual fun setComposerLiftListener(
+        listener: ((heightPoints: Float, durationMs: Int, curve: Int) -> Unit)?,
+    ) = Unit
+
     actual fun dispose() = Unit
 }

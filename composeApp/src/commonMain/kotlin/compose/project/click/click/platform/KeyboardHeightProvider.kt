@@ -13,6 +13,13 @@ expect class KeyboardHeightProvider() {
     /** Re-read the live keyboard overlap — call when a chat thread becomes active. */
     fun syncFromSystem()
 
+    /**
+     * Optional synchronous lift hook. Invoked on the main queue from the keyboard
+     * notification **before** StateFlow subscribers run — use this to drive composer
+     * translation without Flow/collect lag.
+     */
+    fun setComposerLiftListener(listener: ((heightPoints: Float, durationMs: Int, curve: Int) -> Unit)?)
+
     fun dispose()
 }
 

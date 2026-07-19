@@ -64,7 +64,8 @@ actual fun PlatformBottomBar(
         targetValue = if (visible) 1f else 0f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMedium,
+            // Fast snap — a long spring made the bar feel like it remounted on chat back.
+            stiffness = Spring.StiffnessHigh,
         ),
         label = "bottom_bar_visibility",
     )

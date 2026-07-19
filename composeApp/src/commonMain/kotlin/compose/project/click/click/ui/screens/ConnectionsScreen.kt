@@ -98,15 +98,12 @@ fun ConnectionsScreen(
 
     fun finalizeChatClose(leaveChatClearsMessageSurface: Boolean = true) {
         viewModel.leaveChatRoom(clearMessageSurface = leaveChatClearsMessageSurface)
-        // Forced reload clears local inbox caches and can repaint the list; skip that on the iOS
-        // gesture-dismiss path where we already avoided flashing the message surface.
-        viewModel.loadChats(isForced = false)
+        // Do not loadChats here — refreshing the inbox on the same frame as the tab bar
+        // fade-in makes the chrome look like it remounted.
         iosChatSwipeDragPx.floatValue = 0f
         iosChatSwipeBehindLayers = false
         iosChatRightToLeftPeek = null
         onChatDismissed?.invoke()
-        // Restore tab bar / bottom chrome only after settle — same frame as leaveChatRoom used to
-        // jump LazyColumn padding and look like a full inbox recompose.
         onChatOpenStateChanged(false)
     }
 

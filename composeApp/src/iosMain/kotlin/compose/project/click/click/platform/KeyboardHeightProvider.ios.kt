@@ -43,6 +43,8 @@ actual class KeyboardHeightProvider actual constructor() {
     private val _animationCurve = MutableStateFlow(latestAnimationCurve)
     actual val animationCurve: StateFlow<Int> = _animationCurve.asStateFlow()
 
+    private var composerLiftListener: ((heightPoints: Float, durationMs: Int, curve: Int) -> Unit)? = null
+
     private var willChangeFrameObserver: Any? = null
     private var willHideObserver: Any? = null
     private var didHideObserver: Any? = null
@@ -56,7 +58,7 @@ actual class KeyboardHeightProvider actual constructor() {
             queue = NSOperationQueue.mainQueue,
         ) { notification: NSNotification? ->
             notification.keyboardOverlapHeight()?.let { overlap ->
-                updateAnimation(notification)
+                applyAnimationParams(notification)
                 updateHeight(overlap)
             }
         }
@@ -66,23 +68,20 @@ actual class KeyboardHeightProvider actual constructor() {
             `object` = null,
             queue = NSOperationQueue.mainQueue,
         ) { notification: NSNotification? ->
-            updateAnimation(notification)
+            applyAnimationParams(notification)
             updateHeight(0f)
         }
 
-        // A rapid responder change can interrupt a will-hide transition. Did-hide is the
-        // authoritative terminal state and prevents a partially animated residual lift.
         didHideObserver = notificationCenter.addObserverForName(
             name = UIKeyboardDidHideNotification,
             `object` = null,
             queue = NSOperationQueue.mainQueue,
         ) {
+            latestAnimationDurationMillis = 0
+            _animationDurationMillis.value = 0
             updateHeight(0f)
         }
 
-        // UIKit removes the keyboard while the scene is backgrounded without guaranteeing the
-        // matching frame/hide notification. Clear the cached state before a call or multitask
-        // return so the first resumed frame cannot inherit a stale gap.
         didEnterBackgroundObserver = notificationCenter.addObserverForName(
             name = UIApplicationDidEnterBackgroundNotification,
             `object` = null,
@@ -100,8 +99,15 @@ actual class KeyboardHeightProvider actual constructor() {
         _keyboardHeight.value = latestKeyboardHeight
     }
 
+    actual fun setComposerLiftListener(
+        listener: ((heightPoints: Float, durationMs: Int, curve: Int) -> Unit)?,
+    ) {
+        composerLiftListener = listener
+    }
+
     actual fun dispose() {
         if (disposed) return
+        composerLiftListener = null
         willChangeFrameObserver?.let { notificationCenter.removeObserver(it) }
         willChangeFrameObserver = null
         willHideObserver?.let { notificationCenter.removeObserver(it) }
@@ -113,7 +119,7 @@ actual class KeyboardHeightProvider actual constructor() {
         disposed = true
     }
 
-    private fun updateAnimation(notification: NSNotification?) {
+    private fun applyAnimationParams(notification: NSNotification?) {
         latestAnimationDurationMillis = notification.animationDurationMillis()
         latestAnimationCurve = notification.animationCurve()
         _animationDurationMillis.value = latestAnimationDurationMillis
@@ -123,6 +129,12 @@ actual class KeyboardHeightProvider actual constructor() {
     private fun updateHeight(height: Float) {
         latestKeyboardHeight = height.coerceAtLeast(0f)
         _keyboardHeight.value = latestKeyboardHeight
+        // Synchronous main-queue callback — composer lift must start in this turn, not after Flow.
+        composerLiftListener?.invoke(
+            latestKeyboardHeight,
+            latestAnimationDurationMillis,
+            latestAnimationCurve,
+        )
     }
 }
 
@@ -134,9 +146,6 @@ private fun NSNotification?.keyboardOverlapHeight(): Float? {
         origin.y to (origin.y + size.height)
     }
 
-    // Floating/undocked keyboards do not occlude the bottom composer. Treating their frame top
-    // as a bottom inset creates a large false gap. A one-point tolerance absorbs coordinate
-    // rounding at the docked screen edge.
     val touchesBottomEdge = frameBottom >= screenHeight - 1.0
     return if (touchesBottomEdge) {
         (screenHeight - frameTop).coerceAtLeast(0.0).toFloat()

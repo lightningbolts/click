@@ -37,6 +37,7 @@ import kotlinx.datetime.Instant
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.util.LruMemoryCache
 import compose.project.click.click.util.redactedRestMessage
+import compose.project.click.click.utils.softBlurredForLockedDrop
 import compose.project.click.click.utils.toImageBitmap
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState
 
@@ -48,6 +49,7 @@ private val chatPhotoAttachmentShape = RoundedCornerShape(16.dp)
  */
 
 private const val SECURE_CHAT_IMAGE_BITMAP_CACHE_MAX_ENTRIES = 220
+private const val LOCKED_DROP_BLUR_CACHE_MAX_ENTRIES = 80
 
 /**
  * Process-wide cache of decoded secure-chat image bitmaps keyed by
@@ -56,6 +58,17 @@ private const val SECURE_CHAT_IMAGE_BITMAP_CACHE_MAX_ENTRIES = 220
  */
 internal val secureChatImageBitmapCache: LruMemoryCache<String, ImageBitmap> =
     LruMemoryCache(SECURE_CHAT_IMAGE_BITMAP_CACHE_MAX_ENTRIES)
+
+/** Static pre-blurred locked Drop bitmaps — never use live Modifier.blur while swiping. */
+private val lockedDropBlurBitmapCache: LruMemoryCache<String, ImageBitmap> =
+    LruMemoryCache(LOCKED_DROP_BLUR_CACHE_MAX_ENTRIES)
+
+private fun lockedDropDisplayBitmap(messageId: String, source: ImageBitmap): ImageBitmap {
+    lockedDropBlurBitmapCache.get(messageId)?.let { return it }
+    val blurred = runCatching { source.softBlurredForLockedDrop() }.getOrDefault(source)
+    lockedDropBlurBitmapCache.put(messageId, blurred)
+    return blurred
+}
 
 /**
  * Renders the photo portion of a chat message bubble, routing between
@@ -149,7 +162,11 @@ internal fun ChatBubblePhotoContent(
         when {
             bitmap != null -> {
                 PhotoBitmapContent(
-                    bitmap = bitmap,
+                    bitmap = if (rollLocked) {
+                        remember(message.id, bitmap) { lockedDropDisplayBitmap(message.id, bitmap) }
+                    } else {
+                        bitmap
+                    },
                     rollLocked = rollLocked,
                     countdownLabel = countdownLabel,
                     borderIfReceived = borderIfReceived,
@@ -190,10 +207,10 @@ internal fun ChatBubblePhotoContent(
                                 },
                             )
                             .clip(chatPhotoAttachmentShape)
-                            // No Modifier.blur — realtime blur during swipe/layout flickers hard.
+                            // No live Modifier.blur — flickers hard under reply/back translation.
                             .then(
                                 if (rollLocked) {
-                                    Modifier.graphicsLayer { alpha = 0.42f }
+                                    Modifier.graphicsLayer { alpha = 0.55f }
                                 } else {
                                     Modifier
                                 },
@@ -204,7 +221,7 @@ internal fun ChatBubblePhotoContent(
                             modifier = Modifier
                                 .matchParentSize()
                                 .clip(RoundedCornerShape(chatBubbleScaledDp(24f)))
-                                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.40f)),
+                                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.48f)),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
@@ -268,10 +285,10 @@ private fun PhotoBitmapContent(
                     },
                 )
                 .clip(chatPhotoAttachmentShape)
-                // No Modifier.blur — realtime blur during swipe/layout flickers hard.
                 .then(
                     if (rollLocked) {
-                        Modifier.graphicsLayer { alpha = 0.42f }
+                        // Bitmap is already pre-blurred; only dim — no live RenderEffect.
+                        Modifier.graphicsLayer { alpha = 0.92f }
                     } else {
                         Modifier
                     },
@@ -282,7 +299,7 @@ private fun PhotoBitmapContent(
                 modifier = Modifier
                     .matchParentSize()
                     .clip(chatPhotoAttachmentShape)
-                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.40f)),
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.42f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(

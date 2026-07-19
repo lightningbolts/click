@@ -65,10 +65,11 @@ actual fun PlatformBottomBar(
         }
     }
 
-    SideEffect {
+    // Appearance is theme-only. Re-applying UITabBarAppearance on every chat-close recomposition
+    // remounts Liquid Glass and looks like the whole nav bar restarted.
+    LaunchedEffect(isDarkMode, reduceTransparency, usesNativeLiquidGlass, viewController) {
         val clear = UIColor.clearColor
         val selectedColor = if (isDarkMode) {
-            // NeonPurple #D2BBFF — readable over dark page content and distinctly Click.
             UIColor.colorWithRed(0xD2 / 255.0, green = 0xBB / 255.0, blue = 0xFF / 255.0, alpha = 1.0)
         } else {
             UIColor.colorWithRed(0x63 / 255.0, green = 0x0E / 255.0, blue = 0xD4 / 255.0, alpha = 1.0)
@@ -89,7 +90,6 @@ actual fun PlatformBottomBar(
             UIColor.colorWithRed(0xF9 / 255.0, green = 0xF9 / 255.0, blue = 0xF9 / 255.0, alpha = 0.96)
         }
 
-        // Match page BackgroundDark so any uncovered gap is not pure black.
         viewController.view.backgroundColor = if (isDarkMode) {
             UIColor.colorWithRed(0x10 / 255.0, green = 0x12 / 255.0, blue = 0x12 / 255.0, alpha = 1.0)
         } else {
@@ -101,8 +101,6 @@ actual fun PlatformBottomBar(
         tabBar.setTranslucent(true)
 
         if (!usesNativeLiquidGlass) {
-            // iOS 13–25: system material samples the Compose-backed UIView below this native bar.
-            // The low-alpha Click tint keeps content continuity while avoiding a stock gray material.
             tabBar.barTintColor = clear
             tabBar.backgroundColor = clear
             tabBar.backgroundImage = UIImage()
@@ -121,7 +119,6 @@ actual fun PlatformBottomBar(
             tabBar.standardAppearance = appearance
             tabBar.scrollEdgeAppearance = appearance
         }
-        // iOS 26+: leave UIBarAppearance untouched so UIKit supplies native Liquid Glass.
     }
 
     val delegate = remember {
@@ -145,7 +142,11 @@ actual fun PlatformBottomBar(
 
     LaunchedEffect(tabBar) { tabBar.delegate = delegate }
 
-    LaunchedEffect(items, currentRoute, isDarkMode) {
+    // Item identity only — route selection is a SideEffect below (no setItems flash).
+    val itemSignature = remember(items) {
+        items.joinToString("|") { "${it.route}:${it.title}:${it.sfSymbol}" }
+    }
+    LaunchedEffect(itemSignature, isDarkMode) {
         val selectedColor = if (isDarkMode) {
             UIColor.colorWithRed(0xD2 / 255.0, green = 0xBB / 255.0, blue = 0xFF / 255.0, alpha = 1.0)
         } else {
@@ -154,7 +155,6 @@ actual fun PlatformBottomBar(
         val uiItems = items.mapIndexed { index, navItem ->
             val symbol = UIImage.systemImageNamed(navItem.sfSymbol)
             val image = if (navItem.route == NavigationItem.AddClick.route) {
-                // Opaque filled glyph — avoids washed-out template rendering through glass.
                 symbol?.imageWithTintColor(
                     selectedColor,
                     renderingMode = platform.UIKit.UIImageRenderingMode.UIImageRenderingModeAlwaysOriginal,
@@ -169,42 +169,47 @@ actual fun PlatformBottomBar(
             )
         }
         tabBar.setItems(uiItems)
-        val selectedIdx = items.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
+        val selectedIdx = items.indexOfFirst { it.route == currentRouteState }.coerceAtLeast(0)
         uiItems.getOrNull(selectedIdx)?.let { tabBar.selectedItem = it }
+    }
+
+    SideEffect {
+        val selectedIdx = currentItems.indexOfFirst { it.route == currentRouteState }.coerceAtLeast(0)
+        val nativeItems = tabBar.items
+        if (nativeItems != null && selectedIdx < nativeItems.size.toInt()) {
+            val item = nativeItems[selectedIdx] as? UITabBarItem
+            if (item != null && tabBar.selectedItem !== item) {
+                tabBar.selectedItem = item
+            }
+        }
+        // Alpha only — never hidden=, never appearance reset on chat open/close.
+        tabBar.hidden = false
+        tabBar.alpha = if (visible) 1.0 else 0.0
+        tabBar.userInteractionEnabled = visible
     }
 
     DisposableEffect(tabBar, viewController) {
         viewController.view.addSubview(tabBar)
-        // Pin to the absolute bottom so Compose paints continuously under icons + home indicator.
         NSLayoutConstraint.activateConstraints(
             listOf(
                 tabBar.leadingAnchor.constraintEqualToAnchor(viewController.view.leadingAnchor),
                 tabBar.trailingAnchor.constraintEqualToAnchor(viewController.view.trailingAnchor),
                 tabBar.bottomAnchor.constraintEqualToAnchor(viewController.view.bottomAnchor),
-            )
+            ),
         )
         onDispose { tabBar.removeFromSuperview() }
     }
 
-    SideEffect {
-        tabBar.hidden = !visible
-        tabBar.alpha = if (visible) 1.0 else 0.0
-        tabBar.userInteractionEnabled = visible
-    }
-
-    // Never shrink chrome height while hidden — keeps Connections list padding stable and
-    // avoids a remount flash when the bar fades back in after chat.
+    // Measure once on attach — do not restart when `visible` flips (that recomposed the
+    // connections list chrome padding and looked like a nav remount).
     var topLeft by remember { mutableStateOf(DpOffset.Zero) }
     var positionInRoot by remember { mutableStateOf(DpOffset.Zero) }
     var tabBarWidth by remember { mutableStateOf(0.dp) }
     var tabBarHeight by remember { mutableStateOf(AppScreenDefaults.IosTabBarContentHeight) }
     var lastClearance by remember { mutableStateOf(AppScreenDefaults.IosTabBarContentHeight) }
 
-    LaunchedEffect(visible, tabBar) {
-        if (!visible) {
-            AppScreenChromeState.updateBottomChromeHeight(lastClearance)
-            return@LaunchedEffect
-        }
+    LaunchedEffect(tabBar) {
+        AppScreenChromeState.updateBottomChromeHeight(lastClearance)
         var stable = 0
         while (true) {
             val viewHeightPx = viewController.view.bounds.useContents { size.height }
