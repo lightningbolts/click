@@ -76,31 +76,46 @@ actual object PlatformIncomingCallUi {
     actual fun dismissIncomingCall(callId: String, reason: String?) {
         val context = AndroidCallRuntime.appContext() ?: return
         NotificationManagerCompat.from(context).cancel(notificationId(callId))
+        stopVibration(context)
     }
 
     private fun notificationId(callId: String): Int = callId.hashCode()
 
     private fun triggerVibration(context: Context) {
         try {
+            // One-shot pattern only — repeat index 0 loops forever and was never cancelled on dismiss.
+            val pattern = longArrayOf(0, 1000, 500, 1000, 500, 1000)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
                 vibratorManager?.defaultVibrator?.vibrate(
-                    VibrationEffect.createWaveform(longArrayOf(0, 1000, 500, 1000, 500, 1000), 0)
+                    VibrationEffect.createWaveform(pattern, /* repeat= */ -1)
                 )
             } else {
                 @Suppress("DEPRECATION")
                 val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-                val pattern = longArrayOf(0, 1000, 500, 1000, 500, 1000)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator?.vibrate(
-                        VibrationEffect.createWaveform(pattern, 0)
-                    )
+                    vibrator?.vibrate(VibrationEffect.createWaveform(pattern, -1))
                 } else {
-                    vibrator?.vibrate(pattern, 0)
+                    vibrator?.vibrate(pattern, -1)
                 }
             }
         } catch (e: Exception) {
             Log.w(TAG, "Unable to start vibration: ${e.message}")
+        }
+    }
+
+    private fun stopVibration(context: Context) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                vibratorManager?.defaultVibrator?.cancel()
+            } else {
+                @Suppress("DEPRECATION")
+                val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                vibrator?.cancel()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to stop vibration: ${e.message}")
         }
     }
 

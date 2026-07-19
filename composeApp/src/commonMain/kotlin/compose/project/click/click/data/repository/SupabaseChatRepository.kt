@@ -19,13 +19,15 @@ import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.Presence
+import io.github.jan.supabase.realtime.Realtime
+import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.broadcast
 import io.github.jan.supabase.realtime.broadcastFlow
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import io.github.jan.supabase.realtime.decodeRecord
+import io.github.jan.supabase.realtime.realtime
 import io.github.jan.supabase.realtime.track
-import io.github.jan.supabase.realtime.RealtimeChannel
 import compose.project.click.click.data.AppDataManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -121,6 +123,7 @@ class SupabaseChatRepository(
 
     private val globalPresenceMutex = Mutex()
     private var globalPresenceSession: GlobalPresenceSession? = null
+    private var presenceReconnectJob: Job? = null
     private val _onlineUsers = MutableStateFlow<Set<String>>(emptySet())
     override val onlineUsers: StateFlow<Set<String>> = _onlineUsers.asStateFlow()
     private val _presenceHealth = MutableStateFlow(PresenceHealth.Idle)
@@ -162,14 +165,7 @@ class SupabaseChatRepository(
     private suspend fun disposeGlobalPresenceSession(session: GlobalPresenceSession) {
         session.jobs.forEach { it.cancel() }
         session.scope.cancel()
-        try {
-            session.channel.untrack()
-        } catch (_: Exception) {
-        }
-        try {
-            session.channel.unsubscribe()
-        } catch (_: Exception) {
-        }
+        runCatching { supabase.realtime.removeChannel(session.channel) }
     }
 
     @Serializable
@@ -197,8 +193,7 @@ class SupabaseChatRepository(
     private suspend fun disposeEphemeralSession(session: ChatEphemeralSession) {
         session.jobs.forEach { it.cancel() }
         session.scope.cancel()
-        runCatching { session.channel.untrack() }
-        runCatching { session.channel.unsubscribe() }
+        runCatching { supabase.realtime.removeChannel(session.channel) }
     }
 
     override suspend fun startGlobalPresence(userId: String) {
@@ -252,6 +247,7 @@ class SupabaseChatRepository(
                     _presenceHealth.value = PresenceHealth.Degraded
                     presenceJob.cancel()
                     scope.cancel()
+                    runCatching { supabase.realtime.removeChannel(channel) }
                     return@withLock
                 }
                 channel.track(buildJsonObject { put("userId", userId) })
@@ -261,12 +257,19 @@ class SupabaseChatRepository(
                 _presenceHealth.value = PresenceHealth.Degraded
                 presenceJob.cancel()
                 scope.cancel()
+                runCatching { supabase.realtime.removeChannel(channel) }
                 return@withLock
             }
 
             val presenceRefreshJob = scope.launch {
                 while (isActive) {
                     delay(PRESENCE_TRACK_REFRESH_MS)
+                    if (
+                        supabase.realtime.status.value != Realtime.Status.CONNECTED ||
+                        channel.status.value != RealtimeChannel.Status.SUBSCRIBED
+                    ) {
+                        continue
+                    }
                     runCatching {
                         channel.track(buildJsonObject { put("userId", userId) })
                     }
@@ -280,9 +283,48 @@ class SupabaseChatRepository(
                 jobs = listOf(presenceJob, presenceRefreshJob),
             )
         }
+        watchPresenceRealtimeReconnect(userId)
+    }
+
+    private fun watchPresenceRealtimeReconnect(userId: String) {
+        if (presenceReconnectJob?.isActive == true) return
+        presenceReconnectJob = CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+            var everConnected = false
+            var lostConnection = false
+            supabase.realtime.status.collect { status ->
+                when (status) {
+                    Realtime.Status.DISCONNECTED,
+                    Realtime.Status.CONNECTING,
+                    -> {
+                        if (everConnected) lostConnection = true
+                    }
+
+                    Realtime.Status.CONNECTED -> {
+                        if (lostConnection) {
+                            lostConnection = false
+                            delay(750)
+                            val session = globalPresenceMutex.withLock { globalPresenceSession }
+                            if (session == null || session.trackedUserId != userId) {
+                                everConnected = true
+                                return@collect
+                            }
+                            println("ChatRepository: Realtime reconnected — refreshing global presence")
+                            globalPresenceMutex.withLock {
+                                globalPresenceSession?.let { disposeGlobalPresenceSession(it) }
+                                globalPresenceSession = null
+                            }
+                            startGlobalPresence(userId)
+                        }
+                        everConnected = true
+                    }
+                }
+            }
+        }
     }
 
     override suspend fun stopGlobalPresence() {
+        presenceReconnectJob?.cancel()
+        presenceReconnectJob = null
         globalPresenceMutex.withLock {
             val session = globalPresenceSession ?: return@withLock
             globalPresenceSession = null
@@ -1921,7 +1963,7 @@ class SupabaseChatRepository(
         suspend fun abandonJoin() {
             presenceJob.cancel()
             scope.cancel()
-            runCatching { channel.unsubscribe() }
+            runCatching { supabase.realtime.removeChannel(channel) }
         }
 
         try {
@@ -1958,6 +2000,12 @@ class SupabaseChatRepository(
         val presenceRefreshJob = scope.launch {
             while (isActive) {
                 delay(PRESENCE_TRACK_REFRESH_MS)
+                if (
+                    supabase.realtime.status.value != Realtime.Status.CONNECTED ||
+                    channel.status.value != RealtimeChannel.Status.SUBSCRIBED
+                ) {
+                    continue
+                }
                 runCatching {
                     channel.track(buildJsonObject { put("userId", currentUserId) })
                 }

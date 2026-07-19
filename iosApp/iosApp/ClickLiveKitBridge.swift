@@ -255,6 +255,7 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
                 "cameraEnabled": cameraEnabled,
                 "localVideoAvailable": currentLocalVideoTrack() != nil,
                 "remoteVideoAvailable": currentRemoteVideoTrack() != nil,
+                "hasRemoteParticipant": !(room?.remoteParticipants.isEmpty ?? true),
             ]
         )
     }

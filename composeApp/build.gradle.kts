@@ -96,8 +96,8 @@ kotlin {
             implementation("jp.co.cyberagent.android:gpuimage:2.1.0")
             implementation("io.livekit:livekit-android:2.20.3")
 
-            // Ktor Android engine
-            implementation("io.ktor:ktor-client-android:3.0.1")
+            // Ktor OkHttp engine (WebSocket-capable; required for Supabase Realtime)
+            implementation("io.ktor:ktor-client-okhttp:3.0.1")
 
             // Security crypto for encrypted shared preferences
             implementation("androidx.security:security-crypto:1.1.0-alpha06")

@@ -6,7 +6,6 @@ import android.content.Context.AUDIO_SERVICE
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioManager
-import android.view.View
 import androidx.core.content.ContextCompat
 import io.livekit.android.ConnectOptions
 import io.livekit.android.LiveKit
@@ -15,6 +14,7 @@ import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
 import io.livekit.android.renderer.TextureViewRenderer
 import io.livekit.android.room.Room
+import io.livekit.android.room.track.RemoteTrackPublication
 import io.livekit.android.room.track.Track
 import io.livekit.android.room.track.VideoTrack
 import kotlinx.coroutines.CoroutineScope
@@ -42,11 +42,14 @@ internal object AndroidCallRuntime {
     private var pendingCallStart: PendingCallStart? = null
     private var onPermissionGranted: ((PendingCallStart) -> Unit)? = null
     private var onPermissionDenied: (() -> Unit)? = null
+    private var deferredStart: PendingCallStart? = null
+    private var onDeferredStartReady: ((PendingCallStart) -> Unit)? = null
 
     fun init(context: Context, activity: Activity? = null) {
         applicationContext = context.applicationContext
         if (activity != null) {
             currentActivityRef = WeakReference(activity)
+            tryFlushDeferredStart()
         }
     }
 
@@ -56,6 +59,9 @@ internal object AndroidCallRuntime {
 
     fun registerPermissionRequester(requester: ((Array<String>) -> Unit)?) {
         permissionRequester = requester
+        if (requester != null) {
+            tryFlushDeferredStart()
+        }
     }
 
     fun requestCallPermissions(
@@ -68,11 +74,25 @@ internal object AndroidCallRuntime {
         if (requester == null) {
             return false
         }
+        clearDeferredStart()
         pendingCallStart = pending
         onPermissionGranted = onGranted
         onPermissionDenied = onDenied
         requester(permissions)
         return true
+    }
+
+    /**
+     * Keeps a start queued while [MainActivity] is not yet able to request permissions.
+     * Flushed from [init] / [registerPermissionRequester] when the Activity Result launcher is ready.
+     */
+    fun deferStartUntilRequesterReady(
+        pending: PendingCallStart,
+        onReady: (PendingCallStart) -> Unit,
+    ) {
+        deferredStart = pending
+        onDeferredStartReady = onReady
+        tryFlushDeferredStart()
     }
 
     fun handlePermissionResult(allGranted: Boolean) {
@@ -91,6 +111,20 @@ internal object AndroidCallRuntime {
         pendingCallStart = null
         onPermissionGranted = null
         onPermissionDenied = null
+        clearDeferredStart()
+    }
+
+    private fun clearDeferredStart() {
+        deferredStart = null
+        onDeferredStartReady = null
+    }
+
+    private fun tryFlushDeferredStart() {
+        if (permissionRequester == null) return
+        val pending = deferredStart ?: return
+        val onReady = onDeferredStartReady ?: return
+        clearDeferredStart()
+        onReady(pending)
     }
 }
 
@@ -105,14 +139,15 @@ actual class CallManager {
     private var speakerEnabled = false
     private var cameraEnabled = false
     private var videoRequested = false
-    private val rendererBindings = linkedMapOf<TextureViewRenderer, Boolean>()
-    private val attachedTracks = linkedMapOf<TextureViewRenderer, VideoTrack?>()
+    /** True once a remote participant has joined — used to end the call when they leave. */
+    private var hadRemoteParticipant = false
+    private val localVideoListeners = mutableListOf<(VideoTrack?) -> Unit>()
+    private val remoteVideoListeners = mutableListOf<(VideoTrack?) -> Unit>()
 
     actual fun startCall(roomName: String, token: String, wsUrl: String, videoEnabled: Boolean) {
         val context = AndroidCallRuntime.appContext()
-        val activity = AndroidCallRuntime.currentActivity()
-        if (context == null || activity == null) {
-            _callState.value = CallState.Ended("Call context unavailable")
+        if (context == null) {
+            markEndedAndDeferIdle("Call context unavailable")
             return
         }
 
@@ -122,7 +157,7 @@ actual class CallManager {
         }
 
         val missingPermissions = requiredPermissions.filter { permission ->
-            ContextCompat.checkSelfPermission(activity, permission) != PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED
         }
 
         if (missingPermissions.isNotEmpty()) {
@@ -132,24 +167,26 @@ actual class CallManager {
                 wsUrl = wsUrl,
                 videoEnabled = videoEnabled,
             )
+            val resumeStart: (PendingCallStart) -> Unit = { granted ->
+                startCall(
+                    roomName = granted.roomName,
+                    token = granted.token,
+                    wsUrl = granted.wsUrl,
+                    videoEnabled = granted.videoEnabled,
+                )
+            }
             _callState.value = CallState.Connecting(videoRequested = videoEnabled)
             val requested = AndroidCallRuntime.requestCallPermissions(
                 permissions = missingPermissions.toTypedArray(),
                 pending = pending,
-                onGranted = { granted ->
-                    startCall(
-                        roomName = granted.roomName,
-                        token = granted.token,
-                        wsUrl = granted.wsUrl,
-                        videoEnabled = granted.videoEnabled,
-                    )
-                },
+                onGranted = resumeStart,
                 onDenied = {
-                    _callState.value = CallState.Ended("Camera or microphone permission required")
+                    markEndedAndDeferIdle("Camera or microphone permission required")
                 },
             )
             if (!requested) {
-                _callState.value = CallState.Ended("Camera or microphone permission required")
+                // Keep Connecting; retry when MainActivity registers the permission launcher.
+                AndroidCallRuntime.deferStartUntilRequesterReady(pending, resumeStart)
             }
             return
         }
@@ -168,8 +205,10 @@ actual class CallManager {
         val liveKitRoom = LiveKit.create(
             appContext = context,
             options = RoomOptions(
-                adaptiveStream = true,
-                dynacast = true,
+                // Keep both off for 1:1 calls. adaptiveStream+dynacast can pause layers when
+                // Compose TextureViewRenderer visibility is flaky, which looks like "no remote video".
+                adaptiveStream = false,
+                dynacast = false,
             ),
         )
         room = liveKitRoom
@@ -177,11 +216,36 @@ actual class CallManager {
         eventsJob = scope.launch {
             liveKitRoom.events.collect { event ->
                 when (event) {
+                    is RoomEvent.Connected,
                     is RoomEvent.TrackSubscribed,
                     is RoomEvent.TrackUnsubscribed,
+                    is RoomEvent.TrackPublished,
+                    is RoomEvent.TrackUnpublished,
+                    is RoomEvent.TrackMuted,
+                    is RoomEvent.TrackUnmuted,
+                    is RoomEvent.LocalTrackSubscribed,
+                    is RoomEvent.TrackStreamStateChanged,
+                    is RoomEvent.TrackSubscriptionPermissionChanged,
                     is RoomEvent.ParticipantConnected,
-                    is RoomEvent.ParticipantDisconnected,
                     is RoomEvent.Reconnected,
+                    -> syncStateFromRoom()
+
+                    is RoomEvent.ParticipantDisconnected -> {
+                        syncStateFromRoom()
+                        // 1:1: when the other party leaves the room, end locally even if Realtime cancel was missed.
+                        if (
+                            hadRemoteParticipant &&
+                            liveKitRoom.remoteParticipants.isEmpty() &&
+                            room === liveKitRoom
+                        ) {
+                            hadRemoteParticipant = false
+                            cleanupRoom(releaseState = false)
+                            markEndedAndDeferIdle("Call ended")
+                        }
+                    }
+
+                    is RoomEvent.TrackSubscriptionFailed,
+                    is RoomEvent.TrackPublicationFailed,
                     -> syncStateFromRoom()
 
                     is RoomEvent.Reconnecting -> {
@@ -190,8 +254,8 @@ actual class CallManager {
 
                     is RoomEvent.Disconnected -> {
                         cleanupRoom(releaseState = false)
-                        _callState.value = CallState.Ended(
-                            event.reason.name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
+                        markEndedAndDeferIdle(
+                            event.reason.name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() },
                         )
                     }
 
@@ -207,14 +271,38 @@ actual class CallManager {
                     token = token,
                     options = ConnectOptions(autoSubscribe = true),
                 )
-                liveKitRoom.localParticipant.setMicrophoneEnabled(true)
+                val micOk = liveKitRoom.localParticipant.setMicrophoneEnabled(true)
+                if (!micOk) {
+                    cleanupRoom(releaseState = false)
+                    markEndedAndDeferIdle("Unable to enable microphone")
+                    return@launch
+                }
+                microphoneEnabled = true
+
                 if (videoEnabled) {
-                    liveKitRoom.localParticipant.setCameraEnabled(true)
+                    val cameraOk = ensureCameraEnabled(liveKitRoom)
+                    if (!cameraOk) {
+                        // Stay in-call on audio so the session is usable; peer will keep
+                        // "Waiting for remote video" until camera can be enabled later.
+                        println("CallManager: camera failed to publish after connect")
+                    }
+                    cameraEnabled = cameraOk
                 }
                 syncStateFromRoom()
+
+                if (videoEnabled) {
+                    // Publication can lag the boolean success; retry once if no local track yet.
+                    delay(500)
+                    if (room === liveKitRoom &&
+                        liveKitRoom.localParticipant.getTrackPublication(Track.Source.CAMERA)?.track == null
+                    ) {
+                        ensureCameraEnabled(liveKitRoom)
+                        syncStateFromRoom()
+                    }
+                }
             } catch (error: Throwable) {
                 cleanupRoom(releaseState = false)
-                _callState.value = CallState.Ended(error.message ?: "Unable to connect call")
+                markEndedAndDeferIdle(error.message ?: "Unable to connect call")
             }
         }
     }
@@ -223,7 +311,11 @@ actual class CallManager {
         val activeRoom = room ?: return
         scope.launch(Dispatchers.IO) {
             try {
-                activeRoom.localParticipant.setMicrophoneEnabled(enabled)
+                val ok = activeRoom.localParticipant.setMicrophoneEnabled(enabled)
+                if (!ok) {
+                    _callState.value = CallState.Ended("Unable to update microphone")
+                    return@launch
+                }
                 microphoneEnabled = enabled
                 syncStateFromRoom()
             } catch (error: Throwable) {
@@ -242,8 +334,16 @@ actual class CallManager {
         val activeRoom = room ?: return
         scope.launch(Dispatchers.IO) {
             try {
-                activeRoom.localParticipant.setCameraEnabled(enabled)
-                videoRequested = enabled
+                val ok = if (enabled) {
+                    ensureCameraEnabled(activeRoom)
+                } else {
+                    activeRoom.localParticipant.setCameraEnabled(false)
+                }
+                if (!ok) {
+                    _callState.value = CallState.Ended("Unable to update camera")
+                    return@launch
+                }
+                videoRequested = videoRequested || enabled
                 cameraEnabled = enabled
                 syncStateFromRoom()
             } catch (error: Throwable) {
@@ -253,10 +353,18 @@ actual class CallManager {
     }
 
     actual fun endCall() {
-        deferIdleAfterEndJob?.cancel()
         AndroidCallRuntime.clearPendingPermissionRequest()
         cleanupRoom()
-        _callState.value = CallState.Ended("Call ended")
+        markEndedAndDeferIdle("Call ended", clearPending = false)
+    }
+
+    /** Failed starts and hang-up: briefly show Ended, then Idle so the next invite is not stuck busy. */
+    private fun markEndedAndDeferIdle(reason: String, clearPending: Boolean = true) {
+        if (clearPending) {
+            AndroidCallRuntime.clearPendingPermissionRequest()
+        }
+        deferIdleAfterEndJob?.cancel()
+        _callState.value = CallState.Ended(reason)
         deferIdleAfterEndJob = scope.launch {
             delay(420)
             deferIdleAfterEndJob = null
@@ -266,25 +374,53 @@ actual class CallManager {
         }
     }
 
-    internal fun bindRenderer(renderer: TextureViewRenderer, isLocal: Boolean) {
-        rendererBindings[renderer] = isLocal
-        room?.initVideoRenderer(renderer)
-        syncRenderer(renderer, isLocal)
+    internal fun initRenderer(renderer: TextureViewRenderer): Boolean {
+        val activeRoom = room ?: return false
+        activeRoom.initVideoRenderer(renderer)
+        return true
     }
 
-    internal fun unbindRenderer(renderer: TextureViewRenderer) {
-        attachedTracks.remove(renderer)?.removeRenderer(renderer)
-        rendererBindings.remove(renderer)
+    internal fun currentVideoTrack(isLocal: Boolean): VideoTrack? {
+        val activeRoom = room ?: return null
+        return if (isLocal) {
+            activeRoom.localParticipant.getTrackPublication(Track.Source.CAMERA)?.track as? VideoTrack
+        } else {
+            currentRemoteVideoTrack(activeRoom)
+        }
+    }
+
+    internal fun addVideoTrackListener(isLocal: Boolean, listener: (VideoTrack?) -> Unit) {
+        val list = if (isLocal) localVideoListeners else remoteVideoListeners
+        list.add(listener)
+        listener(currentVideoTrack(isLocal))
+    }
+
+    internal fun removeVideoTrackListener(isLocal: Boolean, listener: (VideoTrack?) -> Unit) {
+        val list = if (isLocal) localVideoListeners else remoteVideoListeners
+        list.remove(listener)
+    }
+
+    private fun notifyVideoTrackListeners() {
+        val local = currentVideoTrack(isLocal = true)
+        val remote = currentVideoTrack(isLocal = false)
+        localVideoListeners.toList().forEach { it(local) }
+        remoteVideoListeners.toList().forEach { it(remote) }
     }
 
     private fun syncStateFromRoom() {
+        if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
+            scope.launch { syncStateFromRoom() }
+            return
+        }
         val activeRoom = room ?: return
-        val localTrack = activeRoom.localParticipant
-            .getTrackPublication(Track.Source.CAMERA)
-            ?.track as? VideoTrack
-        val remoteTrack = currentRemoteVideoTrack(activeRoom)
+        ensureRemoteVideoSubscribed(activeRoom)
+        val localTrack = currentVideoTrack(isLocal = true)
+        val remoteTrack = currentVideoTrack(isLocal = false)
 
         cameraEnabled = localTrack != null && videoRequested
+        if (activeRoom.remoteParticipants.isNotEmpty()) {
+            hadRemoteParticipant = true
+        }
         _callState.value = CallState.Connected(
             videoRequested = videoRequested,
             microphoneEnabled = microphoneEnabled,
@@ -292,60 +428,60 @@ actual class CallManager {
             cameraEnabled = cameraEnabled,
             remoteVideoAvailable = remoteTrack != null,
             localVideoAvailable = localTrack != null,
+            hasRemoteParticipant = activeRoom.remoteParticipants.isNotEmpty(),
         )
+        notifyVideoTrackListeners()
+    }
 
-        scope.launch {
-            rendererBindings.forEach { (renderer, isLocal) ->
-                syncRenderer(renderer, isLocal)
+    private fun currentRemoteVideoTrack(activeRoom: Room): VideoTrack? {
+        for (participant in activeRoom.remoteParticipants.values) {
+            for (publication in participant.trackPublications.values) {
+                if (publication.kind != Track.Kind.VIDEO) continue
+                val remotePub = publication as? RemoteTrackPublication
+                if (remotePub != null && !remotePub.subscribed) {
+                    remotePub.setSubscribed(true)
+                }
+                val track = publication.track as? VideoTrack ?: continue
+                if (!publication.muted) return track
+            }
+            for (publication in participant.trackPublications.values) {
+                if (publication.kind != Track.Kind.VIDEO) continue
+                val track = publication.track as? VideoTrack
+                if (track != null) return track
+            }
+        }
+        return null
+    }
+
+    private fun ensureRemoteVideoSubscribed(activeRoom: Room) {
+        for (participant in activeRoom.remoteParticipants.values) {
+            for (publication in participant.trackPublications.values) {
+                if (publication.kind != Track.Kind.VIDEO) continue
+                val remotePub = publication as? RemoteTrackPublication ?: continue
+                if (!remotePub.subscribed) {
+                    remotePub.setSubscribed(true)
+                }
             }
         }
     }
 
-    private fun syncRenderer(renderer: TextureViewRenderer, isLocal: Boolean) {
-        val activeRoom = room
-        if (activeRoom == null) {
-            attachedTracks.remove(renderer)?.removeRenderer(renderer)
-            renderer.visibility = View.INVISIBLE
-            return
+    private suspend fun ensureCameraEnabled(activeRoom: Room): Boolean {
+        if (activeRoom.localParticipant.setCameraEnabled(true)) {
+            return true
         }
-
-        val targetTrack = if (isLocal) {
-            activeRoom.localParticipant.getTrackPublication(Track.Source.CAMERA)?.track as? VideoTrack
-        } else {
-            currentRemoteVideoTrack(activeRoom)
-        }
-
-        val currentTrack = attachedTracks[renderer]
-        if (currentTrack !== targetTrack) {
-            currentTrack?.removeRenderer(renderer)
-            targetTrack?.addRenderer(renderer)
-            attachedTracks[renderer] = targetTrack
-        }
-
-        renderer.visibility = if (targetTrack != null) View.VISIBLE else View.INVISIBLE
-        if (isLocal) {
-            renderer.setMirror(true)
-        }
-    }
-
-    private fun currentRemoteVideoTrack(activeRoom: Room): VideoTrack? {
-        val participant = activeRoom.remoteParticipants.values.firstOrNull() ?: return null
-        return participant.getTrackPublication(Track.Source.CAMERA)?.track as? VideoTrack
-            ?: participant.getTrackPublication(Track.Source.SCREEN_SHARE)?.track as? VideoTrack
+        delay(350)
+        return activeRoom.localParticipant.setCameraEnabled(true)
     }
 
     private fun cleanupRoom(releaseState: Boolean = true) {
         eventsJob?.cancel()
         eventsJob = null
-
-        attachedTracks.forEach { (renderer, track) ->
-            track?.removeRenderer(renderer)
-            renderer.visibility = View.INVISIBLE
-        }
-        attachedTracks.clear()
+        hadRemoteParticipant = false
 
         val activeRoom = room
         room = null
+        notifyVideoTrackListeners()
+
         if (activeRoom != null) {
             try {
                 activeRoom.disconnect()
@@ -357,12 +493,14 @@ actual class CallManager {
             }
         }
 
+        // Always leave telephony/VoIP audio mode so the next incoming ToneGenerator ring is audible.
+        updateAudioRoute(false, reset = true)
+
         if (releaseState) {
             microphoneEnabled = true
             speakerEnabled = false
             cameraEnabled = false
             videoRequested = false
-            updateAudioRoute(false, reset = true)
         }
     }
 

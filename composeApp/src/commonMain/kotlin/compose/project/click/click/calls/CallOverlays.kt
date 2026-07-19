@@ -60,7 +60,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.getPlatform
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.ui.components.StateCardTransition
 import compose.project.click.click.ui.components.rememberWaitingPulse
@@ -288,7 +287,6 @@ fun ActiveCallOverlay(
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val hasRemoteVideo = (state as? CallState.Connected)?.remoteVideoAvailable == true
     val hasLocalVideo = (state as? CallState.Connected)?.localVideoAvailable == true
-    val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
     val density = LocalDensity.current
     var dragOffsetX by remember { mutableFloatStateOf(0f) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
@@ -319,8 +317,8 @@ fun ActiveCallOverlay(
             label = "active_call_drag_y",
         )
 
-        StateCardTransition(visible = true) {
-            Surface(
+        // No Surface/clip/fade around video: TextureViewRenderer goes black when clipped or under alpha.
+        Box(
             modifier = Modifier
                 .widthIn(max = 380.dp)
                 .fillMaxWidth(0.94f)
@@ -354,12 +352,9 @@ fun ActiveCallOverlay(
                                 .coerceIn(0f, maxVerticalOffset)
                         },
                     )
-                },
-            shape = RoundedCornerShape(28.dp),
-            color = BackgroundDark,
-            border = androidx.compose.foundation.BorderStroke(1.dp, BorderHardDark),
-            tonalElevation = 0.dp,
-            shadowElevation = 0.dp,
+                }
+                .background(BackgroundDark, RoundedCornerShape(28.dp))
+                .border(1.dp, BorderHardDark, RoundedCornerShape(28.dp)),
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
@@ -385,13 +380,13 @@ fun ActiveCallOverlay(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 if (isVideoCall) {
+                    // Avoid Modifier.clip around TextureViewRenderer — clipped TextureViews render black on Android.
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 180.dp)
                             .aspectRatio(1.2f)
-                            .clip(RoundedCornerShape(28.dp))
-                            .background(SurfaceDark)
+                            .background(SurfaceDark, RoundedCornerShape(28.dp))
                             .border(1.dp, BorderHardDark, RoundedCornerShape(28.dp)),
                         contentAlignment = Alignment.Center
                     ) {
@@ -403,7 +398,7 @@ fun ActiveCallOverlay(
 
                         if (!hasRemoteVideo) {
                             Text(
-                                text = if (isIOS) "Waiting for remote video…" else "Waiting for remote video…",
+                                text = "Waiting for remote video…",
                                 color = Color.White.copy(alpha = 0.7f),
                                 style = MaterialTheme.typography.bodyMedium,
                                 textAlign = TextAlign.Center,
@@ -416,8 +411,7 @@ fun ActiveCallOverlay(
                                 .align(Alignment.BottomEnd)
                                 .padding(12.dp)
                                 .size(width = 96.dp, height = 136.dp)
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(SurfaceDark)
+                                .background(SurfaceDark, RoundedCornerShape(20.dp))
                                 .border(1.dp, BorderHardDark, RoundedCornerShape(20.dp)),
                             contentAlignment = Alignment.Center
                         ) {
@@ -546,7 +540,6 @@ fun ActiveCallOverlay(
                         )
                     }
                 }
-            }
             }
         }
     }

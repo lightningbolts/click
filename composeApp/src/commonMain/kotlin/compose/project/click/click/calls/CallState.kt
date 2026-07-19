@@ -10,6 +10,8 @@ sealed class CallState {
         val cameraEnabled: Boolean,
         val remoteVideoAvailable: Boolean,
         val localVideoAvailable: Boolean,
+        /** True once at least one remote participant is in the LiveKit room (audio and/or video). */
+        val hasRemoteParticipant: Boolean = false,
     ) : CallState() {
         val hasVideo: Boolean
             get() = cameraEnabled || remoteVideoAvailable || localVideoAvailable

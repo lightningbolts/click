@@ -99,9 +99,9 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
 
             message.toIncomingCallInvite()?.let { invite ->
                 PlatformIncomingCallUi.showIncomingCall(invite)
-                if (AndroidPushNotificationRuntime.isAppInForeground()) {
-                    compose.project.click.click.calls.CallSessionManager.receiveIncomingPush(invite)
-                }
+                // Always seed session state (not only foreground). Admission policy dedupes
+                // FCM + Realtime dual delivery so this is safe when the app is backgrounded.
+                compose.project.click.click.calls.CallSessionManager.receiveIncomingPush(invite)
             }
             return
         }

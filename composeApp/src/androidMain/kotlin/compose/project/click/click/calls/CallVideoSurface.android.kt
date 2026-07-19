@@ -1,44 +1,73 @@
 package compose.project.click.click.calls
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.viewinterop.AndroidView
 import io.livekit.android.renderer.TextureViewRenderer
+import io.livekit.android.room.track.VideoTrack
 
+/**
+ * Renders a LiveKit [VideoTrack]. Creates a fresh [TextureViewRenderer] per track instance so
+ * EGL init + addRenderer always happen together (avoids black panes from stale/released views).
+ */
 @Composable
 actual fun CallVideoSurface(
     callManager: CallManager,
     isLocal: Boolean,
     modifier: Modifier,
 ) {
-    var renderer by remember { mutableStateOf<TextureViewRenderer?>(null) }
+    var track by remember(callManager, isLocal) { mutableStateOf<VideoTrack?>(null) }
 
-    AndroidView(
-        modifier = modifier,
-        factory = { context ->
-            TextureViewRenderer(context).also { view ->
-                renderer = view
-                callManager.bindRenderer(view, isLocal)
-            }
-        },
-        update = { view ->
-            renderer = view
-            callManager.bindRenderer(view, isLocal)
-        },
-    )
+    DisposableEffect(callManager, isLocal) {
+        val listener: (VideoTrack?) -> Unit = { track = it }
+        callManager.addVideoTrackListener(isLocal, listener)
+        onDispose { callManager.removeVideoTrackListener(isLocal, listener) }
+    }
 
-    DisposableEffect(callManager, renderer) {
-        val activeRenderer = renderer
-        onDispose {
-            if (activeRenderer != null) {
-                callManager.unbindRenderer(activeRenderer)
-                activeRenderer.release()
-            }
-        }
+    val activeTrack = track
+    if (activeTrack == null) {
+        Box(modifier = modifier.background(Color.Black))
+        return
+    }
+
+    key(activeTrack) {
+        AndroidView(
+            modifier = modifier,
+            factory = { context ->
+                TextureViewRenderer(context).apply {
+                    isOpaque = true
+                    val initialized = callManager.initRenderer(this)
+                    if (initialized) {
+                        setMirror(isLocal)
+                        activeTrack.addRenderer(this)
+                        tag = activeTrack
+                    }
+                }
+            },
+            update = { view ->
+                val bound = view.tag as? VideoTrack
+                if (bound !== activeTrack) {
+                    bound?.removeRenderer(view)
+                    activeTrack.addRenderer(view)
+                    view.tag = activeTrack
+                    view.setMirror(isLocal)
+                }
+            },
+            onRelease = { view ->
+                val bound = view.tag as? VideoTrack
+                bound?.removeRenderer(view)
+                view.tag = null
+                runCatching { view.release() }
+            },
+        )
     }
 }

@@ -5,10 +5,12 @@ import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.repository.SupabaseChatRepository
 import compose.project.click.click.data.storage.createTokenStorage
+import io.github.jan.supabase.realtime.Realtime
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.broadcast
 import io.github.jan.supabase.realtime.broadcastFlow
 import io.github.jan.supabase.realtime.channel
+import io.github.jan.supabase.realtime.realtime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -19,6 +21,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
@@ -106,6 +110,7 @@ object CallSessionManager {
     private var cancelJob: Job? = null
     private var connectedJob: Job? = null
     private var timeoutJob: Job? = null
+    private var realtimeWatchJob: Job? = null
 
     private var currentUserId: String? = null
     private var currentUserName: String? = null
@@ -139,52 +144,102 @@ object CallSessionManager {
     /** Ensures we only insert one `completed` call_log per connected session. */
     private var completedCallLogInserted: Boolean = false
 
+    /** Avoids parallel token fetch / LiveKit start from response + repeated "connected" signals. */
+    private val joinMutex = Mutex()
+    private var joinStartedCallId: String? = null
+
+    /** Peer "connected" broadcast must fire once per call, not on every Connected state refresh. */
+    private var roomConnectedNotifiedCallId: String? = null
+
+    /** Set when callee accepts via Realtime; lets early-joined callers leave ringback before peer is in-room. */
+    private var acceptedOutgoingCallId: String? = null
+
     private var previousCallState: CallState = CallState.Idle
     private var previousOverlayState: CallOverlayState = CallOverlayState.Idle
 
+    /** When true, [CallState.Ended] must not replace a deliberate Idle overlay (user cancel while ringing). */
+    private var suppressEndedOverlay: Boolean = false
+
     init {
         scope.launch {
-            callState.collectLatest { state ->
+            // Use collect (not collectLatest): rapid Connecting/Connected/Ended churn must not
+            // cancel mid-handler and leave the preview overlay stuck on Outgoing.
+            callState.collect { state ->
                 val overlayBeforeUpdate = _overlayState.value
                 when (state) {
+                    is CallState.Connecting -> {
+                        // Early-join while still Outgoing: keep ringback + "Starting … ring" UI.
+                        if (overlayBeforeUpdate !is CallOverlayState.Outgoing) {
+                            CallRingtonePlayer.stop()
+                        }
+                    }
+
                     is CallState.Connected -> {
-                        if (previousCallState !is CallState.Connected) {
-                            PlatformHapticsPolicy.lightImpact()
-                            callConnectedAtMs = Clock.System.now().toEpochMilliseconds()
-                            completedCallLogInserted = false
-                        }
-                        CallRingtonePlayer.stop()
-                        activeInviteValue?.let { invite ->
-                            PlatformIncomingCallUi.dismissIncomingCall(invite.callId)
-                            notifyPeerRoomConnected(invite)
-                        }
-                        if (_overlayState.value is CallOverlayState.Connecting ||
-                            _overlayState.value is CallOverlayState.Outgoing
-                        ) {
-                            _overlayState.value = CallOverlayState.Idle
+                        val invite = activeInviteValue
+                        val waitingForAnswer =
+                            overlayBeforeUpdate is CallOverlayState.Outgoing &&
+                                !state.hasRemoteParticipant &&
+                                (invite == null || acceptedOutgoingCallId != invite.callId)
+                        val firstConnected = firstConnectedTransition(previousCallState)
+
+                        if (waitingForAnswer) {
+                            // Caller early-joined and is alone — keep ringback, signal readiness.
+                            if (firstConnected && invite != null) {
+                                notifyPeerRoomConnected(invite)
+                            }
+                        } else {
+                            if (firstConnected || callConnectedAtMs == null) {
+                                if (firstConnected) {
+                                    PlatformHapticsPolicy.lightImpact()
+                                }
+                                callConnectedAtMs = Clock.System.now().toEpochMilliseconds()
+                                completedCallLogInserted = false
+                            }
+                            CallRingtonePlayer.stop()
+                            invite?.let { active ->
+                                PlatformIncomingCallUi.dismissIncomingCall(active.callId)
+                                if (firstConnected) {
+                                    notifyPeerRoomConnected(active)
+                                }
+                            }
+                            if (_overlayState.value is CallOverlayState.Connecting ||
+                                _overlayState.value is CallOverlayState.Outgoing
+                            ) {
+                                _overlayState.value = CallOverlayState.Idle
+                            }
                         }
                     }
 
                     is CallState.Ended -> {
                         tryInsertCompletedCallLog()
-                        CallRingtonePlayer.stop()
-                        activeInviteValue?.let { invite ->
-                            PlatformIncomingCallUi.dismissIncomingCall(invite.callId, state.reason)
-                        }
-                        if (
-                            CallOverlayTransitionPolicy.shouldPresentCallEndedOverlay(
-                                previousCallState = previousCallState,
-                                overlayState = overlayBeforeUpdate,
-                            )
-                        ) {
-                            _overlayState.value = CallOverlayState.Ended(
-                                activeInviteValue,
-                                state.reason ?: "Call ended",
-                            )
+                        // A newer invite can be admitted while callState is still Ended (before Idle).
+                        // Do not stop that ring or overwrite its Incoming overlay.
+                        val overlayNow = _overlayState.value
+                        if (overlayNow is CallOverlayState.Incoming) {
+                            resetJoinGuards()
+                        } else {
+                            CallRingtonePlayer.stop()
+                            activeInviteValue?.let { invite ->
+                                PlatformIncomingCallUi.dismissIncomingCall(invite.callId, state.reason)
+                            }
+                            if (
+                                !suppressEndedOverlay &&
+                                CallOverlayTransitionPolicy.shouldPresentCallEndedOverlay(
+                                    previousCallState = previousCallState,
+                                    overlayState = overlayBeforeUpdate,
+                                )
+                            ) {
+                                _overlayState.value = CallOverlayState.Ended(
+                                    activeInviteValue,
+                                    state.reason ?: "Call ended",
+                                )
+                            }
+                            resetJoinGuards()
                         }
                     }
 
                     CallState.Idle -> {
+                        suppressEndedOverlay = false
                         if (previousCallState is CallState.Connected) {
                             tryInsertCompletedCallLog()
                         }
@@ -195,16 +250,24 @@ object CallSessionManager {
                         ) {
                             activeInviteValue = null
                         }
-                    }
-
-                    else -> {
-                        CallRingtonePlayer.stop()
+                        if (previousCallState is CallState.Ended || previousCallState is CallState.Connected) {
+                            resetJoinGuards()
+                        }
                     }
                 }
                 previousCallState = state
                 previousOverlayState = _overlayState.value
             }
         }
+    }
+
+    private fun firstConnectedTransition(previous: CallState): Boolean =
+        previous !is CallState.Connected
+
+    private fun resetJoinGuards() {
+        joinStartedCallId = null
+        roomConnectedNotifiedCallId = null
+        acceptedOutgoingCallId = null
     }
 
     /**
@@ -277,6 +340,7 @@ object CallSessionManager {
         clearSubscriptions()
         currentUserId = userId
         subscribeToIncoming(userId)
+        watchRealtimeConnection(userId)
         processPendingSystemInviteIfPossible()
     }
 
@@ -328,6 +392,10 @@ object CallSessionManager {
         scope.launch {
             callPushNotifier.notifyIncomingCall(invite)
                 .onFailure { println("CallSessionManager: Failed to dispatch incoming call push: ${it.message}") }
+        }
+        // Join LiveKit while ringing so accept does not depend solely on Realtime "response".
+        scope.launch {
+            joinCall(invite)
         }
 
         timeoutJob?.cancel()
@@ -412,6 +480,9 @@ object CallSessionManager {
                     }
             }
         }
+        scope.launch {
+            joinCall(invite)
+        }
 
         timeoutJob?.cancel()
         timeoutJob = scope.launch {
@@ -452,6 +523,7 @@ object CallSessionManager {
         }
         activeInviteValue = null
         _overlayState.value = CallOverlayState.Idle
+        cleanupAfterCall()
     }
 
     fun cancelCurrentCall(notifyPeer: Boolean = true) {
@@ -477,6 +549,8 @@ object CallSessionManager {
         if (invite != null) {
             PlatformIncomingCallUi.dismissIncomingCall(invite.callId)
         }
+        suppressEndedOverlay = true
+        internalCallManager.endCall()
         activeInviteValue = null
         _overlayState.value = CallOverlayState.Idle
         cleanupAfterCall()
@@ -520,31 +594,42 @@ object CallSessionManager {
             else -> pendingSystemAction
         }
 
-        val activeInvite = activeInviteValue
-        if (activeInvite?.callId == invite.callId) {
-            processPendingSystemInviteIfPossible()
-            return
-        }
-
         val userId = resolvedCurrentUserId()
         if (userId != null && invite.calleeId != userId) {
             return
         }
 
-        if (_overlayState.value !is CallOverlayState.Idle || callState.value !is CallState.Idle) {
-            scope.launch {
-                sendResponse(invite, accepted = false, busy = true)
+        when (
+            CallInviteAdmissionPolicy.decide(
+                invite = invite,
+                activeInvite = activeInviteValue,
+                overlayState = _overlayState.value,
+                callState = callState.value,
+            )
+        ) {
+            CallInviteAdmissionPolicy.Decision.SameCall -> {
+                // Keep pending Accept/Decline; do not send busy for FCM+Realtime duplicates.
+                processPendingSystemInviteIfPossible()
+                return
             }
-            pendingSystemInvite = null
-            pendingSystemAction = null
-            return
+            CallInviteAdmissionPolicy.Decision.Busy -> {
+                scope.launch {
+                    sendResponse(invite, accepted = false, busy = true)
+                }
+                // Only drop pending system action when this invite is a true conflict
+                // (different call). Same-call Accept is handled above.
+                pendingSystemInvite = null
+                pendingSystemAction = null
+                return
+            }
+            CallInviteAdmissionPolicy.Decision.Admit -> {
+                activeInviteValue = invite
+                _overlayState.value = CallOverlayState.Incoming(invite)
+                CallRingtonePlayer.startIncoming()
+                PlatformIncomingCallUi.showIncomingCall(invite)
+                processPendingSystemInviteIfPossible()
+            }
         }
-
-        activeInviteValue = invite
-        _overlayState.value = CallOverlayState.Incoming(invite)
-        CallRingtonePlayer.startIncoming()
-        PlatformIncomingCallUi.showIncomingCall(invite)
-        processPendingSystemInviteIfPossible()
     }
 
     private fun releaseLazyOutboundChannels() {
@@ -553,7 +638,7 @@ object CallSessionManager {
         for (userId in toRelease) {
             outboundChannels.remove(userId)?.let { channel ->
                 scope.launch {
-                    runCatching { channel.unsubscribe() }
+                    runCatching { SupabaseConfig.client.realtime.removeChannel(channel) }
                 }
             }
             subscribedOutboundUserIds.remove(userId)
@@ -561,7 +646,66 @@ object CallSessionManager {
     }
 
     private fun cleanupAfterCall() {
+        resetJoinGuards()
         releaseLazyOutboundChannels()
+    }
+
+    /**
+     * After a websocket drop, supabase-kt can leave channels marked SUBSCRIBED while the
+     * server has forgotten them (pushes then return "unmatched topic"). Force a fresh
+     * inbound join so subsequent call invites still arrive.
+     */
+    private fun watchRealtimeConnection(userId: String) {
+        realtimeWatchJob?.cancel()
+        realtimeWatchJob = scope.launch {
+            var everConnected = false
+            var lostConnection = false
+            SupabaseConfig.client.realtime.status.collect { status ->
+                when (status) {
+                    Realtime.Status.DISCONNECTED,
+                    Realtime.Status.CONNECTING,
+                    -> {
+                        if (everConnected) lostConnection = true
+                    }
+
+                    Realtime.Status.CONNECTED -> {
+                        if (lostConnection && currentUserId == userId) {
+                            lostConnection = false
+                            // Let the SDK's rejoinChannels attempt finish, then force a clean join.
+                            // Channel status can stay SUBSCRIBED after a drop while the server forgot
+                            // the topic (pushes then fail with "unmatched topic").
+                            delay(750)
+                            if (currentUserId != userId) return@collect
+                            println("CallSessionManager: Realtime reconnected — resubscribing call invites")
+                            resubscribeIncoming(userId)
+                        }
+                        everConnected = true
+                    }
+                }
+            }
+        }
+    }
+
+    private fun resubscribeIncoming(userId: String) {
+        inviteJob?.cancel()
+        responseJob?.cancel()
+        cancelJob?.cancel()
+        connectedJob?.cancel()
+        inviteJob = null
+        responseJob = null
+        cancelJob = null
+        connectedJob = null
+
+        val previous = inboundChannel
+        inboundChannel = null
+        scope.launch {
+            previous?.let { ch ->
+                runCatching { SupabaseConfig.client.realtime.removeChannel(ch) }
+            }
+            if (currentUserId == userId) {
+                subscribeToIncoming(userId)
+            }
+        }
     }
 
     private fun subscribeToIncoming(userId: String) {
@@ -603,6 +747,8 @@ object CallSessionManager {
     }
 
     private fun clearSubscriptions() {
+        realtimeWatchJob?.cancel()
+        realtimeWatchJob = null
         inviteJob?.cancel()
         responseJob?.cancel()
         cancelJob?.cancel()
@@ -616,14 +762,14 @@ object CallSessionManager {
 
         inboundChannel?.let { channel ->
             scope.launch {
-                runCatching { channel.unsubscribe() }
+                runCatching { SupabaseConfig.client.realtime.removeChannel(channel) }
             }
         }
         inboundChannel = null
 
         outboundChannels.values.forEach { channel ->
             scope.launch {
-                runCatching { channel.unsubscribe() }
+                runCatching { SupabaseConfig.client.realtime.removeChannel(channel) }
             }
         }
         outboundChannels.clear()
@@ -635,19 +781,32 @@ object CallSessionManager {
         val userId = resolvedCurrentUserId() ?: return
         if (invite.calleeId != userId) return
 
-        val isBusy = _overlayState.value !is CallOverlayState.Idle || callState.value !is CallState.Idle
-        if (isBusy) {
-            scope.launch {
-                sendResponse(invite, accepted = false, busy = true)
+        when (
+            CallInviteAdmissionPolicy.decide(
+                invite = invite,
+                activeInvite = activeInviteValue,
+                overlayState = _overlayState.value,
+                callState = callState.value,
+            )
+        ) {
+            CallInviteAdmissionPolicy.Decision.SameCall -> {
+                processPendingSystemInviteIfPossible()
+                return
             }
-            return
+            CallInviteAdmissionPolicy.Decision.Busy -> {
+                scope.launch {
+                    sendResponse(invite, accepted = false, busy = true)
+                }
+                return
+            }
+            CallInviteAdmissionPolicy.Decision.Admit -> {
+                activeInviteValue = invite
+                _overlayState.value = CallOverlayState.Incoming(invite)
+                CallRingtonePlayer.startIncoming()
+                PlatformIncomingCallUi.showIncomingCall(invite)
+                processPendingSystemInviteIfPossible()
+            }
         }
-
-        activeInviteValue = invite
-        _overlayState.value = CallOverlayState.Incoming(invite)
-        CallRingtonePlayer.startIncoming()
-        PlatformIncomingCallUi.showIncomingCall(invite)
-        processPendingSystemInviteIfPossible()
     }
 
     private fun handleResponse(response: CallResponse) {
@@ -662,11 +821,18 @@ object CallSessionManager {
 
         when {
             response.accepted -> {
-                if (callState.value !is CallState.Connected && callState.value !is CallState.Connecting) {
-                    _overlayState.value = CallOverlayState.Connecting(invite)
-                    scope.launch {
-                        joinCall(invite)
+                acceptedOutgoingCallId = invite.callId
+                when {
+                    callState.value is CallState.Connected -> {
+                        // Early-joined caller: leave ringback UI immediately.
+                        _overlayState.value = CallOverlayState.Idle
                     }
+                    _overlayState.value is CallOverlayState.Outgoing -> {
+                        _overlayState.value = CallOverlayState.Connecting(invite)
+                    }
+                }
+                scope.launch {
+                    joinCall(invite)
                 }
             }
 
@@ -686,11 +852,16 @@ object CallSessionManager {
 
         val overlay = _overlayState.value
         if (overlay !is CallOverlayState.Outgoing && overlay !is CallOverlayState.Connecting) return
-        if (callState.value is CallState.Connected || callState.value is CallState.Connecting) return
+        if (callState.value is CallState.Connected) return
+        if (joinStartedCallId == invite.callId) return
 
         timeoutJob?.cancel()
         CallRingtonePlayer.stop()
-        _overlayState.value = CallOverlayState.Connecting(invite)
+        if (callState.value is CallState.Connected) {
+            _overlayState.value = CallOverlayState.Idle
+        } else if (_overlayState.value is CallOverlayState.Outgoing) {
+            _overlayState.value = CallOverlayState.Connecting(invite)
+        }
         scope.launch {
             joinCall(invite)
         }
@@ -704,14 +875,15 @@ object CallSessionManager {
         CallRingtonePlayer.stop()
         PlatformIncomingCallUi.dismissIncomingCall(invite.callId, cancel.reason)
 
-        if (callState.value is CallState.Connected) {
+        if (callState.value is CallState.Connected || callState.value is CallState.Connecting) {
             internalCallManager.endCall()
-            activeInviteValue = null
+            activeInviteValue = invite
             _overlayState.value = when (cancel.reason) {
                 "ended" -> CallOverlayState.Ended(invite, "Call ended")
                 "missed" -> CallOverlayState.Ended(invite, "No answer")
-                else -> CallOverlayState.Idle
+                else -> CallOverlayState.Ended(invite, "Call ended")
             }
+            cleanupAfterCall()
             return
         }
 
@@ -719,13 +891,18 @@ object CallSessionManager {
             is CallOverlayState.Incoming,
             is CallOverlayState.Outgoing,
             is CallOverlayState.Connecting,
+            CallOverlayState.Idle, // active call UI clears overlay to Idle while Connected
             -> {
-                activeInviteValue = null
+                if (callState.value !is CallState.Idle) {
+                    internalCallManager.endCall()
+                }
+                activeInviteValue = invite
                 _overlayState.value = when (cancel.reason) {
                     "missed" -> CallOverlayState.Ended(invite, "No answer")
                     "ended" -> CallOverlayState.Ended(invite, "Call ended")
                     else -> CallOverlayState.Idle
                 }
+                cleanupAfterCall()
             }
 
             else -> Unit
@@ -738,6 +915,15 @@ object CallSessionManager {
     }
 
     private suspend fun joinCall(invite: CallInvite) {
+        joinMutex.withLock {
+            if (joinStartedCallId == invite.callId) return
+            if (callState.value is CallState.Connected) {
+                joinStartedCallId = invite.callId
+                return
+            }
+            joinStartedCallId = invite.callId
+        }
+
         val userId = resolvedCurrentUserId() ?: return failCall(invite, "You need to be signed in to start a call")
         val participantName = currentUserName ?: "Click User"
         val tokenResult = coordinator.fetchCallToken(
@@ -758,6 +944,7 @@ object CallSessionManager {
                 )
             },
             onFailure = {
+                resetJoinGuards()
                 val peerId = if (userId == invite.callerId) invite.calleeId else invite.callerId
                 sendCancel(invite, peerId, "cancelled")
                 failCall(invite, it.message ?: "Failed to create call token")
@@ -769,6 +956,15 @@ object CallSessionManager {
         val userId = resolvedCurrentUserId() ?: return failCall(invite, "You need to be signed in to start a call")
         // Notify the caller immediately so Android/iOS can leave "Calling…" before token fetch completes.
         sendResponse(invite, accepted = true, busy = false)
+
+        joinMutex.withLock {
+            if (joinStartedCallId == invite.callId) return
+            if (callState.value is CallState.Connected) {
+                joinStartedCallId = invite.callId
+                return
+            }
+            joinStartedCallId = invite.callId
+        }
 
         val participantName = currentUserName ?: "Click User"
         val tokenResult = coordinator.fetchCallToken(
@@ -788,6 +984,7 @@ object CallSessionManager {
                 )
             },
             onFailure = {
+                resetJoinGuards()
                 sendCancel(invite, invite.callerId, "cancelled")
                 failCall(invite, it.message ?: "Failed to create call token")
             },
@@ -795,6 +992,8 @@ object CallSessionManager {
     }
 
     private fun notifyPeerRoomConnected(invite: CallInvite) {
+        if (roomConnectedNotifiedCallId == invite.callId) return
+        roomConnectedNotifiedCallId = invite.callId
         val uid = resolvedCurrentUserId() ?: return
         val peerId = if (uid == invite.callerId) invite.calleeId else invite.callerId
         scope.launch {
@@ -877,6 +1076,7 @@ object CallSessionManager {
     private fun failCall(invite: CallInvite?, reason: String) {
         CallRingtonePlayer.stop()
         invite?.let { PlatformIncomingCallUi.dismissIncomingCall(it.callId, reason) }
+        internalCallManager.endCall()
         activeInviteValue = invite
         _overlayState.value = CallOverlayState.Ended(invite, reason)
         cleanupAfterCall()

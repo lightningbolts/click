@@ -2308,12 +2308,10 @@ fun App() {
                             }
 
                             if (activeCallVisible || activeCallAlpha > 0.01f) {
+                                // Do not put LiveKit TextureViewRenderer under graphicsLayer alpha —
+                                // Android TextureView composites black through alpha layers while audio still works.
                                 Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .graphicsLayer {
-                                            alpha = activeCallAlpha
-                                        },
+                                    modifier = Modifier.fillMaxSize(),
                                 ) {
                                     ActiveCallOverlay(
                                         callManager = CallSessionManager.callManager,
