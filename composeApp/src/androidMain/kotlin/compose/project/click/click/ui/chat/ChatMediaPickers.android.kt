@@ -194,24 +194,17 @@ private fun VoiceRecordDialog(
     var elapsedSec by remember { mutableLongStateOf(0L) }
     var recordedDurationSec by remember { mutableLongStateOf(0L) }
     var recordStartMs by remember { mutableLongStateOf(0L) }
+    var recordError by remember { mutableStateOf<String?>(null) }
 
-    fun releaseRecorderQuietly() {
-        runCatching {
-            recorder?.apply {
-                try {
-                    stop()
-                } catch (_: Exception) {
-                }
-                release()
-            }
-        }
+    /** Clear [recorder] first so metering stops, then stop/release the detached instance. */
+    fun detachAndReleaseRecorder() {
+        val mr = recorder
         recorder = null
+        mr?.safeStopAndRelease()
     }
 
     DisposableEffect(Unit) {
-        onDispose {
-            releaseRecorderQuietly()
-        }
+        onDispose { detachAndReleaseRecorder() }
     }
 
     var waveformSamples by remember { mutableStateOf(List(40) { 0.06f }) }
@@ -229,7 +222,11 @@ private fun VoiceRecordDialog(
         if (phase != VoiceRecordUiPhase.Recording || r == null) return@LaunchedEffect
         while (isActive) {
             delay(50)
-            val amp = r.maxAmplitude.coerceAtLeast(0).toFloat() / 32768f
+            // Released MediaRecorder throws IllegalStateException from getMaxAmplitude.
+            val amp = runCatching { r.maxAmplitude }
+                .getOrElse { return@LaunchedEffect }
+                .coerceAtLeast(0)
+                .toFloat() / 32768f
             val v = (amp * 0.88f + 0.12f).coerceIn(0.08f, 1f)
             waveformSamples = waveformSamples.drop(1) + v
         }
@@ -247,8 +244,9 @@ private fun VoiceRecordDialog(
 
     GlassAlertDialog(
         onDismissRequest = {
-            releaseRecorderQuietly()
             phase = VoiceRecordUiPhase.Idle
+            detachAndReleaseRecorder()
+            recordError = null
             if (outputFile.exists()) outputFile.delete()
             onDismiss()
         },
@@ -260,15 +258,17 @@ private fun VoiceRecordDialog(
                 displaySeconds = displaySeconds,
                 waveformSamples = waveformSamples,
                 previewLocalMediaUrl = previewUrl,
+                errorMessage = recordError,
                 onCancel = {
-                    releaseRecorderQuietly()
                     phase = VoiceRecordUiPhase.Idle
+                    detachAndReleaseRecorder()
+                    recordError = null
                     if (outputFile.exists()) outputFile.delete()
                     onDismiss()
                 },
                 onRecord = {
                     if (recorder != null) {
-                        releaseRecorderQuietly()
+                        detachAndReleaseRecorder()
                     }
                     val activeCall = CallSessionManager.callState.value
                     if (activeCall is CallState.Connecting || activeCall is CallState.Connected) {
@@ -279,52 +279,50 @@ private fun VoiceRecordDialog(
                     }
                     outputFile.parentFile?.mkdirs()
                     if (outputFile.exists()) outputFile.delete()
-                    val created = runCatching { createMediaRecorder(context, outputFile) }
-                    val mr = created.getOrNull()
-                    if (mr == null) {
-                        if (outputFile.exists()) outputFile.delete()
-                        phase = VoiceRecordUiPhase.Idle
-                        onRecordBlocked(
-                            "Microphone busy or unavailable. Try again in a moment.",
-                        )
-                        return@VoiceMessageRecordDialogLayout
-                    }
-                    val started = runCatching { mr.start() }
-                    if (started.isFailure) {
-                        runCatching { mr.release() }
-                        recorder = null
-                        if (outputFile.exists()) outputFile.delete()
-                        phase = VoiceRecordUiPhase.Idle
-                        onRecordBlocked(
-                            "Microphone busy or unavailable. Try again in a moment.",
-                        )
-                        return@VoiceMessageRecordDialogLayout
-                    }
-                    recorder = mr
-                    recordStartMs = System.currentTimeMillis()
-                    elapsedSec = 0L
-                    recordedDurationSec = 0L
-                    waveformSamples = List(40) { 0.06f }
-                    phase = VoiceRecordUiPhase.Recording
-                },
-                onStopRecording = {
-                    runCatching {
-                        recorder?.apply {
-                            stop()
-                            release()
+                    recordError = null
+                    val started = runCatching {
+                        val mr = createMediaRecorder(context, outputFile)
+                        try {
+                            mr.start()
+                            mr
+                        } catch (e: Exception) {
+                            runCatching { mr.release() }
+                            throw e
                         }
                     }
-                    recorder = null
+                    started.fold(
+                        onSuccess = { mr ->
+                            recorder = mr
+                            recordStartMs = System.currentTimeMillis()
+                            elapsedSec = 0L
+                            recordedDurationSec = 0L
+                            waveformSamples = List(40) { 0.06f }
+                            phase = VoiceRecordUiPhase.Recording
+                        },
+                        onFailure = {
+                            recorder = null
+                            phase = VoiceRecordUiPhase.Idle
+                            if (outputFile.exists()) outputFile.delete()
+                            recordError =
+                                "Couldn't start recording. Check that the microphone isn't in use and try again."
+                        },
+                    )
+                },
+                onStopRecording = {
                     recordedDurationSec = kotlin.math.max(
                         0L,
                         (System.currentTimeMillis() - recordStartMs) / 1000L,
                     )
                     elapsedSec = recordedDurationSec
+                    // Leave Recording before release so metering LaunchedEffect cancels first.
                     phase = VoiceRecordUiPhase.Preview
+                    detachAndReleaseRecorder()
+                    recordError = null
                 },
                 onReRecord = {
-                    releaseRecorderQuietly()
                     phase = VoiceRecordUiPhase.Idle
+                    detachAndReleaseRecorder()
+                    recordError = null
                     elapsedSec = 0L
                     recordedDurationSec = 0L
                     waveformSamples = List(40) { 0.06f }
@@ -355,23 +353,33 @@ private fun VoiceRecordDialog(
     )
 }
 
+private fun MediaRecorder.safeStopAndRelease() {
+    runCatching {
+        try {
+            stop()
+        } catch (_: Exception) {
+        }
+        release()
+    }
+}
+
 @Suppress("DEPRECATION")
 private fun createMediaRecorder(context: Context, file: File): MediaRecorder {
-    val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+    val mr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         MediaRecorder(context)
     } else {
         MediaRecorder()
     }
     try {
-        recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
-        recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-        recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-        recorder.setOutputFile(file.absolutePath)
-        recorder.prepare()
-        return recorder
-    } catch (error: Exception) {
-        runCatching { recorder.release() }
-        throw error
+        mr.setAudioSource(MediaRecorder.AudioSource.MIC)
+        mr.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+        mr.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+        mr.setOutputFile(file.absolutePath)
+        mr.prepare()
+        return mr
+    } catch (e: Exception) {
+        runCatching { mr.release() }
+        throw e
     }
 }
 
