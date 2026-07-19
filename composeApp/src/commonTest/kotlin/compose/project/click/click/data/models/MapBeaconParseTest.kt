@@ -72,4 +72,25 @@ class MapBeaconParseTest {
         assertEquals(parseEpochMs("2026-07-22 23:00:00+00"), schedule.endEpochMs)
         assertTrue(schedule.startEpochMs != beacon.createdAtEpochMs)
     }
+
+    @Test
+    fun parseMapBeaconMetadata_acceptsStringifiedJson() {
+        val json = Json.parseToJsonElement(
+            """
+            [{
+              "id": "124c10f4-f72a-4dba-97e7-9c6f10daf700",
+              "beacon_type": "event",
+              "lat": 47.6062,
+              "lon": -122.3321,
+              "metadata": "{\"title\":\"birthday\",\"event_start_at\":\"2026-07-22T16:00:00Z\",\"event_end_at\":\"2026-07-22T23:00:00Z\"}",
+              "created_at": "2026-06-12T02:33:00Z",
+              "expires_at": "2026-07-22T23:00:00Z"
+            }]
+            """.trimIndent(),
+        )
+        val beacon = parseMapBeaconRows(json).single()
+        val schedule = beacon.eventSchedule()
+        assertNotNull(schedule)
+        assertEquals(parseEpochMs("2026-07-22T16:00:00Z"), schedule.startEpochMs)
+    }
 }

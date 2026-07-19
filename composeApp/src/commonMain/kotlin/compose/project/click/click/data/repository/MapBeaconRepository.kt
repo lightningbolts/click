@@ -44,6 +44,10 @@ class MapBeaconRepository(
         )
     }
 
+    /** Full beacon by id — used to hydrate event schedule when proximity list omitted it. */
+    suspend fun fetchBeacon(beaconId: String): Result<MapBeacon> =
+        apiClient.getMapBeacon(beaconId)
+
     suspend fun insertBeacon(insert: MapBeaconInsert): Result<MapBeacon> =
         apiClient.postMapBeacon(insert)
 

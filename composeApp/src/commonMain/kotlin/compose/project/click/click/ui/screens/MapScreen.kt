@@ -1247,25 +1247,36 @@ internal fun EventBeaconDetail(
     val uriHandler = LocalUriHandler.current
     val currentUser by AppDataManager.currentUser.collectAsState()
     val connectedUsers by AppDataManager.connectedUsers.collectAsState()
-    val schedule = beacon.eventSchedule()
+    val mapBeacons by viewModel.mapBeacons.collectAsState()
+    val displayBeacon = remember(beacon, mapBeacons) {
+        val fromMap = mapBeacons.firstOrNull { it.id == beacon.id }
+        when {
+            fromMap == null -> beacon
+            fromMap.eventSchedule() != null -> fromMap
+            beacon.eventSchedule() != null -> beacon
+            else -> fromMap
+        }
+    }
+    val schedule = displayBeacon.eventSchedule()
     val live = schedule?.isLive() == true
     val distanceLabel = distanceMeters?.let { formatBeaconDistance(it) }
     val scheduleRange = schedule?.let { formatEventScheduleRange(it) }
-    val categories = beacon.metadata.eventCategories
+    val categories = displayBeacon.metadata.eventCategories
     val border = clickBorderColor()
     val cardSurface = clickCardSurface()
-    val hostUserId = beacon.createdByUserId?.takeIf { it.isNotBlank() }
+    val hostUserId = displayBeacon.createdByUserId?.takeIf { it.isNotBlank() }
     val hostUser = hostUserId?.let { id ->
         if (id == currentUser?.id) currentUser else connectedUsers[id]
     }
-    val hostDisplayName = beacon.creatorDisplayName?.trim()?.takeIf { it.isNotEmpty() }
+    val hostDisplayName = displayBeacon.creatorDisplayName?.trim()?.takeIf { it.isNotEmpty() }
         ?: hostUser?.name?.trim()?.takeIf { it.isNotEmpty() }
     val hostAvatarUrl = hostUser?.image?.trim()?.takeIf { it.isNotEmpty() }
 
-    LaunchedEffect(beacon.id) {
-        viewModel.loadBeaconRsvp(beacon.id, forceRefresh = true)
-        viewModel.loadBeaconEngagement(beacon.id, forceRefresh = true)
-        viewModel.recordEventImpression(beacon.id)
+    LaunchedEffect(displayBeacon.id) {
+        viewModel.loadBeaconRsvp(displayBeacon.id, forceRefresh = true)
+        viewModel.loadBeaconEngagement(displayBeacon.id, forceRefresh = true)
+        viewModel.recordEventImpression(displayBeacon.id)
+        viewModel.ensureEventBeaconSchedule(displayBeacon.id)
     }
 
     Column(
@@ -1283,7 +1294,7 @@ internal fun EventBeaconDetail(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
                 Text(
-                    text = beacon.displayDynamicTitle(),
+                    text = displayBeacon.displayDynamicTitle(),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -1302,15 +1313,15 @@ internal fun EventBeaconDetail(
                 checkedIn = checkedIn,
                 isCreator = isCreator,
                 onShare = {
-                    val shareUrl = buildEventShareUrl(beacon.id)
-                    viewModel.recordEventShare(beacon.id, shareUrl = shareUrl)
+                    val shareUrl = buildEventShareUrl(displayBeacon.id)
+                    viewModel.recordEventShare(displayBeacon.id, shareUrl = shareUrl)
                     shareText(
-                        text = buildEventShareText(beacon, scheduleRange, distanceLabel),
-                        subject = beacon.displayDynamicTitle(),
+                        text = buildEventShareText(displayBeacon, scheduleRange, distanceLabel),
+                        subject = displayBeacon.displayDynamicTitle(),
                     )
                 },
-                onToggleBookmark = { viewModel.toggleBeaconBookmark(beacon.id) },
-                onToggleCheckIn = { viewModel.toggleBeaconCheckIn(beacon.id) },
+                onToggleBookmark = { viewModel.toggleBeaconBookmark(displayBeacon.id) },
+                onToggleCheckIn = { viewModel.toggleBeaconCheckIn(displayBeacon.id) },
                 onEdit = onEdit,
                 onDelete = onDelete,
             )
@@ -1322,7 +1333,7 @@ internal fun EventBeaconDetail(
             EventCategoryChips(categories = categories, border = border, cardSurface = cardSurface)
         }
 
-        if (beacon.showCreatorName && !hostDisplayName.isNullOrBlank()) {
+        if (displayBeacon.showCreatorName && !hostDisplayName.isNullOrBlank()) {
             EventHostCard(
                 displayName = hostDisplayName,
                 userId = hostUserId ?: "host:$hostDisplayName",
@@ -1333,12 +1344,12 @@ internal fun EventBeaconDetail(
         }
 
         Text(
-            text = beacon.metadata.description?.trim().orEmpty().ifBlank { "No description" },
+            text = displayBeacon.metadata.description?.trim().orEmpty().ifBlank { "No description" },
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface,
         )
 
-        beacon.createdAtEpochMs?.let { createdMs ->
+        displayBeacon.createdAtEpochMs?.let { createdMs ->
             Text(
                 text = "Posted ${formatEventPostedAtLabel(createdMs)}",
                 style = MaterialTheme.typography.labelMedium,
@@ -1358,9 +1369,9 @@ internal fun EventBeaconDetail(
             onClick = {
                 openEventMapsRoute(
                     openUri = { uriHandler.openUri(it) },
-                    latitude = beacon.latitude,
-                    longitude = beacon.longitude,
-                    label = beacon.displayDynamicTitle(),
+                    latitude = displayBeacon.latitude,
+                    longitude = displayBeacon.longitude,
+                    label = displayBeacon.displayDynamicTitle(),
                 )
             },
             modifier = Modifier.fillMaxWidth(),
@@ -1386,7 +1397,7 @@ internal fun EventBeaconDetail(
                 onClick = {
                     if (rsvpPending) return@Button
                     rsvpError = null
-                    viewModel.cancelRsvpToBeacon(beacon.id) { ok ->
+                    viewModel.cancelRsvpToBeacon(displayBeacon.id) { ok ->
                         if (!ok) rsvpError = "Could not update RSVP. Please try again."
                     }
                 },
@@ -1412,7 +1423,7 @@ internal fun EventBeaconDetail(
                 onClick = {
                     if (rsvpPending) return@OutlinedButton
                     rsvpError = null
-                    viewModel.rsvpToBeacon(beacon.id) { ok ->
+                    viewModel.rsvpToBeacon(displayBeacon.id) { ok ->
                         if (!ok) rsvpError = "Could not update RSVP. Please try again."
                     }
                 },

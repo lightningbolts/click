@@ -29,9 +29,11 @@ import compose.project.click.click.events.EVENT_VENUE_SCALE_METADATA_KEY
 import compose.project.click.click.events.EVENT_CHECK_IN_RADIUS_METADATA_KEY
 import compose.project.click.click.events.EventReminderCoordinator
 import compose.project.click.click.events.EventSchedule
+import compose.project.click.click.events.eventSchedule
 import compose.project.click.click.events.eventScheduleMetadata
 import compose.project.click.click.events.isVisibleEventBeacon
 import compose.project.click.click.events.validateEventSchedule
+import compose.project.click.click.ui.utils.mergeMapBeaconLists
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import io.github.jan.supabase.auth.auth
@@ -959,6 +961,7 @@ class MapViewModel : ViewModel() {
             cachedUserLatLon = AppDataManager.lastKnownDeviceLocation.value,
         )
         _selection.value = MapSelection.BeaconSelected(beacon, distanceMeters = quickDistance)
+        ensureEventBeaconSchedule(beaconId)
 
         viewModelScope.launch(Dispatchers.Default) {
             val loc = resolveFastMapLocation() ?: return@launch
@@ -967,6 +970,34 @@ class MapViewModel : ViewModel() {
             if (current.beacon.id == beaconId) {
                 _selection.value = current.copy(distanceMeters = distance)
             }
+        }
+    }
+
+    /**
+     * When proximity/cache rows lack `event_start_at` / `event_end_at`, fetch the full beacon so
+     * the detail sheet can show Start/End (same source Home bookmarks already denormalize).
+     */
+    fun ensureEventBeaconSchedule(beaconId: String) {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return
+        val current = _mapBeacons.value.firstOrNull { it.id == id }
+            ?: (_selection.value as? MapSelection.BeaconSelected)?.beacon?.takeIf { it.id == id }
+            ?: return
+        if (current.kind != MapBeaconKind.EVENT) return
+        if (current.eventSchedule() != null) return
+        viewModelScope.launch(Dispatchers.Default) {
+            mapBeaconRepository.fetchBeacon(id).fold(
+                onSuccess = { full ->
+                    _mapBeacons.update { mergeMapBeaconLists(it, listOf(full)) }
+                    AppDataManager.mergeCachedMapBeacons(listOf(full))
+                    val merged = _mapBeacons.value.firstOrNull { it.id == id } ?: full
+                    val sel = _selection.value as? MapSelection.BeaconSelected ?: return@fold
+                    if (sel.beacon.id == id) {
+                        _selection.value = sel.copy(beacon = merged)
+                    }
+                },
+                onFailure = { /* keep sheet open with whatever we have */ },
+            )
         }
     }
 

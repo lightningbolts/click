@@ -1135,6 +1135,29 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         }
     }
 
+    /** `GET /api/beacons/{beaconId}` — full beacon row (metadata incl. event schedule). */
+    suspend fun getMapBeacon(beaconId: String): Result<MapBeacon> {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+        return try {
+            val response: HttpResponse = clickWebClient.get("$clickWebAuthOrigin/api/beacons/$id")
+            if (response.status.value in 200..299) {
+                val payload = response.body<MapBeaconPostResponseDto>()
+                val beaconObj = payload.beacon
+                    ?: return Result.failure(Exception("Beacon payload was missing"))
+                val beacon = parseMapBeaconRows(beaconObj).firstOrNull()
+                    ?: return Result.failure(Exception("Beacon payload was malformed"))
+                Result.success(beacon)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     /** `POST /api/beacons` — insert a map beacon (soundtrack rows enriched server-side). */
     suspend fun postMapBeacon(insert: MapBeaconInsert): Result<MapBeacon> {
         return try {

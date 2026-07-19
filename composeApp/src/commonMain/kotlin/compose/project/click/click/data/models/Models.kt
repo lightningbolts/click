@@ -748,7 +748,16 @@ private val beaconMetadataJson = Json {
 
 fun parseMapBeaconMetadata(element: JsonElement?): MapBeaconMetadata {
     if (element == null) return MapBeaconMetadata()
-    val obj = element as? JsonObject ?: return MapBeaconMetadata()
+    val obj = when (element) {
+        is JsonObject -> element
+        is JsonPrimitive -> {
+            val text = element.contentOrNull?.trim().orEmpty()
+            if (text.isEmpty()) return MapBeaconMetadata()
+            runCatching { beaconMetadataJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                ?: return MapBeaconMetadata()
+        }
+        else -> return MapBeaconMetadata()
+    }
     fun str(vararg keys: String): String? {
         for (k in keys) {
             val p = obj[k] as? JsonPrimitive ?: continue
