@@ -86,6 +86,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        AndroidCallRuntime.registerPermissionRequester { permissions ->
+            callPermissionLauncher.launch(permissions)
+        }
         initCallManager(applicationContext, this)
         compose.project.click.click.notifications.AndroidPushNotificationRuntime.setAppInForeground(true)
         onApplicationDidBecomeActive()

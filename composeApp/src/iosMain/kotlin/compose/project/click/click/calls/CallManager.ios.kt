@@ -111,6 +111,7 @@ actual class CallManager {
             val cameraEnabled = userInfo.boolValue("cameraEnabled") ?: false
             val remoteVideoAvailable = userInfo.boolValue("remoteVideoAvailable") ?: false
             val localVideoAvailable = userInfo.boolValue("localVideoAvailable") ?: false
+            val hasRemoteParticipant = userInfo.boolValue("hasRemoteParticipant") ?: false
             val reportedVideoRequested = userInfo.boolValue("videoRequested") ?: videoRequested
             val reason = userInfo["reason"] as? String
 
@@ -126,6 +127,7 @@ actual class CallManager {
                         cameraEnabled = cameraEnabled,
                         remoteVideoAvailable = remoteVideoAvailable,
                         localVideoAvailable = localVideoAvailable,
+                        hasRemoteParticipant = hasRemoteParticipant,
                     )
                 }
                 "ended" -> {

@@ -41,6 +41,7 @@ object SupabaseConfig {
             supabaseUrl = SUPABASE_URL,
             supabaseKey = SUPABASE_ANON_KEY
         ) {
+            httpEngine = createSupabaseHttpEngine()
             defaultSerializer = KotlinXSerializer(
                 Json {
                     ignoreUnknownKeys = true
