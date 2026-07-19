@@ -74,7 +74,6 @@ actual fun PlatformBottomBar(
         modifier = Modifier
             .graphicsLayer {
                 alpha = barAlpha
-                // Keep hit-testing off while faded so the chat composer receives taps.
             }
             .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
             .background(

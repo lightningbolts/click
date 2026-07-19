@@ -179,11 +179,15 @@ fun rememberComposerBottomPadding(extra: Dp = 0.dp): Dp {
  * `WindowInsets.ime` padding, or a second offset at a call site. Forms and sheets intentionally
  * use `imePadding` instead. Keeping that boundary explicit prevents rapid keyboard toggles from
  * leaving the composer and timeline at different residual insets.
+ *
+ * @param clearNativeTabBar When true on iOS (connections chat), pad above the always-visible
+ * native tab bar. Hub chat hides the bar and should leave this false.
  */
 private fun Modifier.chatBottomInsetUnion(
     extraBottom: Dp = 0.dp,
     nativeKeyboardLiftPx: Float? = null,
     nativeKeyboardLiftPxState: MutableFloatState? = null,
+    clearNativeTabBar: Boolean = false,
 ): Modifier = composed {
     val density = LocalDensity.current
     val style = LocalPlatformStyle.current
@@ -193,10 +197,13 @@ private fun Modifier.chatBottomInsetUnion(
     val navBottomDp = with(density) { navBottomPx.toDp() }
 
     if (style.isIOS) {
-        // iOS never falls through to Compose IME insets. Prefer MutableFloatState so keyboard
-        // frames invalidate graphicsLayer only (no LazyColumn recomposition / image flicker).
+        val bottomPad = if (clearNativeTabBar) {
+            rememberTabBarOverlayHeight()
+        } else {
+            navBottomDp
+        }
         return@composed Modifier
-            .padding(bottom = navBottomDp + extraBottom)
+            .padding(bottom = bottomPad + extraBottom)
             .clipToBounds()
             .graphicsLayer {
                 val liftPx = when {
@@ -240,7 +247,13 @@ fun Modifier.chatThreadKeyboardDock(
     extraBottom: Dp = 0.dp,
     nativeKeyboardLiftPx: Float? = null,
     nativeKeyboardLiftPxState: MutableFloatState? = null,
-): Modifier = chatBottomInsetUnion(extraBottom, nativeKeyboardLiftPx, nativeKeyboardLiftPxState)
+    clearNativeTabBar: Boolean = false,
+): Modifier = chatBottomInsetUnion(
+    extraBottom,
+    nativeKeyboardLiftPx,
+    nativeKeyboardLiftPxState,
+    clearNativeTabBar,
+)
 
 /**
  * Edge-to-edge chat dock. On iOS callers that need keyboard movement must use

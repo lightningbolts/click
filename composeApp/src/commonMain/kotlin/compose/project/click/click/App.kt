@@ -923,6 +923,8 @@ fun App() {
             var pendingBeaconId by remember { mutableStateOf<String?>(null) }
             var pendingMapLayerFilter by remember { mutableStateOf<MapLayerFilter?>(null) }
             var isConnectionsChatOpen by remember { mutableStateOf(false) }
+            // Separate from session-open: true while chat owns the bottom edge.
+            var connectionsChatSuppressesTabBar by remember { mutableStateOf(false) }
             var verifiedCliqueProximityAutofillIntent by remember { mutableStateOf<VerifiedCliqueProximityIntent?>(null) }
             fun navigateTo(route: String) {
                 if (route != currentRoute) {
@@ -932,6 +934,7 @@ fun App() {
                     currentRoute = route
                     if (route != NavigationItem.Connections.route) {
                         isConnectionsChatOpen = false
+                        connectionsChatSuppressesTabBar = false
                     }
                 }
             }
@@ -960,6 +963,7 @@ fun App() {
                 routeHistory.clear()
                 routeHistory.add(NavigationItem.Home.route)
                 isConnectionsChatOpen = false
+                connectionsChatSuppressesTabBar = false
                 pendingChatId = null
                 pendingBeaconId = null
                 pendingMapLayerFilter = null
@@ -1319,8 +1323,11 @@ fun App() {
                 }
             }
 
+            // On iOS the native UITabBar cannot be covered by Compose. Hiding/showing it remounts
+            // Liquid Glass after chat back-swipe. Keep it visible for connections chat; chat pads
+            // above it. Still hide for hub/disposable-roll/calls that fully own the bottom edge.
             val hideMainBottomBar =
-                isConnectionsChatOpen ||
+                (!isIOS && connectionsChatSuppressesTabBar) ||
                     hubChatArgs != null ||
                     showConnectionDisposableRoll ||
                     disposableRollOpening ||
@@ -1341,7 +1348,11 @@ fun App() {
                 )
             }
             Scaffold(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    // Android: zIndex puts chat above the Compose tab bar while a thread is open.
+                    // iOS: native bar stays visible for connections chat (never toggled).
+                    .zIndex(if (hideMainBottomBar || (!isIOS && isConnectionsChatOpen)) 6f else 0f),
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
             ) { paddingValues ->
                 Box(
@@ -1455,7 +1466,11 @@ fun App() {
                                                     isConnectionsChatOpen = isOpen
                                                     if (!isOpen) {
                                                         pendingChatId = null
+                                                        connectionsChatSuppressesTabBar = false
                                                     }
+                                                },
+                                                onChatSuppressesTabBarChanged = { suppresses ->
+                                                    connectionsChatSuppressesTabBar = suppresses
                                                 },
                                                 onNavigateToLocationSettings = { navigateTo(NavigationItem.Settings.route) },
                                                 onHubSelected = { hub ->

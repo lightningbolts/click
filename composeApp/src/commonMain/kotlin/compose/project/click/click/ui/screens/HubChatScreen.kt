@@ -184,7 +184,10 @@ fun HubChatScreen(
     val hubPeekScope = rememberCoroutineScope()
     val hubListState = remember(args.realtimeChannel) { LazyListState() }
     val density = LocalDensity.current
-    val nativeKeyboardInsets = rememberChatNativeKeyboardInsets(keyboardHeightProvider)
+    val nativeKeyboardInsets = rememberChatNativeKeyboardInsets(
+        keyboardHeightProvider = keyboardHeightProvider,
+        subtractTabBarOverlay = false,
+    )
     val focusManager = LocalFocusManager.current
     val focusManagerState = rememberUpdatedState(focusManager)
     val suppressKeyboardDismissWhileProgrammaticTimelineScroll = remember { mutableStateOf(false) }
@@ -447,6 +450,7 @@ fun HubChatScreen(
                         .fillMaxSize()
                         .chatThreadKeyboardDock(
                             nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
+                            clearNativeTabBar = false,
                         ),
                 ) {
                 Box(

@@ -63,10 +63,14 @@ internal val secureChatImageBitmapCache: LruMemoryCache<String, ImageBitmap> =
 private val lockedDropBlurBitmapCache: LruMemoryCache<String, ImageBitmap> =
     LruMemoryCache(LOCKED_DROP_BLUR_CACHE_MAX_ENTRIES)
 
+/** Bump when blur strength changes so stale weak pixels are not reused. */
+private const val LOCKED_DROP_BLUR_CACHE_VERSION = 3
+
 private fun lockedDropDisplayBitmap(messageId: String, source: ImageBitmap): ImageBitmap {
-    lockedDropBlurBitmapCache.get(messageId)?.let { return it }
+    val key = "$messageId#v$LOCKED_DROP_BLUR_CACHE_VERSION"
+    lockedDropBlurBitmapCache.get(key)?.let { return it }
     val blurred = runCatching { source.softBlurredForLockedDrop() }.getOrDefault(source)
-    lockedDropBlurBitmapCache.put(messageId, blurred)
+    lockedDropBlurBitmapCache.put(key, blurred)
     return blurred
 }
 

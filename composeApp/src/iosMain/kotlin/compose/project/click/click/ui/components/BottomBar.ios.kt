@@ -182,10 +182,19 @@ actual fun PlatformBottomBar(
                 tabBar.selectedItem = item
             }
         }
-        // Alpha only — never hidden=, never appearance reset on chat open/close.
+        // Keep the same UITabBar instance mounted for the whole session, always at alpha 1.
+        // Alpha 0→1 rematerializes Liquid Glass (looks like a remount). Instead, while chat owns
+        // the bottom edge we send the bar behind the opaque Compose host; restoring just brings
+        // the already-warm bar to front — no appearance rebuild, no setItems, no alpha flash.
         tabBar.hidden = false
-        tabBar.alpha = if (visible) 1.0 else 0.0
+        tabBar.alpha = 1.0
+        tabBar.layer.mask = null
         tabBar.userInteractionEnabled = visible
+        if (visible) {
+            viewController.view.bringSubviewToFront(tabBar)
+        } else {
+            viewController.view.sendSubviewToBack(tabBar)
+        }
     }
 
     DisposableEffect(tabBar, viewController) {
@@ -246,6 +255,8 @@ actual fun PlatformBottomBar(
             .graphicsLayer {
                 translationX = (topLeft.x - positionInRoot.x).toPx()
                 translationY = (topLeft.y - positionInRoot.y).toPx()
+                // Spacer only — native UITabBar is always opaque. Hide this Compose mirror while
+                // the bar is behind the host so it does not paint a second chrome stack.
                 alpha = if (visible) 1f else 0f
             }
             .width(tabBarWidth)

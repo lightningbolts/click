@@ -12,10 +12,15 @@ actual fun ByteArray.toImageBitmap(): ImageBitmap {
 
 actual fun ImageBitmap.softBlurredForLockedDrop(): ImageBitmap {
     val src = asAndroidBitmap()
-    val tw = (src.width / 18).coerceAtLeast(1)
-    val th = (src.height / 18).coerceAtLeast(1)
+    // Aggressive pixelation — locked drops must not retain recognizable detail.
+    val tw = (src.width / 56).coerceAtLeast(1)
+    val th = (src.height / 56).coerceAtLeast(1)
     val tiny = Bitmap.createScaledBitmap(src, tw, th, true)
-    val up = Bitmap.createScaledBitmap(tiny, src.width.coerceAtLeast(1), src.height.coerceAtLeast(1), true)
-    if (tiny !== src && tiny !== up) tiny.recycle()
+    val midW = (src.width / 12).coerceAtLeast(1)
+    val midH = (src.height / 12).coerceAtLeast(1)
+    val mid = Bitmap.createScaledBitmap(tiny, midW, midH, true)
+    val up = Bitmap.createScaledBitmap(mid, src.width.coerceAtLeast(1), src.height.coerceAtLeast(1), true)
+    if (tiny !== src && !tiny.isRecycled) tiny.recycle()
+    if (mid !== tiny && mid !== up && !mid.isRecycled) mid.recycle()
     return up.asImageBitmap()
 }

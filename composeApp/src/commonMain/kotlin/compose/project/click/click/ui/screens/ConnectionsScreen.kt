@@ -59,6 +59,12 @@ fun ConnectionsScreen(
     initialChatId: String? = null,
     onChatDismissed: (() -> Unit)? = null,
     onChatOpenStateChanged: (Boolean) -> Unit = {},
+    /**
+     * When true, the main tab bar is fully alpha-hidden so chat owns the bottom edge (required on
+     * iOS where UITabBar sits above Compose). Stays true until dismiss settles — do not peel the
+     * native Liquid Glass bar mid-gesture (masking it every frame causes shimmer + drag jank).
+     */
+    onChatSuppressesTabBarChanged: (Boolean) -> Unit = {},
     onNavigateToLocationSettings: (() -> Unit)? = null,
     onHubSelected: ((compose.project.click.click.data.ActiveHubEntry) -> Unit)? = null,
     onOpenSearch: (() -> Unit)? = null,
@@ -98,13 +104,15 @@ fun ConnectionsScreen(
 
     fun finalizeChatClose(leaveChatClearsMessageSurface: Boolean = true) {
         viewModel.leaveChatRoom(clearMessageSurface = leaveChatClearsMessageSurface)
-        // Do not loadChats here — refreshing the inbox on the same frame as the tab bar
-        // fade-in makes the chrome look like it remounted.
+        // Do not loadChats here — refreshing the inbox on the same frame as chrome restore
+        // makes the list look like it remounted with the tab bar.
         iosChatSwipeDragPx.floatValue = 0f
         iosChatSwipeBehindLayers = false
         iosChatRightToLeftPeek = null
         onChatDismissed?.invoke()
         onChatOpenStateChanged(false)
+        // Bring the already-warm UITabBar to front (alpha stayed 1 while it was behind Compose).
+        onChatSuppressesTabBarChanged(false)
     }
 
     fun closeActiveChat(mode: ChatTransitionMode = ChatTransitionMode.Tap) {
@@ -116,8 +124,9 @@ fun ConnectionsScreen(
                 focusManager.clearFocus()
             }
             selectedChatId = null
-            // Defer teardown for BOTH tap and gesture. Gesture used to finalize synchronously,
-            // which raced leaveChatRoom + tab-bar restore against the list reveal and caused flicker.
+            // Keep the bar behind Compose until settle. It stays at alpha 1 the whole time
+            // (sendSubviewToBack while suppressed), so bring-to-front on finalize does not
+            // rematerialize Liquid Glass. Do not un-suppress mid-slide — that covers the chat.
             closeCleanupJob = screenScope.launch {
                 val settleMs = if (mode == ChatTransitionMode.Tap) {
                     CHAT_TRANSITION_DURATION_MS
@@ -154,15 +163,16 @@ fun ConnectionsScreen(
             closeCleanupJob?.cancel()
             isTapCloseInFlight = false
             onChatOpenStateChanged(false)
+            onChatSuppressesTabBarChanged(false)
             viewModel.leaveChatRoom()
         }
     }
 
     LaunchedEffect(selectedChatId) {
-        // Only report open=true here. open=false is deferred to [finalizeChatClose] so chrome
-        // (bottom bar / bottomChrome padding) does not jump during interactive-back reveal.
+        // Session + full tab-bar suppress while a thread is active. Native bar restores on settle.
         if (selectedChatId != null) {
             onChatOpenStateChanged(true)
+            onChatSuppressesTabBarChanged(true)
         }
     }
 
@@ -176,8 +186,9 @@ fun ConnectionsScreen(
         closeCleanupJob = null
         isTapCloseInFlight = false
         chatTransitionMode = ChatTransitionMode.Tap
-        // If a deferred close was cancelled, keep chrome open for the new thread.
+        // If a deferred close was cancelled, keep session + tab-bar suppress for the new thread.
         onChatOpenStateChanged(true)
+        onChatSuppressesTabBarChanged(true)
         ChatNotificationDismisser.dismissForThread(chatId, chatId)
         viewModel.loadChatMessages(chatId)
         selectedChatId = chatId
@@ -273,7 +284,9 @@ fun ConnectionsScreen(
                         },
                         opaquePreviousBackground = false,
                         externalDragOffsetPx = iosChatSwipeDragPx,
-                        onBehindLayersVisibleChanged = { iosChatSwipeBehindLayers = it },
+                        onBehindLayersVisibleChanged = { revealing ->
+                            iosChatSwipeBehindLayers = revealing
+                        },
                         rightToLeftPeek = iosChatRightToLeftPeek,
                         previousContent = {},
                         currentContent = {

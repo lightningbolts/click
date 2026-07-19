@@ -338,7 +338,10 @@ fun ChatView(
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
     val platformStyle = LocalPlatformStyle.current
-    val nativeKeyboardInsets = rememberChatNativeKeyboardInsets(keyboardHeightProvider)
+    val nativeKeyboardInsets = rememberChatNativeKeyboardInsets(
+        keyboardHeightProvider = keyboardHeightProvider,
+        subtractTabBarOverlay = true,
+    )
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val focusManager = LocalFocusManager.current
     val focusManagerState = rememberUpdatedState(focusManager)
@@ -452,7 +455,11 @@ fun ChatView(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+    ) {
         val successForMesh = chatMessagesState as? ChatMessagesState.Success
         if (successForMesh != null) {
             ChatAmbientMeshBackground(
@@ -1030,6 +1037,7 @@ fun ChatView(
                                     .fillMaxSize()
                                     .chatThreadKeyboardDock(
                                         nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
+                                        clearNativeTabBar = true,
                                     ),
                             ) {
                             Box(
