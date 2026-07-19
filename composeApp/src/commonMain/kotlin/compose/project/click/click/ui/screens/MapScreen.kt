@@ -96,6 +96,7 @@ import compose.project.click.click.events.formatEventEndDateLabel
 import compose.project.click.click.events.formatEventEndTimeLabel
 import compose.project.click.click.events.formatEventScheduleRange
 import compose.project.click.click.events.formatEventStartDateLabel
+import compose.project.click.click.events.formatEventPostedAtLabel
 import compose.project.click.click.events.formatEventStartTimeLabel
 import compose.project.click.click.events.isLive
 import compose.project.click.click.events.openEventMapsRoute
@@ -1221,7 +1222,7 @@ private fun BeaconOwnerDropdownMenu(
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun EventBeaconDetail(
+internal fun EventBeaconDetail(
     beacon: MapBeacon,
     distanceMeters: Double?,
     viewModel: MapViewModel,
@@ -1295,6 +1296,14 @@ private fun EventBeaconDetail(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                beacon.createdAtEpochMs?.let { createdMs ->
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Posted ${formatEventPostedAtLabel(createdMs)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             EventHeroActions(
                 bookmarked = bookmarked,
@@ -1344,6 +1353,7 @@ private fun EventBeaconDetail(
             cardSurface = cardSurface,
         )
 
+        val actionShape = RoundedCornerShape(12.dp)
         Button(
             onClick = {
                 openEventMapsRoute(
@@ -1354,6 +1364,13 @@ private fun EventBeaconDetail(
                 )
             },
             modifier = Modifier.fillMaxWidth(),
+            shape = actionShape,
+            border = BorderStroke(2.dp, border),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ),
+            contentPadding = PaddingValues(vertical = 14.dp),
         ) {
             Icon(
                 imageVector = Icons.Filled.Directions,
@@ -1361,41 +1378,58 @@ private fun EventBeaconDetail(
                 modifier = Modifier.size(20.dp),
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Join Event Route")
+            Text("Join Event Route", fontWeight = FontWeight.SemiBold)
         }
 
-        Button(
-            onClick = {
-                if (rsvpPending) return@Button
-                rsvpError = null
-                val onFinished: (Boolean) -> Unit = { ok ->
-                    if (!ok) {
-                        rsvpError = "Could not update RSVP. Please try again."
+        if (currentUserSignedUp) {
+            Button(
+                onClick = {
+                    if (rsvpPending) return@Button
+                    rsvpError = null
+                    viewModel.cancelRsvpToBeacon(beacon.id) { ok ->
+                        if (!ok) rsvpError = "Could not update RSVP. Please try again."
                     }
-                }
-                if (currentUserSignedUp) {
-                    viewModel.cancelRsvpToBeacon(beacon.id, onFinished)
-                } else {
-                    viewModel.rsvpToBeacon(beacon.id, onFinished)
-                }
-            },
-            enabled = !rsvpPending,
-            colors = if (currentUserSignedUp) {
-                ButtonDefaults.buttonColors(
+                },
+                enabled = !rsvpPending,
+                modifier = Modifier.fillMaxWidth(),
+                shape = actionShape,
+                border = BorderStroke(2.dp, MaterialTheme.colorScheme.error),
+                colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.error,
-                    contentColor = MaterialTheme.colorScheme.onError,
+                    contentColor = Color.White,
+                    disabledContainerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.45f),
+                    disabledContentColor = Color.White.copy(alpha = 0.7f),
+                ),
+                contentPadding = PaddingValues(vertical = 14.dp),
+            ) {
+                Text(
+                    text = if (rsvpPending) "Updating…" else "Cancel RSVP",
+                    fontWeight = FontWeight.SemiBold,
                 )
-            } else {
-                ButtonDefaults.outlinedButtonColors()
-            },
-            border = if (!currentUserSignedUp) {
-                BorderStroke(2.dp, border)
-            } else {
-                null
-            },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(if (currentUserSignedUp) "Cancel RSVP" else "RSVP / Sign Up")
+            }
+        } else {
+            OutlinedButton(
+                onClick = {
+                    if (rsvpPending) return@OutlinedButton
+                    rsvpError = null
+                    viewModel.rsvpToBeacon(beacon.id) { ok ->
+                        if (!ok) rsvpError = "Could not update RSVP. Please try again."
+                    }
+                },
+                enabled = !rsvpPending,
+                modifier = Modifier.fillMaxWidth(),
+                shape = actionShape,
+                border = BorderStroke(2.dp, border),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                ),
+                contentPadding = PaddingValues(vertical = 14.dp),
+            ) {
+                Text(
+                    text = if (rsvpPending) "Updating…" else "RSVP / Sign Up",
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
         }
         if (rsvpPending) {
             Text(

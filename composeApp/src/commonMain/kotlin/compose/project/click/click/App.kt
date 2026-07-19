@@ -1349,6 +1349,7 @@ fun App() {
                             fun renderPrimaryScreen(route: String) {
                                 when (route) {
                                     NavigationItem.Home.route -> HomeScreen(
+                                        mapViewModel = mapViewModel,
                                         onNavigateToChat = { connectionId ->
                                             pendingChatId = connectionId
                                             navigateTo(NavigationItem.Connections.route)

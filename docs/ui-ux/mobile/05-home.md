@@ -28,13 +28,13 @@ HomeScreen (organism)
         ├── HomeSearchPill              // → onOpenSearch / UnifiedSearchSheet
         ├── FeaturedEventSection (conditional)  // first HomeEventReminder
         │   └── FeaturedEventCard → "View on Map"
-        ├── Saved events (conditional)  // GET /api/me/event-bookmarks, max 5
-        │   └── SavedEventBookmarkCard[] → "View on Map"
         ├── HomeAvailabilityIntentsRow
         │   ├── SectionHeader "I'm down for…"
         │   ├── AssistChip[] per active intent
         │   ├── AssistChip "Set what you're down for" | "Edit intents"
         │   └── overlap lines (scheme tertiary)
+        ├── Saved events (conditional)  // GET /api/me/event-bookmarks, max 5
+        │   └── SavedEventsSection category tiles → EventBeaconDetail sheet (stays on Home)
         ├── ExploreNearbyBeaconsSection (conditional)
         │   └── tiles for nearby MapBeaconKind / Hub counts only
         ├── ConnectionArchiveWarningBanner (conditional)  // stay-in-touch after explore

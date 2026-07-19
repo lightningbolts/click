@@ -63,16 +63,10 @@ object EventReminderCoordinator {
 
 fun MapBeacon.eventSchedule(): EventSchedule? =
     parseEventScheduleFromMetadata(metadata.raw)
-        ?: run {
-            // Legacy TTL-only events (no event_start_at / event_end_at in metadata).
-            val start = createdAtEpochMs ?: return@run null
-            val end = expiresAtEpochMs ?: return@run null
-            if (end <= start) return@run null
-            EventSchedule(startEpochMs = start, endEpochMs = end)
-        }
 
 fun MapBeacon.isVisibleEventBeacon(nowEpochMs: Long = Clock.System.now().toEpochMilliseconds()): Boolean {
     if (kind != MapBeaconKind.EVENT) return true
+    // Prefer explicit schedule; never treat created_at as the event start for visibility.
     eventSchedule()?.let { return it.isVisible(nowEpochMs) }
     val exp = expiresAtEpochMs ?: return true
     return exp > nowEpochMs

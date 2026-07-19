@@ -1,6 +1,7 @@
 package compose.project.click.click.data.models
 
 import compose.project.click.click.events.eventSchedule
+import compose.project.click.click.events.isVisibleEventBeacon
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -39,9 +40,36 @@ class MapBeaconParseTest {
         assertEquals("Kairui Cheng", beacon.creatorDisplayName)
         assertNotNull(beacon.createdAtEpochMs)
         assertNotNull(beacon.expiresAtEpochMs)
+        // Legacy TTL rows without event_start_at/event_end_at must not invent Start = created_at.
+        assertEquals(null, beacon.eventSchedule())
+        assertTrue(beacon.isVisibleEventBeacon(nowEpochMs = beacon.createdAtEpochMs!! + 1L))
+        assertTrue(!beacon.isVisibleEventBeacon(nowEpochMs = beacon.expiresAtEpochMs!! + 1L))
+    }
+
+    @Test
+    fun parseEventSchedule_acceptsPostgresTimestamptzInMetadata() {
+        val json = Json.parseToJsonElement(
+            """
+            [{
+              "id": "124c10f4-f72a-4dba-97e7-9c6f10daf700",
+              "beacon_type": "event",
+              "lat": 47.6062,
+              "lon": -122.3321,
+              "metadata": {
+                "title": "birthday",
+                "event_start_at": "2026-07-22 16:00:00+00",
+                "event_end_at": "2026-07-22 23:00:00+00"
+              },
+              "created_at": "2026-06-12 02:33:00+00",
+              "expires_at": "2026-07-22 23:00:00+00"
+            }]
+            """.trimIndent(),
+        )
+        val beacon = parseMapBeaconRows(json).single()
         val schedule = beacon.eventSchedule()
         assertNotNull(schedule)
-        assertEquals(beacon.createdAtEpochMs, schedule.startEpochMs)
-        assertEquals(beacon.expiresAtEpochMs, schedule.endEpochMs)
+        assertEquals(parseEpochMs("2026-07-22 16:00:00+00"), schedule.startEpochMs)
+        assertEquals(parseEpochMs("2026-07-22 23:00:00+00"), schedule.endEpochMs)
+        assertTrue(schedule.startEpochMs != beacon.createdAtEpochMs)
     }
 }

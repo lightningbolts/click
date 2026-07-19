@@ -54,10 +54,12 @@ fun parseEventScheduleFromMetadata(raw: JsonObject?): EventSchedule? {
     fun parseInstant(key: String): Long? {
         val text = raw[key]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
             ?: return null
-        return runCatching { Instant.parse(text).toEpochMilliseconds() }.getOrNull()
+        // Same lenient path as beacon row timestamps (ISO + Postgres timestamptz forms).
+        return compose.project.click.click.data.models.parseEpochMs(text)
     }
     val start = parseInstant("event_start_at") ?: parseInstant("eventStartAt") ?: return null
     val end = parseInstant("event_end_at") ?: parseInstant("eventEndAt") ?: return null
+    if (end <= start) return null
     return EventSchedule(startEpochMs = start, endEpochMs = end)
 }
 
@@ -70,6 +72,15 @@ fun EventSchedule.isVisible(nowEpochMs: Long = Clock.System.now().toEpochMillise
 /** True while the event window is in progress (`start ≤ now < end`). */
 fun EventSchedule.isLive(nowEpochMs: Long = Clock.System.now().toEpochMilliseconds()): Boolean =
     nowEpochMs >= startEpochMs && nowEpochMs < endEpochMs
+
+/** Compact posted/created label, e.g. `Jun 12, 7:33 PM`. */
+fun formatEventPostedAtLabel(
+    createdAtEpochMs: Long,
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+): String {
+    val dt = Instant.fromEpochMilliseconds(createdAtEpochMs).toLocalDateTime(timeZone)
+    return formatEventDateTimeLabel(dt)
+}
 
 /** Compact range for discovery cards and beacon detail sheets, e.g. `Jun 12, 7:00 PM – 9:00 PM`. */
 fun formatEventScheduleRange(

@@ -60,16 +60,30 @@ import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.mostUrgentArchiveNotice // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionArchiveWarningBanner // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickSheetDialogChrome // pragma: allowlist secret
 import compose.project.click.click.ui.components.ExploreNearbyBeaconsSection // pragma: allowlist secret
 import compose.project.click.click.ui.components.FeaturedEventSection // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeExploreTile // pragma: allowlist secret
+import compose.project.click.click.ui.components.SavedEventsSection // pragma: allowlist secret
 import compose.project.click.click.ui.components.homeGreetingTitle // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeGreetingSubtitle // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeSearchPill // pragma: allowlist secret
 import compose.project.click.click.ui.components.toHomeExploreTile // pragma: allowlist secret
+import compose.project.click.click.ui.sheet.MapBeaconSheetRoot // pragma: allowlist secret
 import compose.project.click.click.events.isActiveForDiscoveryFeed // pragma: allowlist secret
+import compose.project.click.click.events.EventReminderCoordinator
+import compose.project.click.click.data.models.MapBeacon
+import compose.project.click.click.data.models.MapBeaconKind
+import compose.project.click.click.data.models.MapBeaconMetadata
+import compose.project.click.click.ui.utils.haversineDistance
 import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
+import compose.project.click.click.viewmodel.MapViewModel
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.foundation.verticalScroll
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -87,31 +101,35 @@ private val HeaderToSearchGap = 8.dp
 
 @Composable
 fun HomeScreen(
-    viewModel: HomeViewModel = viewModel { HomeViewModel() },
+    homeViewModel: HomeViewModel = viewModel { HomeViewModel() },
+    mapViewModel: MapViewModel,
     onNavigateToChat: (String) -> Unit = {},
     onOpenSearch: (() -> Unit)? = null,
     onNavigateToMap: (beaconId: String?) -> Unit = {},
     onNavigateToMapLayer: (MapLayerFilter) -> Unit = {},
 ) {
-    val homeState by viewModel.homeState.collectAsState()
-    val reconnectReminders by viewModel.reconnectReminders.collectAsState()
-    val homeEventReminders by viewModel.homeEventReminders.collectAsState()
-    val savedEventBookmarks by viewModel.savedEventBookmarks.collectAsState()
-    val connectionInsights by viewModel.connectionInsights.collectAsState()
-    val showInsightsPanel by viewModel.showInsightsPanel.collectAsState()
-    val locationGroupedConnections by viewModel.locationGroupedConnections.collectAsState()
-    val expandedLocations by viewModel.expandedLocations.collectAsState()
-    val connectedUsers by viewModel.connectedUsers.collectAsState()
-    val nudgeResult by viewModel.nudgeResult.collectAsState()
-    val pollPairSuggestion by viewModel.pollPairSuggestion.collectAsState()
-    val icebreakerSendCooldownSec by viewModel.icebreakerSendCooldownRemainingSec.collectAsState()
-    val homeAvailabilityIntents by viewModel.homeAvailabilityIntents.collectAsState()
-    val homeAvailabilityOverlapMessages by viewModel.homeAvailabilityOverlapMessages.collectAsState()
+    val homeState by homeViewModel.homeState.collectAsState()
+    val reconnectReminders by homeViewModel.reconnectReminders.collectAsState()
+    val homeEventReminders by homeViewModel.homeEventReminders.collectAsState()
+    val savedEventBookmarks by homeViewModel.savedEventBookmarks.collectAsState()
+    val connectionInsights by homeViewModel.connectionInsights.collectAsState()
+    val showInsightsPanel by homeViewModel.showInsightsPanel.collectAsState()
+    val locationGroupedConnections by homeViewModel.locationGroupedConnections.collectAsState()
+    val expandedLocations by homeViewModel.expandedLocations.collectAsState()
+    val connectedUsers by homeViewModel.connectedUsers.collectAsState()
+    val nudgeResult by homeViewModel.nudgeResult.collectAsState()
+    val pollPairSuggestion by homeViewModel.pollPairSuggestion.collectAsState()
+    val icebreakerSendCooldownSec by homeViewModel.icebreakerSendCooldownRemainingSec.collectAsState()
+    val homeAvailabilityIntents by homeViewModel.homeAvailabilityIntents.collectAsState()
+    val homeAvailabilityOverlapMessages by homeViewModel.homeAvailabilityOverlapMessages.collectAsState()
     val archivedForHome by AppDataManager.archivedConnectionIds.collectAsState()
     val hiddenForHome by AppDataManager.hiddenConnectionIds.collectAsState()
     val connectionsForArchiveBanner by AppDataManager.connections.collectAsState()
     val prefetchedBeacons by AppDataManager.prefetchedMapBeacons.collectAsState()
     val prefetchedHubs by AppDataManager.prefetchedCommunityHubs.collectAsState()
+    val mapBeacons by mapViewModel.mapBeacons.collectAsState()
+    val currentUser by AppDataManager.currentUser.collectAsState()
+    var selectedSavedEventBeacon by remember { mutableStateOf<MapBeacon?>(null) }
     var archiveBannerNow by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
     LaunchedEffect(Unit) {
         while (isActive) {
@@ -160,13 +178,13 @@ fun HomeScreen(
         val result = nudgeResult
         if (result != null) {
             toastState.show(scope, result)
-            viewModel.clearNudgeResult()
+            homeViewModel.clearNudgeResult()
         }
     }
 
     LaunchedEffect(showAvailabilityIntentSheet) {
         if (!showAvailabilityIntentSheet) {
-            viewModel.refreshHomeAvailabilityIntents()
+            homeViewModel.refreshHomeAvailabilityIntents()
         }
     }
 
@@ -208,7 +226,7 @@ fun HomeScreen(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
-                        onClick = { viewModel.refresh() },
+                        onClick = { homeViewModel.refresh() },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary
                         )
@@ -248,18 +266,6 @@ fun HomeScreen(
                             }
                         }
 
-                        if (savedEventBookmarks.isNotEmpty()) {
-                            item(key = "saved_events_header") {
-                                SectionHeader(text = "Saved events")
-                            }
-                            items(savedEventBookmarks, key = { "saved-${it.beaconId}" }) { bookmark ->
-                                SavedEventBookmarkCard(
-                                    bookmark = bookmark,
-                                    onViewMap = { onNavigateToMap(bookmark.beaconId) },
-                                )
-                            }
-                        }
-
                         item(key = "availability_intents_strip") {
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
@@ -290,6 +296,21 @@ fun HomeScreen(
                             }
                         }
 
+                        if (savedEventBookmarks.isNotEmpty()) {
+                            item(key = "saved_events") {
+                                SavedEventsSection(
+                                    bookmarks = savedEventBookmarks,
+                                    onBookmarkClick = { bookmark ->
+                                        selectedSavedEventBeacon = resolveSavedEventBeacon(
+                                            bookmark = bookmark,
+                                            mapBeacons = mapBeacons,
+                                            prefetchedBeacons = prefetchedBeacons,
+                                        )
+                                    },
+                                )
+                            }
+                        }
+
                         if (exploreTiles.isNotEmpty()) {
                             item(key = "explore_nearby") {
                                 ExploreNearbyBeaconsSection(
@@ -304,7 +325,7 @@ fun HomeScreen(
                                 ConnectionArchiveWarningBanner(
                                     notice = notice,
                                     onOpenChat = { onNavigateToChat(notice.connectionId) },
-                                    onSendIcebreaker = { viewModel.sendArchiveBannerIcebreaker(notice) },
+                                    onSendIcebreaker = { homeViewModel.sendArchiveBannerIcebreaker(notice) },
                                     modifier = Modifier.fillMaxWidth(),
                                     icebreakerSendEnabled = icebreakerSendCooldownSec <= 0,
                                     icebreakerCooldownSec = icebreakerSendCooldownSec,
@@ -316,7 +337,7 @@ fun HomeScreen(
                                 PollPairCard(
                                     suggestion = suggestion,
                                     onOpenChat = { onNavigateToChat(suggestion.connectionId) },
-                                    onSendIcebreaker = { viewModel.sendPollPairIcebreaker(suggestion) },
+                                    onSendIcebreaker = { homeViewModel.sendPollPairIcebreaker(suggestion) },
                                     icebreakerSendEnabled = icebreakerSendCooldownSec <= 0,
                                     icebreakerCooldownSec = icebreakerSendCooldownSec,
                                 )
@@ -340,7 +361,7 @@ fun HomeScreen(
                                 ReconnectReminderCard(
                                     reminder = reminder,
                                     onReconnect = { onNavigateToChat(reminder.connectionId) },
-                                    onDismiss = { viewModel.dismissReminder(reminder.connectionId) },
+                                    onDismiss = { homeViewModel.dismissReminder(reminder.connectionId) },
                                     avatarUrl = peer?.image,
                                     email = peer?.email,
                                 )
@@ -358,7 +379,7 @@ fun HomeScreen(
                                 HomeEventReminderCard(
                                     reminder = reminder,
                                     onDismiss = {
-                                        viewModel.dismissEventReminder(reminder.beaconId, reminder.kind)
+                                        homeViewModel.dismissEventReminder(reminder.beaconId, reminder.kind)
                                     },
                                     onViewMap = { onNavigateToMap(reminder.beaconId) },
                                 )
@@ -377,10 +398,10 @@ fun HomeScreen(
                                     isExpanded = isExpanded,
                                     connectedUsers = connectedUsers,
                                     currentUserId = state.user.id,
-                                    onToggleExpand = { viewModel.toggleLocationExpanded(location) },
+                                    onToggleExpand = { homeViewModel.toggleLocationExpanded(location) },
                                     onNavigateToChat = onNavigateToChat,
                                     onNudge = { connectionId, otherUserName ->
-                                        viewModel.sendNudgeByConnectionId(connectionId, otherUserName)
+                                        homeViewModel.sendNudgeByConnectionId(connectionId, otherUserName)
                                     }
                                 )
                             }
@@ -420,7 +441,7 @@ fun HomeScreen(
                                 ConnectionInsightsCard(
                                     insights = connectionInsights!!,
                                     expanded = showInsightsPanel,
-                                    onToggle = { viewModel.toggleInsightsPanel() }
+                                    onToggle = { homeViewModel.toggleInsightsPanel() }
                                 )
                             }
                         }
@@ -460,6 +481,49 @@ fun HomeScreen(
                     availabilityViewModel.resetAvailabilityIntentSheet()
                 },
             )
+        }
+
+        val detailBeacon = selectedSavedEventBeacon
+        if (detailBeacon != null) {
+            val detailSurface = GlassSheetTokens.OledBlack()
+            val onDetailSurface = GlassSheetTokens.OnOled()
+            val distanceMeters = AppDataManager.lastKnownDeviceLocation.value?.let { (lat, lon) ->
+                haversineDistance(lat, lon, detailBeacon.latitude, detailBeacon.longitude)
+            }
+            val isCreator = !currentUser?.id.isNullOrBlank() &&
+                detailBeacon.createdByUserId == currentUser?.id
+            MapBeaconSheetRoot(
+                visible = true,
+                onDismissRequest = { selectedSavedEventBeacon = null },
+                containerColor = detailSurface,
+                contentColor = onDetailSurface,
+                scrimColor = Color.Black.copy(alpha = ClickSheetDefaults.ScrimAlpha),
+                contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+                appColorScheme = MaterialTheme.colorScheme,
+                appTypography = MaterialTheme.typography,
+            ) {
+                ClickSheetDialogChrome(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(),
+                    sheetColor = detailSurface,
+                    onSurface = onDetailSurface,
+                    alignSemanticColorsToSheet = true,
+                ) {
+                    EventBeaconDetail(
+                        beacon = detailBeacon,
+                        distanceMeters = distanceMeters,
+                        viewModel = mapViewModel,
+                        isCreator = isCreator,
+                        onEdit = { selectedSavedEventBeacon = null },
+                        onDelete = { selectedSavedEventBeacon = null },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 24.dp, vertical = 12.dp),
+                    )
+                }
+            }
         }
 
         UnifiedToastHost(
@@ -839,84 +903,68 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
 }
 
 /**
- * Bookmarked event row on Home — private saves from Map event detail.
+ * Resolve a bookmarked event into a [MapBeacon] for the Home detail sheet (no Map tab jump).
+ * Bookmark `event_start_at` / `event_end_at` win over any stale map cache so Start Time matches Home.
  */
-@Composable
-fun SavedEventBookmarkCard(
+private fun resolveSavedEventBeacon(
     bookmark: EventBookmarkItemDto,
-    onViewMap: () -> Unit,
-) {
-    val title = bookmark.title?.takeIf { it.isNotBlank() } ?: "Saved event"
-    val timeBadge = bookmark.eventStartAt
-        ?.let { iso -> runCatching { Instant.parse(iso).toEpochMilliseconds() }.getOrNull() }
-        ?.let { formatSavedEventTimeBadge(it) }
-
-    GlassCard(
-        modifier = Modifier.fillMaxWidth(),
-        usePrimaryBorder = true,
-        contentPadding = 14.dp,
-        onClick = onViewMap,
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                if (timeBadge != null) {
-                    Text(
-                        text = timeBadge,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 8.dp),
-                    )
-                }
-            }
-            TextButton(
-                onClick = onViewMap,
-                modifier = Modifier.align(Alignment.End),
-            ) {
-                Text("View on Map", fontWeight = FontWeight.SemiBold)
-            }
-        }
-    }
+    mapBeacons: List<MapBeacon>,
+    prefetchedBeacons: List<MapBeacon>,
+): MapBeacon {
+    val id = bookmark.beaconId.trim()
+    val base = mapBeacons.firstOrNull { it.id == id }
+        ?: EventReminderCoordinator.beaconById(id)
+        ?: prefetchedBeacons.firstOrNull { it.id == id }
+        ?: return bookmark.toSyntheticMapBeacon()
+    return base.withBookmarkScheduleOverlay(bookmark)
 }
 
-private fun formatSavedEventTimeBadge(startEpochMs: Long): String {
-    val now = Clock.System.now()
-    val start = Instant.fromEpochMilliseconds(startEpochMs)
-    val local = start.toLocalDateTime(TimeZone.currentSystemDefault())
-    val nowLocal = now.toLocalDateTime(TimeZone.currentSystemDefault())
-    val hour = local.hour
-    val minute = local.minute
-    val amPm = if (hour < 12) "AM" else "PM"
-    val hour12 = when {
-        hour == 0 -> 12
-        hour > 12 -> hour - 12
-        else -> hour
+private fun MapBeacon.withBookmarkScheduleOverlay(bookmark: EventBookmarkItemDto): MapBeacon {
+    val startIso = bookmark.eventStartAt?.trim()?.takeIf { it.isNotEmpty() } ?: return this
+    val endIso = bookmark.eventEndAt?.trim()?.takeIf { it.isNotEmpty() } ?: return this
+    val existing = metadata.raw
+    val merged = buildJsonObject {
+        existing?.forEach { (k, v) -> put(k, v) }
+        put("event_start_at", JsonPrimitive(startIso))
+        put("event_end_at", JsonPrimitive(endIso))
+        bookmark.title?.trim()?.takeIf { it.isNotEmpty() }?.let { title ->
+            if (existing?.get("title") == null) put("title", JsonPrimitive(title))
+        }
     }
-    val timeStr = if (minute == 0) {
-        "$hour12 $amPm"
-    } else {
-        "$hour12:${minute.toString().padStart(2, '0')} $amPm"
+    return copy(
+        metadata = metadata.copy(
+            title = metadata.title ?: bookmark.title?.trim()?.takeIf { it.isNotEmpty() },
+            raw = merged,
+        ),
+    )
+}
+
+private fun EventBookmarkItemDto.toSyntheticMapBeacon(): MapBeacon {
+    val lat = latitude ?: 0.0
+    val lon = longitude ?: 0.0
+    val title = this.title?.takeIf { it.isNotBlank() }
+    val raw = buildJsonObject {
+        title?.let { put("title", JsonPrimitive(it)) }
+        title?.let { put("description", JsonPrimitive(it)) }
+        eventStartAt?.takeIf { it.isNotBlank() }?.let { put("event_start_at", JsonPrimitive(it)) }
+        eventEndAt?.takeIf { it.isNotBlank() }?.let { put("event_end_at", JsonPrimitive(it)) }
     }
-    return when {
-        local.date == nowLocal.date -> "Today $timeStr"
-        else -> "${local.month.name.take(3)} ${local.dayOfMonth} · $timeStr"
-    }
+    val expiresMs = expiresAt
+        ?.let { compose.project.click.click.data.models.parseEpochMs(it) }
+    return MapBeacon(
+        id = beaconId,
+        kind = MapBeaconKind.EVENT,
+        latitude = lat,
+        longitude = lon,
+        metadata = MapBeaconMetadata(
+            title = title,
+            description = title,
+            raw = raw,
+        ),
+        createdAtEpochMs = null,
+        expiresAtEpochMs = expiresMs,
+        sourceBeaconType = "event",
+    )
 }
 
 /**

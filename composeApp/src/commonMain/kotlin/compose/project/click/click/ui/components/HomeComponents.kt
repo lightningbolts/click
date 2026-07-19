@@ -447,6 +447,128 @@ fun ExploreNearbyBeaconsSection(
     }
 }
 
+/**
+ * Bookmarked events on Home — same square category tiles as [ExploreNearbyBeaconsSection].
+ */
+@Composable
+fun SavedEventsSection(
+    bookmarks: List<compose.project.click.click.data.api.EventBookmarkItemDto>,
+    onBookmarkClick: (compose.project.click.click.data.api.EventBookmarkItemDto) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (bookmarks.isEmpty()) return
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = "Saved events",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        val rows = bookmarks.chunked(2)
+        rows.forEach { rowBookmarks ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                rowBookmarks.forEach { bookmark ->
+                    SavedEventCategoryTile(
+                        bookmark = bookmark,
+                        onClick = { onBookmarkClick(bookmark) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                if (rowBookmarks.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SavedEventCategoryTile(
+    bookmark: compose.project.click.click.data.api.EventBookmarkItemDto,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(16.dp)
+    val title = bookmark.title?.takeIf { it.isNotBlank() } ?: "Saved event"
+    val timeBadge = bookmark.eventStartAt
+        ?.let { iso -> runCatching { Instant.parse(iso).toEpochMilliseconds() }.getOrNull() }
+        ?.let { formatHomeSavedEventTimeBadge(it) }
+        ?: "Bookmarked"
+    Column(
+        modifier = modifier
+            .aspectRatio(1f)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .border(2.dp, clickBorderColor(), shape)
+            .clickable(onClick = onClick)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary)
+                .border(2.dp, clickBorderColor(), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Filled.Event,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = timeBadge,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+private fun formatHomeSavedEventTimeBadge(startEpochMs: Long): String {
+    val now = Clock.System.now()
+    val start = Instant.fromEpochMilliseconds(startEpochMs)
+    val local = start.toLocalDateTime(TimeZone.currentSystemDefault())
+    val nowLocal = now.toLocalDateTime(TimeZone.currentSystemDefault())
+    val hour = local.hour
+    val minute = local.minute
+    val amPm = if (hour < 12) "AM" else "PM"
+    val hour12 = when {
+        hour == 0 -> 12
+        hour > 12 -> hour - 12
+        else -> hour
+    }
+    val timeStr = if (minute == 0) {
+        "$hour12 $amPm"
+    } else {
+        "$hour12:${minute.toString().padStart(2, '0')} $amPm"
+    }
+    return when {
+        local.date == nowLocal.date -> "Today · $timeStr"
+        else -> "${local.month.name.take(3)} ${local.dayOfMonth} · $timeStr"
+    }
+}
+
 @Composable
 private fun ExploreBeaconCategoryTile(
     tile: HomeExploreTile,
