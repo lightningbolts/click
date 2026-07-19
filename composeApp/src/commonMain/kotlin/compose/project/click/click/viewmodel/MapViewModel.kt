@@ -31,6 +31,7 @@ import compose.project.click.click.events.EventReminderCoordinator
 import compose.project.click.click.events.EventSchedule
 import compose.project.click.click.events.eventSchedule
 import compose.project.click.click.events.eventScheduleMetadata
+import compose.project.click.click.events.mergeEventScheduleIntoRaw
 import compose.project.click.click.events.isVisibleEventBeacon
 import compose.project.click.click.events.validateEventSchedule
 import compose.project.click.click.ui.utils.mergeMapBeaconLists
@@ -961,7 +962,6 @@ class MapViewModel : ViewModel() {
             cachedUserLatLon = AppDataManager.lastKnownDeviceLocation.value,
         )
         _selection.value = MapSelection.BeaconSelected(beacon, distanceMeters = quickDistance)
-        ensureEventBeaconSchedule(beaconId)
 
         viewModelScope.launch(Dispatchers.Default) {
             val loc = resolveFastMapLocation() ?: return@launch
@@ -974,8 +974,9 @@ class MapViewModel : ViewModel() {
     }
 
     /**
-     * When proximity/cache rows lack `event_start_at` / `event_end_at`, fetch the full beacon so
-     * the detail sheet can show Start/End (same source Home bookmarks already denormalize).
+     * Detail-sheet only: when proximity/cache rows lack schedule metadata, fetch the full beacon
+     * and **patch schedule onto the existing pin** (never replace lat/lng — GET fallback coords
+     * were wiping pins off the local map).
      */
     fun ensureEventBeaconSchedule(beaconId: String) {
         val id = beaconId.trim()
@@ -988,12 +989,29 @@ class MapViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.Default) {
             mapBeaconRepository.fetchBeacon(id).fold(
                 onSuccess = { full ->
-                    _mapBeacons.update { mergeMapBeaconLists(it, listOf(full)) }
-                    AppDataManager.mergeCachedMapBeacons(listOf(full))
-                    val merged = _mapBeacons.value.firstOrNull { it.id == id } ?: full
+                    val schedule = full.eventSchedule() ?: return@fold
+                    fun MapBeacon.withHydratedSchedule(): MapBeacon = copy(
+                        metadata = metadata.copy(
+                            title = metadata.title ?: full.metadata.title,
+                            description = metadata.description ?: full.metadata.description,
+                            eventCategories = metadata.eventCategories.ifEmpty {
+                                full.metadata.eventCategories
+                            },
+                            raw = mergeEventScheduleIntoRaw(metadata.raw, schedule),
+                        ),
+                        createdAtEpochMs = createdAtEpochMs ?: full.createdAtEpochMs,
+                        expiresAtEpochMs = expiresAtEpochMs ?: full.expiresAtEpochMs,
+                        showCreatorName = showCreatorName || full.showCreatorName,
+                        creatorDisplayName = creatorDisplayName ?: full.creatorDisplayName,
+                    )
+                    _mapBeacons.update { list ->
+                        list.map { b -> if (b.id == id) b.withHydratedSchedule() else b }
+                    }
+                    val patched = _mapBeacons.value.firstOrNull { it.id == id } ?: current.withHydratedSchedule()
+                    AppDataManager.mergeCachedMapBeacons(listOf(patched))
                     val sel = _selection.value as? MapSelection.BeaconSelected ?: return@fold
                     if (sel.beacon.id == id) {
-                        _selection.value = sel.copy(beacon = merged)
+                        _selection.value = sel.copy(beacon = patched)
                     }
                 },
                 onFailure = { /* keep sheet open with whatever we have */ },

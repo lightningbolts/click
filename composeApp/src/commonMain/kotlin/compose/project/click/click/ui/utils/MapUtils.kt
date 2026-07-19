@@ -156,7 +156,15 @@ internal fun mergeMapBeaconLists(
     }
     for (beacon in incoming) {
         val previous = byId[beacon.id]
-        byId[beacon.id] = beacon.withPreservedEventScheduleFrom(previous)
+        var next = beacon.withPreservedEventScheduleFrom(previous)
+        // GET /api/beacons/{id} can fall back to 0,0 when location parse fails — never wipe a good pin.
+        if (previous != null &&
+            next.latitude == 0.0 && next.longitude == 0.0 &&
+            (previous.latitude != 0.0 || previous.longitude != 0.0)
+        ) {
+            next = next.copy(latitude = previous.latitude, longitude = previous.longitude)
+        }
+        byId[beacon.id] = next
     }
     val now = Clock.System.now().toEpochMilliseconds()
     val merged = byId.values.filter { beacon -> beacon.isActiveForDiscoveryFeed(now) }

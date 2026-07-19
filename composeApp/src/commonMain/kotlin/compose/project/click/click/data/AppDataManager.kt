@@ -33,6 +33,8 @@ import compose.project.click.click.data.repository.UserConnectionsSnapshot
 import compose.project.click.click.data.repository.MapBeaconRepository
 import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.data.api.CommunityHubNearbyDto
+import compose.project.click.click.data.api.toEventBookmarkItemDto
+import compose.project.click.click.data.api.toStoredEventBookmark
 import compose.project.click.click.utils.LocationService
 import compose.project.click.click.auth.LocalSessionCache
 import compose.project.click.click.network.NetworkConnectivityMonitor
@@ -135,6 +137,20 @@ object AppDataManager {
 
     private val _prefetchedCommunityHubs = MutableStateFlow<List<CommunityHubNearbyDto>>(emptyList())
     val prefetchedCommunityHubs: StateFlow<List<CommunityHubNearbyDto>> = _prefetchedCommunityHubs.asStateFlow()
+
+    /** Saved event bookmarks restored from disk for instant Home paint. */
+    private val _cachedEventBookmarks =
+        MutableStateFlow<List<compose.project.click.click.data.api.EventBookmarkItemDto>>(emptyList())
+    val cachedEventBookmarks:
+        StateFlow<List<compose.project.click.click.data.api.EventBookmarkItemDto>> =
+        _cachedEventBookmarks.asStateFlow()
+
+    fun updateCachedEventBookmarks(
+        bookmarks: List<compose.project.click.click.data.api.EventBookmarkItemDto>,
+    ) {
+        _cachedEventBookmarks.value = bookmarks.take(5)
+        schedulePersistSnapshot()
+    }
 
     /** True after the startup beacon/hub prefetch attempt finishes (success, empty, or failure). */
     private val _discoveryMapPrefetchComplete = MutableStateFlow(false)
@@ -1186,6 +1202,7 @@ object AppDataManager {
         beaconPrefetchJob = null
         _prefetchedMapBeacons.value = emptyList()
         _prefetchedCommunityHubs.value = emptyList()
+        _cachedEventBookmarks.value = emptyList()
         _discoveryMapPrefetchComplete.value = false
         _lastKnownDeviceLocation.value = null
         queuedProfilePrefetchIds = emptySet()
@@ -2026,6 +2043,10 @@ object AppDataManager {
                     )
                 }
             }
+            if (snapshot.cachedEventBookmarks.isNotEmpty()) {
+                _cachedEventBookmarks.value =
+                    snapshot.cachedEventBookmarks.map { it.toEventBookmarkItemDto() }
+            }
             supabaseRepository.seedCachedUserPublicProfiles(snapshot.cachedUserPublicProfiles)
             supabaseRepository.seedCachedProfileTimelines(snapshot.cachedProfileTimelines)
             applyRestoredSnapshotFreshness(snapshot)
@@ -2076,6 +2097,7 @@ object AppDataManager {
                     reportedDistanceMeters = dto.distanceMeters,
                 )
             },
+            cachedEventBookmarks = _cachedEventBookmarks.value.map { it.toStoredEventBookmark() },
             snapshotSavedAtMs = Clock.System.now().toEpochMilliseconds(),
         )
         runCatching {

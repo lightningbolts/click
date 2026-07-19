@@ -1276,7 +1276,9 @@ internal fun EventBeaconDetail(
         viewModel.loadBeaconRsvp(displayBeacon.id, forceRefresh = true)
         viewModel.loadBeaconEngagement(displayBeacon.id, forceRefresh = true)
         viewModel.recordEventImpression(displayBeacon.id)
-        viewModel.ensureEventBeaconSchedule(displayBeacon.id)
+        if (displayBeacon.eventSchedule() == null) {
+            viewModel.ensureEventBeaconSchedule(displayBeacon.id)
+        }
     }
 
     Column(

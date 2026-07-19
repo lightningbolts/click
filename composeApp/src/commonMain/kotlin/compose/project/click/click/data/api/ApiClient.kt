@@ -1917,6 +1917,30 @@ data class EventBookmarkItemDto(
     @SerialName("expires_at") val expiresAt: String? = null,
 )
 
+fun EventBookmarkItemDto.toStoredEventBookmark(): compose.project.click.click.data.models.StoredEventBookmark =
+    compose.project.click.click.data.models.StoredEventBookmark(
+        beaconId = beaconId,
+        bookmarkedAt = bookmarkedAt,
+        title = title,
+        eventStartAt = eventStartAt,
+        eventEndAt = eventEndAt,
+        latitude = latitude,
+        longitude = longitude,
+        expiresAt = expiresAt,
+    )
+
+fun compose.project.click.click.data.models.StoredEventBookmark.toEventBookmarkItemDto(): EventBookmarkItemDto =
+    EventBookmarkItemDto(
+        beaconId = beaconId,
+        bookmarkedAt = bookmarkedAt,
+        title = title,
+        eventStartAt = eventStartAt,
+        eventEndAt = eventEndAt,
+        latitude = latitude,
+        longitude = longitude,
+        expiresAt = expiresAt,
+    )
+
 @Serializable
 data class EventBookmarksResponseDto(
     val bookmarks: List<EventBookmarkItemDto> = emptyList(),

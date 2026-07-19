@@ -160,3 +160,16 @@ fun StoredCommunityHubPin.toCommunityHubPin(): CommunityHubPin = CommunityHubPin
     activeUserCount = activeUserCount,
     reportedDistanceMeters = reportedDistanceMeters,
 )
+
+/** Disk-safe Home saved-event row (mirrors [compose.project.click.click.data.api.EventBookmarkItemDto]). */
+@Serializable
+data class StoredEventBookmark(
+    val beaconId: String,
+    val bookmarkedAt: String? = null,
+    val title: String? = null,
+    val eventStartAt: String? = null,
+    val eventEndAt: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val expiresAt: String? = null,
+)

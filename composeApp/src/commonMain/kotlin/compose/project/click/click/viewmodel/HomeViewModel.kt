@@ -78,7 +78,8 @@ class HomeViewModel(
     private val _homeEventReminders = MutableStateFlow<List<HomeEventReminder>>(emptyList())
     val homeEventReminders: StateFlow<List<HomeEventReminder>> = _homeEventReminders.asStateFlow()
 
-    private val _savedEventBookmarks = MutableStateFlow<List<EventBookmarkItemDto>>(emptyList())
+    private val _savedEventBookmarks =
+        MutableStateFlow(AppDataManager.cachedEventBookmarks.value)
     val savedEventBookmarks: StateFlow<List<EventBookmarkItemDto>> = _savedEventBookmarks.asStateFlow()
 
     private val _dismissedEventReminderKeys = MutableStateFlow<Set<String>>(emptySet())
@@ -138,6 +139,14 @@ class HomeViewModel(
     init {
         observeAppData()
         subscribeToConnectionChanges()
+        // Cold-start race: snapshot may restore after HomeViewModel is created.
+        viewModelScope.launch {
+            AppDataManager.cachedEventBookmarks.collect { cached ->
+                if (cached.isNotEmpty() && _savedEventBookmarks.value.isEmpty()) {
+                    _savedEventBookmarks.value = cached
+                }
+            }
+        }
     }
 
     /**
@@ -441,16 +450,17 @@ class HomeViewModel(
         try {
             mapBeaconRepository.fetchMyEventBookmarks(limit = 50).fold(
                 onSuccess = { response ->
-                    _savedEventBookmarks.value = response.bookmarks.take(5)
+                    val next = response.bookmarks.take(5)
+                    _savedEventBookmarks.value = next
+                    AppDataManager.updateCachedEventBookmarks(next)
                 },
                 onFailure = { e ->
                     println("Error loading saved event bookmarks: ${e.redactedRestMessage()}")
-                    _savedEventBookmarks.value = emptyList()
+                    // Keep disk-cached bookmarks visible; do not flash an empty section.
                 },
             )
         } catch (e: Exception) {
             println("Error loading saved event bookmarks: ${e.redactedRestMessage()}")
-            _savedEventBookmarks.value = emptyList()
         }
     }
 

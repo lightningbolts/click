@@ -49,6 +49,16 @@ fun eventScheduleMetadata(
         put("event_end_at", Instant.fromEpochMilliseconds(schedule.endEpochMs).toString())
     }
 
+/** Overlay [schedule] onto existing metadata without dropping other keys. */
+fun mergeEventScheduleIntoRaw(
+    base: JsonObject?,
+    schedule: EventSchedule,
+): JsonObject =
+    buildJsonObject {
+        base?.forEach { (k, v) -> put(k, v) }
+        eventScheduleMetadata(schedule).forEach { (k, v) -> put(k, v) }
+    }
+
 fun parseEventScheduleFromMetadata(raw: JsonObject?): EventSchedule? {
     if (raw == null) return null
     fun parseInstant(key: String): Long? {
