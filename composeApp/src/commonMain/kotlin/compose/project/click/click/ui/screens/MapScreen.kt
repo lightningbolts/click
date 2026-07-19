@@ -1296,14 +1296,6 @@ internal fun EventBeaconDetail(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                beacon.createdAtEpochMs?.let { createdMs ->
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Posted ${formatEventPostedAtLabel(createdMs)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
             }
             EventHeroActions(
                 bookmarked = bookmarked,
@@ -1345,6 +1337,14 @@ internal fun EventBeaconDetail(
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface,
         )
+
+        beacon.createdAtEpochMs?.let { createdMs ->
+            Text(
+                text = "Posted ${formatEventPostedAtLabel(createdMs)}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
         EventAttendeeStack(
             attendees = attendees,

@@ -4,6 +4,7 @@ import compose.project.click.click.data.models.Connection // pragma: allowlist s
 import compose.project.click.click.data.models.GeoLocation // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.data.models.withPreservedEventScheduleFrom
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.isResolvedDisplayName // pragma: allowlist secret
 import compose.project.click.click.data.models.resolveDisplayName // pragma: allowlist secret
@@ -154,7 +155,8 @@ internal fun mergeMapBeaconLists(
         byId[beacon.id] = beacon
     }
     for (beacon in incoming) {
-        byId[beacon.id] = beacon
+        val previous = byId[beacon.id]
+        byId[beacon.id] = beacon.withPreservedEventScheduleFrom(previous)
     }
     val now = Clock.System.now().toEpochMilliseconds()
     val merged = byId.values.filter { beacon -> beacon.isActiveForDiscoveryFeed(now) }
