@@ -497,34 +497,50 @@ internal fun ChatCallOptionsIosSurface(
 /**
  * Reply affordance drawn **behind** the bubble; uncovered as the
  * bubble slides (no layout gutter).
+ *
+ * Progress is read from [MutableFloatState]s inside [graphicsLayer] so drag frames
+ * do not recompose the message row (which was flickering chat images).
  */
 @Composable
 internal fun ReplySwipeSideIcon(
-    hintProgress: Float,
-    hintAlpha: Float,
+    rawSwipeTravelPx: androidx.compose.runtime.FloatState,
+    displayVisualPx: androidx.compose.runtime.FloatState,
+    isSent: Boolean,
+    swipeThresholdPx: Float,
+    maxSwipeVisualPx: Float,
     modifier: Modifier = Modifier,
 ) {
-    val t = hintProgress.coerceIn(0f, 1f)
-    val smooth = t * t * (3f - 2f * t)
-    val scale = 0.82f + 0.18f * smooth
-    val visibility = smooth * (0.28f + 0.72f * smooth).coerceIn(0f, 1f)
-    val a = (visibility * hintAlpha).coerceIn(0f, 1f)
     Box(
         modifier = modifier
+            .size(chatBubbleScaledDp(40f))
             .graphicsLayer {
+                val rawHintP = replyDragHintProgress(
+                    rawSwipeTravelPx.floatValue,
+                    isSent,
+                    swipeThresholdPx,
+                )
+                val visualHintP =
+                    (kotlin.math.abs(displayVisualPx.floatValue) / maxSwipeVisualPx.coerceAtLeast(1f))
+                        .coerceIn(0f, 1f)
+                val hintProgress = maxOf(rawHintP, visualHintP)
+                val t = hintProgress.coerceIn(0f, 1f)
+                val smooth = t * t * (3f - 2f * t)
+                val scale = 0.82f + 0.18f * smooth
+                val visibility = smooth * (0.28f + 0.72f * smooth).coerceIn(0f, 1f)
+                val hintAlpha = (0.52f + 0.48f * (hintProgress * hintProgress)).coerceIn(0f, 1f)
+                val a = (visibility * hintAlpha).coerceIn(0f, 1f)
                 alpha = a
                 scaleX = scale
                 scaleY = scale
             }
-            .size(chatBubbleScaledDp(40f))
             .clip(CircleShape)
-            .background(LightBlue.copy(alpha = (0.18f + 0.22f * smooth) * a)),
+            .background(LightBlue.copy(alpha = 0.28f)),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = Icons.AutoMirrored.Filled.Reply,
             contentDescription = "Reply",
-            tint = LightBlue.copy(alpha = a),
+            tint = LightBlue,
             modifier = Modifier.size(chatBubbleScaledDp(22f)),
         )
     }

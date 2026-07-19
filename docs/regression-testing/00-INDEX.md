@@ -76,7 +76,9 @@ npm test
 npm run build
 ```
 
-High-signal unit tests to keep green: `ChatSwipeMathTest`, `ChatViewModelTest`, `ConnectionEncounterMergeTest`, `DiscoveryFeedSectionsTest`, `OfflineBootTest`, proximity codec/matching tests under `composeApp` and `click-web/__tests__/` (incl. `eventEngagement.test.ts`, `event-engagement.route.contract.test.ts`).
+High-signal unit tests to keep green: `ChatSwipeMathTest`, `ChatViewModelTest`, `ChatTimestampPeekTest`, `ChatInteractionPolicyTest`, `HomeContinuityPolicyTest`, `BeaconCheckInOptimismTest`, `ConnectionEncounterMergeTest`, `DiscoveryFeedSectionsTest`, `OfflineBootTest`, proximity codec/matching tests under `composeApp` and `click-web/__tests__/` (incl. `eventEngagement.test.ts`, `event-engagement.route.contract.test.ts`).
+
+**Last §0 run (UI interaction polish, 2026-07-19):** Android `compileDebugKotlinAndroid` PASS · iOS `compileKotlinIosSimulatorArm64` PASS · `testDebugUnitTest` high-signal subset PASS (`BeaconCheckInOptimismTest`, `HomeContinuityPolicyTest`, `ChatTimestampPeekTest`, `ChatSwipeMathTest`, `ChatInteractionPolicyTest`). Device smoke: chat row press; chat/events overlay continuity; optimistic check-in; reply cancel; long-press without native selection; IME lockstep.
 
 **Last §0 run (Home interactive-back underlay anti-flicker, 2026-07-18):** Android compile PASS · iOS Simulator compile PASS. Device smoke: iOS swipe Map/Settings/Add Click → Home should not remount/flicker Home.
 

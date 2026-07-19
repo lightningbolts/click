@@ -27,7 +27,7 @@ object GlassSheetTokens {
 
     @Composable
     @ReadOnlyComposable
-    fun GlassBorderPressed(): Color = clickBorderColor()
+    fun GlassBorderPressed(): Color = clickBorderColor(usePrimary = true).copy(alpha = 0.85f)
 
     @Composable
     @ReadOnlyComposable

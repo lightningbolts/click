@@ -181,15 +181,15 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] Group avatar tap → group members / `TabbedGroupProfileSheet`
 - [ ] Unread badge / preview text accurate
 - [ ] Online indicator on avatar when peer online
-- [ ] `[UI]` Row press: Android bounded ripple; iOS UIKit-style press (no ripple)
+- [ ] `[UI]` Row press: full-row `MotionTokens.PressScale` + glass border pressed alpha (no ripple)
 
 ### 6.3 Chat push (`ConnectionsScreen`)
 
-- [ ] `[P] iOS` List stays mounted; chat overlays; parallax on swipe-back
-- [ ] `[P] iOS` Swipe-back dismisses chat; `ChatTransitionMode.Gesture` clears correctly
-- [ ] `[P] iOS` Timestamp peek via `rightToLeftPeek` during horizontal drag
-- [ ] `[P] Android` `AnimatedContent` swaps list ↔ chat
-- [ ] `[P] Android` `PlatformBackHandler` closes chat
+- [ ] List stays mounted; chat overlays; parallax on swipe-back (iOS **and** Android)
+- [ ] Swipe-back dismisses chat; `ChatTransitionMode.Gesture` clears correctly
+- [ ] Timestamp peek via `rightToLeftPeek` during horizontal drag
+- [ ] `[P] Android` `PlatformBackHandler` closes chat (system back)
+- [ ] Tab bar stays composed under opaque chat (Scaffold zIndex cover — no remount pop on dismiss)
 - [ ] `initialChatId` / `pendingChatId` opens correct thread from push/deep link/Home/Map
 - [ ] Scroll position on list preserved after chat dismiss
 
@@ -219,7 +219,7 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 
 - [ ] Tap hub row opens hub chat overlay
 - [ ] Long-press hub actions (leave, etc.)
-- [ ] `[UI]` Hub row press feedback platform-native
+- [ ] `[UI]` Hub row press feedback: same PressScale + border as connection rows
 
 ### 6.7 Profiles (`ProfileBottomSheet`, `UserProfileBottomSheet`)
 
@@ -247,8 +247,8 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] Text input, send button
 - [ ] `[P] iOS` Composer sizing / corner radii / circle send button
 - [ ] `[P] Android` Composer layout and send affordance
-- [ ] Keyboard opens/closes; timeline scrolls; `ScreenChrome` lift
-- [ ] Reply quote bar when replying
+- [ ] Keyboard opens/closes lockstep with composer (iOS Animatable + UIKit curve; no ~200ms lag)
+- [ ] Reply quote bar when replying; cancel collapses with AnimatedVisibility (no abrupt snap)
 - [ ] Edit mode: cancel edit, save edit
 - [ ] Attachment picker entry (photo, file, voice)
 
@@ -257,9 +257,10 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] Swipe-to-reply on message bubble (L→R received, R→L sent)
 - [ ] Swipe threshold haptic fires once per gesture
 - [ ] Reply composer pre-fills quoted message
-- [ ] Long-press message → `MessageActionSheet`
+- [ ] Long-press message → `MessageActionSheet` (no native word-select competing with sheet)
 - [ ] `[P] iOS` Timestamp gutter peek (horizontal drag while chat embedded in Connections)
 - [ ] `[UI]` Swipe settle uses platform easing (no bubble jump mid-settle — `ChatSwipeMathTest`)
+- [ ] `[UI]` Interactive-back: header chrome uses `interactiveBackPersonality` (subtle scale/offset)
 
 ### 7.4 Message actions (`MessageActionSheet`)
 
@@ -383,9 +384,11 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] Submit success adds pin; failure toast
 - [ ] Beacon detail sheet: RSVP, share, navigate, bookmark, check-in
 - [ ] Bookmark toggle survives app force-kill (server-backed)
+- [ ] Check-in icon flips **immediately** on tap (optimistic); pending blocks double-tap
 - [ ] Check-in far from pin → snackbar + state reverts (geofence)
 - [ ] Check-in with location denied → snackbar, stays unchecked
 - [ ] Check-in before live window → “Check-in opens when the event starts”
+- [ ] Events list from map: drop beacon / layer controls stay under overlay (no alpha remount on back)
 - [ ] `initialBeaconId` focuses correct pin on load
 - [ ] Event reminders sync (`EventReminderCoordinator`)
 - [ ] `[KNOWN-9]` Hazard beacon icon sized consistently with other pin icons (not oversized)

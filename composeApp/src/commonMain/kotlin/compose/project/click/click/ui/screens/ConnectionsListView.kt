@@ -13,6 +13,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.text.style.TextOverflow
@@ -173,6 +174,8 @@ import compose.project.click.click.ui.chat.ChatBubblePhotoContent // pragma: all
 import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatWarmLoadingView // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionItem // pragma: allowlist secret
+import compose.project.click.click.ui.chat.connectionRowPressGestures // pragma: allowlist secret
+import compose.project.click.click.ui.chat.connectionRowPressHighlight // pragma: allowlist secret
 import compose.project.click.click.ui.chat.RememberMeStrip // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ForwardDialog // pragma: allowlist secret
 import compose.project.click.click.ui.chat.VibeCheckBanner // pragma: allowlist secret
@@ -1301,15 +1304,6 @@ private fun ActiveHubFeedRow(
     onLongPress: () -> Unit,
 ) {
     val rowInteraction = remember { MutableInteractionSource() }
-    val rowTapModifier = Modifier.combinedClickable(
-        interactionSource = rowInteraction,
-        indication = null,
-        onClick = onClick,
-        onLongClick = {
-            PlatformHapticsPolicy.heavyImpact()
-            onLongPress()
-        },
-    )
 
     Row(
         modifier = Modifier
@@ -1321,7 +1315,12 @@ private fun ActiveHubFeedRow(
                 shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
             )
             .background(GlassSheetTokens.GlassSurface())
-            .then(rowTapModifier)
+            .connectionRowPressHighlight(rowInteraction)
+            .connectionRowPressGestures(
+                interactionSource = rowInteraction,
+                onClick = onClick,
+                onLongPress = onLongPress,
+            )
             .padding(start = 16.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

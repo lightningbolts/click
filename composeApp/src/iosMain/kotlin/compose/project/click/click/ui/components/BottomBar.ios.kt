@@ -79,9 +79,9 @@ actual fun PlatformBottomBar(
             UIColor.colorWithRed(0x4A / 255.0, green = 0x44 / 255.0, blue = 0x55 / 255.0, alpha = 1.0)
         }
         val clickTint = if (isDarkMode) {
-            UIColor.colorWithRed(0x63 / 255.0, green = 0x0E / 255.0, blue = 0xD4 / 255.0, alpha = 0.10)
+            UIColor.colorWithRed(0x63 / 255.0, green = 0x0E / 255.0, blue = 0xD4 / 255.0, alpha = 0.22)
         } else {
-            UIColor.colorWithRed(0x63 / 255.0, green = 0x0E / 255.0, blue = 0xD4 / 255.0, alpha = 0.06)
+            UIColor.colorWithRed(0x63 / 255.0, green = 0x0E / 255.0, blue = 0xD4 / 255.0, alpha = 0.14)
         }
         val accessibleMaterial = if (isDarkMode) {
             UIColor.colorWithRed(0x10 / 255.0, green = 0x12 / 255.0, blue = 0x12 / 255.0, alpha = 0.96)
@@ -131,7 +131,11 @@ actual fun PlatformBottomBar(
                 val idx = didSelectItem.tag.toInt()
                 currentItems.getOrNull(idx)?.let { item ->
                     if (item.route != currentRouteState) {
-                        PlatformHapticsPolicy.lightImpact()
+                        if (item.route == NavigationItem.AddClick.route) {
+                            PlatformHapticsPolicy.heavyImpact()
+                        } else {
+                            PlatformHapticsPolicy.lightImpact()
+                        }
                     }
                     onItemSelectedState(item)
                 }
@@ -141,12 +145,27 @@ actual fun PlatformBottomBar(
 
     LaunchedEffect(tabBar) { tabBar.delegate = delegate }
 
-    LaunchedEffect(items, currentRoute) {
+    LaunchedEffect(items, currentRoute, isDarkMode) {
+        val selectedColor = if (isDarkMode) {
+            UIColor.colorWithRed(0xD2 / 255.0, green = 0xBB / 255.0, blue = 0xFF / 255.0, alpha = 1.0)
+        } else {
+            UIColor.colorWithRed(0x63 / 255.0, green = 0x0E / 255.0, blue = 0xD4 / 255.0, alpha = 1.0)
+        }
         val uiItems = items.mapIndexed { index, navItem ->
+            val symbol = UIImage.systemImageNamed(navItem.sfSymbol)
+            val image = if (navItem.route == NavigationItem.AddClick.route) {
+                // Opaque filled glyph — avoids washed-out template rendering through glass.
+                symbol?.imageWithTintColor(
+                    selectedColor,
+                    renderingMode = platform.UIKit.UIImageRenderingMode.UIImageRenderingModeAlwaysOriginal,
+                ) ?: symbol
+            } else {
+                symbol
+            }
             UITabBarItem(
                 title = navItem.title,
-                image = UIImage.systemImageNamed(navItem.sfSymbol),
-                tag = index.toLong()
+                image = image,
+                tag = index.toLong(),
             )
         }
         tabBar.setItems(uiItems)
@@ -173,21 +192,19 @@ actual fun PlatformBottomBar(
         tabBar.userInteractionEnabled = visible
     }
 
-    LaunchedEffect(visible, tabBar) {
-        if (!visible) {
-            AppScreenChromeState.updateBottomChromeHeight(
-                AppScreenDefaults.ExtraScrollBottomPadding,
-            )
-        }
-    }
-
+    // Never shrink chrome height while hidden — keeps Connections list padding stable and
+    // avoids a remount flash when the bar fades back in after chat.
     var topLeft by remember { mutableStateOf(DpOffset.Zero) }
     var positionInRoot by remember { mutableStateOf(DpOffset.Zero) }
     var tabBarWidth by remember { mutableStateOf(0.dp) }
     var tabBarHeight by remember { mutableStateOf(AppScreenDefaults.IosTabBarContentHeight) }
+    var lastClearance by remember { mutableStateOf(AppScreenDefaults.IosTabBarContentHeight) }
 
-    LaunchedEffect(Unit, visible) {
-        if (!visible) return@LaunchedEffect
+    LaunchedEffect(visible, tabBar) {
+        if (!visible) {
+            AppScreenChromeState.updateBottomChromeHeight(lastClearance)
+            return@LaunchedEffect
+        }
         var stable = 0
         while (true) {
             val viewHeightPx = viewController.view.bounds.useContents { size.height }
@@ -206,6 +223,7 @@ actual fun PlatformBottomBar(
                     val clearanceFromTop = with(density) {
                         clearanceFromTopPx.toFloat().toDp()
                     }
+                    lastClearance = clearanceFromTop
                     AppScreenChromeState.updateBottomChromeHeight(clearanceFromTop)
                 }
             }
@@ -213,8 +231,6 @@ actual fun PlatformBottomBar(
             withFrameMillis { }
         }
     }
-
-    if (!visible) return
 
     Box(
         modifier = Modifier
@@ -225,6 +241,7 @@ actual fun PlatformBottomBar(
             .graphicsLayer {
                 translationX = (topLeft.x - positionInRoot.x).toPx()
                 translationY = (topLeft.y - positionInRoot.y).toPx()
+                alpha = if (visible) 1f else 0f
             }
             .width(tabBarWidth)
             .height(tabBarHeight)

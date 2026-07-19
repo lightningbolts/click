@@ -1,6 +1,12 @@
 package compose.project.click.click.ui.chat
 
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -51,7 +57,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -98,11 +103,16 @@ internal fun ConnectionChatMessageComposer(
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val replyBannerVisible = replyingTo != null && editingMessageId == null
+    // Keep last target so AnimatedVisibility can exit after clearReplyTarget() nulls [replyingTo].
+    var replyBannerContent by remember { mutableStateOf(replyingTo) }
+    if (replyingTo != null && editingMessageId == null) {
+        replyBannerContent = replyingTo
+    }
     val composerRowVPad = if (composerStyle.isIOS) 6.dp else 8.dp
     val composerRowHPad = ChatChromeHorizontalPadding
     val replyShape = RoundedCornerShape(if (composerStyle.isIOS) 12.dp else 14.dp)
     val composerStripInteraction = remember { MutableInteractionSource() }
-    Box(modifier = Modifier.fillMaxWidth().graphicsLayer { clip = true }) {
+    Box(modifier = Modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
                 .matchParentSize()
@@ -117,19 +127,21 @@ internal fun ConnectionChatMessageComposer(
                 .fillMaxWidth()
                 .padding(horizontal = composerRowHPad, vertical = composerRowVPad),
         ) {
-            Crossfade(
-                targetState = replyBannerVisible,
-                animationSpec = ChatChromeMotion.Crossfade,
-                modifier = Modifier.fillMaxWidth(),
+            AnimatedVisibility(
+                visible = replyBannerVisible,
+                enter = expandVertically(
+                    animationSpec = tween(340, easing = FastOutSlowInEasing),
+                    expandFrom = Alignment.Bottom,
+                ) + fadeIn(animationSpec = tween(280, easing = FastOutSlowInEasing)),
+                exit = shrinkVertically(
+                    animationSpec = tween(360, easing = FastOutSlowInEasing),
+                    shrinkTowards = Alignment.Bottom,
+                ) + fadeOut(animationSpec = tween(300, easing = FastOutSlowInEasing)),
                 label = "replyComposerBanner",
-            ) { showBanner ->
-                if (!showBanner) {
-                    Spacer(Modifier.height(0.dp).fillMaxWidth())
-                } else {
-                    val rt = replyingTo
-                    if (rt == null) {
-                        Spacer(Modifier.height(0.dp).fillMaxWidth())
-                    } else {
+            ) {
+                val rt = replyBannerContent
+                if (rt != null) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
                             shape = replyShape,
@@ -187,11 +199,9 @@ internal fun ConnectionChatMessageComposer(
                                 }
                             }
                         }
+                        Spacer(modifier = Modifier.height(6.dp))
                     }
                 }
-            }
-            if (replyBannerVisible) {
-                Spacer(modifier = Modifier.height(6.dp))
             }
             if (stagedChatImages.isNotEmpty()) {
                 Row(

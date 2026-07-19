@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import compose.project.click.click.events.HomeEventReminder
 import compose.project.click.click.events.eventReminderBody
 import compose.project.click.click.events.eventReminderTitle
@@ -185,6 +186,14 @@ fun HomeScreen(
         if (result != null) {
             toastState.show(scope, result)
             homeViewModel.clearNudgeResult()
+        }
+    }
+
+    val engagementSnackbar by mapViewModel.engagementSnackbar.collectAsState()
+    LaunchedEffect(engagementSnackbar) {
+        engagementSnackbar?.let { msg ->
+            toastState.show(scope, msg)
+            mapViewModel.clearEngagementSnackbar()
         }
     }
 
@@ -517,25 +526,37 @@ fun HomeScreen(
                 appColorScheme = MaterialTheme.colorScheme,
                 appTypography = MaterialTheme.typography,
             ) {
-                ClickSheetDialogChrome(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight(),
-                    sheetColor = detailSurface,
-                    onSurface = onDetailSurface,
-                    alignSemanticColorsToSheet = true,
-                ) {
-                    EventBeaconDetail(
-                        beacon = detailBeacon,
-                        distanceMeters = distanceMeters,
-                        viewModel = mapViewModel,
-                        isCreator = isCreator,
-                        onEdit = { selectedSavedEventBeacon = null },
-                        onDelete = { selectedSavedEventBeacon = null },
+                Box(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
+                    ClickSheetDialogChrome(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .padding(horizontal = 24.dp, vertical = 12.dp),
+                            .fillMaxWidth()
+                            .fillMaxHeight(),
+                        sheetColor = detailSurface,
+                        onSurface = onDetailSurface,
+                        alignSemanticColorsToSheet = true,
+                    ) {
+                        EventBeaconDetail(
+                            beacon = detailBeacon,
+                            distanceMeters = distanceMeters,
+                            viewModel = mapViewModel,
+                            isCreator = isCreator,
+                            onEdit = { selectedSavedEventBeacon = null },
+                            onDelete = { selectedSavedEventBeacon = null },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(horizontal = 24.dp, vertical = 12.dp),
+                        )
+                    }
+                    UnifiedToastHost(
+                        state = toastState,
+                        opaque = true,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .padding(bottom = 24.dp)
+                            .zIndex(100f),
                     )
                 }
             }

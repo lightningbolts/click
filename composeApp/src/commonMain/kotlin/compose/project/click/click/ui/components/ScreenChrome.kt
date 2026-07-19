@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -182,6 +183,7 @@ fun rememberComposerBottomPadding(extra: Dp = 0.dp): Dp {
 private fun Modifier.chatBottomInsetUnion(
     extraBottom: Dp = 0.dp,
     nativeKeyboardLiftPx: Float? = null,
+    nativeKeyboardLiftPxState: MutableFloatState? = null,
 ): Modifier = composed {
     val density = LocalDensity.current
     val style = LocalPlatformStyle.current
@@ -191,13 +193,17 @@ private fun Modifier.chatBottomInsetUnion(
     val navBottomDp = with(density) { navBottomPx.toDp() }
 
     if (style.isIOS) {
-        // iOS never falls through to Compose IME insets. A missing native value means no lift,
-        // which is safer than briefly double-lifting while the notification provider hydrates.
-        val liftPx = nativeKeyboardLiftPx?.coerceAtLeast(0f) ?: 0f
+        // iOS never falls through to Compose IME insets. Prefer MutableFloatState so keyboard
+        // frames invalidate graphicsLayer only (no LazyColumn recomposition / image flicker).
         return@composed Modifier
             .padding(bottom = navBottomDp + extraBottom)
             .clipToBounds()
             .graphicsLayer {
+                val liftPx = when {
+                    nativeKeyboardLiftPxState != null ->
+                        nativeKeyboardLiftPxState.floatValue.coerceAtLeast(0f)
+                    else -> nativeKeyboardLiftPx?.coerceAtLeast(0f) ?: 0f
+                }
                 translationY = -liftPx
             }
     }
@@ -233,7 +239,8 @@ fun Modifier.chatComposerDock(extraBottom: Dp = 0.dp): Modifier = composed {
 fun Modifier.chatThreadKeyboardDock(
     extraBottom: Dp = 0.dp,
     nativeKeyboardLiftPx: Float? = null,
-): Modifier = chatBottomInsetUnion(extraBottom, nativeKeyboardLiftPx)
+    nativeKeyboardLiftPxState: MutableFloatState? = null,
+): Modifier = chatBottomInsetUnion(extraBottom, nativeKeyboardLiftPx, nativeKeyboardLiftPxState)
 
 /**
  * Edge-to-edge chat dock. On iOS callers that need keyboard movement must use

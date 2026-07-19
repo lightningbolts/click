@@ -14,14 +14,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -115,39 +119,43 @@ internal fun ChatBubblePhotoContent(
     }
     Box(modifier = modifier.fillMaxWidth()) {
         val localPreviewBytes = secureState?.imageBytes
-        val cachedBitmap = remember(message.id) { secureChatImageBitmapCache.get(message.id) }
+        // Stable bitmap slot — prefer process cache so reply/swipe recompositions never flash
+        // a spinner when the decoded image is already available.
+        var displayBitmap by remember(message.id) {
+            mutableStateOf(secureChatImageBitmapCache.get(message.id))
+        }
+        // Re-read cache on every composition without resetting state when the item remounts
+        // with the same message id after a brief dispose (reply banner / back-swipe layout).
+        val cachedBitmap = secureChatImageBitmapCache.get(message.id)
+        val bitmap = displayBitmap ?: cachedBitmap
+        LaunchedEffect(message.id, localPreviewBytes) {
+            secureChatImageBitmapCache.get(message.id)?.let {
+                if (displayBitmap !== it) displayBitmap = it
+                return@LaunchedEffect
+            }
+            val bytes = localPreviewBytes ?: return@LaunchedEffect
+            val decoded = runCatching { bytes.toImageBitmap() }
+                .onFailure { e ->
+                    println(
+                        "ChatBubblePhotoContent: failed to decode local preview for message=${message.id}: ${e.redactedRestMessage()}",
+                    )
+                }
+                .getOrNull()
+            if (decoded != null) {
+                secureChatImageBitmapCache.put(message.id, decoded)
+                displayBitmap = decoded
+            }
+        }
         when {
-            cachedBitmap != null -> {
+            bitmap != null -> {
                 PhotoBitmapContent(
-                    bitmap = cachedBitmap,
+                    bitmap = bitmap,
                     rollLocked = rollLocked,
                     countdownLabel = countdownLabel,
                     borderIfReceived = borderIfReceived,
                     photoGestureModifier = photoGestureModifier,
                     uploadProgress = secureState?.uploadProgress,
                 )
-            }
-            localPreviewBytes != null -> {
-                val displayBitmap = remember(message.id) {
-                    runCatching { localPreviewBytes.toImageBitmap() }
-                        .onFailure { e ->
-                            println("ChatBubblePhotoContent: failed to decode local preview for message=${message.id}: ${e.redactedRestMessage()}")
-                        }
-                        .getOrNull()
-                        ?.also { bmp -> secureChatImageBitmapCache.put(message.id, bmp) }
-                }
-                if (displayBitmap != null) {
-                    PhotoBitmapContent(
-                        bitmap = displayBitmap,
-                        rollLocked = rollLocked,
-                        countdownLabel = countdownLabel,
-                        borderIfReceived = borderIfReceived,
-                        photoGestureModifier = photoGestureModifier,
-                        uploadProgress = secureState?.uploadProgress,
-                    )
-                } else {
-                    SecurePhotoLoadingPlaceholder()
-                }
             }
             isEncrypted && secureState?.loading == true -> {
                 SecurePhotoLoadingPlaceholder()
@@ -182,14 +190,21 @@ internal fun ChatBubblePhotoContent(
                                 },
                             )
                             .clip(chatPhotoAttachmentShape)
-                            .then(if (rollLocked) Modifier.blur(25.dp) else Modifier),
+                            // No Modifier.blur — realtime blur during swipe/layout flickers hard.
+                            .then(
+                                if (rollLocked) {
+                                    Modifier.graphicsLayer { alpha = 0.42f }
+                                } else {
+                                    Modifier
+                                },
+                            ),
                     )
                     if (rollLocked && countdownLabel != null) {
                         Box(
                             modifier = Modifier
                                 .matchParentSize()
                                 .clip(RoundedCornerShape(chatBubbleScaledDp(24f)))
-                                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.28f)),
+                                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.40f)),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
@@ -253,14 +268,21 @@ private fun PhotoBitmapContent(
                     },
                 )
                 .clip(chatPhotoAttachmentShape)
-                .then(if (rollLocked) Modifier.blur(25.dp) else Modifier),
+                // No Modifier.blur — realtime blur during swipe/layout flickers hard.
+                .then(
+                    if (rollLocked) {
+                        Modifier.graphicsLayer { alpha = 0.42f }
+                    } else {
+                        Modifier
+                    },
+                ),
         )
         if (rollLocked && countdownLabel != null) {
             Box(
                 modifier = Modifier
                     .matchParentSize()
                     .clip(chatPhotoAttachmentShape)
-                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.28f)),
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.40f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(

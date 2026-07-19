@@ -404,7 +404,12 @@ class IosTokenStorage : TokenStorage {
             kSecAttrService to SERVICE_NAME,
             kSecAttrAccount to key,
         )
-        val attrs = mapOf<Any?, Any?>(
+        // Update must only change value data — including kSecAttrAccessible in SecItemUpdate
+        // returns errSecParam (-50) on many iOS versions.
+        val updateAttrs = mapOf<Any?, Any?>(
+            kSecValueData to valueData,
+        )
+        val addAttrs = mapOf<Any?, Any?>(
             kSecValueData to valueData,
             kSecAttrAccessible to kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         )
@@ -412,12 +417,12 @@ class IosTokenStorage : TokenStorage {
         @Suppress("UNCHECKED_CAST")
         val cfBase = CFBridgingRetain(baseQuery) as CFDictionaryRef
         @Suppress("UNCHECKED_CAST")
-        val cfAttrs = CFBridgingRetain(attrs) as CFDictionaryRef
-        var status = SecItemUpdate(cfBase, cfAttrs)
-        CFBridgingRelease(cfAttrs)
+        val cfUpdateAttrs = CFBridgingRetain(updateAttrs) as CFDictionaryRef
+        var status = SecItemUpdate(cfBase, cfUpdateAttrs)
+        CFBridgingRelease(cfUpdateAttrs)
 
         if (status == errSecItemNotFound) {
-            val addQuery = baseQuery + attrs
+            val addQuery = baseQuery + addAttrs
             @Suppress("UNCHECKED_CAST")
             val cfAdd = CFBridgingRetain(addQuery) as CFDictionaryRef
             status = SecItemAdd(cfAdd, null)
@@ -425,21 +430,21 @@ class IosTokenStorage : TokenStorage {
             // Race / stale item: retry update after duplicate or param error.
             if (status == errSecDuplicateItem || status.toInt() == ERR_SEC_PARAM) {
                 @Suppress("UNCHECKED_CAST")
-                val cfRetryAttrs = CFBridgingRetain(attrs) as CFDictionaryRef
+                val cfRetryAttrs = CFBridgingRetain(updateAttrs) as CFDictionaryRef
                 status = SecItemUpdate(cfBase, cfRetryAttrs)
                 CFBridgingRelease(cfRetryAttrs)
             }
         } else if (status.toInt() == ERR_SEC_PARAM || status == errSecDuplicateItem) {
-            // Param errors often come from delete+add races; force update with fresh data.
+            // Param errors often come from delete+add races; force add with fresh data.
             deleteKeychainItem(key)
-            val addQuery = baseQuery + attrs
+            val addQuery = baseQuery + addAttrs
             @Suppress("UNCHECKED_CAST")
             val cfAdd = CFBridgingRetain(addQuery) as CFDictionaryRef
             status = SecItemAdd(cfAdd, null)
             CFBridgingRelease(cfAdd)
             if (status != errSecSuccess) {
                 @Suppress("UNCHECKED_CAST")
-                val cfRetryAttrs = CFBridgingRetain(attrs) as CFDictionaryRef
+                val cfRetryAttrs = CFBridgingRetain(updateAttrs) as CFDictionaryRef
                 status = SecItemUpdate(cfBase, cfRetryAttrs)
                 CFBridgingRelease(cfRetryAttrs)
             }

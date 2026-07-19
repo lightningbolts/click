@@ -19,6 +19,7 @@ object BeaconEngagementPersistence {
         @SerialName("checked_in") val checkedIn: Boolean = false,
         @SerialName("checked_in_at") val checkedInAt: String? = null,
         @SerialName("check_in_count") val checkInCount: Int = 0,
+        @SerialName("local_early_check_in") val localEarlyCheckIn: Boolean = false,
         @SerialName("updated_at_ms") val updatedAtEpochMs: Long = 0L,
     )
 
@@ -39,9 +40,10 @@ object BeaconEngagementPersistence {
             snapshot.entries.associate { entry ->
                 entry.beaconId to BeaconEngagementCacheEntry(
                     bookmarked = entry.bookmarked,
-                    checkedIn = entry.checkedIn,
+                    checkedIn = entry.checkedIn || entry.localEarlyCheckIn,
                     checkedInAt = entry.checkedInAt,
                     checkInCount = entry.checkInCount,
+                    localEarlyCheckIn = entry.localEarlyCheckIn,
                 )
             }
         }.getOrDefault(emptyMap())
@@ -62,6 +64,7 @@ object BeaconEngagementPersistence {
                     checkedIn = entry.checkedIn,
                     checkedInAt = entry.checkedInAt,
                     checkInCount = entry.checkInCount,
+                    localEarlyCheckIn = entry.localEarlyCheckIn,
                     updatedAtEpochMs = now,
                 )
             },

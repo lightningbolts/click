@@ -1,19 +1,14 @@
 package compose.project.click.click.ui.chat // pragma: allowlist secret
 
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,7 +25,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,7 +34,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
-import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.previewLabel // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator
 import compose.project.click.click.ui.components.CoreConnectionAvatarFrame // pragma: allowlist secret
@@ -103,19 +96,6 @@ fun ConnectionItem(
     }
 
     val rowInteraction = remember { MutableInteractionSource() }
-    val pressed by rowInteraction.collectIsPressedAsState()
-    val cardBorderAlpha by animateFloatAsState(
-        targetValue = if (pressed) {
-            GlassSheetTokens.GlassBorderPressed().alpha
-        } else {
-            GlassSheetTokens.GlassBorder().alpha
-        },
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium,
-        ),
-        label = "connection_row_glass_border",
-    )
 
     Row(
         modifier = Modifier
@@ -123,10 +103,16 @@ fun ConnectionItem(
             .clip(RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner))
             .border(
                 width = 1.dp,
-                color = GlassSheetTokens.GlassBorder().copy(alpha = cardBorderAlpha),
+                color = GlassSheetTokens.GlassBorder(),
                 shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
             )
             .background(GlassSheetTokens.GlassSurface())
+            .connectionRowPressHighlight(rowInteraction)
+            .connectionRowPressGestures(
+                interactionSource = rowInteraction,
+                onClick = onClick,
+                onLongPress = onLongPress,
+            )
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -200,16 +186,7 @@ fun ConnectionItem(
             }
         }
 
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .connectionRowPressGestures(
-                    interactionSource = rowInteraction,
-                    onClick = onClick,
-                    onLongPress = onLongPress,
-                ),
-        ) {
+        Box(modifier = Modifier.weight(1f)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,

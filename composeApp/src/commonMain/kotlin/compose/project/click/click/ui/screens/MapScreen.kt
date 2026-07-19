@@ -23,6 +23,7 @@ import compose.project.click.click.ui.components.ClickSheetDialogChrome // pragm
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.AnimatedClickDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
+import compose.project.click.click.ui.components.InteractiveSwipeBackParallaxPeekRatio // pragma: allowlist secret
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -79,6 +80,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.zIndex
 import compose.project.click.click.getPlatform
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
@@ -226,8 +228,61 @@ fun MapScreen(
         }
     }
 
+    var eventsListTransitionMode by remember { mutableStateOf(EventsListTransitionMode.Tap) }
+    val eventsSwipeDragPx = remember { mutableFloatStateOf(0f) }
+    var eventsSwipeBehindLayers by remember { mutableStateOf(false) }
+    // Keep events UI composed after first open so swipe-back does not remount the list.
+    var eventsOverlayMounted by remember { mutableStateOf(false) }
+    var eventsCloseJob by remember { mutableStateOf<Job?>(null) }
+    val eventsScope = rememberCoroutineScope()
+    // 0 = off-screen below, 1 = fully shown — restores slide-up open without remounting.
+    val eventsVerticalReveal = remember { Animatable(0f) }
+
+    fun finalizeEventsClose() {
+        eventsSwipeDragPx.floatValue = 0f
+        eventsSwipeBehindLayers = false
+        eventsListTransitionMode = EventsListTransitionMode.Tap
+        eventsCloseJob = null
+    }
+
+    fun closeEventsList(mode: EventsListTransitionMode) {
+        eventsCloseJob?.cancel()
+        eventsListTransitionMode = mode
+        if (mode == EventsListTransitionMode.Tap) {
+            onEventsSheetExpandedChanged(false)
+            eventsCloseJob = eventsScope.launch {
+                eventsVerticalReveal.animateTo(
+                    0f,
+                    animationSpec = tween(300, easing = FastOutSlowInEasing),
+                )
+                if (!eventsSheetExpanded) finalizeEventsClose()
+            }
+        } else {
+            onEventsSheetExpandedChanged(false)
+            eventsCloseJob = eventsScope.launch {
+                delay(64L)
+                eventsVerticalReveal.snapTo(0f)
+                if (!eventsSheetExpanded) finalizeEventsClose()
+            }
+        }
+    }
+
     LaunchedEffect(eventsSheetExpanded) {
         if (eventsSheetExpanded) {
+            eventsCloseJob?.cancel()
+            eventsCloseJob = null
+            eventsOverlayMounted = true
+            eventsSwipeDragPx.floatValue = 0f
+            eventsSwipeBehindLayers = false
+            if (eventsVerticalReveal.value < 0.99f) {
+                eventsVerticalReveal.snapTo(0f)
+                eventsVerticalReveal.animateTo(
+                    1f,
+                    animationSpec = tween(300, easing = FastOutSlowInEasing),
+                )
+            } else {
+                eventsVerticalReveal.snapTo(1f)
+            }
             viewModel.refreshDiscoveryFromMapInteraction()
         }
     }
@@ -252,11 +307,8 @@ fun MapScreen(
         onDispose { onEventsSheetExpandedChanged(false) }
     }
 
-    var eventsListTransitionMode by remember { mutableStateOf(EventsListTransitionMode.Tap) }
-
     PlatformBackHandler(enabled = eventsSheetExpanded) {
-        eventsListTransitionMode = EventsListTransitionMode.Tap
-        onEventsSheetExpandedChanged(false)
+        closeEventsList(EventsListTransitionMode.Tap)
     }
 
     val toastState = rememberUnifiedToastState()
@@ -415,23 +467,50 @@ fun MapScreen(
                             },
                             onZoomIn = { viewModel.zoomIn() },
                             onZoomOut = { viewModel.zoomOut() },
+                            // Stay composed under the events overlay (covered, not alpha-hidden) so
+                            // swipe-back reveals controls that never remounted.
                             modifier = Modifier
                                 .fillMaxSize()
                                 .zIndex(10f)
-                                .graphicsLayer { alpha = if (eventsSheetExpanded) 0f else 1f },
+                                .graphicsLayer {
+                                    if (!eventsSwipeBehindLayers) {
+                                        translationX = 0f
+                                        return@graphicsLayer
+                                    }
+                                    val w = size.width.coerceAtLeast(1f)
+                                    val o = eventsSwipeDragPx.floatValue.coerceIn(0f, w)
+                                    val progress = (o / w).coerceIn(0f, 1f)
+                                    translationX =
+                                        -(size.width * InteractiveSwipeBackParallaxPeekRatio) * (1f - progress)
+                                },
                         )
 
                         EventsReopenChip(
                             count = eventNearbyCount,
                             onClick = {
+                                eventsCloseJob?.cancel()
+                                eventsCloseJob = null
+                                eventsSwipeDragPx.floatValue = 0f
+                                eventsSwipeBehindLayers = false
                                 eventsListTransitionMode = EventsListTransitionMode.Tap
+                                eventsOverlayMounted = true
                                 onEventsSheetExpandedChanged(true)
                             },
                             enabled = !eventsSheetExpanded,
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
                                 .zIndex(15f)
-                                .graphicsLayer { alpha = if (eventsSheetExpanded) 0f else 1f }
+                                .graphicsLayer {
+                                    if (!eventsSwipeBehindLayers) {
+                                        translationX = 0f
+                                        return@graphicsLayer
+                                    }
+                                    val w = size.width.coerceAtLeast(1f)
+                                    val o = eventsSwipeDragPx.floatValue.coerceIn(0f, w)
+                                    val progress = (o / w).coerceIn(0f, 1f)
+                                    translationX =
+                                        -(size.width * InteractiveSwipeBackParallaxPeekRatio) * (1f - progress)
+                                }
                                 .padding(
                                     start = 16.dp,
                                     end = 16.dp,
@@ -448,69 +527,79 @@ fun MapScreen(
                                 .zIndex(20f),
                         )
 
-                        val eventsSlideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
-                        val eventsFadeSpec = tween<Float>(220, easing = LinearOutSlowInEasing)
-                        AnimatedVisibility(
-                            visible = eventsSheetExpanded,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .zIndex(40f),
-                            enter = slideInVertically(animationSpec = eventsSlideSpec, initialOffsetY = { it }) +
-                                fadeIn(animationSpec = eventsFadeSpec),
-                            exit = if (eventsListTransitionMode == EventsListTransitionMode.Gesture) {
-                                ExitTransition.None
-                            } else {
-                                slideOutVertically(animationSpec = eventsSlideSpec, targetOffsetY = { it }) +
-                                    fadeOut(animationSpec = eventsFadeSpec)
-                            },
-                            label = "events_fullscreen",
-                        ) {
-                            InteractiveSwipeBackContainer(
-                                enabled = true,
-                                opaquePreviousBackground = false,
-                                onBack = {
-                                    eventsListTransitionMode = EventsListTransitionMode.Gesture
-                                    onEventsSheetExpandedChanged(false)
-                                },
-                                previousContent = {},
-                                currentContent = {
-                                    EventsDiscoveryFullScreen(
-                                        feedItems = feedItems,
-                                        discoveryFeedPending = discoveryFeedPending,
-                                        discoveryFeedRefreshing = discoveryFeedPending,
-                                        onRefreshDiscovery = { viewModel.refreshDiscoveryFeed() },
-                                        layerFilters = layerFilters,
-                                        onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
-                                        viewModel = viewModel,
+                        // Persist after first open; vertical reveal restores slide-up without remounting.
+                        if (eventsOverlayMounted) {
+                            val eventsClosed =
+                                !eventsSheetExpanded &&
+                                    !eventsSwipeBehindLayers &&
+                                    eventsVerticalReveal.value < 0.01f
+                            BoxWithConstraints(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .zIndex(40f),
+                            ) {
+                                val heightPx = constraints.maxHeight
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .graphicsLayer {
+                                            // During interactive back, Y stays put — container owns X.
+                                            val swiping = eventsSwipeBehindLayers ||
+                                                eventsSwipeDragPx.floatValue > 0.5f
+                                            translationY = if (swiping) {
+                                                0f
+                                            } else {
+                                                (1f - eventsVerticalReveal.value) * heightPx
+                                            }
+                                            alpha = if (eventsClosed) 0f else 1f
+                                        }
+                                        .then(
+                                            if (eventsClosed) {
+                                                Modifier.offset { IntOffset(constraints.maxWidth, 0) }
+                                            } else {
+                                                Modifier
+                                            },
+                                        ),
+                                ) {
+                                    InteractiveSwipeBackContainer(
+                                        enabled = eventsSheetExpanded,
+                                        opaquePreviousBackground = false,
+                                        externalDragOffsetPx = eventsSwipeDragPx,
+                                        onBehindLayersVisibleChanged = { eventsSwipeBehindLayers = it },
                                         onBack = {
-                                            eventsListTransitionMode = EventsListTransitionMode.Tap
-                                            onEventsSheetExpandedChanged(false)
+                                            closeEventsList(EventsListTransitionMode.Gesture)
                                         },
-                                        onBeaconClick = { beacon, distanceM ->
-                                            TelemetryBatcher.recordActionTaken()
-                                            viewModel.onBeaconPinTapped(
-                                                beacon.id,
-                                                seedDistanceMeters = distanceM,
+                                        previousContent = {},
+                                        currentContent = {
+                                            EventsDiscoveryFullScreen(
+                                                feedItems = feedItems,
+                                                discoveryFeedPending = discoveryFeedPending,
+                                                discoveryFeedRefreshing = discoveryFeedPending,
+                                                onRefreshDiscovery = { viewModel.refreshDiscoveryFeed() },
+                                                layerFilters = layerFilters,
+                                                onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
+                                                viewModel = viewModel,
+                                                onBack = {
+                                                    closeEventsList(EventsListTransitionMode.Tap)
+                                                },
+                                                onBeaconClick = { beacon, distanceM ->
+                                                    TelemetryBatcher.recordActionTaken()
+                                                    viewModel.onBeaconPinTapped(
+                                                        beacon.id,
+                                                        seedDistanceMeters = distanceM,
+                                                    )
+                                                },
+                                                interactiveBackSwipeOffsetPx = eventsSwipeDragPx,
                                             )
                                         },
                                     )
-                                },
-                            )
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            UnifiedToastHost(
-                state = toastState,
-                opaque = true,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = rememberBottomChromePadding() + 8.dp)
-                    .zIndex(20f),
-            )
         }
         }
     }
@@ -628,23 +717,35 @@ fun MapScreen(
             appTypography = MaterialTheme.typography,
             modifier = Modifier,
         ) {
-            ClickSheetDialogChrome(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(),
-                sheetColor = detailSurface,
-                onSurface = onDetailSurface,
-                alignSemanticColorsToSheet = true,
-            ) {
-                BeaconDetailSheetContent(
-                    beacon = beaconSel.beacon,
-                    distanceMeters = beaconSel.distanceMeters,
-                    currentUserId = currentUser?.id,
-                    viewModel = viewModel,
+            Box(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
+                ClickSheetDialogChrome(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 24.dp, vertical = 12.dp),
+                        .fillMaxWidth()
+                        .fillMaxHeight(),
+                    sheetColor = detailSurface,
+                    onSurface = onDetailSurface,
+                    alignSemanticColorsToSheet = true,
+                ) {
+                    BeaconDetailSheetContent(
+                        beacon = beaconSel.beacon,
+                        distanceMeters = beaconSel.distanceMeters,
+                        currentUserId = currentUser?.id,
+                        viewModel = viewModel,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 24.dp, vertical = 12.dp),
+                    )
+                }
+                UnifiedToastHost(
+                    state = toastState,
+                    opaque = true,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 24.dp)
+                        .zIndex(100f),
                 )
             }
         }
@@ -720,6 +821,20 @@ fun MapScreen(
             toastState.show(mapScope, msg, durationMs = UnifiedToastTokens.LongDurationMs)
         },
     )
+
+    // Above modal sheets so check-in / engagement feedback is visible on event detail.
+    Box(modifier = Modifier.fillMaxSize()) {
+        UnifiedToastHost(
+            state = toastState,
+            opaque = true,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = rememberBottomChromePadding() + 8.dp)
+                .zIndex(100f),
+        )
+    }
 }
 
 /**
@@ -1225,9 +1340,11 @@ internal fun EventBeaconDetail(
     val rsvpPending = beacon.id in rsvpPendingIds
     var rsvpError by remember(beacon.id) { mutableStateOf<String?>(null) }
     val engagementCache by viewModel.beaconEngagementById.collectAsState()
+    val engagementPendingIds by viewModel.beaconEngagementPendingIds.collectAsState()
     val engagement = engagementCache[beacon.id]
     val bookmarked = engagement?.bookmarked == true
-    val checkedIn = engagement?.checkedIn == true
+    val checkedIn = engagement?.checkedIn == true || engagement?.localEarlyCheckIn == true
+    val checkInPending = beacon.id in engagementPendingIds
     val uriHandler = LocalUriHandler.current
     val currentUser by AppDataManager.currentUser.collectAsState()
     val connectedUsers by AppDataManager.connectedUsers.collectAsState()
@@ -1307,6 +1424,7 @@ internal fun EventBeaconDetail(
             EventHeroActions(
                 bookmarked = bookmarked,
                 checkedIn = checkedIn,
+                checkInPending = checkInPending,
                 isCreator = isCreator ||
                     (!currentUser?.id.isNullOrBlank() && displayBeacon.createdByUserId == currentUser?.id),
                 onShare = {
@@ -1485,6 +1603,7 @@ private fun EventLiveBadge() {
 private fun EventHeroActions(
     bookmarked: Boolean,
     checkedIn: Boolean,
+    checkInPending: Boolean = false,
     isCreator: Boolean,
     onShare: () -> Unit,
     onToggleBookmark: () -> Unit,
@@ -1513,6 +1632,7 @@ private fun EventHeroActions(
             selected = checkedIn,
             border = border,
             onClick = onToggleCheckIn,
+            enabled = !checkInPending,
             contentDescription = if (checkedIn) "Undo check in" else "Check in",
             icon = if (checkedIn) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
         )
@@ -1543,9 +1663,11 @@ private fun EventHeroIconButton(
     onClick: () -> Unit,
     contentDescription: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
+    enabled: Boolean = true,
 ) {
     IconButton(
         onClick = onClick,
+        enabled = enabled,
         modifier = Modifier
             .size(48.dp)
             .border(2.dp, border, CircleShape)
@@ -1553,7 +1675,8 @@ private fun EventHeroIconButton(
             .background(
                 if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
                 else Color.Transparent,
-            ),
+            )
+            .graphicsLayer { alpha = if (enabled) 1f else 0.55f },
     ) {
         Icon(
             imageVector = icon,

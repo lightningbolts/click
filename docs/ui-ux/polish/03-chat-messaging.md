@@ -57,7 +57,7 @@
 - Single IME lift path (see part 01); hub + connection chat share helpers.  
 - Attachment / emoji / voice affordances: open/close without fighting IME; mode switches feel intentional.  
 - Multilines grow smoothly up to max; timeline padding tracks height.  
-- Edit strip / reply context (if present): enter/exit animated; cancel is obvious.  
+- Edit strip / reply context: `AnimatedVisibility` expand/shrink + fade (spacer included); cancel is obvious.  
 - Focus transitions from search sheets or headers into chat don’t leave stale insets.  
 
 ### 4.2 Voice / media composer paths
@@ -85,7 +85,7 @@ Polish **interaction**, not brand-new bubble skins (FC tokens stay).
 
 | Element | Polish focus |
 |---------|----------------|
-| Text bubble | Press state, selection/long-press, link tap feedback |
+| Text bubble | Press state; long-press opens sheet (no competing native SelectionContainer when context menu enabled); Copy via sheet |
 | Photo / gallery | Hero open/close; pinch/dismiss; no black flash |
 | Audio | Play/pause motion; waveform/scrub if present; lock screen interruption calm |
 | Attachments / files | Clear tap target; download progress |
@@ -96,7 +96,7 @@ Polish **interaction**, not brand-new bubble skins (FC tokens stay).
 
 ### Required outcomes
 
-- Long-press → `MessageActionSheet`: sheet physics match app sheets; haptics on open.  
+- Long-press → `MessageActionSheet`: sheet physics match app sheets; haptics on open; **no** native word-highlight / select-all while opening the sheet.  
 - Destructive actions confirm with FC popups — consistent copy + motion.  
 - Expanded photo preview: gesture dismiss smooth; returns to same scroll offset.  
 
@@ -107,7 +107,7 @@ Polish **interaction**, not brand-new bubble skins (FC tokens stay).
 | Platform | Expectation |
 |----------|-------------|
 | iOS | List underlay + overlay chat; swipe-back continuous; leave-room deferred until settle |
-| Android | `AnimatedContent` push/pop feels same family as iOS springs |
+| Android | Same persistent-list + overlay pattern as iOS (not AnimatedContent replace) |
 
 ### Required outcomes
 
@@ -136,5 +136,6 @@ Goal: one “Chat chrome kit,” parameterized for hub vs 1:1 vs group.
 - [ ] IME ↔ composer lockstep on iOS + Android  
 - [ ] History scroll + pagination: no stutter/teleport  
 - [ ] Timestamp peek + swipe-back coexist  
-- [ ] Long-press actions + media lightbox feel native-smooth  
+- [ ] Long-press actions without native selection flash; Copy via sheet  
+- [ ] Reply cancel collapses smoothly  
 - [ ] Hub chat matches connection chat motion quality  

@@ -49,11 +49,13 @@
 - Avoid recomposing entire rows on unrelated state (selection, typing, online dots) — isolate high-frequency state.  
 - Prefer `graphicsLayer` / draw for transient effects over layout-affecting modifiers during scroll.  
 - Long-press / swipe row gestures must not fight vertical scroll (clear touch slop / orientation lock).  
+- Inbox / hub rows use [`MotionTokens.PressScale`](../../../composeApp/src/commonMain/kotlin/compose/project/click/click/ui/theme/MotionTokens.kt) + glass border pressed alpha on the **full row** (`connectionRowPressScale` / `connectionRowPressGestures`) — indication stays null.  
 
 ### 3.3 Success criteria
 
 - Slow fling on a 200+ item inbox and a media-heavy chat: no visible hitch on mid Android + recent iPhone.  
 - Open chat → scroll up history → send → return to inbox: list position and preview stay calm (no jump-to-top, no flash).  
+- Press a chat row: visible scale + border impact before navigation.  
 
 ---
 
@@ -76,10 +78,11 @@ Keyboard toggles that: snap the composer, leave a gap above the IME, double-appl
 ### 4.3 Required outcomes
 
 - **One** lift authority per screen (native provider **or** WindowInsets — not both fighting).  
-- iOS: animation duration + curve stay matched to system keyboard notifications.  
+- iOS: `rememberChatNativeKeyboardInsets` drives an `Animatable` with UIKit duration/curve from `KeyboardHeightProvider` (not a delayed `animateFloatAsState` retarget) so composer + timeline track the keyboard without trailing lag.  
 - Android: IME insets animate smoothly with thread dock; no clip under nav/gesture bar.  
 - Focusing composer scrolls/anchors latest messages appropriately without fighting user scroll.  
 - Dismiss-on-scroll (where present) feels intentional, not accidental.  
+- **Never** add `imePadding` on chat thread surfaces.  
 
 ### 4.4 Success criteria
 
@@ -115,6 +118,8 @@ Continuation handoff already fixed or deferred several cases:
 - Add Click overlay underlay (`#12`) — keep persistent underlay pattern.  
 - Chat leave / inbox flicker (`#24`) — defer teardown until gesture settles.  
 - Home-underlay attempt (`#26`) — **reverted**; flicker **still open** — see §5.0 for the required correct fix.  
+- Map events list: map chrome (drop beacon, layer dropdown, events chip) stays **composed under** the overlay (parallax via `externalDragOffsetPx`) — do **not** alpha-hide then remount.  
+- Connection / hub chat: Scaffold lifts above the tab bar (`zIndex`) while chat is open so the bar stays composed underneath an opaque chat (no unmount/remount pop). Android uses the same persistent-list + overlay pattern as iOS.  
 
 ### 5.3 Required outcomes
 

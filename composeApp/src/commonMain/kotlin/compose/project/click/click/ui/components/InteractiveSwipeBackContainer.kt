@@ -146,9 +146,13 @@ fun InteractiveSwipeBackContainer(
         val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
         val commitThresholdPx = widthPx * SwipeBackCommitFraction
         val showPreviousLayer = isGestureActive || isSettling
+        var lastBehindLayersVisible by remember { mutableStateOf<Boolean?>(null) }
 
         SideEffect {
-            onBehindLayersVisibleChanged(showPreviousLayer)
+            if (lastBehindLayersVisible != showPreviousLayer) {
+                lastBehindLayersVisible = showPreviousLayer
+                onBehindLayersVisibleChanged(showPreviousLayer)
+            }
         }
 
         DisposableEffect(Unit) {
@@ -272,7 +276,8 @@ fun InteractiveSwipeBackContainer(
                     settleJob?.cancel()
                     settleJob = null
                     isSettling = false
-                    isGestureActive = false
+                    // Keep isGestureActive if already dragging so underlay layers do not
+                    // remount on every finger restart (was causing laggy back swipes).
                     onHorizontalDragStartedState.value.invoke()
                     rightToLeftPeekState.value?.onGestureStart?.invoke()
                 },

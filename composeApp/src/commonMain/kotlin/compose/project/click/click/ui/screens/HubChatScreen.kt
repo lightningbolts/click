@@ -144,6 +144,7 @@ fun HubChatScreen(
      */
     integrateTimestampPeekWithSwipeBackContainer: Boolean = false,
     onRegisterSwipeBackRightToLeftPeek: (InteractiveSwipeBackRightToLeftPeek?) -> Unit = {},
+    parentInteractiveBackSwipePx: androidx.compose.runtime.MutableFloatState? = null,
     keyboardHeightProvider: KeyboardHeightProvider = rememberKeyboardHeightProvider(),
 ) {
     val viewModel: HubChatViewModel = viewModel(key = args.realtimeChannel) {
@@ -445,7 +446,7 @@ fun HubChatScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .chatThreadKeyboardDock(
-                            nativeKeyboardLiftPx = nativeKeyboardInsets.threadDockNativeKeyboardLiftPx,
+                            nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
                         ),
                 ) {
                 Box(
@@ -461,7 +462,7 @@ fun HubChatScreen(
                         start = 6.dp,
                         end = 6.dp,
                         top = 24.dp + reverseListNewestEdgePad,
-                        bottom = 8.dp + ChatComposerStripReserve + nativeKeyboardInsets.timelineBottomPadding,
+                        bottom = 8.dp + ChatComposerStripReserve,
                     ),
                     dismissKeyboardOnUserMessageScroll = dismissKeyboardOnUserMessageScroll,
                     displayTimestampPeekVisualPx = displayTimestampPeekVisualPx,
@@ -503,11 +504,7 @@ fun HubChatScreen(
                 }
 
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .graphicsLayer {
-                            translationY = -nativeKeyboardInsets.composerLiftPx.coerceAtLeast(0f)
-                        },
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     HubChatInputBar(
                         viewModel = viewModel,

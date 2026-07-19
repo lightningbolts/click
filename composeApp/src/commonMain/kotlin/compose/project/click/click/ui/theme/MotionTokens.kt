@@ -23,7 +23,8 @@ import androidx.compose.animation.core.spring
  */
 object MotionTokens {
     object PressScale {
-        const val PressedScale = 0.95f
+        /** Strong enough to read on a light tap; still bouncy on release. */
+        const val PressedScale = 0.92f
         const val DampingRatio = Spring.DampingRatioMediumBouncy
         const val Stiffness = Spring.StiffnessMedium
     }

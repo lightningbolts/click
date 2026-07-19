@@ -25,6 +25,7 @@ import compose.project.click.click.data.storage.BeaconEngagementPersistence
 import compose.project.click.click.data.api.BeaconEngagementHttpException
 import compose.project.click.click.data.api.EngagementTelemetryBody
 import compose.project.click.click.getPlatform
+import compose.project.click.click.events.beaconCheckInFailureMessage
 import compose.project.click.click.events.EventVenueScale
 import compose.project.click.click.events.EVENT_VENUE_SCALE_METADATA_KEY
 import compose.project.click.click.events.EVENT_CHECK_IN_RADIUS_METADATA_KEY
@@ -87,6 +88,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.min
@@ -127,6 +129,11 @@ data class BeaconEngagementCacheEntry(
     val checkedIn: Boolean = false,
     val checkedInAt: String? = null,
     val checkInCount: Int = 0,
+    /**
+     * Client-kept early check-in after HTTP 409 (event not live yet). Survives force-refresh
+     * and process death until the server reports checkedIn or the user checks out.
+     */
+    val localEarlyCheckIn: Boolean = false,
 )
 
 /**
@@ -246,6 +253,14 @@ class MapViewModel : ViewModel() {
     private val _beaconEngagementPendingIds = MutableStateFlow<Set<String>>(emptySet())
     val beaconEngagementPendingIds: StateFlow<Set<String>> =
         _beaconEngagementPendingIds.asStateFlow()
+
+    /**
+     * Beacon ids the user early-checked-in (HTTP 409). Survives force-refresh races that can
+     * briefly see checkedIn=true with localEarlyCheckIn=false before the 409 write lands.
+     */
+    private val earlyCheckInBeaconIds = mutableSetOf<String>()
+    private val engagementPersistMutex = Mutex()
+    private var engagementPersistGeneration = 0
 
     private val _engagementSnackbar = MutableStateFlow<String?>(null)
     val engagementSnackbar: StateFlow<String?> = _engagementSnackbar.asStateFlow()
@@ -500,15 +515,39 @@ class MapViewModel : ViewModel() {
             ?: return
         val restored = BeaconEngagementPersistence.load(tokenStorage, uid)
         if (restored.isEmpty()) return
-        _beaconEngagementById.update { current -> current + restored }
+        restored.forEach { (id, entry) ->
+            if (entry.localEarlyCheckIn) {
+                earlyCheckInBeaconIds += id
+            }
+        }
+        _beaconEngagementById.update { current ->
+            // Prefer disk early/checked-in over a stale in-memory "not checked in" from a racing fetch.
+            current + restored.mapValues { (id, disk) ->
+                val mem = current[id]
+                if (disk.localEarlyCheckIn || disk.checkedIn) {
+                    disk
+                } else if (mem?.localEarlyCheckIn == true || id in earlyCheckInBeaconIds) {
+                    mem?.copy(checkedIn = true, localEarlyCheckIn = true) ?: disk.copy(
+                        checkedIn = true,
+                        localEarlyCheckIn = true,
+                    )
+                } else {
+                    disk
+                }
+            }
+        }
     }
 
     private fun persistBeaconEngagementCache() {
+        val generation = ++engagementPersistGeneration
         viewModelScope.launch {
-            val uid = SupabaseConfig.client.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
-                ?: AppDataManager.currentUser.value?.id?.trim()?.takeIf { it.isNotEmpty() }
-                ?: return@launch
-            BeaconEngagementPersistence.save(tokenStorage, uid, _beaconEngagementById.value)
+            engagementPersistMutex.withLock {
+                if (generation != engagementPersistGeneration) return@withLock
+                val uid = SupabaseConfig.client.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: AppDataManager.currentUser.value?.id?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: return@withLock
+                BeaconEngagementPersistence.save(tokenStorage, uid, _beaconEngagementById.value)
+            }
         }
     }
 
@@ -517,6 +556,27 @@ class MapViewModel : ViewModel() {
     ) {
         _beaconEngagementById.update(transform)
         persistBeaconEngagementCache()
+    }
+
+    private fun mergeEngagementFromServer(
+        existing: BeaconEngagementCacheEntry?,
+        beaconId: String,
+        bookmarked: Boolean,
+        checkedIn: Boolean,
+        checkedInAt: String?,
+        checkInCount: Int,
+    ): BeaconEngagementCacheEntry {
+        val keepEarly = !checkedIn && (
+            existing?.localEarlyCheckIn == true ||
+                beaconId in earlyCheckInBeaconIds
+            )
+        return BeaconEngagementCacheEntry(
+            bookmarked = bookmarked,
+            checkedIn = checkedIn || keepEarly,
+            checkedInAt = checkedInAt ?: existing?.checkedInAt,
+            checkInCount = checkInCount,
+            localEarlyCheckIn = keepEarly,
+        )
     }
 
     private fun engagementTelemetry(
@@ -1363,7 +1423,10 @@ class MapViewModel : ViewModel() {
                 onSuccess = { payload ->
                     if (id in _beaconEngagementPendingIds.value) return@fold
                     updateBeaconEngagementCache { current ->
-                        current + (id to BeaconEngagementCacheEntry(
+                        val existing = current[id]
+                        current + (id to mergeEngagementFromServer(
+                            existing = existing,
+                            beaconId = id,
                             bookmarked = payload.bookmarked,
                             checkedIn = payload.checkedIn,
                             checkedInAt = payload.checkedInAt,
@@ -1441,14 +1504,16 @@ class MapViewModel : ViewModel() {
         val previous = _beaconEngagementById.value[id]
         val currentlyCheckedIn = previous?.checkedIn == true
         if (currentlyCheckedIn) {
+            earlyCheckInBeaconIds -= id
             _beaconEngagementPendingIds.update { it + id }
             updateBeaconEngagementCache { current ->
                 val base = current[id] ?: BeaconEngagementCacheEntry()
-                current + (id to base.copy(checkedIn = false, checkedInAt = null))
+                current + (id to base.copy(checkedIn = false, checkedInAt = null, localEarlyCheckIn = false))
             }
             PlatformHapticsPolicy.successNotification()
             viewModelScope.launch {
                 if (!ensureClickWebAuthReady()) {
+                    if (previous?.localEarlyCheckIn == true) earlyCheckInBeaconIds += id
                     restoreEngagementSnapshot(id, previous)
                     _beaconEngagementPendingIds.update { it - id }
                     return@launch
@@ -1456,6 +1521,7 @@ class MapViewModel : ViewModel() {
                 mapBeaconRepository.checkOutBeacon(id).fold(
                     onSuccess = { _beaconEngagementPendingIds.update { it - id } },
                     onFailure = {
+                        if (previous?.localEarlyCheckIn == true) earlyCheckInBeaconIds += id
                         restoreEngagementSnapshot(id, previous)
                         _beaconEngagementPendingIds.update { it - id }
                         _engagementSnackbar.value = "Couldn't undo check-in"
@@ -1465,12 +1531,19 @@ class MapViewModel : ViewModel() {
             return
         }
 
+        // Optimistic flip first (matches RSVP) — location/auth/network run after so the icon
+        // does not wait on GPS.
+        _beaconEngagementPendingIds.update { it + id }
+        updateBeaconEngagementCache { current ->
+            val base = current[id] ?: BeaconEngagementCacheEntry()
+            current + (id to base.copy(checkedIn = true, localEarlyCheckIn = false))
+        }
+        PlatformHapticsPolicy.successNotification()
         viewModelScope.launch {
             if (!locationService.hasLocationPermission()) {
+                restoreEngagementSnapshot(id, previous)
+                _beaconEngagementPendingIds.update { it - id }
                 _engagementSnackbar.value = "Location access is required to check in"
-                if (ensureClickWebAuthReady()) {
-                    mapBeaconRepository.checkInBeacon(id, engagementTelemetry())
-                }
                 return@launch
             }
             val loc = resolveBeaconDropLocation()
@@ -1479,47 +1552,63 @@ class MapViewModel : ViewModel() {
                 !loc.longitude.isFinite() ||
                 (loc.latitude == 0.0 && loc.longitude == 0.0)
             ) {
+                restoreEngagementSnapshot(id, previous)
+                _beaconEngagementPendingIds.update { it - id }
                 _engagementSnackbar.value = "Location required to check in"
-                if (ensureClickWebAuthReady()) {
-                    mapBeaconRepository.checkInBeacon(id, engagementTelemetry())
-                }
                 return@launch
             }
             if (!ensureClickWebAuthReady()) {
+                restoreEngagementSnapshot(id, previous)
+                _beaconEngagementPendingIds.update { it - id }
                 _engagementSnackbar.value = "Couldn't check in — try again"
                 return@launch
             }
-            _beaconEngagementPendingIds.update { it + id }
-            updateBeaconEngagementCache { current ->
-                val base = current[id] ?: BeaconEngagementCacheEntry()
-                current + (id to base.copy(checkedIn = true))
-            }
-            PlatformHapticsPolicy.successNotification()
             mapBeaconRepository.checkInBeacon(
                 id,
                 engagementTelemetry(latitude = loc.latitude, longitude = loc.longitude),
             ).fold(
                 onSuccess = { payload ->
+                    if (payload.checkedIn) {
+                        earlyCheckInBeaconIds -= id
+                    }
                     updateBeaconEngagementCache { current ->
                         current + (id to BeaconEngagementCacheEntry(
                             bookmarked = current[id]?.bookmarked ?: false,
                             checkedIn = payload.checkedIn,
                             checkedInAt = payload.checkedInAt,
                             checkInCount = payload.checkInCount,
+                            localEarlyCheckIn = false,
                         ))
                     }
                     _beaconEngagementPendingIds.update { it - id }
+                    _engagementSnackbar.value = if (payload.checkedIn) {
+                        "Checked in"
+                    } else {
+                        "Checked out"
+                    }
                 },
                 onFailure = { err ->
+                    val http = err as? BeaconEngagementHttpException
+                    // Early check-in: keep optimistic checked-in on 409 and persist across kill.
+                    if (http?.status == 409) {
+                        earlyCheckInBeaconIds += id
+                        updateBeaconEngagementCache { current ->
+                            val base = current[id] ?: BeaconEngagementCacheEntry()
+                            current + (id to base.copy(
+                                checkedIn = true,
+                                localEarlyCheckIn = true,
+                            ))
+                        }
+                        _beaconEngagementPendingIds.update { it - id }
+                        _engagementSnackbar.value = "Checked in early — see you at the event"
+                        return@fold
+                    }
                     restoreEngagementSnapshot(id, previous)
                     _beaconEngagementPendingIds.update { it - id }
-                    val http = err as? BeaconEngagementHttpException
-                    _engagementSnackbar.value = when (http?.status) {
-                        403 -> "Move closer to the event to check in"
-                        409 -> "Check-in opens when the event starts"
-                        400 -> "Location required to check in"
-                        else -> http?.message ?: "Couldn't check in"
-                    }
+                    _engagementSnackbar.value = beaconCheckInFailureMessage(
+                        httpStatus = http?.status,
+                        fallback = http?.message,
+                    )
                 },
             )
         }

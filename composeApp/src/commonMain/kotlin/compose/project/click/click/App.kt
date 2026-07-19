@@ -1557,11 +1557,13 @@ fun App() {
                         var hubChatRightToLeftPeek by remember {
                             mutableStateOf<InteractiveSwipeBackRightToLeftPeek?>(null)
                         }
+                        val hubSwipeDragPx = remember { mutableFloatStateOf(0f) }
                         LaunchedEffect(hubChatArgs) {
                             if (hubChatArgs != null) {
                                 lastHubChatArgs = hubChatArgs
                             } else {
                                 hubChatRightToLeftPeek = null
+                                hubSwipeDragPx.floatValue = 0f
                             }
                         }
 
@@ -1807,45 +1809,37 @@ fun App() {
                                 else -> ""
                             }
                             if (activeHubArgs != null && hubUserId.isNotEmpty()) {
-                                if (isIOS) {
-                                    val hubKeyboardController = LocalSoftwareKeyboardController.current
-                                    val hubFocusManager = LocalFocusManager.current
-                                    InteractiveSwipeBackContainer(
-                                        enabled = true,
-                                        opaquePreviousBackground = false,
-                                        onBack = {
-                                            hubFocusManager.clearFocus()
-                                            closeHubChat(NavigationTransitionMode.GestureBack)
-                                        },
-                                        rightToLeftPeek = hubChatRightToLeftPeek,
-                                        previousContent = {},
-                                        currentContent = {
-                                            HubChatScreen(
-                                                args = activeHubArgs,
-                                                currentUserId = hubUserId,
-                                                onNavigateBack = {
-                                                    closeHubChat(NavigationTransitionMode.Tap)
-                                                },
-                                                resolveHubGatekeeperLocation = { resolveHubGatekeeperLocationForChat() },
-                                                integrateTimestampPeekWithSwipeBackContainer = true,
-                                                onRegisterSwipeBackRightToLeftPeek = {
-                                                    hubChatRightToLeftPeek = it
-                                                },
-                                            )
-                                        },
-                                    )
-                                } else {
-                                    HubChatScreen(
-                                        args = activeHubArgs,
-                                        currentUserId = hubUserId,
-                                        onNavigateBack = {
-                                            closeHubChat(NavigationTransitionMode.Tap)
-                                        },
-                                        resolveHubGatekeeperLocation = { resolveHubGatekeeperLocationForChat() },
-                                        integrateTimestampPeekWithSwipeBackContainer = false,
-                                        onRegisterSwipeBackRightToLeftPeek = {},
-                                    )
-                                }
+                                val hubKeyboardController = LocalSoftwareKeyboardController.current
+                                val hubFocusManager = LocalFocusManager.current
+                                InteractiveSwipeBackContainer(
+                                    enabled = true,
+                                    opaquePreviousBackground = false,
+                                    externalDragOffsetPx = hubSwipeDragPx,
+                                    onBack = {
+                                        hubFocusManager.clearFocus()
+                                        if (!isIOS) {
+                                            hubKeyboardController?.hide()
+                                        }
+                                        closeHubChat(NavigationTransitionMode.GestureBack)
+                                    },
+                                    rightToLeftPeek = hubChatRightToLeftPeek,
+                                    previousContent = {},
+                                    currentContent = {
+                                        HubChatScreen(
+                                            args = activeHubArgs,
+                                            currentUserId = hubUserId,
+                                            onNavigateBack = {
+                                                closeHubChat(NavigationTransitionMode.Tap)
+                                            },
+                                            resolveHubGatekeeperLocation = { resolveHubGatekeeperLocationForChat() },
+                                            integrateTimestampPeekWithSwipeBackContainer = true,
+                                            onRegisterSwipeBackRightToLeftPeek = {
+                                                hubChatRightToLeftPeek = it
+                                            },
+                                            parentInteractiveBackSwipePx = hubSwipeDragPx,
+                                        )
+                                    },
+                                )
                             }
                         }
 

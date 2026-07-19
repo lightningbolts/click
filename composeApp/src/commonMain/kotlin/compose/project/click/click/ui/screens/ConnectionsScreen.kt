@@ -1,9 +1,7 @@
 package compose.project.click.click.ui.screens
 
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -11,7 +9,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -104,11 +101,9 @@ fun ConnectionsScreen(
         // Forced reload clears local inbox caches and can repaint the list; skip that on the iOS
         // gesture-dismiss path where we already avoided flashing the message surface.
         viewModel.loadChats(isForced = false)
-        if (isIOS) {
-            iosChatSwipeDragPx.floatValue = 0f
-            iosChatSwipeBehindLayers = false
-            iosChatRightToLeftPeek = null
-        }
+        iosChatSwipeDragPx.floatValue = 0f
+        iosChatSwipeBehindLayers = false
+        iosChatRightToLeftPeek = null
         onChatDismissed?.invoke()
         // Restore tab bar / bottom chrome only after settle — same frame as leaveChatRoom used to
         // jump LazyColumn padding and look like a full inbox recompose.
@@ -135,7 +130,7 @@ fun ConnectionsScreen(
                 delay(settleMs)
                 if (selectedChatId == null) {
                     finalizeChatClose(
-                        leaveChatClearsMessageSurface = !(isIOS && mode == ChatTransitionMode.Gesture),
+                        leaveChatClearsMessageSurface = mode != ChatTransitionMode.Gesture,
                     )
                 }
                 isTapCloseInFlight = false
@@ -192,8 +187,7 @@ fun ConnectionsScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-    if (isIOS) {
-        // Persistent base layer + chat overlay architecture.
+        // Persistent base layer + chat overlay (iOS + Android).
         // ConnectionsListView stays in this tree (not duplicated in swipe previousContent).
         // [InteractiveSwipeBackContainer] uses an empty previousContent; drag offset + behind-layer
         // visibility are mirrored onto this Box so the list receives the same parallax as layer 1.
@@ -209,6 +203,7 @@ fun ConnectionsScreen(
                         val w = size.width.coerceAtLeast(1f)
                         val o = iosChatSwipeDragPx.floatValue.coerceIn(0f, w)
                         val progress = (o / w).coerceIn(0f, 1f)
+                        // Parallax only — scale during drag was janking the gesture.
                         translationX =
                             -(size.width * InteractiveSwipeBackParallaxPeekRatio) * (1f - progress)
                     },
@@ -244,7 +239,7 @@ fun ConnectionsScreen(
                                     event.changes.forEach { it.consume() }
                                 }
                             }
-                        }
+                        },
                 )
             }
 
@@ -264,7 +259,7 @@ fun ConnectionsScreen(
                 } else {
                     ExitTransition.None
                 },
-                label = "ios_chat_overlay",
+                label = "chat_overlay",
             ) {
                 val activeChatId = lastOpenChatIdForIosOverlay
                 if (activeChatId != null) {
@@ -300,62 +295,11 @@ fun ConnectionsScreen(
                                 onOpenDisposableRoll = onOpenDisposableRoll,
                                 onOpenDisposableRollForChat = onOpenDisposableRollForChat,
                             )
-                        }
+                        },
                     )
                 }
             }
         }
-    } else {
-        AnimatedContent(
-            targetState = selectedChatId,
-            transitionSpec = {
-                val slideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
-                val fadeSpec = tween<Float>(220, easing = LinearOutSlowInEasing)
-                if (targetState != null) {
-                    (slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it }) + fadeIn(animationSpec = fadeSpec))
-                        .togetherWith(slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { -it }) + fadeOut(animationSpec = fadeSpec))
-                        .using(SizeTransform(clip = true))
-                } else {
-                    (slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { -it }) + fadeIn(animationSpec = fadeSpec))
-                        .togetherWith(slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { it }) + fadeOut(animationSpec = fadeSpec))
-                        .using(SizeTransform(clip = true))
-                }
-            },
-            label = "chat_open_close_transition"
-        ) { activeChatId ->
-            if (activeChatId == null) {
-                ConnectionsListView(
-                    viewModel = viewModel,
-                    searchQuery = searchQuery,
-                    onOpenSearch = onOpenSearch,
-                    onChatSelected = { chatId -> openChat(chatId) },
-                    onHubSelected = onHubSelected,
-                    onNavigateToLocationSettings = onNavigateToLocationSettings,
-                    onUserProfileClick = { profileUserId = it },
-                    onGroupMembersPicker = {
-                        groupMembersPickerContext = it
-                        showGroupMembersSheet = true
-                    },
-                    verifiedCliqueProximityAutofill = verifiedCliqueProximityAutofill,
-                    onVerifiedCliqueProximityAutofillConsumed = onVerifiedCliqueProximityAutofillConsumed,
-                    isListObscured = false,
-                )
-            } else {
-                ChatView(
-                    viewModel = viewModel,
-                    chatId = activeChatId,
-                    onBackPressed = { closeActiveChat(ChatTransitionMode.Tap) },
-                    onOpenUserProfile = { profileUserId = it },
-                    onOpenGroupMembersPicker = {
-                        groupMembersPickerContext = it
-                        showGroupMembersSheet = true
-                    },
-                    onOpenDisposableRoll = onOpenDisposableRoll,
-                    onOpenDisposableRollForChat = onOpenDisposableRollForChat,
-                )
-            }
-        }
-    }
     // C13 directive: chat-list avatar taps must surface the new tabbed
     // ProfileBottomSheet (Timeline · Media · Links · Files), NOT the legacy
     // UserProfileBottomSheet. The Timeline subtab hydrates user_interests.tags

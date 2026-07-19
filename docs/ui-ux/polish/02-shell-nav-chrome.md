@@ -104,7 +104,9 @@ Same bug as [01-motion-performance.md §5.0](01-motion-performance.md). Shell-le
 
 ### 5.2 Surfaces using swipe-back today
 
-Chat (iOS overlay), Add Click My Code / Scan / Tap, Map events full-screen, **returns that reveal Home**, other `InteractiveSwipeBackContainer` callers — **audit all call sites** in the one-shot plan.
+Connection + hub chat overlays (iOS **and** Android), Add Click My Code / Scan / Tap, Map events full-screen, **returns that reveal Home**, other `InteractiveSwipeBackContainer` callers.
+
+Secondary chrome (chat/events headers) may use `Modifier.interactiveBackPersonality` driven by swipe offset — scale/offset only; **do not** change commit fraction / flick velocity.  
 
 ---
 
@@ -125,7 +127,7 @@ Z-order and gesture ownership must stay obvious:
 | Layer (conceptual) | Examples |
 |--------------------|----------|
 | Base tabs | Home, Add Click, Clicks, Map, Settings |
-| Route overlays | Chat, events list, My Code, Scan |
+| Route overlays | Chat, events list, My Code, Scan — events covers map chrome (not alpha-hide); chat covers tab bar via Scaffold zIndex lift |
 | Sheets / popups | Profile, search, forms, action sheets |
 | Feedback | Toasts, offline banner, tether |
 | Calls | Preview + active call (highest) |
@@ -135,6 +137,8 @@ Z-order and gesture ownership must stay obvious:
 - Opening search does not reset tab scroll.  
 - Toast does not block tab bar taps after dismiss animation.  
 - Call overlay appearance uses polished enter/exit (part 04) without dropping the shell underneath.  
+- Map → Events: drop beacon / layer controls remain painted under the list; swipe-back reveals them (no fade-in remount).  
+- Chat open: tab bar not visually present (covered); on dismiss the bar was always composed underneath.  
 
 ---
 

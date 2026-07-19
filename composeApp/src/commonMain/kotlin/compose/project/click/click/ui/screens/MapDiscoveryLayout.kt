@@ -346,6 +346,7 @@ internal fun EventsDiscoveryFullScreen(
     viewModel: MapViewModel,
     onBack: () -> Unit,
     onBeaconClick: (MapBeacon, distanceMeters: Double?) -> Unit,
+    interactiveBackSwipeOffsetPx: androidx.compose.runtime.MutableFloatState? = null,
 ) {
     var sortMode by remember { mutableIntStateOf(0) }
     val discoverySortMode = if (sortMode == 0) DiscoverySortMode.Distance else DiscoverySortMode.Recent

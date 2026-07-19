@@ -1029,7 +1029,7 @@ fun ChatView(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .chatThreadKeyboardDock(
-                                        nativeKeyboardLiftPx = nativeKeyboardInsets.threadDockNativeKeyboardLiftPx,
+                                        nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
                                     ),
                             ) {
                             Box(
@@ -1215,7 +1215,7 @@ fun ChatView(
                                 start = 12.dp,
                                 end = 12.dp,
                                 top = 24.dp + reverseListNewestEdgePad,
-                                bottom = 8.dp + ChatComposerStripReserve + nativeKeyboardInsets.timelineBottomPadding,
+                                bottom = 8.dp + ChatComposerStripReserve,
                             ),
                             dismissKeyboardOnUserMessageScroll = dismissKeyboardOnUserMessageScroll,
                             displayTimestampPeekVisualPx = displayTimestampPeekVisualPx,
@@ -1262,11 +1262,7 @@ fun ChatView(
                             }
 
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .graphicsLayer {
-                                translationY = -nativeKeyboardInsets.composerLiftPx.coerceAtLeast(0f)
-                            },
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         // Typing indicator — label + bouncing dots (Realtime Broadcast)
                         AnimatedVisibility(

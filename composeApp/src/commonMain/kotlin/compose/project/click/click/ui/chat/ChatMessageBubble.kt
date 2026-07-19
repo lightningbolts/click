@@ -67,7 +67,6 @@ import compose.project.click.click.viewmodel.SecureChatMediaHost
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 
 @Composable
 fun ChatMessageBubble(
@@ -178,9 +177,9 @@ fun ChatMessageBubble(
     val swipeSoftKneePx = remember(density) { with(density) { 5.dp.toPx() } }
     val swipeTrackGain = remember { 1f }
     val swipeOverflowRubberGain = remember { 0.12f }
-    var rawSwipeTravelPx by remember(message.id) { mutableFloatStateOf(0f) }
-    var displayVisualPx by remember(message.id) { mutableFloatStateOf(0f) }
-    var swipeDragging by remember(message.id) { mutableStateOf(false) }
+    // Float states — read only in graphicsLayer (draw), never in composition, or photos flicker.
+    val rawSwipeTravelPx = remember(message.id) { mutableFloatStateOf(0f) }
+    val displayVisualPx = remember(message.id) { mutableFloatStateOf(0f) }
     val onSwipeReplyState = rememberUpdatedState(onSwipeReply)
     val messageWithUserState = rememberUpdatedState(messageWithUser)
     val scope = rememberCoroutineScope()
@@ -190,16 +189,18 @@ fun ChatMessageBubble(
     val draggableState = rememberDraggableState { delta ->
         swipeSettleJob?.cancel()
         swipeSettleJob = null
-        rawSwipeTravelPx = (rawSwipeTravelPx + delta).coerceIn(-ChatGestureMotion.RawTravelCapPx, ChatGestureMotion.RawTravelCapPx)
-        displayVisualPx = swipeVisualFromRawTravel(
-            rawTravelPx = rawSwipeTravelPx,
+        rawSwipeTravelPx.floatValue =
+            (rawSwipeTravelPx.floatValue + delta).coerceIn(-ChatGestureMotion.RawTravelCapPx, ChatGestureMotion.RawTravelCapPx)
+        displayVisualPx.floatValue = swipeVisualFromRawTravel(
+            rawTravelPx = rawSwipeTravelPx.floatValue,
             isSent = isSent,
             maxVisualPx = maxSwipeVisualPx,
             softKneePx = swipeSoftKneePx,
             trackGain = swipeTrackGain,
             overflowRubberGain = swipeOverflowRubberGain,
         )
-        val directed = if (isSent) (-rawSwipeTravelPx).coerceAtLeast(0f) else rawSwipeTravelPx.coerceAtLeast(0f)
+        val directed =
+            if (isSent) (-rawSwipeTravelPx.floatValue).coerceAtLeast(0f) else rawSwipeTravelPx.floatValue.coerceAtLeast(0f)
         if (directed >= swipeThresholdPx && !replyThresholdHapticFired) {
             replyThresholdHapticFired = true
             PlatformHapticsPolicy.heavyImpact()
@@ -213,10 +214,9 @@ fun ChatMessageBubble(
             swipeSettleJob?.cancel()
             swipeSettleJob = null
             replyThresholdHapticFired = false
-            swipeDragging = true
-            if (displayVisualPx != 0f) {
-                rawSwipeTravelPx = swipeRawTravelFromVisual(
-                    visualPx = displayVisualPx,
+            if (displayVisualPx.floatValue != 0f) {
+                rawSwipeTravelPx.floatValue = swipeRawTravelFromVisual(
+                    visualPx = displayVisualPx.floatValue,
                     isSent = isSent,
                     maxVisualPx = maxSwipeVisualPx,
                     softKneePx = swipeSoftKneePx,
@@ -226,25 +226,24 @@ fun ChatMessageBubble(
             }
         },
         onDragStopped = {
-            swipeDragging = false
-            val raw = rawSwipeTravelPx
+            val raw = rawSwipeTravelPx.floatValue
             val shouldReply = if (isSent) raw <= -swipeThresholdPx else raw >= swipeThresholdPx
             if (shouldReply) {
                 PlatformHapticsPolicy.heavyImpact()
                 onSwipeReplyState.value(messageWithUserState.value)
             }
-            rawSwipeTravelPx = 0f
+            rawSwipeTravelPx.floatValue = 0f
             swipeSettleJob = scope.launch {
                 try {
                     animate(
-                        initialValue = displayVisualPx,
+                        initialValue = displayVisualPx.floatValue,
                         targetValue = 0f,
                         animationSpec = spring(
                             dampingRatio = 0.75f,
                             stiffness = Spring.StiffnessLow,
                         ),
                     ) { v, _ ->
-                        displayVisualPx = v
+                        displayVisualPx.floatValue = v
                     }
                 } finally {
                     swipeSettleJob = null
@@ -286,16 +285,6 @@ fun ChatMessageBubble(
         onLongPress(messageWithUser)
     }
 
-    val dragging = swipeDragging
-    val rawHintP = replyDragHintProgress(rawSwipeTravelPx, isSent, swipeThresholdPx)
-    val visualHintP = (abs(displayVisualPx) / maxSwipeVisualPx.coerceAtLeast(1f)).coerceIn(0f, 1f)
-    val hintProgress = if (dragging) maxOf(rawHintP, visualHintP) else visualHintP
-    val hintAlpha = if (dragging) {
-        (0.52f + 0.48f * (hintProgress * hintProgress)).coerceIn(0f, 1f)
-    } else {
-        (0.38f + 0.5f * (hintProgress * hintProgress)).coerceIn(0f, 1f)
-    }
-
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (isSent) Alignment.End else Alignment.Start
@@ -310,8 +299,11 @@ fun ChatMessageBubble(
             Box(modifier = Modifier.fillMaxWidth()) {
                 if (!isSent) {
                     ReplySwipeSideIcon(
-                        hintProgress = hintProgress,
-                        hintAlpha = hintAlpha,
+                        rawSwipeTravelPx = rawSwipeTravelPx,
+                        displayVisualPx = displayVisualPx,
+                        isSent = false,
+                        swipeThresholdPx = swipeThresholdPx,
+                        maxSwipeVisualPx = maxSwipeVisualPx,
                         modifier = Modifier
                             .align(Alignment.CenterStart)
                             .zIndex(0f),
@@ -360,7 +352,7 @@ fun ChatMessageBubble(
                     Column(
                         horizontalAlignment = if (isSent) Alignment.End else Alignment.Start,
                         modifier = Modifier
-                            .graphicsLayer { translationX = displayVisualPx }
+                            .graphicsLayer { translationX = displayVisualPx.floatValue }
                             .then(swipeDragModifier)
                             .then(messageLongPressModifier),
                     ) {
@@ -409,7 +401,8 @@ fun ChatMessageBubble(
                             val capImg = message.content.trim()
                             if (capImg.isNotEmpty()) {
                                 Spacer(modifier = Modifier.height(ChatBubbleTokens.captionBelowImageSpacing))
-                                SelectionContainer(
+                                ChatBubbleSelectableText(
+                                    allowNativeSelection = !enableMessageContextMenu,
                                     modifier = imageCaptionLongPressModifier,
                                 ) {
                                     ChatLinkifyText(
@@ -487,7 +480,9 @@ fun ChatMessageBubble(
                                     val cap = message.content.trim()
                                     if (cap.isNotEmpty()) {
                                         Spacer(modifier = Modifier.height(ChatBubbleTokens.captionBelowImageSpacing))
-                                        SelectionContainer {
+                                        ChatBubbleSelectableText(
+                                            allowNativeSelection = !enableMessageContextMenu,
+                                        ) {
                                             ChatLinkifyText(
                                                 text = cap,
                                                 color = Color.White,
@@ -506,7 +501,9 @@ fun ChatMessageBubble(
                                     )
                                 }
                                 else -> {
-                                    SelectionContainer {
+                                    ChatBubbleSelectableText(
+                                        allowNativeSelection = !enableMessageContextMenu,
+                                    ) {
                                         Column {
                                             if (message.content.isNotBlank()) {
                                                 ChatLinkifyText(
@@ -577,7 +574,8 @@ fun ChatMessageBubble(
                             val capRx = message.content.trim()
                             if (capRx.isNotEmpty()) {
                                 Spacer(modifier = Modifier.height(ChatBubbleTokens.captionBelowImageSpacing))
-                                SelectionContainer(
+                                ChatBubbleSelectableText(
+                                    allowNativeSelection = !enableMessageContextMenu,
                                     modifier = imageCaptionLongPressModifier,
                                 ) {
                                     ChatLinkifyText(
@@ -658,7 +656,9 @@ fun ChatMessageBubble(
                                     val cap = message.content.trim()
                                     if (cap.isNotEmpty()) {
                                         Spacer(modifier = Modifier.height(ChatBubbleTokens.captionBelowImageSpacing))
-                                        SelectionContainer {
+                                        ChatBubbleSelectableText(
+                                            allowNativeSelection = !enableMessageContextMenu,
+                                        ) {
                                             ChatLinkifyText(
                                                 text = cap,
                                                 color = onBody,
@@ -677,7 +677,9 @@ fun ChatMessageBubble(
                                     )
                                 }
                                 else -> {
-                                    SelectionContainer {
+                                    ChatBubbleSelectableText(
+                                        allowNativeSelection = !enableMessageContextMenu,
+                                    ) {
                                         Column {
                                             if (message.content.isNotBlank()) {
                                                 ChatLinkifyText(
@@ -748,8 +750,11 @@ fun ChatMessageBubble(
                 }
                 if (isSent) {
                     ReplySwipeSideIcon(
-                        hintProgress = hintProgress,
-                        hintAlpha = hintAlpha,
+                        rawSwipeTravelPx = rawSwipeTravelPx,
+                        displayVisualPx = displayVisualPx,
+                        isSent = true,
+                        swipeThresholdPx = swipeThresholdPx,
+                        maxSwipeVisualPx = maxSwipeVisualPx,
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
                             .zIndex(0f),
@@ -757,5 +762,22 @@ fun ChatMessageBubble(
                 }
             }
         }
+    }
+}
+
+/**
+ * Native [SelectionContainer] competes with long-press → message action sheet.
+ * When the context menu is enabled, skip selection so Copy lives on the sheet only.
+ */
+@Composable
+private fun ChatBubbleSelectableText(
+    allowNativeSelection: Boolean,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    if (allowNativeSelection) {
+        SelectionContainer(modifier = modifier, content = content)
+    } else {
+        Box(modifier = modifier) { content() }
     }
 }
