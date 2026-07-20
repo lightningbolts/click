@@ -3,35 +3,62 @@ set -e
 
 echo "Starting Xcode Cloud Post-Clone Script..."
 
-export HOMEBREW_NO_AUTO_UPDATE=1
-export HOMEBREW_NO_ENV_HINTS=1
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Ensure Homebrew is on PATH (Apple Silicon + Intel)
-if [ -x /opt/homebrew/bin/brew ]; then
-  eval "$(/opt/homebrew/bin/brew shellenv)"
-elif [ -x /usr/local/bin/brew ]; then
-  eval "$(/usr/local/bin/brew shellenv)"
+# Prefer DerivedData so later builds can reuse the JDK when available.
+if [ -n "${CI_DERIVED_DATA_PATH:-}" ]; then
+  JDK_ROOT="${CI_DERIVED_DATA_PATH}/JDK"
+else
+  JDK_ROOT="${HOME}/.click-ci-jdk"
 fi
 
-# 1. Install Java 17
-echo "Installing OpenJDK 17..."
-brew install openjdk@17
+JAVA_HOME_PATH="${JDK_ROOT}/Home"
 
-JDK_PREFIX="$(brew --prefix openjdk@17)"
-JDK_BUNDLE="${JDK_PREFIX}/libexec/openjdk.jdk"
+install_temurin_17() {
+  if [ -x "${JAVA_HOME_PATH}/bin/java" ]; then
+    echo "JDK already present at ${JAVA_HOME_PATH}"
+    return 0
+  fi
 
-if [ ! -d "$JDK_BUNDLE" ]; then
-  echo "ERROR: OpenJDK bundle not found at $JDK_BUNDLE"
-  exit 1
-fi
+  arch="$(uname -m)"
+  case "$arch" in
+    arm64) adoptium_arch="aarch64" ;;
+    x86_64) adoptium_arch="x64" ;;
+    *)
+      echo "ERROR: Unsupported architecture: $arch"
+      exit 1
+      ;;
+  esac
 
-# 2. Create local Java folder (No sudo needed)
-mkdir -p "$HOME/Library/Java/JavaVirtualMachines"
+  echo "Downloading Temurin JDK 17 (${adoptium_arch})..."
+  # Avoid Homebrew: openjdk@17 pulls ~29 bottles (libxcb, cairo, …) and
+  # Xcode Cloud often fails mid-download with "Connection reset by peer".
+  tmp_dir="$(mktemp -d)"
+  url="https://api.adoptium.net/v3/binary/latest/17/ga/mac/${adoptium_arch}/jdk/hotspot/normal/eclipse?project=jdk"
 
-# 3. Symlink Java using brew --prefix (works on both /opt/homebrew and /usr/local)
-echo "Linking OpenJDK 17 from $JDK_BUNDLE..."
-ln -sfn "$JDK_BUNDLE" "$HOME/Library/Java/JavaVirtualMachines/openjdk-17.jdk"
+  curl -fL --retry 3 --retry-delay 2 -o "${tmp_dir}/jdk.tar.gz" "$url"
+  tar -xzf "${tmp_dir}/jdk.tar.gz" -C "$tmp_dir"
 
-export JAVA_HOME="$JDK_PREFIX"
+  extracted="$(find "$tmp_dir" -maxdepth 1 -type d \( -name 'jdk-17*' -o -name 'temurin-17*' \) | head -1)"
+  if [ -z "$extracted" ] || [ ! -x "${extracted}/bin/java" ]; then
+    echo "ERROR: Failed to extract a usable JDK from Temurin archive"
+    rm -rf "$tmp_dir"
+    exit 1
+  fi
+
+  rm -rf "$JAVA_HOME_PATH"
+  mkdir -p "$JDK_ROOT"
+  mv "$extracted" "$JAVA_HOME_PATH"
+  rm -rf "$tmp_dir"
+}
+
+install_temurin_17
+
+export JAVA_HOME="$JAVA_HOME_PATH"
+export PATH="$JAVA_HOME/bin:$PATH"
+
+# Persist for the Compile Kotlin Framework build phase (fresh shell).
+echo "$JAVA_HOME" > "${SCRIPT_DIR}/.java_home"
+
 echo "Java 17 installed. JAVA_HOME=$JAVA_HOME"
 java -version
