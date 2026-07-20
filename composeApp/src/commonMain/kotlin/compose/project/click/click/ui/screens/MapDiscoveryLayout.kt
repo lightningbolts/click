@@ -25,10 +25,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Celebration
 import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -332,7 +339,8 @@ internal fun EventsReopenChip(
 }
 
 /**
- * Full-screen Events for you (not a modal sheet). Back returns to map + peek chip.
+ * Full-screen Nearby discovery (not a modal sheet). Back returns to map + peek chip.
+ * Shows layer-filtered beacons (events, soundtracks, alerts, vibes) and hubs — not Events-only.
  * Uses the same floating Liquid Glass header / scaffold chrome as Home & Connections.
  */
 @Composable
@@ -352,23 +360,33 @@ internal fun EventsDiscoveryFullScreen(
     val discoverySortMode = if (sortMode == 0) DiscoverySortMode.Distance else DiscoverySortMode.Recent
     var eventsQuery by remember { mutableStateOf("") }
 
-    val eventItems = remember(feedItems, discoverySortMode, eventsQuery) {
-        val events = feedItems
-            .filterIsInstance<DiscoveryFeedItem.Beacon>()
-            .filter { it.beacon.kind == MapBeaconKind.EVENT }
-        val sorted = sortDiscoveryFeedItems(events, discoverySortMode)
-            .filterIsInstance<DiscoveryFeedItem.Beacon>()
+    val discoverySections = remember(feedItems, discoverySortMode, eventsQuery) {
+        val sorted = sortDiscoveryFeedItems(feedItems, discoverySortMode)
         val q = eventsQuery.trim()
-        if (q.isEmpty()) {
+        val filtered = if (q.isEmpty()) {
             sorted
         } else {
             sorted.filter { item ->
-                item.beacon.displayDynamicTitle().contains(q, ignoreCase = true) ||
-                    item.ttlLabel.contains(q, ignoreCase = true) ||
-                    item.beacon.metadata.description.orEmpty().contains(q, ignoreCase = true) ||
-                    item.beacon.creatorDisplayName.orEmpty().contains(q, ignoreCase = true)
+                when (item) {
+                    is DiscoveryFeedItem.Beacon ->
+                        item.beacon.displayDynamicTitle().contains(q, ignoreCase = true) ||
+                            item.ttlLabel.contains(q, ignoreCase = true) ||
+                            item.beacon.metadata.description.orEmpty().contains(q, ignoreCase = true) ||
+                            item.beacon.metadata.trackName.orEmpty().contains(q, ignoreCase = true) ||
+                            item.beacon.metadata.artistName.orEmpty().contains(q, ignoreCase = true) ||
+                            item.beacon.creatorDisplayName.orEmpty().contains(q, ignoreCase = true)
+                    is DiscoveryFeedItem.Hub ->
+                        item.hub.name.contains(q, ignoreCase = true) ||
+                            item.ttlLabel.contains(q, ignoreCase = true)
+                    is DiscoveryFeedItem.Connection ->
+                        item.point.displayName.contains(q, ignoreCase = true)
+                }
             }
         }
+        groupDiscoveryFeedIntoSections(filtered)
+    }
+    val discoveryItemCount = remember(discoverySections) {
+        discoverySections.sumOf { it.items.size }
     }
 
     Box(
@@ -377,7 +395,7 @@ internal fun EventsDiscoveryFullScreen(
             .background(MaterialTheme.colorScheme.background),
     ) {
         AppScreenScaffold(
-            title = "Events",
+            title = "Nearby",
             subtitle = null,
             navigationIcon = {
                 IconButton(onClick = onBack) {
@@ -417,7 +435,7 @@ internal fun EventsDiscoveryFullScreen(
                 )
             }
             when {
-                eventItems.isEmpty() && discoveryFeedPending -> {
+                discoveryItemCount == 0 && discoveryFeedPending -> {
                     item(key = "events_loading") {
                         DiscoveryFeedLoadingPulse(
                             modifier = Modifier
@@ -426,34 +444,61 @@ internal fun EventsDiscoveryFullScreen(
                         )
                     }
                 }
-                eventItems.isEmpty() -> {
+                discoveryItemCount == 0 -> {
                     item(key = "events_empty") {
                         AppEmptyState(
-                            icon = Icons.Default.Event,
-                            title = "No nearby events",
-                            body = "Drop a beacon or check back soon for nearby events.",
+                            icon = Icons.Default.Place,
+                            title = "Nothing nearby",
+                            body = "Drop a soundtrack or event, or enable more layers to see what's around you.",
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
                 }
                 else -> {
-                    items(
-                        items = eventItems,
-                        key = { it.key },
-                        contentType = { "event" },
-                    ) { item ->
-                        DiscoveryEventCard(
-                            item = item,
-                            viewModel = viewModel,
-                            onOpen = {
-                                onBeaconClick(
-                                    item.beacon,
-                                    item.distanceM.takeIf {
-                                        it.isFinite() && it < Double.MAX_VALUE
-                                    },
-                                )
+                    discoverySections.forEach { section ->
+                        item(key = "section-${section.title}") {
+                            Text(
+                                text = section.title,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp, bottom = 2.dp),
+                            )
+                        }
+                        items(
+                            items = section.items,
+                            key = { it.key },
+                            contentType = { item ->
+                                when (item) {
+                                    is DiscoveryFeedItem.Beacon -> "beacon-${item.beacon.kind}"
+                                    is DiscoveryFeedItem.Hub -> "hub"
+                                    is DiscoveryFeedItem.Connection -> "conn"
+                                }
                             },
-                        )
+                        ) { item ->
+                            when (item) {
+                                is DiscoveryFeedItem.Beacon -> {
+                                    DiscoveryEventCard(
+                                        item = item,
+                                        viewModel = viewModel,
+                                        onOpen = {
+                                            onBeaconClick(
+                                                item.beacon,
+                                                item.distanceM.takeIf {
+                                                    it.isFinite() && it < Double.MAX_VALUE
+                                                },
+                                            )
+                                        },
+                                    )
+                                }
+                                is DiscoveryFeedItem.Hub -> {
+                                    DiscoveryHubCard(item = item)
+                                }
+                                is DiscoveryFeedItem.Connection -> Unit
+                            }
+                        }
                     }
                 }
             }
@@ -495,7 +540,7 @@ private fun EventsSheetSearchField(
             decorationBox = { inner ->
                 if (query.isEmpty()) {
                     Text(
-                        text = "Search events near you…",
+                        text = "Search nearby…",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -578,29 +623,86 @@ private fun FilterChipPill(
 }
 
 @Composable
+private fun DiscoveryHubCard(item: DiscoveryFeedItem.Hub) {
+    val hub = item.hub
+    val shape = RoundedCornerShape(16.dp)
+    val distanceText = if (item.sortDistanceM < Double.MAX_VALUE / 2) {
+        formatDiscoveryDistance(item.sortDistanceM)
+    } else {
+        null
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(clickCardSurface())
+            .border(2.dp, clickBorderColor(), shape)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Filled.Groups,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = hub.name,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Text(
+            text = item.ttlLabel,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (distanceText != null) {
+            Text(
+                text = distanceText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
 private fun DiscoveryEventCard(
     item: DiscoveryFeedItem.Beacon,
     viewModel: MapViewModel,
     onOpen: () -> Unit,
 ) {
     val beacon = item.beacon
+    val isEvent = beacon.kind == MapBeaconKind.EVENT
     val rsvpCache by viewModel.beaconRsvpById.collectAsState()
     val rsvpLoadingIds by viewModel.beaconRsvpLoadingIds.collectAsState()
     val rsvpPendingIds by viewModel.beaconRsvpPendingIds.collectAsState()
     val entry = rsvpCache[beacon.id]
     val attendees = entry?.attendees.orEmpty()
     val currentUserSignedUp = entry?.currentUserSignedUp == true
-    val rsvpLoading = entry == null && beacon.id in rsvpLoadingIds
+    val rsvpLoading = isEvent && entry == null && beacon.id in rsvpLoadingIds
     val rsvpPending = beacon.id in rsvpPendingIds
 
-    LaunchedEffect(beacon.id) {
-        viewModel.loadBeaconRsvp(beacon.id, forceRefresh = false)
+    LaunchedEffect(beacon.id, isEvent) {
+        if (isEvent) {
+            viewModel.loadBeaconRsvp(beacon.id, forceRefresh = false)
+        }
     }
 
     val shape = RoundedCornerShape(16.dp)
     val title = beacon.displayDynamicTitle()
     val schedule = beacon.eventSchedule()?.let { formatEventScheduleRange(it) }
     val rawDescription = beacon.metadata.description?.trim()?.takeIf { it.isNotEmpty() }
+        ?: listOfNotNull(beacon.metadata.artistName, beacon.metadata.trackName)
+            .joinToString(" · ")
+            .takeIf { it.isNotBlank() && it != title }
     // Avoid duplicating description when it was promoted to the title.
     val description = rawDescription?.takeIf { it != title }
     val host = beacon.creatorDisplayName?.trim()?.takeIf {
@@ -612,6 +714,26 @@ private fun DiscoveryEventCard(
         formatDiscoveryDistance(item.sortDistanceM)
     } else {
         null
+    }
+    val kindLabel = when (beacon.kind) {
+        MapBeaconKind.SOUNDTRACK -> "Soundtrack"
+        MapBeaconKind.SOS -> "SOS"
+        MapBeaconKind.HAZARD -> "Hazard"
+        MapBeaconKind.UTILITY -> "Utility"
+        MapBeaconKind.STUDY -> "Study"
+        MapBeaconKind.SOCIAL_VIBE -> "Vibe"
+        MapBeaconKind.EVENT -> "Event"
+        MapBeaconKind.OTHER -> "Beacon"
+    }
+    val kindIcon = when (beacon.kind) {
+        MapBeaconKind.SOUNDTRACK -> Icons.Filled.MusicNote
+        MapBeaconKind.SOS -> Icons.Filled.Campaign
+        MapBeaconKind.HAZARD -> Icons.Filled.Warning
+        MapBeaconKind.UTILITY -> Icons.Filled.Build
+        MapBeaconKind.STUDY -> Icons.Filled.School
+        MapBeaconKind.SOCIAL_VIBE -> Icons.Filled.Celebration
+        MapBeaconKind.EVENT -> Icons.Filled.Event
+        MapBeaconKind.OTHER -> Icons.Filled.Place
     }
 
     Column(
@@ -630,7 +752,7 @@ private fun DiscoveryEventCard(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                Icons.Filled.Event,
+                kindIcon,
                 contentDescription = null,
                 modifier = Modifier.size(36.dp),
                 tint = MaterialTheme.colorScheme.primary,
@@ -645,7 +767,7 @@ private fun DiscoveryEventCard(
                     .padding(horizontal = 8.dp, vertical = 4.dp),
             ) {
                 Text(
-                    text = "Event",
+                    text = kindLabel,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimary,
@@ -729,80 +851,80 @@ private fun DiscoveryEventCard(
                     )
                 }
             }
-            when {
-                rsvpLoading -> {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                    )
-                }
-                attendees.isNotEmpty() -> {
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        attendees.take(6).forEach { attendee ->
-                            ConnectionListUserAvatarFace(
-                                displayName = attendee.name,
-                                email = null,
-                                avatarUrl = attendee.avatarUrl,
-                                userId = attendee.userId,
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape),
-                                useCompactTypography = true,
-                            )
-                        }
-                        if (attendees.size > 6) {
-                            Text(
-                                text = "+${attendees.size - 6}",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier
-                                    .align(Alignment.CenterVertically)
-                                    .padding(start = 4.dp),
-                            )
+            if (isEvent) {
+                when {
+                    rsvpLoading -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    }
+                    attendees.isNotEmpty() -> {
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            attendees.take(6).forEach { attendee ->
+                                ConnectionListUserAvatarFace(
+                                    displayName = attendee.name,
+                                    email = null,
+                                    avatarUrl = attendee.avatarUrl,
+                                    userId = attendee.userId,
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape),
+                                    useCompactTypography = true,
+                                )
+                            }
+                            if (attendees.size > 6) {
+                                Text(
+                                    text = "+${attendees.size - 6}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(start = 4.dp),
+                                )
+                            }
                         }
                     }
                 }
-            }
-            if (currentUserSignedUp) {
-                OutlinedButton(
-                    onClick = { viewModel.cancelRsvpToBeacon(beacon.id) {} },
-                    enabled = !rsvpPending && !rsvpLoading,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(2.dp, clickBorderColor()),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                    ),
-                    contentPadding = PaddingValues(vertical = 10.dp),
-                ) {
-                    Text(
-                        text = if (rsvpPending) "Updating…" else "Cancel RSVP",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-            } else {
-                Button(
-                    onClick = { viewModel.rsvpToBeacon(beacon.id) {} },
-                    enabled = !rsvpPending && !rsvpLoading,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                    ),
-                    contentPadding = PaddingValues(vertical = 10.dp),
-                ) {
-                    Text(
-                        text = if (rsvpPending) "Updating…" else "RSVP",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                if (currentUserSignedUp) {
+                    OutlinedButton(
+                        onClick = { viewModel.cancelRsvpToBeacon(beacon.id) {} },
+                        enabled = !rsvpPending && !rsvpLoading,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(2.dp, clickBorderColor()),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                        ),
+                        contentPadding = PaddingValues(vertical = 10.dp),
+                    ) {
+                        Text(
+                            text = if (rsvpPending) "Updating…" else "Cancel RSVP",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                } else {
+                    Button(
+                        onClick = { viewModel.rsvpToBeacon(beacon.id) {} },
+                        enabled = !rsvpPending && !rsvpLoading,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                        ),
+                        contentPadding = PaddingValues(vertical = 10.dp),
+                    ) {
+                        Text(
+                            text = if (rsvpPending) "Updating…" else "RSVP",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                 }
             }
         }

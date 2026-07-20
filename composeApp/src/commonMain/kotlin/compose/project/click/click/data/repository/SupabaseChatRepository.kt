@@ -105,9 +105,81 @@ class SupabaseChatRepository(
     private fun Connection.withEncountersSortedNewestFirst(): Connection =
         copy(connectionEncounters = connectionEncounters.mergeRichestEncounterEvents().sortedByDescending { it.encounteredAt })
 
+    private suspend fun ensureFreshJwtForChat(): String? {
+        // Always hydrate the SDK first — a "fresh" TokenStorage JWT is useless for PostgREST
+        // / realtime if GoTrue still has no session after offline fast-boot.
+        runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+
+        val now = Clock.System.now().toEpochMilliseconds()
+        val existing = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+        val expiresAt = tokenStorage.getExpiresAt()
+        val expiredOrMissing = existing == null ||
+            (expiresAt != null && expiresAt <= now + 60_000L) ||
+            jwtExpEpochMs(existing) ?.let { it <= now + 60_000L } == true
+
+        if (!expiredOrMissing) return existing
+
+        authRepository.refreshSession()
+            .onFailure { println("ChatRepository: ensureFreshJwt refresh failed: ${it.redactedRestMessage()}") }
+        tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }?.let { refreshed ->
+            val exp = tokenStorage.getExpiresAt() ?: jwtExpEpochMs(refreshed)
+            if (exp == null || exp > now + 60_000L) return refreshed
+        }
+
+        authRepository.restoreSession()
+            .onFailure { println("ChatRepository: ensureFreshJwt restore failed: ${it.redactedRestMessage()}") }
+        authRepository.refreshSession()
+            .onFailure { println("ChatRepository: ensureFreshJwt refresh-after-restore failed: ${it.redactedRestMessage()}") }
+        val after = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val exp = tokenStorage.getExpiresAt() ?: jwtExpEpochMs(after)
+        // Never hand callers an already-expired JWT — that floods PostgREST with "JWT expired".
+        if (exp != null && exp <= now + 60_000L) return null
+        return after
+    }
+
+    /** Best-effort JWT `exp` (seconds) → epoch ms; null if unparseable. */
+    private fun jwtExpEpochMs(jwt: String?): Long? {
+        if (jwt.isNullOrBlank()) return null
+        val parts = jwt.split('.')
+        if (parts.size < 2) return null
+        val payload = parts[1]
+            .replace('-', '+')
+            .replace('_', '/')
+            .let { raw ->
+                val pad = (4 - raw.length % 4) % 4
+                raw + "=".repeat(pad)
+            }
+        return runCatching {
+            val json = kotlinx.serialization.json.Json.parseToJsonElement(
+                payload.decodeBase64ToString(),
+            )
+            val exp = (json as? kotlinx.serialization.json.JsonObject)
+                ?.get("exp")
+                ?.let { el ->
+                    when (el) {
+                        is kotlinx.serialization.json.JsonPrimitive ->
+                            el.content.toLongOrNull() ?: el.content.toDoubleOrNull()?.toLong()
+                        else -> null
+                    }
+                }
+            exp?.times(1000L)
+        }.getOrNull()
+    }
+
+    @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+    private fun String.decodeBase64ToString(): String {
+        val bytes = kotlin.io.encoding.Base64.decode(this)
+        return bytes.decodeToString()
+    }
+
     private suspend fun refreshedJwtAfterAuthFailure(): String? {
+        runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
         authRepository.refreshSession()
             .onFailure { println("ChatRepository: token refresh failed: ${it.redactedRestMessage()}") }
+        tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        authRepository.restoreSession()
+        authRepository.refreshSession()
+            .onFailure { println("ChatRepository: token refresh after restore failed: ${it.redactedRestMessage()}") }
         return tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
     }
 
@@ -1231,6 +1303,8 @@ class SupabaseChatRepository(
         beforeTimeCreated: Long?,
     ): List<Message>? {
         return try {
+            // Ensure SDK session is imported so PostgREST RLS returns rows (not empty []).
+            ensureFreshJwtForChat()
             val crypto = resolveChatCrypto(chatId, viewerUserId)
             val rows = when {
                 limit != null && limit > 0 -> {
@@ -1309,7 +1383,7 @@ class SupabaseChatRepository(
             }
 
             val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
-            val authToken = tokenStorage.getJwt() ?: return null
+            val authToken = ensureFreshJwtForChat() ?: return null
             val enrichedMetadata = enrichMediaEncryptionMetadata(messageType, metadata)
 
             val firstSend = apiClient.sendMessage(
@@ -1428,15 +1502,11 @@ class SupabaseChatRepository(
     override suspend fun markMessagesAsRead(chatId: String, userId: String) {
         if (chatId.isBlank() || userId.isBlank()) return
         try {
-            val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() } ?: return
-            val gatekeeperResult = apiClient.markChatAsRead(chatId, jwt)
-            if (gatekeeperResult.isSuccess) return
-
-            gatekeeperResult.exceptionOrNull()?.let { e ->
-                println("markChatAsRead failed, falling back to legacy path: ${e.redactedRestMessage()}")
-            }
-            apiClient.markMessagesAsRead(chatId, userId, jwt).onFailure { e ->
-                println("Legacy markMessagesAsRead fallback failed: ${e.redactedRestMessage()}")
+            val jwt = ensureFreshJwtForChat() ?: return
+            apiClient.markChatAsRead(chatId, jwt).onFailure { e ->
+                // Do not fall back to the legacy Flask /api/chats/:id/mark_read host — it often
+                // times out on simulator LAN and is not the read-receipt SSOT anymore.
+                println("markChatAsRead failed: ${e.redactedRestMessage()}")
             }
         } catch (e: Exception) {
             println("Error marking messages as read: ${e.redactedRestMessage()}")

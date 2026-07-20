@@ -127,7 +127,10 @@ fun HomeScreen(
     val nudgeResult by homeViewModel.nudgeResult.collectAsState()
     val pollPairSuggestion by homeViewModel.pollPairSuggestion.collectAsState()
     val icebreakerSendCooldownSec by homeViewModel.icebreakerSendCooldownRemainingSec.collectAsState()
-    val homeAvailabilityIntents by homeViewModel.homeAvailabilityIntents.collectAsState()
+    val availabilityViewModel: AvailabilityViewModel = viewModel { AvailabilityViewModel() }
+    var showAvailabilityIntentSheet by remember { mutableStateOf(false) }
+    var seedAvailabilityIntent by remember { mutableStateOf<AvailabilityIntentRow?>(null) }
+    val homeAvailabilityIntents by availabilityViewModel.activeAvailabilityIntents.collectAsState()
     val homeAvailabilityOverlapMessages by homeViewModel.homeAvailabilityOverlapMessages.collectAsState()
     val archivedForHome by AppDataManager.archivedConnectionIds.collectAsState()
     val hiddenForHome by AppDataManager.hiddenConnectionIds.collectAsState()
@@ -138,6 +141,14 @@ fun HomeScreen(
     val currentUser by AppDataManager.currentUser.collectAsState()
     var selectedSavedEventBeacon by remember { mutableStateOf<MapBeacon?>(null) }
     var archiveBannerNow by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
+
+    // Use the same auth-aware refresh path as Settings so intents aren't empty after fast boot.
+    LaunchedEffect(currentUser?.id) {
+        if (currentUser?.id != null) {
+            availabilityViewModel.refreshActiveAvailabilityIntents()
+            homeViewModel.refreshHomeAvailabilityIntents()
+        }
+    }
     LaunchedEffect(Unit) {
         while (isActive) {
             delay(60_000)
@@ -178,9 +189,6 @@ fun HomeScreen(
     val toastState = rememberUnifiedToastState()
     val scope = rememberCoroutineScope()
 
-    val availabilityViewModel: AvailabilityViewModel = viewModel { AvailabilityViewModel() }
-    var showAvailabilityIntentSheet by remember { mutableStateOf(false) }
-
     LaunchedEffect(nudgeResult) {
         val result = nudgeResult
         if (result != null) {
@@ -199,6 +207,7 @@ fun HomeScreen(
 
     LaunchedEffect(showAvailabilityIntentSheet) {
         if (!showAvailabilityIntentSheet) {
+            availabilityViewModel.refreshActiveAvailabilityIntents()
             homeViewModel.refreshHomeAvailabilityIntents()
         }
     }
@@ -288,8 +297,14 @@ fun HomeScreen(
                             ) {
                                 HomeAvailabilityIntentsRow(
                                     intents = homeAvailabilityIntents,
-                                    onOpenSheet = {
+                                    onCreateIntent = {
                                         availabilityViewModel.resetAvailabilityIntentSheet()
+                                        seedAvailabilityIntent = null
+                                        showAvailabilityIntentSheet = true
+                                    },
+                                    onEditIntent = { row ->
+                                        availabilityViewModel.beginEditAvailabilityIntent(row)
+                                        seedAvailabilityIntent = row
                                         showAvailabilityIntentSheet = true
                                     },
                                 )
@@ -500,8 +515,10 @@ fun HomeScreen(
         if (showAvailabilityIntentSheet) {
             AvailabilitySheet(
                 viewModel = availabilityViewModel,
+                seedIntent = seedAvailabilityIntent,
                 onDismiss = {
                     showAvailabilityIntentSheet = false
+                    seedAvailabilityIntent = null
                     availabilityViewModel.resetAvailabilityIntentSheet()
                 },
             )
@@ -1333,7 +1350,8 @@ private fun InsightRow(
 @Composable
 private fun HomeAvailabilityIntentsRow(
     intents: List<AvailabilityIntentRow>,
-    onOpenSheet: () -> Unit,
+    onCreateIntent: () -> Unit,
+    onEditIntent: (AvailabilityIntentRow) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         SectionHeader(text = "I'm down for…")
@@ -1348,7 +1366,7 @@ private fun HomeAvailabilityIntentsRow(
                 val label = row.intentTag?.trim().orEmpty().ifEmpty { "Intent" }
                 val sub = row.activeUntilLabel()
                 AssistChip(
-                    onClick = onOpenSheet,
+                    onClick = { onEditIntent(row) },
                     label = {
                         Column(modifier = Modifier.padding(vertical = 2.dp)) {
                             Text(
@@ -1378,10 +1396,10 @@ private fun HomeAvailabilityIntentsRow(
                 )
             }
             AssistChip(
-                onClick = onOpenSheet,
+                onClick = onCreateIntent,
                 label = {
                     Text(
-                        if (intents.isEmpty()) "Set what you're down for" else "Edit intents",
+                        if (intents.isEmpty()) "Set what you're down for" else "Add intent",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.SemiBold,
                     )

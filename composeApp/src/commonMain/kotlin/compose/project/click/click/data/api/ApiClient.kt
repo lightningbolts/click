@@ -394,23 +394,37 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         install(Auth) {
             bearer {
                 loadTokens {
+                    // Prefer live SDK session; fall back to TokenStorage so click-web calls
+                    // still authenticate after offline fast-boot (UI logged in, GoTrue empty).
                     val session = SupabaseConfig.client.auth.currentSessionOrNull()
+                    if (session != null) {
+                        val access = session.accessToken
+                        if (access.isNotBlank()) {
+                            return@loadTokens BearerTokens(access, session.refreshToken.orEmpty())
+                        }
+                    }
+                    val stored = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
                         ?: return@loadTokens null
-                    val access = session.accessToken
-                    if (access.isBlank()) return@loadTokens null
-                    BearerTokens(access, session.refreshToken.orEmpty())
+                    val refresh = tokenStorage.getRefreshToken()?.trim().orEmpty()
+                    BearerTokens(stored, refresh)
                 }
                 refreshTokens {
                     try {
                         SupabaseConfig.client.auth.refreshCurrentSession()
                     } catch (_: Exception) {
-                        return@refreshTokens null
+                        // Fall through to TokenStorage / AuthRepository-style restore below.
                     }
                     val session = SupabaseConfig.client.auth.currentSessionOrNull()
+                    if (session != null) {
+                        val access = session.accessToken
+                        if (access.isNotBlank()) {
+                            return@refreshTokens BearerTokens(access, session.refreshToken.orEmpty())
+                        }
+                    }
+                    val stored = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
                         ?: return@refreshTokens null
-                    val access = session.accessToken
-                    if (access.isBlank()) return@refreshTokens null
-                    BearerTokens(access, session.refreshToken.orEmpty())
+                    val refresh = tokenStorage.getRefreshToken()?.trim().orEmpty()
+                    BearerTokens(stored, refresh)
                 }
                 sendWithoutRequest { request ->
                     request.url.host == clickWebAuthHost

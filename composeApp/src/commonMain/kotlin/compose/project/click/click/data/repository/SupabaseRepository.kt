@@ -343,8 +343,8 @@ class SupabaseRepository {
         val bffProfile = runCatching { apiClient.getUserProfile(trimmedTarget).getOrNull() }.getOrNull()
         if (bffProfile != null) {
             val user = bffProfile.user.toUser()
-            val tags = bffProfile.tags
-            val viewerTagsFromBff = bffProfile.viewerInterestTags
+            var tags = bffProfile.tags
+            var viewerTagsFromBff = bffProfile.viewerInterestTags
             val availability = fetchUserAvailability(trimmedTarget)
             // Prefer BFF availabilityIntents (admin-backed). Fall back to Supabase only when
             // the BFF omitted them so offline / older BFF deploys still work.
@@ -373,6 +373,18 @@ class SupabaseRepository {
             }
             val shared = viewerUserId?.takeIf { it.isNotBlank() && it != trimmedTarget }?.let { v ->
                 fetchSharedConnectionBetween(v, trimmedTarget)
+            }
+            // BFF can return empty tags when mutual-connection/admin path fails; backfill locally
+            // when we know the users are connected (or self). Own tags always readable via RLS.
+            if (tags.isEmpty() && (shared != null || viewerUserId == trimmedTarget)) {
+                tags = fetchUserInterests(trimmedTarget).getOrNull()?.tags.orEmpty()
+            }
+            if (viewerTagsFromBff.isEmpty() &&
+                !viewerUserId.isNullOrBlank() &&
+                viewerUserId != trimmedTarget &&
+                shared != null
+            ) {
+                viewerTagsFromBff = fetchUserInterests(viewerUserId).getOrNull()?.tags.orEmpty()
             }
             val profile = UserPublicProfile(
                 user = user,

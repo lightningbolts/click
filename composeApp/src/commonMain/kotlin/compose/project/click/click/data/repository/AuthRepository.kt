@@ -431,6 +431,9 @@ class AuthRepository(
 
     suspend fun refreshSession(): Result<Unit> {
         return try {
+            // Re-import TokenStorage → GoTrue so refresh uses the live Defaults tokens, not a
+            // stale/empty SDK session left after offline fast-boot or failed Keychain writes.
+            runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
             withTimeout(AUTH_TIMEOUT_MS) {
                 supabase.auth.refreshCurrentSession()
             }

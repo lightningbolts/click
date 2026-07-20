@@ -167,7 +167,7 @@ object AppDataManager {
     }
 
     /** Radius (meters) for the eager beacon prefetch — matches the map discovery feed radius. */
-    private const val BEACON_PREFETCH_RADIUS_METERS = 30_000.0
+    private const val BEACON_PREFETCH_RADIUS_METERS = 50_000.0
 
     /** Bounded retries so the discovery feed seeds even when GPS is slow to warm up at cold start. */
     private const val BEACON_PREFETCH_MAX_ATTEMPTS = 6

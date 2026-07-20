@@ -104,6 +104,9 @@ class AuthViewModel(
                 isAuthenticated = true
                 authState = cachedBoot
                 AppDataManager.primeOfflineBootCache()
+                // Import JWT into the SDK immediately so chat send/fetch/realtime aren't empty
+                // while background refresh is still running.
+                runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
                 ensureSupabaseObserversStarted()
                 launch(Dispatchers.IO) { refreshSessionAndProfileInBackground() }
                 return@launch

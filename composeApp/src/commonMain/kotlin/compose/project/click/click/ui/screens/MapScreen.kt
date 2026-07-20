@@ -416,9 +416,7 @@ fun MapScreen(
                         )
                     }
                     val eventNearbyCount = remember(feedItems) {
-                        feedItems.count {
-                            it is DiscoveryFeedItem.Beacon && it.beacon.kind == MapBeaconKind.EVENT
-                        }
+                        feedItems.count { it is DiscoveryFeedItem.Beacon || it is DiscoveryFeedItem.Hub }
                     }
                     val fabBottomPadding = mapFabAboveNav + EventsReopenChipClearance
 
