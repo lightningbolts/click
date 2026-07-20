@@ -532,49 +532,51 @@ object CallSessionManager {
         CallRingtonePlayer.stop()
 
         val overlay = _overlayState.value
-        if (notifyPeer && invite != null) {
-            scope.launch {
+        scope.launch {
+            if (notifyPeer && invite != null) {
                 when (overlay) {
                     is CallOverlayState.Outgoing -> sendCancel(invite, invite.calleeId, "cancelled")
                     is CallOverlayState.Incoming -> sendResponse(invite, accepted = false, busy = false)
                     is CallOverlayState.Connecting -> {
-                        val peerId = if (currentUserId == invite.callerId) invite.calleeId else invite.callerId
-                        sendCancel(invite, peerId, "cancelled")
+                        peerUserId(invite)?.let { peerId ->
+                            sendCancel(invite, peerId, "cancelled")
+                        }
                     }
                     else -> Unit
                 }
             }
-        }
 
-        if (invite != null) {
-            PlatformIncomingCallUi.dismissIncomingCall(invite.callId)
+            if (invite != null) {
+                PlatformIncomingCallUi.dismissIncomingCall(invite.callId)
+            }
+            suppressEndedOverlay = true
+            internalCallManager.endCall()
+            activeInviteValue = null
+            _overlayState.value = CallOverlayState.Idle
+            cleanupAfterCall()
         }
-        suppressEndedOverlay = true
-        internalCallManager.endCall()
-        activeInviteValue = null
-        _overlayState.value = CallOverlayState.Idle
-        cleanupAfterCall()
     }
 
     fun endActiveCall() {
         val invite = activeInviteValue
-        if (invite != null) {
-            scope.launch {
-                val peerId = if (currentUserId == invite.callerId) invite.calleeId else invite.callerId
-                sendCancel(invite, peerId, "ended")
+        scope.launch {
+            if (invite != null) {
+                peerUserId(invite)?.let { peerId ->
+                    runCatching { sendCancel(invite, peerId, "ended") }
+                }
+                PlatformIncomingCallUi.dismissIncomingCall(invite.callId, "ended")
             }
-            PlatformIncomingCallUi.dismissIncomingCall(invite.callId, "ended")
+            internalCallManager.endCall()
+            CallRingtonePlayer.stop()
+            if (invite != null) {
+                activeInviteValue = invite
+                _overlayState.value = CallOverlayState.Ended(invite, "Call ended")
+            } else {
+                activeInviteValue = null
+                _overlayState.value = CallOverlayState.Idle
+            }
+            cleanupAfterCall()
         }
-        internalCallManager.endCall()
-        CallRingtonePlayer.stop()
-        if (invite != null) {
-            activeInviteValue = invite
-            _overlayState.value = CallOverlayState.Ended(invite, "Call ended")
-        } else {
-            activeInviteValue = null
-            _overlayState.value = CallOverlayState.Idle
-        }
-        cleanupAfterCall()
     }
 
     fun dismissEndedCall() {
@@ -868,7 +870,17 @@ object CallSessionManager {
     }
 
     private fun handleCancel(cancel: CallCancel) {
-        val invite = activeInviteValue ?: return
+        val invite = activeInviteValue
+        if (invite == null) {
+            if (callState.value is CallState.Connected || callState.value is CallState.Connecting) {
+                timeoutJob?.cancel()
+                CallRingtonePlayer.stop()
+                internalCallManager.endCall()
+                _overlayState.value = CallOverlayState.Ended(null, "Call ended")
+                cleanupAfterCall()
+            }
+            return
+        }
         if (invite.callId != cancel.callId) return
 
         timeoutJob?.cancel()
@@ -1084,6 +1096,11 @@ object CallSessionManager {
 
     private fun resolvedCurrentUserId(): String? {
         return currentUserId ?: authRepository.getCurrentUser()?.id
+    }
+
+    private fun peerUserId(invite: CallInvite): String? {
+        val uid = resolvedCurrentUserId() ?: return null
+        return if (uid == invite.callerId) invite.calleeId else invite.callerId
     }
 
     private fun processPendingSystemInviteIfPossible() {

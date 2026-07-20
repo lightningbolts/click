@@ -211,18 +211,15 @@ class CallOverlayStateTransitionTest {
 
     @Test
     fun overlayState_peerIdIsOppositeOfCurrentUser() {
-        // Mirrors the peerId resolution in cancelCurrentCall / endActiveCall.
-        // Swapping caller/callee must be self-inverse: applying it twice
-        // returns the original id so the state machine never cancels itself.
-        fun peerId(invite: CallInvite, currentUserId: String): String =
-            if (currentUserId == invite.callerId) invite.calleeId else invite.callerId
+        fun peerId(invite: CallInvite, currentUserId: String?): String? {
+            val uid = currentUserId ?: return null
+            return if (uid == invite.callerId) invite.calleeId else invite.callerId
+        }
 
         val invite = sampleInvite(callerId = "A", calleeId = "B")
         assertEquals("B", peerId(invite, "A"))
         assertEquals("A", peerId(invite, "B"))
-        // Unknown current user falls through to the callee-side branch and
-        // returns the callerId, matching current production behavior.
-        assertEquals("A", peerId(invite, "unknown"))
+        assertEquals(null, peerId(invite, null))
     }
 
     @Test

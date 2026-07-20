@@ -40,7 +40,7 @@ object AppScreenDefaults {
     val FloatingHeaderCompactHeight = 52.dp
     val ExtraScrollBottomPadding = 16.dp
     val IosTabBarContentHeight = 49.dp
-    val AndroidNavBarContentHeight = 80.dp
+    val AndroidNavBarContentHeight = 80.dp // Material nav bar content; system inset added separately
     val FabGapAboveTabBar = 6.dp
 }
 

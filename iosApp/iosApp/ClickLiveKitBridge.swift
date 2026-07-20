@@ -31,6 +31,7 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
     private var speakerEnabled = false
     private var cameraEnabled = false
     private var endingLocally = false
+    private var hadRemoteParticipant = false
     private var started = false
 
     func start() {
@@ -93,6 +94,7 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
         speakerEnabled = videoEnabled
         cameraEnabled = videoEnabled
         endingLocally = false
+        hadRemoteParticipant = false
         configureAudioSession()
         postState(status: "connecting")
 
@@ -243,6 +245,9 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
     }
 
     private func postState(status: String, reason: String? = nil) {
+        if !(room?.remoteParticipants.isEmpty ?? true) {
+            hadRemoteParticipant = true
+        }
         NotificationCenter.default.post(
             name: ClickCallNotifications.stateDidChange,
             object: nil,
@@ -271,6 +276,7 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
         room = nil
         localVideoView.track = nil
         remoteVideoView.track = nil
+        hadRemoteParticipant = false
         localVideoView.removeFromSuperview()
         remoteVideoView.removeFromSuperview()
         if let localContainer {
@@ -339,7 +345,14 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
 
     func room(_ room: Room, participantDidDisconnect participant: RemoteParticipant) {
         refreshVideoBindings()
-        postState(status: "connected")
+        if hadRemoteParticipant && room.remoteParticipants.isEmpty {
+            Task { @MainActor in
+                await disconnectCurrentRoom(reportIdle: false)
+                postEnded(reason: "Call ended")
+            }
+        } else {
+            postState(status: "connected")
+        }
     }
 
     func room(_ room: Room, participant: RemoteParticipant, didSubscribeTrack publication: RemoteTrackPublication) {

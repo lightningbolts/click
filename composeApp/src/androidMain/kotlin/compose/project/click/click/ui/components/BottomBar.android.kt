@@ -1,38 +1,63 @@
 package compose.project.click.click.ui.components
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarDefaults
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import compose.project.click.click.navigation.NavigationItem
 import compose.project.click.click.ui.theme.NeonPurple
 import compose.project.click.click.ui.theme.PrimaryBlue
+
+private val BarContentHeight = 80.dp
+
+private fun NavigationItem.androidIcon(): ImageVector = when (this) {
+    NavigationItem.AddClick -> Icons.Filled.AddCircle
+    NavigationItem.Connections -> Icons.Filled.Groups
+    else -> icon
+}
 
 @Composable
 actual fun PlatformBottomBar(
@@ -42,9 +67,7 @@ actual fun PlatformBottomBar(
     visible: Boolean,
 ) {
     val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    // Keep chrome height stable while chat overlays hide the bar — avoids list padding jumps
-    // and prevents NavigationBar from leaving composition (remount flicker on return).
-    val chromeHeight = AppScreenDefaults.AndroidNavBarContentHeight + navBarBottom
+    val chromeHeight = BarContentHeight + navBarBottom
     LaunchedEffect(chromeHeight) {
         AppScreenChromeState.updateBottomChromeHeight(chromeHeight)
     }
@@ -52,128 +75,183 @@ actual fun PlatformBottomBar(
     val scheme = MaterialTheme.colorScheme
     val isDark = scheme.background.luminance() < 0.5f
     val haptics = LocalHapticFeedback.current
-    // Click-tinted glass: purple wash over surface so Android matches iOS Click material.
-    val glassTop = if (isDark) {
-        PrimaryBlue.copy(alpha = 0.18f)
-    } else {
-        PrimaryBlue.copy(alpha = 0.10f)
-    }
-    val glassMid = scheme.surface.copy(alpha = if (isDark) 0.78f else 0.82f)
-    val glassBottom = scheme.surfaceContainer.copy(alpha = if (isDark) 0.92f else 0.94f)
+
     val barAlpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
-            // Fast snap — a long spring made the bar feel like it remounted on chat back.
             stiffness = Spring.StiffnessHigh,
         ),
         label = "bottom_bar_visibility",
     )
 
-    NavigationBar(
+    Surface(
         modifier = Modifier
-            .graphicsLayer {
-                alpha = barAlpha
-            }
-            .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color.Transparent,
-                        glassTop,
-                        glassMid,
-                        glassBottom,
-                    ),
-                ),
-            ),
-        containerColor = Color.Transparent,
-        contentColor = scheme.onSurface,
-        tonalElevation = 0.dp,
-        windowInsets = NavigationBarDefaults.windowInsets,
+            .fillMaxWidth()
+            .graphicsLayer { alpha = barAlpha },
+        color = scheme.surfaceContainer,
+        tonalElevation = 3.dp,
+        shadowElevation = 0.dp,
     ) {
-        items.forEach { item ->
-            val selected = currentRoute == item.route
-            val iconScale by animateFloatAsState(
-                targetValue = if (selected && visible) 1.08f else 1f,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessMedium,
-                ),
-                label = "bottom_bar_${item.route}_scale",
-            )
-            NavigationBarItem(
-                icon = {
-                    if (item.route == NavigationItem.AddClick.route) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (isDark) NeonPurple.copy(alpha = 0.95f)
-                                    else PrimaryBlue,
-                                ),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = item.icon,
-                                contentDescription = item.title,
-                                tint = if (isDark) Color.Black else Color.White,
-                                modifier = Modifier.graphicsLayer {
-                                    scaleX = iconScale
-                                    scaleY = iconScale
-                                },
-                            )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = navBarBottom)
+                .height(BarContentHeight),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            items.forEach { item ->
+                val selected = currentRoute == item.route
+                MaterialBottomBarItem(
+                    item = item,
+                    selected = selected,
+                    enabled = visible,
+                    isDark = isDark,
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        if (!visible) return@MaterialBottomBarItem
+                        if (!selected) {
+                            if (item.route == NavigationItem.AddClick.route) {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                            } else {
+                                haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                            }
                         }
-                    } else {
-                        Icon(
-                            imageVector = item.icon,
-                            contentDescription = item.title,
-                            modifier = Modifier.graphicsLayer {
-                                scaleX = iconScale
-                                scaleY = iconScale
-                            },
-                        )
-                    }
-                },
-                label = {
-                    Text(
-                        text = item.title,
-                        style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1,
-                    )
-                },
-                selected = selected,
-                enabled = visible,
-                onClick = {
-                    if (!visible) return@NavigationBarItem
-                    if (!selected) {
-                        if (item.route == NavigationItem.AddClick.route) {
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-                        } else {
-                            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-                        }
-                    }
-                    onItemSelected(item)
-                },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = if (isDark) NeonPurple else scheme.onPrimary,
-                    selectedTextColor = if (isDark) NeonPurple else PrimaryBlue,
-                    indicatorColor = if (item.route == NavigationItem.AddClick.route) {
-                        Color.Transparent
-                    } else if (isDark) {
-                        PrimaryBlue.copy(alpha = 0.55f)
-                    } else {
-                        PrimaryBlue
+                        onItemSelected(item)
                     },
-                    unselectedIconColor = scheme.onSurface,
-                    unselectedTextColor = scheme.onSurfaceVariant,
-                    disabledIconColor = scheme.onSurface.copy(alpha = 0.4f),
-                    disabledTextColor = scheme.onSurfaceVariant.copy(alpha = 0.4f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MaterialBottomBarItem(
+    item: NavigationItem,
+    selected: Boolean,
+    enabled: Boolean,
+    isDark: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val isAdd = item.route == NavigationItem.AddClick.route
+    val accent = if (isDark) NeonPurple else PrimaryBlue
+
+    val iconColor by animateColorAsState(
+        targetValue = when {
+            !enabled -> scheme.onSurfaceVariant.copy(alpha = 0.38f)
+            isAdd -> accent
+            selected -> if (isDark) scheme.onSecondaryContainer else scheme.onPrimary
+            else -> scheme.onSurfaceVariant
+        },
+        label = "nav_icon_${item.route}",
+    )
+    val labelColor by animateColorAsState(
+        targetValue = when {
+            !enabled -> scheme.onSurfaceVariant.copy(alpha = 0.38f)
+            selected || isAdd -> accent
+            else -> scheme.onSurfaceVariant
+        },
+        label = "nav_label_${item.route}",
+    )
+
+    val interactionSource = remember { MutableInteractionSource() }
+
+    // No clip here — clipping was cutting off "Settings" / "Add Click".
+    Column(
+        modifier = modifier
+            .clickable(
+                interactionSource = interactionSource,
+                indication = ripple(bounded = false, radius = 36.dp, color = accent.copy(alpha = 0.2f)),
+                enabled = enabled,
+                onClick = onClick,
+            )
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(width = 56.dp, height = 32.dp)
+                .then(
+                    if (selected && !isAdd) {
+                        Modifier.background(
+                            color = if (isDark) scheme.secondaryContainer else PrimaryBlue,
+                            shape = RoundedCornerShape(16.dp),
+                        )
+                    } else {
+                        Modifier
+                    },
                 ),
-                alwaysShowLabel = true,
+        ) {
+            Icon(
+                imageVector = item.androidIcon(),
+                contentDescription = item.title,
+                tint = iconColor,
+                modifier = Modifier.size(if (isAdd) 26.dp else 24.dp),
             )
         }
+
+        FittedNavLabel(
+            text = item.title,
+            color = labelColor,
+            selected = selected,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+/** Shrinks label font until the full string fits — no ellipsis / clip. */
+@Composable
+private fun FittedNavLabel(
+    text: String,
+    color: Color,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val density = LocalDensity.current
+    val measurer = rememberTextMeasurer()
+    val weight = if (selected) FontWeight.SemiBold else FontWeight.Medium
+
+    BoxWithConstraints(modifier = modifier, contentAlignment = Alignment.Center) {
+        val maxWidthPx = with(density) { maxWidth.toPx() }.toInt().coerceAtLeast(1)
+        val fontSize = remember(text, maxWidthPx, selected) {
+            var sizeSp = 11f
+            while (sizeSp >= 8f) {
+                val result = measurer.measure(
+                    text = text,
+                    style = TextStyle(
+                        fontSize = sizeSp.sp,
+                        fontWeight = weight,
+                        letterSpacing = (-0.1).sp,
+                    ),
+                    maxLines = 1,
+                    softWrap = false,
+                )
+                if (result.size.width <= maxWidthPx) break
+                sizeSp -= 0.5f
+            }
+            sizeSp.sp
+        }
+
+        Text(
+            text = text,
+            color = color,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = fontSize,
+                fontWeight = weight,
+                lineHeight = (fontSize.value + 2f).sp,
+                letterSpacing = (-0.1).sp,
+            ),
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Visible,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
