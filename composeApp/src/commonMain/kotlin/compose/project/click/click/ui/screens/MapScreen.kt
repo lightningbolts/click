@@ -1123,22 +1123,15 @@ private fun BeaconDetailSheetContent(
 
     Column(modifier = modifier) {
         when (beacon.kind) {
-            MapBeaconKind.SOUNDTRACK -> {
-                if (isCreator) {
-                    BeaconOwnerOverflowMenu(
-                        onEdit = openEdit,
-                        onDelete = openDelete,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp),
-                    )
-                }
-                MusicPreviewCard(
-                    beacon = beacon,
-                    distanceMeters = distanceMeters,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+            MapBeaconKind.SOUNDTRACK -> SoundtrackBeaconDetail(
+                beacon = beacon,
+                distanceMeters = distanceMeters,
+                viewModel = viewModel,
+                isCreator = isCreator,
+                onEdit = openEdit,
+                onDelete = openDelete,
+                modifier = Modifier.fillMaxWidth(),
+            )
             MapBeaconKind.EVENT -> EventBeaconDetail(
                 beacon = beacon,
                 distanceMeters = distanceMeters,
@@ -1955,88 +1948,157 @@ private fun CommunityBeaconDetail(
 }
 
 @Composable
-private fun MusicPreviewCard(
+internal fun SoundtrackBeaconDetail(
     beacon: MapBeacon,
     distanceMeters: Double?,
+    viewModel: MapViewModel,
+    isCreator: Boolean,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val trackTitle = beacon.metadata.trackName ?: beacon.metadata.title ?: "Soundtrack"
-    val artistLine = beacon.metadata.artistName ?: beacon.metadata.artist
-    val art = beacon.metadata.albumArtUrl?.takeIf { it.isNotBlank() }
-    val preview = beacon.metadata.previewUrl?.takeIf { it.isNotBlank() }
-    val original = (beacon.metadata.originalUrl ?: beacon.metadata.musicUrl)?.takeIf { it.isNotBlank() }
+    val mapBeacons by viewModel.mapBeacons.collectAsState()
+    val displayBeacon = remember(beacon, mapBeacons) {
+        mapBeacons.firstOrNull { it.id == beacon.id } ?: beacon
+    }
+    val trackTitle = displayBeacon.metadata.trackName?.takeIf { it.isNotBlank() }
+        ?: displayBeacon.metadata.title?.takeIf { it.isNotBlank() }
+        ?: displayBeacon.displayDynamicTitle()
+    val artistLine = displayBeacon.metadata.artistName?.takeIf { it.isNotBlank() }
+        ?: displayBeacon.metadata.artist?.takeIf { it.isNotBlank() }
+    val art = displayBeacon.metadata.albumArtUrl?.takeIf { it.isNotBlank() }
+    val preview = displayBeacon.metadata.previewUrl?.takeIf { it.isNotBlank() }
+    val original = (displayBeacon.metadata.originalUrl ?: displayBeacon.metadata.musicUrl)
+        ?.takeIf { it.isNotBlank() }
+    val distanceLabel = distanceMeters?.let { formatBeaconDistance(it) }
+    val border = clickBorderColor()
+    val cardSurface = clickCardSurface()
+    val currentUser by AppDataManager.currentUser.collectAsState()
+    val connectedUsers by AppDataManager.connectedUsers.collectAsState()
+    val hostUserId = displayBeacon.createdByUserId?.takeIf { it.isNotBlank() }
+    val hostUser = hostUserId?.let { id ->
+        if (id == currentUser?.id) currentUser else connectedUsers[id]
+    }
+    val hostDisplayName = displayBeacon.creatorDisplayName?.trim()?.takeIf { it.isNotEmpty() }
+        ?: hostUser?.name?.trim()?.takeIf { it.isNotEmpty() }
+    val hostAvatarUrl = hostUser?.image?.trim()?.takeIf { it.isNotEmpty() }
+
+    LaunchedEffect(displayBeacon.id) {
+        viewModel.ensureSoundtrackBeaconDetail(displayBeacon.id, seed = displayBeacon)
+    }
 
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        Text(
-            // Soundtrack card body below already renders the song + artist parsed from metadata,
-            // so the header stays the category label to avoid duplicating the track name.
-            text = beacon.displayTypeTitle(),
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Text(
-            text = "Created · ${formatBeaconInstant(beacon.createdAtEpochMs)}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = "Expires · ${formatBeaconInstant(beacon.expiresAtEpochMs)}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top,
         ) {
-            if (art != null) {
-                AsyncImage(
-                    model = art,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(88.dp)
-                        .clip(RoundedCornerShape(14.dp)),
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(88.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.MusicNote,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = trackTitle,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
                 )
                 if (!artistLine.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = artistLine,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
+                }
+                distanceLabel?.let { d ->
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = d,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            if (isCreator ||
+                (!currentUser?.id.isNullOrBlank() && displayBeacon.createdByUserId == currentUser?.id)
+            ) {
+                BeaconOwnerOverflowMenu(
+                    onEdit = onEdit,
+                    onDelete = onDelete,
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(cardSurface)
+                .border(2.dp, border, RoundedCornerShape(20.dp))
+                .padding(16.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (art != null) {
+                    AsyncImage(
+                        model = art,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(112.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .border(2.dp, border, RoundedCornerShape(16.dp)),
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(112.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                            .border(2.dp, border, RoundedCornerShape(16.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.MusicNote,
+                            contentDescription = null,
+                            modifier = Modifier.size(40.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = "Soundtrack",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = trackTitle,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (!artistLine.isNullOrBlank()) {
+                        Text(
+                            text = artistLine,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
         }
@@ -2060,80 +2122,144 @@ private fun MusicPreviewCard(
             }
             val sliderValue = if (isDragging) sliderPosition else progressed
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(cardSurface)
+                    .border(2.dp, border, RoundedCornerShape(20.dp))
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                FilledIconButton(
-                    onClick = { player.togglePlayPause() },
-                    modifier = Modifier.size(48.dp),
+                Text(
+                    text = "Preview",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Icon(
-                        imageVector = if (player.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = if (player.isPlaying) "Pause preview" else "Play preview",
-                    )
-                }
-                Column(Modifier.weight(1f)) {
-                    Slider(
-                        value = sliderValue,
-                        onValueChange = { newVal ->
-                            if (!isDragging) {
-                                wasPlayingBeforeDrag = player.isPlaying
-                                if (player.isPlaying) {
+                    FilledIconButton(
+                        onClick = { player.togglePlayPause() },
+                        modifier = Modifier.size(56.dp),
+                    ) {
+                        Icon(
+                            imageVector = if (player.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = if (player.isPlaying) "Pause preview" else "Play preview",
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Slider(
+                            value = sliderValue,
+                            onValueChange = { newVal ->
+                                if (!isDragging) {
+                                    wasPlayingBeforeDrag = player.isPlaying
+                                    if (player.isPlaying) {
+                                        player.togglePlayPause()
+                                    }
+                                    isDragging = true
+                                }
+                                sliderPosition = newVal.coerceIn(0f, 1f)
+                                tick++
+                            },
+                            onValueChangeFinished = {
+                                val seekMs = (sliderPosition.coerceIn(0f, 1f) * dur.toFloat()).toLong()
+                                player.seekTo(seekMs)
+                                if (wasPlayingBeforeDrag) {
                                     player.togglePlayPause()
                                 }
-                                isDragging = true
-                            }
-                            sliderPosition = newVal.coerceIn(0f, 1f)
-                            tick++
-                        },
-                        onValueChangeFinished = {
-                            val seekMs = (sliderPosition.coerceIn(0f, 1f) * dur.toFloat()).toLong()
-                            player.seekTo(seekMs)
-                            if (wasPlayingBeforeDrag) {
-                                player.togglePlayPause()
-                            }
-                            isDragging = false
-                            tick++
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        valueRange = 0f..1f,
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text(
-                            text = formatBeaconPreviewClock(
-                                if (isDragging) (sliderPosition * dur).toLong() else pos,
-                            ),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                isDragging = false
+                                tick++
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            valueRange = 0f..1f,
                         )
-                        Text(
-                            text = formatBeaconPreviewClock(dur),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                text = formatBeaconPreviewClock(
+                                    if (isDragging) (sliderPosition * dur).toLong() else pos,
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = formatBeaconPreviewClock(dur),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }
+        } else {
+            var waitedForPreview by remember(displayBeacon.id) { mutableStateOf(false) }
+            LaunchedEffect(displayBeacon.id, preview) {
+                if (preview == null) {
+                    delay(2_500)
+                    waitedForPreview = true
+                } else {
+                    waitedForPreview = false
+                }
+            }
+            Text(
+                text = if (!waitedForPreview) {
+                    "Loading preview…"
+                } else {
+                    "No audio preview available for this track."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         if (original != null) {
-            OutlinedButton(
+            Button(
                 onClick = { openBeaconOriginalMediaUrl(original) },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Play full song")
+                Icon(
+                    imageVector = Icons.Filled.OpenInNew,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Open in music app")
             }
         }
 
-        distanceMeters?.let { d ->
+        if (displayBeacon.showCreatorName && !hostDisplayName.isNullOrBlank()) {
+            EventHostCard(
+                displayName = hostDisplayName,
+                userId = hostUserId ?: "host:$hostDisplayName",
+                avatarUrl = hostAvatarUrl,
+                border = border,
+                cardSurface = cardSurface,
+            )
+        }
+
+        displayBeacon.metadata.description?.trim()?.takeIf { it.isNotEmpty() }?.let { desc ->
             Text(
-                text = formatBeaconDistance(d),
-                style = MaterialTheme.typography.bodySmall,
+                text = desc,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = "Created · ${formatBeaconInstant(displayBeacon.createdAtEpochMs)}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "Expires · ${formatBeaconInstant(displayBeacon.expiresAtEpochMs)}",
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }

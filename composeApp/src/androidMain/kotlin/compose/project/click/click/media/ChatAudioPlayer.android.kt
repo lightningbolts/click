@@ -41,6 +41,7 @@ private class AndroidChatAudioPlayer(private val url: String) : ChatAudioPlayer 
 
     private var mediaPlayer: MediaPlayer? = null
     private var prepared = false
+    private var pendingPlay = false
     private val isPlayingState = mutableStateOf(false)
 
     override val isPlaying: Boolean get() = isPlayingState.value
@@ -64,6 +65,15 @@ private class AndroidChatAudioPlayer(private val url: String) : ChatAudioPlayer 
             mp.setOnPreparedListener {
                 prepared = true
                 positionPulse.value = positionPulse.value + 1
+                if (pendingPlay) {
+                    pendingPlay = false
+                    runCatching {
+                        mp.start()
+                        isPlayingState.value = true
+                        handler.removeCallbacks(tick)
+                        handler.post(tick)
+                    }
+                }
             }
             mp.setOnCompletionListener {
                 isPlayingState.value = false
@@ -77,8 +87,12 @@ private class AndroidChatAudioPlayer(private val url: String) : ChatAudioPlayer 
     }
 
     override fun togglePlayPause() {
-        val mp = mediaPlayer ?: return
-        if (!prepared) return
+        val mp = mediaPlayer
+        if (mp == null) return
+        if (!prepared) {
+            pendingPlay = true
+            return
+        }
         if (mp.isPlaying) {
             mp.pause()
             isPlayingState.value = false

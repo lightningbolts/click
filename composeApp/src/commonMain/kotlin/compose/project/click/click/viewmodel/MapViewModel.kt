@@ -1087,6 +1087,7 @@ class MapViewModel : ViewModel() {
 
     /** Beacon ids that already received a successful detail GET this session. */
     private val eventDetailHydratedIds = mutableSetOf<String>()
+    private val soundtrackDetailHydratedIds = mutableSetOf<String>()
 
     /**
      * Detail-sheet only: fetch the full beacon when schedule, Posted (`created_at`), or creator
@@ -1117,62 +1118,101 @@ class MapViewModel : ViewModel() {
             return
         }
         viewModelScope.launch(Dispatchers.Default) {
-            mapBeaconRepository.fetchBeacon(id).fold(
-                onSuccess = { full ->
-                    fun MapBeacon.withHydratedDetail(): MapBeacon {
-                        val schedule = eventSchedule() ?: full.eventSchedule()
-                        val keepCoords = hasUsableMapCoordinates()
-                        return copy(
-                            latitude = if (keepCoords) latitude else full.latitude,
-                            longitude = if (keepCoords) longitude else full.longitude,
-                            metadata = metadata.copy(
-                                title = metadata.title ?: full.metadata.title,
-                                description = metadata.description ?: full.metadata.description,
-                                eventCategories = metadata.eventCategories.ifEmpty {
-                                    full.metadata.eventCategories
-                                },
-                                raw = if (schedule != null) {
-                                    mergeEventScheduleIntoRaw(metadata.raw, schedule)
-                                } else {
-                                    metadata.raw ?: full.metadata.raw
-                                },
-                            ),
-                            createdByUserId = createdByUserId ?: full.createdByUserId,
-                            createdAtEpochMs = createdAtEpochMs ?: full.createdAtEpochMs,
-                            expiresAtEpochMs = expiresAtEpochMs ?: full.expiresAtEpochMs,
-                            showCreatorName = showCreatorName || full.showCreatorName,
-                            creatorDisplayName = creatorDisplayName ?: full.creatorDisplayName,
-                            sourceBeaconType = sourceBeaconType ?: full.sourceBeaconType,
-                        )
-                    }
-                    _mapBeacons.update { list ->
-                        var found = false
-                        val mapped = list.map { b ->
-                            if (b.id == id) {
-                                found = true
-                                b.withHydratedDetail()
-                            } else {
-                                b
-                            }
-                        }
-                        if (found) {
-                            mapped
-                        } else {
-                            mergeMapBeaconLists(list, listOf(current.withHydratedDetail()))
-                        }
-                    }
-                    val patched = _mapBeacons.value.firstOrNull { it.id == id }
-                        ?: current.withHydratedDetail()
-                    eventDetailHydratedIds += id
-                    AppDataManager.mergeCachedMapBeacons(listOf(patched))
-                    val sel = _selection.value as? MapSelection.BeaconSelected
-                    if (sel != null && sel.beacon.id == id) {
-                        _selection.value = sel.copy(beacon = patched)
-                    }
-                },
-                onFailure = { /* keep sheet open with whatever we have */ },
-            )
+            hydrateBeaconDetailFromNetwork(id, current)
         }
+    }
+
+    /**
+     * Hydrates soundtrack preview/art/URLs for the detail sheet. Disk cache historically stripped
+     * these fields, which left play controls missing until a fresh proximity fetch.
+     */
+    fun ensureSoundtrackBeaconDetail(beaconId: String, seed: MapBeacon? = null) {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return
+        val current = _mapBeacons.value.firstOrNull { it.id == id }
+            ?: (_selection.value as? MapSelection.BeaconSelected)?.beacon?.takeIf { it.id == id }
+            ?: seed?.takeIf { it.id == id && it.kind == MapBeaconKind.SOUNDTRACK }
+            ?: return
+        if (current.kind != MapBeaconKind.SOUNDTRACK) return
+        val needsPreview = current.metadata.previewUrl.isNullOrBlank()
+        val needsArt = current.metadata.albumArtUrl.isNullOrBlank()
+        val needsTrack = current.metadata.trackName.isNullOrBlank() && current.metadata.title.isNullOrBlank()
+        val alreadyHydrated = id in soundtrackDetailHydratedIds
+        if (alreadyHydrated && !needsPreview && !needsArt && !needsTrack) return
+        viewModelScope.launch(Dispatchers.Default) {
+            hydrateBeaconDetailFromNetwork(id, current)
+        }
+    }
+
+    private suspend fun hydrateBeaconDetailFromNetwork(id: String, current: MapBeacon) {
+        mapBeaconRepository.fetchBeacon(id).fold(
+            onSuccess = { full ->
+                fun MapBeacon.withHydratedDetail(): MapBeacon {
+                    val schedule = eventSchedule() ?: full.eventSchedule()
+                    val keepCoords = hasUsableMapCoordinates()
+                    fun String?.orHydrated(other: String?): String? =
+                        this?.takeIf { it.isNotBlank() } ?: other?.takeIf { it.isNotBlank() }
+                    return copy(
+                        latitude = if (keepCoords) latitude else full.latitude,
+                        longitude = if (keepCoords) longitude else full.longitude,
+                        metadata = metadata.copy(
+                            title = metadata.title.orHydrated(full.metadata.title),
+                            description = metadata.description.orHydrated(full.metadata.description),
+                            trackName = metadata.trackName.orHydrated(full.metadata.trackName),
+                            artistName = metadata.artistName.orHydrated(full.metadata.artistName),
+                            artist = metadata.artist.orHydrated(full.metadata.artist),
+                            previewUrl = metadata.previewUrl.orHydrated(full.metadata.previewUrl),
+                            albumArtUrl = metadata.albumArtUrl.orHydrated(full.metadata.albumArtUrl),
+                            musicUrl = metadata.musicUrl.orHydrated(full.metadata.musicUrl),
+                            originalUrl = metadata.originalUrl.orHydrated(full.metadata.originalUrl),
+                            eventCategories = metadata.eventCategories.ifEmpty {
+                                full.metadata.eventCategories
+                            },
+                            raw = if (schedule != null) {
+                                mergeEventScheduleIntoRaw(metadata.raw, schedule)
+                            } else {
+                                full.metadata.raw ?: metadata.raw
+                            },
+                        ),
+                        createdByUserId = createdByUserId ?: full.createdByUserId,
+                        createdAtEpochMs = createdAtEpochMs ?: full.createdAtEpochMs,
+                        expiresAtEpochMs = expiresAtEpochMs ?: full.expiresAtEpochMs,
+                        showCreatorName = showCreatorName || full.showCreatorName,
+                        creatorDisplayName = creatorDisplayName.orHydrated(full.creatorDisplayName),
+                        sourceBeaconType = sourceBeaconType ?: full.sourceBeaconType,
+                    )
+                }
+                _mapBeacons.update { list ->
+                    var found = false
+                    val mapped = list.map { b ->
+                        if (b.id == id) {
+                            found = true
+                            b.withHydratedDetail()
+                        } else {
+                            b
+                        }
+                    }
+                    if (found) {
+                        mapped
+                    } else {
+                        mergeMapBeaconLists(list, listOf(current.withHydratedDetail()))
+                    }
+                }
+                val patched = _mapBeacons.value.firstOrNull { it.id == id }
+                    ?: current.withHydratedDetail()
+                when (patched.kind) {
+                    MapBeaconKind.EVENT -> eventDetailHydratedIds += id
+                    MapBeaconKind.SOUNDTRACK -> soundtrackDetailHydratedIds += id
+                    else -> Unit
+                }
+                AppDataManager.mergeCachedMapBeacons(listOf(patched))
+                val sel = _selection.value as? MapSelection.BeaconSelected
+                if (sel != null && sel.beacon.id == id) {
+                    _selection.value = sel.copy(beacon = patched)
+                }
+            },
+            onFailure = { /* keep sheet open with whatever we have */ },
+        )
     }
 
     /** @deprecated Use [ensureEventBeaconDetail]. */

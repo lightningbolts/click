@@ -469,6 +469,10 @@ object AppDataManager {
                 println("AppDataManager: foreground Supabase recovery failed: ${e.redactedRestMessage()}")
             }.isSuccess
             _foregroundRealtimeRecovery.emit(Unit)
+            // RealtimeCoordinator.stop() runs inside recovery — re-subscribe with the fresh JWT.
+            _currentUser.value?.id?.takeIf { it.isNotBlank() }?.let { uid ->
+                runCatching { RealtimeCoordinator.ensureStarted(uid) }
+            }
 
             val dataStale = now - lastRefreshTime > REFRESH_COOLDOWN_MS
             val inboxStale = !isInboxFeedFresh(now)

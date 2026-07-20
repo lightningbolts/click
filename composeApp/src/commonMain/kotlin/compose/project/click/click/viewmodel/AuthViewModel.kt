@@ -193,14 +193,25 @@ class AuthViewModel(
     private fun startBackgroundTokenRefresh() {
         viewModelScope.launch {
             while (true) {
-                delay(45 * 60 * 1000L) // 45 minutes
+                // Supabase access tokens expire ~1h; refresh well before that, and again after
+                // foreground recovery may have failed silently.
+                delay(20 * 60 * 1000L)
                 if (isAuthenticated) {
                     try {
+                        runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
                         authRepository.refreshSession()
                             .onSuccess {
-                                runCatching { SupabaseConfig.client.auth.startAutoRefreshForCurrentSession() }
+                                runCatching {
+                                    SupabaseConfig.client.auth.startAutoRefreshForCurrentSession()
+                                }
+                                println("AuthViewModel: Background token refresh successful")
                             }
-                        println("AuthViewModel: Background token refresh successful")
+                            .onFailure { e ->
+                                println(
+                                    "AuthViewModel: Background token refresh failed: " +
+                                        e.redactedRestMessage(),
+                                )
+                            }
                     } catch (e: Exception) {
                         println("AuthViewModel: Background token refresh failed: ${e.redactedRestMessage()}")
                     }

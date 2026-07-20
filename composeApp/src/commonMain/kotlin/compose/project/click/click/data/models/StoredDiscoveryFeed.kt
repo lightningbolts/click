@@ -27,6 +27,13 @@ data class StoredMapBeacon(
     /** Explicit event window — must survive cache round-trip (not derived from created_at). */
     val eventStartAtEpochMs: Long? = null,
     val eventEndAtEpochMs: Long? = null,
+    /** Soundtrack fields — previously dropped on disk, which hid preview playback after cold start. */
+    val trackName: String? = null,
+    val artistName: String? = null,
+    val previewUrl: String? = null,
+    val albumArtUrl: String? = null,
+    val musicUrl: String? = null,
+    val originalUrl: String? = null,
 )
 
 @Serializable
@@ -47,7 +54,7 @@ fun MapBeacon.toStoredMapBeacon(): StoredMapBeacon {
         kind = kind.apiValue,
         latitude = latitude,
         longitude = longitude,
-        title = metadata.title,
+        title = metadata.title ?: metadata.trackName,
         description = metadata.description,
         createdByUserId = createdByUserId,
         createdAtEpochMs = createdAtEpochMs,
@@ -58,6 +65,12 @@ fun MapBeacon.toStoredMapBeacon(): StoredMapBeacon {
         visibilityAudience = visibilityAudience.apiValue,
         eventStartAtEpochMs = schedule?.startEpochMs,
         eventEndAtEpochMs = schedule?.endEpochMs,
+        trackName = metadata.trackName,
+        artistName = metadata.artistName ?: metadata.artist,
+        previewUrl = metadata.previewUrl,
+        albumArtUrl = metadata.albumArtUrl,
+        musicUrl = metadata.musicUrl,
+        originalUrl = metadata.originalUrl,
     )
 }
 
@@ -67,6 +80,12 @@ fun StoredMapBeacon.toMapBeacon(): MapBeacon {
         description = description,
         eventStartAtEpochMs = eventStartAtEpochMs,
         eventEndAtEpochMs = eventEndAtEpochMs,
+        trackName = trackName,
+        artistName = artistName,
+        previewUrl = previewUrl,
+        albumArtUrl = albumArtUrl,
+        musicUrl = musicUrl,
+        originalUrl = originalUrl,
     )
     return MapBeacon(
         id = id,
@@ -76,6 +95,13 @@ fun StoredMapBeacon.toMapBeacon(): MapBeacon {
         metadata = MapBeaconMetadata(
             title = title,
             description = description,
+            trackName = trackName,
+            artistName = artistName,
+            artist = artistName,
+            previewUrl = previewUrl,
+            albumArtUrl = albumArtUrl,
+            musicUrl = musicUrl,
+            originalUrl = originalUrl,
             raw = scheduleRaw,
         ),
         createdByUserId = createdByUserId,
@@ -93,8 +119,16 @@ private fun storedEventScheduleRaw(
     description: String?,
     eventStartAtEpochMs: Long?,
     eventEndAtEpochMs: Long?,
+    trackName: String? = null,
+    artistName: String? = null,
+    previewUrl: String? = null,
+    albumArtUrl: String? = null,
+    musicUrl: String? = null,
+    originalUrl: String? = null,
 ): JsonObject? {
-    if (title == null && description == null &&
+    val hasSoundtrack = listOf(trackName, artistName, previewUrl, albumArtUrl, musicUrl, originalUrl)
+        .any { !it.isNullOrBlank() }
+    if (title == null && description == null && !hasSoundtrack &&
         (eventStartAtEpochMs == null || eventEndAtEpochMs == null)
     ) {
         return null
@@ -102,6 +136,15 @@ private fun storedEventScheduleRaw(
     return buildJsonObject {
         title?.takeIf { it.isNotBlank() }?.let { put("title", JsonPrimitive(it)) }
         description?.takeIf { it.isNotBlank() }?.let { put("description", JsonPrimitive(it)) }
+        trackName?.takeIf { it.isNotBlank() }?.let { put("track_name", JsonPrimitive(it)) }
+        artistName?.takeIf { it.isNotBlank() }?.let {
+            put("artist_name", JsonPrimitive(it))
+            put("artist", JsonPrimitive(it))
+        }
+        previewUrl?.takeIf { it.isNotBlank() }?.let { put("preview_url", JsonPrimitive(it)) }
+        albumArtUrl?.takeIf { it.isNotBlank() }?.let { put("album_art_url", JsonPrimitive(it)) }
+        musicUrl?.takeIf { it.isNotBlank() }?.let { put("music_url", JsonPrimitive(it)) }
+        originalUrl?.takeIf { it.isNotBlank() }?.let { put("original_url", JsonPrimitive(it)) }
         if (eventStartAtEpochMs != null && eventEndAtEpochMs != null &&
             eventEndAtEpochMs > eventStartAtEpochMs
         ) {
@@ -145,7 +188,8 @@ internal fun MapBeacon.withPreservedEventScheduleFrom(existing: MapBeacon?): Map
             put("event_end_at", JsonPrimitive(Instant.fromEpochMilliseconds(schedule.endEpochMs).toString()))
         }
     } else {
-        metadata.raw
+        // Prefer richer soundtrack metadata when either side has preview/art/track fields.
+        mergeSoundtrackRaw(metadata.raw, existing.metadata.raw)
     }
 
     return copy(
@@ -154,6 +198,13 @@ internal fun MapBeacon.withPreservedEventScheduleFrom(existing: MapBeacon?): Map
         metadata = metadata.copy(
             title = metadata.title ?: existing.metadata.title,
             description = metadata.description ?: existing.metadata.description,
+            trackName = metadata.trackName ?: existing.metadata.trackName,
+            artistName = metadata.artistName ?: existing.metadata.artistName,
+            artist = metadata.artist ?: existing.metadata.artist,
+            previewUrl = metadata.previewUrl ?: existing.metadata.previewUrl,
+            albumArtUrl = metadata.albumArtUrl ?: existing.metadata.albumArtUrl,
+            musicUrl = metadata.musicUrl ?: existing.metadata.musicUrl,
+            originalUrl = metadata.originalUrl ?: existing.metadata.originalUrl,
             eventCategories = metadata.eventCategories.ifEmpty { existing.metadata.eventCategories },
             raw = mergedRaw ?: existing.metadata.raw,
         ),
@@ -172,6 +223,25 @@ internal fun MapBeacon.withPreservedEventScheduleFrom(existing: MapBeacon?): Map
             visibilityAudience
         },
     )
+}
+
+private fun mergeSoundtrackRaw(primary: JsonObject?, fallback: JsonObject?): JsonObject? {
+    if (primary == null) return fallback
+    if (fallback == null) return primary
+    val keys = listOf(
+        "preview_url", "album_art_url", "track_name", "artist_name", "artist",
+        "music_url", "original_url", "title",
+    )
+    return buildJsonObject {
+        primary.forEach { (k, v) -> put(k, v) }
+        for (k in keys) {
+            val have = primary[k]
+            val donor = fallback[k]
+            if ((have == null || (have is JsonPrimitive && have.content.isBlank())) && donor != null) {
+                put(k, donor)
+            }
+        }
+    }
 }
 
 fun CommunityHubPin.toStoredCommunityHubPin(): StoredCommunityHubPin = StoredCommunityHubPin(

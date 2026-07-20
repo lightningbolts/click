@@ -113,14 +113,18 @@ class SupabaseChatRepository(
         val now = Clock.System.now().toEpochMilliseconds()
         val existing = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
         val expiresAt = tokenStorage.getExpiresAt()
+        val jwtExp = jwtExpEpochMs(existing)
         val expiredOrMissing = existing == null ||
             (expiresAt != null && expiresAt <= now + 60_000L) ||
-            jwtExpEpochMs(existing) ?.let { it <= now + 60_000L } == true
+            (jwtExp != null && jwtExp <= now + 60_000L) ||
+            // No reliable expiry metadata — force refresh rather than shipping a dead JWT.
+            (expiresAt == null && jwtExp == null)
 
         if (!expiredOrMissing) return existing
 
         authRepository.refreshSession()
             .onFailure { println("ChatRepository: ensureFreshJwt refresh failed: ${it.redactedRestMessage()}") }
+        runCatching { SupabaseConfig.client.auth.startAutoRefreshForCurrentSession() }
         tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }?.let { refreshed ->
             val exp = tokenStorage.getExpiresAt() ?: jwtExpEpochMs(refreshed)
             if (exp == null || exp > now + 60_000L) return refreshed
@@ -130,6 +134,7 @@ class SupabaseChatRepository(
             .onFailure { println("ChatRepository: ensureFreshJwt restore failed: ${it.redactedRestMessage()}") }
         authRepository.refreshSession()
             .onFailure { println("ChatRepository: ensureFreshJwt refresh-after-restore failed: ${it.redactedRestMessage()}") }
+        runCatching { SupabaseConfig.client.auth.startAutoRefreshForCurrentSession() }
         val after = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val exp = tokenStorage.getExpiresAt() ?: jwtExpEpochMs(after)
         // Never hand callers an already-expired JWT — that floods PostgREST with "JWT expired".
@@ -185,7 +190,12 @@ class SupabaseChatRepository(
 
     private fun Throwable.isAuthFailure(): Boolean {
         val msg = redactedRestMessage().lowercase()
-        return msg.contains("401") || msg.contains("unauthorized") || msg.contains("invalid jwt")
+        return msg.contains("401") ||
+            msg.contains("unauthorized") ||
+            msg.contains("invalid jwt") ||
+            msg.contains("jwt expired") ||
+            msg.contains("token has expired") ||
+            msg.contains("invalidjwttoken")
     }
 
     private val ephemeralMutex = Mutex()
@@ -1448,43 +1458,66 @@ class SupabaseChatRepository(
 
     override suspend fun ensureChatForConnection(connectionId: String): Chat? {
         return try {
-            val existing = supabase.from("chats")
-                .select {
-                    filter {
-                        eq("connection_id", connectionId)
-                    }
-                    limit(1)
+            ensureFreshJwtForChat()
+                ?: run {
+                    println("Error ensuring chat for connection $connectionId: no fresh JWT")
+                    return null
                 }
-                .decodeList<ChatRow>()
-                .firstOrNull()
-
-            if (existing != null) {
-                existing.connectionId?.let { rememberChatConnectionRouting(existing.id, it) }
-                return Chat(
-                    id = existing.id,
-                    connectionId = existing.connectionId,
-                    groupId = existing.groupId,
-                    messages = emptyList(),
-                )
-            }
-
-            val inserted = supabase.from("chats")
-                .insert(ChatInsert(connectionId = connectionId)) {
-                    select()
-                }
-                .decodeSingle<ChatRow>()
-
-            inserted.connectionId?.let { rememberChatConnectionRouting(inserted.id, it) }
-            Chat(
-                id = inserted.id,
-                connectionId = inserted.connectionId,
-                groupId = inserted.groupId,
-                messages = emptyList(),
-            )
+            ensureChatForConnectionOnce(connectionId)
         } catch (e: Exception) {
+            if (e.isAuthFailure()) {
+                val refreshed = refreshedJwtAfterAuthFailure()
+                if (refreshed != null) {
+                    return try {
+                        ensureChatForConnectionOnce(connectionId)
+                    } catch (retry: Exception) {
+                        println(
+                            "Error ensuring chat for connection $connectionId after refresh: " +
+                                retry.redactedRestMessage(),
+                        )
+                        null
+                    }
+                }
+            }
             println("Error ensuring chat for connection $connectionId: ${e.redactedRestMessage()}")
             null
         }
+    }
+
+    private suspend fun ensureChatForConnectionOnce(connectionId: String): Chat? {
+        val existing = supabase.from("chats")
+            .select {
+                filter {
+                    eq("connection_id", connectionId)
+                }
+                limit(1)
+            }
+            .decodeList<ChatRow>()
+            .firstOrNull()
+
+        if (existing != null) {
+            existing.connectionId?.let { rememberChatConnectionRouting(existing.id, it) }
+            return Chat(
+                id = existing.id,
+                connectionId = existing.connectionId,
+                groupId = existing.groupId,
+                messages = emptyList(),
+            )
+        }
+
+        val inserted = supabase.from("chats")
+            .insert(ChatInsert(connectionId = connectionId)) {
+                select()
+            }
+            .decodeSingle<ChatRow>()
+
+        inserted.connectionId?.let { rememberChatConnectionRouting(inserted.id, it) }
+        return Chat(
+            id = inserted.id,
+            connectionId = inserted.connectionId,
+            groupId = inserted.groupId,
+            messages = emptyList(),
+        )
     }
 
     override suspend fun sendMessageForConnection(
