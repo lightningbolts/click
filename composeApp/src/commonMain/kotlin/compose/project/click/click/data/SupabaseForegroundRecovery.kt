@@ -13,9 +13,8 @@ import io.github.jan.supabase.realtime.realtime
  * Drops the Realtime WebSocket and re-authenticates after iOS/Android resume so Ktor does not sit
  * on stale TLS/TCP state until the app-level startup timeout fires.
  *
- * Always imports TokenStorage → refreshes → restarts auto-refresh → reconnects Realtime, then
- * forces [RealtimeCoordinator] channel rebuild so postgres/message channels are not stuck on an
- * expired JWT from before the refresh.
+ * Prefer live GoTrue session on resume; only import TokenStorage when SDK has no session.
+ * Then refresh → restart auto-refresh → reconnect Realtime → rebuild RealtimeCoordinator channels.
  */
 object SupabaseForegroundRecovery {
     suspend fun recoverAfterBackground(
@@ -24,7 +23,11 @@ object SupabaseForegroundRecovery {
         authRepository: AuthRepository = AuthRepository(tokenStorage),
     ) {
         runCatching { client.realtime.disconnect() }
-        runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+        // Only hydrate TokenStorage into GoTrue when the SDK has no session. Blind re-import
+        // overwrites a good SettingsSessionManager refresh token and breaks chat until sign-out.
+        if (client.auth.currentSessionOrNull() == null) {
+            runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+        }
         authRepository.refreshSession()
             .onSuccess {
                 runCatching { client.auth.startAutoRefreshForCurrentSession() }

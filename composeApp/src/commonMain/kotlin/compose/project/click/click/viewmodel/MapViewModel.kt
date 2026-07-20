@@ -120,6 +120,10 @@ sealed class MapSelection {
         /** `null` while proximity is still being resolved. */
         val canJoinGeofence: Boolean?,
     ) : MapSelection()
+    /**
+     * Two or more pins share nearly the same on-screen hit target. User picks which one to open.
+     */
+    data class OverlappingPinsSelected(val pins: List<MapPin>) : MapSelection()
 }
 
 data class BeaconRsvpCacheEntry(
@@ -2289,6 +2293,48 @@ class MapViewModel : ViewModel() {
         )
 
     fun onMapPinTapped(pin: MapPin) {
+        val overlaps = overlappingMapPins(
+            tapped = pin,
+            visiblePins = currentVisibleMapPins(),
+            zoomLevel = _zoomLevel.value,
+        )
+        if (overlaps.size > 1) {
+            _selection.value = MapSelection.OverlappingPinsSelected(overlaps)
+            return
+        }
+        openResolvedMapPin(pin)
+    }
+
+    /** User picked one pin from an overlapping stack chooser. */
+    fun onOverlappingPinChosen(pin: MapPin) {
+        openResolvedMapPin(pin)
+    }
+
+    private fun currentVisibleMapPins(): List<MapPin> {
+        val hubs = _communityHubs.value.map { MapPin.fromCommunityHub(it) }
+        val currentUserId = AppDataManager.currentUser.value?.id
+        val connectedUsers = AppDataManager.connectedUsers.value
+        return when (val state = _renderData.value) {
+            is MapRenderData.IndividualPins -> {
+                val connections = state.points.map { point ->
+                    val peerId = point.connection.user_ids.firstOrNull { it != currentUserId }
+                    val peer = peerId?.let { connectedUsers[it] }
+                    MapPin.fromConnectionPoint(
+                        point,
+                        imageUrl = peer?.image,
+                        avatarSeed = peerId ?: point.connection.id,
+                    )
+                }
+                val beacons = state.beacons.map { MapPin.fromBeacon(it) }
+                connections + beacons + hubs
+            }
+            is MapRenderData.Clusters -> {
+                state.standaloneBeacons.map { MapPin.fromBeacon(it) } + hubs
+            }
+        }
+    }
+
+    private fun openResolvedMapPin(pin: MapPin) {
         if (pin.kind == MapPinKind.COMMUNITY_HUB || pin.id.startsWith("hub:")) {
             val raw = pin.id.removePrefix("hub:")
             val hub = _communityHubs.value.firstOrNull { it.hubId == raw } ?: return

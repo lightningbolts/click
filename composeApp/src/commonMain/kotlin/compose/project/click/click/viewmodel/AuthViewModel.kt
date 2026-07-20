@@ -163,7 +163,9 @@ class AuthViewModel(
      */
     private suspend fun refreshSessionAndProfileInBackground() {
         withContext(Dispatchers.IO) {
-            runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+            if (SupabaseConfig.client.auth.currentSessionOrNull() == null) {
+                runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+            }
             runCatching { authRepository.refreshSession() }
                 .onSuccess {
                     runCatching { SupabaseConfig.client.auth.startAutoRefreshForCurrentSession() }
@@ -195,10 +197,12 @@ class AuthViewModel(
             while (true) {
                 // Supabase access tokens expire ~1h; refresh well before that, and again after
                 // foreground recovery may have failed silently.
-                delay(20 * 60 * 1000L)
+                delay(45 * 60 * 1000L)
                 if (isAuthenticated) {
                     try {
-                        runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+                        if (SupabaseConfig.client.auth.currentSessionOrNull() == null) {
+                            runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+                        }
                         authRepository.refreshSession()
                             .onSuccess {
                                 runCatching {

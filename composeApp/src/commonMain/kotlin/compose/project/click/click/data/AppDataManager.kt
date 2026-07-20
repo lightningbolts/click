@@ -1157,13 +1157,31 @@ object AppDataManager {
      */
     fun isInboxFeedFresh(nowMs: Long = Clock.System.now().toEpochMilliseconds()): Boolean {
         if (!_isDataLoaded.value) return false
-        val hasLocalInbox =
-            _inboxFeedChats.value.isNotEmpty() || _connections.value.isNotEmpty()
-        if (!hasLocalInbox) return false
+        val inbox = _inboxFeedChats.value
+        val connections = _connections.value
+        // Connections alone are not a complete inbox — verified cliques only live in inboxFeedChats.
+        if (inbox.isEmpty() && connections.isEmpty()) return false
+        // Direct-only poison: 1:1 rows exist but no groupClique rows, and we have not successfully
+        // completed a group fetch this process. Force network so Groups tab can recover.
+        if (connections.isNotEmpty() &&
+            inbox.none { it.groupClique != null } &&
+            !groupInboxHydratedThisSession
+        ) {
+            return false
+        }
         val currentVersion = RealtimeCoordinator.currentInboxVersion()
         if (currentVersion != lastSyncedInboxVersion) return false
         if (lastRefreshTime <= 0L) return true
         return nowMs - lastRefreshTime < REFRESH_COOLDOWN_MS
+    }
+
+    /** Set after a successful group-clique inbox fetch (including authentic empty). */
+    @Volatile
+    var groupInboxHydratedThisSession: Boolean = false
+        private set
+
+    fun markGroupInboxHydrated() {
+        groupInboxHydratedThisSession = true
     }
 
     fun notifyInboxVersionSynced() {
@@ -1241,6 +1259,7 @@ object AppDataManager {
         _cachedChatThreads.value = emptyMap()
         _cachedHubThreads.value = emptyMap()
         _inboxFeedChats.value = emptyList()
+        groupInboxHydratedThisSession = false
         supabaseRepository.clearCachedUserPublicProfiles()
         supabaseRepository.clearCachedProfileTimelines()
         _userAvailability.value = null

@@ -39,11 +39,13 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -345,6 +347,7 @@ internal fun EventsReopenChip(
  * Shows layer-filtered beacons (events, soundtracks, alerts, vibes) and hubs — not Events-only.
  * Uses the same floating Liquid Glass header / scaffold chrome as Home & Connections.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun EventsDiscoveryFullScreen(
     feedItems: List<DiscoveryFeedItem>,
@@ -396,109 +399,130 @@ internal fun EventsDiscoveryFullScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
     ) {
-        AppScreenScaffold(
-            title = "Nearby",
-            subtitle = null,
-            navigationIcon = {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back to map",
-                        tint = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
+        PullToRefreshBox(
+            isRefreshing = discoveryFeedRefreshing,
+            onRefresh = onRefreshDiscovery,
+            modifier = Modifier.fillMaxSize(),
+            indicator = {
+                // Pulse is rendered above the search field so we don't stack a second spinner.
             },
-            actions = {
-                HeaderRefreshIconButton(
-                    onClick = onRefreshDiscovery,
-                    enabled = !discoveryFeedRefreshing,
-                )
-            },
-            belowHeaderSpacing = 8.dp,
-            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            item(key = "events_search") {
-                EventsSheetSearchField(
-                    query = eventsQuery,
-                    onQueryChange = { eventsQuery = it },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-            item(key = "events_sort") {
-                DiscoverySortSegmentBar(
-                    selectedTabIndex = sortMode,
-                    onTabSelected = { sortMode = it },
-                )
-            }
-            item(key = "events_layers") {
-                EventsSheetLayerChips(
-                    layerFilters = layerFilters,
-                    onToggleLayerFilter = onToggleLayerFilter,
-                )
-            }
-            when {
-                discoveryItemCount == 0 && discoveryFeedPending -> {
-                    item(key = "events_loading") {
-                        DiscoveryFeedLoadingPulse(
+            AppScreenScaffold(
+                title = "Nearby",
+                subtitle = null,
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back to map",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                },
+                actions = {
+                    HeaderRefreshIconButton(
+                        onClick = onRefreshDiscovery,
+                        enabled = !discoveryFeedRefreshing,
+                    )
+                },
+                belowHeaderSpacing = 8.dp,
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                if (discoveryFeedRefreshing) {
+                    item(key = "events_refresh_pulse") {
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 32.dp),
-                        )
+                                .padding(top = 2.dp, bottom = 2.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            ClickLogoPulse(logoSize = 40.dp)
+                        }
                     }
                 }
-                discoveryItemCount == 0 -> {
-                    item(key = "events_empty") {
-                        AppEmptyState(
-                            icon = Icons.Default.Place,
-                            title = "Nothing nearby",
-                            body = "Drop a soundtrack or event, or enable more layers to see what's around you.",
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
+                item(key = "events_search") {
+                    EventsSheetSearchField(
+                        query = eventsQuery,
+                        onQueryChange = { eventsQuery = it },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
-                else -> {
-                    discoverySections.forEach { section ->
-                        item(key = "section-${section.title}") {
-                            Text(
-                                text = section.title,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                item(key = "events_sort") {
+                    DiscoverySortSegmentBar(
+                        selectedTabIndex = sortMode,
+                        onTabSelected = { sortMode = it },
+                    )
+                }
+                item(key = "events_layers") {
+                    EventsSheetLayerChips(
+                        layerFilters = layerFilters,
+                        onToggleLayerFilter = onToggleLayerFilter,
+                    )
+                }
+                when {
+                    discoveryItemCount == 0 && discoveryFeedPending -> {
+                        item(key = "events_loading") {
+                            DiscoveryFeedLoadingPulse(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 4.dp, bottom = 2.dp),
+                                    .padding(vertical = 32.dp),
                             )
                         }
-                        items(
-                            items = section.items,
-                            key = { it.key },
-                            contentType = { item ->
+                    }
+                    discoveryItemCount == 0 -> {
+                        item(key = "events_empty") {
+                            AppEmptyState(
+                                icon = Icons.Default.Place,
+                                title = "Nothing nearby",
+                                body = "Drop a soundtrack or event, or enable more layers to see what's around you.",
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                    else -> {
+                        discoverySections.forEach { section ->
+                            item(key = "section-${section.title}") {
+                                Text(
+                                    text = section.title,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 4.dp, bottom = 2.dp),
+                                )
+                            }
+                            items(
+                                items = section.items,
+                                key = { it.key },
+                                contentType = { item ->
+                                    when (item) {
+                                        is DiscoveryFeedItem.Beacon -> "beacon-${item.beacon.kind}"
+                                        is DiscoveryFeedItem.Hub -> "hub"
+                                        is DiscoveryFeedItem.Connection -> "conn"
+                                    }
+                                },
+                            ) { item ->
                                 when (item) {
-                                    is DiscoveryFeedItem.Beacon -> "beacon-${item.beacon.kind}"
-                                    is DiscoveryFeedItem.Hub -> "hub"
-                                    is DiscoveryFeedItem.Connection -> "conn"
+                                    is DiscoveryFeedItem.Beacon -> {
+                                        DiscoveryEventCard(
+                                            item = item,
+                                            viewModel = viewModel,
+                                            onOpen = {
+                                                onBeaconClick(
+                                                    item.beacon,
+                                                    item.distanceM.takeIf {
+                                                        it.isFinite() && it < Double.MAX_VALUE
+                                                    },
+                                                )
+                                            },
+                                        )
+                                    }
+                                    is DiscoveryFeedItem.Hub -> {
+                                        DiscoveryHubCard(item = item)
+                                    }
+                                    is DiscoveryFeedItem.Connection -> Unit
                                 }
-                            },
-                        ) { item ->
-                            when (item) {
-                                is DiscoveryFeedItem.Beacon -> {
-                                    DiscoveryEventCard(
-                                        item = item,
-                                        viewModel = viewModel,
-                                        onOpen = {
-                                            onBeaconClick(
-                                                item.beacon,
-                                                item.distanceM.takeIf {
-                                                    it.isFinite() && it < Double.MAX_VALUE
-                                                },
-                                            )
-                                        },
-                                    )
-                                }
-                                is DiscoveryFeedItem.Hub -> {
-                                    DiscoveryHubCard(item = item)
-                                }
-                                is DiscoveryFeedItem.Connection -> Unit
                             }
                         }
                     }

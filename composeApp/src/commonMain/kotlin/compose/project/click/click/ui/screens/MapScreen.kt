@@ -163,6 +163,7 @@ fun MapScreen(
     val communityHubs by viewModel.discoveryFeedHubs.collectAsState()
     val mapBeacons by viewModel.discoveryFeedBeacons.collectAsState()
     val discoveryFeedPending by viewModel.discoveryFeedPending.collectAsState()
+    val discoveryFeedLoading by viewModel.discoveryFeedLoading.collectAsState()
     val locationService = remember { LocationService() }
     val cachedDeviceLocation by AppDataManager.lastKnownDeviceLocation.collectAsState()
     var userLat by remember {
@@ -368,6 +369,7 @@ fun MapScreen(
     val showBottomSheet = selectedProfileId != null && selection is MapSelection.ConnectionSelected
     val showBeaconDetailSheet = selection is MapSelection.BeaconSelected
     val showCommunityHubSheet = selection is MapSelection.HubSelected
+    val showOverlappingPinsSheet = selection is MapSelection.OverlappingPinsSelected
 
     LaunchedEffect(selection) {
         val sel = selection
@@ -572,7 +574,7 @@ fun MapScreen(
                                             EventsDiscoveryFullScreen(
                                                 feedItems = feedItems,
                                                 discoveryFeedPending = discoveryFeedPending,
-                                                discoveryFeedRefreshing = discoveryFeedPending,
+                                                discoveryFeedRefreshing = discoveryFeedLoading,
                                                 onRefreshDiscovery = { viewModel.refreshDiscoveryFeed() },
                                                 layerFilters = layerFilters,
                                                 onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
@@ -654,6 +656,42 @@ fun MapScreen(
                         pendingHubName = name
                         pendingHubCategory = hubCat
                     },
+                )
+            }
+        }
+    }
+
+    if (showOverlappingPinsSheet && selection is MapSelection.OverlappingPinsSelected) {
+        val stack = selection as MapSelection.OverlappingPinsSelected
+        val sheetBg = GlassSheetTokens.OledBlack()
+        val onSheet = GlassSheetTokens.OnOled()
+        MapBeaconSheetRoot(
+            visible = true,
+            onDismissRequest = { viewModel.clearSelection() },
+            containerColor = sheetBg,
+            contentColor = onSheet,
+            scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
+            contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+            appColorScheme = MaterialTheme.colorScheme,
+            appTypography = MaterialTheme.typography,
+            modifier = Modifier,
+        ) {
+            ClickSheetDialogChrome(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(),
+                sheetColor = sheetBg,
+                onSurface = onSheet,
+                alignSemanticColorsToSheet = true,
+            ) {
+                OverlappingMapPinsChooser(
+                    pins = stack.pins,
+                    onChoose = { viewModel.onOverlappingPinChosen(it) },
+                    onDismiss = { viewModel.clearSelection() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 24.dp, vertical = 12.dp),
                 )
             }
         }
@@ -2571,6 +2609,102 @@ private fun rememberStableBoundsHandler(
 private fun rememberStableUnitHandler(onInvoke: () -> Unit): () -> Unit {
     val state = rememberUpdatedState(onInvoke)
     return remember { { state.value() } }
+}
+
+@Composable
+private fun OverlappingMapPinsChooser(
+    pins: List<MapPin>,
+    onChoose: (MapPin) -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val border = clickBorderColor()
+    val cardSurface = clickCardSurface()
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Text(
+            text = "Which pin?",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = "A few pins are stacked here — pick the one you meant.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        pins.forEach { pin ->
+            val kindLabel = when (pin.kind) {
+                MapPinKind.CONNECTION -> "Connection"
+                MapPinKind.COMMUNITY_HUB -> "Hub"
+                MapPinKind.BEACON_SOUNDTRACK -> "Soundtrack"
+                MapPinKind.BEACON_ALERT -> "Alert"
+                MapPinKind.BEACON_SOCIAL -> "Event"
+                MapPinKind.BEACON_OTHER -> "Beacon"
+            }
+            val shape = RoundedCornerShape(16.dp)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(shape)
+                    .background(cardSurface)
+                    .border(2.dp, border, shape)
+                    .clickable { onChoose(pin) }
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                val art = pin.imageUrl?.takeIf { it.isNotBlank() }
+                if (art != null) {
+                    AsyncImage(
+                        model = art,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .border(2.dp, border, CircleShape),
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary)
+                            .border(2.dp, border, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = pin.avatarInitials.take(2).ifEmpty { "?" },
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    }
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = pin.title.ifBlank { kindLabel },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = kindLabel,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+            Text("Cancel")
+        }
+    }
 }
 
 @Composable

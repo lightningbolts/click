@@ -824,20 +824,49 @@ class ChatViewModel(
                 }
 
                 val groupChatsFlow: Flow<Pair<List<ChatWithDetails>, Boolean>> = flow {
-                    emit(chatRepository.fetchGroupUserChatsWithDetails(userId) to true)
+                    val result = runCatching { chatRepository.fetchGroupUserChatsWithDetails(userId) }
+                    result.fold(
+                        onSuccess = { emit(it to true) },
+                        onFailure = { e ->
+                            println(
+                                "ChatViewModel: group chats fetch failed (preserving prior groups): " +
+                                    e.redactedRestMessage(),
+                            )
+                            // groupLoaded=false → keep previously painted group rows; do not
+                            // persist a direct-only inbox that wipes cliques from disk.
+                            emit(emptyList<ChatWithDetails>() to false)
+                        },
+                    )
                 }.onStart {
                     emit(emptyList<ChatWithDetails>() to false)
                 }
 
                 combine(directChatsFlow, groupChatsFlow) { directState, groupState ->
                     val (directChats, directLoaded) = directState
-                    val (groupChats, groupLoaded) = groupState
+                    val (fetchedGroups, groupLoaded) = groupState
+                    val priorGroups =
+                        (_chatListState.value as? ChatListState.Success)
+                            ?.chats
+                            ?.filter { it.groupClique != null }
+                            .orEmpty()
+                    val persistedGroups = persistedInbox.filter { it.groupClique != null }
+                    // Empty successful fetch + prior groups usually means RLS returned nothing
+                    // under a bad/missing JWT (no exception). Keep prior rows and skip persist.
+                    val emptyFetchLooksPoisoned =
+                        groupLoaded &&
+                            fetchedGroups.isEmpty() &&
+                            (priorGroups.isNotEmpty() || persistedGroups.isNotEmpty())
+                    val groupChats = when {
+                        groupLoaded && !emptyFetchLooksPoisoned -> fetchedGroups
+                        priorGroups.isNotEmpty() -> priorGroups
+                        else -> persistedGroups
+                    }
                     CombinedInboxState(
                         chats = (directChats + groupChats)
                             .distinctBy { it.connection.id }
                             .sortedByDescending { chatListActivityTimestamp(it) },
                         directLoaded = directLoaded,
-                        groupLoaded = groupLoaded,
+                        groupLoaded = groupLoaded && !emptyFetchLooksPoisoned,
                     )
                 }.collect { combinedInbox ->
                     val chats = combinedInbox.chats
@@ -902,6 +931,7 @@ class ChatViewModel(
                         chatRepository.seedInboxChatRouting(finalRows)
                         _chatListState.value = ChatListState.Success(finalRows)
                         if (combinedInbox.directLoaded && combinedInbox.groupLoaded) {
+                            AppDataManager.markGroupInboxHydrated()
                             AppDataManager.persistInboxFeedChats(finalRows)
                             prefetchChatPayloads(userId, finalRows)
                         }
@@ -912,6 +942,7 @@ class ChatViewModel(
                         if (!hasCachedRows) {
                             _chatListState.value = ChatListState.Success(emptyList())
                             if (combinedInbox.directLoaded && combinedInbox.groupLoaded) {
+                                AppDataManager.markGroupInboxHydrated()
                                 AppDataManager.persistInboxFeedChats(emptyList())
                             }
                         }
@@ -1075,6 +1106,8 @@ class ChatViewModel(
         val hiddenIds = AppDataManager.hiddenConnectionIds.value
         val archivedIds = AppDataManager.archivedConnectionIds.value
         return chats.filter { chat ->
+            // Clique rows are not 1:1 junctions — never drop them for archive/hidden tables.
+            if (chat.groupClique != null) return@filter true
             val c = chat.connection
             when {
                 c.id in hiddenIds -> false

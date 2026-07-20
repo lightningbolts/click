@@ -10,6 +10,7 @@ import compose.project.click.click.data.models.isResolvedDisplayName // pragma: 
 import compose.project.click.click.data.models.resolveDisplayName // pragma: allowlist secret
 import compose.project.click.click.events.EventReminderCoordinator
 import compose.project.click.click.events.isActiveForDiscoveryFeed
+import compose.project.click.click.ui.components.MapPin
 import kotlinx.datetime.Clock
 import kotlin.math.*
 
@@ -487,6 +488,49 @@ fun beaconZIndex(beacon: MapBeacon): Float =
         MapBeaconKind.SOCIAL_VIBE -> 11_100f
         MapBeaconKind.OTHER -> 11_050f
     }
+
+/**
+ * Approximate Web-Mercator meters-per-pixel at [latitude] / [zoomLevel].
+ * Used to turn on-screen pin size into a geographic overlap radius.
+ */
+fun approximateMetersPerPixel(latitude: Double, zoomLevel: Double): Double {
+    val latRad = latitude.coerceIn(-85.0, 85.0) * PI / 180.0
+    val zoom = zoomLevel.coerceIn(2.0, 22.0)
+    return 156_543.03392 * cos(latRad) / 2.0.pow(zoom)
+}
+
+/**
+ * Geographic radius within which two ~44pt map pins visually overlap at [zoomLevel].
+ * Caps keep disambiguation useful at both street and neighborhood zoom.
+ */
+fun mapPinOverlapRadiusMeters(latitude: Double, zoomLevel: Double, pinDiameterPx: Double = 44.0): Double {
+    val meters = pinDiameterPx * 0.85 * approximateMetersPerPixel(latitude, zoomLevel)
+    return meters.coerceIn(12.0, 90.0)
+}
+
+/**
+ * When MapKit / Google Maps reports a tap on [tapped], also collect other visible pins whose
+ * centers sit under the same finger-sized hit area. Sorted highest-[MapPin.zIndex] first
+ * (frontmost drawn).
+ */
+fun overlappingMapPins(
+    tapped: MapPin,
+    visiblePins: List<MapPin>,
+    zoomLevel: Double,
+): List<MapPin> {
+    val radiusM = mapPinOverlapRadiusMeters(tapped.latitude, zoomLevel)
+    return visiblePins
+        .filter { other ->
+            haversineDistance(
+                tapped.latitude,
+                tapped.longitude,
+                other.latitude,
+                other.longitude,
+            ) <= radiusM
+        }
+        .sortedByDescending { it.zIndex }
+        .distinctBy { it.id }
+}
 
 /**
  * Haversine formula to calculate distance between two coordinates in meters

@@ -23,6 +23,9 @@ import compose.project.click.click.auth.GoogleOAuthConfig
 import compose.project.click.click.getPlatform
 import compose.project.click.click.proximity.isSimulatorOrEmulatorRuntime
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.datetime.Clock
 
 class AuthRepository(
     private val tokenStorage: TokenStorage = createTokenStorage()
@@ -30,6 +33,7 @@ class AuthRepository(
     /** Lazy so [AppDataManager] and JVM tests can load without touching Supabase / Android crypto. */
     private val supabase by lazy { SupabaseConfig.client }
     private val clickWebApi by lazy { ApiClient() }
+    private val refreshMutex = Mutex()
     private companion object {
         const val AUTH_TIMEOUT_MS = 12_000L
         const val AUTH_INTERACTIVE_TIMEOUT_MS = 120_000L
@@ -429,11 +433,28 @@ class AuthRepository(
 
     suspend fun hasValidLocalSession(): Boolean = LocalSessionCache.read(tokenStorage) != null
 
-    suspend fun refreshSession(): Result<Unit> {
-        return try {
-            // Re-import TokenStorage → GoTrue so refresh uses the live Defaults tokens, not a
-            // stale/empty SDK session left after offline fast-boot or failed Keychain writes.
-            runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+    suspend fun refreshSession(): Result<Unit> = refreshMutex.withLock {
+        try {
+            // Prefer the live GoTrue / SettingsSessionManager session. Re-importing TokenStorage
+            // over it can overwrite a good refresh token with a stale one (then AuthRestException
+            // and "no fresh JWT" until sign-out). Only import when the SDK has no session.
+            if (supabase.auth.currentSessionOrNull() == null) {
+                runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+            }
+            val existing = supabase.auth.currentSessionOrNull()
+            val now = Clock.System.now().toEpochMilliseconds()
+            val existingExp = existing?.expiresAt?.toEpochMilliseconds()
+            // Access token still has headroom — sync TokenStorage from SDK and skip network refresh
+            // to avoid concurrent refresh-token rotation races.
+            if (existing != null && existingExp != null && existingExp > now + 120_000L) {
+                tokenStorage.saveTokens(
+                    jwt = existing.accessToken,
+                    refreshToken = existing.refreshToken,
+                    expiresAt = existingExp,
+                    tokenType = existing.tokenType,
+                )
+                return@withLock Result.success(Unit)
+            }
             withTimeout(AUTH_TIMEOUT_MS) {
                 supabase.auth.refreshCurrentSession()
             }
