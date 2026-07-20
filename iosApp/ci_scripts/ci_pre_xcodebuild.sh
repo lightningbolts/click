@@ -1,4 +1,15 @@
 #!/bin/sh
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Re-export JAVA_HOME for any pre-xcodebuild steps (post-clone wrote this file).
+if [ -f "${SCRIPT_DIR}/.java_home" ]; then
+  JAVA_HOME="$(cat "${SCRIPT_DIR}/.java_home")"
+  export JAVA_HOME
+  export PATH="$JAVA_HOME/bin:$PATH"
+  echo "Using JAVA_HOME=$JAVA_HOME"
+fi
 
 # Navigate to the project root (up 2 levels from iosApp/ci_scripts)
 cd ../..

@@ -14,6 +14,22 @@ fi
 
 JAVA_HOME_PATH="${JDK_ROOT}/Home"
 
+# Pin a known Temurin 17.0.19 build (macOS archive uses Contents/Home).
+# Avoid Homebrew: openjdk@17 pulls ~29 bottles and Xcode Cloud often fails mid-download.
+TEMURIN_VERSION="17.0.19_10"
+TEMURIN_TAG="jdk-17.0.19%2B10"
+
+resolve_java_home_from_extracted() {
+  extracted="$1"
+  if [ -x "${extracted}/Contents/Home/bin/java" ]; then
+    echo "${extracted}/Contents/Home"
+  elif [ -x "${extracted}/bin/java" ]; then
+    echo "${extracted}"
+  else
+    return 1
+  fi
+}
+
 install_temurin_17() {
   if [ -x "${JAVA_HOME_PATH}/bin/java" ]; then
     echo "JDK already present at ${JAVA_HOME_PATH}"
@@ -31,24 +47,37 @@ install_temurin_17() {
   esac
 
   echo "Downloading Temurin JDK 17 (${adoptium_arch})..."
-  # Avoid Homebrew: openjdk@17 pulls ~29 bottles (libxcb, cairo, …) and
-  # Xcode Cloud often fails mid-download with "Connection reset by peer".
   tmp_dir="$(mktemp -d)"
-  url="https://api.adoptium.net/v3/binary/latest/17/ga/mac/${adoptium_arch}/jdk/hotspot/normal/eclipse?project=jdk"
+  # Direct GitHub release URL (more reliable than Homebrew ghcr bottles).
+  url="https://github.com/adoptium/temurin17-binaries/releases/download/${TEMURIN_TAG}/OpenJDK17U-jdk_${adoptium_arch}_mac_hotspot_${TEMURIN_VERSION}.tar.gz"
 
   curl -fL --retry 3 --retry-delay 2 -o "${tmp_dir}/jdk.tar.gz" "$url"
   tar -xzf "${tmp_dir}/jdk.tar.gz" -C "$tmp_dir"
 
-  extracted="$(find "$tmp_dir" -maxdepth 1 -type d \( -name 'jdk-17*' -o -name 'temurin-17*' \) | head -1)"
-  if [ -z "$extracted" ] || [ ! -x "${extracted}/bin/java" ]; then
-    echo "ERROR: Failed to extract a usable JDK from Temurin archive"
+  extracted=""
+  for candidate in "$tmp_dir"/jdk-17* "$tmp_dir"/temurin-17*; do
+    if [ -d "$candidate" ]; then
+      extracted="$candidate"
+      break
+    fi
+  done
+
+  if [ -z "$extracted" ]; then
+    echo "ERROR: Temurin archive did not contain an expected JDK directory"
     rm -rf "$tmp_dir"
     exit 1
   fi
 
+  home="$(resolve_java_home_from_extracted "$extracted")" || {
+    echo "ERROR: Failed to locate bin/java under $extracted (expected Contents/Home on macOS)"
+    rm -rf "$tmp_dir"
+    exit 1
+  }
+
   rm -rf "$JAVA_HOME_PATH"
   mkdir -p "$JDK_ROOT"
-  mv "$extracted" "$JAVA_HOME_PATH"
+  # Move only the Home tree so JAVA_HOME points at a normal JDK root.
+  mv "$home" "$JAVA_HOME_PATH"
   rm -rf "$tmp_dir"
 }
 
