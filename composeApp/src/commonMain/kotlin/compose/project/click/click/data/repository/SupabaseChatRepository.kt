@@ -3,6 +3,7 @@ package compose.project.click.click.data.repository
 import compose.project.click.click.chat.attachments.AttachmentCrypto
 import compose.project.click.click.chat.attachments.ChatAttachmentValidator
 import compose.project.click.click.crypto.MessageCrypto
+import compose.project.click.click.auth.LocalSessionCache
 import compose.project.click.click.data.CHAT_ATTACHMENTS_BUCKET
 import compose.project.click.click.data.CHAT_MEDIA_BUCKET
 import compose.project.click.click.data.SupabaseConfig
@@ -1054,25 +1055,33 @@ class SupabaseChatRepository(
         }
     }
 
+    /**
+     * Lightweight chat row for verified cliques — mirrors click-web DashboardView
+     * (`id, group_id, updated_at` only) so listing never depends on full ChatRow / crypto.
+     */
+    @Serializable
+    private data class GroupChatListRow(
+        val id: String,
+        @SerialName("group_id") val groupId: String,
+        @SerialName("updated_at") val updatedAt: Long? = null,
+    )
+
     override suspend fun fetchGroupUserChatsWithDetails(userId: String): List<ChatWithDetails> {
-        // Surface auth/network failures to the caller — swallowing them as emptyList() caused
-        // ChatViewModel to persist a direct-only inbox and wipe group cliques from disk.
-        //
-        // Critical: a missing/expired GoTrue session does NOT always throw. RLS on
-        // group_members simply returns zero rows when auth.uid() is null, which looked like
-        // "user has no groups" and permanently poisoned the inbox cache.
-        runCatching { ensureFreshJwtForChat() }
-        var sessionUid = supabase.auth.currentUserOrNull()?.id?.trim().orEmpty()
-        if (sessionUid.isEmpty()) {
+        // Mirror click-web DashboardView: membership → chats/groups/members; crypto optional.
+        // Offline session import can leave GoTrue with a JWT but user=null — never hard-require
+        // currentUserOrNull(); resolve id from JWT / caller / AppDataManager instead.
+        val jwt = runCatching { ensureFreshJwtForChat() }.getOrNull()
+        if (supabase.auth.currentUserOrNull()?.id.isNullOrBlank()) {
             runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
-            authRepository.refreshSession()
-            sessionUid = supabase.auth.currentUserOrNull()?.id?.trim().orEmpty()
+            if (supabase.auth.currentUserOrNull()?.id.isNullOrBlank()) {
+                runCatching { authRepository.refreshSession() }
+            }
         }
-        if (sessionUid.isEmpty()) {
-            error("Group chats fetch requires an authenticated Supabase session")
+        val memberUserId = resolveSignedInUserIdForGroups(userId, jwt)
+        if (memberUserId.isEmpty()) {
+            println("ChatRepository: group chats skipped — no signed-in user id (jwt=${!jwt.isNullOrBlank()})")
+            return emptyList()
         }
-        // Prefer the JWT subject for the membership query so RLS (auth.uid()) lines up.
-        val memberUserId = sessionUid
 
         val myGroupIds = supabase.from("group_members")
             .select(columns = Columns.list("group_id")) {
@@ -1082,49 +1091,21 @@ class SupabaseChatRepository(
             .decodeList<GroupMemberGroupIdRow>()
             .map { it.groupId }
             .distinct()
-        println(
-            "ChatRepository: group membership for $memberUserId → ${myGroupIds.size} group(s)" +
-                if (memberUserId != userId) " (caller userId=$userId)" else "",
-        )
+        println("ChatRepository: group membership for $memberUserId → ${myGroupIds.size} group(s)")
         if (myGroupIds.isEmpty()) return emptyList()
 
-        val groupChats = supabase.from("chats")
-            .select {
-                filter { isIn("group_id", myGroupIds) }
-            }
-            .decodeList<ChatRow>()
-
-        groupChats.forEach { r ->
-            r.groupId?.let { rememberChatGroupRouting(r.id, it) }
-        }
-
-        val chatIds = groupChats.map { it.id }
-
-        // Batch all independent network calls in parallel using coroutineScope
-        val (latestByChatId, unreadByChatId, allGroups, allMemberRows, allUsers) = coroutineScope {
-            val latestDeferred = async {
-                runCatching { fetchLatestMessageRowPerChat(chatIds) }.getOrElse { emptyMap() }
-            }
-            val unreadDeferred = async {
-                if (chatIds.isNotEmpty()) {
-                    supabase.from("messages")
-                        .select {
-                            filter {
-                                isIn("chat_id", chatIds)
-                                eq("is_read", false)
-                                neq("user_id", memberUserId)
-                            }
-                            limit(10_000)
-                        }
-                        .decodeList<MessageRow>()
-                        .groupingBy { it.chatId }.eachCount()
-                } else {
-                    emptyMap()
-                }
+        val (groupChats, allGroups, allMemberRows) = coroutineScope {
+            val chatsDeferred = async {
+                supabase.from("chats")
+                    .select(columns = Columns.list("id", "group_id", "updated_at")) {
+                        filter { isIn("group_id", myGroupIds) }
+                    }
+                    .decodeList<GroupChatListRow>()
             }
             val groupsDeferred = async {
+                // Match click-web: id/name/created_by only — extra columns must not block listing.
                 supabase.from("groups")
-                    .select(columns = Columns.list("id", "name", "created_by", "key_anchor_user_id", "avatar_url")) {
+                    .select(columns = Columns.list("id", "name", "created_by")) {
                         filter { isIn("id", myGroupIds) }
                     }
                     .decodeList<GroupRow>()
@@ -1137,56 +1118,74 @@ class SupabaseChatRepository(
                     }
                     .decodeList<GroupMemberFullRow>()
             }
-            val allMembersResult = membersDeferred.await()
-            val allMemberUserIds = allMembersResult.map { it.userId }.distinct()
-            val usersDeferred = async { fetchUsersByIdsSafe(allMemberUserIds) }
+            Triple(chatsDeferred.await(), groupsDeferred.await(), membersDeferred.await())
+        }
 
-            GroupChatsParallelResult(
-                latestByChatId = latestDeferred.await(),
-                unreadByChatId = unreadDeferred.await(),
-                allGroups = groupsDeferred.await(),
-                allMemberRows = allMembersResult,
-                allUsers = usersDeferred.await(),
-            )
+        println(
+            "ChatRepository: group chats=${groupChats.size} groups=${allGroups.size} " +
+                "memberRows=${allMemberRows.size}",
+        )
+
+        groupChats.forEach { r ->
+            rememberChatGroupRouting(r.id, r.groupId)
+        }
+
+        val chatIds = groupChats.map { it.id }
+        val (latestByChatId, unreadByChatId, allUsers) = coroutineScope {
+            val latestDeferred = async {
+                runCatching { fetchLatestMessageRowPerChat(chatIds) }.getOrElse { emptyMap() }
+            }
+            val unreadDeferred = async {
+                runCatching {
+                    if (chatIds.isEmpty()) return@runCatching emptyMap()
+                    supabase.from("messages")
+                        .select {
+                            filter {
+                                isIn("chat_id", chatIds)
+                                eq("is_read", false)
+                                neq("user_id", memberUserId)
+                            }
+                            limit(10_000)
+                        }
+                        .decodeList<MessageRow>()
+                        .groupingBy { it.chatId }.eachCount()
+                }.getOrElse { emptyMap() }
+            }
+            val allMemberUserIds = allMemberRows.map { it.userId }.distinct()
+            val usersDeferred = async {
+                runCatching { fetchUsersByIdsSafe(allMemberUserIds) }.getOrElse { emptyList() }
+            }
+            Triple(latestDeferred.await(), unreadDeferred.await(), usersDeferred.await())
         }
 
         val groupsById = allGroups.associateBy { it.id }
         val membersByGroupId = allMemberRows.groupBy { it.groupId }
         val usersById = allUsers.associateBy { it.id }
-        val cryptoByChatId = coroutineScope {
-            val concurrency = Semaphore(6)
-            groupChats.map { chatRow ->
-                async {
-                    concurrency.withPermit {
-                        chatRow.id to resolveChatCrypto(chatRow.id, memberUserId)
-                    }
-                }
-            }.awaitAll()
-                .mapNotNull { (chatId, crypto) -> crypto?.let { chatId to it } }
-                .toMap()
-        }
 
+        // Do NOT resolveChatCrypto here — website list path never does, and hanging key
+        // unwraps were leaving Groups permanently empty while direct chats painted.
         return withContext(Dispatchers.Default) {
             groupChats.mapNotNull { chatRow ->
-                val gid = chatRow.groupId ?: return@mapNotNull null
+                val gid = chatRow.groupId
                 val group = groupsById[gid] ?: return@mapNotNull null
 
+                // Prefer full member list; fall back to viewer-only if RLS hides peers.
                 val memberIds = membersByGroupId[gid]
                     ?.map { it.userId }?.distinct()
-                    ?: return@mapNotNull null
-                if (memberIds.isEmpty()) return@mapNotNull null
+                    .orEmpty()
+                    .ifEmpty { listOf(memberUserId) }
 
                 val title = group.name.ifBlank { "Clique" }
                 val anchor = group.keyAnchorUserId
                     ?: memberIds.filter { it != group.createdBy }.minOrNull()
                     ?: memberIds.firstOrNull()
-                    ?: return@mapNotNull null
+                    ?: memberUserId
                 val displayPeer = memberIds.firstOrNull { it != memberUserId } ?: memberUserId
                 val otherUser = usersById[displayPeer] ?: User(
                     id = gid,
                     name = title,
                     email = null,
-                    image = null,
+                    image = group.avatarUrl,
                     createdAt = 0L,
                 )
                 val groupMemberUsers = memberIds
@@ -1208,10 +1207,8 @@ class SupabaseChatRepository(
                     avatarUrl = group.avatarUrl,
                 )
 
-                val rawLast = latestByChatId[chatRow.id]?.toMessage()
-                val lastMessage = rawLast?.let {
-                    decryptMessageOnCurrentThread(it, cryptoByChatId[chatRow.id])
-                }
+                // Raw preview only — decrypt when the thread is opened.
+                val lastMessage = latestByChatId[chatRow.id]?.toMessage()
                 val synthetic = syntheticConnectionForGroupClique(
                     groupId = gid,
                     memberUserIds = memberIds,
@@ -1226,7 +1223,10 @@ class SupabaseChatRepository(
                         messages = emptyList(),
                     ),
                     connection = synthetic,
-                    otherUser = otherUser,
+                    otherUser = otherUser.copy(
+                        name = title,
+                        image = otherUser.image ?: group.avatarUrl,
+                    ),
                     lastMessage = lastMessage,
                     unreadCount = unreadByChatId[chatRow.id] ?: 0,
                     groupClique = clique,
@@ -1277,12 +1277,32 @@ class SupabaseChatRepository(
         )
     }
 
+    /**
+     * Resolve viewer id for group listing. Prefer live GoTrue user; fall back through JWT `sub`,
+     * the caller [userId], then [AppDataManager] — session import historically set user=null.
+     */
+    private suspend fun resolveSignedInUserIdForGroups(userId: String, jwt: String?): String {
+        supabase.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        val token = jwt?.trim()?.takeIf { it.isNotEmpty() } ?: tokenStorage.getJwt()?.trim()
+        LocalSessionCache.parseIdentityFromJwt(token.orEmpty())
+            ?.userId?.trim()?.takeIf { it.isNotEmpty() }
+            ?.let { return it }
+        userId.trim().takeIf { it.isNotEmpty() }?.let { return it }
+        return AppDataManager.currentUser.value?.id?.trim().orEmpty()
+    }
+
     // Fetch all chats for a user with details via API
     override suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails> {
         return try {
             coroutineScope {
                 val direct = async { fetchDirectUserChatsWithDetails(userId) }
-                val groups = async { fetchGroupUserChatsWithDetails(userId) }
+                val groups = async {
+                    runCatching { fetchGroupUserChatsWithDetails(userId) }
+                        .onFailure { e ->
+                            println("Error fetching group chats: ${e.redactedRestMessage()}")
+                        }
+                        .getOrElse { emptyList() }
+                }
                 (direct.await() + groups.await()).sortedByDescending { d ->
                     d.lastMessage?.timeCreated
                         ?: d.connection.last_message_at

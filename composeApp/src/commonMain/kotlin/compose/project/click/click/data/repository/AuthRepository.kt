@@ -363,12 +363,14 @@ class AuthRepository(
                     if (remaining > 0) remaining else 0L
                 } else 3600L
 
+                val identity = LocalSessionCache.parseIdentityFromJwt(accessToken)
+                val sessionUser = identity?.let { offlineUserInfoFromIdentity(it) }
                 val session = UserSession(
                     accessToken = accessToken,
                     refreshToken = refreshToken,
                     expiresIn = expiresIn,
                     tokenType = tokenType,
-                    user = null
+                    user = sessionUser,
                 )
                 
                 // Import the session into Supabase
@@ -446,7 +448,13 @@ class AuthRepository(
             val existingExp = existing?.expiresAt?.toEpochMilliseconds()
             // Access token still has headroom — sync TokenStorage from SDK and skip network refresh
             // to avoid concurrent refresh-token rotation races.
-            if (existing != null && existingExp != null && existingExp > now + 120_000L) {
+            // Skip network refresh only when access token has headroom AND GoTrue knows the user.
+            // Offline import used to set user=null; skipping then left currentUserOrNull() empty forever.
+            if (existing != null &&
+                existingExp != null &&
+                existingExp > now + 120_000L &&
+                supabase.auth.currentUserOrNull()?.id?.isNotBlank() == true
+            ) {
                 tokenStorage.saveTokens(
                     jwt = existing.accessToken,
                     refreshToken = existing.refreshToken,
@@ -454,6 +462,10 @@ class AuthRepository(
                     tokenType = existing.tokenType,
                 )
                 return@withLock Result.success(Unit)
+            }
+            // Session token present but user missing — re-import identity from JWT before refresh.
+            if (existing != null && supabase.auth.currentUserOrNull()?.id.isNullOrBlank()) {
+                runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
             }
             withTimeout(AUTH_TIMEOUT_MS) {
                 supabase.auth.refreshCurrentSession()

@@ -316,7 +316,7 @@ internal fun EventsReopenChip(
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(
-            text = "Events",
+            text = "Nearby",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,

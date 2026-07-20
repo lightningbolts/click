@@ -612,7 +612,10 @@ object AppDataManager {
             runCatching {
                 val direct = async { chatRepository.fetchDirectUserChatsWithDetails(userId) }
                 val archived = async { chatRepository.fetchArchivedUserChatsWithDetails(userId) }
-                val groups = async { chatRepository.fetchGroupUserChatsWithDetails(userId) }
+                val groups = async {
+                    runCatching { chatRepository.fetchGroupUserChatsWithDetails(userId) }
+                        .getOrElse { emptyList() }
+                }
                 val directRows = (direct.await() + archived.await())
                     .distinctBy { it.connection.id }
                     .sortedByDescending { it.lastMessage?.timeCreated ?: it.connection.last_message_at ?: it.connection.created }
@@ -1176,7 +1179,6 @@ object AppDataManager {
     }
 
     /** Set after a successful group-clique inbox fetch (including authentic empty). */
-    @Volatile
     var groupInboxHydratedThisSession: Boolean = false
         private set
 

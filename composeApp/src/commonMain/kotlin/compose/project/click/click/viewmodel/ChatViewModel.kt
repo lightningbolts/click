@@ -931,7 +931,11 @@ class ChatViewModel(
                         chatRepository.seedInboxChatRouting(finalRows)
                         _chatListState.value = ChatListState.Success(finalRows)
                         if (combinedInbox.directLoaded && combinedInbox.groupLoaded) {
-                            AppDataManager.markGroupInboxHydrated()
+                            // Only mark hydrated when at least one clique landed. An empty "success"
+                            // under a bad JWT must not freeze a direct-only inbox as fresh.
+                            if (finalRows.any { it.groupClique != null }) {
+                                AppDataManager.markGroupInboxHydrated()
+                            }
                             AppDataManager.persistInboxFeedChats(finalRows)
                             prefetchChatPayloads(userId, finalRows)
                         }
@@ -942,6 +946,7 @@ class ChatViewModel(
                         if (!hasCachedRows) {
                             _chatListState.value = ChatListState.Success(emptyList())
                             if (combinedInbox.directLoaded && combinedInbox.groupLoaded) {
+                                // Truly empty account (no directs, no groups) — ok to persist.
                                 AppDataManager.markGroupInboxHydrated()
                                 AppDataManager.persistInboxFeedChats(emptyList())
                             }
