@@ -345,19 +345,32 @@ class SupabaseRepository {
             val user = bffProfile.user.toUser()
             val tags = bffProfile.tags
             val viewerTagsFromBff = bffProfile.viewerInterestTags
-            // Availability + mutual connection still come through the Supabase client
-            // because the BFF returns them as opaque JSON — keeping the existing typed
-            // KMP models avoids a parallel deserialization path for Phase 3.
             val availability = fetchUserAvailability(trimmedTarget)
-            val fromUsersMirror = fetchAvailabilityIntentBubblesFromUsersColumn(trimmedTarget)
-            val fromIntentsTable =
-                if (!viewerUserId.isNullOrBlank() && viewerUserId != trimmedTarget) {
-                    val mutual = fetchSharedConnectionBetween(viewerUserId, trimmedTarget)
-                    if (mutual != null) fetchAvailabilityIntentBubblesFromIntentsTable(trimmedTarget) else emptyList()
-                } else {
-                    emptyList()
-                }
-            val profileIntents = if (fromIntentsTable.isNotEmpty()) fromIntentsTable else fromUsersMirror
+            // Prefer BFF availabilityIntents (admin-backed). Fall back to Supabase only when
+            // the BFF omitted them so offline / older BFF deploys still work.
+            val now = Clock.System.now()
+            val fromBff = bffProfile.availabilityIntents.filter { bubble ->
+                val tag = bubble.intentTag?.trim().orEmpty()
+                if (tag.isEmpty()) return@filter false
+                val exp = bubble.expiresAt?.let { runCatching { Instant.parse(it) }.getOrNull() }
+                    ?: return@filter true
+                exp > now
+            }
+            val profileIntents = if (fromBff.isNotEmpty()) {
+                fromBff
+            } else {
+                val fromUsersMirror = fetchAvailabilityIntentBubblesFromUsersColumn(trimmedTarget)
+                val fromIntentsTable =
+                    if (!viewerUserId.isNullOrBlank() && viewerUserId != trimmedTarget) {
+                        val mutual = fetchSharedConnectionBetween(viewerUserId, trimmedTarget)
+                        if (mutual != null) fetchAvailabilityIntentBubblesFromIntentsTable(trimmedTarget) else emptyList()
+                    } else if (!viewerUserId.isNullOrBlank() && viewerUserId == trimmedTarget) {
+                        fetchAvailabilityIntentBubblesFromIntentsTable(trimmedTarget)
+                    } else {
+                        emptyList()
+                    }
+                if (fromIntentsTable.isNotEmpty()) fromIntentsTable else fromUsersMirror
+            }
             val shared = viewerUserId?.takeIf { it.isNotBlank() && it != trimmedTarget }?.let { v ->
                 fetchSharedConnectionBetween(v, trimmedTarget)
             }

@@ -6,6 +6,7 @@ import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
+import compose.project.click.click.data.models.collapseOneToOneConnectionsByPeer // pragma: allowlist secret
 import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.BeaconVisibilityAudience // pragma: allowlist secret
@@ -738,7 +739,12 @@ class MapViewModel : ViewModel() {
                     // `archivedIds` is read so archive/unarchive recomputes the map when the connections list is unchanged.
                     isDataLoaded && (archivedIds.isNotEmpty() || archivedIds.isEmpty()) -> {
                         // Memory map: show full history (incl. per-user archived) but never removed/hidden rows.
-                        val mapConnections = connections.filter { it.id !in hiddenIds }
+                        // Collapse duplicate 1:1 edges so the same peer is not drawn twice.
+                        val viewerId = AppDataManager.currentUser.value?.id
+                        val mapConnections = collapseOneToOneConnectionsByPeer(
+                            connections.filter { it.id !in hiddenIds },
+                            viewerId,
+                        )
                         _mapState.value = MapState.Success(mapConnections)
                         val mapVisibleConnections = if (locationPrefs.showOnMapEnabled) {
                             mapConnections
@@ -753,7 +759,11 @@ class MapViewModel : ViewModel() {
                         _mapState.value = MapState.Loading
                     }
                     connections.isNotEmpty() -> {
-                        val mapConnections = connections.filter { it.id !in hiddenIds }
+                        val viewerId = AppDataManager.currentUser.value?.id
+                        val mapConnections = collapseOneToOneConnectionsByPeer(
+                            connections.filter { it.id !in hiddenIds },
+                            viewerId,
+                        )
                         _mapState.value = MapState.Success(mapConnections)
                     }
                     else -> {
@@ -2407,6 +2417,16 @@ class MapViewModel : ViewModel() {
             raw += lat to lon
         }
 
+        // Prefer a live/coarse GPS fix early so Android does not wait solely on map bounds.
+        if (raw.isEmpty() && locationService.hasLocationPermission()) {
+            val gps = locationService.getCurrentLocation()
+                ?: locationService.getHighAccuracyLocation(1_500L)
+            if (gps != null) {
+                AppDataManager.noteDeviceLocation(gps.latitude, gps.longitude)
+                raw += gps.latitude to gps.longitude
+            }
+        }
+
         val connectionGeos = AppDataManager.connections.value.mapNotNull { it.connectionMapGeo() }
         if (connectionGeos.isNotEmpty()) {
             raw += connectionGeos.map { it.lat }.average() to connectionGeos.map { it.lon }.average()
@@ -2435,6 +2455,7 @@ class MapViewModel : ViewModel() {
             val gps = locationService.getCurrentLocation()
                 ?: locationService.getHighAccuracyLocation(1_500L)
             if (gps != null) {
+                AppDataManager.noteDeviceLocation(gps.latitude, gps.longitude)
                 raw += gps.latitude to gps.longitude
             }
         }

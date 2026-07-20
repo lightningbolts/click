@@ -1083,32 +1083,41 @@ object AppDataManager {
         beaconPrefetchJob = scope.launch {
             try {
             runCatching {
-                if (!locationService.hasLocationPermission()) {
-                    return@runCatching
-                }
                 // GPS may not be ready the instant the app cold-starts. Retry a few times so the
                 // discovery feed is seeded with hubs + beacons without waiting for the user to
                 // open (and acquire bounds from) the expanded map.
                 var loc: compose.project.click.click.utils.LocationResult? = null
-                var attempt = 0
-                while (attempt < BEACON_PREFETCH_MAX_ATTEMPTS && currentCoroutineContext().isActive) {
-                    loc = locationService.getCurrentLocation()
-                        ?: locationService.getHighAccuracyLocation(2_000L)
-                    if (loc != null) break
-                    attempt++
-                    if (attempt < BEACON_PREFETCH_MAX_ATTEMPTS) {
-                        delay(BEACON_PREFETCH_RETRY_DELAY_MS)
+                if (locationService.hasLocationPermission()) {
+                    var attempt = 0
+                    while (attempt < BEACON_PREFETCH_MAX_ATTEMPTS && currentCoroutineContext().isActive) {
+                        loc = locationService.getCurrentLocation()
+                            ?: locationService.getHighAccuracyLocation(2_000L)
+                        if (loc != null) break
+                        attempt++
+                        if (attempt < BEACON_PREFETCH_MAX_ATTEMPTS) {
+                            delay(BEACON_PREFETCH_RETRY_DELAY_MS)
+                        }
                     }
                 }
-                val resolved = loc ?: return@runCatching
-                _lastKnownDeviceLocation.value = resolved.latitude to resolved.longitude
+                // When GPS is still unavailable (common on Android cold start), seed from
+                // connection encounter centroids so events/beacons still hydrate from the API.
+                val resolvedLatLon: Pair<Double, Double>? = loc?.let { it.latitude to it.longitude }
+                    ?: run {
+                        val geos = _connections.value.mapNotNull { it.connectionMapGeo() }
+                        if (geos.isEmpty()) null
+                        else geos.map { it.lat }.average() to geos.map { it.lon }.average()
+                    }
+                val resolved = resolvedLatLon ?: return@runCatching
+                _lastKnownDeviceLocation.value = resolved
+                val centerLat = resolved.first
+                val centerLon = resolved.second
                 val latDelta = BEACON_PREFETCH_RADIUS_METERS / 111_320.0
-                val lonScale = kotlin.math.cos(resolved.latitude * kotlin.math.PI / 180.0).coerceAtLeast(0.2)
+                val lonScale = kotlin.math.cos(centerLat * kotlin.math.PI / 180.0).coerceAtLeast(0.2)
                 val lonDelta = BEACON_PREFETCH_RADIUS_METERS / (111_320.0 * lonScale)
-                val minLat = (resolved.latitude - latDelta).coerceIn(-90.0, 90.0)
-                val maxLat = (resolved.latitude + latDelta).coerceIn(-90.0, 90.0)
-                val minLon = (resolved.longitude - lonDelta).coerceIn(-180.0, 180.0)
-                val maxLon = (resolved.longitude + lonDelta).coerceIn(-180.0, 180.0)
+                val minLat = (centerLat - latDelta).coerceIn(-90.0, 90.0)
+                val maxLat = (centerLat + latDelta).coerceIn(-90.0, 90.0)
+                val minLon = (centerLon - lonDelta).coerceIn(-180.0, 180.0)
+                val maxLon = (centerLon + lonDelta).coerceIn(-180.0, 180.0)
 
                 coroutineScope {
                     val beaconsDeferred = async {

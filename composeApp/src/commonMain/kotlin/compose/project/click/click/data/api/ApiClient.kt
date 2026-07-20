@@ -12,6 +12,7 @@ import compose.project.click.click.data.models.ProfileTimelinePayload
 import compose.project.click.click.data.models.MapBeaconInsert
 import compose.project.click.click.data.models.parseMapBeaconRows
 import compose.project.click.click.data.models.UserCore
+import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.util.redactedRestMessage
 import io.github.jan.supabase.auth.auth
@@ -73,9 +74,11 @@ data class UserProfileGetResponse(
     val tags: List<String> = emptyList(),
     @SerialName("viewerInterestTags") val viewerInterestTags: List<String> = emptyList(),
     @SerialName("sharedInterestTags") val sharedInterestTags: List<String> = emptyList(),
-    /** Full legacy shape (availability, availability intents, sharedConnection) preserved as JSON. */
+    /** Full legacy shape (availability, sharedConnection) preserved as JSON. */
     val availability: kotlinx.serialization.json.JsonElement? = null,
-    @SerialName("availabilityIntents") val availabilityIntents: kotlinx.serialization.json.JsonElement? = null,
+    /** Typed so mobile can prefer BFF intents over a second Supabase round-trip. */
+    @SerialName("availabilityIntents")
+    val availabilityIntents: List<ProfileAvailabilityIntentBubble> = emptyList(),
     @SerialName("sharedConnection") val sharedConnection: kotlinx.serialization.json.JsonElement? = null,
 )
 

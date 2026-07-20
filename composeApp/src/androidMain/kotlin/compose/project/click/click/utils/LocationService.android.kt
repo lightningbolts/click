@@ -36,6 +36,9 @@ actual class LocationService {
         private const val LAST_KNOWN_MAX_AGE_MS = 10 * 60_000L
         private const val FRESH_MAX_ACCURACY_METERS = 80f
         private const val LAST_KNOWN_MAX_ACCURACY_METERS = 150f
+        /** Discovery / beacon prefetch: match iOS coarse cache tolerance so Android still seeds the feed. */
+        private const val DISCOVERY_LAST_KNOWN_MAX_AGE_MS = 60 * 60_000L
+        private const val DISCOVERY_LAST_KNOWN_MAX_ACCURACY_METERS = 5_000f
     }
 
     private val context: Context
@@ -140,11 +143,28 @@ actual class LocationService {
             }
 
             // Fall back to a recent last-known fix if a fresh fix is unavailable.
-            val lastLocation = getLastKnownLocation()
+            val lastLocation = getLastKnownLocation(
+                maxAgeMs = LAST_KNOWN_MAX_AGE_MS,
+                maxAccuracyMeters = LAST_KNOWN_MAX_ACCURACY_METERS,
+            )
             if (lastLocation != null) {
                 println("LocationService.android: Falling back to last known location: ${lastLocation.latitude}, ${lastLocation.longitude}")
+                return lastLocation
             }
-            lastLocation
+
+            // Coarse discovery fallback (iOS allows up to ~5km cached accuracy). Without this,
+            // Android beacon prefetch often exits with zero centers until the map reports bounds.
+            val coarse = getLastKnownLocation(
+                maxAgeMs = DISCOVERY_LAST_KNOWN_MAX_AGE_MS,
+                maxAccuracyMeters = DISCOVERY_LAST_KNOWN_MAX_ACCURACY_METERS,
+            )
+            if (coarse != null) {
+                println(
+                    "LocationService.android: Coarse last-known for discovery: " +
+                        "${coarse.latitude}, ${coarse.longitude}",
+                )
+            }
+            coarse
         } catch (e: Exception) {
             println("LocationService.android: Error getting location: ${e.message}")
             null
@@ -152,13 +172,16 @@ actual class LocationService {
     }
 
     @SuppressLint("MissingPermission")
-    private suspend fun getLastKnownLocation(): LocationResult? {
+    private suspend fun getLastKnownLocation(
+        maxAgeMs: Long = LAST_KNOWN_MAX_AGE_MS,
+        maxAccuracyMeters: Float = LAST_KNOWN_MAX_ACCURACY_METERS,
+    ): LocationResult? {
         return suspendCancellableCoroutine { continuation ->
             fusedClient.lastLocation
                 .addOnSuccessListener { location ->
                     continuation.resume(location?.toValidatedLocationResult(
-                        maxAgeMs = LAST_KNOWN_MAX_AGE_MS,
-                        maxAccuracyMeters = LAST_KNOWN_MAX_ACCURACY_METERS
+                        maxAgeMs = maxAgeMs,
+                        maxAccuracyMeters = maxAccuracyMeters,
                     ))
                 }
                 .addOnFailureListener {

@@ -162,6 +162,7 @@ import compose.project.click.click.data.models.ChatWithDetails // pragma: allowl
 import compose.project.click.click.data.api.ChatApiClient // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
+import compose.project.click.click.data.models.collapseOneToOneChatsByPeer // pragma: allowlist secret
 import compose.project.click.click.data.models.isArchivedChannelForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
@@ -398,19 +399,27 @@ fun ConnectionsListView(
         }
     }
 
-    val activeChats = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds) {
-        effectiveChats.filter {
-            it.groupClique == null &&
-                it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-        }
+    val activeChats = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds, currentUserId) {
+        collapseOneToOneChatsByPeer(
+            chats = effectiveChats.filter {
+                it.groupClique == null &&
+                    it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
+            },
+            viewerUserId = currentUserId,
+            activityTs = { connectionListActivityTs(it) },
+        )
     }
     val activeOneToOneChats = remember(activeChats) {
         activeChats.sortedByDescending { connectionListActivityTs(it) }
     }
-    val rememberMeChats = remember(activeChats, coreConnectionIds) {
-        activeChats
-            .filter { it.groupClique == null && it.connection.id in coreConnectionIds }
-            .sortedByDescending { connectionListActivityTs(it) }
+    val rememberMeChats = remember(activeChats, coreConnectionIds, currentUserId) {
+        collapseOneToOneChatsByPeer(
+            chats = activeChats.filter {
+                it.groupClique == null && it.connection.id in coreConnectionIds
+            },
+            viewerUserId = currentUserId,
+            activityTs = { connectionListActivityTs(it) },
+        ).sortedByDescending { connectionListActivityTs(it) }
     }
     val showRememberMeStrip =
         selectedTabIndex == 0 && searchQuery.isBlank() && rememberMeChats.isNotEmpty()
