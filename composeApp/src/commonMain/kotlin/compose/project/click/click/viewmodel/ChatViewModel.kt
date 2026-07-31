@@ -24,6 +24,7 @@ import compose.project.click.click.data.models.isEncryptedMedia // pragma: allow
 import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.collapseOneToOneChatsByPeer // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.isArchivedChannelForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.isResolvedDisplayName // pragma: allowlist secret
@@ -777,12 +778,16 @@ class ChatViewModel(
             // no real data has ever been emitted.
             val alreadyHasRealData = _chatListState.value is ChatListState.Success
             val fromConnectionsOnly = buildCachedChats(cachedConnections, cachedUsers, userId)
-            val cachedSeedChats = applyChatListVisibility(
-                if (persistedInbox.isNotEmpty()) {
-                    enrichInboxRowsFromConnectedUsers(persistedInbox, cachedUsers)
-                } else {
-                    fromConnectionsOnly
-                },
+            val cachedSeedChats = collapseOneToOneChatsByPeer(
+                chats = applyChatListVisibility(
+                    if (persistedInbox.isNotEmpty()) {
+                        enrichInboxRowsFromConnectedUsers(persistedInbox, cachedUsers)
+                    } else {
+                        fromConnectionsOnly
+                    },
+                ),
+                viewerUserId = userId,
+                activityTs = { chatListActivityTimestamp(it) },
             )
             if (!alreadyHasRealData) {
                 if (cachedSeedChats.isNotEmpty()) {
@@ -927,7 +932,12 @@ class ChatViewModel(
                         }
                         val visibilityFiltered = applyChatListVisibility(mergedWithLocalPreview)
                         pruneStaleReadClearedHints(visibilityFiltered)
-                        val finalRows = applyUnreadClearHintsToInboxRows(visibilityFiltered)
+                        val collapsed = collapseOneToOneChatsByPeer(
+                            chats = visibilityFiltered,
+                            viewerUserId = userId,
+                            activityTs = { chatListActivityTimestamp(it) },
+                        )
+                        val finalRows = applyUnreadClearHintsToInboxRows(collapsed)
                         chatRepository.seedInboxChatRouting(finalRows)
                         _chatListState.value = ChatListState.Success(finalRows)
                         if (combinedInbox.directLoaded && combinedInbox.groupLoaded) {
@@ -990,7 +1000,12 @@ class ChatViewModel(
         }
         val visible = applyChatListVisibility(seed)
         pruneStaleReadClearedHints(visible)
-        return applyUnreadClearHintsToInboxRows(visible)
+        val collapsed = collapseOneToOneChatsByPeer(
+            chats = visible,
+            viewerUserId = userId,
+            activityTs = { chatListActivityTimestamp(it) },
+        )
+        return applyUnreadClearHintsToInboxRows(collapsed)
     }
 
     private fun enrichInboxRowsFromConnectedUsers(

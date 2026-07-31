@@ -270,6 +270,18 @@ data class ProximityBindOkResponseDto(
     @SerialName("group_clique_candidate") val groupCliqueCandidate: ProximityGroupCliqueCandidateDto? = null,
     @SerialName("encounter_id") val encounterId: String? = null,
     @SerialName("collaboration_ttl") val collaborationTtl: String? = null,
+    /** Multi-peer first-time bind: host must confirm selected members before create. */
+    @SerialName("awaiting_selection") val awaitingSelection: Boolean? = null,
+    @SerialName("pending_handshake_id") val pendingHandshakeId: String? = null,
+    @SerialName("expires_at") val expiresAt: String? = null,
+)
+
+/** JSON body for `POST /api/connections/proximity/confirm`. */
+@Serializable
+data class ProximityConfirmSelectionPostBody(
+    @SerialName("pending_handshake_id") val pendingHandshakeId: String,
+    @SerialName("selected_member_ids") val selectedMemberIds: List<String>,
+    @SerialName("context_tags") val contextTags: List<String>? = null,
 )
 
 /** HTTP 202 — peer offline; handshake stored server-side for async match. */
@@ -1389,6 +1401,65 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
                     )
                 }
             }
+            clickWebFailure(e.response)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * POST `/api/connections/proximity/confirm` — host confirms selected members after
+     * `awaiting_selection` on a multi-peer first-time bind.
+     */
+    suspend fun postProximityConfirmSelection(
+        bearerJwt: String,
+        pendingHandshakeId: String,
+        selectedMemberIds: List<String>,
+        contextTags: List<String>? = null,
+    ): Result<ProximityBindOkResponseDto> {
+        val pendingId = pendingHandshakeId.trim()
+        if (pendingId.isEmpty()) {
+            return Result.failure(IllegalArgumentException("pendingHandshakeId required"))
+        }
+        val members = selectedMemberIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+            // Server adds host; max member set is PROXIMITY_HOST_SELECTION_MAX_MEMBERS (12).
+            .take(11)
+        if (members.isEmpty()) {
+            return Result.failure(IllegalArgumentException("selectedMemberIds required"))
+        }
+        val tags = contextTags
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?.distinct()
+            ?.takeIf { it.isNotEmpty() }
+        return try {
+            val response: HttpResponse = clickWebClient.post(
+                "$clickWebAuthOrigin/api/connections/proximity/confirm",
+            ) {
+                contentType(ContentType.Application.Json)
+                bearerJwt.trim().takeIf { it.isNotEmpty() }?.let { token ->
+                    header("Authorization", "Bearer $token")
+                }
+                setBody(
+                    ProximityConfirmSelectionPostBody(
+                        pendingHandshakeId = pendingId,
+                        selectedMemberIds = members,
+                        contextTags = tags,
+                    ),
+                )
+            }
+            when (response.status.value) {
+                in 200..299 -> {
+                    val dto = response.body<ProximityBindOkResponseDto>()
+                    if (!dto.error.isNullOrBlank()) {
+                        Result.failure(Exception(dto.error))
+                    } else {
+                        Result.success(dto)
+                    }
+                }
+                else -> clickWebFailure(response)
+            }
+        } catch (e: ClientRequestException) {
             clickWebFailure(e.response)
         } catch (e: Exception) {
             Result.failure(e)

@@ -7,6 +7,7 @@ import compose.project.click.click.collaboration.CollaborationSession // pragma:
 import compose.project.click.click.collaboration.CollaborationSessionManager // pragma: allowlist secret
 import compose.project.click.click.data.repository.BindProximityHandshakeOutcome // pragma: allowlist secret
 import compose.project.click.click.data.repository.BindProximityHandshakeResult // pragma: allowlist secret
+import compose.project.click.click.data.repository.PROXIMITY_HOST_SELECTION_MAX_PEERS // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
@@ -41,6 +42,7 @@ import compose.project.click.click.sensors.captureConnectionSensorContext // pra
 import compose.project.click.click.sensors.ConnectionSensorContext // pragma: allowlist secret
 import compose.project.click.click.sensors.HardwareVibeMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.HardwareVibeSnapshot // pragma: allowlist secret
+import compose.project.click.click.telemetry.ConnectionFlowTelemetry
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import io.ktor.client.HttpClient // pragma: allowlist secret
@@ -110,6 +112,9 @@ sealed class ConnectionState {
     /**
      * Proximity group (or single peer) connections are created; user is adding subjective context tags
      * to be fanned out to every [newConnections] row.
+     *
+     * When [requiresSelection] is true (multi-peer `awaiting_selection` or legacy PendingConfirmation),
+     * [selectableUsers] / [pendingHandshakeId] feed the combined people + tags sheet before create.
      */
     data class TaggingContext(
         val newConnections: List<Connection>,
@@ -121,6 +126,14 @@ sealed class ConnectionState {
         val isNewConnection: Boolean = true,
         /** True while POST `/api/connections/encounter` is in flight. */
         val encounterSubmitting: Boolean = false,
+        /** Candidates for host multi-peer selection (people + tags sheet). */
+        val selectableUsers: List<UserProfile> = emptyList(),
+        /** Pending handshake id when server returned `awaiting_selection`. */
+        val pendingHandshakeId: String? = null,
+        /** When true, host must pick peers (and optionally tags) before connection create. */
+        val requiresSelection: Boolean = false,
+        /** Currently selected peer ids when [requiresSelection] is true. */
+        val selectedPeerIds: Set<String> = emptySet(),
     ) : ConnectionState()
 
     /** QR parsed locally; user fills context before any redeem/create network work. */
@@ -244,22 +257,37 @@ class ConnectionViewModel : ViewModel() {
         lastProximityEncounterLoggedAggregate = outcome.encounterLogged
         val users = outcome.matches
         if (users.isEmpty()) {
+            ConnectionFlowTelemetry.recordFailed(reason = "no_nearby_tap")
             _connectionState.value = ConnectionState.Error("No nearby tap detected. Try again closer together.")
             return
         }
+        val isReconnect = !outcome.isAggregateNewConnection
         if (shouldBlockForRateLimit(users, outcome.encounterLogged)) {
+            ConnectionFlowTelemetry.recordReconnectRateLimited(
+                peerCount = users.size,
+                isGroup = outcome.isGroup,
+            )
             _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
         }
         PlatformHapticsPolicy.successNotification()
         val groupIds = outcome.groupCliqueCandidateMemberIds?.distinct()?.sorted()
         val others = groupIds?.filter { it != currentUserId }.orEmpty()
         if (outcome.isGroup && outcome.connectionId != null && groupIds != null && others.size >= 2) {
+            ConnectionFlowTelemetry.recordMatched(
+                peerCount = users.size,
+                isGroup = true,
+                isReconnect = isReconnect,
+            )
             val groupConnection = syntheticProximityConnection(
                 connectionId = outcome.connectionId,
                 memberUserIds = groupIds,
                 isGroup = true,
             )
-            AppDataManager.addConnection(groupConnection, syntheticUserForProximitySuccess(users.map { it.toUserProfile() }))
+            upsertProximityConnectionIfNeeded(
+                connection = groupConnection,
+                otherUser = syntheticUserForProximitySuccess(users.map { it.toUserProfile() }),
+                isNewConnection = outcome.isAggregateNewConnection,
+            )
             _connectionState.value = ConnectionState.TaggingContext(
                 newConnections = listOf(groupConnection),
                 targetUsers = users.map { it.toUserProfile() },
@@ -272,13 +300,22 @@ class ConnectionViewModel : ViewModel() {
                 isNewConnection = outcome.isAggregateNewConnection,
             )
         } else if (!outcome.isGroup && outcome.connectionId != null && users.size == 1) {
+            ConnectionFlowTelemetry.recordMatched(
+                peerCount = 1,
+                isGroup = false,
+                isReconnect = isReconnect,
+            )
             val peer = users.first()
             val connection = syntheticProximityConnection(
                 connectionId = outcome.connectionId,
                 memberUserIds = listOf(currentUserId, peer.id).distinct().sorted(),
                 isGroup = false,
             )
-            AppDataManager.addConnection(connection, peer)
+            upsertProximityConnectionIfNeeded(
+                connection = connection,
+                otherUser = peer,
+                isNewConnection = outcome.isAggregateNewConnection,
+            )
             _connectionState.value = ConnectionState.TaggingContext(
                 newConnections = listOf(connection),
                 targetUsers = listOf(peer.toUserProfile()),
@@ -289,8 +326,75 @@ class ConnectionViewModel : ViewModel() {
                 isNewConnection = outcome.isAggregateNewConnection,
             )
         } else {
-            _connectionState.value = ConnectionState.PendingConfirmation(users)
+            ConnectionFlowTelemetry.recordAwaitingSelection(
+                peerCount = users.size,
+                candidateCount = users.size,
+                isGroup = outcome.isGroup || users.size > 1,
+                isReconnect = isReconnect,
+            )
+            val peers = users.filter { it.id.isNotBlank() && it.id != currentUserId }
+            val profiles = peers.map { it.toUserProfile() }.take(PROXIMITY_HOST_SELECTION_MAX_PEERS)
+            _connectionState.value = ConnectionState.TaggingContext(
+                newConnections = emptyList(),
+                targetUsers = profiles,
+                isGroup = peers.size >= 2,
+                memberUserIds = (listOf(currentUserId) + profiles.map { it.id }).distinct().sorted(),
+                bindEncounterPersistedPeerIds = peers
+                    .filter { it.encounterPersistedOnBind }
+                    .map { it.id }
+                    .toSet(),
+                isNewConnection = outcome.isAggregateNewConnection,
+                selectableUsers = profiles,
+                requiresSelection = outcome.isAggregateNewConnection && peers.size >= 2,
+                selectedPeerIds = profiles.map { it.id }.toSet(),
+            )
         }
+    }
+
+    private fun upsertProximityConnectionIfNeeded(
+        connection: Connection,
+        otherUser: User?,
+        isNewConnection: Boolean,
+    ) {
+        val alreadyPresent = AppDataManager.connections.value.any { it.id == connection.id }
+        if (!isNewConnection && alreadyPresent) return
+        AppDataManager.addConnection(connection, otherUser)
+    }
+
+    private fun handleAwaitingHostSelection(
+        awaiting: BindProximityHandshakeResult.AwaitingHostSelection,
+        currentUserId: String,
+    ) {
+        lastProximityEncounterLoggedAggregate = false
+        val users = awaiting.candidates.filter { it.id.isNotBlank() && it.id != currentUserId }
+        if (users.isEmpty()) {
+            ConnectionFlowTelemetry.recordFailed(reason = "no_nearby_tap")
+            _connectionState.value = ConnectionState.Error("No nearby tap detected. Try again closer together.")
+            return
+        }
+        ConnectionFlowTelemetry.recordAwaitingSelection(
+            peerCount = users.size,
+            candidateCount = users.size,
+            isGroup = awaiting.groupCliqueCandidateMemberIds.orEmpty().size >= 3 || users.size >= 2,
+            isReconnect = !awaiting.isAggregateNewConnection,
+        )
+        PlatformHapticsPolicy.successNotification()
+        val profiles = users.map { it.toUserProfile() }.take(PROXIMITY_HOST_SELECTION_MAX_PEERS)
+        val selected = profiles.map { it.id }.toSet()
+        val groupIds = awaiting.groupCliqueCandidateMemberIds?.distinct()?.sorted().orEmpty()
+        _connectionState.value = ConnectionState.TaggingContext(
+            newConnections = emptyList(),
+            targetUsers = profiles,
+            isGroup = groupIds.size >= 3 || users.size >= 2,
+            memberUserIds = groupIds.ifEmpty {
+                (listOf(currentUserId) + profiles.map { it.id }).distinct().sorted()
+            },
+            isNewConnection = awaiting.isAggregateNewConnection,
+            selectableUsers = profiles,
+            pendingHandshakeId = awaiting.pendingHandshakeId,
+            requiresSelection = true,
+            selectedPeerIds = selected,
+        )
     }
 
     private fun startPendingProximityRecovery(
@@ -314,13 +418,22 @@ class ConnectionViewModel : ViewModel() {
                 }.getOrNull()
                 when (recovered) {
                     is BindProximityHandshakeResult.InstantMatch -> {
+                        ConnectionFlowTelemetry.recordRecoveryPollSuccess(peerCount = recovered.outcome.matches.size)
                         handleInstantProximityOutcome(recovered.outcome, currentUserId)
+                        return@launch
+                    }
+                    is BindProximityHandshakeResult.AwaitingHostSelection -> {
+                        ConnectionFlowTelemetry.recordRecoveryPollSuccess(peerCount = recovered.candidates.size)
+                        handleAwaitingHostSelection(recovered, currentUserId)
                         return@launch
                     }
                     is BindProximityHandshakeResult.PendingServerMatch,
                     null,
                     -> Unit
                 }
+            }
+            if (_connectionState.value is ConnectionState.ProximityHandshakePendingMatch) {
+                ConnectionFlowTelemetry.recordRecoveryPollTimeout(reason = "pending_match_polls_exhausted")
             }
         }
     }
@@ -396,7 +509,7 @@ class ConnectionViewModel : ViewModel() {
     }
 
     /**
-     * Tri-factor tap flow: GPS → concurrent BLE broadcast + 3s listen → server clustering → [PendingConfirmation].
+     * Tri-factor tap flow: GPS → concurrent BLE broadcast + 5s listen → server clustering → tagging / selection.
      */
     fun startTapProximityHandshake(
         httpClient: HttpClient,
@@ -429,6 +542,7 @@ class ConnectionViewModel : ViewModel() {
             return
         }
         lastTapProximityStartedAtMs = nowMs
+        ConnectionFlowTelemetry.recordStarted()
         viewModelScope.launch {
             try {
                 lastProximityEncounterLoggedAggregate = true
@@ -558,6 +672,7 @@ class ConnectionViewModel : ViewModel() {
                     if (bindResult.isSuccess) {
                         when (val handshake = bindResult.getOrNull()!!) {
                             is BindProximityHandshakeResult.PendingServerMatch -> {
+                                ConnectionFlowTelemetry.recordPending()
                                 _connectionState.value = ConnectionState.ProximityHandshakePendingMatch(
                                     message = PROXIMITY_PENDING_MATCH_MESSAGE,
                                 )
@@ -567,6 +682,9 @@ class ConnectionViewModel : ViewModel() {
                                     currentUserId = currentUserId,
                                 )
                             }
+                            is BindProximityHandshakeResult.AwaitingHostSelection -> {
+                                handleAwaitingHostSelection(handshake, currentUserId)
+                            }
                             is BindProximityHandshakeResult.InstantMatch -> {
                                 handleInstantProximityOutcome(handshake.outcome, currentUserId)
                             }
@@ -574,6 +692,7 @@ class ConnectionViewModel : ViewModel() {
                     } else {
                         val e = bindResult.exceptionOrNull()!!
                         if (e.isRetryableForProximityBind()) {
+                            ConnectionFlowTelemetry.recordOfflineQueued(reason = "retryable_bind")
                             repository.enqueuePendingProximityHandshake(
                                 myToken = myToken,
                                 heardTokens = heardTokensAudio,
@@ -594,13 +713,16 @@ class ConnectionViewModel : ViewModel() {
                                 message = PROXIMITY_OFFLINE_SYNC_MESSAGE,
                             )
                         } else {
+                            ConnectionFlowTelemetry.recordFailed(reason = "bind_failed")
                             _connectionState.value = ConnectionState.Error(e.message ?: "Proximity handshake failed")
                         }
                     }
                 }
             } catch (e: ProximityHardwarePermissionException) {
+                ConnectionFlowTelemetry.recordFailed(reason = "hardware_permissions")
                 _connectionState.value = ConnectionState.Error(HARDWARE_PERMISSIONS_MISSING_MESSAGE)
             } catch (e: Exception) {
+                ConnectionFlowTelemetry.recordFailed(reason = "handshake_exception")
                 _connectionState.value = ConnectionState.Error(e.message ?: "Proximity handshake failed")
             }
         }
@@ -620,14 +742,36 @@ class ConnectionViewModel : ViewModel() {
         if (shouldBlockForRateLimit(users, payload.encounterLogged)) {
             _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
         }
+        val awaitingPendingId = payload.pendingHandshakeId?.trim().orEmpty()
+        // awaiting_selection recovery must open host pick + confirm — never auto-create a clique.
+        if (awaitingPendingId.isNotEmpty()) {
+            PlatformHapticsPolicy.successNotification()
+            handleAwaitingHostSelection(
+                BindProximityHandshakeResult.AwaitingHostSelection(
+                    pendingHandshakeId = awaitingPendingId,
+                    expiresAt = null,
+                    candidates = users,
+                    isAggregateNewConnection = payload.isAggregateNewConnection,
+                    groupCliqueCandidateMemberIds = payload.groupCliqueCandidateMemberIds,
+                ),
+                currentUserId,
+            )
+            return
+        }
         val groupIds = payload.groupCliqueCandidateMemberIds
         val others = groupIds?.filter { it != currentUserId }?.distinct().orEmpty()
-        if (currentUserId.isNotBlank() && groupIds != null && others.size >= 2) {
+        // Only first-time multi (≥2 peers) autofills verified clique; reconnects open encounter sheet.
+        if (
+            payload.isAggregateNewConnection &&
+            currentUserId.isNotBlank() &&
+            groupIds != null &&
+            others.size >= 2
+        ) {
             PlatformHapticsPolicy.successNotification()
             viewModelScope.launch {
                 _verifiedCliqueFromProximity.emit(
                     VerifiedCliqueProximityIntent(
-                        preselectFriendIds = others,
+                        preselectFriendIds = others.take(PROXIMITY_HOST_SELECTION_MAX_PEERS),
                         matchedUsers = users,
                     ),
                 )
@@ -640,7 +784,26 @@ class ConnectionViewModel : ViewModel() {
             cur is ConnectionState.Idle
         ) {
             PlatformHapticsPolicy.successNotification()
-            _connectionState.value = ConnectionState.PendingConfirmation(users)
+            val peers = users.filter { it.id.isNotBlank() && it.id != currentUserId }
+            val profiles = peers.map { it.toUserProfile() }
+            val cappedProfiles = profiles.take(PROXIMITY_HOST_SELECTION_MAX_PEERS)
+            _connectionState.value = ConnectionState.TaggingContext(
+                newConnections = emptyList(),
+                targetUsers = cappedProfiles,
+                isGroup = peers.size >= 2 || groupIds.orEmpty().size >= 3,
+                memberUserIds = groupIds?.takeIf { it.isNotEmpty() }
+                    ?: (listOf(currentUserId) + cappedProfiles.map { it.id }).distinct().sorted(),
+                bindEncounterPersistedPeerIds = peers
+                    .filter { it.encounterPersistedOnBind }
+                    .map { it.id }
+                    .toSet(),
+                isNewConnection = payload.isAggregateNewConnection,
+                selectableUsers = cappedProfiles,
+                // Reconnect multi: optional people pick for encounter; first-time without pending id
+                // is legacy — still requires host pick before create.
+                requiresSelection = payload.isAggregateNewConnection && peers.size >= 2,
+                selectedPeerIds = cappedProfiles.map { it.id }.toSet(),
+            )
         }
     }
 
@@ -666,18 +829,54 @@ class ConnectionViewModel : ViewModel() {
                         _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
                     }
                     PlatformHapticsPolicy.successNotification()
+                    val awaitingPendingId = r.pendingHandshakeId?.trim().orEmpty()
+                    if (awaitingPendingId.isNotEmpty()) {
+                        handleAwaitingHostSelection(
+                            BindProximityHandshakeResult.AwaitingHostSelection(
+                                pendingHandshakeId = awaitingPendingId,
+                                expiresAt = null,
+                                candidates = r.recoveredUsers,
+                                isAggregateNewConnection = r.isAggregateNewConnection,
+                                groupCliqueCandidateMemberIds = r.groupCliqueCandidateMemberIds,
+                            ),
+                            currentUserId,
+                        )
+                        return@launch
+                    }
                     val g = r.groupCliqueCandidateMemberIds
                     val others = g?.filter { it != currentUserId }?.distinct().orEmpty()
-                    if (currentUserId.isNotBlank() && g != null && others.size >= 2) {
+                    if (
+                        r.isAggregateNewConnection &&
+                        currentUserId.isNotBlank() &&
+                        g != null &&
+                        others.size >= 2
+                    ) {
                         _verifiedCliqueFromProximity.emit(
                             VerifiedCliqueProximityIntent(
-                                preselectFriendIds = others,
+                                preselectFriendIds = others.take(PROXIMITY_HOST_SELECTION_MAX_PEERS),
                                 matchedUsers = r.recoveredUsers,
                             ),
                         )
                         _connectionState.value = ConnectionState.Idle
                     } else {
-                        _connectionState.value = ConnectionState.PendingConfirmation(r.recoveredUsers)
+                        val peers = r.recoveredUsers
+                            .filter { it.id.isNotBlank() && it.id != currentUserId }
+                        val profiles = peers.map { it.toUserProfile() }
+                            .take(PROXIMITY_HOST_SELECTION_MAX_PEERS)
+                        _connectionState.value = ConnectionState.TaggingContext(
+                            newConnections = emptyList(),
+                            targetUsers = profiles,
+                            isGroup = peers.size >= 2,
+                            memberUserIds = (listOf(currentUserId) + peers.map { it.id }).distinct().sorted(),
+                            bindEncounterPersistedPeerIds = peers
+                                .filter { it.encounterPersistedOnBind }
+                                .map { it.id }
+                                .toSet(),
+                            isNewConnection = r.isAggregateNewConnection,
+                            selectableUsers = profiles,
+                            requiresSelection = r.isAggregateNewConnection && peers.size >= 2,
+                            selectedPeerIds = profiles.map { it.id }.toSet(),
+                        )
                     }
                 }
                 r.remainingInQueue > 0 ->
@@ -843,6 +1042,14 @@ class ConnectionViewModel : ViewModel() {
     }
 
     fun resetConnectionState() {
+        val tagging = _connectionState.value as? ConnectionState.TaggingContext
+        if (tagging?.requiresSelection == true) {
+            ConnectionFlowTelemetry.recordHostSelectionAbandoned(
+                candidateCount = tagging.selectableUsers.size.takeIf { it > 0 }
+                    ?: tagging.targetUsers.size,
+                reason = "dismissed",
+            )
+        }
         lastProximityEncounterLoggedAggregate = true
         lastProximityHardwareVibe = null
         _connectionState.value = ConnectionState.Idle
@@ -936,6 +1143,10 @@ class ConnectionViewModel : ViewModel() {
                         }
                     }
                     PlatformHapticsPolicy.successNotification()
+                    ConnectionFlowTelemetry.recordReconnectEncounterSaved(
+                        peerCount = validPeerCount,
+                        isGroup = validPeerCount >= 2 || tagging.isGroup,
+                    )
                     _connectionState.value = ConnectionState.Idle
                     return@launch
                 }
@@ -955,6 +1166,10 @@ class ConnectionViewModel : ViewModel() {
                     }
                 }
                 PlatformHapticsPolicy.successNotification()
+                ConnectionFlowTelemetry.recordReconnectEncounterSaved(
+                    peerCount = peersNeedingInsert.size.coerceAtLeast(validPeerCount),
+                    isGroup = peersNeedingInsert.size >= 2 || tagging.isGroup,
+                )
                 _connectionState.value = ConnectionState.Idle
             } catch (e: Exception) {
                 _connectionState.value = ConnectionState.Error(e.message ?: "Could not save encounter")
@@ -1024,12 +1239,17 @@ class ConnectionViewModel : ViewModel() {
                     allEncountersLogged = allEncountersLogged && outcome.encounterLogged
                     val connection = outcome.connection
                     created.add(connection)
-                    AppDataManager.addConnection(connection, peer)
+                    upsertProximityConnectionIfNeeded(
+                        connection = connection,
+                        otherUser = peer,
+                        isNewConnection = peer.isNewConnection,
+                    )
                 }
                 if (!created.any { it.isPendingSync() }) {
                     AppDataManager.refresh(force = true)
                 }
                 val profiles = peers.map { it.toUserProfile() }
+                val isNewAggregate = peers.any { it.isNewConnection }
                 lastProximityEncounterLoggedAggregate = true
                 if (!allEncountersLogged) {
                     _connectionState.value = ConnectionState.Idle
@@ -1038,7 +1258,7 @@ class ConnectionViewModel : ViewModel() {
                     _connectionState.value = ConnectionState.TaggingContext(
                         newConnections = created,
                         targetUsers = profiles,
-                        isNewConnection = true,
+                        isNewConnection = isNewAggregate,
                     )
                 }
             } catch (e: Exception) {
@@ -1046,6 +1266,236 @@ class ConnectionViewModel : ViewModel() {
                 _connectionState.value = ConnectionState.Error(e.message ?: "Unknown error")
             }
         }
+    }
+
+    fun toggleHostSelectionPeer(peerId: String) {
+        val tagging = _connectionState.value as? ConnectionState.TaggingContext ?: return
+        if (!tagging.requiresSelection) return
+        val id = peerId.trim()
+        if (id.isEmpty()) return
+        val next = if (id in tagging.selectedPeerIds) {
+            tagging.selectedPeerIds - id
+        } else if (tagging.selectedPeerIds.size >= PROXIMITY_HOST_SELECTION_MAX_PEERS) {
+            tagging.selectedPeerIds
+        } else {
+            tagging.selectedPeerIds + id
+        }
+        _connectionState.value = tagging.copy(selectedPeerIds = next)
+    }
+
+    /**
+     * Promote legacy multi-peer [ConnectionState.PendingConfirmation] into the combined
+     * people + tags [ConnectionState.TaggingContext] (host selection) sheet.
+     */
+    fun promotePendingConfirmationToHostSelection(currentUserId: String) {
+        val pending = _connectionState.value as? ConnectionState.PendingConfirmation ?: return
+        val peers = pending.users.filter { it.id.isNotBlank() && it.id != currentUserId }
+        if (peers.size < 2) return
+        val profiles = peers.map { it.toUserProfile() }.take(PROXIMITY_HOST_SELECTION_MAX_PEERS)
+        _connectionState.value = ConnectionState.TaggingContext(
+            newConnections = emptyList(),
+            targetUsers = profiles,
+            isGroup = peers.size >= 2,
+            memberUserIds = (listOf(currentUserId) + profiles.map { it.id }).distinct().sorted(),
+            bindEncounterPersistedPeerIds = peers
+                .filter { it.encounterPersistedOnBind }
+                .map { it.id }
+                .toSet(),
+            isNewConnection = peers.any { it.isNewConnection },
+            selectableUsers = profiles,
+            requiresSelection = true,
+            selectedPeerIds = profiles.map { it.id }.toSet(),
+        )
+    }
+
+    /**
+     * Host confirms multi-peer selection (+ optional context tags).
+     * Uses `POST /api/connections/proximity/confirm` when [ConnectionState.TaggingContext.pendingHandshakeId]
+     * is set; otherwise falls back to legacy per-peer [confirmProximityConnection].
+     */
+    fun confirmHostProximitySelection(
+        selectedPeerIds: List<String>,
+        currentUserId: String,
+        contextTag: ContextTag? = null,
+        hardwareVibe: HardwareVibeSnapshot? = null,
+        weatherSnapshotLabel: String? = null,
+        sensorContext: ConnectionSensorContext? = null,
+    ) {
+        val tagging = _connectionState.value as? ConnectionState.TaggingContext
+        if (tagging == null || !tagging.requiresSelection) {
+            _connectionState.value = ConnectionState.Error("No proximity selection in progress")
+            return
+        }
+        val selected = selectedPeerIds
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && it != currentUserId }
+            .distinct()
+            .take(PROXIMITY_HOST_SELECTION_MAX_PEERS)
+        if (selected.isEmpty()) {
+            _connectionState.value = ConnectionState.Error("Select at least one person to connect with")
+            return
+        }
+        val pendingId = tagging.pendingHandshakeId?.trim().orEmpty()
+        val contextTagIds = contextTag?.let { tag ->
+            listOf(if (tag.id == "custom") tag.label else tag.id)
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+        }
+        ConnectionFlowTelemetry.recordHostSelectionConfirmed(
+            selectedCount = selected.size,
+            candidateCount = tagging.selectableUsers.size.takeIf { it > 0 } ?: tagging.targetUsers.size,
+            isGroup = selected.size >= 2 || tagging.isGroup,
+            isReconnect = !tagging.isNewConnection,
+        )
+        if (pendingId.isNotEmpty()) {
+            viewModelScope.launch {
+                _connectionState.value = ConnectionState.Loading
+                try {
+                    val outcome = withContext(Dispatchers.Default) {
+                        repository.confirmProximitySelection(
+                            pendingHandshakeId = pendingId,
+                            selectedMemberIds = selected,
+                            contextTags = contextTagIds,
+                        )
+                    }.getOrElse { err ->
+                        _connectionState.value = ConnectionState.Error(
+                            err.message ?: "Failed to confirm proximity selection",
+                        )
+                        return@launch
+                    }
+                    activateCollaborationSessionIfPresent(outcome)
+                    lastProximityEncounterLoggedAggregate = outcome.encounterLogged
+                    val matchedPeers = outcome.matches
+                        .filter { it.id.isNotBlank() && it.id != currentUserId }
+                    val profiles = matchedPeers.map { it.toUserProfile() }.ifEmpty {
+                        tagging.selectableUsers.filter { it.id in selected }
+                    }
+                    val connectionId = outcome.connectionId
+                    val created = if (!connectionId.isNullOrBlank()) {
+                        val memberIds = outcome.groupCliqueCandidateMemberIds
+                            ?.takeIf { it.isNotEmpty() }
+                            ?: (listOf(currentUserId) + selected).distinct().sorted()
+                        val connection = syntheticProximityConnection(
+                            connectionId = connectionId,
+                            memberUserIds = memberIds,
+                            isGroup = outcome.isGroup || memberIds.size > 2,
+                        )
+                        upsertProximityConnectionIfNeeded(
+                            connection = connection,
+                            otherUser = syntheticUserForProximitySuccess(profiles),
+                            isNewConnection = outcome.isAggregateNewConnection,
+                        )
+                        listOf(connection)
+                    } else {
+                        emptyList()
+                    }
+                    if (created.isNotEmpty() && !created.any { it.isPendingSync() }) {
+                        AppDataManager.refresh(force = true)
+                    }
+                    if (!outcome.encounterLogged) {
+                        _connectionState.value = ConnectionState.Idle
+                        _transientNotice.tryEmit(RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE)
+                        return@launch
+                    }
+                    if (created.isEmpty()) {
+                        _connectionState.value = ConnectionState.Error("Connection was not created")
+                        return@launch
+                    }
+                    // Host + ≥2 selected peers (member set ≥3) on a new spark → clique autofill
+                    // with the confirmed selection only (never the raw unmatched BLE candidate list).
+                    if (selected.size >= 2 && outcome.isAggregateNewConnection) {
+                        val selectedUsers = matchedPeers.filter { it.id in selected }.ifEmpty {
+                            tagging.selectableUsers
+                                .ifEmpty { tagging.targetUsers }
+                                .filter { it.id in selected }
+                                .map { profile ->
+                                    User(
+                                        id = profile.id,
+                                        name = profile.displayName,
+                                        image = profile.avatarUrl,
+                                        createdAt = 0L,
+                                    )
+                                }
+                        }
+                        ConnectionFlowTelemetry.recordVerifiedCliqueCreated(
+                            peerCount = selected.size,
+                            selectedCount = selected.size,
+                            candidateCount = tagging.selectableUsers.size.takeIf { it > 0 }
+                                ?: tagging.targetUsers.size,
+                        )
+                        _verifiedCliqueFromProximity.emit(
+                            VerifiedCliqueProximityIntent(
+                                preselectFriendIds = selected,
+                                matchedUsers = selectedUsers,
+                            ),
+                        )
+                        _connectionState.value = ConnectionState.Idle
+                        return@launch
+                    }
+                    // Tags already sent with confirm when present; skip second tagging sheet.
+                    if (!contextTagIds.isNullOrEmpty()) {
+                        val primary = created.first()
+                        _connectionState.value = ConnectionState.Success(
+                            primary,
+                            syntheticUserForProximitySuccess(profiles),
+                        )
+                    } else {
+                        _connectionState.value = ConnectionState.TaggingContext(
+                            newConnections = created,
+                            targetUsers = profiles,
+                            isGroup = outcome.isGroup || profiles.size >= 2,
+                            memberUserIds = created.first().user_ids,
+                            bindEncounterPersistedPeerIds = matchedPeers
+                                .filter { it.encounterPersistedOnBind }
+                                .map { it.id }
+                                .toSet(),
+                            isNewConnection = outcome.isAggregateNewConnection,
+                        )
+                    }
+                } catch (e: Exception) {
+                    _connectionState.value = ConnectionState.Error(e.message ?: "Failed to confirm selection")
+                }
+            }
+            return
+        }
+
+        // Legacy PendingConfirmation path: create 1:1 edges client-side.
+        val peerUsers = tagging.selectableUsers
+            .ifEmpty { tagging.targetUsers }
+            .filter { it.id in selected }
+            .map { profile ->
+                User(
+                    id = profile.id,
+                    name = profile.displayName,
+                    image = profile.avatarUrl,
+                    createdAt = 0L,
+                    isNewConnection = tagging.isNewConnection,
+                    encounterPersistedOnBind = profile.id in tagging.bindEncounterPersistedPeerIds,
+                )
+            }
+        if (selected.size >= 2 && tagging.isNewConnection) {
+            viewModelScope.launch {
+                ConnectionFlowTelemetry.recordVerifiedCliqueCreated(
+                    peerCount = selected.size,
+                    selectedCount = selected.size,
+                    candidateCount = tagging.selectableUsers.size.takeIf { it > 0 }
+                        ?: tagging.targetUsers.size,
+                )
+                _verifiedCliqueFromProximity.emit(
+                    VerifiedCliqueProximityIntent(
+                        preselectFriendIds = selected,
+                        matchedUsers = peerUsers,
+                    ),
+                )
+            }
+        }
+        confirmProximityConnection(
+            peerUsers = peerUsers,
+            currentUserId = currentUserId,
+            hardwareVibe = hardwareVibe,
+            weatherSnapshotLabel = weatherSnapshotLabel,
+            sensorContext = sensorContext,
+        )
     }
 
     /**
@@ -1070,6 +1520,10 @@ class ConnectionViewModel : ViewModel() {
         viewModelScope.launch {
             val connections = tagging.newConnections
             val targetProfiles = tagging.targetUsers
+            if (connections.isEmpty()) {
+                _connectionState.value = ConnectionState.Idle
+                return@launch
+            }
             try {
                 val sensorsMissing = noiseLevelCategory == null &&
                     exactNoiseLevelDb == null &&

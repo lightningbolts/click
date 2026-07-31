@@ -45,12 +45,12 @@ NfcScreen / Tap to Connect (push)
 └── Handshaking bottom Card + "Cancel"
 
 ConnectionContextSheet (modal, multi-entry)
-├── Avatars header
+├── Avatars header (1:1 / post-select) OR People multi-select FIRST (≥2 candidates)
 ├── Title/subtitle (presentation-specific)
-├── Suggested + All tag chips (ContextTagTaxonomy)
+├── Suggested + All tag chips (ContextTagTaxonomy) — after people when multi-select
 ├── Custom activity field
 ├── Ambient noise copy
-├── Calendar overlap card (ReconnectEncounter)
+├── Calendar overlap card (ReconnectEncounter, 1:1)
 └── "Skip" | "Connect" | "Save Encounter"
 
 ConnectionRevealOverlay (full-screen overlay)
@@ -131,7 +131,8 @@ Full-screen flat scrim (black @ 40%, no blur). Centered bordered card max 340dp 
 | `"Connect"` (idle) | Permission gates → `startTapProximityHandshake` |
 | `"Open app settings"` | System settings |
 | `"Open Settings"` (unsupported) | Radio settings |
-| Confirm peers | `"Connect"` / `"Connect with everyone"` |
+| Confirm peers (1:1) | Inline `"Connect"` on `PendingConfirmation` |
+| Multi-peer host pick | Promoted to `TaggingContext(requiresSelection)` → combined sheet (people then tags) |
 | Handshaking `"Cancel"` | `stopAll()` + `resetConnectionState()` |
 | Success `"View Connection"` | `onConnectionCreated(id)` |
 | Success `"Connect Another"` | `resetConnectionState()` |
@@ -141,11 +142,12 @@ Full-screen flat scrim (black @ 40%, no blur). Centered bordered card max 340dp 
 
 | Control | Action |
 |---------|--------|
-| Tag chips | Select taxonomy tag |
+| People rows (multi-select) | Toggle peer ids when `selectableUsers.size >= 2` — **above** tag chips |
+| Tag chips | Select taxonomy tag (hidden for pure ReconnectEncounter without multi-select) |
 | `"✏️ Write your own"` | Focus custom field |
-| `"Skip"` | `onSkip` / `onDismiss` |
-| `"Connect"` | `onConfirm(tag, noiseOptIn)` |
-| `"Save Encounter"` | `onSaveEncounter()` (ReconnectEncounter) |
+| `"Skip"` | `onSkip` / `onDismiss` (abandons host selection when `requiresSelection`) |
+| `"Connect"` | `onConfirm(tag, noiseOptIn)` — or `confirmHostProximitySelection` when `requiresSelection` |
+| `"Save Encounter"` | `onSaveEncounter()` (`ReconnectEncounter` only when **not** `requiresSelection`) |
 | `"Lock Intent"` | Calendar overlap CTA |
 
 ---
@@ -183,10 +185,10 @@ Full-screen flat scrim (black @ 40%, no blur). Centered bordered card max 340dp 
 |-------|----------------|--------------|
 | **Idle** | `NfcIdleContent` | `"Ready to Connect"` / `"Tap to Connect unavailable"` |
 | **ProximityFetchingLocation** | GPS icon + spinner | `"Fetching Location..."` |
-| **ProximityHandshaking** | Pulsing rings + BT icon | `"Handshaking…"` |
+| **ProximityHandshaking** | Pulsing rings + BT icon | `"Handshaking…"` (~**5s** BLE/ultrasonic listen window) |
 | **ProximityResolving** | Spinner | `"Matching nearby taps…"` |
-| **PendingConfirmation** | Peer list + CTAs | `"Confirm your tap"` / `"Confirm this group"` |
-| **TaggingContext** | `ProximityAwaitingContextContent` + sheet | `"You're connected"` / `"You're all connected"` |
+| **PendingConfirmation** | Inline peer confirm (**1:1 only**) | `"Confirm your tap"` |
+| **TaggingContext** | Sheet (+ optional awaiting-context chrome) | People+tags host pick, NewSpark/QrFlow tags, or ReconnectEncounter |
 | **Loading** | Spinner | `"Creating Connection..."` |
 | **SecuringConnection** | Spinner | `"Securing Connection..."` |
 | **Success** | `NfcSuccessContent` | `"Connection Created!"` |
@@ -216,18 +218,30 @@ Full-screen flat scrim (black @ 40%, no blur). Centered bordered card max 340dp 
 | Body | `"Stay close — broadcasting and listening for nearby taps."` |
 | Button | `"Cancel"` |
 
-#### Pending confirmation
+#### Pending confirmation (1:1 inline)
+
+Multi-peer (`users.size >= 2`) is **not** confirmed here — `promotePendingConfirmationToHostSelection` opens the combined `ConnectionContextSheet` instead. Legacy `"Connect with everyone"` is **not** the primary multi-peer path.
 
 | Element | String |
 |---------|--------|
 | Single peer headline | `"Confirm your tap"` |
-| Group headline | `"Confirm this group"` |
 | Single subtitle | `"You'll add optional context next."` |
-| Group subtitle | `"You'll connect with everyone listed, then add one shared context tag."` |
 | User name fallback | `"User"` |
-| Primary (1) | `"Connect"` |
-| Primary (N) | `"Connect with everyone"` |
+| Primary | `"Connect"` |
 | Cancel | `"Cancel"` |
+
+#### Multi-peer host selection (`awaiting_selection` → TaggingContext)
+
+Server returns `awaiting_selection` + `pending_handshake_id` for first-time multi-peer (≥3 member set) before durable create. Host picks people **then** optional context tags in one sheet; confirm calls `confirmProximitySelection` (selection size cap ≤12). Reconnect / existing-connection bumps use **`ReconnectEncounter`** presentation (`"Save Encounter"`), not NewSpark.
+
+| Element | String |
+|---------|--------|
+| NewSpark multi-select title | `"Who was in this tap?"` |
+| NewSpark / QrFlow multi-select subtitle | `"Select people to connect with, then pick optional context. You can skip and keep going."` |
+| People section | `"People"` (profile/name rows, multi-select, **above** tags) |
+| Primary (selection) | `"Connect"` (disabled while selection empty) |
+| Reconnect multi-select title | `"Logging this encounter…"` |
+| Reconnect multi-select subtitle | `"Choose who was there, then save this crossing to your shared history."` |
 
 #### ProximityAwaitingContext (behind sheet)
 
@@ -287,11 +301,15 @@ Full-screen flat scrim (black @ 40%, no blur). Centered bordered card max 340dp 
 | Mode | Title | Subtitle (1:1) | Primary CTA |
 |------|-------|----------------|-------------|
 | **NewSpark** | `"Sparking a new connection…"` | `"Pick what best describes this physical encounter. You can leave it blank and keep going."` | `"Connect"` |
+| **NewSpark** (multi-select) | `"Who was in this tap?"` | People first, then optional tags | `"Connect"` |
 | **QrFlow** | Same as NewSpark | Same | `"Connect"` |
 | **ReconnectEncounter** | `"Logging encounter with {name}…"` | `"Save this crossing to your shared encounter history."` | `"Save Encounter"` |
-| **Group (any)** | `"Set the context for this group"` | `"This tag applies to everyone in this meetup. You can leave it blank and keep going."` | `"Connect"` |
+| **ReconnectEncounter** (multi-select) | `"Logging this encounter…"` | Choose who was there, then save | `"Save Encounter"` / `"Connect"` when `requiresSelection` |
+| **Group (post-select / no pick)** | `"Set the context for this group"` | `"This tag applies to everyone in this meetup. You can leave it blank and keep going."` | `"Connect"` |
 
-**Sheet sections:** `"Suggested"`, `"All tags"`, `"Custom activity"`, `"Ambient noise"`.
+**Sheet order (multi-peer):** `"People"` multi-select → Suggested / All tags / Custom / Ambient (tags omitted on pure ReconnectEncounter without selection).
+
+**Sheet sections (tags):** `"Suggested"`, `"All tags"`, `"Custom activity"`, `"Ambient noise"`.
 
 **Custom field:**
 
@@ -425,16 +443,20 @@ sequenceDiagram
     User->>Nfc: Tap "Connect"
     Nfc->>VM: Permission gates
     VM->>Nfc: FetchingLocation
-    VM->>Nfc: Handshaking
-  alt Peers found
+    VM->>Nfc: Handshaking (~5s listen)
+  alt Single peer
         VM->>Nfc: PendingConfirmation
         User->>Nfc: Confirm
-        VM->>Nfc: Loading → SecuringConnection
-        VM->>Nfc: TaggingContext
-        Nfc->>Ctx: NewSpark sheet
-        User->>Ctx: Connect / Skip
+        VM->>Nfc: TaggingContext (NewSpark or ReconnectEncounter)
+        Nfc->>Ctx: Tags / Save Encounter
+        User->>Ctx: Connect / Skip / Save Encounter
         VM->>Nfc: Success
-        User->>Nfc: View Connection
+    else Multi-peer awaiting_selection
+        VM->>Nfc: TaggingContext(requiresSelection)
+        Nfc->>Ctx: People multi-select FIRST, then tags
+        User->>Ctx: Pick peers + optional tag → Connect
+        VM->>VM: confirmProximitySelection (≤12)
+        VM->>Nfc: Success
     else Offline
         VM->>Nfc: ProximityCapturedOfflineSyncing
     else Pending server match
@@ -477,9 +499,9 @@ flowchart TD
 
 ---
 
-## 6. Future — event context on connect
+## 6. Event context on connect
 
-**Not built yet.** When connecting via Tap, QR, or App Clip **at** a live map event (same place + schedule window), persist the event on the encounter and show it later in connection encounter info / profile Timeline. Spec: [10-map-beacons-hubs.md](10-map-beacons-hubs.md) §7.
+When connecting via Tap (or logging a reconnect encounter) while GPS is inside a **live** map event geofence, attach the event only if **every** participant has **RSVPed** (`beacon_attendees`) **and** an **active check-in** (`event_check_ins` with `checked_out_at IS NULL`). Persist `event_beacon_id` + denorm fields and merge context tag `at_event`. Spec: [10-map-beacons-hubs.md](10-map-beacons-hubs.md) §7.
 
 ---
 

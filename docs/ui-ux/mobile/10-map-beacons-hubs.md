@@ -60,7 +60,7 @@ CreateHubModal — also reachable from BeaconDropSheet Hub category
 | Event cards | Title, host, schedule, description, distance, attendees, RSVP. Card tap → `EventBeaconDetail` |
 | Back | Swipe / back / system back → map + peek. Map stays mounted (no marker preview wipe) |
 
-**Pins:** Circular avatar markers (**44dp** Android / **44pt** iOS) for connections, beacons, hubs, **and cluster hubs**. All use the same diameter when scrunched — no squad size scaling on the circle (squad still raises z-index / pulse). Cluster hubs show count glyphs on the same circular chrome (not teardrop `MKMarker` / oversized hubs). Tap cluster → zoom into members (unchanged).
+**Pins:** Circular avatar markers (**44dp** Android / **44pt** iOS) for connections, beacons, hubs, **and cluster hubs**. All use the same diameter when scrunched — no squad size scaling on the circle (squad still raises z-index / pulse). Cluster hubs show count glyphs on the same circular chrome (not teardrop `MKMarker` / oversized hubs). Tap cluster → zoom into members (unchanged). **Reconnect:** map connections collapse to a **single pin per peer** (`collapseOneToOneConnectionsByPeer`) — no duplicate pins after Bluetooth re-tap.
 
 ### Events feed (full screen)
 
@@ -422,13 +422,13 @@ flowchart TD
 
 ## 7. Event ↔ encounter integration
 
-When two users connect (Tap / QR / connection create / encounter log) while GPS is inside a **live** map event geofence **and both already RSVPed** (`beacon_attendees`), attach that event to the encounter.
+When two users connect (Tap / QR / connection create / encounter log) while GPS is inside a **live** map event geofence **and every participant has RSVPed** (`beacon_attendees`) **and an active check-in** (`event_check_ins`, `checked_out_at IS NULL`), attach that event to the encounter.
 
 | Concern | Intent |
 |---------|--------|
-| Trigger | Successful connect while device GPS is inside the event beacon radius **and** live window (`isEventLiveForCheckIn`) **and** both users RSVPed |
+| Trigger | Successful connect while device GPS is inside the event beacon radius **and** live window (`isEventLiveForCheckIn`) **and** all participants RSVPed **and** actively checked in |
 | Persist | `event_beacon_id` + denorm title/schedule; merge context tag `at_event` |
 | Surface | Profile **Timeline** — event title, schedule, “View on map”; `at_event` chip label “At event” |
-| Non-goals | Creating RSVPs as a side effect of connecting (read-only gate) |
+| Non-goals | Creating RSVPs or check-ins as a side effect of connecting (read-only gate) |
 
 Cross-links: [06-connect-handshake.md](06-connect-handshake.md), [12-profile-memories.md](12-profile-memories.md).

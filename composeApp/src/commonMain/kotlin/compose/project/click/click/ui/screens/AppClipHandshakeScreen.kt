@@ -118,7 +118,7 @@ fun AppClipHandshakeScreen(invocationUrl: String?) {
                     onDismiss = { handshakeComplete = true },
                     onSkip = { handshakeComplete = true },
                     presentation = ConnectionContextPresentation.QrFlow,
-                    onConfirm = { _, _ -> handshakeComplete = true },
+                    onConfirm = { _, _, _ -> handshakeComplete = true },
                 )
             }
         }

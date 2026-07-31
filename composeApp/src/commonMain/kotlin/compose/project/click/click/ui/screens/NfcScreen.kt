@@ -47,6 +47,7 @@ import compose.project.click.click.data.OpenMeteoWeatherService
 import compose.project.click.click.data.models.toConnectionPayloadWeatherJson
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserProfile
+import compose.project.click.click.data.models.toUserProfile
 import compose.project.click.click.proximity.MockProximityManager
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.bottomChromePadding
@@ -243,45 +244,52 @@ fun NfcScreen(
                                 NfcMatchingPeersContent(pulseActive = pulseHandshake)
                             }
                             is ConnectionState.PendingConfirmation -> {
-                                ProximityConfirmConnectionsContent(
-                                    users = state.users,
-                                    onConfirmAll = {
-                                        onProximityFinalizeStart()
-                                        scope.launch {
-                                            val vibe = withContext(Dispatchers.Default) {
-                                                runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
-                                            }
-                                            val (la, lo) = connectionViewModel.lastProximityCoordinates()
-                                            val weatherLabel = withContext(Dispatchers.Default) {
-                                                if (
-                                                    la != null && lo != null &&
-                                                    la.isFinite() && lo.isFinite() &&
-                                                    !(la == 0.0 && lo == 0.0)
-                                                ) {
-                                                    openMeteoWeather.fetchWeather(la, lo)?.toConnectionPayloadWeatherJson()
-                                                } else {
-                                                    null
+                                // Single-peer keeps inline confirm; multi-peer is promoted to TaggingContext.
+                                if (state.users.size <= 1) {
+                                    ProximityConfirmConnectionsContent(
+                                        users = state.users,
+                                        onConfirmAll = {
+                                            onProximityFinalizeStart()
+                                            scope.launch {
+                                                val vibe = withContext(Dispatchers.Default) {
+                                                    runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
                                                 }
+                                                val (la, lo) = connectionViewModel.lastProximityCoordinates()
+                                                val weatherLabel = withContext(Dispatchers.Default) {
+                                                    if (
+                                                        la != null && lo != null &&
+                                                        la.isFinite() && lo.isFinite() &&
+                                                        !(la == 0.0 && lo == 0.0)
+                                                    ) {
+                                                        openMeteoWeather.fetchWeather(la, lo)?.toConnectionPayloadWeatherJson()
+                                                    } else {
+                                                        null
+                                                    }
+                                                }
+                                                val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
+                                                val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
+                                                val sensors = captureConnectionSensorContext(
+                                                    ambientNoiseMonitor = ambientNoiseMonitor,
+                                                    barometricHeightMonitor = barometricHeightMonitor,
+                                                    ambientNoiseOptIn = noiseOptIn,
+                                                    barometricContextOptIn = baroOptIn,
+                                                )
+                                                connectionViewModel.confirmProximityConnection(
+                                                    peerUsers = state.users,
+                                                    currentUserId = userId,
+                                                    hardwareVibe = vibe,
+                                                    weatherSnapshotLabel = weatherLabel,
+                                                    sensorContext = sensors,
+                                                )
                                             }
-                                            val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
-                                            val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
-                                            val sensors = captureConnectionSensorContext(
-                                                ambientNoiseMonitor = ambientNoiseMonitor,
-                                                barometricHeightMonitor = barometricHeightMonitor,
-                                                ambientNoiseOptIn = noiseOptIn,
-                                                barometricContextOptIn = baroOptIn,
-                                            )
-                                            connectionViewModel.confirmProximityConnection(
-                                                peerUsers = state.users,
-                                                currentUserId = userId,
-                                                hardwareVibe = vibe,
-                                                weatherSnapshotLabel = weatherLabel,
-                                                sensorContext = sensors,
-                                            )
-                                        }
-                                    },
-                                    onCancel = { connectionViewModel.resetConnectionState() },
-                                )
+                                        },
+                                        onCancel = { connectionViewModel.resetConnectionState() },
+                                    )
+                                } else {
+                                    ProximityAwaitingContextContent(
+                                        targetUsers = state.users.map { it.toUserProfile() },
+                                    )
+                                }
                             }
                             is ConnectionState.TaggingContext -> {
                                 ProximityAwaitingContextContent(targetUsers = state.targetUsers)
@@ -341,6 +349,14 @@ fun NfcScreen(
                     }
                 }
 
+                // Multi-peer PendingConfirmation → TaggingContext(requiresSelection) people+tags sheet.
+                LaunchedEffect(connectionState) {
+                    val pending = connectionState as? ConnectionState.PendingConfirmation ?: return@LaunchedEffect
+                    if (pending.users.size >= 2) {
+                        connectionViewModel.promotePendingConfirmationToHostSelection(userId)
+                    }
+                }
+
                 if (connectionState is ConnectionState.TaggingContext) {
                     val tagging = connectionState as ConnectionState.TaggingContext
                     var calendarLockInProgress by remember { mutableStateOf(false) }
@@ -348,8 +364,41 @@ fun NfcScreen(
                     val reconnectConnectionId = tagging.newConnections.firstOrNull()?.id
                     val reconnectPeerId = tagging.targetUsers.firstOrNull { it.id != userId }?.id
                         ?: tagging.targetUsers.firstOrNull()?.id
+                    val sheetSelectableUsers = when {
+                        tagging.selectableUsers.size >= 2 -> tagging.selectableUsers
+                        tagging.targetUsers.size >= 2 -> tagging.targetUsers
+                        else -> emptyList()
+                    }
+                    val sheetInitialSelectedIds = tagging.selectedPeerIds
+                        .ifEmpty { sheetSelectableUsers.map { it.id }.toSet() }
+                    // requiresSelection must use Connect → confirmHostProximitySelection (not Save Encounter).
+                    val presentation = if (!tagging.isNewConnection && !tagging.requiresSelection) {
+                        ConnectionContextPresentation.ReconnectEncounter
+                    } else {
+                        ConnectionContextPresentation.NewSpark
+                    }
+                    fun taggingForSelectedPeers(selectedIds: Set<String>): ConnectionState.TaggingContext {
+                        if (selectedIds.isEmpty() || sheetSelectableUsers.size < 2) return tagging
+                        val filteredTargets = tagging.targetUsers.filter { it.id in selectedIds }
+                            .ifEmpty { tagging.targetUsers }
+                        val filteredConnections = tagging.newConnections.filter { conn ->
+                            conn.user_ids.any { uid -> uid in selectedIds && uid != userId }
+                        }.ifEmpty { tagging.newConnections }
+                        return tagging.copy(
+                            targetUsers = filteredTargets,
+                            newConnections = filteredConnections,
+                            memberUserIds = tagging.memberUserIds
+                                .filter { it in selectedIds || it == userId }
+                                .ifEmpty { tagging.memberUserIds },
+                            selectedPeerIds = selectedIds,
+                        )
+                    }
                     val finishWithoutTags: () -> Unit = {
                         scope.launch {
+                            if (tagging.requiresSelection) {
+                                connectionViewModel.resetConnectionState()
+                                return@launch
+                            }
                             val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
                             val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
                             val sensors = captureConnectionSensorContext(
@@ -373,18 +422,20 @@ fun NfcScreen(
                         }
                     }
                     ConnectionContextSheet(
-                        connectedUsers = tagging.targetUsers,
+                        connectedUsers = tagging.selectableUsers.ifEmpty { tagging.targetUsers },
                         locationName = null,
                         initialNoiseOptIn = ambientNoiseOptIn,
                         noisePermissionGranted = ambientNoiseMonitor.hasPermission,
                         onSkip = finishWithoutTags,
                         onDismiss = finishWithoutTags,
-                        presentation = ConnectionContextPresentation.NewSpark,
+                        presentation = presentation,
                         encounterSaveInProgress = tagging.encounterSubmitting,
-                        onSaveEncounter = {
+                        selectableUsers = sheetSelectableUsers,
+                        initialSelectedUserIds = sheetInitialSelectedIds,
+                        onSaveEncounter = { selectedIds ->
                             scope.launch {
                                 connectionViewModel.saveReconnectEncounter(
-                                    tagging = tagging,
+                                    tagging = taggingForSelectedPeers(selectedIds),
                                     currentUserId = userId,
                                     ambientNoiseMonitor = ambientNoiseMonitor,
                                     barometricHeightMonitor = barometricHeightMonitor,
@@ -413,7 +464,7 @@ fun NfcScreen(
                                 }
                             }
                         },
-                        onConfirm = { contextTag, noiseOptIn ->
+                        onConfirm = { contextTag, noiseOptIn, selectedIds ->
                             if (tagging.isNewConnection) {
                                 PlatformHapticsPolicy.successNotification()
                                 onProximityFinalizeStart()
@@ -428,18 +479,27 @@ fun NfcScreen(
                                     ambientNoiseOptIn = noiseOptIn,
                                     barometricContextOptIn = baroOptIn,
                                 )
-                                connectionViewModel.saveContextTags(
-                                    tagging = tagging,
-                                    contextTag = contextTag,
-                                    noiseLevelCategory = sensors.noiseLevelCategory,
-                                    exactNoiseLevelDb = sensors.exactNoiseLevelDb,
-                                    heightCategory = sensors.heightCategory,
-                                    exactBarometricElevationMeters = sensors.exactBarometricElevationMeters,
-                                    ambientNoiseMonitor = ambientNoiseMonitor,
-                                    barometricHeightMonitor = barometricHeightMonitor,
-                                    ambientNoiseOptIn = noiseOptIn,
-                                    barometricContextOptIn = baroOptIn,
-                                )
+                                if (tagging.requiresSelection) {
+                                    connectionViewModel.confirmHostProximitySelection(
+                                        selectedPeerIds = selectedIds.toList(),
+                                        currentUserId = userId,
+                                        contextTag = contextTag,
+                                        sensorContext = sensors,
+                                    )
+                                } else {
+                                    connectionViewModel.saveContextTags(
+                                        tagging = taggingForSelectedPeers(selectedIds),
+                                        contextTag = contextTag,
+                                        noiseLevelCategory = sensors.noiseLevelCategory,
+                                        exactNoiseLevelDb = sensors.exactNoiseLevelDb,
+                                        heightCategory = sensors.heightCategory,
+                                        exactBarometricElevationMeters = sensors.exactBarometricElevationMeters,
+                                        ambientNoiseMonitor = ambientNoiseMonitor,
+                                        barometricHeightMonitor = barometricHeightMonitor,
+                                        ambientNoiseOptIn = noiseOptIn,
+                                        barometricContextOptIn = baroOptIn,
+                                    )
+                                }
                             }
                         },
                     )
@@ -568,7 +628,7 @@ private fun ProximityConfirmConnectionsContent(
             colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
         ) {
             Text(
-                if (users.size <= 1) "Connect" else "Connect with everyone",
+                "Connect",
                 style = MaterialTheme.typography.titleMedium,
             )
         }

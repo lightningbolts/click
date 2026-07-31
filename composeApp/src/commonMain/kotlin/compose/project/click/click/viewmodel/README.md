@@ -117,14 +117,14 @@ Proximity connection is modeled as a sealed `ConnectionState`:
 |-------|---------|
 | `Idle` / `Loading` | Initial / in-flight |
 | `ProximityFetchingLocation` | GPS warm-up |
-| `ProximityHandshaking` | BLE + ultrasonic active |
-| `PendingConfirmation` | Peer list ready for user confirm |
+| `ProximityHandshaking` | BLE + ultrasonic active (~5s listen window) |
+| `PendingConfirmation` | Legacy peer list; multi-peer promotes to `TaggingContext(requiresSelection)` |
 | `ProximityCapturedOfflineSyncing` | Tokens saved locally; sync when online |
 | `ProximityHandshakePendingMatch` | HTTP 202 — waiting for peer online |
-| `TaggingContext` | Post-connect subjective tag fan-out |
+| `TaggingContext` | People multi-select (when `requiresSelection`) above context tags; or `ReconnectEncounter` for existing edges |
 | `Success` | Connection row created |
 
-Multi-Tap emits `VerifiedCliqueProximityIntent` for UI autofill into group member picker.
+First-time multi-peer (≥3) returns server `awaiting_selection` → host picks people + tags → `POST /api/connections/proximity/confirm` (selection cap ≤12). Multi-Tap emits `VerifiedCliqueProximityIntent` with **selected** peer ids only for UI autofill into group member picker.
 
 ### ChatViewModel highlights
 

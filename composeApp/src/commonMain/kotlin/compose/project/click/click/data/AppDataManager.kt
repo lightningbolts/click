@@ -15,8 +15,7 @@ import compose.project.click.click.data.models.LocationPreferences
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserAvailability
 import compose.project.click.click.data.models.isResolvedDisplayName
-import compose.project.click.click.data.models.isActiveForUser
-import compose.project.click.click.data.models.isArchivedChannelForUser
+import compose.project.click.click.data.models.isOneToOnePairEdge
 import compose.project.click.click.data.models.resolveDisplayName
 import compose.project.click.click.data.repository.NotificationPreferences
 import compose.project.click.click.data.repository.NotificationPreferencesRepository
@@ -1288,12 +1287,26 @@ object AppDataManager {
     }
     
     /**
-     * Update connections list (after making a new connection)
+     * Update connections list (after making a new connection).
+     * Upserts by id; for 1:1 pair edges, replaces any older active pair-edge for the same peer
+     * so reconnects do not grow duplicate DM rows.
      */
     fun addConnection(connection: Connection, otherUser: User? = null) {
-        _connections.value = (_connections.value + connection).distinctBy { it.id }
-
         val currentUserId = _currentUser.value?.id
+        var list = _connections.value
+        if (connection.isOneToOnePairEdge() && !currentUserId.isNullOrBlank()) {
+            val peerId = connection.user_ids.firstOrNull { it != currentUserId }
+            if (!peerId.isNullOrBlank()) {
+                list = list.filterNot { existing ->
+                    if (existing.id == connection.id) return@filterNot false
+                    if (!existing.isOneToOnePairEdge()) return@filterNot false
+                    if (!existing.isInActiveConnectionsChannel()) return@filterNot false
+                    existing.user_ids.firstOrNull { it != currentUserId } == peerId
+                }
+            }
+        }
+        _connections.value = (list + connection).distinctBy { it.id }
+
         val otherUserId = currentUserId?.let { currentId ->
             connection.user_ids.firstOrNull { it != currentId }
         }
@@ -1919,6 +1932,8 @@ object AppDataManager {
                                 users = recovered,
                                 encounterLogged = proximity.recoveredEncounterLogged,
                                 groupCliqueCandidateMemberIds = proximity.groupCliqueCandidateMemberIds,
+                                pendingHandshakeId = proximity.pendingHandshakeId,
+                                isAggregateNewConnection = proximity.isAggregateNewConnection,
                             ),
                         )
                     }
@@ -1965,6 +1980,8 @@ object AppDataManager {
                     users = recovered,
                     encounterLogged = proximity.recoveredEncounterLogged,
                     groupCliqueCandidateMemberIds = proximity.groupCliqueCandidateMemberIds,
+                    pendingHandshakeId = proximity.pendingHandshakeId,
+                    isAggregateNewConnection = proximity.isAggregateNewConnection,
                 ),
             )
         }

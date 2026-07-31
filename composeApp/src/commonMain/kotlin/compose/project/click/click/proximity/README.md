@@ -67,8 +67,8 @@ sequenceDiagram
 
 | Platform | File | Notes |
 |----------|------|-------|
-| Android | `androidMain/.../AndroidProximityManager.kt` | BLE advertiser/scanner, GATT server + client reads, `AudioTrack`/`AudioRecord` for ultrasonic path; `PROXIMITY_DEBOUNCE_WINDOW_MS = 3000` |
-| iOS | `iosMain/.../IosProximityManager.kt` | CoreBluetooth peripheral/central managers, `AVAudioSession` play/record, PCM file bridge |
+| Android | `androidMain/.../AndroidProximityManager.kt` | BLE advertiser/scanner, GATT server + client reads, `AudioTrack`/`AudioRecord` for ultrasonic path; `PROXIMITY_DEBOUNCE_WINDOW_MS = 5000` (~**5s** listen) |
+| iOS | `iosMain/.../IosProximityManager.kt` | CoreBluetooth peripheral/central managers, `AVAudioSession` play/record, PCM file bridge; ~**5s** listen / broadcast hold |
 | Factory | `rememberProximityManager()` | Returns `MockProximityManager` when `isSimulatorOrEmulatorRuntime()` |
 
 ### BLE design (`ProximityBleCodec`)
@@ -98,6 +98,8 @@ Path: `click/supabase/functions/bind-proximity-connection/index.ts`
 | **Match window** | Same 5 min window for token/GPS/time overlap |
 | **GPS proximity** | Haversine ≤ **15 m** when both sides have usable GPS (`PROXIMITY_MATCH_MAX_M`) |
 | **Multi-tap / clique** | Builds token/GPS/time graph; **BFS** (`bfsComponent`) finds connected components; `group_clique_candidate` when ≥ 3 users |
+| **Candidate scoping** | Pending rows loaded via **token-scoped** + **geo-scoped** queries (never full-table); hard row cap `PENDING_CANDIDATE_MAX_ROWS` |
+| **Host selection defer** | First-time multi-peer (≥3, no existing group) returns `awaiting_selection` + `pending_handshake_id` — durable create deferred until `confirmProximitySelection` (host pick; selection size cap **≤12** / `PROXIMITY_HOST_SELECTION_MAX_MEMBERS`) |
 | **Encounter debouncing** | Re-crossings within **50 m** and same **12-hour UTC block** append **"Extended Hangout"** tag instead of duplicate encounter rows |
 | **proximity_confidence** | Base score on bind: **65** with GPS, **50** without; flagged when &lt; 20 |
 | **Connection lifecycle** | Creates `connections` + `chats` rows; logs `connection_encounters` with sensor payload; seeds `collaboration_sessions` |
@@ -157,7 +159,7 @@ Full distance/BSSID scoring is server-side when using the web API.
 
 - **Connect in person (Tri-Factor):** Tap phones together using Bluetooth, inaudible sound, and GPS to prove you're in the same room.
 - **Scan a QR code:** Point your camera at someone's Click QR to connect instantly.
-- **Group connect (Multi-Tap):** Three or more people can connect at once and land in a verified group chat.
+- **Group connect (Multi-Tap):** Three or more people can connect at once; host picks people (then optional tags) before create (`awaiting_selection`, ≤12). Verified group chat follows after confirm.
 - **Private encrypted chat:** Messages are end-to-end encrypted—only you and your connection can read them.
 - **Send photos, files & voice notes:** Share media in chat; files are encrypted before upload.
 - **Emoji reactions:** React to messages with emoji.

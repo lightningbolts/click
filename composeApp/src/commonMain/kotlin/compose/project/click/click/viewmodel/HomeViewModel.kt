@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
+import compose.project.click.click.data.models.collapseOneToOneConnectionsByPeer // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.ConnectionArchiveNotice // pragma: allowlist secret
@@ -160,7 +161,10 @@ class HomeViewModel(
             }
             val arch = AppDataManager.archivedConnectionIds.value
             val hid = AppDataManager.hiddenConnectionIds.value
-            val conns = AppDataManager.connections.value.filter { it.isActiveForUser(arch, hid) }
+            val conns = collapseOneToOneConnectionsByPeer(
+                connections = AppDataManager.connections.value.filter { it.isActiveForUser(arch, hid) },
+                viewerUserId = uid,
+            )
             val cu = AppDataManager.connectedUsers.value
             loadHomeAvailabilityOverlapMessages(uid, conns, cu)
         }
@@ -272,9 +276,12 @@ class HomeViewModel(
                                             supabaseRepository.fetchActiveAvailabilityIntentsForUser(uid)
                                         val arch = AppDataManager.archivedConnectionIds.value
                                         val hid = AppDataManager.hiddenConnectionIds.value
-                                        val conns = AppDataManager.connections.value.filter {
-                                            it.isActiveForUser(arch, hid)
-                                        }
+                                        val conns = collapseOneToOneConnectionsByPeer(
+                                            connections = AppDataManager.connections.value.filter {
+                                                it.isActiveForUser(arch, hid)
+                                            },
+                                            viewerUserId = uid,
+                                        )
                                         val cu = AppDataManager.connectedUsers.value
                                         loadHomeAvailabilityOverlapMessages(uid, conns, cu)
                                     }
@@ -282,9 +289,12 @@ class HomeViewModel(
                                 }
                             }
                         }
-                        val activeConnections = connections.filter {
-                            it.isActiveForUser(archivedIds, hiddenIds)
-                        }
+                        val activeConnections = collapseOneToOneConnectionsByPeer(
+                            connections = connections.filter {
+                                it.isActiveForUser(archivedIds, hiddenIds)
+                            },
+                            viewerUserId = user.id,
+                        )
                         val recentConnections = activeConnections
                             .sortedByDescending { it.created }
                             .take(5)
