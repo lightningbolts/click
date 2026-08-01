@@ -142,7 +142,7 @@ fun GlobalSearchScreen(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(16.dp),
                             color = clickCardSurface(),
-                            border = BorderStroke(1.dp, clickBorderColor()),
+                            border = BorderStroke(clickCardBorderWidth(), clickBorderColor()),
                         ) {
                             TextField(
                                 modifier = Modifier
@@ -304,7 +304,7 @@ internal fun UnifiedSearchResultsList(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
                 color = clickCardSurface(),
-                border = BorderStroke(1.dp, clickBorderColor()),
+                border = BorderStroke(clickCardBorderWidth(), clickBorderColor()),
             ) {
                 SearchResultRow(
                     result = row,
@@ -437,7 +437,7 @@ internal fun TinyBadge(text: String) {
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = clickCardSurface(),
-        border = BorderStroke(1.dp, clickBorderColor()),
+        border = BorderStroke(clickCardBorderWidth(), clickBorderColor()),
     ) {
         Text(
             text = text,
@@ -607,7 +607,7 @@ private fun SearchLeadingIconBox(content: @Composable () -> Unit) {
             .size(42.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(SoftBlue)
-            .border(1.dp, clickBorderColor(), RoundedCornerShape(12.dp)),
+            .border(clickCardBorderWidth(), clickBorderColor(), RoundedCornerShape(12.dp)),
         contentAlignment = Alignment.Center,
     ) {
         content()

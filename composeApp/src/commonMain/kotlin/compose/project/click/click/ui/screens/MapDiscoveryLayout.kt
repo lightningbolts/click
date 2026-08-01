@@ -309,7 +309,7 @@ internal fun EventsReopenChip(
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
-            .border(2.dp, clickBorderColor(), shape)
+            .border(clickCardBorderWidth(), clickBorderColor(), shape)
             .background(clickCardSurface())
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
@@ -544,7 +544,7 @@ private fun EventsSheetSearchField(
         modifier = modifier
             .clip(shape)
             .background(clickCardSurface())
-            .border(2.dp, clickBorderColor(), shape)
+            .border(clickCardBorderWidth(), clickBorderColor(), shape)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -663,7 +663,7 @@ private fun DiscoveryHubCard(item: DiscoveryFeedItem.Hub) {
             .fillMaxWidth()
             .clip(shape)
             .background(clickCardSurface())
-            .border(2.dp, clickBorderColor(), shape)
+            .border(clickCardBorderWidth(), clickBorderColor(), shape)
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -768,7 +768,7 @@ private fun DiscoveryEventCard(
             .fillMaxWidth()
             .clip(shape)
             .background(clickCardSurface())
-            .border(2.dp, clickBorderColor(), shape)
+            .border(clickCardBorderWidth(), clickBorderColor(), shape)
             .clickable(onClick = onOpen),
     ) {
         Box(

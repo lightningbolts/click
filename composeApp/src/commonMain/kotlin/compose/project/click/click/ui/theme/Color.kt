@@ -41,7 +41,7 @@ val SurfaceVariantDark = Color(0xFF2A2C2C)
 // Hard borders & structural tokens (replace glass vocabulary)
 // ============================================================================
 val BorderHard = Color(0xFF000000)
-val BorderHardDark = Color(0xFFFFFFFF)
+val BorderHardDark = Color(0x1AFFFFFF) // Soft 10% white stroke for dark mode (replaces harsh solid white)
 val OutlineMuted = Color(0xFF7B7487)
 val OutlineVariant = Color(0xFFCCC3D8)
 

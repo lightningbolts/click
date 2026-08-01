@@ -141,7 +141,7 @@ private fun UnifiedSearchSheetContent(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             color = clickCardSurface(),
-            border = BorderStroke(1.dp, clickBorderColor()),
+            border = BorderStroke(clickCardBorderWidth(), clickBorderColor()),
         ) {
             Row(
                 modifier = Modifier

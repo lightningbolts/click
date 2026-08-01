@@ -182,7 +182,7 @@ fun HomeSearchPill(
             .fillMaxWidth()
             .clip(shape)
             .background(clickCardSurface())
-            .border(2.dp, clickBorderColor(), shape)
+            .border(clickCardBorderWidth(), clickBorderColor(), shape)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -264,7 +264,7 @@ fun FeaturedEventCard(
             .fillMaxWidth()
             .clip(shape)
             .background(clickCardSurface())
-            .border(2.dp, clickBorderColor(), shape),
+            .border(clickCardBorderWidth(), clickBorderColor(), shape),
     ) {
         Box(
             modifier = Modifier

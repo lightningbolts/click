@@ -19,10 +19,9 @@ fun AdaptiveCard(
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val style = LocalPlatformStyle.current
     val radius = getAdaptiveCornerRadius()
     val shape = RoundedCornerShape(radius)
-    val borderWidth = style.cardBorderWidth
+    val borderWidth = clickCardBorderWidth()
 
     val cardModifier = modifier.border(
         width = borderWidth,
@@ -34,7 +33,7 @@ fun AdaptiveCard(
         Surface(
             modifier = cardModifier,
             shape = shape,
-            color = MaterialTheme.colorScheme.surface,
+            color = clickCardSurface(),
             shadowElevation = 0.dp,
             onClick = onClick,
             content = {
@@ -45,7 +44,7 @@ fun AdaptiveCard(
         Surface(
             modifier = cardModifier,
             shape = shape,
-            color = MaterialTheme.colorScheme.surface,
+            color = clickCardSurface(),
             shadowElevation = 0.dp,
             content = {
                 Column(modifier = Modifier.padding(getAdaptivePadding()), content = content)
@@ -64,12 +63,12 @@ fun AdaptiveSurface(
         modifier = modifier
             .fillMaxWidth()
             .border(
-                width = LocalPlatformStyle.current.cardBorderWidth,
+                width = clickCardBorderWidth(),
                 color = clickBorderColor(),
                 shape = RoundedCornerShape(bottomStart = radius, bottomEnd = radius),
             ),
         shape = RoundedCornerShape(bottomStart = radius, bottomEnd = radius),
-        color = MaterialTheme.colorScheme.surface,
+        color = clickCardSurface(),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp
     ) {

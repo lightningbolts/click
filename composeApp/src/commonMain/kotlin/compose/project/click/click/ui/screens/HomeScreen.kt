@@ -723,7 +723,7 @@ private fun LocationGroupCard(
                 Box(
                     modifier = Modifier
                         .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
-                        .border(2.dp, clickBorderColor(), RoundedCornerShape(12.dp))
+                        .border(clickCardBorderWidth(), clickBorderColor(), RoundedCornerShape(12.dp))
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
@@ -809,8 +809,8 @@ private fun ConnectionRowItem(
             .fillMaxWidth()
             .clip(rowShape)
             .clickable { onNavigate() }
-            .background(MaterialTheme.colorScheme.surface)
-            .border(2.dp, clickBorderColor(), rowShape)
+            .background(clickCardSurface())
+            .border(clickCardBorderWidth(), clickBorderColor(), rowShape)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -820,7 +820,7 @@ private fun ConnectionRowItem(
                 .size(36.dp)
                 .clip(RoundedCornerShape(18.dp))
                 .background(MaterialTheme.colorScheme.primary)
-                .border(2.dp, clickBorderColor(), CircleShape),
+                .border(clickCardBorderWidth(), clickBorderColor(), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -908,7 +908,7 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
                     .size(56.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primaryContainer)
-                    .border(2.dp, clickBorderColor(), CircleShape),
+                    .border(clickCardBorderWidth(), clickBorderColor(), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -1098,7 +1098,7 @@ fun ReconnectReminderCard(
                     userId = reminder.userId,
                     modifier = Modifier
                         .size(44.dp)
-                        .border(2.dp, clickBorderColor(), CircleShape),
+                        .border(clickCardBorderWidth(), clickBorderColor(), CircleShape),
                     useCompactTypography = true,
                 )
                 Spacer(modifier = Modifier.width(12.dp))

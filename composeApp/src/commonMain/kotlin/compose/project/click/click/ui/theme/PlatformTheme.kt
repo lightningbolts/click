@@ -68,6 +68,17 @@ fun clickBorderColor(usePrimary: Boolean = false): Color {
     return if (dark) BorderHardDark else BorderHard
 }
 
+/**
+ * Structural border width: 2dp in light mode, 1dp subtle stroke in dark mode.
+ */
+@Composable
+@ReadOnlyComposable
+fun clickCardBorderWidth(): Dp {
+    val dark = LocalIsDarkMode.current ||
+        MaterialTheme.colorScheme.background.luminance() < 0.5f
+    return if (dark) 1.dp else LocalPlatformStyle.current.cardBorderWidth
+}
+
 /** Opaque card/sheet fill from the active Material scheme. */
 @Composable
 @ReadOnlyComposable

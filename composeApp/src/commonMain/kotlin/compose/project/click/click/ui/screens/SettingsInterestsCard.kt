@@ -115,7 +115,7 @@ internal fun SettingsInterestsCard(
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
                                 color = SoftBlue,
-                                border = BorderStroke(1.dp, clickBorderColor()),
+                                border = BorderStroke(clickCardBorderWidth(), clickBorderColor()),
                             ) {
                                 Text(
                                     text = tag,

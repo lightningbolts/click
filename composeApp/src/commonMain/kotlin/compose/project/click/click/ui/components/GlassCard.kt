@@ -25,7 +25,7 @@ private fun platformCardShape(): RoundedCornerShape {
 }
 
 @Composable
-private fun platformBorderWidth(): Dp = LocalPlatformStyle.current.cardBorderWidth
+private fun platformBorderWidth(): Dp = clickCardBorderWidth()
 
 /** Legacy name — Functional Clarity uses 16.dp card corners. */
 val GlassCornerRadius: Dp = 16.dp
@@ -108,7 +108,7 @@ fun Modifier.glassEffect(usePrimaryBorder: Boolean = false): Modifier {
     return this
         .clip(GlassCardShape)
         .background(bg)
-        .border(2.dp, borderColor, GlassCardShape)
+        .border(clickCardBorderWidth(), borderColor, GlassCardShape)
 }
 
 @Composable
