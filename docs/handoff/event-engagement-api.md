@@ -53,7 +53,7 @@ Creator picks **Check-in area** on event drop (not topic categories):
 | `venue` | 750 m | club, arena hall |
 | `campus` | 2500 m | large campus / festival |
 
-Explicit `check_in_radius_meters` clamped **[25, 5000]**. Pin near gathering **center**. Live window = schedule `isLive` + **24 h** early grace. Errors: 400 location / 403 out of bounds / 409 not live.
+Explicit `check_in_radius_meters` clamped **[25, 5000]**. Event **creation** may use a geocoded address (`location_name` / `formatted_address` in metadata) so creators need not be on-site; pin coords still live in PostGIS. **Check-in** remains GPS + geofence at the venue. Live window = schedule `isLive` + **24 h** early grace. Errors: 400 location / 403 out of bounds / 409 not live.
 
 **Location denied:** no optimistic check-in; snackbar “Location access is required to check in”; optional reject POST for funnel analytics.
 

@@ -122,6 +122,8 @@ Proximity connection is modeled as a sealed `ConnectionState`:
 | `ProximityCapturedOfflineSyncing` | Tokens saved locally; sync when online |
 | `ProximityHandshakePendingMatch` | HTTP 202 — waiting for peer online |
 | `TaggingContext` | People multi-select (when `requiresSelection`) above context tags; or `ReconnectEncounter` for existing edges |
+
+After BLE instant match / `saveReconnectEncounter` success, call `AppDataManager.notifyProximityConnectionChanged` (force refresh + profile cache invalidation + `proximityEncounterEpoch` bump) so open profile sheets show new encounters without clearing app cache.
 | `Success` | Connection row created |
 
 First-time multi-peer (≥3) returns server `awaiting_selection` → host picks people + tags → `POST /api/connections/proximity/confirm` (selection cap ≤12). Multi-Tap emits `VerifiedCliqueProximityIntent` with **selected** peer ids only for UI autofill into group member picker.

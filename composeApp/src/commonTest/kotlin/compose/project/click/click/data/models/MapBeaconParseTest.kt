@@ -93,4 +93,28 @@ class MapBeaconParseTest {
         assertNotNull(schedule)
         assertEquals(parseEpochMs("2026-07-22T16:00:00Z"), schedule.startEpochMs)
     }
+
+    @Test
+    fun parseMapBeaconMetadata_preservesLocationAddressFields() {
+        val json = Json.parseToJsonElement(
+            """
+            [{
+              "id": "124c10f4-f72a-4dba-97e7-9c6f10daf700",
+              "beacon_type": "event",
+              "lat": 47.6062,
+              "lon": -122.3321,
+              "metadata": {
+                "title": "campus meetup",
+                "location_name": "Red Square",
+                "formatted_address": "Red Square, Seattle, WA, USA"
+              },
+              "created_at": "2026-06-12T02:33:00Z",
+              "expires_at": "2026-07-22T23:00:00Z"
+            }]
+            """.trimIndent(),
+        )
+        val beacon = parseMapBeaconRows(json).single()
+        assertEquals("Red Square", beacon.metadata.locationName)
+        assertEquals("Red Square, Seattle, WA, USA", beacon.metadata.formattedAddress)
+    }
 }

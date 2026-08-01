@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import compose.project.click.click.data.models.ChatWithDetails
+import compose.project.click.click.ui.components.AvatarWithOnlineIndicator
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
 import compose.project.click.click.ui.components.CoreConnectionAvatarFrame
 import compose.project.click.click.ui.theme.PrimaryBlue
@@ -43,6 +44,7 @@ fun RememberMeStrip(
     onChatSelected: (chatId: String) -> Unit,
     modifier: Modifier = Modifier,
     showClicksSectionLabel: Boolean = true,
+    onlineUserIds: Set<String> = emptySet(),
 ) {
     if (chats.isEmpty()) return
 
@@ -64,6 +66,7 @@ fun RememberMeStrip(
             items(chats, key = { it.connection.id }) { chat ->
                 RememberMeChip(
                     chat = chat,
+                    isOnline = chat.otherUser.id in onlineUserIds,
                     onClick = {
                         onChatSelected(chat.chat.id ?: chat.connection.id)
                     },
@@ -85,6 +88,7 @@ fun RememberMeStrip(
 @Composable
 private fun RememberMeChip(
     chat: ChatWithDetails,
+    isOnline: Boolean,
     onClick: () -> Unit,
 ) {
     val user = chat.otherUser
@@ -103,21 +107,23 @@ private fun RememberMeChip(
     ) {
         Box(contentAlignment = Alignment.BottomEnd) {
             // Circular hit target only — avoid the 80dp-wide column becoming a square tap region.
-            CoreConnectionAvatarFrame(
-                isCore = true,
-                avatarSize = 56.dp,
-                onClick = onClick,
-            ) {
-                ConnectionListUserAvatarFace(
-                    displayName = displayName,
-                    email = user.email,
-                    avatarUrl = user.image,
-                    userId = user.id,
-                    modifier = Modifier
-                        .size(56.dp)
-                        .border(2.dp, clickBorderColor(), CircleShape),
-                    useCompactTypography = true,
-                )
+            AvatarWithOnlineIndicator(isOnline = isOnline) {
+                CoreConnectionAvatarFrame(
+                    isCore = true,
+                    avatarSize = 56.dp,
+                    onClick = onClick,
+                ) {
+                    ConnectionListUserAvatarFace(
+                        displayName = displayName,
+                        email = user.email,
+                        avatarUrl = user.image,
+                        userId = user.id,
+                        modifier = Modifier
+                            .size(56.dp)
+                            .border(2.dp, clickBorderColor(), CircleShape),
+                        useCompactTypography = true,
+                    )
+                }
             }
             if (badge != null) {
                 Text(
@@ -129,7 +135,7 @@ private fun RememberMeChip(
                     modifier = Modifier
                         .clip(RoundedCornerShape(999.dp))
                         .background(PrimaryBlue)
-                        .border(2.dp, MaterialTheme.colorScheme.surface, RoundedCornerShape(999.dp))
+                        .border(2.dp, MaterialTheme.colorScheme.background, RoundedCornerShape(999.dp))
                         .padding(horizontal = 4.dp, vertical = 1.dp),
                 )
             }

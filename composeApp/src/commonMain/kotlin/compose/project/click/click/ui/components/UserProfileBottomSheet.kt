@@ -49,6 +49,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -71,6 +72,7 @@ import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: 
 import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.ConnectionEncounter // pragma: allowlist secret
 import compose.project.click.click.data.ContextTagTaxonomy
 import compose.project.click.click.deeplink.EventDeepLinkRouter
@@ -780,6 +782,21 @@ fun UserProfileBottomSheet(
             error = result.exceptionOrNull()?.message
         }
         loading = false
+    }
+
+    val proximityEncounterEpoch by AppDataManager.proximityEncounterEpoch.collectAsState()
+    LaunchedEffect(proximityEncounterEpoch, userId, viewerUserId) {
+        if (proximityEncounterEpoch <= 0L || userId.isNullOrBlank()) return@LaunchedEffect
+        val refreshed = runCatching {
+            withContext(Dispatchers.Default) {
+                repository.refreshUserPublicProfile(viewerUserId, userId)
+            }
+        }.getOrNull()
+        if (refreshed != null) {
+            profile = refreshed
+            error = null
+            loading = false
+        }
     }
 
     fun dismiss() {

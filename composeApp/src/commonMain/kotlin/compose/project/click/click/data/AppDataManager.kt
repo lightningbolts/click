@@ -17,6 +17,7 @@ import compose.project.click.click.data.models.UserAvailability
 import compose.project.click.click.data.models.isResolvedDisplayName
 import compose.project.click.click.data.models.isOneToOnePairEdge
 import compose.project.click.click.data.models.resolveDisplayName
+import compose.project.click.click.data.models.richerConnectionEncounters
 import compose.project.click.click.data.models.shouldPreserveLocalConnectionJunctions
 import compose.project.click.click.data.repository.NotificationPreferences
 import compose.project.click.click.data.repository.NotificationPreferencesRepository
@@ -206,6 +207,38 @@ object AppDataManager {
 
     fun bumpChatListRefresh() {
         _chatListRefreshEpoch.value = _chatListRefreshEpoch.value + 1
+    }
+
+    /**
+     * Bumped after BLE/proximity handshake or reconnect encounter save so open profile
+     * sheets re-fetch shared connection + timeline without requiring a cache clear.
+     */
+    private val _proximityEncounterEpoch = MutableStateFlow(0L)
+    val proximityEncounterEpoch: StateFlow<Long> = _proximityEncounterEpoch.asStateFlow()
+
+    /**
+     * Invalidate profile caches for affected peers, force a connections refresh, and bump
+     * [proximityEncounterEpoch] so UI sheets re-load encounter timelines.
+     */
+    fun notifyProximityConnectionChanged(
+        peerUserIds: Collection<String>,
+        connectionIds: Collection<String> = emptyList(),
+    ) {
+        val targets = compose.project.click.click.viewmodel.proximityConnectionChangeTargets(
+            peerUserIds = peerUserIds,
+            connectionIds = connectionIds,
+            currentUserId = _currentUser.value?.id,
+        )
+        if (targets.peerUserIds.isNotEmpty()) {
+            supabaseRepository.invalidateUserPublicProfiles(targets.peerUserIds)
+            supabaseRepository.invalidateProfileTimelinesForPeers(targets.peerUserIds)
+        }
+        // connectionIds reserved for future connection-scoped timeline keys / chat targets
+        @Suppress("UNUSED_VARIABLE")
+        val unusedConnectionIds = targets.connectionIds
+        _proximityEncounterEpoch.value = _proximityEncounterEpoch.value + 1L
+        refresh(force = true)
+        schedulePersistSnapshot()
     }
     
     // Connected users info
@@ -2098,11 +2131,16 @@ object AppDataManager {
         val previewMsg = bestPreview?.takeIf { msg ->
             mergedAt == null || msg.timeCreated >= mergedAt
         }
+        val mergedEncounters = richerConnectionEncounters(
+            local.connectionEncounters,
+            server.connectionEncounters,
+        )
         return server.copy(
             last_message_at = mergedAt,
             chat = server.chat.copy(
                 messages = previewMsg?.let { listOf(it) } ?: emptyList(),
             ),
+            connectionEncounters = mergedEncounters,
         )
     }
 

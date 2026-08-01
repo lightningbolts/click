@@ -91,6 +91,8 @@ Server enrichment (async):
     │
     ▼
 Client: ConnectionEncounter.toMemoryCapsule() → timeline / map UI
+
+After proximity bind / encounter POST, `AppDataManager.notifyProximityConnectionChanged` + richest-wins `richerConnectionEncounters` keep timeline SSOT fresh without clearing disk cache.
 ```
 
 If bind fails offline, the full payload stays in `PendingEncounterQueue` until `AppDataManager` sync loop succeeds.

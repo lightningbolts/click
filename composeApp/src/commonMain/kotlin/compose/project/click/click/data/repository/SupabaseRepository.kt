@@ -168,6 +168,20 @@ class SupabaseRepository {
         profileTimelineCache.value = emptyMap()
     }
 
+    fun invalidateUserPublicProfiles(peerUserIds: Collection<String>) {
+        val keys = peerUserIds.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        if (keys.isEmpty()) return
+        userPublicProfileCache.value = userPublicProfileCache.value.filterKeys { it !in keys }
+    }
+
+    fun invalidateProfileTimelinesForPeers(peerUserIds: Collection<String>) {
+        val peers = peerUserIds.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        if (peers.isEmpty()) return
+        profileTimelineCache.value = profileTimelineCache.value.filterValues { entry ->
+            !(entry.targetType.equals("user", ignoreCase = true) && entry.targetId in peers)
+        }
+    }
+
     private fun cacheProfileTimeline(payload: ProfileTimelinePayload) {
         val key = profileTimelineCacheKey(payload.targetType, payload.targetId) ?: return
         val entry = ProfileTimelineCacheEntry(
@@ -246,9 +260,18 @@ class SupabaseRepository {
     suspend fun refreshUserPublicProfile(viewerUserId: String?, targetUserId: String): UserPublicProfile? {
         val key = targetUserId.trim()
         if (key.isEmpty()) return null
-        val fresh = fetchUserPublicProfile(viewerUserId, key)
-        if (fresh != null) cacheUserPublicProfile(key, fresh)
-        return fresh
+        val fresh = fetchUserPublicProfile(viewerUserId, key) ?: return null
+        // Always re-fetch shared connection from network so BLE encounter rows aren't
+        // short-circuited by a stale in-memory Connection without connectionEncounters.
+        val viewer = viewerUserId?.trim()?.takeIf { it.isNotEmpty() && it != key }
+        val updated = if (viewer != null) {
+            val shared = fetchSharedConnectionBetween(viewer, key, forceNetwork = true)
+            fresh.copy(sharedConnection = shared)
+        } else {
+            fresh
+        }
+        cacheUserPublicProfile(key, updated)
+        return updated
     }
 
     private fun isConnectionArchivesUnavailableError(e: Throwable): Boolean {
@@ -535,9 +558,15 @@ class SupabaseRepository {
      * picks the one with the latest activity (`last_message_at` or `created`).
      * Excludes connections the viewer has hidden via [connection_hidden].
      */
-    suspend fun fetchSharedConnectionBetween(viewerUserId: String, peerUserId: String): Connection? {
+    suspend fun fetchSharedConnectionBetween(
+        viewerUserId: String,
+        peerUserId: String,
+        forceNetwork: Boolean = false,
+    ): Connection? {
         if (viewerUserId.isBlank() || peerUserId.isBlank()) return null
-        findSharedConnectionInMemory(viewerUserId, peerUserId)?.let { return it }
+        if (!forceNetwork) {
+            findSharedConnectionInMemory(viewerUserId, peerUserId)?.let { return it }
+        }
         return try {
             val hidden = getHiddenConnectionIds(viewerUserId)
             val rows = supabase.from("connections")
@@ -557,7 +586,8 @@ class SupabaseRepository {
             throw e
         } catch (e: Exception) {
             println("Error fetchSharedConnectionBetween (redacted): ${e.redactedRestMessage()}")
-            null
+            // Fall back to memory if forced network fails.
+            if (forceNetwork) findSharedConnectionInMemory(viewerUserId, peerUserId) else null
         }
     }
 

@@ -150,6 +150,7 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] Filter chips / tags selectable
 - [ ] Save applies tags; skip/cancel dismisses without corrupting state (host abandon does not create group)
 - [ ] Reconnect encounter path (`saveReconnectEncounter` / `ReconnectEncounter` presentation)
+- [ ] After BLE reconnect / encounter save, peer **Our timeline** shows the new encounter **without** clearing app cache
 - [ ] `at_event` attachment only when all participants have RSVP **and** active check-in
 - [ ] Memory capsule sensor capture when opted in (noise, barometric)
 - [ ] `[UI]` Save uses `ClickPlatformButton`; chips use `ClickPlatformSegmentedControl`
@@ -184,7 +185,7 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] 1:1 avatar tap → `TabbedUserProfileSheet`
 - [ ] Group avatar tap → group members / `TabbedGroupProfileSheet`
 - [ ] Unread badge / preview text accurate
-- [ ] Online indicator on avatar when peer online
+- [ ] Online indicator on avatar when peer online (dot outside circular clip; visible on list rows **and** Remember Me strip)
 - [ ] `[UI]` Row press: full-row `MotionTokens.PressScale` + glass border pressed alpha (no ripple)
 
 ### 6.3 Chat push (`ConnectionsScreen`)
@@ -231,6 +232,8 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] Tabbed group profile: members list, add member
 - [ ] Connection moment / encounter metrics display (noise, elevation, wind, etc.)
 - [ ] Memories section (`MemoriesListSection`) when present
+- [ ] Timeline journal: bordered **Add** button; timeline bullet aligned
+- [ ] After BLE reconnect, open peer profile — encounter appears on timeline without app cache clear
 
 ---
 
@@ -291,7 +294,7 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 ### 7.6 Chat header & calls entry
 
 - [ ] Back closes chat (platform-appropriate)
-- [ ] Peer name / avatar / presence
+- [ ] Peer name / avatar / presence (online dot overlays avatar outside clip; subtitle Online/Offline matches `onlineUsers` ∪ `isPeerOnline`)
 - [ ] Call menu: voice call, video call
 - [ ] `[UI]` Call menu `ClickPlatformDropdownMenu`
 - [ ] Overflow → `ConnectionActionSheet` (same actions as list)
@@ -387,10 +390,13 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] Drop beacon FAB / entry opens drop sheet
 - [ ] Create event / vibe / social / hazard beacon with required fields
 - [ ] Event create: **Check-in area** chips set venue scale (`intimate` / `neighborhood` / `venue` / `campus`)
+- [ ] Event create: **address search** or “Use my location” required; can create event without being at the venue
+- [ ] Event detail shows address label when `location_name` / `formatted_address` set
 - [ ] Submit success adds pin; failure toast
-- [ ] Beacon detail sheet: RSVP, share, navigate, bookmark, check-in
+- [ ] Beacon detail sheet: RSVP, share, navigate, bookmark, labeled check-in CTA
 - [ ] Bookmark toggle survives app force-kill (server-backed)
-- [ ] Check-in icon flips **immediately** on tap (optimistic); pending blocks double-tap
+- [ ] Check-in is a full-width labeled button (`Check in here` / `Checked in`) — not a hero icon circle
+- [ ] Check-in CTA updates immediately on tap (optimistic); pending blocks double-tap
 - [ ] Check-in far from pin → snackbar + state reverts (geofence)
 - [ ] Check-in with location denied → snackbar, stays unchecked
 - [ ] Check-in before live window → “Check-in opens when the event starts”

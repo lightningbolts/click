@@ -749,6 +749,7 @@ fun ConnectionsListView(
                                     RememberMeStrip(
                                         chats = rememberMeChats,
                                         onChatSelected = onChatSelected,
+                                        onlineUserIds = onlineUsers,
                                         modifier = Modifier.padding(bottom = 4.dp),
                                     )
                                 }

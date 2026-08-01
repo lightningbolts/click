@@ -73,8 +73,9 @@ ChatView (organism — full-screen thread)
 | Horizontal padding | **16dp** (`ChatChromeHorizontalPadding`) — matches composer outer edges |
 | Back | `ChatHeaderIconButton(showBorder = true)` — 40dp circular, 2dp `clickBorderColor()` |
 | Call / More / Rename | `ChatHeaderIconButton` borderless — plain icons so trailing actions do not stack as busy rings |
-| 1:1 avatar | `CoreConnectionAvatarFrame` 36dp + online indicator 9dp |
+| 1:1 avatar | `AvatarWithOnlineIndicator` **outside** `CoreConnectionAvatarFrame` 36dp + online indicator 9dp (dot overlays avatar rim; ring uses background token, not near-black surface) |
 | Group avatar | `GroupAvatar` 34dp cluster; tap → group members picker |
+| Presence subtitle | “Online” / “Offline” uses `isPeerOnline \|\| peerId in onlineUsers` (same source as avatar dot) |
 | Title | `titleMedium`, semibold, 1 line ellipsis |
 | Subtitle (1:1) | Green dot + `"Online"` / `"Offline"` (`AnimatedContent`) |
 | Subtitle (group) | `"{N} members: {first names…}"` up to 2 lines |

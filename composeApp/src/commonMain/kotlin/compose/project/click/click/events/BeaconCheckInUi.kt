@@ -16,3 +16,14 @@ internal fun beaconCheckInFailureMessage(
     400 -> "Location required to check in"
     else -> fallback ?: "Couldn't check in"
 }
+
+/** Labeled check-in CTA copy (not icon-only). */
+internal fun eventCheckInCtaLabel(
+    checkedIn: Boolean,
+    pending: Boolean,
+): String = when {
+    pending && !checkedIn -> "Checking location…"
+    pending && checkedIn -> "Updating…"
+    checkedIn -> "Checked in"
+    else -> "Check in here"
+}

@@ -34,10 +34,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +53,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.BeaconVisibilityAudience
 import compose.project.click.click.data.models.MapBeaconKind
 import compose.project.click.click.events.EventSchedule
@@ -57,6 +64,13 @@ import compose.project.click.click.events.defaultEventSchedule
 import compose.project.click.click.events.validateEventSchedule
 import compose.project.click.click.ui.components.EventDateTimePicker
 import compose.project.click.click.ui.components.ClickOutlinedTextField
+import compose.project.click.click.utils.GeocodedPlace
+import compose.project.click.click.utils.GeocodingService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Beacon drop types exposed in the map FAB flow.
@@ -118,14 +132,17 @@ fun BeaconDropSheetContent(
         eventSchedule: compose.project.click.click.events.EventSchedule?,
         eventCategories: List<String>,
         venueScale: compose.project.click.click.events.EventVenueScale,
+        eventLocation: GeocodedPlace?,
         onRejectedEarly: () -> Unit,
     ) -> Unit,
     onCreateHub: (name: String, category: String) -> Unit = { _, _ -> },
+    onResolveCurrentLocation: suspend () -> GeocodedPlace? = { null },
     submitLocked: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val clipboardManager = LocalClipboardManager.current
     val focusManager = LocalFocusManager.current
+    val scope = rememberCoroutineScope()
     val dismissKeyboard: () -> Unit = remember(focusManager) {
         { focusManager.clearFocus() }
     }
@@ -140,6 +157,12 @@ fun BeaconDropSheetContent(
     var eventCategories by remember { mutableStateOf(setOf<String>()) }
     var venueScale by remember { mutableStateOf(EventVenueScale.DEFAULT) }
     var submitValidationError by remember { mutableStateOf<String?>(null) }
+    var addressQuery by remember { mutableStateOf("") }
+    var addressSuggestions by remember { mutableStateOf<List<GeocodedPlace>>(emptyList()) }
+    var selectedEventLocation by remember { mutableStateOf<GeocodedPlace?>(null) }
+    var addressSearching by remember { mutableStateOf(false) }
+    var resolvingCurrentLocation by remember { mutableStateOf(false) }
+    var addressSearchJob by remember { mutableStateOf<Job?>(null) }
 
     var hubNameDraft by remember { mutableStateOf("") }
     var hubCategory by remember { mutableStateOf(hubCategoryOptions.first()) }
@@ -296,7 +319,14 @@ fun BeaconDropSheetContent(
                         onDismissError()
                     }
                 },
-                placeholder = "Title (max 80)",
+                placeholder = when (category.value) {
+                    BeaconDropCategory.HAZARD -> "What’s the hazard?"
+                    BeaconDropCategory.SOS -> "What do you need help with?"
+                    BeaconDropCategory.UTILITY -> "What did you find?"
+                    BeaconDropCategory.STUDY -> "Study spot name"
+                    BeaconDropCategory.EVENT -> "Event title (max 80)"
+                    else -> "Title (max 80)"
+                },
                 singleLine = true,
                 trailingIcon = null,
                 colors = fieldColors,
@@ -349,7 +379,7 @@ fun BeaconDropSheetContent(
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = "How big is the place? Drop the pin near the center of the gathering.",
+                    text = "How big is the place? Set the address near the center of the gathering.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -371,21 +401,191 @@ fun BeaconDropSheetContent(
                         )
                     }
                 }
+                Text(
+                    text = "Event location",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = "Search an address so you can create the event without being there. Guests still check in at the venue.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                BeaconDropOutlinedField(
+                    value = addressQuery,
+                    onValueChange = { next ->
+                        addressQuery = next.take(200)
+                        selectedEventLocation = null
+                        submitValidationError = null
+                        onDismissError()
+                        addressSearchJob?.cancel()
+                        addressSearchJob = scope.launch {
+                            delay(220)
+                            val q = addressQuery.trim()
+                            if (q.length < 2) {
+                                addressSuggestions = emptyList()
+                                addressSearching = false
+                                return@launch
+                            }
+                            addressSearching = true
+                            val near = AppDataManager.lastKnownDeviceLocation.value
+                            val results = withContext(Dispatchers.Default) {
+                                GeocodingService.searchAddresses(
+                                    query = q,
+                                    limit = 5,
+                                    nearLat = near?.first,
+                                    nearLon = near?.second,
+                                )
+                            }
+                            if (addressQuery.trim() == q) {
+                                addressSuggestions = results
+                            }
+                            addressSearching = false
+                        }
+                    },
+                    placeholder = "Search address or place",
+                    singleLine = true,
+                    trailingIcon = {
+                        if (addressSearching) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.Place,
+                                contentDescription = null,
+                            )
+                        }
+                    },
+                    colors = fieldColors,
+                    onDismissKeyboard = dismissKeyboard,
+                )
+                TextButton(
+                    onClick = {
+                        if (resolvingCurrentLocation) return@TextButton
+                        scope.launch {
+                            resolvingCurrentLocation = true
+                            submitValidationError = null
+                            onDismissError()
+                            val place = withContext(Dispatchers.Default) {
+                                onResolveCurrentLocation()
+                            }
+                            if (place != null) {
+                                selectedEventLocation = place
+                                addressQuery = place.shortLabel
+                                addressSuggestions = emptyList()
+                            } else {
+                                submitValidationError =
+                                    "Could not read your location. Enable GPS or search an address."
+                            }
+                            resolvingCurrentLocation = false
+                        }
+                    },
+                    enabled = !resolvingCurrentLocation && !submitLocked,
+                ) {
+                    if (resolvingCurrentLocation) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                        )
+                        Spacer(modifier = Modifier.size(8.dp))
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.MyLocation,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(modifier = Modifier.size(8.dp))
+                    }
+                    Text(if (resolvingCurrentLocation) "Getting location…" else "Use my location")
+                }
+                selectedEventLocation?.let { place ->
+                    Text(
+                        text = place.displayName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                if (addressSuggestions.isNotEmpty() && selectedEventLocation == null) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        addressSuggestions.forEach { suggestion ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selectedEventLocation = suggestion
+                                        addressQuery = suggestion.shortLabel
+                                        addressSuggestions = emptyList()
+                                        dismissKeyboard()
+                                        onDismissError()
+                                    }
+                                    .padding(vertical = 8.dp),
+                            ) {
+                                Text(
+                                    text = suggestion.shortLabel,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                if (suggestion.displayName != suggestion.shortLabel) {
+                                    Text(
+                                        text = suggestion.displayName,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 2,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             } else {
+                Text(
+                    text = when (category.value) {
+                        BeaconDropCategory.HAZARD -> "Hazard details"
+                        BeaconDropCategory.SOS -> "SOS details"
+                        BeaconDropCategory.UTILITY -> "Utility details"
+                        BeaconDropCategory.STUDY -> "Study spot details"
+                        else -> "Beacon details"
+                    },
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = when (category.value) {
+                        BeaconDropCategory.HAZARD ->
+                            "Warn people nearby about something to avoid. Pin drops at your current location."
+                        BeaconDropCategory.SOS ->
+                            "Ask for help nearby. Pin drops at your current location."
+                        BeaconDropCategory.UTILITY ->
+                            "Share a useful find nearby (outlet, water, restroom). Pin drops at your current location."
+                        BeaconDropCategory.STUDY ->
+                            "Mark a quiet place to work. Pin drops at your current location."
+                        else ->
+                            "Pin drops at your current location."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Text(
                     text = "Visible for",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth(),
+                Text(
+                    text = "How long should this pin stay on the map?",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(
-                        items = BeaconDuration.entries.toList(),
-                        key = { it.name },
-                    ) { opt ->
+                    BeaconDuration.entries.forEach { opt ->
                         FilterChip(
                             selected = expiration.value == opt,
                             onClick = {
@@ -531,6 +731,12 @@ fun BeaconDropSheetContent(
                         isSubmitting = false
                         return@Button
                     }
+                    if (isEvent && selectedEventLocation == null) {
+                        submitValidationError =
+                            "Set an event location (search an address or use my location)."
+                        isSubmitting = false
+                        return@Button
+                    }
                     onSubmit(
                         kind,
                         title,
@@ -542,6 +748,7 @@ fun BeaconDropSheetContent(
                         schedule,
                         if (isEvent) eventCategories.toList() else emptyList(),
                         if (isEvent) venueScale else EventVenueScale.DEFAULT,
+                        if (isEvent) selectedEventLocation else null,
                     ) {
                         isSubmitting = false
                     }

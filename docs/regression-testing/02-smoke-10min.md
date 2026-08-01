@@ -23,6 +23,7 @@ Full matrix: [01-full-checklist.md](01-full-checklist.md) · Known issues: [03-k
 - [ ] Add Click → Tap-to-Connect starts scanning (BLE/location prompts OK)
 - [ ] `[KNOWN-3]` Two-person tap produces a **1:1** chat (not only a group) when only two phones tap
 - [ ] New connection appears in Clicks → Active
+- [ ] After BLE reconnect, peer profile **Our timeline** shows the new encounter without clearing app cache
 
 ---
 
@@ -49,10 +50,11 @@ Full matrix: [01-full-checklist.md](01-full-checklist.md) · Known issues: [03-k
 - [ ] `[KNOWN-5]` Basemap not stuck full grayscale unless Ghost Mode is on
 - [ ] `[KNOWN-4]` Create or find an event beacon → appears on map **and** in discovery list
 - [ ] Events list from map: map controls stay under overlay (revealed on back, no pop-in)
-- [ ] Drop event → pick **Check-in area** scale → pin appears → open detail
+- [ ] Drop event → pick **Check-in area** scale + **address** (or Use my location) → pin appears → open detail
 - [ ] Event detail: Bookmark toggle survives app force-kill (server + disk cache)
-- [ ] Event detail: Check-in icon flips immediately; far from pin → snackbar + toggle reverts
+- [ ] Event detail: labeled **Check in here** CTA (not hero circle); far from pin → snackbar + toggle reverts
 - [ ] Event detail: Check-in with location denied → snackbar, stays unchecked
+- [ ] Online green dot visible on Clicks list avatar when peer is online
 - [ ] `[KNOWN-9]` Hazard beacon icon not wildly oversized vs other pins
 
 ---

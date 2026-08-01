@@ -31,6 +31,7 @@
 | GATT token read | 4-digit token matches peer | |
 | Ultrasonic | Chirp does not leave mic stuck for voice notes | `[KNOWN-7]` |
 | GPS fallback | Match within ~15m when BLE weak | `[KNOWN-1]` coalesce |
+| Timeline after reconnect | Peer profile “Our timeline” updates without clearing app cache | |
 | 1:1 outcome | DM connection, not group-only | `[KNOWN-3]` |
 | 3+ outcome | All members on group | `[KNOWN-1]` |
 | Re-tap | No duplicate Active rows | `[KNOWN-2]` |
