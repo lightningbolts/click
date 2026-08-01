@@ -78,12 +78,13 @@ Session tokens are persisted in two places:
 
 ### Google OAuth (`GoogleOAuthConfig`)
 
-Native Google Sign-In requires **iOS and Web client IDs from the same GCP project**:
+Native Google Sign-In requires **platform and Web client IDs from the same GCP project**:
 
-- `WEB_CLIENT_ID` — Supabase verifies ID tokens against this audience
+- `WEB_CLIENT_ID` — Supabase verifies ID tokens against this audience (`serverClientId` on Android)
+- `ANDROID_CLIENT_ID` — GCP Android OAuth client (package + SHA-1); not passed into Credential Manager
 - `IOS_CLIENT_ID` — `GIDClientID` / reversed URL scheme for iOS native flow
 - `iosNativeSignInConfigured()` — validates project-number parity
-- Supabase Auth → Google must list both IDs and enable "Skip nonce check"
+- Supabase Auth → Google must list web + iOS IDs and enable "Skip nonce check"
 
 `AuthRepository.signInWithGoogleNative()` exchanges the native ID token via Supabase `IDToken` provider.
 
