@@ -51,6 +51,7 @@ import androidx.compose.material.icons.outlined.Message
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -341,6 +342,22 @@ fun ProfileBottomSheet(
         legacyLoading = false
     }
 
+    val proximityEncounterEpoch by AppDataManager.proximityEncounterEpoch.collectAsState()
+    LaunchedEffect(proximityEncounterEpoch, state.userId, effectiveViewerUserId) {
+        if (proximityEncounterEpoch <= 0L) return@LaunchedEffect
+        val uid = state.userId?.trim() ?: return@LaunchedEffect
+        val refreshed = runCatching {
+            withContext(Dispatchers.Default) {
+                repository.refreshUserPublicProfile(effectiveViewerUserId, uid)
+            }
+        }.getOrNull()
+        if (refreshed != null) {
+            legacyProfile = refreshed
+            legacyError = null
+            legacyLoading = false
+        }
+    }
+
     val timelineTargetType = if (state.isGroup) {
         "chat"
     } else if (!state.userId.isNullOrBlank()) {
@@ -373,6 +390,21 @@ fun ProfileBottomSheet(
             return@LaunchedEffect
         }
         profileTimeline = repository.getCachedProfileTimeline(type, id)
+        val refreshed = runCatching {
+            withContext(Dispatchers.Default) {
+                repository.refreshProfileTimeline(type, id)
+            }
+        }.getOrNull()
+        if (refreshed != null) {
+            profileTimeline = refreshed
+            AppDataManager.persistProfileTimelineCaches()
+        }
+    }
+
+    LaunchedEffect(proximityEncounterEpoch, timelineTargetType, timelineTargetId) {
+        if (proximityEncounterEpoch <= 0L) return@LaunchedEffect
+        val type = timelineTargetType ?: return@LaunchedEffect
+        val id = timelineTargetId ?: return@LaunchedEffect
         val refreshed = runCatching {
             withContext(Dispatchers.Default) {
                 repository.refreshProfileTimeline(type, id)
@@ -1504,19 +1536,37 @@ private fun JournalComposerCard(
                 onClick = { onVisibilityChange("shared") },
             )
             Spacer(Modifier.weight(1f))
-            TextButton(
+            val addEnabled = text.trim().isNotEmpty() && !posting
+            val addShape = RoundedCornerShape(999.dp)
+            Surface(
                 onClick = onSubmit,
-                enabled = text.trim().isNotEmpty() && !posting,
+                enabled = addEnabled,
+                shape = addShape,
+                color = if (addEnabled) PrimaryBlue.copy(alpha = 0.18f) else Color.Transparent,
+                border = BorderStroke(
+                    1.dp,
+                    if (addEnabled) PrimaryBlue.copy(alpha = 0.7f) else GlassSheetTokens.GlassBorder(),
+                ),
             ) {
-                if (posting) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp,
-                        color = PrimaryBlue,
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    if (posting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(12.dp),
+                            strokeWidth = 1.5.dp,
+                            color = PrimaryBlue,
+                        )
+                    }
+                    Text(
+                        text = if (posting) "Adding…" else "Add",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (addEnabled) PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
                     )
-                    Spacer(Modifier.width(8.dp))
                 }
-                Text("Add")
             }
         }
         if (!error.isNullOrBlank()) {
@@ -1724,12 +1774,19 @@ private fun TimelineRow(item: ProfileSheetTimelineItem) {
     ) {
         Box(
             modifier = Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(PrimaryBlue)
+                .width(32.dp)
                 .padding(top = 6.dp),
-        )
-        Spacer(Modifier.width(12.dp))
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .clip(CircleShape)
+                    .border(2.dp, PrimaryBlue.copy(alpha = 0.35f), CircleShape)
+                    .background(PrimaryBlue),
+            )
+        }
+        Spacer(Modifier.width(4.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 item.title,

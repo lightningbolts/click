@@ -1268,17 +1268,10 @@ class ChatViewModel(
      * non-blank [location_name]) so list refresh / timestamp merges never drop timeline data.
      */
     private fun richerConnectionEncounters(a: Connection, b: Connection): List<ConnectionEncounter> {
-        val la = a.connectionEncounters
-        val lb = b.connectionEncounters
-        fun hasPlace(rows: List<ConnectionEncounter>) =
-            rows.any { !it.locationName.isNullOrBlank() }
-        return when {
-            hasPlace(la) && !hasPlace(lb) -> la
-            hasPlace(lb) && !hasPlace(la) -> lb
-            lb.size > la.size -> lb
-            la.size > lb.size -> la
-            else -> la
-        }
+        return compose.project.click.click.data.models.richerConnectionEncounters(
+            a.connectionEncounters,
+            b.connectionEncounters,
+        )
     }
 
     /**

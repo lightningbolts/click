@@ -289,6 +289,10 @@ class ConnectionViewModel : ViewModel() {
                 otherUser = syntheticUserForProximitySuccess(users.map { it.toUserProfile() }),
                 isNewConnection = outcome.isAggregateNewConnection,
             )
+            AppDataManager.notifyProximityConnectionChanged(
+                peerUserIds = others,
+                connectionIds = listOfNotNull(outcome.connectionId),
+            )
             _connectionState.value = ConnectionState.TaggingContext(
                 newConnections = listOf(groupConnection),
                 targetUsers = users.map { it.toUserProfile() },
@@ -316,6 +320,10 @@ class ConnectionViewModel : ViewModel() {
                 connection = connection,
                 otherUser = peer,
                 isNewConnection = outcome.isAggregateNewConnection,
+            )
+            AppDataManager.notifyProximityConnectionChanged(
+                peerUserIds = listOf(peer.id),
+                connectionIds = listOf(outcome.connectionId),
             )
             _connectionState.value = ConnectionState.TaggingContext(
                 newConnections = listOf(connection),
@@ -1148,6 +1156,10 @@ class ConnectionViewModel : ViewModel() {
                         peerCount = validPeerCount,
                         isGroup = validPeerCount >= 2 || tagging.isGroup,
                     )
+                    AppDataManager.notifyProximityConnectionChanged(
+                        peerUserIds = tagging.targetUsers.map { it.id },
+                        connectionIds = tagging.newConnections.map { it.id },
+                    )
                     _connectionState.value = ConnectionState.Idle
                     return@launch
                 }
@@ -1170,6 +1182,10 @@ class ConnectionViewModel : ViewModel() {
                 ConnectionFlowTelemetry.recordReconnectEncounterSaved(
                     peerCount = peersNeedingInsert.size.coerceAtLeast(validPeerCount),
                     isGroup = peersNeedingInsert.size >= 2 || tagging.isGroup,
+                )
+                AppDataManager.notifyProximityConnectionChanged(
+                    peerUserIds = tagging.targetUsers.map { it.id },
+                    connectionIds = tagging.newConnections.map { it.id },
                 )
                 _connectionState.value = ConnectionState.Idle
             } catch (e: Exception) {

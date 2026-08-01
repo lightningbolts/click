@@ -222,6 +222,7 @@ fun CoreConnectionAvatarFrame(
 
 /**
  * Wraps a circular avatar and draws a small online indicator at the bottom-end when [isOnline].
+ * Place this *outside* any circular clip (e.g. [CoreConnectionAvatarFrame]) so the dot is not masked.
  */
 @Composable
 fun AvatarWithOnlineIndicator(
@@ -229,6 +230,7 @@ fun AvatarWithOnlineIndicator(
     modifier: Modifier = Modifier,
     indicatorSize: Dp = 10.dp,
     indicatorBorder: Dp = 1.5.dp,
+    indicatorBorderColor: Color = MaterialTheme.colorScheme.background,
     content: @Composable () -> Unit,
 ) {
     Box(modifier = modifier) {
@@ -237,12 +239,13 @@ fun AvatarWithOnlineIndicator(
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
+                    .offset(x = 1.dp, y = 1.dp)
                     .size(indicatorSize)
                     .clip(CircleShape)
                     .background(OnlineGreen)
                     .border(
                         width = indicatorBorder,
-                        color = MaterialTheme.colorScheme.surface,
+                        color = indicatorBorderColor,
                         shape = CircleShape
                     )
             )

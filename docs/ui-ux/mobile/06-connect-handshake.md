@@ -234,6 +234,8 @@ Multi-peer (`users.size >= 2`) is **not** confirmed here — `promotePendingConf
 
 Server returns `awaiting_selection` + `pending_handshake_id` for first-time multi-peer (≥3 member set) before durable create. Host picks people **then** optional context tags in one sheet; confirm calls `confirmProximitySelection` (selection size cap ≤12). Reconnect / existing-connection bumps use **`ReconnectEncounter`** presentation (`"Save Encounter"`), not NewSpark.
 
+After a successful BLE instant match or reconnect encounter save, `AppDataManager.notifyProximityConnectionChanged` force-refreshes connections, invalidates peer profile/timeline caches, and bumps `proximityEncounterEpoch` so open profile sheets re-fetch **Our timeline** without clearing app cache.
+
 | Element | String |
 |---------|--------|
 | NewSpark multi-select title | `"Who was in this tap?"` |

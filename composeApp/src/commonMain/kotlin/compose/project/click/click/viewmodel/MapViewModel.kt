@@ -62,6 +62,9 @@ import kotlinx.serialization.json.putJsonArray // pragma: allowlist secret
 import kotlinx.serialization.json.add // pragma: allowlist secret
 import compose.project.click.click.events.EVENT_CATEGORY_OPTIONS // pragma: allowlist secret
 import compose.project.click.click.events.EVENT_CATEGORIES_METADATA_KEY // pragma: allowlist secret
+import compose.project.click.click.utils.EVENT_FORMATTED_ADDRESS_METADATA_KEY
+import compose.project.click.click.utils.EVENT_LOCATION_NAME_METADATA_KEY
+import compose.project.click.click.utils.GeocodedPlace
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.realtime.PostgresAction
 import kotlinx.coroutines.Dispatchers
@@ -1375,6 +1378,11 @@ class MapViewModel : ViewModel() {
             }
     }
 
+    fun hasLocationPermission(): Boolean = locationService.hasLocationPermission()
+
+    /** Exposed for BeaconDropSheet “Use my location”. */
+    suspend fun resolveDropLocationForUi(): LocationResult? = resolveBeaconDropLocation()
+
     fun rsvpToBeacon(beaconId: String, onFinished: (Boolean) -> Unit = {}) {
         val id = beaconId.trim()
         if (id.isEmpty() || id in _beaconRsvpPendingIds.value) return
@@ -1795,6 +1803,7 @@ class MapViewModel : ViewModel() {
         eventSchedule: EventSchedule? = null,
         eventCategories: List<String> = emptyList(),
         venueScale: EventVenueScale = EventVenueScale.DEFAULT,
+        eventLocation: GeocodedPlace? = null,
         onAcceptedLocally: () -> Unit = {},
         onRejectedEarly: () -> Unit = {},
         onRemoteFinished: (Boolean) -> Unit = {},
@@ -1805,14 +1814,23 @@ class MapViewModel : ViewModel() {
             try {
             _beaconInsertError.value = null
             _beaconDropFailureToast.value = null
-            if (!locationService.hasLocationPermission()) {
+            val useProvidedEventLocation =
+                kind == MapBeaconKind.EVENT &&
+                    eventLocation != null &&
+                    eventLocation.latitude.isFinite() &&
+                    eventLocation.longitude.isFinite()
+            if (!useProvidedEventLocation && !locationService.hasLocationPermission()) {
                 _beaconInsertError.value =
                     "Location is required to drop a community beacon. Enable location in Settings and try again."
                 onRejectedEarly()
                 onRemoteFinished(false)
                 return@launch
             }
-            val locationDeferred = async(Dispatchers.Default) { resolveBeaconDropLocation() }
+            val locationDeferred = if (useProvidedEventLocation) {
+                null
+            } else {
+                async(Dispatchers.Default) { resolveBeaconDropLocation() }
+            }
             val trimmedTitle = title.trim()
             val trimmedDescription = description?.trim()?.takeIf { it.isNotEmpty() }
             val metadata: JsonObject? = when (kind) {
@@ -1866,6 +1884,13 @@ class MapViewModel : ViewModel() {
                         onRemoteFinished(false)
                         return@launch
                     }
+                    if (!useProvidedEventLocation) {
+                        _beaconInsertError.value =
+                            "Set an event location (search an address or use my location)."
+                        onRejectedEarly()
+                        onRemoteFinished(false)
+                        return@launch
+                    }
                     buildJsonObject {
                         put("title", trimmedTitle)
                         trimmedDescription?.let { put("description", it) }
@@ -1881,6 +1906,16 @@ class MapViewModel : ViewModel() {
                         }
                         put(EVENT_VENUE_SCALE_METADATA_KEY, venueScale.apiValue)
                         put(EVENT_CHECK_IN_RADIUS_METADATA_KEY, venueScale.radiusMeters)
+                        val locationName = eventLocation!!.shortLabel.trim().ifEmpty {
+                            eventLocation.displayName.trim()
+                        }
+                        if (locationName.isNotEmpty()) {
+                            put(EVENT_LOCATION_NAME_METADATA_KEY, locationName)
+                        }
+                        val formatted = eventLocation.displayName.trim()
+                        if (formatted.isNotEmpty()) {
+                            put(EVENT_FORMATTED_ADDRESS_METADATA_KEY, formatted)
+                        }
                     }
                 }
                 MapBeaconKind.SOS, MapBeaconKind.HAZARD, MapBeaconKind.UTILITY, MapBeaconKind.STUDY -> {
@@ -1932,22 +1967,31 @@ class MapViewModel : ViewModel() {
                     }
                 }
             }
-            val loc = locationDeferred.await()
-                ?: run {
-                    _beaconInsertError.value =
-                        "Could not read GPS. Enable location and try again."
-                    onRejectedEarly()
-                    onRemoteFinished(false)
-                    return@launch
-                }
+            val locLat: Double
+            val locLon: Double
+            if (useProvidedEventLocation) {
+                locLat = eventLocation!!.latitude
+                locLon = eventLocation.longitude
+            } else {
+                val loc = locationDeferred!!.await()
+                    ?: run {
+                        _beaconInsertError.value =
+                            "Could not read GPS. Enable location and try again."
+                        onRejectedEarly()
+                        onRemoteFinished(false)
+                        return@launch
+                    }
+                locLat = loc.latitude
+                locLon = loc.longitude
+            }
             val squadSession = CollaborationSessionManager.activeMapDropSession()
             val eventExpiresIso = eventSchedule?.endEpochMs?.let {
                 kotlinx.datetime.Instant.fromEpochMilliseconds(it).toString()
             }
             val insert = MapBeaconInsert(
                 kind = kind.apiValue,
-                lat = loc.latitude,
-                lon = loc.longitude,
+                lat = locLat,
+                lon = locLon,
                 metadata = metadata,
                 ttlMs = when {
                     kind == MapBeaconKind.SOUNDTRACK -> null
@@ -1963,8 +2007,8 @@ class MapViewModel : ViewModel() {
             val optimisticBeacon = MapBeacon(
                 id = optimisticId,
                 kind = kind,
-                latitude = loc.latitude,
-                longitude = loc.longitude,
+                latitude = locLat,
+                longitude = locLon,
                 metadata = parseMapBeaconMetadata(metadata),
                 createdByUserId = AppDataManager.currentUser.value?.id,
                 createdAtEpochMs = Clock.System.now().toEpochMilliseconds(),
@@ -1988,8 +2032,8 @@ class MapViewModel : ViewModel() {
                     ) {
                         serverBeacon
                     } else {
-                        // Insert response can lack parseable PostGIS location — keep drop GPS.
-                        serverBeacon.copy(latitude = loc.latitude, longitude = loc.longitude)
+                        // Insert response can lack parseable PostGIS location — keep drop coords.
+                        serverBeacon.copy(latitude = locLat, longitude = locLon)
                     }
                     _mapBeacons.update { current ->
                         mergeMapBeaconLists(
@@ -1999,8 +2043,8 @@ class MapViewModel : ViewModel() {
                     }
                     EventReminderCoordinator.rememberBeacon(confirmed)
                     refreshBeaconsAfterDrop(
-                        latitude = loc.latitude,
-                        longitude = loc.longitude,
+                        latitude = locLat,
+                        longitude = locLon,
                         confirmedBeacon = confirmed,
                     )
                     onRemoteFinished(true)

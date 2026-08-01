@@ -123,6 +123,25 @@ fun List<ConnectionEncounter>.mergeRichestEncounterEvents(): List<ConnectionEnco
         .values
         .map { rows -> mergeEncounterRows(rows) }
 
+/**
+ * Prefer the encounter list that has place names or more rows so refresh merges
+ * never wipe a richer local timeline with a sparse server snapshot (or vice versa).
+ */
+fun richerConnectionEncounters(
+    a: List<ConnectionEncounter>,
+    b: List<ConnectionEncounter>,
+): List<ConnectionEncounter> {
+    fun hasPlace(rows: List<ConnectionEncounter>) =
+        rows.any { !it.locationName.isNullOrBlank() || !it.displayLocation.isNullOrBlank() }
+    return when {
+        hasPlace(a) && !hasPlace(b) -> a
+        hasPlace(b) && !hasPlace(a) -> b
+        b.size > a.size -> b
+        a.size > b.size -> a
+        else -> a
+    }.mergeRichestEncounterEvents()
+}
+
 fun ConnectionEncounter.toMemoryCapsule(): MemoryCapsule {
     val at = encounteredAtInstant()?.toEpochMilliseconds() ?: 0L
     val tag = contextTags.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let {

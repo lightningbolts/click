@@ -14,7 +14,7 @@
 3. **Reminder scheduling logic** — which reminder kinds are due in a cron/window.
 4. **Coordinator** — in-memory index of event beacons for Home + notification surfaces.
 
-Event beacons are a `MapBeaconKind.EVENT` variant — geographic pins with a structured schedule in beacon metadata.
+Event beacons are a `MapBeaconKind.EVENT` variant — geographic pins with a structured schedule in beacon metadata. Creators can set location via **address search** (`GeocodingService` / Nominatim) without being on-site; `location_name` + `formatted_address` live in metadata while coords remain PostGIS. Check-in still requires GPS inside the venue-scale geofence. UI copy helpers: `beaconCheckInFailureMessage`, `eventCheckInCtaLabel`.
 
 ---
 

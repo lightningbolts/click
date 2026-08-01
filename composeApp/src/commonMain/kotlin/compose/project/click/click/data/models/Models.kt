@@ -864,6 +864,10 @@ data class MapBeaconMetadata(
     val albumArtUrl: String? = null,
     /** Event taxonomy chips from metadata `event_categories`. */
     val eventCategories: List<String> = emptyList(),
+    /** Short place label from address search or reverse geocode. */
+    val locationName: String? = null,
+    /** Full formatted address for event detail / share. */
+    val formattedAddress: String? = null,
     val raw: JsonObject? = null,
 )
 
@@ -904,6 +908,8 @@ fun parseMapBeaconMetadata(element: JsonElement?): MapBeaconMetadata {
         artistName = str("artist_name"),
         albumArtUrl = str("album_art_url", "artworkUrl100"),
         eventCategories = parseEventCategories(obj),
+        locationName = str("location_name", "place_name", "venue_name"),
+        formattedAddress = str("formatted_address", "address", "display_address"),
         raw = obj,
     )
 }

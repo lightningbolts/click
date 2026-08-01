@@ -64,6 +64,13 @@ Also merged earlier: **PR #44 `map_color_android`** — Android light-mode map u
 | **26** | Home flicker after Map/Settings/Add Click interactive-back | **Reverted** Home-underlay overlay (caused Map→Home flash + broken tab crossfade). Restored AnimatedContent primary crossfade. Flicker fix deferred — do not reintroduce underlay without preserving tab transitions |
 | **25** | Inbox preview jumps to old (“12w ago”) after scroll-up in chat | Monotonic inbox bump; global realtime Insert-only for list events; pagination merges hot cache; leave repairs preview from newest; ephemeral join no longer holds mutex during 8s subscribe |
 
+### 1.4 Events / presence / BLE timeline (2026-08-01)
+
+- Event create: address search (Nominatim) or “Use my location”; `location_name` / `formatted_address` in metadata; creators need not be on-site.
+- Event check-in: full-width labeled CTA (not hero circle); journal Add button + timeline bullet polish.
+- Online indicator: `AvatarWithOnlineIndicator` wraps outside `CoreConnectionAvatarFrame` (list, chat header, Remember Me).
+- BLE reconnect: `notifyProximityConnectionChanged` + `proximityEncounterEpoch` so Our timeline updates without clearing app cache.
+
 ### 1.4 Engineering invariants preserved
 
 - Chat disk/hot timeline cache still used on re-entry (egress-conscious).

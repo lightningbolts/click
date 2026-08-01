@@ -21,6 +21,8 @@ Together these factors reduce reliance on a single OS proximity sandbox and feed
 
 **Entry points:** `NfcScreen` (primary UI for tap-to-connect), `rememberProximityManager()` (platform factory), `ConnectionViewModel` (orchestrates listen → GPS warm-up → `bind-proximity-connection` POST).
 
+On terminal success (instant match or reconnect encounter save), `ConnectionViewModel` calls `AppDataManager.notifyProximityConnectionChanged` so profile **Our timeline** refreshes without requiring an app cache clear.
+
 ---
 
 ## Architecture & Key Classes
