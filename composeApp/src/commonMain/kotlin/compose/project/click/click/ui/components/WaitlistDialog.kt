@@ -115,7 +115,7 @@ fun WaitlistDialog(
                         style = MaterialTheme.typography.bodyMedium,
                         color = GlassSheetTokens.OnOledMuted(),
                     )
-                    OutlinedTextField(
+                    ClickOutlinedTextField(
                         value = email,
                         onValueChange = {
                             email = it

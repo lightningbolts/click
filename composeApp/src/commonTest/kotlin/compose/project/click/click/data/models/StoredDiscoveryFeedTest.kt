@@ -47,9 +47,10 @@ class StoredDiscoveryFeedTest {
 
     @Test
     fun mergeMapBeaconLists_preservesScheduleWhenIncomingLacksIt() {
-        // Keep schedule in the future so isActiveForDiscoveryFeed does not drop the row.
-        val startIso = "2030-07-22T16:00:00Z"
-        val endIso = "2030-07-22T23:00:00Z"
+        // Keep schedule far in the future so isActiveForDiscoveryFeed does not drop the row
+        // when "today" moves past a nearer hardcoded date.
+        val startIso = "2099-07-22T16:00:00Z"
+        val endIso = "2099-07-22T23:00:00Z"
         val withSchedule = MapBeacon(
             id = "a",
             kind = MapBeaconKind.EVENT,
@@ -80,6 +81,31 @@ class StoredDiscoveryFeedTest {
         assertEquals(1.1, merged.latitude)
         assertNotNull(merged.eventSchedule())
         assertEquals(withSchedule.eventSchedule()?.startEpochMs, merged.eventSchedule()?.startEpochMs)
+    }
+
+    @Test
+    fun soundtrackBeacon_roundTripsPreviewUrlThroughStoredProjection() {
+        val original = MapBeacon(
+            id = "ost-1",
+            kind = MapBeaconKind.SOUNDTRACK,
+            latitude = 37.77,
+            longitude = -122.42,
+            metadata = MapBeaconMetadata(
+                trackName = "Neon Lights",
+                artistName = "Demo Artist",
+                previewUrl = "https://example.com/preview.m4a",
+                albumArtUrl = "https://example.com/art.jpg",
+                musicUrl = "https://open.spotify.com/track/abc",
+                originalUrl = "https://open.spotify.com/track/abc",
+            ),
+            expiresAtEpochMs = 1_900_000_000_000L,
+            sourceBeaconType = "soundtrack",
+        )
+        val restored = original.toStoredMapBeacon().toMapBeacon()
+        assertEquals(original.metadata.previewUrl, restored.metadata.previewUrl)
+        assertEquals(original.metadata.trackName, restored.metadata.trackName)
+        assertEquals(original.metadata.albumArtUrl, restored.metadata.albumArtUrl)
+        assertEquals(original.metadata.musicUrl, restored.metadata.musicUrl)
     }
 
     @Test

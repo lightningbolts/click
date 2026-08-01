@@ -284,6 +284,7 @@ import compose.project.click.click.ui.chat.ChatMediaPickerHandles // pragma: all
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 import compose.project.click.click.util.LruMemoryCache // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickOutlinedTextField
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1574,7 +1575,7 @@ fun ChatView(
             showRenameGroupDialog = false
         },
         body = {
-            OutlinedTextField(
+            ClickOutlinedTextField(
                 value = renameGroupDraft,
                 onValueChange = { renameGroupDraft = it },
                 singleLine = true,

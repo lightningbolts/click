@@ -19,6 +19,7 @@ import compose.project.click.click.data.models.mergeRichestEncounterEvents // pr
 import compose.project.click.click.data.models.resolveDisplayName // pragma: allowlist secret
 import compose.project.click.click.util.isOfflineNetworkFailure // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
+import compose.project.click.click.util.dedupeOneToOneConnectionsByPeer // pragma: allowlist secret
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
@@ -601,15 +602,18 @@ class SupabaseRepository {
         val validArchiveIds = archivedIds - hiddenIds
         val archivedRows = fetchArchivedChannelConnections(userId, validArchiveIds)
         val lifecycleArchivedRows = fetchLifecycleArchivedConnections(userId, hiddenIds)
-        val merged = (activeRows + archivedRows + lifecycleArchivedRows)
-            .distinctBy { it.id }
-            .filter { it.normalizedConnectionStatus() != "removed" }
-            .filter { conn ->
-                // Exclude connections where the other participant has blocked this user
-                if (blockedByUserIds.isEmpty()) true
-                else conn.user_ids.none { it != userId && it in blockedByUserIds }
-            }
-            .sortedByDescending { it.created }
+        val merged = dedupeOneToOneConnectionsByPeer(
+            viewerUserId = userId,
+            connections = (activeRows + archivedRows + lifecycleArchivedRows)
+                .distinctBy { it.id }
+                .filter { it.normalizedConnectionStatus() != "removed" }
+                .filter { conn ->
+                    // Exclude connections where the other participant has blocked this user
+                    if (blockedByUserIds.isEmpty()) true
+                    else conn.user_ids.none { it != userId && it in blockedByUserIds }
+                }
+                .sortedByDescending { it.created },
+        )
         return UserConnectionsSnapshot(
             connections = merged,
             archivedConnectionIds = archivedIds,

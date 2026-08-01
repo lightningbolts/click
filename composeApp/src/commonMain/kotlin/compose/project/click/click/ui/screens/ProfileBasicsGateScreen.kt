@@ -56,6 +56,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.until
+import compose.project.click.click.ui.components.ClickOutlinedTextField
 
 private const val MinSignupAgeYears = 13
 
@@ -160,14 +161,14 @@ fun ProfileBasicsGateScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
+        ClickOutlinedTextField(
             value = firstName,
             onValueChange = { firstName = it },
             label = { Text("First name") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
-        OutlinedTextField(
+        ClickOutlinedTextField(
             value = lastName,
             onValueChange = { lastName = it },
             label = { Text("Last name") },
@@ -175,7 +176,7 @@ fun ProfileBasicsGateScreen(
             modifier = Modifier.fillMaxWidth(),
         )
         if (requireBirthday) {
-            OutlinedTextField(
+            ClickOutlinedTextField(
                 value = birthdayIso,
                 onValueChange = { birthdayIso = normalizeBirthdayInput(it) },
                 label = { Text("Birthday") },

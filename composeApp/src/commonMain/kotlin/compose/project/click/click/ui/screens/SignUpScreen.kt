@@ -49,6 +49,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.until
+import compose.project.click.click.ui.components.ClickOutlinedTextField
 
 private const val MinSignupAgeYears = 13
 
@@ -255,14 +256,14 @@ fun SignUpScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                OutlinedTextField(
+                ClickOutlinedTextField(
                     value = firstName,
                     onValueChange = { firstName = it },
                     label = { Text("First name") },
                     leadingIcon = {
                         Icon(Icons.Filled.Person, contentDescription = null)
                     },
-                    modifier = Modifier.weight(1f).height(64.dp),
+                    modifier = Modifier.weight(1f),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Text,
@@ -278,11 +279,11 @@ fun SignUpScreen(
                     shape = RoundedCornerShape(12.dp),
                     enabled = !isLoading
                 )
-                OutlinedTextField(
+                ClickOutlinedTextField(
                     value = lastName,
                     onValueChange = { lastName = it },
                     label = { Text("Last name") },
-                    modifier = Modifier.weight(1f).height(64.dp),
+                    modifier = Modifier.weight(1f),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Text,
@@ -302,7 +303,7 @@ fun SignUpScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            OutlinedTextField(
+            ClickOutlinedTextField(
                 value = birthdayIso,
                 onValueChange = { birthdayIso = it.replace('/', '-') },
                 label = { Text("Birthday") },
@@ -390,14 +391,14 @@ fun SignUpScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             // Email TextField
-            OutlinedTextField(
+            ClickOutlinedTextField(
                 value = email,
                 onValueChange = { email = it },
                 label = { Text("Email") },
                 leadingIcon = {
                     Icon(Icons.Filled.Email, contentDescription = "Email")
                 },
-                modifier = Modifier.fillMaxWidth().height(64.dp),
+                modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Email,
@@ -417,7 +418,7 @@ fun SignUpScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             // Password TextField
-            OutlinedTextField(
+            ClickOutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
                 label = { Text("Password") },
@@ -433,7 +434,7 @@ fun SignUpScreen(
                     }
                 },
                 visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth().height(64.dp),
+                modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Password,
@@ -453,7 +454,7 @@ fun SignUpScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             // Confirm Password TextField
-            OutlinedTextField(
+            ClickOutlinedTextField(
                 value = confirmPassword,
                 onValueChange = { confirmPassword = it },
                 label = { Text("Confirm Password") },
@@ -469,7 +470,7 @@ fun SignUpScreen(
                     }
                 },
                 visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth().height(64.dp),
+                modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Password,

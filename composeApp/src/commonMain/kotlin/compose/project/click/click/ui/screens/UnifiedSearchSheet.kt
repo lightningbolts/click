@@ -56,6 +56,7 @@ import compose.project.click.click.ui.components.GlassAdaptiveBottomSheet
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.ui.theme.clickBorderColor
 import compose.project.click.click.ui.theme.clickCardSurface
+import compose.project.click.click.ui.theme.clickTextFieldTextStyle
 import compose.project.click.click.viewmodel.GlobalSearchViewModel
 import compose.project.click.click.viewmodel.SearchResultCategory
 import kotlinx.coroutines.delay
@@ -145,7 +146,7 @@ private fun UnifiedSearchSheetContent(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp)
+                    .height(56.dp)
                     .padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -160,7 +161,7 @@ private fun UnifiedSearchSheetContent(
                     value = query,
                     onValueChange = { viewModel.search(it, userId) },
                     singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    textStyle = clickTextFieldTextStyle().copy(
                         color = MaterialTheme.colorScheme.onSurface,
                     ),
                     cursorBrush = SolidColor(PrimaryBlue),
@@ -176,7 +177,7 @@ private fun UnifiedSearchSheetContent(
                             if (query.isEmpty()) {
                                 Text(
                                     text = "Search people, places, beacons…",
-                                    style = MaterialTheme.typography.bodyLarge,
+                                    style = clickTextFieldTextStyle(),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,

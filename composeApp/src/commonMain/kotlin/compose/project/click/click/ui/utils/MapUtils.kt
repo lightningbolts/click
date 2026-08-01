@@ -11,6 +11,7 @@ import compose.project.click.click.data.models.resolveDisplayName // pragma: all
 import compose.project.click.click.events.EventReminderCoordinator
 import compose.project.click.click.events.isActiveForDiscoveryFeed
 import compose.project.click.click.ui.components.MapPin
+import compose.project.click.click.util.dedupeOneToOneConnectionsByPeer
 import kotlinx.datetime.Clock
 import kotlin.math.*
 
@@ -436,6 +437,8 @@ fun determineMapRenderData(
     zoomLevel: Double,
     clusterThreshold: Double = 12.0,
     connectionPeerDisplayName: (Connection) -> String? = { null },
+    /** When set, collapses duplicate 1:1 connection rows for the same peer before pin/cluster build. */
+    viewerUserId: String? = null,
 ): MapRenderData {
     val standaloneKinds = setOf(
         MapBeaconKind.SOUNDTRACK,
@@ -444,7 +447,12 @@ fun determineMapRenderData(
         MapBeaconKind.UTILITY,
         MapBeaconKind.EVENT,
     )
-    val points = connections.mapNotNull { conn ->
+    // Always peer-dedupe; sorted pair key does not require viewer.
+    val mapConnections = dedupeOneToOneConnectionsByPeer(
+        viewerUserId = viewerUserId.orEmpty(),
+        connections = connections,
+    )
+    val points = mapConnections.mapNotNull { conn ->
         try {
             conn.toMapPoint(connectionPeerDisplayName(conn))
         } catch (e: Exception) {
