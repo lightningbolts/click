@@ -90,8 +90,8 @@ val LocalUnifiedPopupAnimatedDismiss = staticCompositionLocalOf<() -> Unit> {
 }
 
 /**
- * Full-screen overlay with animated scrim rendered in-tree (not platform [Dialog]) so content stays
- * centered and dimming covers the full host surface — modeled after media expansion / group rename.
+ * Full-screen overlay with animated scrim via window [Popup] so [Modifier.fillMaxSize] stays
+ * bounded even when the caller lives under [verticalScroll] (e.g. beacon event schedule).
  */
 @Composable
 fun UnifiedPopupOverlay(
@@ -163,40 +163,49 @@ fun UnifiedPopupOverlay(
     }
 
     CompositionLocalProvider(LocalUnifiedPopupAnimatedDismiss provides ::requestDismiss) {
-        Box(
-            modifier = modifier
-                .fillMaxSize()
-                .zIndex(UnifiedPopupTokens.OverlayZIndex),
+        Popup(
+            onDismissRequest = { requestDismiss() },
+            properties = PopupProperties(
+                focusable = true,
+                dismissOnBackPress = true,
+                dismissOnClickOutside = true,
+            ),
         ) {
-            AnimatedVisibility(
-                visibleState = transitionState,
-                enter = fadeIn(animationSpec = fadeInSpec),
-                exit = fadeOut(animationSpec = fadeOutSpec),
-                label = "unified_popup_scrim",
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = scrimAlpha))
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() },
-                            onClick = { requestDismiss() },
-                        ),
-                )
-            }
             Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
+                modifier = modifier
+                    .fillMaxSize()
+                    .zIndex(UnifiedPopupTokens.OverlayZIndex),
             ) {
                 AnimatedVisibility(
                     visibleState = transitionState,
-                    enter = contentEnter,
-                    exit = contentExit,
-                    label = "unified_popup_content",
+                    enter = fadeIn(animationSpec = fadeInSpec),
+                    exit = fadeOut(animationSpec = fadeOutSpec),
+                    label = "unified_popup_scrim",
+                    modifier = Modifier.fillMaxSize(),
                 ) {
-                    content()
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = scrimAlpha))
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() },
+                                onClick = { requestDismiss() },
+                            ),
+                    )
+                }
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    AnimatedVisibility(
+                        visibleState = transitionState,
+                        enter = contentEnter,
+                        exit = contentExit,
+                        label = "unified_popup_content",
+                    ) {
+                        content()
+                    }
                 }
             }
         }
@@ -358,9 +367,16 @@ fun UnifiedPopupTextButton(
     label: String,
     onClick: () -> Unit,
     contentColor: Color = MaterialTheme.colorScheme.primary,
+    enabled: Boolean = true,
 ) {
-    TextButton(onClick = onClick) {
-        Text(label, color = contentColor)
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+    ) {
+        Text(
+            label,
+            color = if (enabled) contentColor else contentColor.copy(alpha = 0.38f),
+        )
     }
 }
 
@@ -386,6 +402,7 @@ fun UnifiedPopupFormDialog(
     /** Horizontal padding around [body] only; defaults to [innerHorizontalPadding] or [innerPadding]. */
     bodyHorizontalPadding: Dp? = null,
     motion: UnifiedPopupMotion = UnifiedPopupMotion.Default,
+    confirmEnabled: Boolean = true,
     body: @Composable () -> Unit,
 ) {
     UnifiedPopupOverlay(
@@ -450,6 +467,7 @@ fun UnifiedPopupFormDialog(
                         UnifiedPopupTextButton(
                             label = confirmLabel,
                             contentColor = GlassSheetTokens.OnOled(),
+                            enabled = confirmEnabled,
                             onClick = {
                                 onConfirm()
                                 requestAnimatedDismiss()

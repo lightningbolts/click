@@ -2,35 +2,75 @@
 
 package compose.project.click.click.ui.components
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DatePickerDefaults
+import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.events.EventClock12h
 import compose.project.click.click.events.EventSchedule
 import compose.project.click.click.events.EventScheduleValidationError
+import compose.project.click.click.events.MAX_EVENT_DURATION_MS
+import compose.project.click.click.events.coerceSameDayEventTimes
+import compose.project.click.click.events.eventClock12hFrom24h
+import compose.project.click.click.events.eventClock12hTo24h
+import compose.project.click.click.events.formatEventClockLabel
+import compose.project.click.click.events.formatEventDateOnlyLabel
+import compose.project.click.click.events.formatEventDateRangeLabel
+import compose.project.click.click.events.localDateToUtcMidnightMillis
+import compose.project.click.click.events.mergeLocalDateWithClock
+import compose.project.click.click.events.utcMidnightMillisToLocalDate
+import compose.project.click.click.ui.theme.PrimaryBlue
+import kotlin.math.abs
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
-import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.toLocalDateTime
 
 private val PickerPopupSurfacePadding = 0.dp
 private val PickerPopupChromePadding = 16.dp
 private val PickerPopupInnerVerticalPadding = 12.dp
+/** DateRangePicker embeds a vertical grid; unbounded max height in a dialog Column crashes. */
+private val DateRangePickerHeight = 440.dp
+private val TumblerRowHeight = 36.dp
+private val TumblerVisibleRows = 5
 
 @Composable
 fun EventDateTimePicker(
@@ -39,28 +79,22 @@ fun EventDateTimePicker(
     validationError: EventScheduleValidationError?,
     modifier: Modifier = Modifier,
 ) {
-    var pickingStartDate by remember { mutableStateOf(true) }
-    var pickingStartTime by remember { mutableStateOf(true) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
+    var pickingStartTime by remember { mutableStateOf(true) }
 
+    val tz = TimeZone.currentSystemDefault()
     val startLocal = remember(schedule.startEpochMs) {
-        Instant.fromEpochMilliseconds(schedule.startEpochMs).toLocalDateTime(TimeZone.currentSystemDefault())
+        Instant.fromEpochMilliseconds(schedule.startEpochMs).toLocalDateTime(tz)
     }
     val endLocal = remember(schedule.endEpochMs) {
-        Instant.fromEpochMilliseconds(schedule.endEpochMs).toLocalDateTime(TimeZone.currentSystemDefault())
+        Instant.fromEpochMilliseconds(schedule.endEpochMs).toLocalDateTime(tz)
     }
+    val sameDay = startLocal.date == endLocal.date
 
-    var startHour by remember(schedule.startEpochMs) { mutableIntStateOf(startLocal.hour) }
-    var startMinute by remember(schedule.startEpochMs) { mutableIntStateOf(startLocal.minute) }
-    var endHour by remember(schedule.endEpochMs) { mutableIntStateOf(endLocal.hour) }
-    var endMinute by remember(schedule.endEpochMs) { mutableIntStateOf(endLocal.minute) }
-
-    var pendingHour by remember { mutableIntStateOf(startHour) }
-    var pendingMinute by remember { mutableIntStateOf(startMinute) }
-    var pendingDateMs by remember { mutableLongStateOf(schedule.startEpochMs) }
-    val iosTimePickerRef = remember { mutableStateOf<Any?>(null) }
-    val iosDatePickerRef = remember { mutableStateOf<Any?>(null) }
+    var pendingHour12 by remember { mutableIntStateOf(1) }
+    var pendingMinute by remember { mutableIntStateOf(0) }
+    var pendingIsPm by remember { mutableStateOf(false) }
 
     val pickerDialogTitleStyle = MaterialTheme.typography.titleSmall
 
@@ -68,13 +102,14 @@ fun EventDateTimePicker(
         onScheduleChange(EventSchedule(startEpochMs = startMs, endEpochMs = endMs))
     }
 
-    fun mergeDateTime(dateMs: Long, hour: Int, minute: Int): Long {
-        val dayStart = Instant.fromEpochMilliseconds(dateMs)
-            .toLocalDateTime(TimeZone.currentSystemDefault())
-            .date
-            .atStartOfDayIn(TimeZone.currentSystemDefault())
-            .toEpochMilliseconds()
-        return dayStart + (hour.coerceIn(0, 23) * 60L + minute.coerceIn(0, 59)) * 60_000L
+    fun openTimePicker(forStart: Boolean) {
+        pickingStartTime = forStart
+        val source = if (forStart) startLocal else endLocal
+        val clock = eventClock12hFrom24h(source.hour, source.minute)
+        pendingHour12 = clock.hour12
+        pendingMinute = clock.minute
+        pendingIsPm = clock.isPm
+        showTimePicker = true
     }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -89,38 +124,32 @@ fun EventDateTimePicker(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { pickingStartDate = true; showDatePicker = true }, modifier = Modifier.weight(1f)) {
-                Text("Start: ${startLocal.date}")
-            }
-            Button(onClick = { pickingStartDate = false; showDatePicker = true }, modifier = Modifier.weight(1f)) {
-                Text("End: ${endLocal.date}")
-            }
+            ScheduleActionButton(
+                text = "Start: ${formatEventDateOnlyLabel(schedule.startEpochMs, tz)}",
+                onClick = { showDatePicker = true },
+                modifier = Modifier.weight(1f),
+            )
+            ScheduleActionButton(
+                text = "End: ${formatEventDateOnlyLabel(schedule.endEpochMs, tz)}",
+                onClick = { showDatePicker = true },
+                modifier = Modifier.weight(1f),
+            )
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = {
-                    pickingStartTime = true
-                    pendingHour = startHour
-                    pendingMinute = startMinute
-                    showTimePicker = true
-                },
+            ScheduleActionButton(
+                text = "Start: ${formatEventClockLabel(startLocal.hour, startLocal.minute)}",
+                onClick = { openTimePicker(forStart = true) },
                 modifier = Modifier.weight(1f),
-            ) {
-                Text("Start: ${formatEventTime(startHour, startMinute)}")
-            }
-            Button(
-                onClick = {
-                    pickingStartTime = false
-                    pendingHour = endHour
-                    pendingMinute = endMinute
-                    showTimePicker = true
-                },
+            )
+            ScheduleActionButton(
+                text = "End: ${formatEventClockLabel(endLocal.hour, endLocal.minute)}",
+                onClick = { openTimePicker(forStart = false) },
                 modifier = Modifier.weight(1f),
-            ) {
-                Text("End: ${formatEventTime(endHour, endMinute)}")
-            }
+            )
         }
+
         validationError?.let { err ->
             Text(
                 text = when (err) {
@@ -134,17 +163,32 @@ fun EventDateTimePicker(
         }
     }
 
-    val dateInitialMs = if (pickingStartDate) schedule.startEpochMs else schedule.endEpochMs
-    LaunchedEffect(showDatePicker, dateInitialMs) {
+    val dateRangeState = rememberDateRangePickerState(
+        initialSelectedStartDateMillis = localDateToUtcMidnightMillis(startLocal.date),
+        initialSelectedEndDateMillis = localDateToUtcMidnightMillis(endLocal.date),
+    )
+    LaunchedEffect(showDatePicker, schedule.startEpochMs, schedule.endEpochMs) {
         if (showDatePicker) {
-            pendingDateMs = dateInitialMs
+            dateRangeState.setSelection(
+                localDateToUtcMidnightMillis(startLocal.date),
+                localDateToUtcMidnightMillis(endLocal.date),
+            )
         }
+    }
+
+    val dateRangeComplete =
+        dateRangeState.selectedStartDateMillis != null &&
+            dateRangeState.selectedEndDateMillis != null
+    val dateRangeTooLong = run {
+        val startMs = dateRangeState.selectedStartDateMillis ?: return@run false
+        val endMs = dateRangeState.selectedEndDateMillis ?: return@run false
+        endMs - startMs > MAX_EVENT_DURATION_MS
     }
 
     UnifiedPopupFormDialog(
         visible = showDatePicker,
         onDismissRequest = { showDatePicker = false },
-        title = if (pickingStartDate) "Start date" else "End date",
+        title = "Select date range",
         titleStyle = pickerDialogTitleStyle,
         contentMaxWidth = null,
         surfaceHorizontalPadding = PickerPopupSurfacePadding,
@@ -153,31 +197,83 @@ fun EventDateTimePicker(
         bodyHorizontalPadding = 0.dp,
         motion = UnifiedPopupMotion.Picker,
         confirmLabel = "OK",
+        confirmEnabled = dateRangeComplete && !dateRangeTooLong,
         onConfirm = {
-            val selected = readPlatformEventDateSelection(
-                pickerRef = iosDatePickerRef.value,
-                fallbackEpochMs = pendingDateMs,
+            val startUtc = dateRangeState.selectedStartDateMillis ?: return@UnifiedPopupFormDialog
+            val endUtc = dateRangeState.selectedEndDateMillis ?: return@UnifiedPopupFormDialog
+            val startDate = utcMidnightMillisToLocalDate(startUtc)
+            val endDate = utcMidnightMillisToLocalDate(endUtc)
+            applySchedule(
+                mergeLocalDateWithClock(startDate, startLocal.hour, startLocal.minute, tz),
+                mergeLocalDateWithClock(endDate, endLocal.hour, endLocal.minute, tz),
             )
-            if (pickingStartDate) {
-                applySchedule(
-                    mergeDateTime(selected, startHour, startMinute),
-                    schedule.endEpochMs,
-                )
-            } else {
-                applySchedule(
-                    schedule.startEpochMs,
-                    mergeDateTime(selected, endHour, endMinute),
-                )
-            }
         },
         body = {
             if (showDatePicker) {
-                PlatformEventDatePickerBody(
-                    initialEpochMs = dateInitialMs,
-                    pickerRef = iosDatePickerRef,
-                    modifier = Modifier.fillMaxWidth(),
-                    onSelectionChange = { pendingDateMs = it },
-                )
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    val startUtc = dateRangeState.selectedStartDateMillis
+                    val endUtc = dateRangeState.selectedEndDateMillis
+                    if (startUtc != null) {
+                        val startDate = utcMidnightMillisToLocalDate(startUtc)
+                        val endDate = endUtc?.let { utcMidnightMillisToLocalDate(it) }
+                        Text(
+                            text = if (endDate != null) {
+                                formatEventDateRangeLabel(
+                                    mergeLocalDateWithClock(startDate, 0, 0, tz),
+                                    mergeLocalDateWithClock(endDate, 0, 0, tz),
+                                    tz,
+                                )
+                            } else {
+                                "Select end date"
+                            },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = GlassSheetTokens.OnOled(),
+                            modifier = Modifier.padding(horizontal = PickerPopupChromePadding),
+                        )
+                        if (dateRangeTooLong) {
+                            Text(
+                                text = "Events can last at most 1 month.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(
+                                    horizontal = PickerPopupChromePadding,
+                                    vertical = 4.dp,
+                                ),
+                            )
+                        } else {
+                            Spacer(Modifier.height(8.dp))
+                        }
+                    }
+                    DateRangePicker(
+                        state = dateRangeState,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(DateRangePickerHeight),
+                        showModeToggle = false,
+                        title = null,
+                        headline = null,
+                        colors = DatePickerDefaults.colors(
+                            containerColor = GlassSheetTokens.OledBlack(),
+                            titleContentColor = GlassSheetTokens.OnOled(),
+                            headlineContentColor = GlassSheetTokens.OnOled(),
+                            weekdayContentColor = GlassSheetTokens.OnOledMuted(),
+                            subheadContentColor = GlassSheetTokens.OnOledMuted(),
+                            navigationContentColor = GlassSheetTokens.OnOled(),
+                            yearContentColor = GlassSheetTokens.OnOled(),
+                            currentYearContentColor = GlassSheetTokens.OnOled(),
+                            selectedYearContentColor = GlassSheetTokens.OnOled(),
+                            selectedYearContainerColor = PrimaryBlue,
+                            dayContentColor = GlassSheetTokens.OnOled(),
+                            selectedDayContainerColor = PrimaryBlue,
+                            selectedDayContentColor = GlassSheetTokens.OnOled(),
+                            todayDateBorderColor = PrimaryBlue,
+                            todayContentColor = PrimaryBlue,
+                            dayInSelectionRangeContainerColor = PrimaryBlue.copy(alpha = 0.22f),
+                            dayInSelectionRangeContentColor = GlassSheetTokens.OnOled(),
+                        ),
+                    )
+                }
             }
         },
     )
@@ -191,55 +287,207 @@ fun EventDateTimePicker(
         surfaceHorizontalPadding = PickerPopupSurfacePadding,
         innerPadding = PickerPopupInnerVerticalPadding,
         innerHorizontalPadding = PickerPopupChromePadding,
-        bodyHorizontalPadding = 0.dp,
+        bodyHorizontalPadding = PickerPopupChromePadding,
         motion = UnifiedPopupMotion.Picker,
         confirmLabel = "OK",
         onConfirm = {
-            val (hour, minute) = readPlatformEventTimeSelection(
-                pickerRef = iosTimePickerRef.value,
-                fallbackHour = pendingHour,
-                fallbackMinute = pendingMinute,
+            val (hour24, minute) = eventClock12hTo24h(
+                EventClock12h(hour12 = pendingHour12, minute = pendingMinute, isPm = pendingIsPm),
             )
             if (pickingStartTime) {
-                startHour = hour
-                startMinute = minute
+                val coerced = if (sameDay) {
+                    coerceSameDayEventTimes(
+                        editingStart = true,
+                        startHour = hour24,
+                        startMinute = minute,
+                        endHour = endLocal.hour,
+                        endMinute = endLocal.minute,
+                    )
+                } else {
+                    (hour24 to minute) to (endLocal.hour to endLocal.minute)
+                }
                 applySchedule(
-                    mergeDateTime(schedule.startEpochMs, hour, minute),
-                    schedule.endEpochMs,
+                    mergeLocalDateWithClock(startLocal.date, coerced.first.first, coerced.first.second, tz),
+                    mergeLocalDateWithClock(endLocal.date, coerced.second.first, coerced.second.second, tz),
                 )
             } else {
-                endHour = hour
-                endMinute = minute
+                val coerced = if (sameDay) {
+                    coerceSameDayEventTimes(
+                        editingStart = false,
+                        startHour = startLocal.hour,
+                        startMinute = startLocal.minute,
+                        endHour = hour24,
+                        endMinute = minute,
+                    )
+                } else {
+                    (startLocal.hour to startLocal.minute) to (hour24 to minute)
+                }
                 applySchedule(
-                    schedule.startEpochMs,
-                    mergeDateTime(schedule.endEpochMs, hour, minute),
+                    mergeLocalDateWithClock(startLocal.date, coerced.first.first, coerced.first.second, tz),
+                    mergeLocalDateWithClock(endLocal.date, coerced.second.first, coerced.second.second, tz),
                 )
             }
         },
         body = {
             if (showTimePicker) {
-                EventTimePickerPopupBody(
-                    initialHour = pendingHour,
-                    initialMinute = pendingMinute,
-                    pickerRef = iosTimePickerRef,
+                EventTimeTumbler(
+                    hour12 = pendingHour12,
+                    minute = pendingMinute,
+                    isPm = pendingIsPm,
+                    onHour12Change = { pendingHour12 = it },
+                    onMinuteChange = { pendingMinute = it },
+                    onIsPmChange = { pendingIsPm = it },
                     modifier = Modifier.fillMaxWidth(),
-                    onSelectionChange = { hour, minute ->
-                        pendingHour = hour
-                        pendingMinute = minute
-                    },
                 )
             }
         },
     )
 }
 
-private fun formatEventTime(hour: Int, minute: Int): String {
-    val h = hour.coerceIn(0, 23)
-    val m = minute.coerceIn(0, 59)
-    val period = if (h < 12) "AM" else "PM"
-    val hour12 = when (val mod = h % 12) {
-        0 -> 12
-        else -> mod
+@Composable
+private fun ScheduleActionButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(GlassSheetTokens.BentoInteriorCorner),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = PrimaryBlue,
+            contentColor = Color.White,
+        ),
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
     }
-    return "$hour12:${m.toString().padStart(2, '0')} $period"
+}
+
+@Composable
+private fun EventTimeTumbler(
+    hour12: Int,
+    minute: Int,
+    isPm: Boolean,
+    onHour12Change: (Int) -> Unit,
+    onMinuteChange: (Int) -> Unit,
+    onIsPmChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val capsuleShape = RoundedCornerShape(999.dp)
+    val tumblerHeight = TumblerRowHeight * TumblerVisibleRows
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(tumblerHeight),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(TumblerRowHeight)
+                .clip(capsuleShape)
+                .background(GlassSheetTokens.GlassSurface())
+                .border(1.dp, GlassSheetTokens.GlassBorder(), capsuleShape),
+        )
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TumblerColumn(
+                values = (1..12).map { it.toString() },
+                selectedIndex = (hour12 - 1).coerceIn(0, 11),
+                onSelectedIndex = { onHour12Change(it + 1) },
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+            )
+            TumblerColumn(
+                values = (0..59).map { it.toString().padStart(2, '0') },
+                selectedIndex = minute.coerceIn(0, 59),
+                onSelectedIndex = onMinuteChange,
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+            )
+            TumblerColumn(
+                values = listOf("AM", "PM"),
+                selectedIndex = if (isPm) 1 else 0,
+                onSelectedIndex = { onIsPmChange(it == 1) },
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TumblerColumn(
+    values: List<String>,
+    selectedIndex: Int,
+    onSelectedIndex: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val edgePadding = TumblerRowHeight * ((TumblerVisibleRows - 1) / 2)
+    val safeSelected = selectedIndex.coerceIn(0, (values.size - 1).coerceAtLeast(0))
+
+    LaunchedEffect(safeSelected, values.size) {
+        if (values.isEmpty()) return@LaunchedEffect
+        listState.animateScrollToItem(safeSelected)
+    }
+
+    LaunchedEffect(listState, values.size) {
+        snapshotFlow { listState.isScrollInProgress }
+            .distinctUntilChanged()
+            .collect { scrolling ->
+                if (!scrolling) {
+                    val info = listState.layoutInfo
+                    if (info.visibleItemsInfo.isEmpty()) return@collect
+                    val viewportCenter = (info.viewportStartOffset + info.viewportEndOffset) / 2
+                    val closest = info.visibleItemsInfo.minByOrNull { item ->
+                        abs((item.offset + item.size / 2) - viewportCenter)
+                    } ?: return@collect
+                    if (closest.index != safeSelected) {
+                        onSelectedIndex(closest.index.coerceIn(0, values.lastIndex))
+                    }
+                }
+            }
+    }
+
+    LazyColumn(
+        state = listState,
+        modifier = modifier,
+        contentPadding = PaddingValues(vertical = edgePadding),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        items(values.size, key = { it }) { index ->
+            val selected = index == safeSelected
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(TumblerRowHeight)
+                    .clickable {
+                        onSelectedIndex(index)
+                        scope.launch { listState.animateScrollToItem(index) }
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = values[index],
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (selected) {
+                        GlassSheetTokens.OnOled()
+                    } else {
+                        GlassSheetTokens.OnOledMuted()
+                    },
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
+    }
 }
