@@ -29,3 +29,27 @@ fun Throwable.isOfflineNetworkFailure(): Boolean {
         message.contains("no address associated") ||
         (message.contains("host") && message.contains("unreachable"))
 }
+
+/**
+ * True when a refresh/session failure means credentials are dead (not a transient network blip).
+ * Callers should clear auth tokens and force re-login rather than staying "logged in" with a
+ * poisoned JWT that makes PostgREST/RLS return empty forever.
+ */
+fun Throwable.isHardAuthFailure(): Boolean {
+    if (isOfflineNetworkFailure()) return false
+    val name = this::class.simpleName.orEmpty().lowercase()
+    if (name.contains("authrest") || name.contains("authexception") || name.contains("authapi")) {
+        return true
+    }
+    val message = redactedRestMessage().lowercase()
+    return message.contains("invalid refresh") ||
+        message.contains("refresh token not found") ||
+        message.contains("refresh_token_not_found") ||
+        message.contains("session not found") ||
+        message.contains("session_not_found") ||
+        message.contains("invalid jwt") ||
+        message.contains("jwt expired") ||
+        message.contains("user from sub claim in jwt does not exist") ||
+        message.contains("invalid login credentials") ||
+        (message.contains("refresh") && message.contains("invalid"))
+}

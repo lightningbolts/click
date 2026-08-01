@@ -1440,6 +1440,8 @@ class SupabaseChatRepository(
         }
     }
 
+    override suspend fun ensureFreshAuthToken(): String? = ensureFreshJwtForChat()
+
     private fun enrichMediaEncryptionMetadata(messageType: String, metadata: JsonElement?): JsonElement? {
         val mt = messageType.lowercase()
         if (mt != ChatMessageType.IMAGE && mt != ChatMessageType.AUDIO) return metadata
@@ -1966,9 +1968,12 @@ class SupabaseChatRepository(
     // Update a message via API
     override suspend fun updateMessage(chatId: String, messageId: String, userId: String, content: String): Message? {
         return try {
-            val authToken = tokenStorage.getJwt() ?: return null
+            val authToken = ensureFreshJwtForChat() ?: return null
             val result = apiClient.updateMessage(chatId, messageId, userId, content, authToken)
-            result.getOrElse {
+            result.recoverCatching { firstErr ->
+                val retried = refreshedJwtAfterAuthFailure() ?: throw firstErr
+                apiClient.updateMessage(chatId, messageId, userId, content, retried).getOrThrow()
+            }.getOrElse {
                 println("Error updating message: ${it.redactedRestMessage()}")
                 null
             }
@@ -1981,9 +1986,12 @@ class SupabaseChatRepository(
     // Delete a message via API
     override suspend fun deleteMessage(chatId: String, messageId: String, userId: String): Boolean {
         return try {
-            val authToken = tokenStorage.getJwt() ?: return false
+            val authToken = ensureFreshJwtForChat() ?: return false
             val result = apiClient.deleteMessage(chatId, messageId, userId, authToken)
-            result.getOrElse {
+            result.recoverCatching { firstErr ->
+                val retried = refreshedJwtAfterAuthFailure() ?: throw firstErr
+                apiClient.deleteMessage(chatId, messageId, userId, retried).getOrThrow()
+            }.getOrElse {
                 println("Error deleting message: ${it.redactedRestMessage()}")
                 false
             }
@@ -2050,8 +2058,11 @@ class SupabaseChatRepository(
     /** Add a reaction via Next.js gatekeeper. */
     override suspend fun addReaction(messageId: String, userId: String, reactionType: String): Boolean {
         return try {
-            val jwt = tokenStorage.getJwt() ?: return false
-            apiClient.sendReaction(messageId, userId, reactionType, jwt).isSuccess
+            val jwt = ensureFreshJwtForChat() ?: return false
+            apiClient.sendReaction(messageId, userId, reactionType, jwt).recoverCatching {
+                val retried = refreshedJwtAfterAuthFailure() ?: throw it
+                apiClient.sendReaction(messageId, userId, reactionType, retried).getOrThrow()
+            }.isSuccess
         } catch (e: Exception) {
             println("Error adding reaction: ${e.redactedRestMessage()}")
             false
@@ -2061,8 +2072,11 @@ class SupabaseChatRepository(
     /** Remove a reaction via Next.js gatekeeper. */
     override suspend fun removeReaction(messageId: String, userId: String, reactionType: String): Boolean {
         return try {
-            val jwt = tokenStorage.getJwt() ?: return false
-            apiClient.removeReaction(messageId, userId, reactionType, jwt).getOrElse { false }
+            val jwt = ensureFreshJwtForChat() ?: return false
+            apiClient.removeReaction(messageId, userId, reactionType, jwt).recoverCatching {
+                val retried = refreshedJwtAfterAuthFailure() ?: throw it
+                apiClient.removeReaction(messageId, userId, reactionType, retried).getOrThrow()
+            }.getOrElse { false }
         } catch (e: Exception) {
             println("Error removing reaction: ${e.redactedRestMessage()}")
             false
@@ -2234,15 +2248,21 @@ class SupabaseChatRepository(
 
     override suspend fun updateMessageStatus(messageId: String, status: String): Boolean {
         return try {
-            val authToken = tokenStorage.getJwt() ?: return false
-            apiClient.updateMessageStatus(messageId, status, authToken).getOrElse { false }
+            val authToken = ensureFreshJwtForChat() ?: return false
+            apiClient.updateMessageStatus(messageId, status, authToken).recoverCatching {
+                val retried = refreshedJwtAfterAuthFailure() ?: throw it
+                apiClient.updateMessageStatus(messageId, status, retried).getOrThrow()
+            }.getOrElse { false }
         } catch (e: Exception) { println("Error updating status: ${e.redactedRestMessage()}"); false }
     }
 
     override suspend fun forwardMessage(messageId: String, targetChatId: String, userId: String): Message? {
         return try {
-            val authToken = tokenStorage.getJwt() ?: return null
-            apiClient.forwardMessage(messageId, targetChatId, userId, authToken).getOrElse { null }
+            val authToken = ensureFreshJwtForChat() ?: return null
+            apiClient.forwardMessage(messageId, targetChatId, userId, authToken).recoverCatching {
+                val retried = refreshedJwtAfterAuthFailure() ?: throw it
+                apiClient.forwardMessage(messageId, targetChatId, userId, retried).getOrThrow()
+            }.getOrElse { null }
         } catch (e: Exception) { println("Error forwarding message: ${e.redactedRestMessage()}"); null }
     }
 
@@ -2418,7 +2438,7 @@ class SupabaseChatRepository(
     ): Result<Unit> = runCatching {
         require(groupId.isNotBlank())
         require(newMemberUserId.isNotBlank())
-        val authToken = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+        val authToken = ensureFreshJwtForChat()?.trim()?.takeIf { it.isNotEmpty() }
             ?: throw IllegalStateException("Not authenticated")
         apiClient.addCliqueMember(
             groupId = groupId,
@@ -2451,7 +2471,7 @@ class SupabaseChatRepository(
     override suspend fun removeCliqueMember(groupId: String, memberUserId: String): Result<Unit> = runCatching {
         require(groupId.isNotBlank())
         require(memberUserId.isNotBlank())
-        val authToken = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+        val authToken = ensureFreshJwtForChat()?.trim()?.takeIf { it.isNotEmpty() }
             ?: throw IllegalStateException("Not authenticated")
         apiClient.removeCliqueMember(
             groupId = groupId,
@@ -2546,13 +2566,24 @@ class SupabaseChatRepository(
                 is ChatSessionCaches.ResolvedChatCrypto.GroupMaster -> MessageCrypto.encryptMediaBytes(plainBytes, crypto.masterKey)
                 is ChatSessionCaches.ResolvedChatCrypto.Pairwise -> MessageCrypto.encryptMediaBytes(plainBytes, crypto.keys)
             }
-            val jwt = tokenStorage.getJwt() ?: return null
+            val jwt = ensureFreshJwtForChat() ?: return null
             apiClient.uploadMedia(
                 fileBytes = cipher,
                 chatId = chatId,
                 mimeType = uploadMime,
                 authToken = jwt,
-            ).getOrElse { return null }
+            ).getOrElse { firstErr ->
+                val retriedJwt = refreshedJwtAfterAuthFailure() ?: return null
+                apiClient.uploadMedia(
+                    fileBytes = cipher,
+                    chatId = chatId,
+                    mimeType = uploadMime,
+                    authToken = retriedJwt,
+                ).getOrElse {
+                    println("ChatRepository: uploadChatMedia failed: ${firstErr.redactedRestMessage()}")
+                    return null
+                }
+            }
         } catch (e: Exception) {
             println("ChatRepository: uploadChatMedia failed: ${e.redactedRestMessage()}")
             null
@@ -2643,14 +2674,24 @@ class SupabaseChatRepository(
             val fileMasterKey = AttachmentCrypto.generateFileMasterKey()
             val cipher = AttachmentCrypto.encryptFileBytes(plainBytes, fileMasterKey)
             val sha = AttachmentCrypto.sha256Base64(plainBytes)
-            val jwt = tokenStorage.getJwt() ?: return null
+            val jwt = ensureFreshJwtForChat() ?: return null
             val uploaded = apiClient.uploadAttachment(
                 fileBytes = cipher,
                 chatId = chatId,
                 mimeType = mimeType.ifBlank { "application/octet-stream" },
                 fileName = fileName,
                 authToken = jwt,
-            ).getOrElse { err ->
+            ).recoverCatching { firstErr ->
+                val retriedJwt = refreshedJwtAfterAuthFailure()
+                    ?: throw firstErr
+                apiClient.uploadAttachment(
+                    fileBytes = cipher,
+                    chatId = chatId,
+                    mimeType = mimeType.ifBlank { "application/octet-stream" },
+                    fileName = fileName,
+                    authToken = retriedJwt,
+                ).getOrThrow()
+            }.getOrElse { err ->
                 println("ChatRepository: attachment upload failed: ${err.redactedRestMessage()}")
                 return null
             }
@@ -2675,8 +2716,11 @@ class SupabaseChatRepository(
     ): ByteArray? {
         if (path.isBlank() || fileMasterKeyBase64.isBlank()) return null
         return try {
-            val jwt = tokenStorage.getJwt() ?: return null
-            val signedUrl = apiClient.signAttachmentUrl(path, jwt).getOrElse { err ->
+            val jwt = ensureFreshJwtForChat() ?: return null
+            val signedUrl = apiClient.signAttachmentUrl(path, jwt).recoverCatching { firstErr ->
+                val retriedJwt = refreshedJwtAfterAuthFailure() ?: throw firstErr
+                apiClient.signAttachmentUrl(path, retriedJwt).getOrThrow()
+            }.getOrElse { err ->
                 println("ChatRepository: signAttachmentUrl failed: ${err.redactedRestMessage()}")
                 return null
             }
@@ -2787,10 +2831,16 @@ class SupabaseChatRepository(
         mediaUrl: String,
     ): ByteArray? {
         return try {
+            ensureFreshJwtForChat()
             val crypto = resolveChatCrypto(chatId, viewerUserId) ?: return null
             val raw = apiClient.downloadUrlBytes(mediaUrl).getOrElse { err ->
                 println("ChatRepository: media download failed: ${err.redactedRestMessage()}")
-                return null
+                // One auth-refresh retry — stale JWT after offline→online often looks like a download miss.
+                refreshedJwtAfterAuthFailure()
+                apiClient.downloadUrlBytes(mediaUrl).getOrElse { retryErr ->
+                    println("ChatRepository: media download retry failed: ${retryErr.redactedRestMessage()}")
+                    return null
+                }
             }
             val normalized = normalizeEncryptedMediaPayload(raw)
             if (normalized !== raw) {

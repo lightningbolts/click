@@ -309,17 +309,36 @@ class ChatViewModel(
         viewModelScope.launch {
             _isLoadingOlderMessages.value = true
             try {
-                val fetched = chatRepository.fetchMessagesForChat(
-                    chatId = apiChatId,
-                    viewerUserId = userId,
-                    limit = OLDER_MESSAGES_PAGE_SIZE,
-                    beforeTimeCreated = oldest.timeCreated,
-                ).orEmpty()
-                if (fetched.isEmpty()) {
-                    _hasMoreOlderMessages.value = false
-                    return@launch
+                suspend fun fetchPage(): List<Message>? =
+                    chatRepository.fetchMessagesForChat(
+                        chatId = apiChatId,
+                        viewerUserId = userId,
+                        limit = OLDER_MESSAGES_PAGE_SIZE,
+                        beforeTimeCreated = oldest.timeCreated,
+                    )
+
+                var fetched = fetchPage()
+                // Auth-empty / null under stale JWT must not freeze pagination as "end of history".
+                var authReadyAfterRetry = false
+                if (fetched == null || fetched.isEmpty()) {
+                    authReadyAfterRetry = !chatRepository.ensureFreshAuthToken().isNullOrBlank()
+                    if (authReadyAfterRetry) {
+                        fetched = fetchPage()
+                    }
                 }
-                val vaulted = vaultMessagesForUi(apiChatId, userId, fetched)
+                when (olderMessagesPageOutcome(fetched, authReadyAfterRetry)) {
+                    OlderMessagesPageOutcome.KeepHasMore -> {
+                        println("ChatViewModel: loadOlderMessages failed; keeping hasMoreOlderMessages")
+                        return@launch
+                    }
+                    OlderMessagesPageOutcome.EndOfHistory -> {
+                        _hasMoreOlderMessages.value = false
+                        return@launch
+                    }
+                    OlderMessagesPageOutcome.MergePage -> Unit
+                }
+                val page = fetched ?: return@launch
+                val vaulted = vaultMessagesForUi(apiChatId, userId, page)
                 val knownUsers = buildMap {
                     state.messages.forEach { put(it.user.id, it.user) }
                     AppDataManager.currentUser.value?.let { put(it.id, it) }
@@ -345,7 +364,7 @@ class ChatViewModel(
                         icebreakerPrompts = _icebreakerPrompts.value,
                         showIcebreakerPanel = _showIcebreakerPanel.value,
                     )).copy(messages = merged)
-                if (fetched.size < OLDER_MESSAGES_PAGE_SIZE) {
+                if (page.size < OLDER_MESSAGES_PAGE_SIZE) {
                     _hasMoreOlderMessages.value = false
                 }
             } finally {
@@ -600,6 +619,13 @@ class ChatViewModel(
                 restoreActiveChatSubscriptionsIfNeeded()
             }
         }
+
+        viewModelScope.launch {
+            AppDataManager.inboxReloadRequests.collect {
+                if (_currentUserId.value.isNullOrBlank()) return@collect
+                loadChats(isForced = true)
+            }
+        }
     }
 
     // Set the current user
@@ -698,9 +724,15 @@ class ChatViewModel(
     private fun reapplyChatListVisibilityFromAppData() {
         val cur = _chatListState.value
         if (cur !is ChatListState.Success) return
+        val userId = _currentUserId.value
         val filtered = applyChatListVisibility(cur.chats)
-        pruneStaleReadClearedHints(filtered)
-        _chatListState.value = ChatListState.Success(applyUnreadClearHintsToInboxRows(filtered))
+        val collapsed = collapseOneToOneChatsByPeer(
+            chats = filtered,
+            viewerUserId = userId,
+            activityTs = { chatListActivityTimestamp(it) },
+        )
+        pruneStaleReadClearedHints(collapsed)
+        _chatListState.value = ChatListState.Success(applyUnreadClearHintsToInboxRows(collapsed))
     }
 
     /**
@@ -2208,32 +2240,47 @@ class ChatViewModel(
         if (!message.isEncryptedMedia()) return
         viewModelScope.launch(chatMediaDispatcher) {
             _secureChatMediaLoadState.update { it + (message.id to SecureChatMediaLoadState(loading = true)) }
+            // Refresh JWT before decrypt — stale cold-start tokens made audio appear stuck on "Preparing".
+            runCatching { chatRepository.ensureFreshAuthToken() }
             val bytes = runCatching {
                 chatRepository.downloadAndDecryptChatMedia(scopeId, viewerUserId, url)
             }.onFailure { e ->
                 println("ChatViewModel: secure audio decrypt failed for message=${message.id}: ${e.redactedRestMessage()}")
             }.getOrNull()
             if (bytes == null || bytes.isEmpty()) {
-                println("ChatViewModel: secure audio bytes missing for message=${message.id}")
-                _secureChatMediaLoadState.update {
-                    it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not load audio"))
+                // One more refresh+retry before surfacing a permanent error.
+                runCatching { chatRepository.ensureFreshAuthToken() }
+                val retried = runCatching {
+                    chatRepository.downloadAndDecryptChatMedia(scopeId, viewerUserId, url)
+                }.getOrNull()
+                if (retried == null || retried.isEmpty()) {
+                    println("ChatViewModel: secure audio bytes missing for message=${message.id}")
+                    _secureChatMediaLoadState.update {
+                        it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not load audio"))
+                    }
+                    return@launch
                 }
+                cacheAndPublishSecureAudio(message, retried)
                 return@launch
             }
-            val path = cacheSecureAudioOnDisk(message.id, bytes, message.audioCacheFileExtension())
-            if (path.isNullOrBlank()) {
-                println("ChatViewModel: secure audio cache write failed for message=${message.id}")
-                _secureChatMediaLoadState.update {
-                    it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not cache audio"))
-                }
-            } else {
-                val evictedPath = secureAudioPathCache.put(message.id, path)
-                if (!evictedPath.isNullOrBlank() && evictedPath != path && !isChatMediaVaultLocalPath(evictedPath)) {
-                    deleteSecureChatAudioTempFile(evictedPath)
-                }
-                _secureChatMediaLoadState.update {
-                    it + (message.id to SecureChatMediaLoadState(loading = false, audioLocalPath = path))
-                }
+            cacheAndPublishSecureAudio(message, bytes)
+        }
+    }
+
+    private fun cacheAndPublishSecureAudio(message: Message, bytes: ByteArray) {
+        val path = cacheSecureAudioOnDisk(message.id, bytes, message.audioCacheFileExtension())
+        if (path.isNullOrBlank()) {
+            println("ChatViewModel: secure audio cache write failed for message=${message.id}")
+            _secureChatMediaLoadState.update {
+                it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not cache audio"))
+            }
+        } else {
+            val evictedPath = secureAudioPathCache.put(message.id, path)
+            if (!evictedPath.isNullOrBlank() && evictedPath != path && !isChatMediaVaultLocalPath(evictedPath)) {
+                deleteSecureChatAudioTempFile(evictedPath)
+            }
+            _secureChatMediaLoadState.update {
+                it + (message.id to SecureChatMediaLoadState(loading = false, audioLocalPath = path))
             }
         }
     }

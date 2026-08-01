@@ -639,6 +639,22 @@ fun Connection.isActiveForUser(archivedIds: Set<String>, hiddenIds: Set<String>)
     id !in hiddenIds && id !in archivedIds && isInActiveConnectionsChannel()
 
 /**
+ * Empty server snapshot with empty junction sets while local SSOT already has connections is the
+ * classic bad-JWT / RLS-empty poison signal — preserve local archive/hidden/core until a real
+ * authenticated snapshot arrives (sign-out must not be required to recover pins).
+ */
+fun shouldPreserveLocalConnectionJunctions(
+    localConnectionCount: Int,
+    snapshotConnectionCount: Int,
+    snapshotArchivedCount: Int,
+    snapshotHiddenCount: Int,
+): Boolean =
+    localConnectionCount > 0 &&
+        snapshotConnectionCount == 0 &&
+        snapshotArchivedCount == 0 &&
+        snapshotHiddenCount == 0
+
+/**
  * True 1:1 DM edge (not a multi-member group row). Duplicate handshake / clique pairwise
  * rows for the same peer all match this and should collapse in map + Active list UI.
  */

@@ -11,6 +11,7 @@ import compose.project.click.click.data.repository.PROXIMITY_HOST_SELECTION_MAX_
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
+import compose.project.click.click.data.models.isOneToOnePairEdge // pragma: allowlist secret
 import compose.project.click.click.data.models.ConnectionRequest // pragma: allowlist secret
 import compose.project.click.click.data.models.ContextTag // pragma: allowlist secret
 import compose.project.click.click.data.models.HeightCategory // pragma: allowlist secret
@@ -1200,6 +1201,12 @@ class ConnectionViewModel : ViewModel() {
                 val created = mutableListOf<Connection>()
                 var allEncountersLogged = true
                 for (peer in peers) {
+                    val existingLocalPair = AppDataManager.connections.value.firstOrNull { existing ->
+                        existing.isOneToOnePairEdge() &&
+                            existing.isInActiveConnectionsChannel() &&
+                            peer.id in existing.user_ids &&
+                            currentUserId in existing.user_ids
+                    }
                     val request = ConnectionRequest(
                         userId1 = currentUserId,
                         userId2 = peer.id,
@@ -1222,7 +1229,8 @@ class ConnectionViewModel : ViewModel() {
                         batteryLevel = vibe?.batteryLevel?.takeIf { it in 0..100 },
                         weatherSnapshotLabel = weatherSnapshotLabel?.trim()?.takeIf { it.isNotEmpty() },
                         skipEncounterInsert = peer.encounterPersistedOnBind,
-                        preflightConnectionId = peer.connectionId?.takeIf { it.isNotBlank() },
+                        preflightConnectionId = peer.connectionId?.takeIf { it.isNotBlank() }
+                            ?: existingLocalPair?.id,
                         preflightEncounterLogged = if (peer.encounterPersistedOnBind) true else null,
                     )
                     val result = withContext(Dispatchers.Default) {
@@ -1247,6 +1255,7 @@ class ConnectionViewModel : ViewModel() {
                 }
                 if (!created.any { it.isPendingSync() }) {
                     AppDataManager.refresh(force = true)
+                    AppDataManager.requestInboxReload()
                 }
                 val profiles = peers.map { it.toUserProfile() }
                 val isNewAggregate = peers.any { it.isNewConnection }
@@ -1391,6 +1400,7 @@ class ConnectionViewModel : ViewModel() {
                     }
                     if (created.isNotEmpty() && !created.any { it.isPendingSync() }) {
                         AppDataManager.refresh(force = true)
+                        AppDataManager.requestInboxReload()
                     }
                     if (!outcome.encounterLogged) {
                         _connectionState.value = ConnectionState.Idle

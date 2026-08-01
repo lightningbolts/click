@@ -313,6 +313,12 @@ class ConnectionRepository(
     suspend fun fetchConnectionTabs(
         connectionId: String,
     ): Result<compose.project.click.click.data.api.ConnectionTabsGetResponse> {
+        // Profile media tabs share the click-web bearer path — refresh before first call so a
+        // stale cold-start JWT does not permanently empty the Media tab until sign-out.
+        runCatching { authRepository.refreshSession() }
+        val first = apiClient.getConnectionTabs(connectionId)
+        if (first.isSuccess) return first
+        runCatching { authRepository.refreshSession() }
         return apiClient.getConnectionTabs(connectionId)
     }
 

@@ -424,11 +424,10 @@ fun ChatView(
             val total = info.totalItemsCount
             val maxVisibleIndex = info.visibleItemsInfo.maxOfOrNull { it.index } ?: 0
             Triple(maxVisibleIndex, total, listState.firstVisibleItemIndex)
-        }.collect { (maxVisibleIndex, total, firstVisible) ->
+        }.collect { (maxVisibleIndex, total, _) ->
             if (total > 0 &&
                 hasMoreOlderMessages &&
                 !isLoadingOlderMessages &&
-                firstVisible > 0 &&
                 maxVisibleIndex >= total - 3
             ) {
                 viewModel.loadOlderMessages()

@@ -444,11 +444,15 @@ fun ConnectionsListView(
         // connection_archives / connection_hidden — those junctions are for 1:1 edges only.
         effectiveChats.filter { it.groupClique != null }
     }
-    val archivedChats = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds) {
-        effectiveChats.filter {
-            it.groupClique == null &&
-                it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
-        }
+    val archivedChats = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds, currentUserId) {
+        collapseOneToOneChatsByPeer(
+            chats = effectiveChats.filter {
+                it.groupClique == null &&
+                    it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
+            },
+            viewerUserId = currentUserId,
+            activityTs = { connectionListActivityTs(it) },
+        )
     }
     val sortedTabChats = remember(activeChats, groupChats, archivedChats, selectedTabIndex, coreConnectionIds) {
         val tabChats = when (selectedTabIndex) {

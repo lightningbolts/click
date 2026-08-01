@@ -20,6 +20,19 @@ class NetworkFailureUtilTest {
     fun isOfflineNetworkFailure_rejectsUnrelatedErrors() {
         assertFalse(IllegalArgumentException("invalid user id").isOfflineNetworkFailure())
     }
+
+    @Test
+    fun isHardAuthFailure_matchesInvalidRefresh() {
+        assertTrue(Exception("Invalid Refresh Token").isHardAuthFailure())
+        assertTrue(Exception("Refresh Token Not Found").isHardAuthFailure())
+        assertTrue(Exception("JWT expired").isHardAuthFailure())
+    }
+
+    @Test
+    fun isHardAuthFailure_rejectsNetworkErrors() {
+        assertFalse(IOException("network unreachable").isHardAuthFailure())
+        assertFalse(IllegalStateException("You are offline").isHardAuthFailure())
+    }
 }
 
 private class IOException(message: String) : Exception(message)
