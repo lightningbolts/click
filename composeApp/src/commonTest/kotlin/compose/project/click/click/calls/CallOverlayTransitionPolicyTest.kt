@@ -71,8 +71,18 @@ class CallOverlayTransitionPolicyTest {
     @Test
     fun presentationFor_handsPreviewToActiveWithoutEmptyOwner() {
         val invite = sampleInvite()
+        // Before LiveKit startCall, Connecting overlay still owns the join card.
         assertEquals(
             CallOverlayTransitionPolicy.Presentation.Preview,
+            CallOverlayTransitionPolicy.presentationFor(
+                overlayState = CallOverlayState.Connecting(invite),
+                callState = CallState.Idle,
+                suppressEndedPreviewAfterActiveCall = false,
+            ),
+        )
+        // Once media is Connecting/Connected, mount Active so video surfaces init immediately.
+        assertEquals(
+            CallOverlayTransitionPolicy.Presentation.Active,
             CallOverlayTransitionPolicy.presentationFor(
                 overlayState = CallOverlayState.Connecting(invite),
                 callState = CallState.Connecting(videoRequested = false),
@@ -90,6 +100,43 @@ class CallOverlayTransitionPolicyTest {
                     cameraEnabled = false,
                     remoteVideoAvailable = false,
                     localVideoAvailable = false,
+                ),
+                suppressEndedPreviewAfterActiveCall = false,
+            ),
+        )
+    }
+
+    @Test
+    fun presentationFor_outgoingStaysPreviewUntilRemoteParticipant() {
+        val invite = sampleInvite()
+        assertEquals(
+            CallOverlayTransitionPolicy.Presentation.Preview,
+            CallOverlayTransitionPolicy.presentationFor(
+                overlayState = CallOverlayState.Outgoing(invite),
+                callState = CallState.Connected(
+                    videoRequested = true,
+                    microphoneEnabled = true,
+                    speakerEnabled = true,
+                    cameraEnabled = true,
+                    remoteVideoAvailable = false,
+                    localVideoAvailable = true,
+                    hasRemoteParticipant = false,
+                ),
+                suppressEndedPreviewAfterActiveCall = false,
+            ),
+        )
+        assertEquals(
+            CallOverlayTransitionPolicy.Presentation.Active,
+            CallOverlayTransitionPolicy.presentationFor(
+                overlayState = CallOverlayState.Outgoing(invite),
+                callState = CallState.Connected(
+                    videoRequested = true,
+                    microphoneEnabled = true,
+                    speakerEnabled = true,
+                    cameraEnabled = true,
+                    remoteVideoAvailable = false,
+                    localVideoAvailable = true,
+                    hasRemoteParticipant = true,
                 ),
                 suppressEndedPreviewAfterActiveCall = false,
             ),

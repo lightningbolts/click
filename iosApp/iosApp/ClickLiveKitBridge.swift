@@ -110,10 +110,16 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
         self.room = room
 
         do {
-            try await room.connect(url: wsUrl, token: token)
-            try await room.localParticipant.setMicrophone(enabled: true)
+            let connectOptions = ConnectOptions(autoSubscribe: true)
+            try await room.connect(url: wsUrl, token: token, connectOptions: connectOptions)
+            // Enable mic + camera concurrently so remote subscribers don't wait on a serial round-trip.
+            async let micEnabled = room.localParticipant.setMicrophone(enabled: true)
             if videoEnabled {
-                try await room.localParticipant.setCamera(enabled: true)
+                async let cameraEnabled = room.localParticipant.setCamera(enabled: true)
+                _ = try await micEnabled
+                _ = try await cameraEnabled
+            } else {
+                _ = try await micEnabled
             }
             refreshVideoBindings()
             postState(status: "connected")
@@ -229,19 +235,33 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
     }
 
     private func currentLocalVideoTrack() -> VideoTrack? {
-        room?.localParticipant.localVideoTracks
-            .first(where: { $0.source == .camera && !$0.isMuted })?
+        let pubs = room?.localParticipant.localVideoTracks ?? []
+        return (pubs.first(where: { $0.source == .camera && !$0.isMuted })
+            ?? pubs.first(where: { $0.source == .camera })
+            ?? pubs.first)?
             .track as? VideoTrack
     }
 
     private func currentRemoteVideoTrack() -> VideoTrack? {
-        room?.remoteParticipants.values
-            .compactMap { participant in
-                participant.videoTracks
-                    .first(where: { $0.source == .camera && !$0.isMuted && $0.isSubscribed })?
-                    .track as? VideoTrack
+        // Prefer live camera, but bind any subscribed video immediately — waiting for unmute
+        // is a common source of multi-second "Waiting for remote video" gaps.
+        for participant in room?.remoteParticipants.values ?? [] {
+            let pubs = participant.videoTracks
+            if let liveCamera = pubs.first(where: {
+                $0.source == .camera && $0.isSubscribed && !$0.isMuted
+            })?.track as? VideoTrack {
+                return liveCamera
             }
-            .first
+            if let camera = pubs.first(where: {
+                $0.source == .camera && $0.isSubscribed
+            })?.track as? VideoTrack {
+                return camera
+            }
+            if let anyVideo = pubs.first(where: { $0.isSubscribed })?.track as? VideoTrack {
+                return anyVideo
+            }
+        }
+        return nil
     }
 
     private func postState(status: String, reason: String? = nil) {
@@ -341,6 +361,7 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
     func room(_ room: Room, participantDidConnect participant: RemoteParticipant) {
         refreshVideoBindings()
         postState(status: "connected")
+        pollForRemoteVideo()
     }
 
     func room(_ room: Room, participantDidDisconnect participant: RemoteParticipant) {
@@ -365,6 +386,28 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
         postState(status: "connected")
     }
 
+    func room(_ room: Room, participant: Participant, trackPublication _: TrackPublication, didUpdateIsMuted _: Bool) {
+        refreshVideoBindings()
+        postState(status: "connected")
+    }
+
+    func room(_ room: Room, participant: RemoteParticipant, didPublishTrack publication: RemoteTrackPublication) {
+        if publication.kind == .video {
+            // Ensure we subscribe immediately; autoSubscribe normally handles this, but an
+            // explicit nudge avoids multi-second gaps before the first remote frame.
+            Task {
+                try? await publication.set(subscribed: true)
+                await MainActor.run {
+                    self.refreshVideoBindings()
+                    self.postState(status: "connected")
+                }
+            }
+        }
+        refreshVideoBindings()
+        postState(status: "connected")
+        pollForRemoteVideo()
+    }
+
     func room(_ room: Room, participant: LocalParticipant, didPublishTrack publication: LocalTrackPublication) {
         refreshVideoBindings()
         postState(status: "connected")
@@ -373,6 +416,22 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
     func room(_ room: Room, participant: LocalParticipant, didUnpublishTrack publication: LocalTrackPublication) {
         refreshVideoBindings()
         postState(status: "connected")
+    }
+
+    private func pollForRemoteVideo() {
+        guard videoRequested else { return }
+        Task { @MainActor in
+            for _ in 0..<20 {
+                if currentRemoteVideoTrack() != nil {
+                    refreshVideoBindings()
+                    postState(status: "connected")
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                refreshVideoBindings()
+                postState(status: "connected")
+            }
+        }
     }
 }
 #else
