@@ -2395,6 +2395,7 @@ fun App() {
                                         otherUserName = activeInvite?.counterpartName(appDataUser?.id) ?: "Connection",
                                         state = activeCallUiState,
                                         onEndCall = { CallSessionManager.endActiveCall() },
+                                        chromeAlpha = activeCallAlpha,
                                     )
                                 }
                             }

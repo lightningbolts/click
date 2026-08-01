@@ -528,54 +528,60 @@ object CallSessionManager {
 
     fun cancelCurrentCall(notifyPeer: Boolean = true) {
         val invite = activeInviteValue
+        val overlay = _overlayState.value
         timeoutJob?.cancel()
         CallRingtonePlayer.stop()
-
-        val overlay = _overlayState.value
+        suppressEndedOverlay = true
+        if (invite != null) {
+            PlatformIncomingCallUi.dismissIncomingCall(invite.callId)
+        }
+        activeInviteValue = null
+        _overlayState.value = CallOverlayState.Idle
+        internalCallManager.endCall()
+        resetJoinGuards()
+        // Peer notify after local UI clears — never block Cancel on Realtime.
         scope.launch {
             if (notifyPeer && invite != null) {
                 when (overlay) {
-                    is CallOverlayState.Outgoing -> sendCancel(invite, invite.calleeId, "cancelled")
-                    is CallOverlayState.Incoming -> sendResponse(invite, accepted = false, busy = false)
+                    is CallOverlayState.Outgoing -> runCatching {
+                        sendCancel(invite, invite.calleeId, "cancelled")
+                    }
+                    is CallOverlayState.Incoming -> runCatching {
+                        sendResponse(invite, accepted = false, busy = false)
+                    }
                     is CallOverlayState.Connecting -> {
                         peerUserId(invite)?.let { peerId ->
-                            sendCancel(invite, peerId, "cancelled")
+                            runCatching { sendCancel(invite, peerId, "cancelled") }
                         }
                     }
                     else -> Unit
                 }
             }
-
-            if (invite != null) {
-                PlatformIncomingCallUi.dismissIncomingCall(invite.callId)
-            }
-            suppressEndedOverlay = true
-            internalCallManager.endCall()
-            activeInviteValue = null
-            _overlayState.value = CallOverlayState.Idle
-            cleanupAfterCall()
+            releaseLazyOutboundChannels()
         }
     }
 
     fun endActiveCall() {
         val invite = activeInviteValue
+        CallRingtonePlayer.stop()
+        if (invite != null) {
+            activeInviteValue = invite
+            _overlayState.value = CallOverlayState.Ended(invite, "Call ended")
+            PlatformIncomingCallUi.dismissIncomingCall(invite.callId, "ended")
+        } else {
+            activeInviteValue = null
+            _overlayState.value = CallOverlayState.Idle
+        }
+        // Tear down media immediately so video hangup cannot freeze on last TextureView frame.
+        internalCallManager.endCall()
+        resetJoinGuards()
         scope.launch {
             if (invite != null) {
                 peerUserId(invite)?.let { peerId ->
                     runCatching { sendCancel(invite, peerId, "ended") }
                 }
-                PlatformIncomingCallUi.dismissIncomingCall(invite.callId, "ended")
             }
-            internalCallManager.endCall()
-            CallRingtonePlayer.stop()
-            if (invite != null) {
-                activeInviteValue = invite
-                _overlayState.value = CallOverlayState.Ended(invite, "Call ended")
-            } else {
-                activeInviteValue = null
-                _overlayState.value = CallOverlayState.Idle
-            }
-            cleanupAfterCall()
+            releaseLazyOutboundChannels()
         }
     }
 
@@ -966,8 +972,6 @@ object CallSessionManager {
 
     private suspend fun acceptAndJoinIncomingCall(invite: CallInvite) {
         val userId = resolvedCurrentUserId() ?: return failCall(invite, "You need to be signed in to start a call")
-        // Notify the caller immediately so Android/iOS can leave "Calling…" before token fetch completes.
-        sendResponse(invite, accepted = true, busy = false)
 
         joinMutex.withLock {
             if (joinStartedCallId == invite.callId) return
@@ -979,6 +983,11 @@ object CallSessionManager {
         }
 
         val participantName = currentUserName ?: "Click User"
+        // Overlap accept signaling with token fetch so Android join is not gated on Realtime RTT.
+        scope.launch {
+            runCatching { sendResponse(invite, accepted = true, busy = false) }
+        }
+
         val tokenResult = coordinator.fetchCallToken(
             connectionId = invite.connectionId,
             roomName = invite.roomName,

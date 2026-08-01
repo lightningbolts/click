@@ -54,6 +54,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -275,18 +276,29 @@ fun ActiveCallOverlay(
     otherUserName: String,
     state: CallState,
     onEndCall: () -> Unit,
+    /** Fade labels/controls only — never put TextureView under alpha. */
+    chromeAlpha: Float = 1f,
 ) {
     val isMuted = (state as? CallState.Connected)?.microphoneEnabled == false
     val isSpeakerEnabled = (state as? CallState.Connected)?.speakerEnabled == true
     val isVideoEnabled = (state as? CallState.Connected)?.cameraEnabled == true
+    var heldVideoLayout by remember { androidx.compose.runtime.mutableStateOf(false) }
+    if (state is CallState.Connecting) {
+        heldVideoLayout = state.videoRequested
+    } else if (state is CallState.Connected) {
+        heldVideoLayout = state.videoRequested
+    }
     val isVideoCall = when (state) {
         is CallState.Connecting -> state.videoRequested
         is CallState.Connected -> state.videoRequested
+        is CallState.Ended -> heldVideoLayout
         else -> false
     }
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val hasRemoteVideo = (state as? CallState.Connected)?.remoteVideoAvailable == true
     val hasLocalVideo = (state as? CallState.Connected)?.localVideoAvailable == true
+    // Blank TextureViews on hangup so exit cannot freeze on the last decoded frame.
+    val blankVideoSurfaces = state is CallState.Ended
     val density = LocalDensity.current
     var dragOffsetX by remember { mutableFloatStateOf(0f) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
@@ -360,23 +372,34 @@ fun ActiveCallOverlay(
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = when (state) {
-                        is CallState.Connecting -> if (state.videoRequested) "Connecting video…" else "Connecting…"
-                        is CallState.Connected -> if (state.hasVideo) "Video call" else "Voice call"
-                        is CallState.Ended -> state.reason ?: "Call ended"
-                        CallState.Idle -> ""
-                    },
-                    style = MaterialTheme.typography.labelLarge,
-                    color = Color.White.copy(alpha = 0.75f)
-                )
-                Text(
-                    text = otherUserName,
-                    modifier = Modifier.padding(top = 8.dp),
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = Color.White,
-                    fontWeight = FontWeight.SemiBold
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer { alpha = chromeAlpha },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = when (state) {
+                            is CallState.Connecting -> when {
+                                state.reconnecting -> "Reconnecting…"
+                                state.videoRequested -> "Connecting video…"
+                                else -> "Connecting…"
+                            }
+                            is CallState.Connected -> if (state.hasVideo) "Video call" else "Voice call"
+                            is CallState.Ended -> state.reason ?: "Call ended"
+                            CallState.Idle -> ""
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Color.White.copy(alpha = 0.75f)
+                    )
+                    Text(
+                        text = otherUserName,
+                        modifier = Modifier.padding(top = 8.dp),
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
                 Spacer(modifier = Modifier.height(14.dp))
 
                 if (isVideoCall) {
@@ -390,19 +413,26 @@ fun ActiveCallOverlay(
                             .border(1.dp, BorderHardDark, RoundedCornerShape(28.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        CallVideoSurface(
-                            callManager = callManager,
-                            isLocal = false,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        if (!blankVideoSurfaces) {
+                            CallVideoSurface(
+                                callManager = callManager,
+                                isLocal = false,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
 
-                        if (!hasRemoteVideo) {
+                        if (blankVideoSurfaces || !hasRemoteVideo) {
                             Text(
-                                text = "Waiting for remote video…",
+                                text = when {
+                                    blankVideoSurfaces -> "Call ended"
+                                    else -> "Waiting for remote video…"
+                                },
                                 color = Color.White.copy(alpha = 0.7f),
                                 style = MaterialTheme.typography.bodyMedium,
                                 textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(24.dp)
+                                modifier = Modifier
+                                    .padding(24.dp)
+                                    .graphicsLayer { alpha = chromeAlpha },
                             )
                         }
 
@@ -415,13 +445,15 @@ fun ActiveCallOverlay(
                                 .border(1.dp, BorderHardDark, RoundedCornerShape(20.dp)),
                             contentAlignment = Alignment.Center
                         ) {
-                            CallVideoSurface(
-                                callManager = callManager,
-                                isLocal = true,
-                                modifier = Modifier.fillMaxSize()
-                            )
+                            if (!blankVideoSurfaces) {
+                                CallVideoSurface(
+                                    callManager = callManager,
+                                    isLocal = true,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
 
-                            if (!hasLocalVideo) {
+                            if (!blankVideoSurfaces && !hasLocalVideo) {
                                 Text(
                                     text = "Local preview",
                                     color = Color.White.copy(alpha = 0.65f),
@@ -437,7 +469,8 @@ fun ActiveCallOverlay(
                             .clip(RoundedCornerShape(24.dp))
                             .background(SurfaceDark)
                             .border(1.dp, BorderHardDark, RoundedCornerShape(24.dp))
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                            .padding(horizontal = 14.dp, vertical = 12.dp)
+                            .graphicsLayer { alpha = chromeAlpha },
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
@@ -456,7 +489,15 @@ fun ActiveCallOverlay(
                             )
                         }
                         Text(
-                            text = if (state is CallState.Connecting) "Connecting audio…" else "Voice call in progress",
+                            text = when (state) {
+                                is CallState.Connecting -> if (state.reconnecting) {
+                                    "Reconnecting…"
+                                } else {
+                                    "Connecting audio…"
+                                }
+                                is CallState.Ended -> state.reason ?: "Call ended"
+                                else -> "Voice call in progress"
+                            },
                             color = Color.White.copy(alpha = 0.72f),
                             style = MaterialTheme.typography.bodyMedium,
                         )
@@ -475,7 +516,9 @@ fun ActiveCallOverlay(
                 val endPressed by endInteraction.collectIsPressedAsState()
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer { alpha = chromeAlpha },
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {

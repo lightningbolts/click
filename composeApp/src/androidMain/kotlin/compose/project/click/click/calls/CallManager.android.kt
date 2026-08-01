@@ -14,17 +14,21 @@ import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
 import io.livekit.android.renderer.TextureViewRenderer
 import io.livekit.android.room.Room
+import io.livekit.android.room.participant.VideoTrackPublishDefaults
+import io.livekit.android.room.track.LocalVideoTrackOptions
 import io.livekit.android.room.track.RemoteTrackPublication
 import io.livekit.android.room.track.Track
+import io.livekit.android.room.track.VideoPreset169
+import io.livekit.android.room.track.VideoQuality
 import io.livekit.android.room.track.VideoTrack
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.lang.ref.WeakReference
 
@@ -209,6 +213,14 @@ actual class CallManager {
                 // Compose TextureViewRenderer visibility is flaky, which looks like "no remote video".
                 adaptiveStream = false,
                 dynacast = false,
+                // H540 + simulcast on: faster than H720 open, still multi-layer for iOS peers.
+                videoTrackCaptureDefaults = LocalVideoTrackOptions(
+                    captureParams = VideoPreset169.H540.capture,
+                ),
+                videoTrackPublishDefaults = VideoTrackPublishDefaults(
+                    videoEncoding = VideoPreset169.H540.encoding,
+                    simulcast = true,
+                ),
             ),
         )
         room = liveKitRoom
@@ -216,8 +228,18 @@ actual class CallManager {
         eventsJob = scope.launch {
             liveKitRoom.events.collect { event ->
                 when (event) {
+                    is RoomEvent.TrackSubscribed -> {
+                        val publication = event.publication as? RemoteTrackPublication
+                        if (publication != null && publication.kind == Track.Kind.VIDEO) {
+                            if (!publication.subscribed) publication.setSubscribed(true)
+                            if (publication.track is VideoTrack) {
+                                publication.setVideoQuality(VideoQuality.HIGH)
+                            }
+                        }
+                        syncStateFromRoom()
+                    }
+
                     is RoomEvent.Connected,
-                    is RoomEvent.TrackSubscribed,
                     is RoomEvent.TrackUnsubscribed,
                     is RoomEvent.TrackPublished,
                     is RoomEvent.TrackUnpublished,
@@ -249,7 +271,10 @@ actual class CallManager {
                     -> syncStateFromRoom()
 
                     is RoomEvent.Reconnecting -> {
-                        _callState.value = CallState.Connecting(videoRequested = videoRequested)
+                        _callState.value = CallState.Connecting(
+                            videoRequested = videoRequested,
+                            reconnecting = true,
+                        )
                     }
 
                     is RoomEvent.Disconnected -> {
@@ -271,6 +296,7 @@ actual class CallManager {
                     token = token,
                     options = ConnectOptions(autoSubscribe = true),
                 )
+                // Serialize mic → camera (parallel CameraX + AudioRecord races on many devices).
                 val micOk = liveKitRoom.localParticipant.setMicrophoneEnabled(true)
                 if (!micOk) {
                     cleanupRoom(releaseState = false)
@@ -278,26 +304,36 @@ actual class CallManager {
                     return@launch
                 }
                 microphoneEnabled = true
-
-                if (videoEnabled) {
-                    val cameraOk = ensureCameraEnabled(liveKitRoom)
-                    if (!cameraOk) {
-                        // Stay in-call on audio so the session is usable; peer will keep
-                        // "Waiting for remote video" until camera can be enabled later.
-                        println("CallManager: camera failed to publish after connect")
-                    }
-                    cameraEnabled = cameraOk
-                }
                 syncStateFromRoom()
 
                 if (videoEnabled) {
-                    // Publication can lag the boolean success; retry once if no local track yet.
-                    delay(500)
+                    // Never hard-fail accept on camera lag — audio stays up; keep retrying publish.
+                    var cameraOk = ensureCameraEnabled(liveKitRoom)
+                    cameraEnabled = cameraOk
+                    syncStateFromRoom()
+                    if (!cameraOk ||
+                        liveKitRoom.localParticipant.getTrackPublication(Track.Source.CAMERA)?.track == null
+                    ) {
+                        delay(500)
+                        if (room === liveKitRoom) {
+                            cameraOk = ensureCameraEnabled(liveKitRoom)
+                            cameraEnabled = cameraOk
+                            syncStateFromRoom()
+                        }
+                    }
                     if (room === liveKitRoom &&
                         liveKitRoom.localParticipant.getTrackPublication(Track.Source.CAMERA)?.track == null
                     ) {
-                        ensureCameraEnabled(liveKitRoom)
-                        syncStateFromRoom()
+                        delay(750)
+                        if (room === liveKitRoom) {
+                            cameraEnabled = ensureCameraEnabled(liveKitRoom)
+                            syncStateFromRoom()
+                        }
+                    }
+                    if (room === liveKitRoom &&
+                        liveKitRoom.localParticipant.getTrackPublication(Track.Source.CAMERA)?.track == null
+                    ) {
+                        println("CallManager: camera still unpublished after retries; staying in-call on audio")
                     }
                 }
             } catch (error: Throwable) {
@@ -354,8 +390,9 @@ actual class CallManager {
 
     actual fun endCall() {
         AndroidCallRuntime.clearPendingPermissionRequest()
-        cleanupRoom()
+        // Flip to Ended before teardown so UI blanks TextureViews before disconnect/release.
         markEndedAndDeferIdle("Call ended", clearPending = false)
+        cleanupRoom(releaseState = false)
     }
 
     /** Failed starts and hang-up: briefly show Ended, then Idle so the next invite is not stuck busy. */
@@ -366,7 +403,7 @@ actual class CallManager {
         deferIdleAfterEndJob?.cancel()
         _callState.value = CallState.Ended(reason)
         deferIdleAfterEndJob = scope.launch {
-            delay(420)
+            delay(180)
             deferIdleAfterEndJob = null
             if (_callState.value is CallState.Ended) {
                 _callState.value = CallState.Idle
@@ -435,12 +472,16 @@ actual class CallManager {
 
     private fun currentRemoteVideoTrack(activeRoom: Room): VideoTrack? {
         for (participant in activeRoom.remoteParticipants.values) {
+            val cameraPub = participant.getTrackPublication(Track.Source.CAMERA) as? RemoteTrackPublication
+            if (cameraPub != null) {
+                ensureRemotePublicationReady(cameraPub)
+                val cameraTrack = cameraPub.track as? VideoTrack
+                if (cameraTrack != null && !cameraPub.muted) return cameraTrack
+            }
             for (publication in participant.trackPublications.values) {
                 if (publication.kind != Track.Kind.VIDEO) continue
                 val remotePub = publication as? RemoteTrackPublication
-                if (remotePub != null && !remotePub.subscribed) {
-                    remotePub.setSubscribed(true)
-                }
+                if (remotePub != null) ensureRemotePublicationReady(remotePub)
                 val track = publication.track as? VideoTrack ?: continue
                 if (!publication.muted) return track
             }
@@ -455,13 +496,23 @@ actual class CallManager {
 
     private fun ensureRemoteVideoSubscribed(activeRoom: Room) {
         for (participant in activeRoom.remoteParticipants.values) {
+            val cameraPub = participant.getTrackPublication(Track.Source.CAMERA) as? RemoteTrackPublication
+            if (cameraPub != null) ensureRemotePublicationReady(cameraPub)
             for (publication in participant.trackPublications.values) {
                 if (publication.kind != Track.Kind.VIDEO) continue
                 val remotePub = publication as? RemoteTrackPublication ?: continue
-                if (!remotePub.subscribed) {
-                    remotePub.setSubscribed(true)
-                }
+                ensureRemotePublicationReady(remotePub)
             }
+        }
+    }
+
+    private fun ensureRemotePublicationReady(publication: RemoteTrackPublication) {
+        if (!publication.subscribed) {
+            publication.setSubscribed(true)
+        }
+        if (publication.track is VideoTrack) {
+            publication.setEnabled(true)
+            publication.setVideoQuality(VideoQuality.HIGH)
         }
     }
 
@@ -480,18 +531,8 @@ actual class CallManager {
 
         val activeRoom = room
         room = null
+        // Drop Compose track bindings before LiveKit teardown so hangup cannot freeze on last frame.
         notifyVideoTrackListeners()
-
-        if (activeRoom != null) {
-            try {
-                activeRoom.disconnect()
-            } catch (_: Throwable) {
-            }
-            try {
-                activeRoom.release()
-            } catch (_: Throwable) {
-            }
-        }
 
         // Always leave telephony/VoIP audio mode so the next incoming ToneGenerator ring is audible.
         updateAudioRoute(false, reset = true)
@@ -501,6 +542,20 @@ actual class CallManager {
             speakerEnabled = false
             cameraEnabled = false
             videoRequested = false
+        }
+
+        // disconnect/release can block; never run them on Main during video hangup.
+        if (activeRoom != null) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    activeRoom.disconnect()
+                } catch (_: Throwable) {
+                }
+                try {
+                    activeRoom.release()
+                } catch (_: Throwable) {
+                }
+            }
         }
     }
 

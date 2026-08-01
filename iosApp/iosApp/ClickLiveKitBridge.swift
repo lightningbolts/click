@@ -106,11 +106,16 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
     private func connect(roomName: String, token: String, wsUrl: String, videoEnabled: Bool) async {
         await disconnectCurrentRoom(reportIdle: false)
 
-        let room = Room(delegate: self)
+        // Match Android: disable adaptiveStream/dynacast so Compose/UIKit visibility cannot pause layers.
+        let room = Room(
+            delegate: self,
+            roomOptions: RoomOptions(adaptiveStream: false, dynacast: false)
+        )
         self.room = room
 
         do {
             try await room.connect(url: wsUrl, token: token)
+            // Serialize mic → camera (same as Android) for reliable cross-platform publish.
             try await room.localParticipant.setMicrophone(enabled: true)
             if videoEnabled {
                 try await room.localParticipant.setCamera(enabled: true)
@@ -270,15 +275,16 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
     }
 
     private func disconnectCurrentRoom(reportIdle: Bool) async {
+        // Clear video binds before disconnect so hangup cannot freeze on the last frame.
+        localVideoView.track = nil
+        remoteVideoView.track = nil
+        localVideoView.removeFromSuperview()
+        remoteVideoView.removeFromSuperview()
         if let room {
             await room.disconnect()
         }
         room = nil
-        localVideoView.track = nil
-        remoteVideoView.track = nil
         hadRemoteParticipant = false
-        localVideoView.removeFromSuperview()
-        remoteVideoView.removeFromSuperview()
         if let localContainer {
             attach(videoView: localVideoView, to: localContainer)
         }

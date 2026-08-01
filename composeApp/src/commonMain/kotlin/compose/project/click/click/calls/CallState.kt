@@ -2,7 +2,11 @@ package compose.project.click.click.calls
 
 sealed class CallState {
     data object Idle : CallState()
-    data class Connecting(val videoRequested: Boolean) : CallState()
+    data class Connecting(
+        val videoRequested: Boolean,
+        /** True when LiveKit is reconnecting mid-call (not first join). */
+        val reconnecting: Boolean = false,
+    ) : CallState()
     data class Connected(
         val videoRequested: Boolean,
         val microphoneEnabled: Boolean,
