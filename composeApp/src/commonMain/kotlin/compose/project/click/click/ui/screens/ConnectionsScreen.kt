@@ -70,6 +70,9 @@ fun ConnectionsScreen(
     onOpenSearch: (() -> Unit)? = null,
     onOpenDisposableRoll: ((String) -> Unit)? = null,
     onOpenDisposableRollForChat: ((String) -> Unit)? = null,
+    shareableBeacons: List<compose.project.click.click.data.models.MapBeacon> = emptyList(),
+    mapViewModel: compose.project.click.click.viewmodel.MapViewModel? = null,
+    onShareBeaconToChat: ((compose.project.click.click.data.models.MapBeacon) -> Unit)? = null,
     viewModel: ChatViewModel = viewModel { ChatViewModel() },
     verifiedCliqueProximityAutofill: VerifiedCliqueProximityIntent? = null,
     onVerifiedCliqueProximityAutofillConsumed: () -> Unit = {},
@@ -304,6 +307,9 @@ fun ConnectionsScreen(
                                 parentInteractiveBackSwipePx = iosChatSwipeDragPx,
                                 onOpenDisposableRoll = onOpenDisposableRoll,
                                 onOpenDisposableRollForChat = onOpenDisposableRollForChat,
+                                shareableBeacons = shareableBeacons,
+                                mapViewModel = mapViewModel,
+                                onShareBeaconToChat = onShareBeaconToChat,
                             )
                         },
                     )

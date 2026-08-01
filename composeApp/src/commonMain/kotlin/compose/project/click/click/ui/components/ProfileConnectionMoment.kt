@@ -301,14 +301,15 @@ private fun formatElevationCategoryLabel(raw: String): String {
     }
 }
 
-/** Barometric / floor context: category label when present, plus meter snapshot. */
+/** Floor context: category label when present, plus AGL meter snapshot (not AMSL). */
 fun Connection.profileBarometricLine(): String? {
     val origin = originEncounter
     val parts = mutableListOf<String>()
     origin?.elevationCategory?.trim()?.takeIf { it.isNotEmpty() }?.let { raw ->
         parts.add(formatElevationCategoryLabel(raw))
     }
-    val meters = origin?.exactBarometricElevationM?.takeIf { it.isFinite() }
+    val meters = origin?.relativeAltitudeM?.takeIf { it.isFinite() }
+        ?: origin?.exactBarometricElevationM?.takeIf { it.isFinite() }
         ?: exactBarometricElevationM?.takeIf { originEncounter == null && it.isFinite() }
         ?: memoryCapsule?.exactBarometricElevationMeters?.takeIf { originEncounter == null && it.isFinite() }
     meters?.let { parts.add("${it.roundToInt()} m") }

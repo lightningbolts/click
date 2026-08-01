@@ -1,5 +1,7 @@
 package compose.project.click.click.sensors
 
+import compose.project.click.click.data.models.HeightCategory
+import compose.project.click.click.data.models.deriveHeightCategory
 import kotlin.math.pow
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -46,5 +48,19 @@ class BarometricElevationTest {
         assertNotNull(sample)
         assertFalse(sample.isCalibrated)
         assertEquals(990.0, sample.pressureHpa)
+        // Provisional only — category must not be inferred from AMSL.
+        assertEquals(HeightCategory.GROUND_LEVEL, sample.category)
+    }
+
+    @Test
+    fun deriveHeightCategory_usesAglThresholds() {
+        // AMSL 40 m with terrain 38 m → ~2 m AGL → ground level (not high rise)
+        assertEquals(HeightCategory.GROUND_LEVEL, deriveHeightCategory(40.0 - 38.0))
+        // AMSL 5 m with terrain 10 m → −5 m AGL → below ground
+        assertEquals(HeightCategory.BELOW_GROUND, deriveHeightCategory(5.0 - 10.0))
+        assertEquals(HeightCategory.ELEVATED, deriveHeightCategory(20.0))
+        assertEquals(HeightCategory.HIGH_RISE, deriveHeightCategory(40.0))
+        assertEquals(HeightCategory.GROUND_LEVEL, deriveHeightCategory(0.0))
+        assertEquals(null, deriveHeightCategory(null))
     }
 }

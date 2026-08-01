@@ -60,6 +60,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -68,6 +69,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.ui.theme.LightBlue
+import compose.project.click.click.ui.theme.PrimaryBlue
 
 /** Anchored attachment tray that does not steal IME focus from the composer field. */
 @Composable
@@ -542,6 +544,39 @@ internal fun ReplySwipeSideIcon(
             contentDescription = "Reply",
             tint = LightBlue,
             modifier = Modifier.size(chatBubbleScaledDp(22f)),
+        )
+    }
+}
+
+/**
+ * Rich card for a shared map beacon in 1:1 / group chat.
+ * Tap opens the full beacon detail bottom sheet (map/nearby content).
+ */
+@Composable
+internal fun BeaconChatCard(
+    message: Message,
+    isSent: Boolean,
+    onOpenBeacon: (beaconId: String) -> Unit = {},
+) {
+    val model = remember(message.id, message.metadata, message.content) {
+        BeaconPreviewModel.fromMessage(message)
+    }
+    val align = if (isSent) Alignment.CenterEnd else Alignment.CenterStart
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp, horizontal = 8.dp),
+        contentAlignment = align,
+    ) {
+        BeaconPreviewCard(
+            model = model,
+            compact = false,
+            modifier = Modifier.widthIn(max = 300.dp),
+            onClick = {
+                PlatformHapticsPolicy.lightImpact()
+                val id = model.beaconId.trim()
+                if (id.isNotEmpty()) onOpenBeacon(id)
+            },
         )
     }
 }

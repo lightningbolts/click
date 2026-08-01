@@ -61,8 +61,14 @@ enum class HeightCategory {
     HIGH_RISE
 }
 
-fun deriveHeightCategory(altitudeMeters: Double?): HeightCategory? {
-    val altitude = altitudeMeters ?: return null
+/**
+ * Classifies height **above local ground** (AGL), not barometric AMSL.
+ *
+ * Pass [relativeAltitudeM] (`exact_barometric_elevation_m − DEM terrain`), never raw
+ * sea-level barometric altitude — AMSL thresholds produce false BELOW_GROUND / HIGH_RISE labels.
+ */
+fun deriveHeightCategory(relativeAltitudeM: Double?): HeightCategory? {
+    val altitude = relativeAltitudeM ?: return null
     return when {
         altitude < -3.0 -> HeightCategory.BELOW_GROUND
         altitude < 8.0 -> HeightCategory.GROUND_LEVEL

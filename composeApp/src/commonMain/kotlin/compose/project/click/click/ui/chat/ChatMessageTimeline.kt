@@ -26,9 +26,11 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.data.models.ChatMessageType
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.MessageWithUser
+import compose.project.click.click.data.models.isBeaconChatMessage
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState
 import compose.project.click.click.viewmodel.SecureChatMediaHost
 import kotlinx.coroutines.delay
@@ -126,6 +128,7 @@ internal fun ChatMessageTimeline(
     onSwipeReply: (MessageWithUser) -> Unit,
     onDownloadAttachment: suspend (MessageWithUser, compose.project.click.click.chat.attachments.AttachmentCrypto.Envelope) -> ChatAttachmentDownloadOutcome,
     onExpandPhoto: (MessageWithUser) -> Unit = {},
+    onOpenBeacon: (beaconId: String) -> Unit = {},
     isLoadingOlderMessages: Boolean = false,
     interMessageBaseCompact: Dp = ChatInterMessageListBaseCompact,
     enableMessageContextMenu: Boolean = true,
@@ -137,6 +140,7 @@ internal fun ChatMessageTimeline(
     val onSwipeReplyState = rememberUpdatedState(onSwipeReply)
     val onDownloadAttachmentState = rememberUpdatedState(onDownloadAttachment)
     val onExpandPhotoState = rememberUpdatedState(onExpandPhoto)
+    val onOpenBeaconState = rememberUpdatedState(onOpenBeacon)
 
     Box(
         modifier = modifier.fillMaxSize(),
@@ -194,7 +198,9 @@ internal fun ChatMessageTimeline(
                     is ChatTimelineEntry.MessageEntry -> {
                         val messageWithUser = entry.messageWithUser
                         val msgReactions = reactionsMap[messageWithUser.message.id] ?: emptyList()
-                        val isCallLog = messageWithUser.message.messageType == "call_log"
+                        val mt = messageWithUser.message.messageType.lowercase()
+                        val isCallLog = mt == ChatMessageType.CALL_LOG ||
+                            messageWithUser.message.isBeaconChatMessage()
                         Column(Modifier.padding(top = listGapTop)) {
                             ChatMessageRowWithTimestampGutter(
                                 isCallLog = isCallLog,
@@ -228,6 +234,7 @@ internal fun ChatMessageTimeline(
                                             onDownloadAttachmentState.value(mwu, env)
                                         },
                                         onExpandPhoto = { onExpandPhotoState.value(it) },
+                                        onOpenBeacon = { onOpenBeaconState.value(it) },
                                     )
                                 }
                                 if (isCallLog) {

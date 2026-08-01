@@ -20,7 +20,6 @@ import compose.project.click.click.data.models.PendingConnectionDraft
 import compose.project.click.click.data.models.PendingHandshake
 import compose.project.click.click.data.models.ProximityHandshakeLocationSnapshot
 import compose.project.click.click.data.models.newPendingHandshakeId
-import compose.project.click.click.data.models.deriveHeightCategory
 import compose.project.click.click.data.models.GeoLocation
 import compose.project.click.click.data.models.HeightCategory
 import compose.project.click.click.data.models.ConnectionEncounter
@@ -1401,8 +1400,9 @@ class ConnectionRepository(
             )?.takeIf { it.isFinite() }
                 ?: request.exactBarometricElevationMeters?.takeIf { it.isFinite() }
 
-            // Never infer `elevation_category` from GPS `altitudeMeters` — only from barometric elevation we persist.
-            val heightCategory = exactBarometricElevationMeters?.let { deriveHeightCategory(it) }
+            // elevation_category is derived server-side from relative_altitude_m (AGL = AMSL − DEM).
+            // Never persist AMSL-based categories from the client.
+            val heightCategory: HeightCategory? = null
 
             val contextTags = listOfNotNull(contextTagId?.trim()?.takeIf { it.isNotEmpty() })
             try {
@@ -1588,7 +1588,8 @@ class ConnectionRepository(
             )?.takeIf { it.isFinite() }
                 ?: request.exactBarometricElevationMeters?.takeIf { it.isFinite() }
 
-            val heightCategory = exactBarometricElevationMeters?.let { deriveHeightCategory(it) }
+            // elevation_category is derived server-side from relative_altitude_m (AGL).
+            val heightCategory: HeightCategory? = null
 
             val result = try {
                 supabase.from("connections")
@@ -2073,7 +2074,7 @@ class ConnectionRepository(
 
             val trimmedWeather = weatherSnapshotLabel?.trim()?.takeIf { it.isNotEmpty() }
             val finiteBaro = exactBarometricElevationM?.takeIf { it.isFinite() }
-            val heightWire = heightCategory?.name?.takeIf { finiteBaro != null }
+            // Omit AMSL-derived height_category; QR route derives elevation_category from AGL after DEM.
             val requestPayload = QrApiRedeemRequest(
                 token = token,
                 gpsLat = scannerLat?.takeIf { it.isFinite() && it != 0.0 },
@@ -2085,8 +2086,8 @@ class ConnectionRepository(
                 weatherSnapshot = trimmedWeather,
                 noiseLevelCategory = noiseLevelCategory?.name,
                 exactNoiseLevelDb = exactNoiseLevelDb?.takeIf { it.isFinite() },
-                heightCategory = heightWire,
-                elevationCategory = heightWire,
+                heightCategory = null,
+                elevationCategory = null,
                 exactBarometricElevationM = finiteBaro,
                 contextTags = contextTags?.filter { it.isNotBlank() }?.distinct()?.takeIf { it.isNotEmpty() },
             )

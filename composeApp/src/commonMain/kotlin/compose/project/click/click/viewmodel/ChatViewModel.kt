@@ -14,6 +14,9 @@ import compose.project.click.click.data.models.ChatMessageType // pragma: allowl
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageDeliveryState // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
+import compose.project.click.click.data.models.toBeaconChatContent
+import compose.project.click.click.data.models.toBeaconChatMetadata
+import compose.project.click.click.data.models.withCoercedBeaconType
 import compose.project.click.click.data.models.replySnippetForMessage // pragma: allowlist secret
 import compose.project.click.click.data.models.withDbDerivedDeliveryState // pragma: allowlist secret
 import compose.project.click.click.data.models.replySnippetForMetadata // pragma: allowlist secret
@@ -186,6 +189,8 @@ class ChatViewModel(
     private val supabaseRepository: SupabaseRepository = SupabaseRepository(),
     private val chatApi: ChatApiClient = ChatApiClient(),
     private val connectivityMonitor: ConnectivityMonitor = NetworkConnectivityMonitor(),
+    private val mapBeaconRepository: compose.project.click.click.data.repository.MapBeaconRepository =
+        compose.project.click.click.data.repository.MapBeaconRepository(),
 ) : ViewModel(), SecureChatMediaHost {
 
     private companion object {
@@ -219,6 +224,9 @@ class ChatViewModel(
 
     private val _stagedChatImages = MutableStateFlow<List<StagedChatImage>>(emptyList())
     val stagedChatImages: StateFlow<List<StagedChatImage>> = _stagedChatImages.asStateFlow()
+
+    private val _stagedBeacon = MutableStateFlow<compose.project.click.click.data.models.MapBeacon?>(null)
+    val stagedBeacon: StateFlow<compose.project.click.click.data.models.MapBeacon?> = _stagedBeacon.asStateFlow()
 
     private val _replyingTo = MutableStateFlow<MessageWithUser?>(null)
     val replyingTo: StateFlow<MessageWithUser?> = _replyingTo.asStateFlow()
@@ -1695,6 +1703,7 @@ class ChatViewModel(
         if (switchingConnection) {
             currentApiChatId = null
             _stagedChatImages.value = emptyList()
+            _stagedBeacon.value = null
             _replyingTo.value = null
             _editingMessageId.value = null
         }
@@ -3088,6 +3097,21 @@ class ChatViewModel(
         _stagedChatImages.update { it.filterNot { s -> s.id == id } }
     }
 
+    fun stageBeaconForShare(beacon: compose.project.click.click.data.models.MapBeacon) {
+        _stagedBeacon.value = beacon
+        _stagedChatImages.value = emptyList()
+    }
+
+    fun clearStagedBeacon() {
+        _stagedBeacon.value = null
+    }
+
+    fun commitStagedBeacon() {
+        val beacon = _stagedBeacon.value ?: return
+        _stagedBeacon.value = null
+        sendBeaconMessage(beacon)
+    }
+
     fun commitStagedMediaToUpload() {
         val connectionId = currentConnectionId ?: return
         val userId = _currentUserId.value ?: return
@@ -3652,6 +3676,7 @@ class ChatViewModel(
         currentConnectionId = null
         currentApiChatId = null
         _stagedChatImages.value = emptyList()
+        _stagedBeacon.value = null
         _isPeerTyping.value = false
         _isPeerOnline.value = false
         _isLocalTypingActive.value = false
@@ -3786,6 +3811,100 @@ class ChatViewModel(
         val userId = _currentUserId.value ?: return
         viewModelScope.launch {
             chatRepository.forwardMessage(messageId, targetChatId, userId)
+        }
+    }
+
+    /**
+     * Sends a plaintext [ChatMessageType.BEACON] card into the active 1:1 or group chat.
+     * Public map metadata — not E2EE. Records share telemetry when possible.
+     */
+    fun sendBeaconMessage(beacon: compose.project.click.click.data.models.MapBeacon) {
+        val userId = _currentUserId.value ?: return
+        val successState = _chatMessagesState.value as? ChatMessagesState.Success ?: return
+        val connectionId = successState.chatDetails.connection.id
+        viewModelScope.launch {
+            _isMessageSubmitInProgress.value = true
+            try {
+                val apiChatId = resolveOrCreateApiChatId(connectionId) ?: run {
+                    _messageSendError.value = "Failed to send — unable to start chat"
+                    return@launch
+                }
+                val content = beacon.toBeaconChatContent()
+                val meta = beacon.toBeaconChatMetadata()
+                val message = chatRepository.sendMessage(
+                    chatId = apiChatId,
+                    userId = userId,
+                    content = content,
+                    messageType = ChatMessageType.BEACON,
+                    metadata = meta,
+                )
+                if (message != null) {
+                    val coerced = message.withCoercedBeaconType()
+                    val currentUser = resolveMessageUser(userId, apiChatId)
+                        ?: AppDataManager.currentUser.value?.takeIf { it.id == userId }
+                        ?: User(id = userId, name = "You", createdAt = 0L)
+                    applyInsertedMessage(coerced, currentUser, userId)
+                    activateConnectionIfPending(connectionId)
+                    val shareUrl = meta["share_url"]?.let { (it as? JsonPrimitive)?.contentOrNull }
+                    mapBeaconRepository.recordBeaconShare(
+                        beacon.id,
+                        telemetry = compose.project.click.click.data.api.EngagementTelemetryBody(surface = "chat"),
+                        shareUrl = shareUrl,
+                    )
+                } else {
+                    _messageSendError.value = "Failed to share beacon"
+                }
+            } catch (e: Exception) {
+                _messageSendError.value =
+                    "Failed to share beacon — ${e.redactedRestMessage().ifBlank { "error" }}"
+            } finally {
+                _isMessageSubmitInProgress.value = false
+            }
+        }
+    }
+
+    /**
+     * Share [beacon] into an arbitrary chat (map → chat picker). Hydrates the thread if needed.
+     */
+    fun sendBeaconMessageToChat(chatId: String, beacon: compose.project.click.click.data.models.MapBeacon) {
+        val userId = _currentUserId.value ?: return
+        val targetChatId = chatId.trim().takeIf { it.isNotEmpty() } ?: return
+        viewModelScope.launch {
+            _isMessageSubmitInProgress.value = true
+            try {
+                val content = beacon.toBeaconChatContent()
+                val meta = beacon.toBeaconChatMetadata()
+                val message = chatRepository.sendMessage(
+                    chatId = targetChatId,
+                    userId = userId,
+                    content = content,
+                    messageType = ChatMessageType.BEACON,
+                    metadata = meta,
+                )
+                if (message != null) {
+                    val coerced = message.withCoercedBeaconType()
+                    val shareUrl = meta["share_url"]?.let { (it as? JsonPrimitive)?.contentOrNull }
+                    mapBeaconRepository.recordBeaconShare(
+                        beacon.id,
+                        telemetry = compose.project.click.click.data.api.EngagementTelemetryBody(surface = "chat"),
+                        shareUrl = shareUrl,
+                    )
+                    val open = _chatMessagesState.value as? ChatMessagesState.Success
+                    if (open?.chatDetails?.chat?.id == targetChatId) {
+                        val currentUser = resolveMessageUser(userId, targetChatId)
+                            ?: AppDataManager.currentUser.value?.takeIf { it.id == userId }
+                            ?: User(id = userId, name = "You", createdAt = 0L)
+                        applyInsertedMessage(coerced, currentUser, userId)
+                    }
+                } else {
+                    _messageSendError.value = "Failed to share beacon"
+                }
+            } catch (e: Exception) {
+                _messageSendError.value =
+                    "Failed to share beacon — ${e.redactedRestMessage().ifBlank { "error" }}"
+            } finally {
+                _isMessageSubmitInProgress.value = false
+            }
         }
     }
 

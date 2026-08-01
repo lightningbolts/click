@@ -138,6 +138,8 @@ import compose.project.click.click.ui.components.ClickOutlinedTextField
 fun MapScreen(
     viewModel: MapViewModel = viewModel { MapViewModel() },
     onNavigateToChat: ((String) -> Unit)? = null,
+    /** Share a beacon into a connection/group chat (opens chat picker in App shell). */
+    onShareBeaconToChat: ((MapBeacon) -> Unit)? = null,
     /** When set, focuses the matching beacon pin once map beacons have loaded. */
     initialBeaconId: String? = null,
     onBeaconFocusConsumed: () -> Unit = {},
@@ -786,6 +788,7 @@ fun MapScreen(
                         distanceMeters = beaconSel.distanceMeters,
                         currentUserId = currentUser?.id,
                         viewModel = viewModel,
+                        onShareBeaconToChat = onShareBeaconToChat,
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(rememberScrollState())
@@ -1159,11 +1162,12 @@ private fun MapLayerFilterDropdown(
 }
 
 @Composable
-private fun BeaconDetailSheetContent(
+internal fun BeaconDetailSheetContent(
     beacon: MapBeacon,
     distanceMeters: Double?,
     currentUserId: String?,
     viewModel: MapViewModel,
+    onShareBeaconToChat: ((MapBeacon) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val isCreator = !currentUserId.isNullOrBlank() && beacon.createdByUserId == currentUserId
@@ -1196,6 +1200,7 @@ private fun BeaconDetailSheetContent(
                 isCreator = isCreator,
                 onEdit = openEdit,
                 onDelete = openDelete,
+                onShareToChat = onShareBeaconToChat?.let { cb -> { cb(beacon) } },
                 modifier = Modifier.fillMaxWidth(),
             )
             else -> {
@@ -1370,6 +1375,7 @@ internal fun EventBeaconDetail(
     isCreator: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onShareToChat: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val rsvpCache by viewModel.beaconRsvpById.collectAsState()
@@ -1475,6 +1481,7 @@ internal fun EventBeaconDetail(
                         subject = displayBeacon.displayDynamicTitle(),
                     )
                 },
+                onShareToChat = onShareToChat,
                 onToggleBookmark = { viewModel.toggleBeaconBookmark(displayBeacon.id) },
                 onEdit = onEdit,
                 onDelete = onDelete,
@@ -1708,20 +1715,51 @@ private fun EventHeroActions(
     bookmarked: Boolean,
     isCreator: Boolean,
     onShare: () -> Unit,
+    onShareToChat: (() -> Unit)? = null,
     onToggleBookmark: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val border = clickBorderColor()
     var menuExpanded by remember { mutableStateOf(false) }
+    var shareMenuExpanded by remember { mutableStateOf(false) }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        EventHeroIconButton(
-            selected = false,
-            border = border,
-            onClick = onShare,
-            contentDescription = "Share event",
-            icon = Icons.Filled.Share,
-        )
+        Box {
+            EventHeroIconButton(
+                selected = shareMenuExpanded,
+                border = border,
+                onClick = {
+                    if (onShareToChat != null) {
+                        shareMenuExpanded = true
+                    } else {
+                        onShare()
+                    }
+                },
+                contentDescription = "Share event",
+                icon = Icons.Filled.Share,
+            )
+            DropdownMenu(
+                expanded = shareMenuExpanded,
+                onDismissRequest = { shareMenuExpanded = false },
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Share link") },
+                    onClick = {
+                        shareMenuExpanded = false
+                        onShare()
+                    },
+                )
+                if (onShareToChat != null) {
+                    DropdownMenuItem(
+                        text = { Text("Share to chat") },
+                        onClick = {
+                            shareMenuExpanded = false
+                            onShareToChat()
+                        },
+                    )
+                }
+            }
+        }
         EventHeroIconButton(
             selected = bookmarked,
             border = border,
@@ -2001,7 +2039,7 @@ private fun EventAttendeeStack(
 }
 
 @Composable
-private fun CommunityBeaconDetail(
+internal fun CommunityBeaconDetail(
     beacon: MapBeacon,
     distanceMeters: Double?,
     isCreator: Boolean,

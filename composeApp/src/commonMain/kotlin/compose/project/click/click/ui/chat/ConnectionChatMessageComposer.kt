@@ -92,12 +92,15 @@ internal fun ConnectionChatMessageComposer(
     tetherPingEnabled: Boolean = false,
     pingTetherLoading: Boolean = false,
     onPingTether: () -> Unit = {},
+    shareableBeacons: List<compose.project.click.click.data.models.MapBeacon> = emptyList(),
 ) {
     val messageInput by viewModel.messageInput.collectAsState()
     val messageSendError by viewModel.messageSendError.collectAsState()
     val isSending by viewModel.isSending.collectAsState()
     val stagedChatImages by viewModel.stagedChatImages.collectAsState()
+    val stagedBeacon by viewModel.stagedBeacon.collectAsState()
     var attachmentMenuExpanded by remember { mutableStateOf(false) }
+    var showBeaconPicker by remember { mutableStateOf(false) }
 
     val composerStyle = LocalPlatformStyle.current
     val focusManager = LocalFocusManager.current
@@ -200,6 +203,52 @@ internal fun ConnectionChatMessageComposer(
                             }
                         }
                         Spacer(modifier = Modifier.height(6.dp))
+                    }
+                }
+            }
+            if (stagedBeacon != null) {
+                val beacon = stagedBeacon!!
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        BeaconPreviewCard(
+                            model = BeaconPreviewModel.fromMapBeacon(beacon),
+                            compact = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(6.dp)
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(Color.Black.copy(alpha = 0.52f))
+                                .clickable { viewModel.clearStagedBeacon() },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = "Remove",
+                                tint = Color.White,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    }
+                    Button(
+                        onClick = {
+                            PlatformHapticsPolicy.successNotification()
+                            viewModel.commitStagedBeacon()
+                        },
+                        enabled = !isSending,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                    ) {
+                        Text("Send")
                     }
                 }
             }
@@ -320,6 +369,19 @@ internal fun ConnectionChatMessageComposer(
                                     onOpenDisposableRoll()
                                 },
                             )
+                            ChatAttachmentMenuRow(
+                                label = "Share beacon",
+                                icon = Icons.Filled.Explore,
+                                enabled = shareableBeacons.isNotEmpty(),
+                                onClick = {
+                                    if (shareableBeacons.isEmpty()) return@ChatAttachmentMenuRow
+                                    PlatformHapticsPolicy.heavyImpact()
+                                    attachmentMenuExpanded = false
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus()
+                                    showBeaconPicker = true
+                                },
+                            )
                             if (tetherPingEnabled) {
                                 ChatAttachmentMenuRow(
                                     label = "Ping Tether",
@@ -372,6 +434,16 @@ internal fun ConnectionChatMessageComposer(
                                 },
                             )
                     }
+                },
+            )
+        }
+        if (showBeaconPicker) {
+            ShareBeaconBottomSheet(
+                beacons = shareableBeacons.take(40),
+                onDismissRequest = { showBeaconPicker = false },
+                onConfirmStage = { beacon ->
+                    showBeaconPicker = false
+                    viewModel.stageBeaconForShare(beacon)
                 },
             )
         }

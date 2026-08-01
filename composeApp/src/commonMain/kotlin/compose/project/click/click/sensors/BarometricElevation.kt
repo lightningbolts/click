@@ -1,7 +1,6 @@
 package compose.project.click.click.sensors
 
 import compose.project.click.click.data.models.HeightCategory
-import compose.project.click.click.data.models.deriveHeightCategory
 import kotlin.math.pow
 
 /** ISA standard sea-level pressure (hPa) — fallback when Open-Meteo MSL is unavailable. */
@@ -52,9 +51,10 @@ fun barometricHeightSampleFromPressure(
     pressureMslHpa: Double?,
 ): BarometricHeightSample? {
     val result = computeBarometricElevationMeters(pressureHpa, pressureMslHpa) ?: return null
-    val category = deriveHeightCategory(result.elevationMeters) ?: return null
+    // AMSL alone cannot drive HeightCategory — server derives category from relative_altitude_m (AGL).
+    // Use GROUND_LEVEL as a non-persisted provisional until terrain enrich overwrites.
     return BarometricHeightSample(
-        category = category,
+        category = HeightCategory.GROUND_LEVEL,
         elevationMeters = result.elevationMeters,
         pressureHpa = pressureHpa,
         isCalibrated = result.isCalibrated,

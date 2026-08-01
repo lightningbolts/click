@@ -25,6 +25,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement
@@ -108,6 +109,7 @@ import compose.project.click.click.ui.utils.rememberMicrophonePermissionRequeste
 import compose.project.click.click.util.redactedRestMessage
 import compose.project.click.click.viewmodel.AuthViewModel
 import compose.project.click.click.viewmodel.AuthState
+import compose.project.click.click.ui.utils.displayDynamicTitle
 import compose.project.click.click.viewmodel.ChatViewModel
 import compose.project.click.click.viewmodel.HomeViewModel
 import compose.project.click.click.viewmodel.MapViewModel
@@ -974,6 +976,11 @@ fun App() {
             val homeViewModel: HomeViewModel = viewModel { HomeViewModel() }
             val mapViewModel: MapViewModel = viewModel { MapViewModel() }
             val chatViewModel: ChatViewModel = viewModel { ChatViewModel() }
+            val shareableMapBeacons by mapViewModel.mapBeacons.collectAsState()
+            var pendingBeaconShareToChat by remember {
+                mutableStateOf<compose.project.click.click.data.models.MapBeacon?>(null)
+            }
+            val chatListForBeaconShare by chatViewModel.chatListState.collectAsState()
             var hubChatArgs by remember { mutableStateOf<HubChatNavArgs?>(null) }
             var hubVerifyInProgress by remember { mutableStateOf(false) }
             var lastHubChatArgs by remember { mutableStateOf<HubChatNavArgs?>(null) }
@@ -1493,6 +1500,11 @@ fun App() {
                                                 onOpenDisposableRollForChat = { chatId ->
                                                     openChatDisposableRoll(chatId)
                                                 },
+                                                shareableBeacons = shareableMapBeacons,
+                                                mapViewModel = mapViewModel,
+                                                onShareBeaconToChat = { beacon ->
+                                                    pendingBeaconShareToChat = beacon
+                                                },
                                             )
                                         } else {
                                             Box(
@@ -1509,6 +1521,9 @@ fun App() {
                                         onNavigateToChat = { connectionId ->
                                             pendingChatId = connectionId
                                             navigateTo(NavigationItem.Connections.route)
+                                        },
+                                        onShareBeaconToChat = { beacon ->
+                                            pendingBeaconShareToChat = beacon
                                         },
                                         initialBeaconId = pendingBeaconId,
                                         onBeaconFocusConsumed = { pendingBeaconId = null },
@@ -2458,6 +2473,63 @@ fun App() {
                             navigateTo(NavigationItem.Settings.route)
                         },
                     )
+                }
+            }
+            pendingBeaconShareToChat?.let { beaconToShare ->
+                val chatList = (chatListForBeaconShare as? compose.project.click.click.viewmodel.ChatListState.Success)
+                    ?.chats
+                    .orEmpty()
+                androidx.compose.ui.window.Dialog(
+                    onDismissRequest = { pendingBeaconShareToChat = null },
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                text = "Share to chat",
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                text = beaconToShare.displayDynamicTitle(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            chatList.take(40).forEach { row ->
+                                val chatId = row.chat.id?.trim()?.takeIf { it.isNotEmpty() } ?: return@forEach
+                                val label = row.groupClique?.name?.trim()?.takeIf { it.isNotEmpty() }
+                                    ?: row.otherUser.name?.trim()?.takeIf { it.isNotEmpty() }
+                                    ?: "Chat"
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            chatViewModel.sendBeaconMessageToChat(chatId, beaconToShare)
+                                            pendingBeaconShareToChat = null
+                                            pendingChatId = row.connection.id
+                                            navigateTo(NavigationItem.Connections.route)
+                                        }
+                                        .padding(vertical = 10.dp),
+                                )
+                            }
+                            if (chatList.isEmpty()) {
+                                Text(
+                                    text = "No chats yet. Connect with someone first.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
                 }
             }
             GlobalTetherOverlay(

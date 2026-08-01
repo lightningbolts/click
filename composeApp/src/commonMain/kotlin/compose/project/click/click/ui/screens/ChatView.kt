@@ -166,6 +166,7 @@ import compose.project.click.click.ui.chat.AnimatedVisibilityChatBubble // pragm
 import compose.project.click.click.ui.chat.chatBubbleStableRowKey // pragma: allowlist secret
 import compose.project.click.click.ui.chat.CallLogSystemRow // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatBeaconDetailSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatExpandedPhotoPreview // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatWarmLoadingView // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionItem // pragma: allowlist secret
@@ -296,6 +297,9 @@ fun ChatView(
     onOpenGroupMembersPicker: (GroupMembersPickerContext) -> Unit = {},
     onOpenDisposableRoll: ((connectionId: String) -> Unit)? = null,
     onOpenDisposableRollForChat: ((chatId: String) -> Unit)? = null,
+    shareableBeacons: List<compose.project.click.click.data.models.MapBeacon> = emptyList(),
+    mapViewModel: compose.project.click.click.viewmodel.MapViewModel? = null,
+    onShareBeaconToChat: ((compose.project.click.click.data.models.MapBeacon) -> Unit)? = null,
     /**
      * When true, timestamp peek is driven by the parent `InteractiveSwipeBackContainer` horizontal
      * drag (register callbacks with [onRegisterSwipeBackRightToLeftPeek]). When false, the chat
@@ -386,6 +390,7 @@ fun ChatView(
     var contextMenuMessage by remember { mutableStateOf<MessageWithUser?>(null) }
     var forwardMessageId by remember { mutableStateOf<String?>(null) }
     var expandedPhotoTarget by remember { mutableStateOf<MessageWithUser?>(null) }
+    var openBeaconDetailId by remember { mutableStateOf<String?>(null) }
     val secureMediaLoadMap by viewModel.secureChatMediaLoadState.collectAsState()
     val toastState = rememberGlassToastState()
     val tetherPayload by EncounterTetherManager.activeTetherPayload.collectAsState()
@@ -1249,6 +1254,7 @@ fun ChatView(
                                 viewModel.downloadChatAttachment(mwu.message.id, env)
                             },
                             onExpandPhoto = { expandedPhotoTarget = it },
+                            onOpenBeacon = { beaconId -> openBeaconDetailId = beaconId },
                             isLoadingOlderMessages = isLoadingOlderMessages,
                             modifier = messageContentModifier
                                 .padding(horizontal = 4.dp)
@@ -1402,6 +1408,7 @@ fun ChatView(
                                         senderId = currentUserId!!,
                                     )
                                 },
+                                shareableBeacons = shareableBeacons,
                             )
                         }
                     }
@@ -1455,6 +1462,25 @@ fun ChatView(
             secureMediaLoadMap = secureMediaLoadMap,
             onDismiss = { expandedPhotoTarget = null },
         )
+    }
+
+    val beaconDetailId = openBeaconDetailId
+    val mapVm = mapViewModel
+    if (beaconDetailId != null) {
+        if (mapVm != null) {
+            ChatBeaconDetailSheet(
+                beaconId = beaconDetailId,
+                mapViewModel = mapVm,
+                knownBeacons = shareableBeacons,
+                onDismissRequest = { openBeaconDetailId = null },
+                onShareBeaconToChat = onShareBeaconToChat,
+            )
+        } else {
+            LaunchedEffect(beaconDetailId) {
+                compose.project.click.click.deeplink.EventDeepLinkRouter.setPendingBeaconId(beaconDetailId)
+                openBeaconDetailId = null
+            }
+        }
     }
 
     GlassToastHost(

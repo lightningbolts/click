@@ -21,6 +21,11 @@ object ChatMessageType {
     const val CALL_LOG = "call_log"
     /** Encrypted arbitrary attachment — decrypted body is an `AttachmentCrypto` envelope. */
     const val FILE = "file"
+    /**
+     * Shared map beacon card — plaintext body + structured metadata (public map data).
+     * Same encryption skip pattern as [CALL_LOG].
+     */
+    const val BEACON = "beacon"
 }
 
 /** Client / UI lifecycle for an outgoing or hydrated inbox row (not a DB enum). */
@@ -181,25 +186,45 @@ fun Message.audioCacheFileExtension(): String {
 
 /** Chat list / previews: short label independent of encryption noise in [Message.content]. */
 fun Message.previewLabel(): String {
-    return when (messageType.lowercase()) {
-        ChatMessageType.IMAGE -> {
-            val cap = content.trim()
-            if (cap.isNotEmpty()) cap else "Photo"
+    return when {
+        isBeaconChatMessage() -> {
+            val title = beaconTitleFromMetadata(metadata)?.trim()?.takeIf { it.isNotEmpty() }
+            when {
+                title != null && messageTypeLooksLikeEvent(metadata) -> "Event: $title"
+                title != null -> title
+                else -> "Beacon"
+            }
         }
-        ChatMessageType.AUDIO -> {
-            val cap = content.trim()
-            if (cap.isNotEmpty()) cap else "Voice message"
+        else -> when (messageType.lowercase()) {
+            ChatMessageType.IMAGE -> {
+                val cap = content.trim()
+                if (cap.isNotEmpty()) cap else "Photo"
+            }
+            ChatMessageType.AUDIO -> {
+                val cap = content.trim()
+                if (cap.isNotEmpty()) cap else "Voice message"
+            }
+            ChatMessageType.CALL_LOG -> "Call"
+            ChatMessageType.FILE -> "File"
+            // Mask raw attachment envelopes (`ccx:v1:{...}`) so chat-list previews never
+            // leak the encrypted JSON before the client has a chance to decrypt it.
+            else -> maskAttachmentEnvelope(content)
         }
-        ChatMessageType.CALL_LOG -> "Call"
-        ChatMessageType.FILE -> "File"
-        // Mask raw attachment envelopes (`ccx:v1:{...}`) so chat-list previews never
-        // leak the encrypted JSON before the client has a chance to decrypt it.
-        else -> maskAttachmentEnvelope(content)
     }
 }
 
 /** Text shown when copying a message to the clipboard. */
 fun Message.copyableText(): String {
+    if (isBeaconChatMessage()) {
+        val title = beaconTitleFromMetadata(metadata)?.trim()?.takeIf { it.isNotEmpty() }
+        val shareUrl = beaconShareUrlFromMetadata(metadata)
+        return when {
+            title != null && shareUrl != null -> "$title\n$shareUrl"
+            shareUrl != null -> shareUrl
+            title != null -> title
+            else -> content.ifBlank { "Beacon" }
+        }
+    }
     return when (messageType.lowercase()) {
         ChatMessageType.IMAGE -> {
             val cap = content.trim()
@@ -227,4 +252,46 @@ fun Message.copyableText(): String {
 
 fun replySnippetForMessage(message: Message, maxLen: Int = 140): String {
     return replySnippetForMetadata(message.previewLabel(), maxLen)
+}
+
+fun beaconTitleFromMetadata(metadata: kotlinx.serialization.json.JsonElement?): String? {
+    val root = metadata as? JsonObject ?: return null
+    return root["title"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+        ?: root["beacon_title"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+}
+
+fun beaconShareUrlFromMetadata(metadata: kotlinx.serialization.json.JsonElement?): String? {
+    val root = metadata as? JsonObject ?: return null
+    return root["share_url"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+        ?: root["shareUrl"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+}
+
+fun beaconIdFromMetadata(metadata: kotlinx.serialization.json.JsonElement?): String? {
+    val root = metadata as? JsonObject ?: return null
+    return root["beacon_id"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+        ?: root["beaconId"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+}
+
+fun beaconTypeFromMetadata(metadata: kotlinx.serialization.json.JsonElement?): String? {
+    val root = metadata as? JsonObject ?: return null
+    return root["beacon_type"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+        ?: root["beaconType"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+}
+
+/** True when the row is a beacon card (explicit type or beacon metadata). */
+fun Message.isBeaconChatMessage(): Boolean {
+    if (messageType.lowercase() == ChatMessageType.BEACON) return true
+    return beaconIdFromMetadata(metadata) != null
+}
+
+/** Normalize rows that were persisted as `text` but carry beacon metadata. */
+fun Message.withCoercedBeaconType(): Message {
+    if (!isBeaconChatMessage()) return this
+    if (messageType.lowercase() == ChatMessageType.BEACON) return this
+    return copy(messageType = ChatMessageType.BEACON)
+}
+
+private fun messageTypeLooksLikeEvent(metadata: kotlinx.serialization.json.JsonElement?): Boolean {
+    val type = beaconTypeFromMetadata(metadata)?.lowercase() ?: return false
+    return type == "event" || type == "social" || type == "social_vibe"
 }

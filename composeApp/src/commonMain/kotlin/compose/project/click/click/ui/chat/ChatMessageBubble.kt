@@ -57,6 +57,7 @@ import compose.project.click.click.data.models.ChatMessageType
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.hasLocalMediaUri
+import compose.project.click.click.data.models.isBeaconChatMessage
 import compose.project.click.click.data.models.isEncryptedMedia
 import compose.project.click.click.data.models.mediaUrlOrNull
 import compose.project.click.click.data.models.originalMimeTypeOrNull
@@ -99,10 +100,20 @@ fun ChatMessageBubble(
     onDownloadAttachment: suspend (MessageWithUser, AttachmentCrypto.Envelope) -> ChatAttachmentDownloadOutcome =
         { _, _ -> ChatAttachmentDownloadOutcome.Failure("Download not available in this context.") },
     onExpandPhoto: (MessageWithUser) -> Unit = {},
+    /** Opens the full map beacon detail sheet for a shared beacon card. */
+    onOpenBeacon: (beaconId: String) -> Unit = {},
 ) {
     val message = messageWithUser.message
     if (message.messageType == "call_log") {
         CallLogSystemRow(message = message)
+        return
+    }
+    if (message.isBeaconChatMessage()) {
+        BeaconChatCard(
+            message = message,
+            isSent = messageWithUser.isSent,
+            onOpenBeacon = onOpenBeacon,
+        )
         return
     }
     val isSent = messageWithUser.isSent

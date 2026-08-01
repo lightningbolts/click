@@ -190,7 +190,9 @@ private fun ConnectionEncounter.metricElevationLabel(): String? {
             } ?: raw.replace('_', ' ').lowercase().replaceFirstChar { it.titlecase() }
         parts.add(friendly)
     }
-    exactBarometricElevationM?.takeIf { it.isFinite() }?.let { parts.add("${it.roundToInt()} m") }
+    val meters = relativeAltitudeM?.takeIf { it.isFinite() }
+        ?: exactBarometricElevationM?.takeIf { it.isFinite() }
+    meters?.let { parts.add("${it.roundToInt()} m") }
     return parts.joinToString(" · ").takeIf { it.isNotEmpty() }
 }
 

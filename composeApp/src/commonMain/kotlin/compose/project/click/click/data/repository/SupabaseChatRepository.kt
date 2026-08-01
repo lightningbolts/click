@@ -676,7 +676,7 @@ class SupabaseChatRepository(
 
     private fun decryptMessageOnCurrentThread(message: Message, crypto: ChatSessionCaches.ResolvedChatCrypto?): Message {
         val decrypted =
-            if (message.messageType == "call_log") {
+            if (message.messageType == "call_log" || message.isBeaconChatMessage()) {
                 message
             } else if (crypto == null) {
                 if (MessageCrypto.isAnyE2eeWireContent(message.content)) {
@@ -702,7 +702,7 @@ class SupabaseChatRepository(
                     }
                 }
             }
-        return decrypted.withDbDerivedDeliveryState()
+        return decrypted.withCoercedBeaconType().withDbDerivedDeliveryState()
     }
 
     private suspend fun decryptMessage(message: Message, crypto: ChatSessionCaches.ResolvedChatCrypto?): Message =
@@ -1466,7 +1466,7 @@ class SupabaseChatRepository(
         return try {
             val crypto = resolveChatCrypto(chatId, userId)
             val wireContent = when {
-                messageType == "call_log" -> content
+                messageType == "call_log" || messageType == "beacon" -> content
                 crypto is ChatSessionCaches.ResolvedChatCrypto.GroupMaster ->
                     MessageCrypto.encryptGroupMessageContent(content, crypto.masterKey)
                 crypto is ChatSessionCaches.ResolvedChatCrypto.Pairwise ->
