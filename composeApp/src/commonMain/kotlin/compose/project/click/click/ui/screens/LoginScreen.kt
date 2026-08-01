@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import compose.project.click.click.data.api.ApiConfig
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.theme.LocalPlatformStyle
+import compose.project.click.click.ui.components.ClickOutlinedTextField
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,14 +100,14 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(48.dp))
             // Email TextField
-            OutlinedTextField(
+            ClickOutlinedTextField(
                 value = email,
                 onValueChange = { email = it },
                 label = { Text("Email") },
                 leadingIcon = {
                     Icon(Icons.Filled.Email, contentDescription = "Email")
                 },
-                modifier = Modifier.fillMaxWidth().height(64.dp),
+                modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Email,
@@ -126,7 +127,7 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             // Password TextField
-            OutlinedTextField(
+            ClickOutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
                 label = { Text("Password") },
@@ -142,7 +143,7 @@ fun LoginScreen(
                     }
                 },
                 visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth().height(64.dp),
+                modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Password,

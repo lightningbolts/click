@@ -1476,7 +1476,7 @@ private fun JournalComposerCard(
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
         )
-        OutlinedTextField(
+        ClickOutlinedTextField(
             value = text,
             onValueChange = onTextChange,
             modifier = Modifier.fillMaxWidth(),
@@ -1650,7 +1650,7 @@ private fun JournalTimelineRow(
             )
         }
         if (isEditing) {
-            OutlinedTextField(
+            ClickOutlinedTextField(
                 value = editText,
                 onValueChange = onEditTextChange,
                 modifier = Modifier.fillMaxWidth(),

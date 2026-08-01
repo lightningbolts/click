@@ -221,6 +221,7 @@ import compose.project.click.click.viewmodel.SecureChatMediaHost // pragma: allo
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.util.ViewerAvailabilityBubblesCache // pragma: allowlist secret
+import compose.project.click.click.util.dedupeOneToOneChatsByPeer // pragma: allowlist secret
 import compose.project.click.click.util.prefetchAvailabilityOverlapsForPeers // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers // pragma: allowlist secret
 import kotlinx.coroutines.withContext // pragma: allowlist secret
@@ -251,6 +252,7 @@ import compose.project.click.click.ui.chat.ChatMediaPickerHandles // pragma: all
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 import compose.project.click.click.util.LruMemoryCache // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickOutlinedTextField
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -414,6 +416,9 @@ fun ConnectionsListView(
     }
     val showRememberMeStrip =
         selectedTabIndex == 0 && searchQuery.isBlank() && rememberMeChats.isNotEmpty()
+    val rememberMeConnectionIds = remember(rememberMeChats) {
+        rememberMeChats.map { it.connection.id }.toSet()
+    }
 
     LaunchedEffect(currentUserId, viewerAvailabilityBubbles, activeOneToOneChats) {
         val userId = currentUserId?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
@@ -442,9 +447,22 @@ fun ConnectionsListView(
                 it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
         }
     }
-    val sortedTabChats = remember(activeChats, groupChats, archivedChats, selectedTabIndex, coreConnectionIds) {
+    val sortedTabChats = remember(
+        activeChats,
+        groupChats,
+        archivedChats,
+        selectedTabIndex,
+        coreConnectionIds,
+        showRememberMeStrip,
+        rememberMeConnectionIds,
+    ) {
         val tabChats = when (selectedTabIndex) {
-            0 -> activeChats
+            0 -> if (showRememberMeStrip) {
+                // Core people live in the Remember Me strip — don't list them again below.
+                activeChats.filter { it.connection.id !in rememberMeConnectionIds }
+            } else {
+                activeChats
+            }
             1 -> groupChats
             else -> archivedChats
         }
@@ -469,7 +487,7 @@ fun ConnectionsListView(
     val connectionsDisplayLimit by viewModel.connectionsDisplayLimit.collectAsState()
     val displayedChats = remember(filteredChats, connectionsDisplayLimit, searchQuery) {
         val page = if (searchQuery.isNotBlank()) filteredChats else filteredChats.take(connectionsDisplayLimit)
-        page.distinctBy { it.connection.id }
+        dedupeOneToOneChatsByPeer(page.distinctBy { it.connection.id })
     }
     LaunchedEffect(connectionsLazyListState, filteredChats.size, connectionsDisplayLimit, searchQuery) {
         if (searchQuery.isNotBlank()) return@LaunchedEffect
@@ -1232,7 +1250,7 @@ private fun HubActionSheet(
             },
             body = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
+                    ClickOutlinedTextField(
                         value = editNameDraft,
                         onValueChange = { editNameDraft = it.take(80) },
                         singleLine = true,
@@ -1247,7 +1265,7 @@ private fun HubActionSheet(
                             unfocusedLabelColor = GlassSheetTokens.OnOledMuted(),
                         ),
                     )
-                    OutlinedTextField(
+                    ClickOutlinedTextField(
                         value = editCategoryDraft,
                         onValueChange = { editCategoryDraft = it.take(40) },
                         singleLine = true,

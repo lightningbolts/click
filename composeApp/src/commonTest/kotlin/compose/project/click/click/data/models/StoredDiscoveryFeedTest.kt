@@ -47,6 +47,8 @@ class StoredDiscoveryFeedTest {
 
     @Test
     fun mergeMapBeaconLists_preservesScheduleWhenIncomingLacksIt() {
+        // Use a far-future window so mergeMapBeaconLists' isActiveForDiscoveryFeed filter
+        // does not drop the row when "today" moves past a hardcoded date.
         val withSchedule = MapBeacon(
             id = "a",
             kind = MapBeaconKind.EVENT,
@@ -55,8 +57,8 @@ class StoredDiscoveryFeedTest {
             metadata = MapBeaconMetadata(
                 title = "birthday",
                 raw = buildJsonObject {
-                    put("event_start_at", JsonPrimitive("2026-07-22T16:00:00Z"))
-                    put("event_end_at", JsonPrimitive("2026-07-22T23:00:00Z"))
+                    put("event_start_at", JsonPrimitive("2099-07-22T16:00:00Z"))
+                    put("event_end_at", JsonPrimitive("2099-07-22T23:00:00Z"))
                 },
             ),
             createdAtEpochMs = 1_700_000_000_000L,
@@ -77,6 +79,31 @@ class StoredDiscoveryFeedTest {
         assertEquals(1.1, merged.latitude)
         assertNotNull(merged.eventSchedule())
         assertEquals(withSchedule.eventSchedule()?.startEpochMs, merged.eventSchedule()?.startEpochMs)
+    }
+
+    @Test
+    fun soundtrackBeacon_roundTripsPreviewUrlThroughStoredProjection() {
+        val original = MapBeacon(
+            id = "ost-1",
+            kind = MapBeaconKind.SOUNDTRACK,
+            latitude = 37.77,
+            longitude = -122.42,
+            metadata = MapBeaconMetadata(
+                trackName = "Neon Lights",
+                artistName = "Demo Artist",
+                previewUrl = "https://example.com/preview.m4a",
+                albumArtUrl = "https://example.com/art.jpg",
+                musicUrl = "https://open.spotify.com/track/abc",
+                originalUrl = "https://open.spotify.com/track/abc",
+            ),
+            expiresAtEpochMs = 1_900_000_000_000L,
+            sourceBeaconType = "soundtrack",
+        )
+        val restored = original.toStoredMapBeacon().toMapBeacon()
+        assertEquals(original.metadata.previewUrl, restored.metadata.previewUrl)
+        assertEquals(original.metadata.trackName, restored.metadata.trackName)
+        assertEquals(original.metadata.albumArtUrl, restored.metadata.albumArtUrl)
+        assertEquals(original.metadata.musicUrl, restored.metadata.musicUrl)
     }
 
     @Test

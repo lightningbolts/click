@@ -35,6 +35,8 @@ import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.data.api.CommunityHubNearbyDto
 import compose.project.click.click.data.api.toEventBookmarkItemDto
 import compose.project.click.click.data.api.toStoredEventBookmark
+import compose.project.click.click.util.dedupeOneToOneChatsByPeer
+import compose.project.click.click.util.dedupeOneToOneConnectionsByPeer
 import compose.project.click.click.utils.LocationService
 import compose.project.click.click.auth.LocalSessionCache
 import compose.project.click.click.network.NetworkConnectivityMonitor
@@ -224,7 +226,7 @@ object AppDataManager {
     val inboxFeedChats: StateFlow<List<ChatWithDetails>> = _inboxFeedChats.asStateFlow()
 
     fun persistInboxFeedChats(chats: List<ChatWithDetails>) {
-        _inboxFeedChats.value = chats
+        _inboxFeedChats.value = dedupeOneToOneChatsByPeer(chats)
         scope.launch { schedulePersistSnapshot() }
     }
 
@@ -1257,7 +1259,7 @@ object AppDataManager {
      * Update connections list (after making a new connection)
      */
     fun addConnection(connection: Connection, otherUser: User? = null) {
-        _connections.value = (_connections.value + connection).distinctBy { it.id }
+        publishConnections(_connections.value + connection)
 
         val currentUserId = _currentUser.value?.id
         val otherUserId = currentUserId?.let { currentId ->
@@ -1322,7 +1324,7 @@ object AppDataManager {
      */
     fun revertHideConnectionLocally(connectionId: String, connection: Connection) {
         _hiddenConnectionIds.value = _hiddenConnectionIds.value - connectionId
-        _connections.value = (_connections.value + connection).distinctBy { it.id }
+        publishConnections(_connections.value + connection)
         seedJunctionCacheFromMemory()
         scope.launch { schedulePersistSnapshot() }
     }
@@ -1355,16 +1357,17 @@ object AppDataManager {
     fun applyRestoredConnection(connection: Connection) {
         _archivedConnectionIds.value = _archivedConnectionIds.value - connection.id
         _hiddenConnectionIds.value = _hiddenConnectionIds.value - connection.id
-        _connections.value = (_connections.value.filter { it.id != connection.id } + connection).distinctBy { it.id }
+        publishConnections(_connections.value.filter { it.id != connection.id } + connection)
         seedJunctionCacheFromMemory()
         scope.launch { schedulePersistSnapshot() }
     }
 
     fun replaceLocalConnection(localId: String, syncedConnection: Connection, otherUser: User? = null) {
-        _connections.value = _connections.value
-            .filterNot { it.id == localId }
-            .plus(syncedConnection)
-            .distinctBy { it.id }
+        publishConnections(
+            _connections.value
+                .filterNot { it.id == localId }
+                .plus(syncedConnection),
+        )
         if (otherUser != null) {
             _connectedUsers.value = _connectedUsers.value + (otherUser.id to otherUser)
         }
@@ -1942,7 +1945,7 @@ object AppDataManager {
      */
     private fun applyFetchedConnectionSnapshot(snapshot: UserConnectionsSnapshot) {
         val localConnections = _connections.value
-        _connections.value = when {
+        val merged = when {
             snapshot.connections.isNotEmpty() -> {
                 val localById = localConnections.associateBy { it.id }
                 snapshot.connections.map { server ->
@@ -1952,6 +1955,7 @@ object AppDataManager {
             localConnections.isNotEmpty() -> localConnections
             else -> snapshot.connections
         }
+        publishConnections(merged)
         _archivedConnectionIds.value = snapshot.archivedConnectionIds
         _hiddenConnectionIds.value = snapshot.hiddenConnectionIds
         val serverCore = snapshot.coreConnectionIds
@@ -1964,6 +1968,14 @@ object AppDataManager {
         }
         seedJunctionCacheFromMemory()
         notifyInboxVersionSynced()
+    }
+
+    /**
+     * Write [connections] into SSOT after collapsing duplicate 1:1 rows for the same peer.
+     */
+    private fun publishConnections(connections: List<Connection>) {
+        val viewerId = _currentUser.value?.id.orEmpty()
+        _connections.value = dedupeOneToOneConnectionsByPeer(viewerId, connections)
     }
 
     /**
@@ -2018,7 +2030,10 @@ object AppDataManager {
             val snapshot = json.decodeFromString<CachedAppSnapshot>(snapshotJson)
             _currentUser.value = snapshot.currentUser
             _userInterestTags.value = snapshot.currentUser?.tags.orEmpty()
-            _connections.value = snapshot.connections
+            _connections.value = dedupeOneToOneConnectionsByPeer(
+                viewerUserId = snapshot.currentUser?.id.orEmpty(),
+                connections = snapshot.connections,
+            )
             _connectedUsers.value = snapshot.connectedUsers.associateBy { it.id }
             _locationPreferences.value = snapshot.locationPreferences
             _archivedConnectionIds.value = snapshot.archivedConnectionIds
@@ -2026,7 +2041,7 @@ object AppDataManager {
             _coreConnectionIds.value = snapshot.coreConnectionIds
             _cachedChatThreads.value = snapshot.cachedChatThreads.associateBy { it.connectionId }
             _cachedHubThreads.value = snapshot.cachedHubThreads.associateBy { it.hubId }
-            _inboxFeedChats.value = snapshot.inboxFeedChats
+            _inboxFeedChats.value = dedupeOneToOneChatsByPeer(snapshot.inboxFeedChats)
             if (snapshot.cachedMapBeacons.isNotEmpty()) {
                 // Drop null-island rows poisoned by GET /api/beacons/{id} location-parse fallback.
                 val restored = snapshot.cachedMapBeacons

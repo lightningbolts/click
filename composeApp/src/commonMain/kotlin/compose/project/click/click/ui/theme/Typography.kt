@@ -1,10 +1,12 @@
 package compose.project.click.click.ui.theme
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.sp
 import click.composeapp.generated.resources.Res
 import click.composeapp.generated.resources.manrope_bold
@@ -128,3 +130,20 @@ fun clickTypography(): Typography {
         ),
     )
 }
+
+/**
+ * Input text style for Material text fields.
+ *
+ * [clickTypography] bodyLarge uses 28sp line height for reading, which is too tall for
+ * default Material field chrome. Fields use a shorter line box, centered, with no trim
+ * so Manrope descenders (g/y/p) are not clipped.
+ */
+@Composable
+fun clickTextFieldTextStyle(): TextStyle =
+    MaterialTheme.typography.bodyLarge.copy(
+        lineHeight = 24.sp,
+        lineHeightStyle = LineHeightStyle(
+            alignment = LineHeightStyle.Alignment.Center,
+            trim = LineHeightStyle.Trim.None,
+        ),
+    )

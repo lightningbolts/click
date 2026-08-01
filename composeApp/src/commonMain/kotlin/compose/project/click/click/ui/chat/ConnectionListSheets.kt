@@ -76,12 +76,13 @@ import compose.project.click.click.data.models.ChatWithDetails // pragma: allowl
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickTextFieldTextStyle
 import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 
 private val PickerSelectionPurple = Color(0xFF9D4EDD)
 private val PickerSelectionRingWidth = 2.5.dp
-private val PickerSearchBarHeight = 48.dp
+private val PickerSearchBarHeight = 56.dp
 private val PickerAvatarSize = 40.dp
 private val PickerAvatarOuterSize = PickerAvatarSize + PickerSelectionRingWidth * 2
 private val PickerSelectedStripHeight = 76.dp
@@ -124,7 +125,7 @@ internal fun ConnectionPickerSearchBar(
             value = query,
             onValueChange = onQueryChange,
             singleLine = true,
-            textStyle = MaterialTheme.typography.bodyMedium.copy(
+            textStyle = clickTextFieldTextStyle().copy(
                 color = GlassSheetTokens.OnOled(),
             ),
             cursorBrush = SolidColor(PrimaryBlue),
@@ -139,7 +140,7 @@ internal fun ConnectionPickerSearchBar(
                     if (query.isEmpty()) {
                         Text(
                             text = placeholder,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = clickTextFieldTextStyle(),
                             color = GlassSheetTokens.OnOledMuted(),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,

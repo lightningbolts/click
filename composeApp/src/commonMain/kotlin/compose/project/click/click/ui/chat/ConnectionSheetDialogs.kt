@@ -20,6 +20,7 @@ import compose.project.click.click.ui.components.GlassAlertDialog // pragma: all
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.LocalGlassAlertAnimatedDismiss // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickOutlinedTextField
 
 /**
  * Destructive / confirm flows shown after the connection action sheet has dismissed
@@ -108,7 +109,7 @@ internal fun ConnectionSheetDialogs(
                             color = GlassSheetTokens.OnOledMuted(),
                             modifier = Modifier.padding(bottom = 8.dp),
                         )
-                        OutlinedTextField(
+                        ClickOutlinedTextField(
                             value = reportReason,
                             onValueChange = { reportReason = it },
                             placeholder = {

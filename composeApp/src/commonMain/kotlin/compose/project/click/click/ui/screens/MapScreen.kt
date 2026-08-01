@@ -85,6 +85,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import compose.project.click.click.ui.components.CreateHubModal
+import compose.project.click.click.util.oneToOnePeerPairKey
 import compose.project.click.click.utils.LocationService
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -117,6 +118,7 @@ import compose.project.click.click.ui.components.UnifiedToastHost
 import compose.project.click.click.ui.components.UnifiedToastTokens
 import compose.project.click.click.ui.components.rememberUnifiedToastState
 import compose.project.click.click.ui.theme.LocalPlatformStyle
+import compose.project.click.click.ui.components.ClickOutlinedTextField
 
 /**
  * Map screen — Phase 2 refactor (B1, C10, C11):
@@ -1125,22 +1127,15 @@ private fun BeaconDetailSheetContent(
 
     Column(modifier = modifier) {
         when (beacon.kind) {
-            MapBeaconKind.SOUNDTRACK -> {
-                if (isCreator) {
-                    BeaconOwnerOverflowMenu(
-                        onEdit = openEdit,
-                        onDelete = openDelete,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp),
-                    )
-                }
-                MusicPreviewCard(
-                    beacon = beacon,
-                    distanceMeters = distanceMeters,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+            MapBeaconKind.SOUNDTRACK -> SoundtrackBeaconDetail(
+                beacon = beacon,
+                distanceMeters = distanceMeters,
+                viewModel = viewModel,
+                isCreator = isCreator,
+                onEdit = openEdit,
+                onDelete = openDelete,
+                modifier = Modifier.fillMaxWidth(),
+            )
             MapBeaconKind.EVENT -> EventBeaconDetail(
                 beacon = beacon,
                 distanceMeters = distanceMeters,
@@ -1196,7 +1191,7 @@ private fun BeaconDetailSheetContent(
             viewModel.updateOwnedBeaconDescription(beacon.id, editDraft)
         },
     ) {
-        OutlinedTextField(
+        ClickOutlinedTextField(
             value = editDraft,
             onValueChange = { if (it.length <= 140) editDraft = it },
             modifier = Modifier.fillMaxWidth(),
@@ -1957,36 +1952,58 @@ private fun CommunityBeaconDetail(
 }
 
 @Composable
-private fun MusicPreviewCard(
+internal fun SoundtrackBeaconDetail(
     beacon: MapBeacon,
     distanceMeters: Double?,
+    viewModel: MapViewModel,
+    isCreator: Boolean,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val trackTitle = beacon.metadata.trackName ?: beacon.metadata.title ?: "Soundtrack"
-    val artistLine = beacon.metadata.artistName ?: beacon.metadata.artist
-    val art = beacon.metadata.albumArtUrl?.takeIf { it.isNotBlank() }
-    val preview = beacon.metadata.previewUrl?.takeIf { it.isNotBlank() }
-    val original = (beacon.metadata.originalUrl ?: beacon.metadata.musicUrl)?.takeIf { it.isNotBlank() }
+    val mapBeacons by viewModel.mapBeacons.collectAsState()
+    val displayBeacon = remember(beacon, mapBeacons) {
+        mapBeacons.firstOrNull { it.id == beacon.id } ?: beacon
+    }
+    val trackTitle = displayBeacon.metadata.trackName ?: displayBeacon.metadata.title ?: "Soundtrack"
+    val artistLine = displayBeacon.metadata.artistName ?: displayBeacon.metadata.artist
+    val art = displayBeacon.metadata.albumArtUrl?.takeIf { it.isNotBlank() }
+    val preview = displayBeacon.metadata.previewUrl?.takeIf { it.isNotBlank() }
+    val original = (displayBeacon.metadata.originalUrl ?: displayBeacon.metadata.musicUrl)
+        ?.takeIf { it.isNotBlank() }
+
+    LaunchedEffect(displayBeacon.id) {
+        viewModel.ensureSoundtrackBeaconDetail(displayBeacon.id, seed = displayBeacon)
+    }
 
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        if (isCreator) {
+            BeaconOwnerOverflowMenu(
+                onEdit = onEdit,
+                onDelete = onDelete,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+            )
+        }
         Text(
             // Soundtrack card body below already renders the song + artist parsed from metadata,
             // so the header stays the category label to avoid duplicating the track name.
-            text = beacon.displayTypeTitle(),
+            text = displayBeacon.displayTypeTitle(),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
         )
         Text(
-            text = "Created · ${formatBeaconInstant(beacon.createdAtEpochMs)}",
+            text = "Created · ${formatBeaconInstant(displayBeacon.createdAtEpochMs)}",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-            text = "Expires · ${formatBeaconInstant(beacon.expiresAtEpochMs)}",
+            text = "Expires · ${formatBeaconInstant(displayBeacon.expiresAtEpochMs)}",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -2076,7 +2093,7 @@ private fun MusicPreviewCard(
                         contentDescription = if (player.isPlaying) "Pause preview" else "Play preview",
                     )
                 }
-                Column(Modifier.weight(1f)) {
+                Column(modifier.weight(1f)) {
                     Slider(
                         value = sliderValue,
                         onValueChange = { newVal ->
@@ -2121,6 +2138,25 @@ private fun MusicPreviewCard(
                     }
                 }
             }
+        } else {
+            var waitedForPreview by remember(displayBeacon.id) { mutableStateOf(false) }
+            LaunchedEffect(displayBeacon.id, preview) {
+                if (preview == null) {
+                    delay(2_500)
+                    waitedForPreview = true
+                } else {
+                    waitedForPreview = false
+                }
+            }
+            Text(
+                text = if (!waitedForPreview) {
+                    "Loading preview…"
+                } else {
+                    "No audio preview available for this track."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         if (original != null) {
@@ -2337,7 +2373,9 @@ private fun MapContent(
     val pins = remember(renderData, connectedUsers, currentUserId, hubPins) {
         when (renderData) {
             is MapRenderData.IndividualPins -> {
-                val conn = renderData.points.map { point ->
+                val conn = renderData.points
+                    .distinctBy { oneToOnePeerPairKey(it.connection.user_ids) ?: it.connection.id }
+                    .map { point ->
                     val peerId = point.connection.user_ids.firstOrNull { it != currentUserId }
                     val peer = peerId?.let { connectedUsers[it] }
                     MapPin.fromConnectionPoint(

@@ -487,7 +487,7 @@ fun ConnectionContextSheet(
                     label = { Text("✏️ Write your own") }
                 )
 
-                OutlinedTextField(
+                ClickOutlinedTextField(
                     value = customTagText,
                     onValueChange = { input ->
                         customTagText = input

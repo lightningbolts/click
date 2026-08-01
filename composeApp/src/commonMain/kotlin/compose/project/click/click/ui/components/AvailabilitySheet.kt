@@ -111,7 +111,7 @@ fun AvailabilitySheet(
                     }
                 }
 
-                OutlinedTextField(
+                ClickOutlinedTextField(
                     value = tag,
                     onValueChange = viewModel::updateIntentTagInput,
                     modifier = Modifier.fillMaxWidth(),
