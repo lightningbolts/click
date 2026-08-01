@@ -84,10 +84,11 @@ actual class CallManager {
     actual fun endCall() {
         deferIdleAfterEndJob?.cancel()
         endCallGraceActive = true
-        notificationCenter.postNotificationName(aName = CALL_END_NOTIFICATION, `object` = null)
+        // Ended first so UI blanks video before native disconnect.
         _callState.value = CallState.Ended("Call ended")
+        notificationCenter.postNotificationName(aName = CALL_END_NOTIFICATION, `object` = null)
         deferIdleAfterEndJob = scope.launch {
-            delay(420)
+            delay(180)
             deferIdleAfterEndJob = null
             endCallGraceActive = false
             if (_callState.value is CallState.Ended) {
