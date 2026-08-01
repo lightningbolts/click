@@ -845,6 +845,7 @@ class MapViewModel : ViewModel() {
                     connectionPeerDisplayName = { conn ->
                         mapPeerDisplayNameForPin(conn, currentUserId, connectedUsersSnapshot)
                     },
+                    viewerUserId = currentUserId,
                 )
             }
 

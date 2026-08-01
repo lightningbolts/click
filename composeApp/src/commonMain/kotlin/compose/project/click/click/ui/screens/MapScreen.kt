@@ -85,6 +85,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import compose.project.click.click.ui.components.CreateHubModal
+import compose.project.click.click.util.oneToOnePeerPairKey
 import compose.project.click.click.utils.LocationService
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -117,6 +118,7 @@ import compose.project.click.click.ui.components.UnifiedToastHost
 import compose.project.click.click.ui.components.UnifiedToastTokens
 import compose.project.click.click.ui.components.rememberUnifiedToastState
 import compose.project.click.click.ui.theme.LocalPlatformStyle
+import compose.project.click.click.ui.components.ClickOutlinedTextField
 
 /**
  * Map screen — Phase 2 refactor (B1, C10, C11):
@@ -1225,7 +1227,7 @@ private fun BeaconDetailSheetContent(
             viewModel.updateOwnedBeaconDescription(beacon.id, editDraft)
         },
     ) {
-        OutlinedTextField(
+        ClickOutlinedTextField(
             value = editDraft,
             onValueChange = { if (it.length <= 140) editDraft = it },
             modifier = Modifier.fillMaxWidth(),
@@ -2499,7 +2501,9 @@ private fun MapContent(
     val pins = remember(renderData, connectedUsers, currentUserId, hubPins) {
         when (renderData) {
             is MapRenderData.IndividualPins -> {
-                val conn = renderData.points.map { point ->
+                val conn = renderData.points
+                    .distinctBy { oneToOnePeerPairKey(it.connection.user_ids) ?: it.connection.id }
+                    .map { point ->
                     val peerId = point.connection.user_ids.firstOrNull { it != currentUserId }
                     val peer = peerId?.let { connectedUsers[it] }
                     MapPin.fromConnectionPoint(

@@ -82,6 +82,7 @@ import compose.project.click.click.ui.components.HeaderRefreshIconButton
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding
 import compose.project.click.click.ui.theme.clickBorderColor
 import compose.project.click.click.ui.theme.clickCardSurface
+import compose.project.click.click.ui.theme.clickTextFieldTextStyle
 import compose.project.click.click.ui.utils.CommunityHubPin
 import compose.project.click.click.ui.utils.ConnectionMapPoint
 import compose.project.click.click.ui.utils.MapRenderData
@@ -558,7 +559,7 @@ private fun EventsSheetSearchField(
             value = query,
             onValueChange = onQueryChange,
             singleLine = true,
-            textStyle = MaterialTheme.typography.bodyLarge.copy(
+            textStyle = clickTextFieldTextStyle().copy(
                 color = MaterialTheme.colorScheme.onSurface,
             ),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
@@ -567,7 +568,7 @@ private fun EventsSheetSearchField(
                 if (query.isEmpty()) {
                     Text(
                         text = "Search nearby…",
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = clickTextFieldTextStyle(),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,

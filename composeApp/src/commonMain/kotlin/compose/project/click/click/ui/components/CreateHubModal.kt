@@ -138,7 +138,7 @@ fun JoinCommunityHubSheet(
                     style = MaterialTheme.typography.bodyMedium,
                     color = GlassSheetTokens.OnOledMuted(),
                 )
-                OutlinedTextField(
+                ClickOutlinedTextField(
                     value = hubCodeDraft,
                     onValueChange = { hubCodeDraft = it },
                     modifier = Modifier.fillMaxWidth(),
@@ -263,7 +263,7 @@ private fun CreateHubSheetBody(
             style = MaterialTheme.typography.bodyMedium,
             color = GlassSheetTokens.OnOledMuted(),
         )
-        OutlinedTextField(
+        ClickOutlinedTextField(
             value = nameDraft,
             onValueChange = { nameDraft = it.take(80) },
             modifier = Modifier.fillMaxWidth(),
@@ -310,7 +310,7 @@ private fun CreateHubSheetBody(
             )
         }
         if (isCustomCategory) {
-            OutlinedTextField(
+            ClickOutlinedTextField(
                 value = customCategoryDraft,
                 onValueChange = { customCategoryDraft = it.take(CUSTOM_CATEGORY_MAX_CHARS) },
                 modifier = Modifier.fillMaxWidth(),

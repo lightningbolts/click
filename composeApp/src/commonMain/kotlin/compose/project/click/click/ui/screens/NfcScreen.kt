@@ -50,6 +50,7 @@ import compose.project.click.click.data.models.UserProfile
 import compose.project.click.click.data.models.toUserProfile
 import compose.project.click.click.proximity.MockProximityManager
 import compose.project.click.click.ui.components.AdaptiveBackground
+import compose.project.click.click.ui.components.ClickTextFieldMinHeight
 import compose.project.click.click.ui.components.bottomChromePadding
 import compose.project.click.click.ui.components.ConnectionContextPresentation
 import compose.project.click.click.ui.components.ConnectionContextSheet
@@ -1360,7 +1361,10 @@ private fun NfcSuccessContent(
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                             )
                         },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = ClickTextFieldMinHeight),
+                        textStyle = clickTextFieldTextStyle(),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = Color.Transparent,
                             unfocusedContainerColor = Color.Transparent,

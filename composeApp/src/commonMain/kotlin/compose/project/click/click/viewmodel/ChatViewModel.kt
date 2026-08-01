@@ -68,6 +68,7 @@ import compose.project.click.click.network.ConnectivityMonitor
 import compose.project.click.click.network.NetworkConnectivityMonitor
 import compose.project.click.click.util.isOfflineNetworkFailure
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
+import compose.project.click.click.util.dedupeOneToOneChatsByPeer
 import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
 import compose.project.click.click.ui.chat.deleteSecureChatAudioTempFile // pragma: allowlist secret
 import compose.project.click.click.ui.chat.saveDecryptedAttachmentToDownloads // pragma: allowlist secret
@@ -572,9 +573,11 @@ class ChatViewModel(
                         .sortedByDescending { chatListActivityTimestamp(it) }
 
                     val reconciledBase = applyChatListVisibility(
-                        (missingChats + mergedChats)
-                            .distinctBy { it.connection.id }
-                            .sortedByDescending { chatListActivityTimestamp(it) }
+                        dedupeOneToOneChatsByPeer(
+                            (missingChats + mergedChats)
+                                .distinctBy { it.connection.id }
+                                .sortedByDescending { chatListActivityTimestamp(it) },
+                        ),
                     )
                     pruneStaleReadClearedHints(reconciledBase)
                     val reconciledChats = applyUnreadClearHintsToInboxRows(reconciledBase)
@@ -855,7 +858,11 @@ class ChatViewModel(
                     val archivedChats = chatRepository.fetchArchivedUserChatsWithDetails(userId)
                     // Single emission: an intermediate "direct-only" payload made the Archived tab
                     // count flicker to 0 until the archived fetch completed (tap-back + loadChats path).
-                    emit((directChats + archivedChats).distinctBy { it.connection.id } to true)
+                    emit(
+                        dedupeOneToOneChatsByPeer(
+                            (directChats + archivedChats).distinctBy { it.connection.id },
+                        ) to true,
+                    )
                 }.onStart {
                     emit(emptyList<ChatWithDetails>() to false)
                 }
@@ -899,9 +906,11 @@ class ChatViewModel(
                         else -> persistedGroups
                     }
                     CombinedInboxState(
-                        chats = (directChats + groupChats)
-                            .distinctBy { it.connection.id }
-                            .sortedByDescending { chatListActivityTimestamp(it) },
+                        chats = dedupeOneToOneChatsByPeer(
+                            (directChats + groupChats)
+                                .distinctBy { it.connection.id }
+                                .sortedByDescending { chatListActivityTimestamp(it) },
+                        ),
                         directLoaded = directLoaded,
                         groupLoaded = groupLoaded && !emptyFetchLooksPoisoned,
                     )
@@ -962,7 +971,9 @@ class ChatViewModel(
                             }
                             mergeChatRowWithCache(apiChat, localSeed, freshUser)
                         }
-                        val visibilityFiltered = applyChatListVisibility(mergedWithLocalPreview)
+                        val visibilityFiltered = applyChatListVisibility(
+                            dedupeOneToOneChatsByPeer(mergedWithLocalPreview),
+                        )
                         pruneStaleReadClearedHints(visibilityFiltered)
                         val collapsed = collapseOneToOneChatsByPeer(
                             chats = visibilityFiltered,
@@ -1030,7 +1041,7 @@ class ChatViewModel(
         } else {
             fromConnectionsOnly
         }
-        val visible = applyChatListVisibility(seed)
+        val visible = applyChatListVisibility(dedupeOneToOneChatsByPeer(seed))
         pruneStaleReadClearedHints(visible)
         val collapsed = collapseOneToOneChatsByPeer(
             chats = visible,

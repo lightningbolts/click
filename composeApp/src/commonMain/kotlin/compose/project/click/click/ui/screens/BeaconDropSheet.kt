@@ -31,7 +31,6 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -57,6 +56,7 @@ import compose.project.click.click.events.EventVenueScale
 import compose.project.click.click.events.defaultEventSchedule
 import compose.project.click.click.events.validateEventSchedule
 import compose.project.click.click.ui.components.EventDateTimePicker
+import compose.project.click.click.ui.components.ClickOutlinedTextField
 
 /**
  * Beacon drop types exposed in the map FAB flow.
@@ -99,7 +99,7 @@ private val hubCategoryOptions = listOf(
     "gaming", "tech", "art", "fitness", "networking", "party",
 )
 
-private val BeaconSingleLineFieldHeight = 56.dp
+private val BeaconSingleLineFieldHeight = 72.dp
 private val BeaconMultilineFieldHeight = 128.dp
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -586,7 +586,7 @@ private fun BeaconDropOutlinedField(
             .fillMaxWidth()
             .height(fieldHeight),
     ) {
-        OutlinedTextField(
+        ClickOutlinedTextField(
             value = value,
             onValueChange = onValueChange,
             modifier = Modifier.fillMaxSize(),
@@ -605,7 +605,6 @@ private fun BeaconDropOutlinedField(
             keyboardActions = KeyboardActions(onDone = { onDismissKeyboard() }),
             trailingIcon = trailingIcon,
             colors = colors,
-            textStyle = MaterialTheme.typography.bodyLarge,
         )
     }
 }

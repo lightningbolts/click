@@ -122,6 +122,7 @@ import compose.project.click.click.viewmodel.HubChatNavigationEvent // pragma: a
 import compose.project.click.click.viewmodel.HubChatViewModel // pragma: allowlist secret
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import compose.project.click.click.ui.components.ClickOutlinedTextField
 
 data class HubChatNavArgs(
     val hubId: String,
@@ -629,7 +630,7 @@ fun HubChatScreen(
             },
             body = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
+                    ClickOutlinedTextField(
                         value = editNameDraft,
                         onValueChange = { editNameDraft = it.take(80) },
                         singleLine = true,
@@ -644,7 +645,7 @@ fun HubChatScreen(
                             unfocusedLabelColor = GlassSheetTokens.OnOledMuted(),
                         ),
                     )
-                    OutlinedTextField(
+                    ClickOutlinedTextField(
                         value = editCategoryDraft,
                         onValueChange = { editCategoryDraft = it.take(40) },
                         singleLine = true,

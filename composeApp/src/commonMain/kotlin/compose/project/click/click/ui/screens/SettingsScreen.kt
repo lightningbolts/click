@@ -94,6 +94,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import compose.project.click.click.ui.chat.rememberChatMediaPickers
+import compose.project.click.click.ui.components.ClickOutlinedTextField
 
 @Composable
 fun SettingsScreen(
@@ -568,7 +569,7 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        OutlinedTextField(
+                        ClickOutlinedTextField(
                             value = newFirstName,
                             onValueChange = { newFirstName = it },
                             label = { Text("First name", color = GlassSheetTokens.OnOledMuted()) },
@@ -576,7 +577,7 @@ fun SettingsScreen(
                             modifier = Modifier.fillMaxWidth(),
                             colors = nameDialogFieldColors,
                         )
-                        OutlinedTextField(
+                        ClickOutlinedTextField(
                             value = newLastName,
                             onValueChange = { newLastName = it },
                             label = { Text("Last name", color = GlassSheetTokens.OnOledMuted()) },

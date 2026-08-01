@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -67,10 +68,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.ui.components.GlassSheetTokens
+import compose.project.click.click.ui.components.ClickTextFieldMinHeight
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.ui.theme.SoftBlue
 import compose.project.click.click.ui.theme.clickBorderColor
 import compose.project.click.click.ui.theme.clickCardSurface
+import compose.project.click.click.ui.theme.clickTextFieldTextStyle
 import compose.project.click.click.viewmodel.GlobalSearchViewModel
 import compose.project.click.click.viewmodel.SearchResult
 import compose.project.click.click.viewmodel.SearchResultCategory
@@ -144,10 +147,12 @@ fun GlobalSearchScreen(
                             TextField(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .heightIn(min = ClickTextFieldMinHeight)
                                     .focusRequester(focusRequester),
                                 value = query,
                                 onValueChange = { viewModel.search(it, userId) },
                                 singleLine = true,
+                                textStyle = clickTextFieldTextStyle(),
                                 placeholder = {
                                     Text(
                                         "Search people, places, interests, intents…",
