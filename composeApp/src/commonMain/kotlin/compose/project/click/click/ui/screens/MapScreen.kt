@@ -95,6 +95,7 @@ import kotlinx.datetime.toLocalDateTime
 import compose.project.click.click.events.EventSchedule
 import compose.project.click.click.events.buildEventShareText
 import compose.project.click.click.events.buildEventShareUrl
+import compose.project.click.click.events.eventCheckInCtaLabel
 import compose.project.click.click.events.eventSchedule
 import compose.project.click.click.events.formatEventEndDateLabel
 import compose.project.click.click.events.formatEventEndTimeLabel
@@ -635,7 +636,22 @@ fun MapScreen(
                     errorMessage = beaconInsertError,
                     onDismissError = { viewModel.clearBeaconInsertError() },
                     submitLocked = beaconSubmitInFlight,
-                    onSubmit = { kind, title, description, soundtrackUrl, ttlMs, showCreatorName, visibilityAudience, eventSchedule, eventCategories, venueScale, onRejectedEarly ->
+                    onResolveCurrentLocation = {
+                        if (!viewModel.hasLocationPermission()) {
+                            null
+                        } else {
+                            val loc = viewModel.resolveDropLocationForUi()
+                            loc?.let {
+                                compose.project.click.click.utils.GeocodedPlace(
+                                    latitude = it.latitude,
+                                    longitude = it.longitude,
+                                    displayName = "Current location",
+                                    shortLabel = "Current location",
+                                )
+                            }
+                        }
+                    },
+                    onSubmit = { kind, title, description, soundtrackUrl, ttlMs, showCreatorName, visibilityAudience, eventSchedule, eventCategories, venueScale, eventLocation, onRejectedEarly ->
                         viewModel.submitBeaconDrop(
                             kind = kind,
                             title = title,
@@ -647,6 +663,7 @@ fun MapScreen(
                             eventSchedule = eventSchedule,
                             eventCategories = eventCategories,
                             venueScale = venueScale,
+                            eventLocation = eventLocation,
                             onAcceptedLocally = { showBeaconDropSheet = false },
                             onRejectedEarly = onRejectedEarly,
                             onRemoteFinished = { },
@@ -1182,18 +1199,12 @@ private fun BeaconDetailSheetContent(
                 modifier = Modifier.fillMaxWidth(),
             )
             else -> {
-                if (isCreator) {
-                    BeaconOwnerOverflowMenu(
-                        onEdit = openEdit,
-                        onDelete = openDelete,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp),
-                    )
-                }
                 CommunityBeaconDetail(
                     beacon = beacon,
                     distanceMeters = distanceMeters,
+                    isCreator = isCreator,
+                    onEdit = openEdit,
+                    onDelete = openDelete,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -1454,8 +1465,6 @@ internal fun EventBeaconDetail(
             }
             EventHeroActions(
                 bookmarked = bookmarked,
-                checkedIn = checkedIn,
-                checkInPending = checkInPending,
                 isCreator = isCreator ||
                     (!currentUser?.id.isNullOrBlank() && displayBeacon.createdByUserId == currentUser?.id),
                 onShare = {
@@ -1467,7 +1476,6 @@ internal fun EventBeaconDetail(
                     )
                 },
                 onToggleBookmark = { viewModel.toggleBeaconBookmark(displayBeacon.id) },
-                onToggleCheckIn = { viewModel.toggleBeaconCheckIn(displayBeacon.id) },
                 onEdit = onEdit,
                 onDelete = onDelete,
             )
@@ -1477,6 +1485,27 @@ internal fun EventBeaconDetail(
 
         if (categories.isNotEmpty()) {
             EventCategoryChips(categories = categories, border = border, cardSurface = cardSurface)
+        }
+
+        val locationLabel = displayBeacon.metadata.formattedAddress?.trim()?.takeIf { it.isNotEmpty() }
+            ?: displayBeacon.metadata.locationName?.trim()?.takeIf { it.isNotEmpty() }
+        if (locationLabel != null) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Place,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+                Text(
+                    text = locationLabel,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
         }
 
         if (displayBeacon.showCreatorName && !hostDisplayName.isNullOrBlank()) {
@@ -1511,6 +1540,50 @@ internal fun EventBeaconDetail(
         )
 
         val actionShape = RoundedCornerShape(12.dp)
+        val checkInLabel = eventCheckInCtaLabel(checkedIn = checkedIn, pending = checkInPending)
+        Button(
+            onClick = {
+                if (checkInPending) return@Button
+                viewModel.toggleBeaconCheckIn(displayBeacon.id)
+            },
+            enabled = !checkInPending,
+            modifier = Modifier.fillMaxWidth(),
+            shape = actionShape,
+            border = BorderStroke(2.dp, border),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (checkedIn) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.surface
+                },
+                contentColor = if (checkedIn) {
+                    MaterialTheme.colorScheme.onPrimary
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+                disabledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+                disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+            ),
+            contentPadding = PaddingValues(vertical = 14.dp),
+        ) {
+            if (checkInPending) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            } else {
+                Icon(
+                    imageVector = if (checkedIn) Icons.Filled.CheckCircle else Icons.Filled.Place,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Text(checkInLabel, fontWeight = FontWeight.SemiBold)
+        }
+
         Button(
             onClick = {
                 openEventMapsRoute(
@@ -1633,12 +1706,9 @@ private fun EventLiveBadge() {
 @Composable
 private fun EventHeroActions(
     bookmarked: Boolean,
-    checkedIn: Boolean,
-    checkInPending: Boolean = false,
     isCreator: Boolean,
     onShare: () -> Unit,
     onToggleBookmark: () -> Unit,
-    onToggleCheckIn: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -1658,14 +1728,6 @@ private fun EventHeroActions(
             onClick = onToggleBookmark,
             contentDescription = if (bookmarked) "Remove bookmark" else "Bookmark event",
             icon = if (bookmarked) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
-        )
-        EventHeroIconButton(
-            selected = checkedIn,
-            border = border,
-            onClick = onToggleCheckIn,
-            enabled = !checkInPending,
-            contentDescription = if (checkedIn) "Undo check in" else "Check in",
-            icon = if (checkedIn) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
         )
         if (isCreator) {
             Box {
@@ -1942,46 +2004,168 @@ private fun EventAttendeeStack(
 private fun CommunityBeaconDetail(
     beacon: MapBeacon,
     distanceMeters: Double?,
+    isCreator: Boolean,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val border = clickBorderColor()
+    val cardSurface = clickCardSurface()
+    val currentUser by AppDataManager.currentUser.collectAsState()
+    val connectedUsers by AppDataManager.connectedUsers.collectAsState()
+    val kindLabel = when (beacon.kind) {
+        MapBeaconKind.HAZARD -> "Hazard"
+        MapBeaconKind.SOS -> "SOS"
+        MapBeaconKind.UTILITY -> "Utility"
+        MapBeaconKind.STUDY -> "Study"
+        MapBeaconKind.SOCIAL_VIBE -> "Social"
+        MapBeaconKind.OTHER -> "Beacon"
+        else -> "Beacon"
+    }
+    val kindIcon = when (beacon.kind) {
+        MapBeaconKind.HAZARD -> Icons.Filled.Warning
+        MapBeaconKind.SOS -> Icons.Filled.NotificationsActive
+        MapBeaconKind.UTILITY -> Icons.Filled.Build
+        MapBeaconKind.STUDY -> Icons.Filled.MenuBook
+        MapBeaconKind.SOCIAL_VIBE -> Icons.Filled.Groups
+        else -> Icons.Filled.Place
+    }
+    val hostUserId = beacon.createdByUserId?.takeIf { it.isNotBlank() }
+    val hostUser = hostUserId?.let { id ->
+        if (id == currentUser?.id) currentUser else connectedUsers[id]
+    }
+    val hostDisplayName = beacon.creatorDisplayName?.trim()?.takeIf { it.isNotEmpty() }
+        ?: hostUser?.name?.trim()?.takeIf { it.isNotEmpty() }
+    val hostAvatarUrl = hostUser?.image?.trim()?.takeIf { it.isNotEmpty() }
+    val distanceLabel = distanceMeters?.let { formatBeaconDistance(it) }
+    val createdLabel = formatBeaconInstant(beacon.createdAtEpochMs)
+    val expiresLabel = formatBeaconInstant(beacon.expiresAtEpochMs)
+    val createdParts = createdLabel.split(" · ").let { parts ->
+        if (parts.size >= 2) parts[0] to parts.drop(1).joinToString(" · ")
+        else createdLabel to ""
+    }
+    val expiresParts = expiresLabel.split(" · ").let { parts ->
+        if (parts.size >= 2) parts[0] to parts.drop(1).joinToString(" · ")
+        else expiresLabel to ""
+    }
+
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        Text(
-            text = beacon.displayDynamicTitle(),
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        if (beacon.showCreatorName && !beacon.creatorDisplayName.isNullOrBlank()) {
-            Text(
-                text = "Shared by ${beacon.creatorDisplayName}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary,
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
+                            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Icon(
+                                imageVector = kindIcon,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Text(
+                                text = kindLabel,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = beacon.displayDynamicTitle(),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                distanceLabel?.let { d ->
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = d,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            if (isCreator ||
+                (!currentUser?.id.isNullOrBlank() && beacon.createdByUserId == currentUser?.id)
+            ) {
+                BeaconOwnerOverflowMenu(
+                    onEdit = onEdit,
+                    onDelete = onDelete,
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            EventBentoCell(
+                modifier = Modifier.weight(1f),
+                label = "Posted",
+                date = createdParts.first,
+                time = createdParts.second.ifBlank { "—" },
+                icon = Icons.Filled.Schedule,
+                border = border,
+                cardSurface = cardSurface,
+            )
+            EventBentoCell(
+                modifier = Modifier.weight(1f),
+                label = "Expires",
+                date = expiresParts.first,
+                time = expiresParts.second.ifBlank { "—" },
+                icon = Icons.Filled.EventBusy,
+                border = border,
+                cardSurface = cardSurface,
             )
         }
-        Text(
-            text = "Created · ${formatBeaconInstant(beacon.createdAtEpochMs)}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = "Expires · ${formatBeaconInstant(beacon.expiresAtEpochMs)}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Text(
-            text = beacon.metadata.description?.trim().orEmpty().ifBlank { "No description" },
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        distanceMeters?.let { d ->
+
+        if (beacon.showCreatorName && !hostDisplayName.isNullOrBlank()) {
+            EventHostCard(
+                displayName = hostDisplayName,
+                userId = hostUserId ?: "host:$hostDisplayName",
+                avatarUrl = hostAvatarUrl,
+                border = border,
+                cardSurface = cardSurface,
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(2.dp, border, RoundedCornerShape(12.dp))
+                .background(cardSurface, RoundedCornerShape(12.dp))
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Text(
-                text = formatBeaconDistance(d),
-                style = MaterialTheme.typography.bodySmall,
+                text = "Description",
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = beacon.metadata.description?.trim().orEmpty().ifBlank { "No description" },
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
     }

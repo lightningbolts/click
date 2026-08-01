@@ -82,7 +82,7 @@ Full-width scroll column inside `ClickFormBottomSheet`; mesh background optional
 | `"Click Drops"` | `onOpenDisposableRoll != null` | Open disposable roll camera flow |
 | Avatar tap | Group + `onAvatarClick` | Change group avatar |
 | Tab tap | Any | `pagerState` animate to page |
-| Journal `"Add"` | Non-empty draft | `createProfileTimelineJournalEntry` |
+| Journal `"Add"` | Non-empty draft | Compact pill matching Private/Everyone border (1dp, same height) → `createProfileTimelineJournalEntry` |
 | Journal `"Edit"` / `"Delete"` | Own entries | Update / delete |
 | Media thumb tap | Unlocked media | Full-screen preview |
 | Link row tap | — | `onOpenLink(url)` |
@@ -274,7 +274,7 @@ flowchart TD
     R --> S[Full scroll profile — no tab pager]
 ```
 
-**Data hydration:** `ProfileBottomSheet` Timeline uses `SupabaseRepository.fetchUserPublicProfile` when `userId` + `viewerUserId` present. Media/Links/Files use `ConnectionRepository.fetchConnectionTabs` when `connectionId` set.
+**Data hydration:** `ProfileBottomSheet` Timeline uses `SupabaseRepository.fetchUserPublicProfile` when `userId` + `viewerUserId` present. Media/Links/Files use `ConnectionRepository.fetchConnectionTabs` when `connectionId` set. After BLE/proximity success, `AppDataManager.proximityEncounterEpoch` triggers a re-fetch of public profile + journal timeline so new encounters appear without clearing app cache.
 
 **Journal visibility mapping:** UI `"Everyone"` → storage `"shared"`; `"Private"` → `"private"`.
 

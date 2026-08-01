@@ -81,4 +81,12 @@ class BeaconCheckInOptimismTest {
             beaconCheckInFailureMessage(409),
         )
     }
+
+    @Test
+    fun checkInCtaLabels_areClearAndStateAware() {
+        assertEquals("Check in here", eventCheckInCtaLabel(checkedIn = false, pending = false))
+        assertEquals("Checking location…", eventCheckInCtaLabel(checkedIn = false, pending = true))
+        assertEquals("Checked in", eventCheckInCtaLabel(checkedIn = true, pending = false))
+        assertEquals("Updating…", eventCheckInCtaLabel(checkedIn = true, pending = true))
+    }
 }

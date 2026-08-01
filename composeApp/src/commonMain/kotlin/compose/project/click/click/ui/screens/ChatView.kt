@@ -762,16 +762,17 @@ fun ChatView(
                                     }
                                 } else {
                                     val isPeerCore = chatDetails.connection.id in coreConnectionIds
-                                    CoreConnectionAvatarFrame(
-                                        isCore = isPeerCore,
-                                        avatarSize = 36.dp,
-                                        onClick = { onOpenUserProfile(chatDetails.otherUser.id) },
+                                    val peerOnline =
+                                        chatDetails.otherUser.id in onlineUsers || isPeerOnline
+                                    AvatarWithOnlineIndicator(
+                                        isOnline = peerOnline,
+                                        indicatorSize = 9.dp,
+                                        indicatorBorder = 1.25.dp,
                                     ) {
-                                        AvatarWithOnlineIndicator(
-                                            isOnline = chatDetails.otherUser.id in onlineUsers || isPeerOnline,
-                                            modifier = Modifier.fillMaxSize(),
-                                            indicatorSize = 9.dp,
-                                            indicatorBorder = 1.25.dp,
+                                        CoreConnectionAvatarFrame(
+                                            isCore = isPeerCore,
+                                            avatarSize = 36.dp,
+                                            onClick = { onOpenUserProfile(chatDetails.otherUser.id) },
                                         ) {
                                             ConnectionListUserAvatarFace(
                                                 displayName = chatDetails.otherUser.name,
@@ -805,12 +806,14 @@ fun ChatView(
                                             overflow = TextOverflow.Ellipsis,
                                         )
                                     } else if (!isGroupChat) {
+                                        val subtitleOnline =
+                                            chatDetails.otherUser.id in onlineUsers || isPeerOnline
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
                                             AnimatedVisibility(
-                                                visible = isPeerOnline,
+                                                visible = subtitleOnline,
                                                 enter = fadeIn() + expandVertically(),
                                                 exit = fadeOut() + shrinkVertically()
                                             ) {
@@ -822,7 +825,7 @@ fun ChatView(
                                                 )
                                             }
                                             AnimatedContent(
-                                                targetState = isPeerOnline,
+                                                targetState = subtitleOnline,
                                                 transitionSpec = {
                                                     fadeIn(
                                                         animationSpec = spring(

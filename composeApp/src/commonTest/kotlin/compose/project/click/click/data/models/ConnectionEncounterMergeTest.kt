@@ -47,4 +47,35 @@ class ConnectionEncounterMergeTest {
         assertEquals(80, event.batteryLevel)
         assertEquals(listOf("Met Face-to-Face", "Extended Hangout"), event.contextTags)
     }
+
+    @Test
+    fun richerConnectionEncounters_prefersPlaceNamesAndLongerLists() {
+        val sparse = listOf(
+            ConnectionEncounter(
+                id = "a",
+                connectionId = "conn-1",
+                encounteredAt = "2026-06-30T05:03:01.450Z",
+            ),
+        )
+        val withPlace = listOf(
+            ConnectionEncounter(
+                id = "b",
+                connectionId = "conn-1",
+                encounteredAt = "2026-06-30T05:03:01.450Z",
+                locationName = "Red Square",
+            ),
+        )
+        val richer = richerConnectionEncounters(sparse, withPlace)
+        assertEquals(1, richer.size)
+        assertEquals("Red Square", richer.single().locationName)
+
+        val longer = listOf(
+            ConnectionEncounter(id = "1", connectionId = "c", encounteredAt = "2026-01-01T00:00:00Z"),
+            ConnectionEncounter(id = "2", connectionId = "c", encounteredAt = "2026-01-02T00:00:00Z"),
+        )
+        val shorter = listOf(
+            ConnectionEncounter(id = "3", connectionId = "c", encounteredAt = "2026-01-01T00:00:00Z"),
+        )
+        assertEquals(2, richerConnectionEncounters(shorter, longer).size)
+    }
 }

@@ -73,7 +73,8 @@ ConnectionsScreen (organism — tab shell + chat overlay)
 | Time chip | Primary fill; compact `formatRememberMeBadge` (`12h` / `2d` / …); omit if no last activity |
 | Name | First name (`firstName` or first token of display name) |
 | Labels | `"Remember Me"` then optional `"Clicks"` above the list |
-| Hit target | Circular on avatar (`CoreConnectionAvatarFrame` + `clip(CircleShape)`); name label **pill** (`clip(RoundedCornerShape(999.dp))` + horizontal padding — not full-width square `clickable`) |
+| Hit target | Circular on avatar (`AvatarWithOnlineIndicator` wraps `CoreConnectionAvatarFrame` so the green online dot sits **outside** the circular clip); name label **pill** |
+| Online | Green online indicator on 1:1 row avatars **and** Remember Me chips when peer is in `onlineUsers` |
 | Duplication | Core people still appear in `ConnectionItem` rows below |
 
 ### ConnectionItem

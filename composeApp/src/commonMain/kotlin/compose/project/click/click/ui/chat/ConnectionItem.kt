@@ -165,14 +165,13 @@ fun ConnectionItem(
                 }
             }
         } else {
-            CoreConnectionAvatarFrame(
-                isCore = isCore,
-                avatarSize = 44.dp,
-                onClick = onAvatarClick,
+            AvatarWithOnlineIndicator(
+                isOnline = showOnlineIndicator,
             ) {
-                AvatarWithOnlineIndicator(
-                    isOnline = showOnlineIndicator,
-                    modifier = Modifier.fillMaxSize(),
+                CoreConnectionAvatarFrame(
+                    isCore = isCore,
+                    avatarSize = 44.dp,
+                    onClick = onAvatarClick,
                 ) {
                     ConnectionListUserAvatarFace(
                         displayName = user.name,
