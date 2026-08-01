@@ -31,40 +31,16 @@ object CallOverlayTransitionPolicy {
      * Chooses exactly one visual owner during preview → active → ended hand-off.
      * An ended preview is suppressed after the active layer has owned the session, preventing
      * the preview card from flashing while the active card performs its exit.
-     *
-     * Video surfaces live only under the Active layer — mount it as soon as media joins
-     * (Connecting/Connected) so TextureView/VideoView init is not delayed until overlay → Idle.
      */
     fun presentationFor(
         overlayState: CallOverlayState,
         callState: CallState,
         suppressEndedPreviewAfterActiveCall: Boolean,
     ): Presentation {
-        // Incoming ring always owns the Accept/Decline card.
-        if (overlayState is CallOverlayState.Incoming) return Presentation.Preview
-
-        // Outgoing ring keeps the ring card until the peer is actually in-room.
-        if (overlayState is CallOverlayState.Outgoing) {
-            val connected = callState as? CallState.Connected
-            return if (connected?.hasRemoteParticipant == true) {
-                Presentation.Active
-            } else {
-                Presentation.Preview
-            }
-        }
-
-        // Accept/join path: mount Active as soon as LiveKit is Connecting/Connected so remote
-        // video can attach without waiting for the overlay to clear to Idle.
-        if (overlayState is CallOverlayState.Connecting) {
-            return if (
-                callState is CallState.Connecting ||
-                callState is CallState.Connected
-            ) {
-                Presentation.Active
-            } else {
-                Presentation.Preview
-            }
-        }
+        val previewOnly = overlayState is CallOverlayState.Outgoing ||
+            overlayState is CallOverlayState.Incoming ||
+            overlayState is CallOverlayState.Connecting
+        if (previewOnly) return Presentation.Preview
 
         if (
             callState is CallState.Connected ||

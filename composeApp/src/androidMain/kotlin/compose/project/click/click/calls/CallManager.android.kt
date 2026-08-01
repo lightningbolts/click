@@ -141,8 +141,6 @@ actual class CallManager {
     private var videoRequested = false
     /** True once a remote participant has joined — used to end the call when they leave. */
     private var hadRemoteParticipant = false
-    /** Polls briefly after a peer joins so remote camera is bound as soon as the track exists. */
-    private var remoteVideoPollJob: Job? = null
     private val localVideoListeners = mutableListOf<(VideoTrack?) -> Unit>()
     private val remoteVideoListeners = mutableListOf<(VideoTrack?) -> Unit>()
 
@@ -228,25 +226,9 @@ actual class CallManager {
                     is RoomEvent.LocalTrackSubscribed,
                     is RoomEvent.TrackStreamStateChanged,
                     is RoomEvent.TrackSubscriptionPermissionChanged,
+                    is RoomEvent.ParticipantConnected,
                     is RoomEvent.Reconnected,
-                    -> {
-                        syncStateFromRoom()
-                        if (
-                            event is RoomEvent.TrackSubscribed ||
-                            event is RoomEvent.TrackPublished ||
-                            event is RoomEvent.TrackUnmuted
-                        ) {
-                            // Peer camera often appears as publish/subscribe shortly after join.
-                            if (currentRemoteVideoTrack(liveKitRoom) == null) {
-                                startRemoteVideoPoll(liveKitRoom)
-                            }
-                        }
-                    }
-
-                    is RoomEvent.ParticipantConnected -> {
-                        syncStateFromRoom()
-                        startRemoteVideoPoll(liveKitRoom)
-                    }
+                    -> syncStateFromRoom()
 
                     is RoomEvent.ParticipantDisconnected -> {
                         syncStateFromRoom()
@@ -284,42 +266,33 @@ actual class CallManager {
 
         scope.launch(Dispatchers.IO) {
             try {
-                // Publish A/V during connect so the peer can subscribe immediately instead of
-                // waiting for post-connect setMicrophone/setCamera round-trips.
                 liveKitRoom.connect(
                     url = wsUrl,
                     token = token,
-                    options = ConnectOptions(
-                        autoSubscribe = true,
-                        audio = true,
-                        video = videoEnabled,
-                    ),
+                    options = ConnectOptions(autoSubscribe = true),
                 )
+                val micOk = liveKitRoom.localParticipant.setMicrophoneEnabled(true)
+                if (!micOk) {
+                    cleanupRoom(releaseState = false)
+                    markEndedAndDeferIdle("Unable to enable microphone")
+                    return@launch
+                }
                 microphoneEnabled = true
 
                 if (videoEnabled) {
-                    val localCamera = liveKitRoom.localParticipant
-                        .getTrackPublication(Track.Source.CAMERA)?.track
-                    if (localCamera == null) {
-                        val cameraOk = ensureCameraEnabled(liveKitRoom)
-                        if (!cameraOk) {
-                            // Stay in-call on audio so the session is usable; peer will keep
-                            // "Waiting for remote video" until camera can be enabled later.
-                            println("CallManager: camera failed to publish after connect")
-                        }
-                        cameraEnabled = cameraOk
-                    } else {
-                        cameraEnabled = true
+                    val cameraOk = ensureCameraEnabled(liveKitRoom)
+                    if (!cameraOk) {
+                        // Stay in-call on audio so the session is usable; peer will keep
+                        // "Waiting for remote video" until camera can be enabled later.
+                        println("CallManager: camera failed to publish after connect")
                     }
+                    cameraEnabled = cameraOk
                 }
                 syncStateFromRoom()
-                if (liveKitRoom.remoteParticipants.isNotEmpty()) {
-                    startRemoteVideoPoll(liveKitRoom)
-                }
 
                 if (videoEnabled) {
-                    // Publication can lag the boolean success; quick retry if no local track yet.
-                    delay(150)
+                    // Publication can lag the boolean success; retry once if no local track yet.
+                    delay(500)
                     if (room === liveKitRoom &&
                         liveKitRoom.localParticipant.getTrackPublication(Track.Source.CAMERA)?.track == null
                     ) {
@@ -461,7 +434,6 @@ actual class CallManager {
     }
 
     private fun currentRemoteVideoTrack(activeRoom: Room): VideoTrack? {
-        var fallback: VideoTrack? = null
         for (participant in activeRoom.remoteParticipants.values) {
             for (publication in participant.trackPublications.values) {
                 if (publication.kind != Track.Kind.VIDEO) continue
@@ -470,18 +442,15 @@ actual class CallManager {
                     remotePub.setSubscribed(true)
                 }
                 val track = publication.track as? VideoTrack ?: continue
-                // Prefer live camera immediately; don't wait for an unmute edge if already usable.
-                if (publication.source == Track.Source.CAMERA && !publication.muted) {
-                    return track
-                }
-                if (fallback == null && !publication.muted) {
-                    fallback = track
-                } else if (fallback == null) {
-                    fallback = track
-                }
+                if (!publication.muted) return track
+            }
+            for (publication in participant.trackPublications.values) {
+                if (publication.kind != Track.Kind.VIDEO) continue
+                val track = publication.track as? VideoTrack
+                if (track != null) return track
             }
         }
-        return fallback
+        return null
     }
 
     private fun ensureRemoteVideoSubscribed(activeRoom: Room) {
@@ -496,39 +465,17 @@ actual class CallManager {
         }
     }
 
-    private fun startRemoteVideoPoll(activeRoom: Room) {
-        if (!videoRequested) return
-        if (currentRemoteVideoTrack(activeRoom) != null) {
-            remoteVideoPollJob?.cancel()
-            remoteVideoPollJob = null
-            return
-        }
-        remoteVideoPollJob?.cancel()
-        remoteVideoPollJob = scope.launch {
-            // Peer camera publish can trail ParticipantConnected by a few hundred ms.
-            repeat(20) {
-                delay(100)
-                if (room !== activeRoom) return@launch
-                ensureRemoteVideoSubscribed(activeRoom)
-                syncStateFromRoom()
-                if (currentRemoteVideoTrack(activeRoom) != null) return@launch
-            }
-        }
-    }
-
     private suspend fun ensureCameraEnabled(activeRoom: Room): Boolean {
         if (activeRoom.localParticipant.setCameraEnabled(true)) {
             return true
         }
-        delay(120)
+        delay(350)
         return activeRoom.localParticipant.setCameraEnabled(true)
     }
 
     private fun cleanupRoom(releaseState: Boolean = true) {
         eventsJob?.cancel()
         eventsJob = null
-        remoteVideoPollJob?.cancel()
-        remoteVideoPollJob = null
         hadRemoteParticipant = false
 
         val activeRoom = room
