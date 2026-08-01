@@ -1,6 +1,7 @@
 package compose.project.click.click.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -23,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -49,6 +52,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.zIndex
@@ -56,6 +60,7 @@ import compose.project.click.click.data.ContextTagTaxonomy
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.data.models.ContextTag
 import compose.project.click.click.data.models.UserProfile
+import compose.project.click.click.data.repository.PROXIMITY_HOST_SELECTION_MAX_PEERS
 import androidx.compose.material3.CircularProgressIndicator
 import compose.project.click.click.calendar.AvailabilityOverlapGap
 import compose.project.click.click.calendar.CalendarAccessStatus
@@ -201,6 +206,52 @@ private fun StackedProfileAvatarRow(
     }
 }
 
+@Composable
+private fun ConnectionContextSelectableUserRow(
+    profile: UserProfile,
+    selected: Boolean,
+    onToggle: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                PlatformHapticsPolicy.lightImpact()
+                onToggle()
+            }
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(
+            checked = selected,
+            onCheckedChange = {
+                PlatformHapticsPolicy.lightImpact()
+                onToggle()
+            },
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        ProfileAvatarBubble(
+            profile = profile,
+            size = 40.dp,
+            borderColor = if (selected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerHigh
+            },
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = profile.displayName.trim().ifBlank { "Connection" },
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = GlassSheetTokens.OnOled(),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ConnectionContextSheet(
@@ -209,16 +260,18 @@ fun ConnectionContextSheet(
     initialNoiseOptIn: Boolean,
     noisePermissionGranted: Boolean,
     onDismiss: () -> Unit,
-    onConfirm: (ContextTag?, Boolean) -> Unit,
+    onConfirm: (ContextTag?, Boolean /* noise */, Set<String> /* selectedIds */) -> Unit,
     onSkip: (() -> Unit)? = null,
     presentation: ConnectionContextPresentation = ConnectionContextPresentation.NewSpark,
     encounterSaveInProgress: Boolean = false,
-    onSaveEncounter: (() -> Unit)? = null,
+    onSaveEncounter: ((Set<String> /* selectedIds */) -> Unit)? = null,
     connectionId: String? = null,
     peerUserId: String? = null,
     currentUserId: String? = null,
     lockIntentInProgress: Boolean = false,
     onLockIntent: ((AvailabilityOverlapGap) -> Unit)? = null,
+    selectableUsers: List<UserProfile> = emptyList(),
+    initialSelectedUserIds: Set<String> = emptySet(),
 ) {
     val hourOfDay = remember {
         Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour
@@ -230,6 +283,24 @@ fun ConnectionContextSheet(
     var selectedTagId by remember { mutableStateOf<String?>(suggestions.firstOrNull()?.id) }
     var customTagText by remember { mutableStateOf("") }
     var ambientNoiseOptIn by remember(initialNoiseOptIn) { mutableStateOf(initialNoiseOptIn) }
+    val uniqueSelectableUsers = remember(selectableUsers) { selectableUsers.distinctBy { it.id } }
+    val showPeerMultiSelect = uniqueSelectableUsers.size >= 2
+    var selectedUserIds by remember(uniqueSelectableUsers, initialSelectedUserIds) {
+        mutableStateOf(
+            (
+                if (initialSelectedUserIds.isNotEmpty()) {
+                    initialSelectedUserIds.filter { id -> uniqueSelectableUsers.any { it.id == id } }
+                } else {
+                    uniqueSelectableUsers.map { it.id }
+                }
+            ).take(PROXIMITY_HOST_SELECTION_MAX_PEERS).toSet(),
+        )
+    }
+    val resolvedSelectedIds: Set<String> = when {
+        showPeerMultiSelect -> selectedUserIds
+        else -> connectedUsers.map { it.id }.filter { it.isNotBlank() }.toSet()
+    }
+    val selectionRequiredAndEmpty = showPeerMultiSelect && selectedUserIds.isEmpty()
     val isCustomSelectionInvalid = selectedTagId == "custom" && customTagText.isBlank()
     val dismissSheet = onSkip ?: onDismiss
     val calendarProvider = remember { CalendarProvider() }
@@ -315,16 +386,25 @@ fun ConnectionContextSheet(
     val subtitleText: String
     when (presentation) {
         ConnectionContextPresentation.ReconnectEncounter -> {
-            val name = connectedUsers.firstOrNull()?.displayName?.trim()?.takeIf { it.isNotEmpty() } ?: "them"
-            titleText = "Logging encounter with $name…"
-            subtitleText = "Save this crossing to your shared encounter history."
+            if (showPeerMultiSelect) {
+                titleText = "Logging this encounter…"
+                subtitleText = "Choose who was there, then save this crossing to your shared history."
+            } else {
+                val name = connectedUsers.firstOrNull()?.displayName?.trim()?.takeIf { it.isNotEmpty() } ?: "them"
+                titleText = "Logging encounter with $name…"
+                subtitleText = "Save this crossing to your shared encounter history."
+            }
         }
-        ConnectionContextPresentation.QrFlow -> when (connectedUsers.size) {
-            0 -> {
+        ConnectionContextPresentation.QrFlow -> when {
+            showPeerMultiSelect -> {
+                titleText = "Who was in this meetup?"
+                subtitleText = "Select people to connect with, then pick optional context. You can skip and keep going."
+            }
+            connectedUsers.isEmpty() -> {
                 titleText = "Sparking a new connection…"
                 subtitleText = "Pick what best describes this moment. You can skip and keep going."
             }
-            1 -> {
+            connectedUsers.size == 1 -> {
                 titleText = "Sparking a new connection…"
                 subtitleText = "Pick what best describes this physical encounter. You can leave it blank and keep going."
             }
@@ -333,12 +413,16 @@ fun ConnectionContextSheet(
                 subtitleText = "This tag applies to everyone in this meetup. You can leave it blank and keep going."
             }
         }
-        ConnectionContextPresentation.NewSpark -> when (connectedUsers.size) {
-            0 -> {
+        ConnectionContextPresentation.NewSpark -> when {
+            showPeerMultiSelect -> {
+                titleText = "Who was in this tap?"
+                subtitleText = "Select people to connect with, then pick optional context. You can skip and keep going."
+            }
+            connectedUsers.isEmpty() -> {
                 titleText = "Sparking a new connection…"
                 subtitleText = "Pick what best describes this moment. You can skip and keep going."
             }
-            1 -> {
+            connectedUsers.size == 1 -> {
                 titleText = "Sparking a new connection…"
                 subtitleText = "Pick what best describes this physical encounter. You can leave it blank and keep going."
             }
@@ -346,6 +430,17 @@ fun ConnectionContextSheet(
                 titleText = "Set the context for this group"
                 subtitleText = "This tag applies to everyone in this meetup. You can leave it blank and keep going."
             }
+        }
+    }
+
+    fun toggleSelectableUser(userId: String) {
+        selectedUserIds = if (userId in selectedUserIds) {
+            selectedUserIds - userId
+        } else if (selectedUserIds.size >= PROXIMITY_HOST_SELECTION_MAX_PEERS) {
+            // Server max member set is 12 including host.
+            selectedUserIds
+        } else {
+            selectedUserIds + userId
         }
     }
 
@@ -359,11 +454,6 @@ fun ConnectionContextSheet(
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            if (connectedUsers.isNotEmpty()) {
-                ConnectionContextHeaderAvatars(connectedUsers)
-                Spacer(modifier = Modifier.height(4.dp))
-            }
-
             Text(
                 text = titleText,
                 style = MaterialTheme.typography.titleLarge,
@@ -377,29 +467,15 @@ fun ConnectionContextSheet(
                 color = GlassSheetTokens.OnOledMuted(),
             )
 
+            if (!showPeerMultiSelect && connectedUsers.isNotEmpty()) {
+                ConnectionContextHeaderAvatars(connectedUsers)
+            }
+
             if (!locationName.isNullOrBlank()) {
                 Text(
                     text = "Location hint: $locationName",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary
-                )
-            }
-
-            if (showCalendarSync && calendarPermissionDenied) {
-                Text(
-                    text = "Calendar access is off — schedule overlap won't appear until you enable read-only calendar access in Settings.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            bestOverlap?.let { gap ->
-                val (dayLabel, timeLabel) = gap.formatDayAndTimeLabels()
-                CalendarOverlapBentoCard(
-                    dayLabel = dayLabel,
-                    timeLabel = timeLabel,
-                    lockInProgress = lockIntentInProgress,
-                    onLockIntent = { onLockIntent?.invoke(gap) },
                 )
             }
 
@@ -423,6 +499,50 @@ fun ConnectionContextSheet(
                 scaleMax = 1.025f,
                 alphaMin = 0.9f,
             )
+
+            if (showPeerMultiSelect) {
+                Text(
+                    text = "People",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = GlassSheetTokens.OnOled(),
+                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 280.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    uniqueSelectableUsers.forEach { profile ->
+                        ConnectionContextSelectableUserRow(
+                            profile = profile,
+                            selected = profile.id in selectedUserIds,
+                            onToggle = { toggleSelectableUser(profile.id) },
+                        )
+                    }
+                }
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f),
+                )
+            }
+
+            if (showCalendarSync && calendarPermissionDenied) {
+                Text(
+                    text = "Calendar access is off — schedule overlap won't appear until you enable read-only calendar access in Settings.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            bestOverlap?.let { gap ->
+                val (dayLabel, timeLabel) = gap.formatDayAndTimeLabels()
+                CalendarOverlapBentoCard(
+                    dayLabel = dayLabel,
+                    timeLabel = timeLabel,
+                    lockInProgress = lockIntentInProgress,
+                    onLockIntent = { onLockIntent?.invoke(gap) },
+                )
+            }
 
             if (showTagPickers) {
                 Text(
@@ -560,13 +680,15 @@ fun ConnectionContextSheet(
                         Button(
                             onClick = {
                                 PlatformHapticsPolicy.lightImpact()
-                                onSaveEncounter?.invoke()
+                                onSaveEncounter?.invoke(resolvedSelectedIds)
                             },
                             modifier = Modifier
                                 .weight(1f)
                                 .scale(springBtn * reconnectPulse.scale)
                                 .alpha(reconnectPulse.alpha),
-                            enabled = !encounterSaveInProgress && onSaveEncounter != null,
+                            enabled = !encounterSaveInProgress &&
+                                onSaveEncounter != null &&
+                                !selectionRequiredAndEmpty,
                         ) {
                             if (encounterSaveInProgress) {
                                 CircularProgressIndicator(
@@ -581,12 +703,12 @@ fun ConnectionContextSheet(
                         Button(
                             onClick = {
                                 PlatformHapticsPolicy.lightImpact()
-                                onConfirm(resolveSelectedTag(), ambientNoiseOptIn)
+                                onConfirm(resolveSelectedTag(), ambientNoiseOptIn, resolvedSelectedIds)
                             },
                             modifier = Modifier
                                 .weight(1f)
                                 .scale(springBtn),
-                            enabled = !isCustomSelectionInvalid
+                            enabled = !isCustomSelectionInvalid && !selectionRequiredAndEmpty,
                         ) {
                             Text("Connect")
                         }

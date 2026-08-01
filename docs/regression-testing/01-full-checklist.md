@@ -120,11 +120,12 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 ### 5.4 Tap / Tri-Factor (`NfcScreen`)
 
 - [ ] Idle → Fetching location → Scanning/handshaking states render
-- [ ] BLE + ultrasonic + GPS handshake progresses (`ConnectionViewModel` state machine)
+- [ ] BLE + ultrasonic + GPS handshake progresses (`ConnectionViewModel` state machine); ~**5s** listen window
 - [ ] Single-peer match → 1:1 DM connection (`is_group=false`) — `[KNOWN-3]` verify DM path, not group-only UX
-- [ ] Multi-peer (3+) → matching peers UI → verified clique path
-- [ ] `[KNOWN-1]` 3+ phones: **every** participant registered on the group connection
-- [ ] `[KNOWN-2]` Re-tap same pair: no duplicate 1:1 connection rows (inbox / DB)
+- [ ] Multi-peer (3+) → `awaiting_selection` → host **People multi-select above tags** (not `"Connect with everyone"`) → `confirmProximitySelection` (≤12)
+- [ ] `[KNOWN-1]` 3-phone group registration: selected participants registered on the group connection
+- [ ] `[KNOWN-2]` Re-tap same pair: no duplicate 1:1 connection rows in inbox / DB; reconnect uses `ReconnectEncounter`
+- [ ] `[KNOWN-2]` Re-tap same pair: **no duplicate map pin** (single pin per peer)
 - [ ] Confirm creates connection; offline capture queues sync snackbar
 - [ ] `TaggingContext` → `ConnectionContextSheet` (in-screen or after dismiss)
 - [ ] Error states (`NfcErrorContent`) recoverable
@@ -145,9 +146,11 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 ### 5.6 Context tags (`ConnectionContextSheet`)
 
 - [ ] QrFlow vs NewSpark modes show correct copy
+- [ ] Multi-peer: **People** section appears **above** Suggested / All tags; Connect disabled until ≥1 peer selected
 - [ ] Filter chips / tags selectable
-- [ ] Save applies tags; skip/cancel dismisses without corrupting state
-- [ ] Reconnect encounter path (`saveReconnectEncounter`)
+- [ ] Save applies tags; skip/cancel dismisses without corrupting state (host abandon does not create group)
+- [ ] Reconnect encounter path (`saveReconnectEncounter` / `ReconnectEncounter` presentation)
+- [ ] `at_event` attachment only when all participants have RSVP **and** active check-in
 - [ ] Memory capsule sensor capture when opted in (noise, barometric)
 - [ ] `[UI]` Save uses `ClickPlatformButton`; chips use `ClickPlatformSegmentedControl`
 
@@ -165,6 +168,7 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 ### 6.1 List & tabs (`ConnectionsListView`, `ConnectionsTabControls`)
 
 - [ ] Active / Groups / Archived tabs switch; list filters correctly
+- [ ] `[KNOWN-2]` Bluetooth reconnect does **not** create a duplicate 1:1 Active chat row (collapse/upsert by peer)
 - [ ] Sort/filter dropdown works
 - [ ] Search within list (if present) filters rows
 - [ ] Core connections pinned when marked core
@@ -363,9 +367,11 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] Map loads user location (permission granted)
 - [ ] `[KNOWN-5]` Map basemap renders with intended color styling (not stuck grayscale unless ghost mode)
 - [ ] Connection pins render; tap opens connection marker sheet
+- [ ] `[KNOWN-2]` Bluetooth reconnect → **single pin per peer** (no duplicate connection pins)
 - [ ] Community hub pins; tap → hub detail sheet → join geofence flow
 - [ ] Beacon pins; tap → beacon detail
 - [ ] `[KNOWN-4]` Events visible on map also appear in discovery list view (and vice versa for in-range events)
+- [ ] Event encounter attach (`at_event`): only when all participants RSVPed **and** actively checked in
 - [ ] Map layer filter dropdown (connections, hubs, beacons / events)
 - [ ] Zoom controls (`MapZoomGlassControls`)
 - [ ] `[UI]` Map overlay icon buttons platform-native

@@ -123,6 +123,8 @@ class FakeChatRepository(
             limit?.takeIf { it > 0 }?.let { bounded.takeLast(it) } ?: bounded
         }
 
+    override suspend fun ensureFreshAuthToken(): String? = "fake-jwt"
+
     override suspend fun fetchReactionsForChat(chatId: String, messageIds: List<String>?): List<MessageReaction> =
         onFetchReactionsForChat(chatId)
 

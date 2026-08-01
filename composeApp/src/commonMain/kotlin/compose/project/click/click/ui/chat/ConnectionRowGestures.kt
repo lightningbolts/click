@@ -37,16 +37,19 @@ internal fun Modifier.connectionRowPressGestures(
     },
 )
 
-/** Slow fill-in so light taps still read as a wash, not a flash. */
-private val PressHighlightIn = tween<Float>(durationMillis = 420, easing = LinearOutSlowInEasing)
-private val PressHighlightOut = tween<Float>(durationMillis = 380, easing = FastOutSlowInEasing)
-private const val PressHighlightAlpha = 0.14f
+/** Clear full-row wash on press — no left-edge accent (that sat under the avatar). */
+private val PressHighlightIn = tween<Float>(durationMillis = 140, easing = FastOutSlowInEasing)
+private val PressHighlightOut = tween<Float>(durationMillis = 380, easing = LinearOutSlowInEasing)
+/** Stronger than the original 0.14, without a harsh left bar. */
+private const val PressHighlightAlpha = 0.18f
+/** Brief hold after a solid press so the wash survives into the chat transition. */
+private const val PressHighlightHoldMs = 140L
 
 /**
  * Full-row wash highlight — pair with [connectionRowPressGestures].
  *
- * On release we fade from the current wash level (no snap-to-peak). That keeps light taps
- * from looking like a sudden fill-in.
+ * On release we hold briefly when the wash was strong, then fade — so opening a chat
+ * still shows a clear tapped-row flash under the push.
  */
 @Composable
 internal fun Modifier.connectionRowPressHighlight(
@@ -64,9 +67,8 @@ internal fun Modifier.connectionRowPressHighlight(
                 is PressInteraction.Cancel,
                 -> {
                     wash.stop()
-                    // Soft hold only if we already reached a visible wash — never snap up to 1f.
-                    if (wash.value >= 0.35f) {
-                        kotlinx.coroutines.delay(48L)
+                    if (wash.value >= 0.25f) {
+                        kotlinx.coroutines.delay(PressHighlightHoldMs)
                     }
                     wash.animateTo(0f, animationSpec = PressHighlightOut)
                 }

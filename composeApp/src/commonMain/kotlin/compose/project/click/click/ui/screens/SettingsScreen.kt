@@ -192,6 +192,7 @@ fun SettingsScreen(
     var newFirstName by remember { mutableStateOf("") }
     var newLastName by remember { mutableStateOf("") }
     var showAvailabilityIntentSheet by remember { mutableStateOf(false) }
+    var seedAvailabilityIntent by remember { mutableStateOf<AvailabilityIntentRow?>(null) }
     var pendingDeleteAvailabilityIntent by remember { mutableStateOf<AvailabilityIntentRow?>(null) }
     var showPermissionsHub by remember { mutableStateOf(false) }
 
@@ -233,6 +234,7 @@ fun SettingsScreen(
                                 Button(
                                     onClick = {
                                         availabilityViewModel.resetAvailabilityIntentSheet()
+                                        seedAvailabilityIntent = null
                                         showAvailabilityIntentSheet = true
                                     },
                                     modifier = Modifier
@@ -317,6 +319,7 @@ fun SettingsScreen(
                                                         TextButton(
                                                             onClick = {
                                                                 availabilityViewModel.beginEditAvailabilityIntent(row)
+                                                                seedAvailabilityIntent = row
                                                                 showAvailabilityIntentSheet = true
                                                             },
                                                         ) {
@@ -507,8 +510,10 @@ fun SettingsScreen(
         if (showAvailabilityIntentSheet) {
             AvailabilitySheet(
                 viewModel = availabilityViewModel,
+                seedIntent = seedAvailabilityIntent,
                 onDismiss = {
                     showAvailabilityIntentSheet = false
+                    seedAvailabilityIntent = null
                     availabilityViewModel.resetAvailabilityIntentSheet()
                 },
             )

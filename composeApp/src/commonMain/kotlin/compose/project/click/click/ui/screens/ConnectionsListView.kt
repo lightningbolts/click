@@ -162,6 +162,7 @@ import compose.project.click.click.data.models.ChatWithDetails // pragma: allowl
 import compose.project.click.click.data.api.ChatApiClient // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
+import compose.project.click.click.data.models.collapseOneToOneChatsByPeer // pragma: allowlist secret
 import compose.project.click.click.data.models.isArchivedChannelForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
@@ -400,19 +401,27 @@ fun ConnectionsListView(
         }
     }
 
-    val activeChats = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds) {
-        effectiveChats.filter {
-            it.groupClique == null &&
-                it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-        }
+    val activeChats = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds, currentUserId) {
+        collapseOneToOneChatsByPeer(
+            chats = effectiveChats.filter {
+                it.groupClique == null &&
+                    it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
+            },
+            viewerUserId = currentUserId,
+            activityTs = { connectionListActivityTs(it) },
+        )
     }
     val activeOneToOneChats = remember(activeChats) {
         activeChats.sortedByDescending { connectionListActivityTs(it) }
     }
-    val rememberMeChats = remember(activeChats, coreConnectionIds) {
-        activeChats
-            .filter { it.groupClique == null && it.connection.id in coreConnectionIds }
-            .sortedByDescending { connectionListActivityTs(it) }
+    val rememberMeChats = remember(activeChats, coreConnectionIds, currentUserId) {
+        collapseOneToOneChatsByPeer(
+            chats = activeChats.filter {
+                it.groupClique == null && it.connection.id in coreConnectionIds
+            },
+            viewerUserId = currentUserId,
+            activityTs = { connectionListActivityTs(it) },
+        ).sortedByDescending { connectionListActivityTs(it) }
     }
     val showRememberMeStrip =
         selectedTabIndex == 0 && searchQuery.isBlank() && rememberMeChats.isNotEmpty()
@@ -435,17 +444,20 @@ fun ConnectionsListView(
         }
     }
 
-    val groupChats = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds) {
-        effectiveChats.filter {
-            it.groupClique != null &&
-                it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-        }
+    val groupChats = remember(effectiveChats) {
+        // Group cliques use a synthetic connection id (= group id). Do not gate them on
+        // connection_archives / connection_hidden — those junctions are for 1:1 edges only.
+        effectiveChats.filter { it.groupClique != null }
     }
-    val archivedChats = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds) {
-        effectiveChats.filter {
-            it.groupClique == null &&
-                it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
-        }
+    val archivedChats = remember(effectiveChats, archivedConnectionIds, hiddenConnectionIds, currentUserId) {
+        collapseOneToOneChatsByPeer(
+            chats = effectiveChats.filter {
+                it.groupClique == null &&
+                    it.connection.isArchivedChannelForUser(archivedConnectionIds, hiddenConnectionIds)
+            },
+            viewerUserId = currentUserId,
+            activityTs = { connectionListActivityTs(it) },
+        )
     }
     val sortedTabChats = remember(
         activeChats,
@@ -501,6 +513,11 @@ fun ConnectionsListView(
     }
     LaunchedEffect(selectedTabIndex) {
         viewModel.resetConnectionsDisplayLimit()
+        // Groups tab: always force a network inbox reload when clique rows are missing so we
+        // recover from a direct-only poisoned disk cache (hubs use a separate store).
+        if (selectedTabIndex == 1 && groupChats.isEmpty()) {
+            viewModel.loadChats(isForced = true)
+        }
     }
 
     /** Verified-click picker: every non-group 1:1 edge still in the inbox, including pending and archived-tab rows. */
@@ -601,19 +618,25 @@ fun ConnectionsListView(
         activeCount,
         groupCount,
         archivedCount,
+        activeHubs.size,
+        filteredChats.size,
     ) {
-        if (effectiveChats.isEmpty()) {
+        if (effectiveChats.isEmpty() && activeHubs.isEmpty()) {
             if (chatListState is ChatListState.Loading) "Loading…" else ""
         } else {
-            val tabChats = when (selectedTabIndex) {
-                0 -> activeChats
-                1 -> groupChats
-                else -> archivedChats
+            val tabCount = when (selectedTabIndex) {
+                0 -> activeChats.size
+                1 -> groupChats.size + activeHubs.size
+                else -> archivedChats.size
             }
-            val filteredCount = if (searchQuery.isBlank()) {
-                tabChats.size
+            val filteredCount = if (searchQuery.isNotBlank()) {
+                filteredChats.size + if (selectedTabIndex == 1) {
+                    activeHubs.count { it.name.contains(searchQuery, ignoreCase = true) }
+                } else {
+                    0
+                }
             } else {
-                filteredChats.size
+                tabCount
             }
             val tabLabel = when (selectedTabIndex) {
                 0 -> "active"
@@ -675,7 +698,9 @@ fun ConnectionsListView(
                             alpha = tabContentAlpha.value
                         }
                 ) {
-                    if (filteredChats.isEmpty()) {
+                    if (filteredChats.isEmpty() &&
+                        !(selectedTabIndex == 1 && activeHubs.isNotEmpty())
+                    ) {
                         val emptyScroll = rememberScrollState()
                         Column(
                             modifier = Modifier

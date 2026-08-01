@@ -15,9 +15,9 @@ import compose.project.click.click.data.models.LocationPreferences
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.UserAvailability
 import compose.project.click.click.data.models.isResolvedDisplayName
-import compose.project.click.click.data.models.isActiveForUser
-import compose.project.click.click.data.models.isArchivedChannelForUser
+import compose.project.click.click.data.models.isOneToOnePairEdge
 import compose.project.click.click.data.models.resolveDisplayName
+import compose.project.click.click.data.models.shouldPreserveLocalConnectionJunctions
 import compose.project.click.click.data.repository.NotificationPreferences
 import compose.project.click.click.data.repository.NotificationPreferencesRepository
 import compose.project.click.click.notifications.createPushNotificationService
@@ -169,7 +169,7 @@ object AppDataManager {
     }
 
     /** Radius (meters) for the eager beacon prefetch — matches the map discovery feed radius. */
-    private const val BEACON_PREFETCH_RADIUS_METERS = 30_000.0
+    private const val BEACON_PREFETCH_RADIUS_METERS = 50_000.0
 
     /** Bounded retries so the discovery feed seeds even when GPS is slow to warm up at cold start. */
     private const val BEACON_PREFETCH_MAX_ATTEMPTS = 6
@@ -355,6 +355,20 @@ object AppDataManager {
     )
     val foregroundRealtimeRecovery: SharedFlow<Unit> = _foregroundRealtimeRecovery.asSharedFlow()
 
+    /**
+     * Emitted after proximity / connection mutations that need a forced Clicks inbox rebuild
+     * (collapse duplicate 1:1 edges) rather than trusting a stale disk feed.
+     */
+    private val _inboxReloadRequests = MutableSharedFlow<Unit>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val inboxReloadRequests: SharedFlow<Unit> = _inboxReloadRequests.asSharedFlow()
+
+    fun requestInboxReload() {
+        scope.launch { _inboxReloadRequests.emit(Unit) }
+    }
+
     /** Surfaces a one-shot message to UI collectors (e.g. onboarding before the main scaffold exists). */
     fun postTransientUserMessage(message: String) {
         if (message.isBlank()) return
@@ -460,27 +474,44 @@ object AppDataManager {
      * [STARTUP_TIMEOUT_MS] on half-open connections (common after iOS backgrounding).
      */
     fun handleApplicationForegrounded() {
+        recoverSessionAndRealtime(reason = "foreground", forceDataRefresh = false)
+    }
+
+    /**
+     * Shared session + Realtime recovery used by foreground resume and offline→online reconnect.
+     * Refreshes GoTrue, rebinds Realtime with a fresh JWT, and refreshes inbox/data when stale.
+     */
+    private fun recoverSessionAndRealtime(reason: String, forceDataRefresh: Boolean) {
         if (_ghostModeEnabled.value) return
         val now = Clock.System.now().toEpochMilliseconds()
         if (now - lastForegroundRecoveryMs < FOREGROUND_RECOVERY_DEBOUNCE_MS) return
         lastForegroundRecoveryMs = now
         scope.launch {
+            println("AppDataManager: session/realtime recovery ($reason)")
             val recoveryOk = runCatching {
                 SupabaseForegroundRecovery.recoverAfterBackground(SupabaseConfig.client)
             }.onFailure { e ->
-                println("AppDataManager: foreground Supabase recovery failed: ${e.redactedRestMessage()}")
+                println(
+                    "AppDataManager: session recovery failed ($reason): ${e.redactedRestMessage()}",
+                )
             }.isSuccess
             _foregroundRealtimeRecovery.emit(Unit)
+            // RealtimeCoordinator.stop() runs inside recovery — re-subscribe with the fresh JWT.
+            _currentUser.value?.id?.takeIf { it.isNotBlank() }?.let { uid ->
+                runCatching { RealtimeCoordinator.ensureStarted(uid) }
+            }
 
             val dataStale = now - lastRefreshTime > REFRESH_COOLDOWN_MS
             val inboxStale = !isInboxFeedFresh(now)
-            if (!recoveryOk || (dataStale && inboxStale)) {
+            if (forceDataRefresh || !recoveryOk || (dataStale && inboxStale)) {
                 loadAllDataJob?.cancel()
-                if (recoveryOk && inboxStale && !dataStale) {
+                if (!forceDataRefresh && recoveryOk && inboxStale && !dataStale) {
                     refreshInboxFromCoordinator(force = true)
                 } else {
                     startLoadAllDataJob()
                 }
+            } else if (recoveryOk && inboxStale) {
+                refreshInboxFromCoordinator(force = true)
             }
         }
     }
@@ -610,7 +641,10 @@ object AppDataManager {
             runCatching {
                 val direct = async { chatRepository.fetchDirectUserChatsWithDetails(userId) }
                 val archived = async { chatRepository.fetchArchivedUserChatsWithDetails(userId) }
-                val groups = async { chatRepository.fetchGroupUserChatsWithDetails(userId) }
+                val groups = async {
+                    runCatching { chatRepository.fetchGroupUserChatsWithDetails(userId) }
+                        .getOrElse { emptyList() }
+                }
                 val directRows = (direct.await() + archived.await())
                     .distinctBy { it.connection.id }
                     .sortedByDescending { it.lastMessage?.timeCreated ?: it.connection.last_message_at ?: it.connection.created }
@@ -809,16 +843,20 @@ object AppDataManager {
     }
 
     /**
-     * Initialize app data - call this once when the app starts
+     * Initialize app data - call this once when the app starts.
+     *
+     * Disk-first [primeOfflineBootCache] may already set [_isDataLoaded]; that must NOT skip
+     * pending sync, network reconnect observers, or the first network-backed [loadAllData].
      */
     fun initializeData() {
-        if (_isDataLoaded.value || _isLoading.value) return // Already loaded or loading
         scope.launch {
             refreshPendingConnectionCount()
         }
         startPendingConnectionSync()
         startNetworkConnectivityObserver()
-        
+        // Disk prime sets isDataLoaded=true for offline UI; still run a network hydrate unless
+        // one is already in flight.
+        if (_isLoading.value || loadAllDataJob?.isActive == true) return
         startLoadAllDataJob()
     }
     
@@ -1085,32 +1123,41 @@ object AppDataManager {
         beaconPrefetchJob = scope.launch {
             try {
             runCatching {
-                if (!locationService.hasLocationPermission()) {
-                    return@runCatching
-                }
                 // GPS may not be ready the instant the app cold-starts. Retry a few times so the
                 // discovery feed is seeded with hubs + beacons without waiting for the user to
                 // open (and acquire bounds from) the expanded map.
                 var loc: compose.project.click.click.utils.LocationResult? = null
-                var attempt = 0
-                while (attempt < BEACON_PREFETCH_MAX_ATTEMPTS && currentCoroutineContext().isActive) {
-                    loc = locationService.getCurrentLocation()
-                        ?: locationService.getHighAccuracyLocation(2_000L)
-                    if (loc != null) break
-                    attempt++
-                    if (attempt < BEACON_PREFETCH_MAX_ATTEMPTS) {
-                        delay(BEACON_PREFETCH_RETRY_DELAY_MS)
+                if (locationService.hasLocationPermission()) {
+                    var attempt = 0
+                    while (attempt < BEACON_PREFETCH_MAX_ATTEMPTS && currentCoroutineContext().isActive) {
+                        loc = locationService.getCurrentLocation()
+                            ?: locationService.getHighAccuracyLocation(2_000L)
+                        if (loc != null) break
+                        attempt++
+                        if (attempt < BEACON_PREFETCH_MAX_ATTEMPTS) {
+                            delay(BEACON_PREFETCH_RETRY_DELAY_MS)
+                        }
                     }
                 }
-                val resolved = loc ?: return@runCatching
-                _lastKnownDeviceLocation.value = resolved.latitude to resolved.longitude
+                // When GPS is still unavailable (common on Android cold start), seed from
+                // connection encounter centroids so events/beacons still hydrate from the API.
+                val resolvedLatLon: Pair<Double, Double>? = loc?.let { it.latitude to it.longitude }
+                    ?: run {
+                        val geos = _connections.value.mapNotNull { it.connectionMapGeo() }
+                        if (geos.isEmpty()) null
+                        else geos.map { it.lat }.average() to geos.map { it.lon }.average()
+                    }
+                val resolved = resolvedLatLon ?: return@runCatching
+                _lastKnownDeviceLocation.value = resolved
+                val centerLat = resolved.first
+                val centerLon = resolved.second
                 val latDelta = BEACON_PREFETCH_RADIUS_METERS / 111_320.0
-                val lonScale = kotlin.math.cos(resolved.latitude * kotlin.math.PI / 180.0).coerceAtLeast(0.2)
+                val lonScale = kotlin.math.cos(centerLat * kotlin.math.PI / 180.0).coerceAtLeast(0.2)
                 val lonDelta = BEACON_PREFETCH_RADIUS_METERS / (111_320.0 * lonScale)
-                val minLat = (resolved.latitude - latDelta).coerceIn(-90.0, 90.0)
-                val maxLat = (resolved.latitude + latDelta).coerceIn(-90.0, 90.0)
-                val minLon = (resolved.longitude - lonDelta).coerceIn(-180.0, 180.0)
-                val maxLon = (resolved.longitude + lonDelta).coerceIn(-180.0, 180.0)
+                val minLat = (centerLat - latDelta).coerceIn(-90.0, 90.0)
+                val maxLat = (centerLat + latDelta).coerceIn(-90.0, 90.0)
+                val minLon = (centerLon - lonDelta).coerceIn(-180.0, 180.0)
+                val maxLon = (centerLon + lonDelta).coerceIn(-180.0, 180.0)
 
                 coroutineScope {
                     val beaconsDeferred = async {
@@ -1146,13 +1193,30 @@ object AppDataManager {
      */
     fun isInboxFeedFresh(nowMs: Long = Clock.System.now().toEpochMilliseconds()): Boolean {
         if (!_isDataLoaded.value) return false
-        val hasLocalInbox =
-            _inboxFeedChats.value.isNotEmpty() || _connections.value.isNotEmpty()
-        if (!hasLocalInbox) return false
+        val inbox = _inboxFeedChats.value
+        val connections = _connections.value
+        // Connections alone are not a complete inbox — verified cliques only live in inboxFeedChats.
+        if (inbox.isEmpty() && connections.isEmpty()) return false
+        // Direct-only poison: 1:1 rows exist but no groupClique rows, and we have not successfully
+        // completed a group fetch this process. Force network so Groups tab can recover.
+        if (connections.isNotEmpty() &&
+            inbox.none { it.groupClique != null } &&
+            !groupInboxHydratedThisSession
+        ) {
+            return false
+        }
         val currentVersion = RealtimeCoordinator.currentInboxVersion()
         if (currentVersion != lastSyncedInboxVersion) return false
         if (lastRefreshTime <= 0L) return true
         return nowMs - lastRefreshTime < REFRESH_COOLDOWN_MS
+    }
+
+    /** Set after a successful group-clique inbox fetch (including authentic empty). */
+    var groupInboxHydratedThisSession: Boolean = false
+        private set
+
+    fun markGroupInboxHydrated() {
+        groupInboxHydratedThisSession = true
     }
 
     fun notifyInboxVersionSynced() {
@@ -1230,6 +1294,7 @@ object AppDataManager {
         _cachedChatThreads.value = emptyMap()
         _cachedHubThreads.value = emptyMap()
         _inboxFeedChats.value = emptyList()
+        groupInboxHydratedThisSession = false
         supabaseRepository.clearCachedUserPublicProfiles()
         supabaseRepository.clearCachedProfileTimelines()
         _userAvailability.value = null
@@ -1256,12 +1321,31 @@ object AppDataManager {
     }
     
     /**
-     * Update connections list (after making a new connection)
+     * Update connections list (after making a new connection).
+     * Upserts by id; for 1:1 pair edges, replaces any older active pair-edge for the same peer
+     * so reconnects do not grow duplicate DM rows.
      */
     fun addConnection(connection: Connection, otherUser: User? = null) {
-        publishConnections(_connections.value + connection)
-
         val currentUserId = _currentUser.value?.id
+        var list = _connections.value
+        if (connection.isOneToOnePairEdge() &&
+            connection.isInActiveConnectionsChannel() &&
+            !currentUserId.isNullOrBlank()
+        ) {
+            val peerId = connection.user_ids.firstOrNull { it != currentUserId }
+            if (!peerId.isNullOrBlank()) {
+                // Retire every other active-channel pair-edge for this peer (pending/active/kept),
+                // including edges whose status string is blank/legacy-null treated as active.
+                list = list.filterNot { existing ->
+                    if (existing.id == connection.id) return@filterNot false
+                    if (!existing.isOneToOnePairEdge()) return@filterNot false
+                    if (!existing.isInActiveConnectionsChannel()) return@filterNot false
+                    existing.user_ids.firstOrNull { it != currentUserId } == peerId
+                }
+            }
+        }
+        publishConnections(list + connection)
+
         val otherUserId = currentUserId?.let { currentId ->
             connection.user_ids.firstOrNull { it != currentId }
         }
@@ -1832,6 +1916,9 @@ object AppDataManager {
         networkConnectivityJob = scope.launch {
             networkConnectivityMonitor.isOnline.collect { online ->
                 if (online && !wasOnline) {
+                    // Same JWT + Realtime recovery as foreground — offline→online alone used to
+                    // leave stale sockets / expired JWTs until the user signed out.
+                    recoverSessionAndRealtime(reason = "network_reconnect", forceDataRefresh = true)
                     runCatching { flushPendingProximityHandshakesFromBackgroundWorker() }
                         .onFailure {
                             println("AppDataManager: Encounter queue drain on reconnect failed: ${it.message}")
@@ -1888,6 +1975,8 @@ object AppDataManager {
                                 users = recovered,
                                 encounterLogged = proximity.recoveredEncounterLogged,
                                 groupCliqueCandidateMemberIds = proximity.groupCliqueCandidateMemberIds,
+                                pendingHandshakeId = proximity.pendingHandshakeId,
+                                isAggregateNewConnection = proximity.isAggregateNewConnection,
                             ),
                         )
                     }
@@ -1934,6 +2023,8 @@ object AppDataManager {
                     users = recovered,
                     encounterLogged = proximity.recoveredEncounterLogged,
                     groupCliqueCandidateMemberIds = proximity.groupCliqueCandidateMemberIds,
+                    pendingHandshakeId = proximity.pendingHandshakeId,
+                    isAggregateNewConnection = proximity.isAggregateNewConnection,
                 ),
             )
         }
@@ -1942,9 +2033,17 @@ object AppDataManager {
     /**
      * Apply server connection snapshot. Preserves locally cached rows when the server
      * returns none but cold-start restore already had data (offline network failure).
+     * Empty junction sets under an empty connection fetch are treated as RLS/auth poison
+     * and must not wipe optimistic / offline archive + core pins.
      */
     private fun applyFetchedConnectionSnapshot(snapshot: UserConnectionsSnapshot) {
         val localConnections = _connections.value
+        val preserveJunctions = shouldPreserveLocalConnectionJunctions(
+            localConnectionCount = localConnections.size,
+            snapshotConnectionCount = snapshot.connections.size,
+            snapshotArchivedCount = snapshot.archivedConnectionIds.size,
+            snapshotHiddenCount = snapshot.hiddenConnectionIds.size,
+        )
         val merged = when {
             snapshot.connections.isNotEmpty() -> {
                 val localById = localConnections.associateBy { it.id }
@@ -1956,10 +2055,13 @@ object AppDataManager {
             else -> snapshot.connections
         }
         publishConnections(merged)
-        _archivedConnectionIds.value = snapshot.archivedConnectionIds
-        _hiddenConnectionIds.value = snapshot.hiddenConnectionIds
+        if (!preserveJunctions) {
+            _archivedConnectionIds.value = snapshot.archivedConnectionIds
+            _hiddenConnectionIds.value = snapshot.hiddenConnectionIds
+        }
         val serverCore = snapshot.coreConnectionIds
         _coreConnectionIds.value = when {
+            preserveJunctions -> _coreConnectionIds.value
             snapshot.coreConnectionIdsAuthoritative && serverCore.isEmpty() && _coreConnectionIds.value.isNotEmpty() ->
                 _coreConnectionIds.value
             snapshot.coreConnectionIdsAuthoritative -> serverCore

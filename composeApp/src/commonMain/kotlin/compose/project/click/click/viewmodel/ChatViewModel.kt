@@ -24,6 +24,7 @@ import compose.project.click.click.data.models.isEncryptedMedia // pragma: allow
 import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.collapseOneToOneChatsByPeer // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.isArchivedChannelForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.isResolvedDisplayName // pragma: allowlist secret
@@ -309,17 +310,36 @@ class ChatViewModel(
         viewModelScope.launch {
             _isLoadingOlderMessages.value = true
             try {
-                val fetched = chatRepository.fetchMessagesForChat(
-                    chatId = apiChatId,
-                    viewerUserId = userId,
-                    limit = OLDER_MESSAGES_PAGE_SIZE,
-                    beforeTimeCreated = oldest.timeCreated,
-                ).orEmpty()
-                if (fetched.isEmpty()) {
-                    _hasMoreOlderMessages.value = false
-                    return@launch
+                suspend fun fetchPage(): List<Message>? =
+                    chatRepository.fetchMessagesForChat(
+                        chatId = apiChatId,
+                        viewerUserId = userId,
+                        limit = OLDER_MESSAGES_PAGE_SIZE,
+                        beforeTimeCreated = oldest.timeCreated,
+                    )
+
+                var fetched = fetchPage()
+                // Auth-empty / null under stale JWT must not freeze pagination as "end of history".
+                var authReadyAfterRetry = false
+                if (fetched == null || fetched.isEmpty()) {
+                    authReadyAfterRetry = !chatRepository.ensureFreshAuthToken().isNullOrBlank()
+                    if (authReadyAfterRetry) {
+                        fetched = fetchPage()
+                    }
                 }
-                val vaulted = vaultMessagesForUi(apiChatId, userId, fetched)
+                when (olderMessagesPageOutcome(fetched, authReadyAfterRetry)) {
+                    OlderMessagesPageOutcome.KeepHasMore -> {
+                        println("ChatViewModel: loadOlderMessages failed; keeping hasMoreOlderMessages")
+                        return@launch
+                    }
+                    OlderMessagesPageOutcome.EndOfHistory -> {
+                        _hasMoreOlderMessages.value = false
+                        return@launch
+                    }
+                    OlderMessagesPageOutcome.MergePage -> Unit
+                }
+                val page = fetched ?: return@launch
+                val vaulted = vaultMessagesForUi(apiChatId, userId, page)
                 val knownUsers = buildMap {
                     state.messages.forEach { put(it.user.id, it.user) }
                     AppDataManager.currentUser.value?.let { put(it.id, it) }
@@ -345,7 +365,7 @@ class ChatViewModel(
                         icebreakerPrompts = _icebreakerPrompts.value,
                         showIcebreakerPanel = _showIcebreakerPanel.value,
                     )).copy(messages = merged)
-                if (fetched.size < OLDER_MESSAGES_PAGE_SIZE) {
+                if (page.size < OLDER_MESSAGES_PAGE_SIZE) {
                     _hasMoreOlderMessages.value = false
                 }
             } finally {
@@ -602,6 +622,13 @@ class ChatViewModel(
                 restoreActiveChatSubscriptionsIfNeeded()
             }
         }
+
+        viewModelScope.launch {
+            AppDataManager.inboxReloadRequests.collect {
+                if (_currentUserId.value.isNullOrBlank()) return@collect
+                loadChats(isForced = true)
+            }
+        }
     }
 
     // Set the current user
@@ -700,9 +727,15 @@ class ChatViewModel(
     private fun reapplyChatListVisibilityFromAppData() {
         val cur = _chatListState.value
         if (cur !is ChatListState.Success) return
+        val userId = _currentUserId.value
         val filtered = applyChatListVisibility(cur.chats)
-        pruneStaleReadClearedHints(filtered)
-        _chatListState.value = ChatListState.Success(applyUnreadClearHintsToInboxRows(filtered))
+        val collapsed = collapseOneToOneChatsByPeer(
+            chats = filtered,
+            viewerUserId = userId,
+            activityTs = { chatListActivityTimestamp(it) },
+        )
+        pruneStaleReadClearedHints(collapsed)
+        _chatListState.value = ChatListState.Success(applyUnreadClearHintsToInboxRows(collapsed))
     }
 
     /**
@@ -780,14 +813,16 @@ class ChatViewModel(
             // no real data has ever been emitted.
             val alreadyHasRealData = _chatListState.value is ChatListState.Success
             val fromConnectionsOnly = buildCachedChats(cachedConnections, cachedUsers, userId)
-            val cachedSeedChats = applyChatListVisibility(
-                dedupeOneToOneChatsByPeer(
+            val cachedSeedChats = collapseOneToOneChatsByPeer(
+                chats = applyChatListVisibility(
                     if (persistedInbox.isNotEmpty()) {
                         enrichInboxRowsFromConnectedUsers(persistedInbox, cachedUsers)
                     } else {
                         fromConnectionsOnly
                     },
                 ),
+                viewerUserId = userId,
+                activityTs = { chatListActivityTimestamp(it) },
             )
             if (!alreadyHasRealData) {
                 if (cachedSeedChats.isNotEmpty()) {
@@ -833,14 +868,43 @@ class ChatViewModel(
                 }
 
                 val groupChatsFlow: Flow<Pair<List<ChatWithDetails>, Boolean>> = flow {
-                    emit(chatRepository.fetchGroupUserChatsWithDetails(userId) to true)
+                    val result = runCatching { chatRepository.fetchGroupUserChatsWithDetails(userId) }
+                    result.fold(
+                        onSuccess = { emit(it to true) },
+                        onFailure = { e ->
+                            println(
+                                "ChatViewModel: group chats fetch failed (preserving prior groups): " +
+                                    e.redactedRestMessage(),
+                            )
+                            // groupLoaded=false → keep previously painted group rows; do not
+                            // persist a direct-only inbox that wipes cliques from disk.
+                            emit(emptyList<ChatWithDetails>() to false)
+                        },
+                    )
                 }.onStart {
                     emit(emptyList<ChatWithDetails>() to false)
                 }
 
                 combine(directChatsFlow, groupChatsFlow) { directState, groupState ->
                     val (directChats, directLoaded) = directState
-                    val (groupChats, groupLoaded) = groupState
+                    val (fetchedGroups, groupLoaded) = groupState
+                    val priorGroups =
+                        (_chatListState.value as? ChatListState.Success)
+                            ?.chats
+                            ?.filter { it.groupClique != null }
+                            .orEmpty()
+                    val persistedGroups = persistedInbox.filter { it.groupClique != null }
+                    // Empty successful fetch + prior groups usually means RLS returned nothing
+                    // under a bad/missing JWT (no exception). Keep prior rows and skip persist.
+                    val emptyFetchLooksPoisoned =
+                        groupLoaded &&
+                            fetchedGroups.isEmpty() &&
+                            (priorGroups.isNotEmpty() || persistedGroups.isNotEmpty())
+                    val groupChats = when {
+                        groupLoaded && !emptyFetchLooksPoisoned -> fetchedGroups
+                        priorGroups.isNotEmpty() -> priorGroups
+                        else -> persistedGroups
+                    }
                     CombinedInboxState(
                         chats = dedupeOneToOneChatsByPeer(
                             (directChats + groupChats)
@@ -848,7 +912,7 @@ class ChatViewModel(
                                 .sortedByDescending { chatListActivityTimestamp(it) },
                         ),
                         directLoaded = directLoaded,
-                        groupLoaded = groupLoaded,
+                        groupLoaded = groupLoaded && !emptyFetchLooksPoisoned,
                     )
                 }.collect { combinedInbox ->
                     val chats = combinedInbox.chats
@@ -911,10 +975,20 @@ class ChatViewModel(
                             dedupeOneToOneChatsByPeer(mergedWithLocalPreview),
                         )
                         pruneStaleReadClearedHints(visibilityFiltered)
-                        val finalRows = applyUnreadClearHintsToInboxRows(visibilityFiltered)
+                        val collapsed = collapseOneToOneChatsByPeer(
+                            chats = visibilityFiltered,
+                            viewerUserId = userId,
+                            activityTs = { chatListActivityTimestamp(it) },
+                        )
+                        val finalRows = applyUnreadClearHintsToInboxRows(collapsed)
                         chatRepository.seedInboxChatRouting(finalRows)
                         _chatListState.value = ChatListState.Success(finalRows)
                         if (combinedInbox.directLoaded && combinedInbox.groupLoaded) {
+                            // Only mark hydrated when at least one clique landed. An empty "success"
+                            // under a bad JWT must not freeze a direct-only inbox as fresh.
+                            if (finalRows.any { it.groupClique != null }) {
+                                AppDataManager.markGroupInboxHydrated()
+                            }
                             AppDataManager.persistInboxFeedChats(finalRows)
                             prefetchChatPayloads(userId, finalRows)
                         }
@@ -925,6 +999,8 @@ class ChatViewModel(
                         if (!hasCachedRows) {
                             _chatListState.value = ChatListState.Success(emptyList())
                             if (combinedInbox.directLoaded && combinedInbox.groupLoaded) {
+                                // Truly empty account (no directs, no groups) — ok to persist.
+                                AppDataManager.markGroupInboxHydrated()
                                 AppDataManager.persistInboxFeedChats(emptyList())
                             }
                         }
@@ -967,7 +1043,12 @@ class ChatViewModel(
         }
         val visible = applyChatListVisibility(dedupeOneToOneChatsByPeer(seed))
         pruneStaleReadClearedHints(visible)
-        return applyUnreadClearHintsToInboxRows(visible)
+        val collapsed = collapseOneToOneChatsByPeer(
+            chats = visible,
+            viewerUserId = userId,
+            activityTs = { chatListActivityTimestamp(it) },
+        )
+        return applyUnreadClearHintsToInboxRows(collapsed)
     }
 
     private fun enrichInboxRowsFromConnectedUsers(
@@ -1088,6 +1169,8 @@ class ChatViewModel(
         val hiddenIds = AppDataManager.hiddenConnectionIds.value
         val archivedIds = AppDataManager.archivedConnectionIds.value
         return chats.filter { chat ->
+            // Clique rows are not 1:1 junctions — never drop them for archive/hidden tables.
+            if (chat.groupClique != null) return@filter true
             val c = chat.connection
             when {
                 c.id in hiddenIds -> false
@@ -2168,32 +2251,47 @@ class ChatViewModel(
         if (!message.isEncryptedMedia()) return
         viewModelScope.launch(chatMediaDispatcher) {
             _secureChatMediaLoadState.update { it + (message.id to SecureChatMediaLoadState(loading = true)) }
+            // Refresh JWT before decrypt — stale cold-start tokens made audio appear stuck on "Preparing".
+            runCatching { chatRepository.ensureFreshAuthToken() }
             val bytes = runCatching {
                 chatRepository.downloadAndDecryptChatMedia(scopeId, viewerUserId, url)
             }.onFailure { e ->
                 println("ChatViewModel: secure audio decrypt failed for message=${message.id}: ${e.redactedRestMessage()}")
             }.getOrNull()
             if (bytes == null || bytes.isEmpty()) {
-                println("ChatViewModel: secure audio bytes missing for message=${message.id}")
-                _secureChatMediaLoadState.update {
-                    it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not load audio"))
+                // One more refresh+retry before surfacing a permanent error.
+                runCatching { chatRepository.ensureFreshAuthToken() }
+                val retried = runCatching {
+                    chatRepository.downloadAndDecryptChatMedia(scopeId, viewerUserId, url)
+                }.getOrNull()
+                if (retried == null || retried.isEmpty()) {
+                    println("ChatViewModel: secure audio bytes missing for message=${message.id}")
+                    _secureChatMediaLoadState.update {
+                        it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not load audio"))
+                    }
+                    return@launch
                 }
+                cacheAndPublishSecureAudio(message, retried)
                 return@launch
             }
-            val path = cacheSecureAudioOnDisk(message.id, bytes, message.audioCacheFileExtension())
-            if (path.isNullOrBlank()) {
-                println("ChatViewModel: secure audio cache write failed for message=${message.id}")
-                _secureChatMediaLoadState.update {
-                    it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not cache audio"))
-                }
-            } else {
-                val evictedPath = secureAudioPathCache.put(message.id, path)
-                if (!evictedPath.isNullOrBlank() && evictedPath != path && !isChatMediaVaultLocalPath(evictedPath)) {
-                    deleteSecureChatAudioTempFile(evictedPath)
-                }
-                _secureChatMediaLoadState.update {
-                    it + (message.id to SecureChatMediaLoadState(loading = false, audioLocalPath = path))
-                }
+            cacheAndPublishSecureAudio(message, bytes)
+        }
+    }
+
+    private fun cacheAndPublishSecureAudio(message: Message, bytes: ByteArray) {
+        val path = cacheSecureAudioOnDisk(message.id, bytes, message.audioCacheFileExtension())
+        if (path.isNullOrBlank()) {
+            println("ChatViewModel: secure audio cache write failed for message=${message.id}")
+            _secureChatMediaLoadState.update {
+                it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not cache audio"))
+            }
+        } else {
+            val evictedPath = secureAudioPathCache.put(message.id, path)
+            if (!evictedPath.isNullOrBlank() && evictedPath != path && !isChatMediaVaultLocalPath(evictedPath)) {
+                deleteSecureChatAudioTempFile(evictedPath)
+            }
+            _secureChatMediaLoadState.update {
+                it + (message.id to SecureChatMediaLoadState(loading = false, audioLocalPath = path))
             }
         }
     }

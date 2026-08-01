@@ -98,7 +98,7 @@ Append-only `event_engagement_events` (service-role). Current-state rows stay ri
 |------|-------|
 | Home “Saved events” | `GET /api/me/event-bookmarks` → Home section after Featured Event |
 | Share deep-link | `https://click-us.vercel.app/e/{beaconId}` in share text; `POST /api/beacons/{id}/share`; Universal Links; insights Shares |
-| Encounter ↔ event | RSVP-gated: both in `beacon_attendees` + live geofence → `event_beacon_id` + `at_event` tag + Timeline |
+| Encounter ↔ event | RSVP **+ active check-in** gate: every participant in `beacon_attendees` **and** `event_check_ins` (`checked_out_at IS NULL`) + live geofence → `event_beacon_id` + `at_event` tag + Timeline |
 
 ## 5b. Still future
 
@@ -115,4 +115,4 @@ cd click && ./gradlew :composeApp:compileDebugKotlinAndroid
 
 **Last green (2026-07-18):** engagement API base + follow-ups. Apply migration `20260718200000_encounter_event_beacon` on remote Supabase `click` if not yet applied.
 
-**Device smoke (human):** bookmark survives force-kill; far check-in reverts with snackbar; venue-scale on create; location-denied snackbar; insights page loads in demo mode; Saved events on Home; share opens `/e/` link; Timeline shows event after RSVP-gated connect.
+**Device smoke (human):** bookmark survives force-kill; far check-in reverts with snackbar; venue-scale on create; location-denied snackbar; insights page loads in demo mode; Saved events on Home; share opens `/e/` link; Timeline shows event only after RSVP **and** active check-in for all participants.

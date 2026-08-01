@@ -165,6 +165,7 @@ fun MapScreen(
     val communityHubs by viewModel.discoveryFeedHubs.collectAsState()
     val mapBeacons by viewModel.discoveryFeedBeacons.collectAsState()
     val discoveryFeedPending by viewModel.discoveryFeedPending.collectAsState()
+    val discoveryFeedLoading by viewModel.discoveryFeedLoading.collectAsState()
     val locationService = remember { LocationService() }
     val cachedDeviceLocation by AppDataManager.lastKnownDeviceLocation.collectAsState()
     var userLat by remember {
@@ -370,6 +371,7 @@ fun MapScreen(
     val showBottomSheet = selectedProfileId != null && selection is MapSelection.ConnectionSelected
     val showBeaconDetailSheet = selection is MapSelection.BeaconSelected
     val showCommunityHubSheet = selection is MapSelection.HubSelected
+    val showOverlappingPinsSheet = selection is MapSelection.OverlappingPinsSelected
 
     LaunchedEffect(selection) {
         val sel = selection
@@ -418,9 +420,7 @@ fun MapScreen(
                         )
                     }
                     val eventNearbyCount = remember(feedItems) {
-                        feedItems.count {
-                            it is DiscoveryFeedItem.Beacon && it.beacon.kind == MapBeaconKind.EVENT
-                        }
+                        feedItems.count { it is DiscoveryFeedItem.Beacon || it is DiscoveryFeedItem.Hub }
                     }
                     val fabBottomPadding = mapFabAboveNav + EventsReopenChipClearance
 
@@ -576,7 +576,7 @@ fun MapScreen(
                                             EventsDiscoveryFullScreen(
                                                 feedItems = feedItems,
                                                 discoveryFeedPending = discoveryFeedPending,
-                                                discoveryFeedRefreshing = discoveryFeedPending,
+                                                discoveryFeedRefreshing = discoveryFeedLoading,
                                                 onRefreshDiscovery = { viewModel.refreshDiscoveryFeed() },
                                                 layerFilters = layerFilters,
                                                 onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
@@ -658,6 +658,42 @@ fun MapScreen(
                         pendingHubName = name
                         pendingHubCategory = hubCat
                     },
+                )
+            }
+        }
+    }
+
+    if (showOverlappingPinsSheet && selection is MapSelection.OverlappingPinsSelected) {
+        val stack = selection as MapSelection.OverlappingPinsSelected
+        val sheetBg = GlassSheetTokens.OledBlack()
+        val onSheet = GlassSheetTokens.OnOled()
+        MapBeaconSheetRoot(
+            visible = true,
+            onDismissRequest = { viewModel.clearSelection() },
+            containerColor = sheetBg,
+            contentColor = onSheet,
+            scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
+            contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+            appColorScheme = MaterialTheme.colorScheme,
+            appTypography = MaterialTheme.typography,
+            modifier = Modifier,
+        ) {
+            ClickSheetDialogChrome(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(),
+                sheetColor = sheetBg,
+                onSurface = onSheet,
+                alignSemanticColorsToSheet = true,
+            ) {
+                OverlappingMapPinsChooser(
+                    pins = stack.pins,
+                    onChoose = { viewModel.onOverlappingPinChosen(it) },
+                    onDismiss = { viewModel.clearSelection() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 24.dp, vertical = 12.dp),
                 )
             }
         }
@@ -1965,12 +2001,27 @@ internal fun SoundtrackBeaconDetail(
     val displayBeacon = remember(beacon, mapBeacons) {
         mapBeacons.firstOrNull { it.id == beacon.id } ?: beacon
     }
-    val trackTitle = displayBeacon.metadata.trackName ?: displayBeacon.metadata.title ?: "Soundtrack"
-    val artistLine = displayBeacon.metadata.artistName ?: displayBeacon.metadata.artist
+    val trackTitle = displayBeacon.metadata.trackName?.takeIf { it.isNotBlank() }
+        ?: displayBeacon.metadata.title?.takeIf { it.isNotBlank() }
+        ?: displayBeacon.displayDynamicTitle()
+    val artistLine = displayBeacon.metadata.artistName?.takeIf { it.isNotBlank() }
+        ?: displayBeacon.metadata.artist?.takeIf { it.isNotBlank() }
     val art = displayBeacon.metadata.albumArtUrl?.takeIf { it.isNotBlank() }
     val preview = displayBeacon.metadata.previewUrl?.takeIf { it.isNotBlank() }
     val original = (displayBeacon.metadata.originalUrl ?: displayBeacon.metadata.musicUrl)
         ?.takeIf { it.isNotBlank() }
+    val distanceLabel = distanceMeters?.let { formatBeaconDistance(it) }
+    val border = clickBorderColor()
+    val cardSurface = clickCardSurface()
+    val currentUser by AppDataManager.currentUser.collectAsState()
+    val connectedUsers by AppDataManager.connectedUsers.collectAsState()
+    val hostUserId = displayBeacon.createdByUserId?.takeIf { it.isNotBlank() }
+    val hostUser = hostUserId?.let { id ->
+        if (id == currentUser?.id) currentUser else connectedUsers[id]
+    }
+    val hostDisplayName = displayBeacon.creatorDisplayName?.trim()?.takeIf { it.isNotEmpty() }
+        ?: hostUser?.name?.trim()?.takeIf { it.isNotEmpty() }
+    val hostAvatarUrl = hostUser?.image?.trim()?.takeIf { it.isNotEmpty() }
 
     LaunchedEffect(displayBeacon.id) {
         viewModel.ensureSoundtrackBeaconDetail(displayBeacon.id, seed = displayBeacon)
@@ -1978,84 +2029,116 @@ internal fun SoundtrackBeaconDetail(
 
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        if (isCreator) {
-            BeaconOwnerOverflowMenu(
-                onEdit = onEdit,
-                onDelete = onDelete,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp),
-            )
-        }
-        Text(
-            // Soundtrack card body below already renders the song + artist parsed from metadata,
-            // so the header stays the category label to avoid duplicating the track name.
-            text = displayBeacon.displayTypeTitle(),
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Text(
-            text = "Created · ${formatBeaconInstant(displayBeacon.createdAtEpochMs)}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = "Expires · ${formatBeaconInstant(displayBeacon.expiresAtEpochMs)}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top,
         ) {
-            if (art != null) {
-                AsyncImage(
-                    model = art,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(88.dp)
-                        .clip(RoundedCornerShape(14.dp)),
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(88.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.MusicNote,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = trackTitle,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
                 )
                 if (!artistLine.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = artistLine,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
+                }
+                distanceLabel?.let { d ->
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = d,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            if (isCreator ||
+                (!currentUser?.id.isNullOrBlank() && displayBeacon.createdByUserId == currentUser?.id)
+            ) {
+                BeaconOwnerOverflowMenu(
+                    onEdit = onEdit,
+                    onDelete = onDelete,
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(cardSurface)
+                .border(2.dp, border, RoundedCornerShape(20.dp))
+                .padding(16.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (art != null) {
+                    AsyncImage(
+                        model = art,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(112.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .border(2.dp, border, RoundedCornerShape(16.dp)),
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(112.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                            .border(2.dp, border, RoundedCornerShape(16.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.MusicNote,
+                            contentDescription = null,
+                            modifier = Modifier.size(40.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = "Soundtrack",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = trackTitle,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (!artistLine.isNullOrBlank()) {
+                        Text(
+                            text = artistLine,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
         }
@@ -2079,62 +2162,78 @@ internal fun SoundtrackBeaconDetail(
             }
             val sliderValue = if (isDragging) sliderPosition else progressed
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(cardSurface)
+                    .border(2.dp, border, RoundedCornerShape(20.dp))
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                FilledIconButton(
-                    onClick = { player.togglePlayPause() },
-                    modifier = Modifier.size(48.dp),
+                Text(
+                    text = "Preview",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Icon(
-                        imageVector = if (player.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = if (player.isPlaying) "Pause preview" else "Play preview",
-                    )
-                }
-                Column(modifier.weight(1f)) {
-                    Slider(
-                        value = sliderValue,
-                        onValueChange = { newVal ->
-                            if (!isDragging) {
-                                wasPlayingBeforeDrag = player.isPlaying
-                                if (player.isPlaying) {
+                    FilledIconButton(
+                        onClick = { player.togglePlayPause() },
+                        modifier = Modifier.size(56.dp),
+                    ) {
+                        Icon(
+                            imageVector = if (player.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = if (player.isPlaying) "Pause preview" else "Play preview",
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Slider(
+                            value = sliderValue,
+                            onValueChange = { newVal ->
+                                if (!isDragging) {
+                                    wasPlayingBeforeDrag = player.isPlaying
+                                    if (player.isPlaying) {
+                                        player.togglePlayPause()
+                                    }
+                                    isDragging = true
+                                }
+                                sliderPosition = newVal.coerceIn(0f, 1f)
+                                tick++
+                            },
+                            onValueChangeFinished = {
+                                val seekMs = (sliderPosition.coerceIn(0f, 1f) * dur.toFloat()).toLong()
+                                player.seekTo(seekMs)
+                                if (wasPlayingBeforeDrag) {
                                     player.togglePlayPause()
                                 }
-                                isDragging = true
-                            }
-                            sliderPosition = newVal.coerceIn(0f, 1f)
-                            tick++
-                        },
-                        onValueChangeFinished = {
-                            val seekMs = (sliderPosition.coerceIn(0f, 1f) * dur.toFloat()).toLong()
-                            player.seekTo(seekMs)
-                            if (wasPlayingBeforeDrag) {
-                                player.togglePlayPause()
-                            }
-                            isDragging = false
-                            tick++
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        valueRange = 0f..1f,
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text(
-                            text = formatBeaconPreviewClock(
-                                if (isDragging) (sliderPosition * dur).toLong() else pos,
-                            ),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                isDragging = false
+                                tick++
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            valueRange = 0f..1f,
                         )
-                        Text(
-                            text = formatBeaconPreviewClock(dur),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                text = formatBeaconPreviewClock(
+                                    if (isDragging) (sliderPosition * dur).toLong() else pos,
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = formatBeaconPreviewClock(dur),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }
@@ -2160,18 +2259,47 @@ internal fun SoundtrackBeaconDetail(
         }
 
         if (original != null) {
-            OutlinedButton(
+            Button(
                 onClick = { openBeaconOriginalMediaUrl(original) },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Play full song")
+                Icon(
+                    imageVector = Icons.Filled.OpenInNew,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Open in music app")
             }
         }
 
-        distanceMeters?.let { d ->
+        if (displayBeacon.showCreatorName && !hostDisplayName.isNullOrBlank()) {
+            EventHostCard(
+                displayName = hostDisplayName,
+                userId = hostUserId ?: "host:$hostDisplayName",
+                avatarUrl = hostAvatarUrl,
+                border = border,
+                cardSurface = cardSurface,
+            )
+        }
+
+        displayBeacon.metadata.description?.trim()?.takeIf { it.isNotEmpty() }?.let { desc ->
             Text(
-                text = formatBeaconDistance(d),
-                style = MaterialTheme.typography.bodySmall,
+                text = desc,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = "Created · ${formatBeaconInstant(displayBeacon.createdAtEpochMs)}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "Expires · ${formatBeaconInstant(displayBeacon.expiresAtEpochMs)}",
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -2485,6 +2613,102 @@ private fun rememberStableBoundsHandler(
 private fun rememberStableUnitHandler(onInvoke: () -> Unit): () -> Unit {
     val state = rememberUpdatedState(onInvoke)
     return remember { { state.value() } }
+}
+
+@Composable
+private fun OverlappingMapPinsChooser(
+    pins: List<MapPin>,
+    onChoose: (MapPin) -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val border = clickBorderColor()
+    val cardSurface = clickCardSurface()
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Text(
+            text = "Which pin?",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = "A few pins are stacked here — pick the one you meant.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        pins.forEach { pin ->
+            val kindLabel = when (pin.kind) {
+                MapPinKind.CONNECTION -> "Connection"
+                MapPinKind.COMMUNITY_HUB -> "Hub"
+                MapPinKind.BEACON_SOUNDTRACK -> "Soundtrack"
+                MapPinKind.BEACON_ALERT -> "Alert"
+                MapPinKind.BEACON_SOCIAL -> "Event"
+                MapPinKind.BEACON_OTHER -> "Beacon"
+            }
+            val shape = RoundedCornerShape(16.dp)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(shape)
+                    .background(cardSurface)
+                    .border(2.dp, border, shape)
+                    .clickable { onChoose(pin) }
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                val art = pin.imageUrl?.takeIf { it.isNotBlank() }
+                if (art != null) {
+                    AsyncImage(
+                        model = art,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .border(2.dp, border, CircleShape),
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary)
+                            .border(2.dp, border, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = pin.avatarInitials.take(2).ifEmpty { "?" },
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    }
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = pin.title.ifBlank { kindLabel },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = kindLabel,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+            Text("Cancel")
+        }
+    }
 }
 
 @Composable

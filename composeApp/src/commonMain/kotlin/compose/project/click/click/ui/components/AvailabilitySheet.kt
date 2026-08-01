@@ -19,25 +19,23 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
-import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
+import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AvailabilityIntentDuration // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AvailabilityViewModel // pragma: allowlist secret
-import kotlinx.coroutines.launch
 
 /**
  * Availability intent editor — same shell as Memory Map’s connection sheet ([MapScreen] + [AdaptiveBottomSheet]):
@@ -48,6 +46,8 @@ import kotlinx.coroutines.launch
 fun AvailabilitySheet(
     viewModel: AvailabilityViewModel,
     onDismiss: () -> Unit,
+    /** When set, seed the editor from this row (covers taps that forgot beginEdit). */
+    seedIntent: AvailabilityIntentRow? = null,
 ) {
     val tag by viewModel.intentTagInput.collectAsState()
     val duration by viewModel.intentDuration.collectAsState()
@@ -55,6 +55,13 @@ fun AvailabilitySheet(
     val submitError by viewModel.intentSubmitError.collectAsState()
     val editingIntentId by viewModel.editingAvailabilityIntentId.collectAsState()
     val isEditing = !editingIntentId.isNullOrBlank()
+
+    LaunchedEffect(seedIntent?.id) {
+        val seed = seedIntent ?: return@LaunchedEffect
+        if (!seed.id.isNullOrBlank()) {
+            viewModel.beginEditAvailabilityIntent(seed)
+        }
+    }
 
     val canSubmit = tag.trim().isNotEmpty() && !submitting
 
@@ -111,23 +118,26 @@ fun AvailabilitySheet(
                     }
                 }
 
-                ClickOutlinedTextField(
-                    value = tag,
-                    onValueChange = viewModel::updateIntentTagInput,
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Intent tag") },
-                    placeholder = { Text("Coffee, study, walk…") },
-                    supportingText = {
-                        Text("${tag.length}/${AvailabilityViewModel.AVAILABILITY_INTENT_TAG_MAX_LENGTH}")
-                    },
-                    singleLine = true,
-                    enabled = !submitting,
-                    maxLines = 1,
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.Words,
-                        imeAction = ImeAction.Done,
-                    ),
-                )
+                // Remount when switching create ↔ edit so the field never sticks on a blank value.
+                key(editingIntentId ?: "new-intent") {
+                    ClickOutlinedTextField(
+                        value = tag,
+                        onValueChange = viewModel::updateIntentTagInput,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Intent tag") },
+                        placeholder = { Text("Coffee, study, walk…") },
+                        supportingText = {
+                            Text("${tag.length}/${AvailabilityViewModel.AVAILABILITY_INTENT_TAG_MAX_LENGTH}")
+                        },
+                        singleLine = true,
+                        enabled = !submitting,
+                        maxLines = 1,
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Words,
+                            imeAction = ImeAction.Done,
+                        ),
+                    )
+                }
 
                 submitError?.let { err ->
                     Text(

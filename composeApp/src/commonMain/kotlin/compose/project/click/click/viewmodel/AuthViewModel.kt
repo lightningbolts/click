@@ -11,6 +11,7 @@ import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.displayNameFromMetadata
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.storage.TokenStorage
+import compose.project.click.click.util.isHardAuthFailure
 import compose.project.click.click.util.isOfflineNetworkFailure
 import compose.project.click.click.util.redactedRestMessage
 import io.github.jan.supabase.auth.auth
@@ -72,6 +73,13 @@ class AuthViewModel(
                         val networkCause = status.cause as? RefreshFailureCause.NetworkError
                         if (networkCause != null) {
                             restoreOfflineSessionIfPossible(networkCause.exception)
+                        } else {
+                            val cause = (status.cause as? RefreshFailureCause.InternalServerError)
+                                ?.exception
+                                ?: Exception("Session refresh failed")
+                            if (cause.isHardAuthFailure()) {
+                                viewModelScope.launch { forceSessionExpiredReLogin(cause) }
+                            }
                         }
                     }
                     is SessionStatus.NotAuthenticated -> {
@@ -104,6 +112,9 @@ class AuthViewModel(
                 isAuthenticated = true
                 authState = cachedBoot
                 AppDataManager.primeOfflineBootCache()
+                // Import JWT into the SDK immediately so chat send/fetch/realtime aren't empty
+                // while background refresh is still running.
+                runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
                 ensureSupabaseObserversStarted()
                 launch(Dispatchers.IO) { refreshSessionAndProfileInBackground() }
                 return@launch
@@ -160,12 +171,20 @@ class AuthViewModel(
      */
     private suspend fun refreshSessionAndProfileInBackground() {
         withContext(Dispatchers.IO) {
-            runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+            if (SupabaseConfig.client.auth.currentSessionOrNull() == null) {
+                runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+            }
             runCatching { authRepository.refreshSession() }
                 .onSuccess {
                     runCatching { SupabaseConfig.client.auth.startAutoRefreshForCurrentSession() }
                 }
-                .onFailure { restoreOfflineSessionIfPossible(it) }
+                .onFailure { error ->
+                    if (error.isHardAuthFailure()) {
+                        forceSessionExpiredReLogin(error)
+                        return@withContext
+                    }
+                    restoreOfflineSessionIfPossible(error)
+                }
             authRepository.restoreSession()
                 .onSuccess { user ->
                     isAuthenticated = true
@@ -190,14 +209,30 @@ class AuthViewModel(
     private fun startBackgroundTokenRefresh() {
         viewModelScope.launch {
             while (true) {
-                delay(45 * 60 * 1000L) // 45 minutes
+                // Supabase access tokens expire ~1h; refresh well before that, and again after
+                // foreground recovery may have failed silently.
+                delay(45 * 60 * 1000L)
                 if (isAuthenticated) {
                     try {
+                        if (SupabaseConfig.client.auth.currentSessionOrNull() == null) {
+                            runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+                        }
                         authRepository.refreshSession()
                             .onSuccess {
-                                runCatching { SupabaseConfig.client.auth.startAutoRefreshForCurrentSession() }
+                                runCatching {
+                                    SupabaseConfig.client.auth.startAutoRefreshForCurrentSession()
+                                }
+                                println("AuthViewModel: Background token refresh successful")
                             }
-                        println("AuthViewModel: Background token refresh successful")
+                            .onFailure { e ->
+                                println(
+                                    "AuthViewModel: Background token refresh failed: " +
+                                        e.redactedRestMessage(),
+                                )
+                                if (e.isHardAuthFailure()) {
+                                    forceSessionExpiredReLogin(e)
+                                }
+                            }
                     } catch (e: Exception) {
                         println("AuthViewModel: Background token refresh failed: ${e.redactedRestMessage()}")
                     }
@@ -384,6 +419,10 @@ class AuthViewModel(
                     scheduleAutoRefreshForCurrentSession()
                 },
                 onFailure = { error ->
+                    if (error.isHardAuthFailure()) {
+                        forceSessionExpiredReLogin(error)
+                        return
+                    }
                     val keptOffline = restoreOfflineSessionIfPossible(error)
                     if (!keptOffline) {
                         isAuthenticated = false
@@ -409,6 +448,21 @@ class AuthViewModel(
         authState = cachedBoot
         println("AuthViewModel: Using cached offline auth state from persisted tokens")
         return true
+    }
+
+    /**
+     * Hard auth failure (invalid/revoked refresh) — clear tokens and force re-login instead of
+     * staying "logged in" with a dead JWT that makes chat/media look empty forever.
+     */
+    private suspend fun forceSessionExpiredReLogin(error: Throwable) {
+        println(
+            "AuthViewModel: Hard auth failure — forcing re-login: ${error.redactedRestMessage()}",
+        )
+        runCatching { AppDataManager.clearData() }
+        runCatching { tokenStorage.clearTokens() }
+        runCatching { authRepository.signOut() }
+        isAuthenticated = false
+        authState = AuthState.Error("Your session expired. Please sign in again.")
     }
 
     private fun isLikelyNetworkFailure(error: Throwable?): Boolean {

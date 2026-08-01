@@ -1966,14 +1966,56 @@ fun App() {
                             }
                         }
 
+                        // Multi-peer PendingConfirmation → TaggingContext(requiresSelection) when NFC UI is not showing.
+                        LaunchedEffect(connectionState, showNfcScreen) {
+                            if (showNfcScreen) return@LaunchedEffect
+                            val pending = connectionState as? ConnectionState.PendingConfirmation ?: return@LaunchedEffect
+                            if (pending.users.size >= 2) {
+                                connectionViewModel.promotePendingConfirmationToHostSelection(currentUser.id)
+                            }
+                        }
+
                         if (connectionState is ConnectionState.TaggingContext && !showNfcScreen && !suppressConnectionContextSheet) {
                             val tagging = connectionState as ConnectionState.TaggingContext
                             var calendarLockInProgress by remember { mutableStateOf(false) }
                             val reconnectConnectionId = tagging.newConnections.firstOrNull()?.id
                             val reconnectPeerId = tagging.targetUsers.firstOrNull { it.id != currentUser.id }?.id
                                 ?: tagging.targetUsers.firstOrNull()?.id
+                            val sheetSelectableUsers = when {
+                                tagging.selectableUsers.size >= 2 -> tagging.selectableUsers
+                                tagging.targetUsers.size >= 2 -> tagging.targetUsers
+                                else -> emptyList()
+                            }
+                            val sheetInitialSelectedIds = tagging.selectedPeerIds
+                                .ifEmpty { sheetSelectableUsers.map { it.id }.toSet() }
+                            // requiresSelection must use Connect → confirmHostProximitySelection (not Save Encounter).
+                            val presentation = if (!tagging.isNewConnection && !tagging.requiresSelection) {
+                                ConnectionContextPresentation.ReconnectEncounter
+                            } else {
+                                ConnectionContextPresentation.NewSpark
+                            }
+                            fun taggingForSelectedPeers(selectedIds: Set<String>): ConnectionState.TaggingContext {
+                                if (selectedIds.isEmpty() || sheetSelectableUsers.size < 2) return tagging
+                                val filteredTargets = tagging.targetUsers.filter { it.id in selectedIds }
+                                    .ifEmpty { tagging.targetUsers }
+                                val filteredConnections = tagging.newConnections.filter { conn ->
+                                    conn.user_ids.any { uid -> uid in selectedIds && uid != currentUser.id }
+                                }.ifEmpty { tagging.newConnections }
+                                return tagging.copy(
+                                    targetUsers = filteredTargets,
+                                    newConnections = filteredConnections,
+                                    memberUserIds = tagging.memberUserIds
+                                        .filter { it in selectedIds || it == currentUser.id }
+                                        .ifEmpty { tagging.memberUserIds },
+                                    selectedPeerIds = selectedIds,
+                                )
+                            }
                             val finishWithoutTags: () -> Unit = {
                                 connectionScope.launch {
+                                    if (tagging.requiresSelection) {
+                                        connectionViewModel.resetConnectionState()
+                                        return@launch
+                                    }
                                     val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
                                     val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
                                     val sensors = captureConnectionSensorContext(
@@ -1997,18 +2039,20 @@ fun App() {
                                 }
                             }
                             ConnectionContextSheet(
-                                connectedUsers = tagging.targetUsers,
+                                connectedUsers = tagging.selectableUsers.ifEmpty { tagging.targetUsers },
                                 locationName = null,
                                 initialNoiseOptIn = ambientNoiseOptIn,
                                 noisePermissionGranted = ambientMonitor.hasPermission,
                                 onDismiss = finishWithoutTags,
                                 onSkip = finishWithoutTags,
-                                presentation = ConnectionContextPresentation.NewSpark,
+                                presentation = presentation,
                                 encounterSaveInProgress = tagging.encounterSubmitting,
-                                onSaveEncounter = {
+                                selectableUsers = sheetSelectableUsers,
+                                initialSelectedUserIds = sheetInitialSelectedIds,
+                                onSaveEncounter = { selectedIds ->
                                     connectionScope.launch {
                                         connectionViewModel.saveReconnectEncounter(
-                                            tagging = tagging,
+                                            tagging = taggingForSelectedPeers(selectedIds),
                                             currentUserId = currentUser.id,
                                             ambientNoiseMonitor = ambientMonitor,
                                             barometricHeightMonitor = baroMonitor,
@@ -2037,7 +2081,7 @@ fun App() {
                                         }
                                     }
                                 },
-                                onConfirm = { contextTag, noiseOptIn ->
+                                onConfirm = { contextTag, noiseOptIn, selectedIds ->
                                     if (tagging.isNewConnection) {
                                         PlatformHapticsPolicy.successNotification()
                                         connectionRevealState = ConnectionRevealUiState(
@@ -2055,18 +2099,27 @@ fun App() {
                                             ambientNoiseOptIn = noiseOptIn,
                                             barometricContextOptIn = baroOptIn,
                                         )
-                                        connectionViewModel.saveContextTags(
-                                            tagging = tagging,
-                                            contextTag = contextTag,
-                                            noiseLevelCategory = sensors.noiseLevelCategory,
-                                            exactNoiseLevelDb = sensors.exactNoiseLevelDb,
-                                            heightCategory = sensors.heightCategory,
-                                            exactBarometricElevationMeters = sensors.exactBarometricElevationMeters,
-                                            ambientNoiseMonitor = ambientMonitor,
-                                            barometricHeightMonitor = baroMonitor,
-                                            ambientNoiseOptIn = noiseOptIn,
-                                            barometricContextOptIn = baroOptIn,
-                                        )
+                                        if (tagging.requiresSelection) {
+                                            connectionViewModel.confirmHostProximitySelection(
+                                                selectedPeerIds = selectedIds.toList(),
+                                                currentUserId = currentUser.id,
+                                                contextTag = contextTag,
+                                                sensorContext = sensors,
+                                            )
+                                        } else {
+                                            connectionViewModel.saveContextTags(
+                                                tagging = taggingForSelectedPeers(selectedIds),
+                                                contextTag = contextTag,
+                                                noiseLevelCategory = sensors.noiseLevelCategory,
+                                                exactNoiseLevelDb = sensors.exactNoiseLevelDb,
+                                                heightCategory = sensors.heightCategory,
+                                                exactBarometricElevationMeters = sensors.exactBarometricElevationMeters,
+                                                ambientNoiseMonitor = ambientMonitor,
+                                                barometricHeightMonitor = baroMonitor,
+                                                ambientNoiseOptIn = noiseOptIn,
+                                                barometricContextOptIn = baroOptIn,
+                                            )
+                                        }
                                     }
                                 },
                             )
@@ -2083,7 +2136,7 @@ fun App() {
                                 onDismiss = cancelQr,
                                 onSkip = cancelQr,
                                 presentation = ConnectionContextPresentation.QrFlow,
-                                onConfirm = { contextTag, noiseOptIn ->
+                                onConfirm = { contextTag, noiseOptIn, _ ->
                                     PlatformHapticsPolicy.successNotification()
                                     connectionRevealState = ConnectionRevealUiState(
                                         methodLabel = "QR",

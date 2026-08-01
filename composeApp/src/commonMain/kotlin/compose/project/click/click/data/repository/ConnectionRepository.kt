@@ -143,12 +143,21 @@ data class PendingProximityHandshakeSyncResult(
     val groupCliqueCandidateMemberIds: List<String>? = null,
     /** True when the server accepted the handshake but no peer is online yet (HTTP 202). */
     val serverPendingMatch: Boolean = false,
+    /**
+     * When set, recovered peers came from `awaiting_selection` and host must
+     * [confirmProximitySelection] before create — do not treat as an already-created clique.
+     */
+    val pendingHandshakeId: String? = null,
+    val isAggregateNewConnection: Boolean = true,
 )
 
 data class ProximityHandshakeRecoveryPayload(
     val users: List<User>,
     val encounterLogged: Boolean = true,
     val groupCliqueCandidateMemberIds: List<String>? = null,
+    /** Present when recovery landed on `awaiting_selection` (host confirm still required). */
+    val pendingHandshakeId: String? = null,
+    val isAggregateNewConnection: Boolean = true,
 )
 
 data class BindProximityHandshakeOutcome(
@@ -178,11 +187,28 @@ data class BindProximityHandshakeOutcome(
 /** Result of `POST /api/connections/proximity` — instant match vs async pending. */
 sealed class BindProximityHandshakeResult {
     data class InstantMatch(val outcome: BindProximityHandshakeOutcome) : BindProximityHandshakeResult()
+    /**
+     * Multi-peer (≥3) first-time bind: server returned candidates; host must
+     * [ConnectionRepository.confirmProximitySelection] before a connection is created.
+     */
+    data class AwaitingHostSelection(
+        val pendingHandshakeId: String,
+        val expiresAt: String?,
+        val candidates: List<User>,
+        val isAggregateNewConnection: Boolean = true,
+        val groupCliqueCandidateMemberIds: List<String>? = null,
+    ) : BindProximityHandshakeResult()
     data class PendingServerMatch(
         val pendingHandshakeId: String,
         val expiresAt: String,
     ) : BindProximityHandshakeResult()
 }
+
+/** Mirrors click-web `PROXIMITY_HOST_SELECTION_MAX_MEMBERS` (host + selected peers). */
+const val PROXIMITY_HOST_SELECTION_MAX_MEMBERS = 12
+
+/** Max peer ids the host may select (server adds the caller to form the member set). */
+const val PROXIMITY_HOST_SELECTION_MAX_PEERS = PROXIMITY_HOST_SELECTION_MAX_MEMBERS - 1
 
 private fun ProximityBindOkResponseDto.toBindOutcome(): BindProximityHandshakeOutcome {
     val rows = matches.orEmpty()
@@ -201,6 +227,23 @@ private fun ProximityBindOkResponseDto.toBindOutcome(): BindProximityHandshakeOu
         isGroup = isGroup == true,
         encounterId = encounterId?.trim()?.takeIf { it.isNotEmpty() },
         collaborationTtl = collaborationTtl?.trim()?.takeIf { it.isNotEmpty() },
+    )
+}
+
+private fun ProximityBindOkResponseDto.toAwaitingHostSelectionOrNull(): BindProximityHandshakeResult.AwaitingHostSelection? {
+    if (awaitingSelection != true) return null
+    val pendingId = pendingHandshakeId?.trim().orEmpty()
+    if (pendingId.isEmpty()) return null
+    val rows = matches.orEmpty()
+    if (rows.isEmpty()) return null
+    val aggregateNewConnection = isNewConnection
+        ?: rows.any { it.isNewConnection }
+    return BindProximityHandshakeResult.AwaitingHostSelection(
+        pendingHandshakeId = pendingId,
+        expiresAt = expiresAt?.trim()?.takeIf { it.isNotEmpty() },
+        candidates = rows,
+        isAggregateNewConnection = aggregateNewConnection,
+        groupCliqueCandidateMemberIds = groupCliqueCandidate?.memberUserIds?.takeIf { it.isNotEmpty() },
     )
 }
 
@@ -270,6 +313,12 @@ class ConnectionRepository(
     suspend fun fetchConnectionTabs(
         connectionId: String,
     ): Result<compose.project.click.click.data.api.ConnectionTabsGetResponse> {
+        // Profile media tabs share the click-web bearer path — refresh before first call so a
+        // stale cold-start JWT does not permanently empty the Media tab until sign-out.
+        runCatching { authRepository.refreshSession() }
+        val first = apiClient.getConnectionTabs(connectionId)
+        if (first.isSuccess) return first
+        runCatching { authRepository.refreshSession() }
         return apiClient.getConnectionTabs(connectionId)
     }
 
@@ -607,6 +656,9 @@ class ConnectionRepository(
             when (apiResult) {
                 is ProximityHandshakePostResult.InstantMatch -> {
                     val parsed = apiResult.body
+                    parsed.toAwaitingHostSelectionOrNull()?.let { awaiting ->
+                        return Result.success(awaiting)
+                    }
                     val outcome = parsed.toBindOutcome()
                     Result.success(BindProximityHandshakeResult.InstantMatch(outcome))
                 }
@@ -641,8 +693,12 @@ class ConnectionRepository(
         }
         return try {
             when (val apiResult = apiClient.getPendingProximityHandshake(pendingId, bearerJwt = bearerJwt).getOrThrow()) {
-                is ProximityHandshakePostResult.InstantMatch ->
+                is ProximityHandshakePostResult.InstantMatch -> {
+                    apiResult.body.toAwaitingHostSelectionOrNull()?.let { awaiting ->
+                        return Result.success(awaiting)
+                    }
                     Result.success(BindProximityHandshakeResult.InstantMatch(apiResult.body.toBindOutcome()))
+                }
                 is ProximityHandshakePostResult.PendingMatch ->
                     Result.success(
                         BindProximityHandshakeResult.PendingServerMatch(
@@ -653,6 +709,54 @@ class ConnectionRepository(
                 is ProximityHandshakePostResult.IgnoredEmptyPayload ->
                     Result.failure(IllegalStateException(PROXIMITY_NO_NEARBY_DEVICES_MESSAGE))
             }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Host confirms selected members after an `awaiting_selection` bind response.
+     * Posts to `POST /api/connections/proximity/confirm`.
+     */
+    suspend fun confirmProximitySelection(
+        pendingHandshakeId: String,
+        selectedMemberIds: List<String>,
+        contextTags: List<String>? = null,
+        bearerJwt: String? = null,
+    ): Result<BindProximityHandshakeOutcome> {
+        val pendingId = pendingHandshakeId.trim()
+        if (pendingId.isEmpty()) {
+            return Result.failure(IllegalArgumentException("pendingHandshakeId required"))
+        }
+        val members = selectedMemberIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+            .take(PROXIMITY_HOST_SELECTION_MAX_PEERS)
+        if (members.isEmpty()) {
+            return Result.failure(IllegalArgumentException("selectedMemberIds required"))
+        }
+        val jwt = bearerJwt?.trim()?.takeIf { it.isNotEmpty() }
+            ?: tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+        if (jwt.isNullOrBlank()) {
+            return Result.failure(IllegalStateException("Please sign in again."))
+        }
+        return try {
+            val firstResult = apiClient.postProximityConfirmSelection(
+                bearerJwt = jwt,
+                pendingHandshakeId = pendingId,
+                selectedMemberIds = members,
+                contextTags = contextTags,
+            )
+            val dto = firstResult.getOrElse { firstError ->
+                val refreshed = if (firstError.isClickWebAuthFailure()) refreshedJwtAfterAuthFailure() else null
+                refreshed?.let { freshJwt ->
+                    apiClient.postProximityConfirmSelection(
+                        bearerJwt = freshJwt,
+                        pendingHandshakeId = pendingId,
+                        selectedMemberIds = members,
+                        contextTags = contextTags,
+                    ).getOrNull()
+                } ?: return Result.failure(firstError)
+            }
+            Result.success(dto.toBindOutcome())
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -746,6 +850,16 @@ class ConnectionRepository(
                             serverPendingMatch = true,
                         )
                     }
+                    is BindProximityHandshakeResult.AwaitingHostSelection -> {
+                        return PendingProximityHandshakeSyncResult(
+                            recoveredUsers = bindResult.candidates,
+                            remainingInQueue = rest.size,
+                            recoveredEncounterLogged = false,
+                            groupCliqueCandidateMemberIds = bindResult.groupCliqueCandidateMemberIds,
+                            pendingHandshakeId = bindResult.pendingHandshakeId,
+                            isAggregateNewConnection = bindResult.isAggregateNewConnection,
+                        )
+                    }
                     is BindProximityHandshakeResult.InstantMatch -> {
                         val outcome = bindResult.outcome
                         val users = outcome.matches
@@ -755,6 +869,7 @@ class ConnectionRepository(
                                 remainingInQueue = rest.size,
                                 recoveredEncounterLogged = outcome.encounterLogged,
                                 groupCliqueCandidateMemberIds = outcome.groupCliqueCandidateMemberIds,
+                                isAggregateNewConnection = outcome.isAggregateNewConnection,
                             )
                         }
                         continue

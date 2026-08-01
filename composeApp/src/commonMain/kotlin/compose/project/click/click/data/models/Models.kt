@@ -639,6 +639,132 @@ fun Connection.isActiveForUser(archivedIds: Set<String>, hiddenIds: Set<String>)
     id !in hiddenIds && id !in archivedIds && isInActiveConnectionsChannel()
 
 /**
+ * Empty server snapshot with empty junction sets while local SSOT already has connections is the
+ * classic bad-JWT / RLS-empty poison signal — preserve local archive/hidden/core until a real
+ * authenticated snapshot arrives (sign-out must not be required to recover pins).
+ */
+fun shouldPreserveLocalConnectionJunctions(
+    localConnectionCount: Int,
+    snapshotConnectionCount: Int,
+    snapshotArchivedCount: Int,
+    snapshotHiddenCount: Int,
+): Boolean =
+    localConnectionCount > 0 &&
+        snapshotConnectionCount == 0 &&
+        snapshotArchivedCount == 0 &&
+        snapshotHiddenCount == 0
+
+/**
+ * True 1:1 DM edge (not a multi-member group row). Duplicate handshake / clique pairwise
+ * rows for the same peer all match this and should collapse in map + Active list UI.
+ */
+fun Connection.isOneToOnePairEdge(): Boolean =
+    !isGroup && user_ids.size == 2
+
+/** Recency rank for choosing which duplicate 1:1 edge to keep. */
+fun Connection.oneToOneCollapseRecencyMs(): Long =
+    maxOf(last_message_at ?: 0L, created)
+
+/**
+ * Prefer the edge with usable map coordinates, then the more recent activity timestamp.
+ */
+fun preferOneToOneConnectionForPeer(a: Connection, b: Connection): Connection {
+    val aGeo = a.connectionMapGeo() != null
+    val bGeo = b.connectionMapGeo() != null
+    if (aGeo != bGeo) return if (aGeo) a else b
+    return if (a.oneToOneCollapseRecencyMs() >= b.oneToOneCollapseRecencyMs()) a else b
+}
+
+/**
+ * Collapse duplicate 1:1 connection rows for the same peer to a single edge (display-only).
+ * Multi-member / group rows are left unchanged.
+ */
+fun collapseOneToOneConnectionsByPeer(
+    connections: List<Connection>,
+    viewerUserId: String?,
+): List<Connection> {
+    if (viewerUserId.isNullOrBlank() || connections.isEmpty()) return connections
+    val bestByPeer = LinkedHashMap<String, Connection>()
+    for (conn in connections) {
+        if (!conn.isOneToOnePairEdge()) continue
+        val peerId = conn.user_ids.firstOrNull { it != viewerUserId } ?: continue
+        val existing = bestByPeer[peerId]
+        bestByPeer[peerId] =
+            if (existing == null) conn else preferOneToOneConnectionForPeer(existing, conn)
+    }
+    if (bestByPeer.isEmpty()) return connections
+    val winners = bestByPeer.values.map { it.id }.toHashSet()
+    val emittedPeers = HashSet<String>()
+    val out = ArrayList<Connection>(connections.size)
+    for (conn in connections) {
+        if (!conn.isOneToOnePairEdge()) {
+            out.add(conn)
+            continue
+        }
+        val peerId = conn.user_ids.firstOrNull { it != viewerUserId } ?: continue
+        if (conn.id !in winners) continue
+        if (!emittedPeers.add(peerId)) continue
+        out.add(conn)
+    }
+    return out
+}
+
+/**
+ * Collapse duplicate Active-tab 1:1 chats for the same peer (keep richest/most recent).
+ * Group clique rows are left unchanged.
+ */
+fun collapseOneToOneChatsByPeer(
+    chats: List<ChatWithDetails>,
+    viewerUserId: String?,
+    activityTs: (ChatWithDetails) -> Long,
+): List<ChatWithDetails> {
+    if (viewerUserId.isNullOrBlank() || chats.isEmpty()) return chats
+    val bestByPeer = LinkedHashMap<String, ChatWithDetails>()
+    for (chat in chats) {
+        if (chat.groupClique != null) continue
+        if (!chat.connection.isOneToOnePairEdge()) continue
+        val peerId = chat.otherUser.id.takeIf { it.isNotBlank() }
+            ?: chat.connection.user_ids.firstOrNull { it != viewerUserId }
+            ?: continue
+        val existing = bestByPeer[peerId]
+        if (existing == null) {
+            bestByPeer[peerId] = chat
+            continue
+        }
+        val preferNew = when {
+            chat.connection.connectionMapGeo() != null &&
+                existing.connection.connectionMapGeo() == null -> true
+            chat.connection.connectionMapGeo() == null &&
+                existing.connection.connectionMapGeo() != null -> false
+            activityTs(chat) != activityTs(existing) -> activityTs(chat) > activityTs(existing)
+            (chat.unreadCount) != (existing.unreadCount) -> chat.unreadCount > existing.unreadCount
+            else ->
+                chat.connection.oneToOneCollapseRecencyMs() >=
+                    existing.connection.oneToOneCollapseRecencyMs()
+        }
+        if (preferNew) bestByPeer[peerId] = chat
+    }
+    if (bestByPeer.isEmpty()) return chats
+    val winners = bestByPeer.values.map { it.connection.id }.toHashSet()
+    val emittedPeers = HashSet<String>()
+    val out = ArrayList<ChatWithDetails>(chats.size)
+    for (chat in chats) {
+        if (chat.groupClique != null || !chat.connection.isOneToOnePairEdge()) {
+            out.add(chat)
+            continue
+        }
+        val peerId = chat.otherUser.id.takeIf { it.isNotBlank() }
+            ?: chat.connection.user_ids.firstOrNull { it != viewerUserId }
+            ?: continue
+        if (chat.connection.id !in winners) continue
+        if (!emittedPeers.add(peerId)) continue
+        out.add(chat)
+    }
+    return out
+}
+
+
+/**
  * Clicks "Archived" tab: server-archived lifecycle or user junction archive, never hidden.
  */
 fun Connection.isArchivedChannelForUser(archivedIds: Set<String>, hiddenIds: Set<String>): Boolean =

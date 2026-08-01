@@ -180,14 +180,22 @@ data class MapPin(
                 ?.takeIf { it > 1f }
                 ?: 1f
             // Prefer cover/image from metadata when present; otherwise platform generates initials.
-            val coverUrl = beacon.metadata.raw
-                ?.get("image_url")
-                ?.jsonPrimitive
-                ?.contentOrNull
-                ?.trim()
-                ?.takeIf { it.isNotEmpty() }
+            // Soundtrack pins must use album art (same source as discovery/event cover cards).
+            val coverUrl = beacon.metadata.albumArtUrl?.trim()?.takeIf { it.isNotEmpty() }
+                ?: beacon.metadata.raw
+                    ?.get("image_url")
+                    ?.jsonPrimitive
+                    ?.contentOrNull
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
                 ?: beacon.metadata.raw
                     ?.get("cover_url")
+                    ?.jsonPrimitive
+                    ?.contentOrNull
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                ?: beacon.metadata.raw
+                    ?.get("album_art_url")
                     ?.jsonPrimitive
                     ?.contentOrNull
                     ?.trim()

@@ -92,6 +92,12 @@ interface ChatRepository {
         beforeTimeCreated: Long? = null,
     ): List<Message>?
 
+    /**
+     * Ensures a usable JWT for chat/media PostgREST and BFF calls (refresh + dual-store sync).
+     * Used by pagination / media paths that must not treat auth-empty responses as end-of-history.
+     */
+    suspend fun ensureFreshAuthToken(): String?
+
     suspend fun sendMessage(
         chatId: String,
         userId: String,

@@ -315,7 +315,7 @@ fun ProfileBottomSheet(
         }
     }
 
-    LaunchedEffect(state.userId, state.viewerUserId) {
+    LaunchedEffect(state.userId, effectiveViewerUserId) {
         val uid = state.userId?.trim()
         if (uid.isNullOrBlank()) {
             legacyProfile = null
@@ -328,7 +328,7 @@ fun ProfileBottomSheet(
         legacyError = null
         val result = runCatching {
             withContext(Dispatchers.Default) {
-                repository.refreshUserPublicProfile(state.viewerUserId, uid)
+                repository.refreshUserPublicProfile(effectiveViewerUserId, uid)
             }
         }
         val refreshed = result.getOrNull()

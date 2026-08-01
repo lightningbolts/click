@@ -7,6 +7,7 @@ import compose.project.click.click.data.models.AvailabilityIntentRow
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.data.models.Message
+import compose.project.click.click.data.models.collapseOneToOneChatsByPeer
 import compose.project.click.click.data.models.isArchivedChannelForUser
 import compose.project.click.click.data.repository.ChatRepository
 import compose.project.click.click.data.repository.MapBeaconRepository
@@ -273,7 +274,7 @@ class GlobalSearchViewModel(
                     return@launch
                 }
 
-                val (activeRows, archivedRows, cliqueRows, ownIntents, searchBeacons, searchLocation) =
+                val (activeRowsRaw, archivedRowsRaw, cliqueRows, ownIntents, searchBeacons, searchLocation) =
                     coroutineScope {
                         val activeD = async { chatRepository.fetchDirectUserChatsWithDetails(userId) }
                         val archivedD = async { chatRepository.fetchArchivedUserChatsWithDetails(userId) }
@@ -294,6 +295,14 @@ class GlobalSearchViewModel(
                             searchLocation = location,
                         )
                     }
+
+                val activityTs: (ChatWithDetails) -> Long = { row ->
+                    row.lastMessage?.timeCreated
+                        ?: row.connection.last_message_at
+                        ?: row.connection.created
+                }
+                val activeRows = collapseOneToOneChatsByPeer(activeRowsRaw, userId, activityTs)
+                val archivedRows = collapseOneToOneChatsByPeer(archivedRowsRaw, userId, activityTs)
 
                 val archivedIds = junctionArchivedConnectionIds()
                 val hiddenIds = junctionHiddenConnectionIds()

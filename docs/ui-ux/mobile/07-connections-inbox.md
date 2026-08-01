@@ -171,6 +171,8 @@ Header subtitle while loading empty: `"Loading…"`
 | Availability bolt | Gold bolt icon when mutual intent overlap |
 | Core | Star frame on avatar |
 
+**Bluetooth reconnect:** Inbox upserts/collapses 1:1 rows by peer (`collapseOneToOneChatsByPeer`) so a re-tap does **not** create a duplicate Active chat row for the same pair.
+
 **Preview strings:**
 
 | Case | Text |

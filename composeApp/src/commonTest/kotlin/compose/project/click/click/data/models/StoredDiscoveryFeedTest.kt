@@ -47,8 +47,10 @@ class StoredDiscoveryFeedTest {
 
     @Test
     fun mergeMapBeaconLists_preservesScheduleWhenIncomingLacksIt() {
-        // Use a far-future window so mergeMapBeaconLists' isActiveForDiscoveryFeed filter
-        // does not drop the row when "today" moves past a hardcoded date.
+        // Keep schedule far in the future so isActiveForDiscoveryFeed does not drop the row
+        // when "today" moves past a nearer hardcoded date.
+        val startIso = "2099-07-22T16:00:00Z"
+        val endIso = "2099-07-22T23:00:00Z"
         val withSchedule = MapBeacon(
             id = "a",
             kind = MapBeaconKind.EVENT,
@@ -57,12 +59,12 @@ class StoredDiscoveryFeedTest {
             metadata = MapBeaconMetadata(
                 title = "birthday",
                 raw = buildJsonObject {
-                    put("event_start_at", JsonPrimitive("2099-07-22T16:00:00Z"))
-                    put("event_end_at", JsonPrimitive("2099-07-22T23:00:00Z"))
+                    put("event_start_at", JsonPrimitive(startIso))
+                    put("event_end_at", JsonPrimitive(endIso))
                 },
             ),
             createdAtEpochMs = 1_700_000_000_000L,
-            expiresAtEpochMs = 1_900_000_000_000L,
+            expiresAtEpochMs = 2_200_000_000_000L,
             sourceBeaconType = "event",
         )
         val stripped = MapBeacon(
@@ -72,7 +74,7 @@ class StoredDiscoveryFeedTest {
             longitude = 2.1,
             metadata = MapBeaconMetadata(title = "birthday"),
             createdAtEpochMs = 1_700_000_000_000L,
-            expiresAtEpochMs = 1_900_000_000_000L,
+            expiresAtEpochMs = 2_200_000_000_000L,
             sourceBeaconType = "event",
         )
         val merged = mergeMapBeaconLists(listOf(withSchedule), listOf(stripped)).single()

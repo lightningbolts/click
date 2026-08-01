@@ -3,6 +3,7 @@ package compose.project.click.click.data.repository
 import compose.project.click.click.chat.attachments.AttachmentCrypto
 import compose.project.click.click.chat.attachments.ChatAttachmentValidator
 import compose.project.click.click.crypto.MessageCrypto
+import compose.project.click.click.auth.LocalSessionCache
 import compose.project.click.click.data.CHAT_ATTACHMENTS_BUCKET
 import compose.project.click.click.data.CHAT_MEDIA_BUCKET
 import compose.project.click.click.data.SupabaseConfig
@@ -105,15 +106,139 @@ class SupabaseChatRepository(
     private fun Connection.withEncountersSortedNewestFirst(): Connection =
         copy(connectionEncounters = connectionEncounters.mergeRichestEncounterEvents().sortedByDescending { it.encounteredAt })
 
+    private suspend fun ensureFreshJwtForChat(): String? {
+        val now = Clock.System.now().toEpochMilliseconds()
+
+        fun usableAccessToken(token: String?, expiresAtMs: Long?): String? {
+            val t = token?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+            val exp = expiresAtMs ?: jwtExpEpochMs(t)
+            // Only reject tokens that are clearly long-dead. Near-expiry tokens are still usable
+            // for a short window and must not hard-block chat when refresh fails.
+            if (exp != null && exp <= now - 5 * 60_000L) return null
+            return t
+        }
+
+        // 1) Prefer live GoTrue session. Never import TokenStorage over it (that caused AuthRestException
+        //    + "no fresh JWT" after staying signed in).
+        val sdkSession = supabase.auth.currentSessionOrNull()
+        if (sdkSession != null) {
+            usableAccessToken(
+                sdkSession.accessToken,
+                sdkSession.expiresAt?.toEpochMilliseconds(),
+            )?.let { token ->
+                runCatching {
+                    tokenStorage.saveTokens(
+                        jwt = sdkSession.accessToken,
+                        refreshToken = sdkSession.refreshToken,
+                        expiresAt = sdkSession.expiresAt?.toEpochMilliseconds(),
+                        tokenType = sdkSession.tokenType,
+                    )
+                }
+                val exp = sdkSession.expiresAt?.toEpochMilliseconds() ?: jwtExpEpochMs(token)
+                if (exp != null && exp <= now + 90_000L) {
+                    authRepository.refreshSession()
+                        .onFailure {
+                            println("ChatRepository: ensureFreshJwt refresh failed: ${it.redactedRestMessage()}")
+                        }
+                    val refreshed = supabase.auth.currentSessionOrNull()
+                    usableAccessToken(
+                        refreshed?.accessToken,
+                        refreshed?.expiresAt?.toEpochMilliseconds(),
+                    )?.let { return it }
+                }
+                return token
+            }
+        }
+
+        // 2) SDK empty — hydrate from TokenStorage, then refresh once under AuthRepository mutex.
+        runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+        authRepository.refreshSession()
+            .onFailure {
+                println("ChatRepository: ensureFreshJwt refresh-after-import failed: ${it.redactedRestMessage()}")
+            }
+
+        val after = supabase.auth.currentSessionOrNull()
+        if (after != null) {
+            usableAccessToken(
+                after.accessToken,
+                after.expiresAt?.toEpochMilliseconds(),
+            )?.let { token ->
+                runCatching {
+                    tokenStorage.saveTokens(
+                        jwt = after.accessToken,
+                        refreshToken = after.refreshToken,
+                        expiresAt = after.expiresAt?.toEpochMilliseconds(),
+                        tokenType = after.tokenType,
+                    )
+                }
+                return token
+            }
+        }
+
+        // 3) Last resort: whatever TokenStorage still has. Never return null solely because refresh
+        //    failed — that hard-blocked chat until sign-out ("no fresh JWT").
+        return tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    /** Best-effort JWT `exp` (seconds) → epoch ms; null if unparseable. */
+    private fun jwtExpEpochMs(jwt: String?): Long? {
+        if (jwt.isNullOrBlank()) return null
+        val parts = jwt.split('.')
+        if (parts.size < 2) return null
+        val payload = parts[1]
+            .replace('-', '+')
+            .replace('_', '/')
+            .let { raw ->
+                val pad = (4 - raw.length % 4) % 4
+                raw + "=".repeat(pad)
+            }
+        return runCatching {
+            val json = kotlinx.serialization.json.Json.parseToJsonElement(
+                payload.decodeBase64ToString(),
+            )
+            val exp = (json as? kotlinx.serialization.json.JsonObject)
+                ?.get("exp")
+                ?.let { el ->
+                    when (el) {
+                        is kotlinx.serialization.json.JsonPrimitive ->
+                            el.content.toLongOrNull() ?: el.content.toDoubleOrNull()?.toLong()
+                        else -> null
+                    }
+                }
+            exp?.times(1000L)
+        }.getOrNull()
+    }
+
+    @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+    private fun String.decodeBase64ToString(): String {
+        val bytes = kotlin.io.encoding.Base64.decode(this)
+        return bytes.decodeToString()
+    }
+
     private suspend fun refreshedJwtAfterAuthFailure(): String? {
+        // Do not import TokenStorage over a live SDK session — that can rotate to a stale refresh token.
+        if (supabase.auth.currentSessionOrNull() == null) {
+            runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+        }
         authRepository.refreshSession()
             .onFailure { println("ChatRepository: token refresh failed: ${it.redactedRestMessage()}") }
-        return tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+        supabase.auth.currentSessionOrNull()?.accessToken?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        authRepository.restoreSession()
+        authRepository.refreshSession()
+            .onFailure { println("ChatRepository: token refresh after restore failed: ${it.redactedRestMessage()}") }
+        return supabase.auth.currentSessionOrNull()?.accessToken?.trim()?.takeIf { it.isNotEmpty() }
+            ?: tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
     }
 
     private fun Throwable.isAuthFailure(): Boolean {
         val msg = redactedRestMessage().lowercase()
-        return msg.contains("401") || msg.contains("unauthorized") || msg.contains("invalid jwt")
+        return msg.contains("401") ||
+            msg.contains("unauthorized") ||
+            msg.contains("invalid jwt") ||
+            msg.contains("jwt expired") ||
+            msg.contains("token has expired") ||
+            msg.contains("invalidjwttoken")
     }
 
     private val ephemeralMutex = Mutex()
@@ -930,171 +1055,188 @@ class SupabaseChatRepository(
         }
     }
 
+    /**
+     * Lightweight chat row for verified cliques — mirrors click-web DashboardView
+     * (`id, group_id, updated_at` only) so listing never depends on full ChatRow / crypto.
+     */
+    @Serializable
+    private data class GroupChatListRow(
+        val id: String,
+        @SerialName("group_id") val groupId: String,
+        @SerialName("updated_at") val updatedAt: Long? = null,
+    )
+
     override suspend fun fetchGroupUserChatsWithDetails(userId: String): List<ChatWithDetails> {
-        return try {
-            val myGroupIds = supabase.from("group_members")
-                .select(columns = Columns.list("group_id")) {
-                    filter { eq("user_id", userId) }
-                    limit(500)
-                }
-                .decodeList<GroupMemberGroupIdRow>()
-                .map { it.groupId }
-                .distinct()
-            if (myGroupIds.isEmpty()) return emptyList()
-
-            val groupChats = supabase.from("chats")
-                .select {
-                    filter { isIn("group_id", myGroupIds) }
-                }
-                .decodeList<ChatRow>()
-
-            groupChats.forEach { r ->
-                r.groupId?.let { rememberChatGroupRouting(r.id, it) }
+        // Mirror click-web DashboardView: membership → chats/groups/members; crypto optional.
+        // Offline session import can leave GoTrue with a JWT but user=null — never hard-require
+        // currentUserOrNull(); resolve id from JWT / caller / AppDataManager instead.
+        val jwt = runCatching { ensureFreshJwtForChat() }.getOrNull()
+        if (supabase.auth.currentUserOrNull()?.id.isNullOrBlank()) {
+            runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+            if (supabase.auth.currentUserOrNull()?.id.isNullOrBlank()) {
+                runCatching { authRepository.refreshSession() }
             }
+        }
+        val memberUserId = resolveSignedInUserIdForGroups(userId, jwt)
+        if (memberUserId.isEmpty()) {
+            println("ChatRepository: group chats skipped — no signed-in user id (jwt=${!jwt.isNullOrBlank()})")
+            return emptyList()
+        }
 
-            val chatIds = groupChats.map { it.id }
+        val myGroupIds = supabase.from("group_members")
+            .select(columns = Columns.list("group_id")) {
+                filter { eq("user_id", memberUserId) }
+                limit(500)
+            }
+            .decodeList<GroupMemberGroupIdRow>()
+            .map { it.groupId }
+            .distinct()
+        println("ChatRepository: group membership for $memberUserId → ${myGroupIds.size} group(s)")
+        if (myGroupIds.isEmpty()) return emptyList()
 
-            // Batch all independent network calls in parallel using coroutineScope
-            val (latestByChatId, unreadByChatId, allGroups, allMemberRows, allUsers) = coroutineScope {
-                val latestDeferred = async {
-                    runCatching { fetchLatestMessageRowPerChat(chatIds) }.getOrElse { emptyMap() }
-                }
-                val unreadDeferred = async {
-                    if (chatIds.isNotEmpty()) {
-                        supabase.from("messages")
-                            .select {
-                                filter {
-                                    isIn("chat_id", chatIds)
-                                    eq("is_read", false)
-                                    neq("user_id", userId)
-                                }
-                                limit(10_000)
+        val (groupChats, allGroups, allMemberRows) = coroutineScope {
+            val chatsDeferred = async {
+                supabase.from("chats")
+                    .select(columns = Columns.list("id", "group_id", "updated_at")) {
+                        filter { isIn("group_id", myGroupIds) }
+                    }
+                    .decodeList<GroupChatListRow>()
+            }
+            val groupsDeferred = async {
+                // Match click-web: id/name/created_by only — extra columns must not block listing.
+                supabase.from("groups")
+                    .select(columns = Columns.list("id", "name", "created_by")) {
+                        filter { isIn("id", myGroupIds) }
+                    }
+                    .decodeList<GroupRow>()
+            }
+            val membersDeferred = async {
+                supabase.from("group_members")
+                    .select(columns = Columns.list("group_id", "user_id")) {
+                        filter { isIn("group_id", myGroupIds) }
+                        limit(5000)
+                    }
+                    .decodeList<GroupMemberFullRow>()
+            }
+            Triple(chatsDeferred.await(), groupsDeferred.await(), membersDeferred.await())
+        }
+
+        println(
+            "ChatRepository: group chats=${groupChats.size} groups=${allGroups.size} " +
+                "memberRows=${allMemberRows.size}",
+        )
+
+        groupChats.forEach { r ->
+            rememberChatGroupRouting(r.id, r.groupId)
+        }
+
+        val chatIds = groupChats.map { it.id }
+        val (latestByChatId, unreadByChatId, allUsers) = coroutineScope {
+            val latestDeferred = async {
+                runCatching { fetchLatestMessageRowPerChat(chatIds) }.getOrElse { emptyMap() }
+            }
+            val unreadDeferred = async {
+                runCatching {
+                    if (chatIds.isEmpty()) return@runCatching emptyMap()
+                    supabase.from("messages")
+                        .select {
+                            filter {
+                                isIn("chat_id", chatIds)
+                                eq("is_read", false)
+                                neq("user_id", memberUserId)
                             }
-                            .decodeList<MessageRow>()
-                            .groupingBy { it.chatId }.eachCount()
-                    } else {
-                        emptyMap()
-                    }
-                }
-                val groupsDeferred = async {
-                    supabase.from("groups")
-                        .select(columns = Columns.list("id", "name", "created_by", "key_anchor_user_id", "avatar_url")) {
-                            filter { isIn("id", myGroupIds) }
+                            limit(10_000)
                         }
-                        .decodeList<GroupRow>()
-                }
-                val membersDeferred = async {
-                    supabase.from("group_members")
-                        .select(columns = Columns.list("group_id", "user_id")) {
-                            filter { isIn("group_id", myGroupIds) }
-                            limit(5000)
-                        }
-                        .decodeList<GroupMemberFullRow>()
-                }
-                val allMembersResult = membersDeferred.await()
-                val allMemberUserIds = allMembersResult.map { it.userId }.distinct()
-                val usersDeferred = async { fetchUsersByIdsSafe(allMemberUserIds) }
+                        .decodeList<MessageRow>()
+                        .groupingBy { it.chatId }.eachCount()
+                }.getOrElse { emptyMap() }
+            }
+            val allMemberUserIds = allMemberRows.map { it.userId }.distinct()
+            val usersDeferred = async {
+                runCatching { fetchUsersByIdsSafe(allMemberUserIds) }.getOrElse { emptyList() }
+            }
+            Triple(latestDeferred.await(), unreadDeferred.await(), usersDeferred.await())
+        }
 
-                GroupChatsParallelResult(
-                    latestByChatId = latestDeferred.await(),
-                    unreadByChatId = unreadDeferred.await(),
-                    allGroups = groupsDeferred.await(),
-                    allMemberRows = allMembersResult,
-                    allUsers = usersDeferred.await(),
+        val groupsById = allGroups.associateBy { it.id }
+        val membersByGroupId = allMemberRows.groupBy { it.groupId }
+        val usersById = allUsers.associateBy { it.id }
+
+        // Do NOT resolveChatCrypto here — website list path never does, and hanging key
+        // unwraps were leaving Groups permanently empty while direct chats painted.
+        return withContext(Dispatchers.Default) {
+            groupChats.mapNotNull { chatRow ->
+                val gid = chatRow.groupId
+                val group = groupsById[gid] ?: return@mapNotNull null
+
+                // Prefer full member list; fall back to viewer-only if RLS hides peers.
+                val memberIds = membersByGroupId[gid]
+                    ?.map { it.userId }?.distinct()
+                    .orEmpty()
+                    .ifEmpty { listOf(memberUserId) }
+
+                val title = group.name.ifBlank { "Clique" }
+                val anchor = group.keyAnchorUserId
+                    ?: memberIds.filter { it != group.createdBy }.minOrNull()
+                    ?: memberIds.firstOrNull()
+                    ?: memberUserId
+                val displayPeer = memberIds.firstOrNull { it != memberUserId } ?: memberUserId
+                val otherUser = usersById[displayPeer] ?: User(
+                    id = gid,
+                    name = title,
+                    email = null,
+                    image = group.avatarUrl,
+                    createdAt = 0L,
                 )
-            }
-
-            val groupsById = allGroups.associateBy { it.id }
-            val membersByGroupId = allMemberRows.groupBy { it.groupId }
-            val usersById = allUsers.associateBy { it.id }
-            val cryptoByChatId = coroutineScope {
-                val concurrency = Semaphore(6)
-                groupChats.map { chatRow ->
-                    async {
-                        concurrency.withPermit {
-                            chatRow.id to resolveChatCrypto(chatRow.id, userId)
-                        }
-                    }
-                }.awaitAll()
-                    .mapNotNull { (chatId, crypto) -> crypto?.let { chatId to it } }
-                    .toMap()
-            }
-
-            withContext(Dispatchers.Default) {
-                groupChats.mapNotNull { chatRow ->
-                    val gid = chatRow.groupId ?: return@mapNotNull null
-                    val group = groupsById[gid] ?: return@mapNotNull null
-
-                    val memberIds = membersByGroupId[gid]
-                        ?.map { it.userId }?.distinct()
-                        ?: return@mapNotNull null
-                    if (memberIds.isEmpty()) return@mapNotNull null
-
-                    val title = group.name.ifBlank { "Clique" }
-                    val anchor = group.keyAnchorUserId
-                        ?: memberIds.filter { it != group.createdBy }.minOrNull()
-                        ?: memberIds.firstOrNull()
-                        ?: return@mapNotNull null
-                    val displayPeer = memberIds.firstOrNull { it != userId } ?: userId
-                    val otherUser = usersById[displayPeer] ?: User(
-                        id = gid,
-                        name = title,
-                        email = null,
-                        image = null,
-                        createdAt = 0L,
+                val groupMemberUsers = memberIds
+                    .filter { it != memberUserId }
+                    .mapNotNull { uid -> usersById[uid] }
+                    .sortedWith(
+                        compareByDescending<User> {
+                            maxOf(it.lastPolled ?: 0L, it.last_paired ?: 0L)
+                        }.thenBy { it.name ?: "" }
+                            .thenBy { it.id },
                     )
-                    val groupMemberUsers = memberIds
-                        .filter { it != userId }
-                        .mapNotNull { uid -> usersById[uid] }
-                        .sortedWith(
-                            compareByDescending<User> {
-                                maxOf(it.lastPolled ?: 0L, it.last_paired ?: 0L)
-                            }.thenBy { it.name ?: "" }
-                                .thenBy { it.id },
-                        )
 
-                    val clique = GroupCliqueDetails(
+                val clique = GroupCliqueDetails(
+                    groupId = gid,
+                    name = title,
+                    createdByUserId = group.createdBy,
+                    keyAnchorUserId = anchor,
+                    memberUserIds = memberIds,
+                    avatarUrl = group.avatarUrl,
+                )
+
+                // Raw preview only — decrypt when the thread is opened.
+                val lastMessage = latestByChatId[chatRow.id]?.toMessage()
+                val synthetic = syntheticConnectionForGroupClique(
+                    groupId = gid,
+                    memberUserIds = memberIds,
+                    lastMessageAt = lastMessage?.timeCreated ?: chatRow.updatedAt,
+                )
+
+                ChatWithDetails(
+                    chat = Chat(
+                        id = chatRow.id,
+                        connectionId = null,
                         groupId = gid,
+                        messages = emptyList(),
+                    ),
+                    connection = synthetic,
+                    otherUser = otherUser.copy(
                         name = title,
-                        createdByUserId = group.createdBy,
-                        keyAnchorUserId = anchor,
-                        memberUserIds = memberIds,
-                        avatarUrl = group.avatarUrl,
-                    )
-
-                    val rawLast = latestByChatId[chatRow.id]?.toMessage()
-                    val lastMessage = rawLast?.let {
-                        decryptMessageOnCurrentThread(it, cryptoByChatId[chatRow.id])
-                    }
-                    val synthetic = syntheticConnectionForGroupClique(
-                        groupId = gid,
-                        memberUserIds = memberIds,
-                        lastMessageAt = lastMessage?.timeCreated ?: chatRow.updatedAt,
-                    )
-
-                    ChatWithDetails(
-                        chat = Chat(
-                            id = chatRow.id,
-                            connectionId = null,
-                            groupId = gid,
-                            messages = emptyList(),
-                        ),
-                        connection = synthetic,
-                        otherUser = otherUser,
-                        lastMessage = lastMessage,
-                        unreadCount = unreadByChatId[chatRow.id] ?: 0,
-                        groupClique = clique,
-                        groupMemberUsers = groupMemberUsers,
-                    )
-                }.sortedByDescending { d ->
-                    d.lastMessage?.timeCreated
-                        ?: d.connection.last_message_at
-                        ?: d.connection.created
-                }
+                        image = otherUser.image ?: group.avatarUrl,
+                    ),
+                    lastMessage = lastMessage,
+                    unreadCount = unreadByChatId[chatRow.id] ?: 0,
+                    groupClique = clique,
+                    groupMemberUsers = groupMemberUsers,
+                )
+            }.sortedByDescending { d ->
+                d.lastMessage?.timeCreated
+                    ?: d.connection.last_message_at
+                    ?: d.connection.created
             }
-        } catch (e: Exception) {
-            println("ChatRepository: group chats fetch failed: ${e.redactedRestMessage()}")
-            emptyList()
         }
     }
 
@@ -1135,12 +1277,32 @@ class SupabaseChatRepository(
         )
     }
 
+    /**
+     * Resolve viewer id for group listing. Prefer live GoTrue user; fall back through JWT `sub`,
+     * the caller [userId], then [AppDataManager] — session import historically set user=null.
+     */
+    private suspend fun resolveSignedInUserIdForGroups(userId: String, jwt: String?): String {
+        supabase.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        val token = jwt?.trim()?.takeIf { it.isNotEmpty() } ?: tokenStorage.getJwt()?.trim()
+        LocalSessionCache.parseIdentityFromJwt(token.orEmpty())
+            ?.userId?.trim()?.takeIf { it.isNotEmpty() }
+            ?.let { return it }
+        userId.trim().takeIf { it.isNotEmpty() }?.let { return it }
+        return AppDataManager.currentUser.value?.id?.trim().orEmpty()
+    }
+
     // Fetch all chats for a user with details via API
     override suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails> {
         return try {
             coroutineScope {
                 val direct = async { fetchDirectUserChatsWithDetails(userId) }
-                val groups = async { fetchGroupUserChatsWithDetails(userId) }
+                val groups = async {
+                    runCatching { fetchGroupUserChatsWithDetails(userId) }
+                        .onFailure { e ->
+                            println("Error fetching group chats: ${e.redactedRestMessage()}")
+                        }
+                        .getOrElse { emptyList() }
+                }
                 (direct.await() + groups.await()).sortedByDescending { d ->
                     d.lastMessage?.timeCreated
                         ?: d.connection.last_message_at
@@ -1231,6 +1393,8 @@ class SupabaseChatRepository(
         beforeTimeCreated: Long?,
     ): List<Message>? {
         return try {
+            // Ensure SDK session is imported so PostgREST RLS returns rows (not empty []).
+            ensureFreshJwtForChat()
             val crypto = resolveChatCrypto(chatId, viewerUserId)
             val rows = when {
                 limit != null && limit > 0 -> {
@@ -1276,6 +1440,8 @@ class SupabaseChatRepository(
         }
     }
 
+    override suspend fun ensureFreshAuthToken(): String? = ensureFreshJwtForChat()
+
     private fun enrichMediaEncryptionMetadata(messageType: String, metadata: JsonElement?): JsonElement? {
         val mt = messageType.lowercase()
         if (mt != ChatMessageType.IMAGE && mt != ChatMessageType.AUDIO) return metadata
@@ -1309,7 +1475,9 @@ class SupabaseChatRepository(
             }
 
             val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
-            val authToken = tokenStorage.getJwt() ?: return null
+            val authToken = ensureFreshJwtForChat()
+                ?: tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+                ?: return null
             val enrichedMetadata = enrichMediaEncryptionMetadata(messageType, metadata)
 
             val firstSend = apiClient.sendMessage(
@@ -1374,43 +1542,63 @@ class SupabaseChatRepository(
 
     override suspend fun ensureChatForConnection(connectionId: String): Chat? {
         return try {
-            val existing = supabase.from("chats")
-                .select {
-                    filter {
-                        eq("connection_id", connectionId)
-                    }
-                    limit(1)
-                }
-                .decodeList<ChatRow>()
-                .firstOrNull()
-
-            if (existing != null) {
-                existing.connectionId?.let { rememberChatConnectionRouting(existing.id, it) }
-                return Chat(
-                    id = existing.id,
-                    connectionId = existing.connectionId,
-                    groupId = existing.groupId,
-                    messages = emptyList(),
-                )
-            }
-
-            val inserted = supabase.from("chats")
-                .insert(ChatInsert(connectionId = connectionId)) {
-                    select()
-                }
-                .decodeSingle<ChatRow>()
-
-            inserted.connectionId?.let { rememberChatConnectionRouting(inserted.id, it) }
-            Chat(
-                id = inserted.id,
-                connectionId = inserted.connectionId,
-                groupId = inserted.groupId,
-                messages = emptyList(),
-            )
+            // Best-effort session prep — never hard-block with "no fresh JWT".
+            runCatching { ensureFreshJwtForChat() }
+            ensureChatForConnectionOnce(connectionId)
         } catch (e: Exception) {
+            if (e.isAuthFailure()) {
+                val refreshed = refreshedJwtAfterAuthFailure()
+                if (refreshed != null) {
+                    return try {
+                        ensureChatForConnectionOnce(connectionId)
+                    } catch (retry: Exception) {
+                        println(
+                            "Error ensuring chat for connection $connectionId after refresh: " +
+                                retry.redactedRestMessage(),
+                        )
+                        null
+                    }
+                }
+            }
             println("Error ensuring chat for connection $connectionId: ${e.redactedRestMessage()}")
             null
         }
+    }
+
+    private suspend fun ensureChatForConnectionOnce(connectionId: String): Chat? {
+        val existing = supabase.from("chats")
+            .select {
+                filter {
+                    eq("connection_id", connectionId)
+                }
+                limit(1)
+            }
+            .decodeList<ChatRow>()
+            .firstOrNull()
+
+        if (existing != null) {
+            existing.connectionId?.let { rememberChatConnectionRouting(existing.id, it) }
+            return Chat(
+                id = existing.id,
+                connectionId = existing.connectionId,
+                groupId = existing.groupId,
+                messages = emptyList(),
+            )
+        }
+
+        val inserted = supabase.from("chats")
+            .insert(ChatInsert(connectionId = connectionId)) {
+                select()
+            }
+            .decodeSingle<ChatRow>()
+
+        inserted.connectionId?.let { rememberChatConnectionRouting(inserted.id, it) }
+        return Chat(
+            id = inserted.id,
+            connectionId = inserted.connectionId,
+            groupId = inserted.groupId,
+            messages = emptyList(),
+        )
     }
 
     override suspend fun sendMessageForConnection(
@@ -1428,15 +1616,13 @@ class SupabaseChatRepository(
     override suspend fun markMessagesAsRead(chatId: String, userId: String) {
         if (chatId.isBlank() || userId.isBlank()) return
         try {
-            val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() } ?: return
-            val gatekeeperResult = apiClient.markChatAsRead(chatId, jwt)
-            if (gatekeeperResult.isSuccess) return
-
-            gatekeeperResult.exceptionOrNull()?.let { e ->
-                println("markChatAsRead failed, falling back to legacy path: ${e.redactedRestMessage()}")
-            }
-            apiClient.markMessagesAsRead(chatId, userId, jwt).onFailure { e ->
-                println("Legacy markMessagesAsRead fallback failed: ${e.redactedRestMessage()}")
+            val jwt = ensureFreshJwtForChat()
+                ?: tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+                ?: return
+            apiClient.markChatAsRead(chatId, jwt).onFailure { e ->
+                // Do not fall back to the legacy Flask /api/chats/:id/mark_read host — it often
+                // times out on simulator LAN and is not the read-receipt SSOT anymore.
+                println("markChatAsRead failed: ${e.redactedRestMessage()}")
             }
         } catch (e: Exception) {
             println("Error marking messages as read: ${e.redactedRestMessage()}")
@@ -1782,9 +1968,12 @@ class SupabaseChatRepository(
     // Update a message via API
     override suspend fun updateMessage(chatId: String, messageId: String, userId: String, content: String): Message? {
         return try {
-            val authToken = tokenStorage.getJwt() ?: return null
+            val authToken = ensureFreshJwtForChat() ?: return null
             val result = apiClient.updateMessage(chatId, messageId, userId, content, authToken)
-            result.getOrElse {
+            result.recoverCatching { firstErr ->
+                val retried = refreshedJwtAfterAuthFailure() ?: throw firstErr
+                apiClient.updateMessage(chatId, messageId, userId, content, retried).getOrThrow()
+            }.getOrElse {
                 println("Error updating message: ${it.redactedRestMessage()}")
                 null
             }
@@ -1797,9 +1986,12 @@ class SupabaseChatRepository(
     // Delete a message via API
     override suspend fun deleteMessage(chatId: String, messageId: String, userId: String): Boolean {
         return try {
-            val authToken = tokenStorage.getJwt() ?: return false
+            val authToken = ensureFreshJwtForChat() ?: return false
             val result = apiClient.deleteMessage(chatId, messageId, userId, authToken)
-            result.getOrElse {
+            result.recoverCatching { firstErr ->
+                val retried = refreshedJwtAfterAuthFailure() ?: throw firstErr
+                apiClient.deleteMessage(chatId, messageId, userId, retried).getOrThrow()
+            }.getOrElse {
                 println("Error deleting message: ${it.redactedRestMessage()}")
                 false
             }
@@ -1866,8 +2058,11 @@ class SupabaseChatRepository(
     /** Add a reaction via Next.js gatekeeper. */
     override suspend fun addReaction(messageId: String, userId: String, reactionType: String): Boolean {
         return try {
-            val jwt = tokenStorage.getJwt() ?: return false
-            apiClient.sendReaction(messageId, userId, reactionType, jwt).isSuccess
+            val jwt = ensureFreshJwtForChat() ?: return false
+            apiClient.sendReaction(messageId, userId, reactionType, jwt).recoverCatching {
+                val retried = refreshedJwtAfterAuthFailure() ?: throw it
+                apiClient.sendReaction(messageId, userId, reactionType, retried).getOrThrow()
+            }.isSuccess
         } catch (e: Exception) {
             println("Error adding reaction: ${e.redactedRestMessage()}")
             false
@@ -1877,8 +2072,11 @@ class SupabaseChatRepository(
     /** Remove a reaction via Next.js gatekeeper. */
     override suspend fun removeReaction(messageId: String, userId: String, reactionType: String): Boolean {
         return try {
-            val jwt = tokenStorage.getJwt() ?: return false
-            apiClient.removeReaction(messageId, userId, reactionType, jwt).getOrElse { false }
+            val jwt = ensureFreshJwtForChat() ?: return false
+            apiClient.removeReaction(messageId, userId, reactionType, jwt).recoverCatching {
+                val retried = refreshedJwtAfterAuthFailure() ?: throw it
+                apiClient.removeReaction(messageId, userId, reactionType, retried).getOrThrow()
+            }.getOrElse { false }
         } catch (e: Exception) {
             println("Error removing reaction: ${e.redactedRestMessage()}")
             false
@@ -2050,15 +2248,21 @@ class SupabaseChatRepository(
 
     override suspend fun updateMessageStatus(messageId: String, status: String): Boolean {
         return try {
-            val authToken = tokenStorage.getJwt() ?: return false
-            apiClient.updateMessageStatus(messageId, status, authToken).getOrElse { false }
+            val authToken = ensureFreshJwtForChat() ?: return false
+            apiClient.updateMessageStatus(messageId, status, authToken).recoverCatching {
+                val retried = refreshedJwtAfterAuthFailure() ?: throw it
+                apiClient.updateMessageStatus(messageId, status, retried).getOrThrow()
+            }.getOrElse { false }
         } catch (e: Exception) { println("Error updating status: ${e.redactedRestMessage()}"); false }
     }
 
     override suspend fun forwardMessage(messageId: String, targetChatId: String, userId: String): Message? {
         return try {
-            val authToken = tokenStorage.getJwt() ?: return null
-            apiClient.forwardMessage(messageId, targetChatId, userId, authToken).getOrElse { null }
+            val authToken = ensureFreshJwtForChat() ?: return null
+            apiClient.forwardMessage(messageId, targetChatId, userId, authToken).recoverCatching {
+                val retried = refreshedJwtAfterAuthFailure() ?: throw it
+                apiClient.forwardMessage(messageId, targetChatId, userId, retried).getOrThrow()
+            }.getOrElse { null }
         } catch (e: Exception) { println("Error forwarding message: ${e.redactedRestMessage()}"); null }
     }
 
@@ -2234,7 +2438,7 @@ class SupabaseChatRepository(
     ): Result<Unit> = runCatching {
         require(groupId.isNotBlank())
         require(newMemberUserId.isNotBlank())
-        val authToken = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+        val authToken = ensureFreshJwtForChat()?.trim()?.takeIf { it.isNotEmpty() }
             ?: throw IllegalStateException("Not authenticated")
         apiClient.addCliqueMember(
             groupId = groupId,
@@ -2267,7 +2471,7 @@ class SupabaseChatRepository(
     override suspend fun removeCliqueMember(groupId: String, memberUserId: String): Result<Unit> = runCatching {
         require(groupId.isNotBlank())
         require(memberUserId.isNotBlank())
-        val authToken = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+        val authToken = ensureFreshJwtForChat()?.trim()?.takeIf { it.isNotEmpty() }
             ?: throw IllegalStateException("Not authenticated")
         apiClient.removeCliqueMember(
             groupId = groupId,
@@ -2362,13 +2566,24 @@ class SupabaseChatRepository(
                 is ChatSessionCaches.ResolvedChatCrypto.GroupMaster -> MessageCrypto.encryptMediaBytes(plainBytes, crypto.masterKey)
                 is ChatSessionCaches.ResolvedChatCrypto.Pairwise -> MessageCrypto.encryptMediaBytes(plainBytes, crypto.keys)
             }
-            val jwt = tokenStorage.getJwt() ?: return null
+            val jwt = ensureFreshJwtForChat() ?: return null
             apiClient.uploadMedia(
                 fileBytes = cipher,
                 chatId = chatId,
                 mimeType = uploadMime,
                 authToken = jwt,
-            ).getOrElse { return null }
+            ).getOrElse { firstErr ->
+                val retriedJwt = refreshedJwtAfterAuthFailure() ?: return null
+                apiClient.uploadMedia(
+                    fileBytes = cipher,
+                    chatId = chatId,
+                    mimeType = uploadMime,
+                    authToken = retriedJwt,
+                ).getOrElse {
+                    println("ChatRepository: uploadChatMedia failed: ${firstErr.redactedRestMessage()}")
+                    return null
+                }
+            }
         } catch (e: Exception) {
             println("ChatRepository: uploadChatMedia failed: ${e.redactedRestMessage()}")
             null
@@ -2459,14 +2674,24 @@ class SupabaseChatRepository(
             val fileMasterKey = AttachmentCrypto.generateFileMasterKey()
             val cipher = AttachmentCrypto.encryptFileBytes(plainBytes, fileMasterKey)
             val sha = AttachmentCrypto.sha256Base64(plainBytes)
-            val jwt = tokenStorage.getJwt() ?: return null
+            val jwt = ensureFreshJwtForChat() ?: return null
             val uploaded = apiClient.uploadAttachment(
                 fileBytes = cipher,
                 chatId = chatId,
                 mimeType = mimeType.ifBlank { "application/octet-stream" },
                 fileName = fileName,
                 authToken = jwt,
-            ).getOrElse { err ->
+            ).recoverCatching { firstErr ->
+                val retriedJwt = refreshedJwtAfterAuthFailure()
+                    ?: throw firstErr
+                apiClient.uploadAttachment(
+                    fileBytes = cipher,
+                    chatId = chatId,
+                    mimeType = mimeType.ifBlank { "application/octet-stream" },
+                    fileName = fileName,
+                    authToken = retriedJwt,
+                ).getOrThrow()
+            }.getOrElse { err ->
                 println("ChatRepository: attachment upload failed: ${err.redactedRestMessage()}")
                 return null
             }
@@ -2491,8 +2716,11 @@ class SupabaseChatRepository(
     ): ByteArray? {
         if (path.isBlank() || fileMasterKeyBase64.isBlank()) return null
         return try {
-            val jwt = tokenStorage.getJwt() ?: return null
-            val signedUrl = apiClient.signAttachmentUrl(path, jwt).getOrElse { err ->
+            val jwt = ensureFreshJwtForChat() ?: return null
+            val signedUrl = apiClient.signAttachmentUrl(path, jwt).recoverCatching { firstErr ->
+                val retriedJwt = refreshedJwtAfterAuthFailure() ?: throw firstErr
+                apiClient.signAttachmentUrl(path, retriedJwt).getOrThrow()
+            }.getOrElse { err ->
                 println("ChatRepository: signAttachmentUrl failed: ${err.redactedRestMessage()}")
                 return null
             }
@@ -2603,10 +2831,16 @@ class SupabaseChatRepository(
         mediaUrl: String,
     ): ByteArray? {
         return try {
+            ensureFreshJwtForChat()
             val crypto = resolveChatCrypto(chatId, viewerUserId) ?: return null
             val raw = apiClient.downloadUrlBytes(mediaUrl).getOrElse { err ->
                 println("ChatRepository: media download failed: ${err.redactedRestMessage()}")
-                return null
+                // One auth-refresh retry — stale JWT after offline→online often looks like a download miss.
+                refreshedJwtAfterAuthFailure()
+                apiClient.downloadUrlBytes(mediaUrl).getOrElse { retryErr ->
+                    println("ChatRepository: media download retry failed: ${retryErr.redactedRestMessage()}")
+                    return null
+                }
             }
             val normalized = normalizeEncryptedMediaPayload(raw)
             if (normalized !== raw) {

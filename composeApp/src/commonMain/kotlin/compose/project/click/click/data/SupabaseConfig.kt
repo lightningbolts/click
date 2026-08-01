@@ -13,6 +13,7 @@ import io.github.jan.supabase.realtime.Realtime
 import io.github.jan.supabase.storage.Storage
 import compose.project.click.click.auth.LocalSessionCache
 import compose.project.click.click.data.storage.TokenStorage
+import io.github.jan.supabase.auth.user.UserInfo
 import io.github.jan.supabase.auth.user.UserSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,6 +21,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 
 object SupabaseConfig {
@@ -90,12 +93,23 @@ object SupabaseConfig {
             3600L
         }
 
+        // Must populate user — importSession with user=null leaves currentUserOrNull() empty
+        // even when the access token is valid (refreshSession then skips network), which broke
+        // group_members listing ("requires an authenticated Supabase session").
+        val sessionUser = UserInfo(
+            id = identity.userId,
+            aud = "authenticated",
+            email = identity.email.takeIf { it.isNotBlank() },
+            userMetadata = buildJsonObject {
+                identity.name?.let { put("name", it) }
+            },
+        )
         val session = UserSession(
             accessToken = accessToken,
             refreshToken = refreshToken,
             expiresIn = expiresIn,
             tokenType = tokenStorage.getTokenType() ?: "bearer",
-            user = null,
+            user = sessionUser,
         )
         return runCatching {
             client.auth.importSession(session)

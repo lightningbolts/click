@@ -13,9 +13,12 @@ The `telemetry/` package implements:
 2. **Anonymized spatial bucketing** — coarse hexbin IDs, never raw GPS in payloads.
 3. **Grass nudge UI state** — gentle prompt when users pan without acting (anti-doomscroll nudge).
 4. **Background flush** — POST aggregated anomaly to click-web when session thresholds met.
+5. **Connection-flow telemetry** — proximity handshake funnel events (separate from map friction).
 
-Server persistence target: **`system_friction_logs`** table (via click-web `/api/telemetry/friction` BFF route).
+Server persistence targets:
 
+- **`system_friction_logs`** via `/api/telemetry/friction` (`map_friction_anomaly` only).
+- **`connection_flow_events`** via `/api/telemetry/connection-flow` (proximity handshake allowlist).
 ---
 
 ## Architecture
@@ -112,12 +115,13 @@ This keeps PII handling server-controlled.
 
 ## Constraints
 
-1. **No raw coordinates in HTTP body** — only `hexbin_id` from `AnonymizedHexbin`.
+1. **No raw coordinates in HTTP body** — only `hexbin_id` from `AnonymizedHexbin` (friction) or omit location entirely (connection-flow).
 2. **No flush without auth** — missing JWT silently skips POST.
 3. **Non-blocking** — all flush work on `Dispatchers.Default`; never block UI thread.
-4. **Session reset after flush** — prevents duplicate posts for same session.
+4. **Session reset after flush** — prevents duplicate friction posts for same session.
 5. **Pan-only sessions** — zero pans → no anomaly (browsing list/map static view not penalized).
-6. **Privacy review before new events** — extend `FrictionAnomalyPayload` only with anonymized fields.
+6. **Privacy review before new events** — extend payloads only with anonymized fields; keep connection-flow allowlist separate from `map_friction_anomaly`.
+7. **Do not mix streams** — connection-flow events must never write to `system_friction_logs`.
 
 ---
 
@@ -125,9 +129,11 @@ This keeps PII handling server-controlled.
 
 | Path | Role |
 |------|------|
-| `telemetry/TelemetryBatcher.kt` | Session tracking + HTTP flush |
+| `telemetry/TelemetryBatcher.kt` | Map friction session tracking + HTTP flush |
+| `telemetry/ConnectionFlowTelemetry.kt` | Proximity handshake funnel events |
 | `telemetry/AnonymizedHexbin.kt` | Spatial bucketing |
 | `viewmodel/MapViewModel.kt` | Pan/hexbin hooks |
+| `viewmodel/ConnectionViewModel.kt` | Handshake funnel hooks |
 | `ui/screens/MapScreen.kt` | Grass nudge UI consumption |
 | `data/api/ApiConfig.kt` | `CLICK_WEB_BASE_URL` |
 | `data/SupabaseConfig.kt` | JWT for Bearer header |
@@ -185,6 +191,28 @@ Unrelated.
 
 ### Business insights
 Aggregated `system_friction_logs` + hexbin powers **business map friction dashboards** on web — merchants see neighborhood-level discovery pain, not individual user tracks.
+
+### Connection-flow telemetry (`ConnectionFlowTelemetry`)
+
+Proximity handshake funnel — **do not mix** into `map_friction_anomaly` / `system_friction_logs`.
+
+| Piece | Role |
+|-------|------|
+| `ConnectionFlowTelemetry.kt` | Fire-and-forget JWT Bearer POST; ~10% sample on success-path events |
+| `POST /api/telemetry/connection-flow` | Allowlisted ingest → `connection_flow_events` (60/min/user in-memory rate limit) |
+| `lib/server/telemetry/connectionFlowEvents.ts` | Shared allowlist + server emit (`emitProximityAtEventOutcome`) |
+| `ConnectionViewModel` | Hooks: started, matched / awaiting_selection / pending / offline_queued / failed |
+| `bindProximityHandshake` / `confirmProximitySelection` | Server emits `proximity_at_event_attached` / `_skipped` on live-event resolve |
+
+**Always emit (client):** `started`, `awaiting_selection`, `failed`, `host_selection_abandoned`, `reconnect_rate_limited`, recovery timeouts/incomplete, clique blocked, `proximity_at_event_skipped`.
+
+**Sampled (~10% client):** `matched`, `pending`, `offline_queued`, `host_selection_confirmed`, reconnect saved, recovery success, clique created, `proximity_at_event_attached`.
+
+**Server emits (no client sampling):** at-event attached/skipped are also written directly from proximity encounter paths with skip reasons `missing_gps`, `insufficient_participants`, or `no_live_event_match` (includes RSVP-without-active-check-in and out-of-fence cases — attachment requires RSVP **and** active check-in for all participants).
+
+**Payload fields only:** `event`, `peer_count?`, `is_group?`, `is_reconnect?`, `selected_count?`, `candidate_count?`, `reason?` — no user ids, no raw GPS.
+
+**Sampling note:** Client success-path sampling (~10% via `SUCCESS_SAMPLE_RATE`) reduces volume; failures, `awaiting_selection`, and selection abandons always leave the device. Rate limit on the BFF is per-process only (not shared across serverless instances).
 
 ### Event reminders
 Unrelated.

@@ -78,8 +78,13 @@ object RealtimeCoordinator {
 
     fun stop() {
         scope.launch {
-            startMutex.withLock { stopLocked() }
+            stopAndAwait()
         }
+    }
+
+    /** Synchronous teardown — preferred after JWT refresh so [ensureStarted] cannot race a late stop. */
+    suspend fun stopAndAwait() {
+        startMutex.withLock { stopLocked() }
     }
 
     private fun stopLocked() {

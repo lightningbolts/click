@@ -22,8 +22,8 @@ Continuation status: [`../handoff/functional-clarity-continuation.md`](../handof
 
 | # | Title | Type | Status | Priority |
 |---|--------|------|--------|----------|
-| 1 | Incomplete group registration (Bluetooth handshake) | Bug | Code fix landed — needs device repro (client 503 recover hardened 2026-07-17) | P0 |
-| 2 | Duplicate connections | Bug | Code fix landed — needs device repro (confirm fetch-by-id + dup-key hardened 2026-07-17) | P0 |
+| 1 | Incomplete group registration (Bluetooth handshake) | Bug | Code fix landed — needs device repro (503 recover + host multi-select `awaiting_selection`) | P0 |
+| 2 | Duplicate connections | Bug | Code fix landed — needs device repro (fetch-by-id + inbox/map peer collapse) | P0 |
 | 3 | Handshake limited to groups (no 1:1 DM) | Feature / UX | Code fix landed — needs device repro (auto-clique + Message CTA) | P1 |
 | 4 | Events missing from list view | Bug | Code fix landed — needs device repro | P1 |
 | 5 | Map not rendering in color | Bug / design ambiguity | Confirmed (basemap code fixed — device confirm) | P2 |
@@ -55,6 +55,8 @@ Continuation status: [`../handoff/functional-clarity-continuation.md`](../handof
 
 **Code audit hardenings (2026-07-17):** client 503 → `recoverPendingProximityHandshake`; confirm path fetch-by-`preflightConnectionId` + duplicate-key re-lookup; Success “Message” CTA; `BeaconPinMetrics` + SOS standalone; Keychain `SecItemUpdate` / `-50` retry.
 
+**Handshake UX hardenings (docs synced):** host multi-select (`awaiting_selection`) for incomplete group registration; inbox/map peer collapse for duplicate UI chats/pins; `ReconnectEncounter` on reconnect; ~5s listen window; `at_event` requires RSVP **and** active check-in. Status remains **code fix landed — needs device repro**.
+
 ---
 
 ## 1. Bluetooth handshake: incomplete group registration
@@ -63,12 +65,12 @@ Continuation status: [`../handoff/functional-clarity-continuation.md`](../handof
 |-------|--------|
 | **Type** | Bug |
 | **Area** | Connections / Bluetooth (Tri-Factor: BLE + ultrasonic + GPS) |
-| **Status** | Confirmed risk |
+| **Status** | Code fix landed — needs device repro |
 | **Priority** | P0 |
 
 ### Expected
 
-Every participant present during a group handshake is registered on the group connection.
+Every participant present during a group handshake is registered on the group connection. Host multi-select (`awaiting_selection`) lets the initiator choose who to include before durable create.
 
 ### Evidence
 
@@ -82,7 +84,7 @@ Every participant present during a group handshake is registered on the group co
    GET recovery returns **409** when `memberIds` does not include the caller or length &lt; 2.
 
 4. **Client BLE window**  
-   Android/iOS proximity managers use a short listen window (~3s); late joiners may miss mutual token hear.
+   Android/iOS proximity managers use a short listen window (~**5s**); late joiners may miss mutual token hear.
 
 ### Suspected root cause
 
@@ -99,12 +101,19 @@ Server marks handshake rows matched without a durable connection for the full BF
 - `ApiClient.postProximityHandshake` treats HTTP **503** with `pending_handshake_id` as recoverable pending (same path as HTTP 202).
 - `ConnectionViewModel` starts `recoverPendingProximityHandshake` instead of hard `Error` when the server leaves the handshake unmatched.
 
+### Host multi-select (code — handshake UX fix)
+
+- First-time multi-peer (≥3) returns `awaiting_selection` and **defers** durable create until host confirms via `confirmProximitySelection`.
+- Combined sheet: people multi-select **above** context tags; selection size cap ≤12 (`PROXIMITY_HOST_SELECTION_MAX_MEMBERS`).
+- Legacy `"Connect with everyone"` is no longer the primary multi-peer path (promoted to host pick sheet).
+
 ### Suggested regression cases
 
-- [ ] 3 phones tap within 2s with BLE on → one group connection containing all three user IDs
-- [ ] 4 phones, one with Bluetooth off → document who is included; no silent “matched but missing” state
+- [ ] 3 phones tap within ~5s listen window with BLE on → host picks people + tags → one group connection containing selected user IDs
+- [ ] 4 phones, one with Bluetooth off → document who appears as candidate; no silent “matched but missing” state
 - [ ] Force connection-create failure (e.g. DB constraint) → pending rows not stuck as matched without connection
 - [ ] After 202 pending, poll until success → all members present on returned connection
+- [ ] Host abandons selection (Skip/dismiss) → no partial group create; telemetry `host_selection_abandoned`
 
 ### Repro steps
 
@@ -118,12 +127,12 @@ TBD on device: 3+ Android/iOS phones, same room, Tap-to-Connect simultaneously; 
 |-------|--------|
 | **Type** | Bug |
 | **Area** | Connections / Bluetooth |
-| **Status** | Confirmed risk |
+| **Status** | Code fix landed — needs device repro |
 | **Priority** | P0 |
 
 ### Expected
 
-A connection between two users is created exactly once (for that member set), regardless of how many handshake events occur.
+A connection between two users is created exactly once (for that member set), regardless of how many handshake events occur. Inbox and map must not show duplicate 1:1 UI rows/pins after Bluetooth reconnect.
 
 ### Evidence
 
@@ -153,15 +162,22 @@ Dedup is incomplete across server/client paths and group-vs-pair cardinality; gr
 - `createConnectionOnline` restores by `preflightConnectionId` via `fetchConnectionById` **before** insert.
 - Insert races that hit unique pair constraints re-lookup the pair and restore instead of failing/duplicating.
 
+### UI collapse / upsert (code — handshake UX fix)
+
+- Clicks inbox collapses 1:1 chats by peer (`collapseOneToOneChatsByPeer`) — Bluetooth reconnect must **not** spawn a second Active row.
+- Map collapses connections by peer (`collapseOneToOneConnectionsByPeer`) — **single pin per peer** on reconnect.
+- Reconnect path uses `ReconnectEncounter` presentation + encounter upsert rather than creating a new connection.
+
 ### Suggested regression cases
 
-- [ ] 1:1 tap twice → still one Active 1:1 row for that pair
-- [ ] 3-person tap → exactly one group chat + expected pairwise edges (document expected count) — not two group chats
+- [ ] 1:1 tap twice → still one Active 1:1 row for that pair (no duplicate inbox chat)
+- [ ] 1:1 re-tap → one map pin for that peer (no duplicate pins)
+- [ ] 3-person tap → host multi-select → exactly one group chat + expected pairwise edges (document expected count) — not two group chats
 - [ ] Confirm fallback path after 202 → no second distinct 1:1 with same two members
 
 ### Repro steps
 
-TBD: tap same two phones twice; query connections for `user_ids` containing both; check Clicks inbox for duplicate rows.
+TBD: tap same two phones twice; query connections for `user_ids` containing both; check Clicks inbox and map for duplicate rows/pins.
 
 ---
 

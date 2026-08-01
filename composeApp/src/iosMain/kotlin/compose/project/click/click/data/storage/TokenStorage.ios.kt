@@ -1,32 +1,58 @@
 package compose.project.click.click.data.storage
 
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.MemScope
 import kotlinx.cinterop.alloc
+import kotlinx.cinterop.allocArrayOf
+import kotlinx.cinterop.convert
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
+import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.value
+import platform.CoreFoundation.CFDictionaryCreate
 import platform.CoreFoundation.CFDictionaryRef
+import platform.CoreFoundation.CFStringRef
+import platform.CoreFoundation.CFTypeRef
 import platform.CoreFoundation.CFTypeRefVar
+import platform.CoreFoundation.kCFAllocatorDefault
+import platform.CoreFoundation.kCFBooleanTrue
 import platform.Foundation.CFBridgingRelease
 import platform.Foundation.CFBridgingRetain
 import platform.Foundation.NSData
 import platform.Foundation.NSString
 import platform.Foundation.NSUTF8StringEncoding
+import platform.Foundation.NSUserDefaults
 import platform.Foundation.create
 import platform.Foundation.dataUsingEncoding
-import platform.Foundation.NSUserDefaults
-import platform.Security.*
+import platform.Security.SecItemAdd
+import platform.Security.SecItemCopyMatching
+import platform.Security.SecItemDelete
+import platform.Security.SecItemUpdate
+import platform.Security.errSecDuplicateItem
+import platform.Security.errSecItemNotFound
+import platform.Security.errSecSuccess
+import platform.Security.kSecAttrAccessible
+import platform.Security.kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+import platform.Security.kSecAttrAccount
+import platform.Security.kSecAttrService
+import platform.Security.kSecClass
+import platform.Security.kSecClassGenericPassword
+import platform.Security.kSecMatchLimit
+import platform.Security.kSecMatchLimitOne
+import platform.Security.kSecReturnData
+import platform.Security.kSecValueData
+import platform.darwin.OSStatus
 
 /**
  * iOS TokenStorage that uses BOTH NSUserDefaults AND Keychain for redundancy.
- * 
+ *
  * Strategy:
- * - WRITE: Save to both NSUserDefaults and Keychain
- * - READ: Try Keychain first, fall back to NSUserDefaults
- * 
- * This ensures:
- * - NSUserDefaults: Works reliably for normal app lifecycle (app switcher removal)
- * - Keychain: Persists across app updates/reinstalls (TestFlight, App Store)
+ * - WRITE: Save to NSUserDefaults first (authoritative for the active session), then best-effort Keychain
+ * - READ: Prefer NSUserDefaults, then Keychain (avoids stale Keychain JWT poisoning fresh Defaults tokens
+ *   when Keychain writes fail with errSecParam)
+ *
+ * Historical bug: Keychain-first reads + failed Keychain overwrites left an expired JWT in Keychain while
+ * Defaults held a valid session → endless "JWT expired" / "Refresh Token Not Found" loops.
  */
 @OptIn(ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)
 class IosTokenStorage : TokenStorage {
@@ -58,11 +84,10 @@ class IosTokenStorage : TokenStorage {
         private const val ERR_SEC_PARAM = -50
     }
 
-    // NSUserDefaults - reliable for normal app lifecycle
     private val userDefaults = NSUserDefaults(suiteName = PREFS_SUITE_NAME) ?: NSUserDefaults.standardUserDefaults
 
     override suspend fun saveTokens(jwt: String, refreshToken: String, expiresAt: Long?, tokenType: String?) {
-        // Save to NSUserDefaults (primary - always works)
+        // Defaults are the live session source of truth.
         userDefaults.setObject(jwt, KEY_JWT)
         userDefaults.setObject(refreshToken, KEY_REFRESH_TOKEN)
         if (expiresAt != null) {
@@ -77,7 +102,12 @@ class IosTokenStorage : TokenStorage {
         }
         userDefaults.synchronize()
 
-        // Also save to Keychain (for update persistence). Defaults already saved; warn if Keychain fails.
+        // Always clear Keychain token slots before write so a failed Add cannot leave a stale JWT.
+        deleteKeychainItem(KEY_JWT)
+        deleteKeychainItem(KEY_REFRESH_TOKEN)
+        deleteKeychainItem(KEY_EXPIRES_AT)
+        deleteKeychainItem(KEY_TOKEN_TYPE)
+
         val jwtOk = setKeychainItem(KEY_JWT, jwt)
         val refreshOk = setKeychainItem(KEY_REFRESH_TOKEN, refreshToken)
         val expiresOk = if (expiresAt != null) {
@@ -91,73 +121,59 @@ class IosTokenStorage : TokenStorage {
             true
         }
         if (!jwtOk || !refreshOk || !expiresOk || !typeOk) {
+            // Failed writes must not leave partial/stale Keychain rows that outrank Defaults.
+            deleteKeychainItem(KEY_JWT)
+            deleteKeychainItem(KEY_REFRESH_TOKEN)
+            deleteKeychainItem(KEY_EXPIRES_AT)
+            deleteKeychainItem(KEY_TOKEN_TYPE)
             println(
-                "IosTokenStorage: NSUserDefaults saved but Keychain write incomplete " +
-                    "(jwt=$jwtOk refresh=$refreshOk expires=$expiresOk type=$typeOk) — session may not survive app update",
+                "IosTokenStorage: NSUserDefaults saved; Keychain skipped after write failure " +
+                    "(jwt=$jwtOk refresh=$refreshOk expires=$expiresOk type=$typeOk)",
             )
         }
     }
 
     override suspend fun getJwt(): String? {
-        // Try Keychain first (survives updates), then NSUserDefaults
-        val keychainValue = getKeychainItem(KEY_JWT)
-        if (!keychainValue.isNullOrBlank()) {
-            return keychainValue
+        userDefaults.stringForKey(KEY_JWT)?.takeIf { it.isNotBlank() }?.let { return it }
+        return getKeychainItem(KEY_JWT)?.takeIf { it.isNotBlank() }?.also { recovered ->
+            userDefaults.setObject(recovered, KEY_JWT)
+            userDefaults.synchronize()
         }
-
-        val defaultsValue = userDefaults.stringForKey(KEY_JWT)
-        if (!defaultsValue.isNullOrBlank()) {
-            // Sync to Keychain for future updates
-            setKeychainItem(KEY_JWT, defaultsValue)
-        }
-        return defaultsValue
     }
 
     override suspend fun getRefreshToken(): String? {
-        val keychainValue = getKeychainItem(KEY_REFRESH_TOKEN)
-        if (!keychainValue.isNullOrBlank()) {
-            return keychainValue
+        userDefaults.stringForKey(KEY_REFRESH_TOKEN)?.takeIf { it.isNotBlank() }?.let { return it }
+        return getKeychainItem(KEY_REFRESH_TOKEN)?.takeIf { it.isNotBlank() }?.also { recovered ->
+            userDefaults.setObject(recovered, KEY_REFRESH_TOKEN)
+            userDefaults.synchronize()
         }
-
-        val defaultsValue = userDefaults.stringForKey(KEY_REFRESH_TOKEN)
-        if (!defaultsValue.isNullOrBlank()) {
-            setKeychainItem(KEY_REFRESH_TOKEN, defaultsValue)
-        }
-        return defaultsValue
     }
 
     override suspend fun getExpiresAt(): Long? {
-        val keychainValue = getKeychainItem(KEY_EXPIRES_AT)?.toLongOrNull()
-        if (keychainValue != null) {
-            return keychainValue
-        }
-        
         val expiry = userDefaults.doubleForKey(KEY_EXPIRES_AT)
-        return if (expiry > 0) expiry.toLong() else null
+        if (expiry > 0) return expiry.toLong()
+        return getKeychainItem(KEY_EXPIRES_AT)?.toLongOrNull()?.also { recovered ->
+            userDefaults.setDouble(recovered.toDouble(), KEY_EXPIRES_AT)
+            userDefaults.synchronize()
+        }
     }
 
     override suspend fun getTokenType(): String? {
-        val keychainValue = getKeychainItem(KEY_TOKEN_TYPE)
-        if (!keychainValue.isNullOrBlank()) {
-            return keychainValue
-        }
-        return userDefaults.stringForKey(KEY_TOKEN_TYPE)
+        userDefaults.stringForKey(KEY_TOKEN_TYPE)?.takeIf { it.isNotBlank() }?.let { return it }
+        return getKeychainItem(KEY_TOKEN_TYPE)?.takeIf { it.isNotBlank() }
     }
 
     override suspend fun clearTokens() {
-        // Clear token keys in NSUserDefaults
         userDefaults.removeObjectForKey(KEY_JWT)
         userDefaults.removeObjectForKey(KEY_REFRESH_TOKEN)
         userDefaults.removeObjectForKey(KEY_EXPIRES_AT)
         userDefaults.removeObjectForKey(KEY_TOKEN_TYPE)
         userDefaults.synchronize()
-        
-        // Clear Keychain
+
         deleteKeychainItem(KEY_JWT)
         deleteKeychainItem(KEY_REFRESH_TOKEN)
         deleteKeychainItem(KEY_EXPIRES_AT)
         deleteKeychainItem(KEY_TOKEN_TYPE)
-        
     }
 
     override suspend fun saveFreeThisWeek(isFree: Boolean) {
@@ -390,118 +406,135 @@ class IosTokenStorage : TokenStorage {
 
     // ============ Keychain Helpers ============
 
-    private fun setKeychainItem(key: String, value: String): Boolean {
-        val nsString = NSString.create(string = value)
+    /**
+     * Uses CFDictionaryCreate + CFBridgingRetain (same pattern as multiplatform-settings).
+     * Kotlin Map → CFBridgingRetain often yields errSecParam (-50) for SecItemAdd/Update.
+     */
+    private fun setKeychainItem(key: String, value: String): Boolean = memScoped {
+        if (value.isEmpty()) return false
+        @Suppress("CAST_NEVER_SUCCEEDS")
+        val nsString = value as NSString
         val valueData = nsString.dataUsingEncoding(NSUTF8StringEncoding) ?: run {
             println("IosTokenStorage: Failed to encode value for key '$key'")
             return false
         }
 
-        // AfterFirstUnlock*: session reads succeed after first device unlock each boot.
-        // ThisDeviceOnly: tokens are not included in iTunes/Finder backups.
-        val baseQuery = mapOf<Any?, Any?>(
-            kSecClass to kSecClassGenericPassword,
-            kSecAttrService to SERVICE_NAME,
-            kSecAttrAccount to key,
-        )
-        // Update must only change value data — including kSecAttrAccessible in SecItemUpdate
-        // returns errSecParam (-50) on many iOS versions.
-        val updateAttrs = mapOf<Any?, Any?>(
-            kSecValueData to valueData,
-        )
-        val addAttrs = mapOf<Any?, Any?>(
-            kSecValueData to valueData,
-            kSecAttrAccessible to kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
-        )
-
-        @Suppress("UNCHECKED_CAST")
-        val cfBase = CFBridgingRetain(baseQuery) as CFDictionaryRef
-        @Suppress("UNCHECKED_CAST")
-        val cfUpdateAttrs = CFBridgingRetain(updateAttrs) as CFDictionaryRef
-        var status = SecItemUpdate(cfBase, cfUpdateAttrs)
-        CFBridgingRelease(cfUpdateAttrs)
-
-        if (status == errSecItemNotFound) {
-            val addQuery = baseQuery + addAttrs
-            @Suppress("UNCHECKED_CAST")
-            val cfAdd = CFBridgingRetain(addQuery) as CFDictionaryRef
-            status = SecItemAdd(cfAdd, null)
-            CFBridgingRelease(cfAdd)
-            // Race / stale item: retry update after duplicate or param error.
-            if (status == errSecDuplicateItem || status.toInt() == ERR_SEC_PARAM) {
-                @Suppress("UNCHECKED_CAST")
-                val cfRetryAttrs = CFBridgingRetain(updateAttrs) as CFDictionaryRef
-                status = SecItemUpdate(cfBase, cfRetryAttrs)
-                CFBridgingRelease(cfRetryAttrs)
-            }
-        } else if (status.toInt() == ERR_SEC_PARAM || status == errSecDuplicateItem) {
-            // Param errors often come from delete+add races; force add with fresh data.
-            deleteKeychainItem(key)
-            val addQuery = baseQuery + addAttrs
-            @Suppress("UNCHECKED_CAST")
-            val cfAdd = CFBridgingRetain(addQuery) as CFDictionaryRef
-            status = SecItemAdd(cfAdd, null)
-            CFBridgingRelease(cfAdd)
-            if (status != errSecSuccess) {
-                @Suppress("UNCHECKED_CAST")
-                val cfRetryAttrs = CFBridgingRetain(updateAttrs) as CFDictionaryRef
-                status = SecItemUpdate(cfBase, cfRetryAttrs)
-                CFBridgingRelease(cfRetryAttrs)
-            }
-        }
-
-        CFBridgingRelease(cfBase)
-
-        if (status != errSecSuccess) {
-            println(
-                "IosTokenStorage: Keychain set failed for '$key', status: $status" +
-                    if (status.toInt() == ERR_SEC_PARAM) " (errSecParam)" else "",
+        val cfAccount = CFBridgingRetain(key)
+        val cfService = CFBridgingRetain(SERVICE_NAME)
+        val cfValue = CFBridgingRetain(valueData)
+        try {
+            val basePairs = mapOf<CFStringRef?, CFTypeRef?>(
+                kSecClass to kSecClassGenericPassword,
+                kSecAttrService to cfService,
+                kSecAttrAccount to cfAccount,
             )
+            val updatePairs = mapOf<CFStringRef?, CFTypeRef?>(
+                kSecValueData to cfValue,
+            )
+            val addPairs = basePairs + mapOf(
+                kSecValueData to cfValue,
+                kSecAttrAccessible to kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            )
+
+            val cfBase = cfDictionaryOf(basePairs)
+            val cfUpdate = cfDictionaryOf(updatePairs)
+            var status: OSStatus = SecItemUpdate(cfBase, cfUpdate)
+            CFBridgingRelease(cfUpdate)
+
+            if (status == errSecItemNotFound) {
+                val cfAdd = cfDictionaryOf(addPairs)
+                status = SecItemAdd(cfAdd, null)
+                CFBridgingRelease(cfAdd)
+                if (status == errSecDuplicateItem || status.toInt() == ERR_SEC_PARAM) {
+                    val cfRetry = cfDictionaryOf(updatePairs)
+                    status = SecItemUpdate(cfBase, cfRetry)
+                    CFBridgingRelease(cfRetry)
+                }
+            } else if (status.toInt() == ERR_SEC_PARAM || status == errSecDuplicateItem) {
+                deleteKeychainItem(key)
+                val cfAdd = cfDictionaryOf(addPairs)
+                status = SecItemAdd(cfAdd, null)
+                CFBridgingRelease(cfAdd)
+                if (status != errSecSuccess) {
+                    val cfRetry = cfDictionaryOf(updatePairs)
+                    status = SecItemUpdate(cfBase, cfRetry)
+                    CFBridgingRelease(cfRetry)
+                }
+            }
+
+            CFBridgingRelease(cfBase)
+
+            if (status != errSecSuccess) {
+                println(
+                    "IosTokenStorage: Keychain set failed for '$key', status: $status" +
+                        if (status.toInt() == ERR_SEC_PARAM) " (errSecParam)" else "",
+                )
+            }
+            return status == errSecSuccess
+        } finally {
+            CFBridgingRelease(cfAccount)
+            CFBridgingRelease(cfService)
+            CFBridgingRelease(cfValue)
         }
-        return status == errSecSuccess
     }
 
     private fun getKeychainItem(key: String): String? = memScoped {
-        val query = mapOf<Any?, Any?>(
-            kSecClass to kSecClassGenericPassword,
-            kSecAttrService to SERVICE_NAME,
-            kSecAttrAccount to key,
-            kSecReturnData to true,
-            kSecMatchLimit to kSecMatchLimitOne
-        )
-
-        @Suppress("UNCHECKED_CAST")
-        val cfQuery = CFBridgingRetain(query) as CFDictionaryRef
-
-        val result = alloc<CFTypeRefVar>()
-        val status = SecItemCopyMatching(cfQuery, result.ptr)
-        CFBridgingRelease(cfQuery)
-
-        if (status == errSecSuccess) {
-            val data = CFBridgingRelease(result.value) as? NSData
-            val stringValue = data?.let {
-                NSString.create(data = it, encoding = NSUTF8StringEncoding) as? String
-            }
-            stringValue
-        } else {
-            null
+        val cfAccount = CFBridgingRetain(key)
+        val cfService = CFBridgingRetain(SERVICE_NAME)
+        try {
+            val query = cfDictionaryOf(
+                mapOf(
+                    kSecClass to kSecClassGenericPassword,
+                    kSecAttrService to cfService,
+                    kSecAttrAccount to cfAccount,
+                    kSecReturnData to kCFBooleanTrue,
+                    kSecMatchLimit to kSecMatchLimitOne,
+                ),
+            )
+            val result = alloc<CFTypeRefVar>()
+            val status = SecItemCopyMatching(query, result.ptr)
+            CFBridgingRelease(query)
+            if (status != errSecSuccess) return null
+            val data = CFBridgingRelease(result.value) as? NSData ?: return null
+            NSString.create(data = data, encoding = NSUTF8StringEncoding) as? String
+        } finally {
+            CFBridgingRelease(cfAccount)
+            CFBridgingRelease(cfService)
         }
     }
 
-    private fun deleteKeychainItem(key: String): Boolean {
-        val query = mapOf<Any?, Any?>(
-            kSecClass to kSecClassGenericPassword,
-            kSecAttrService to SERVICE_NAME,
-            kSecAttrAccount to key
+    private fun deleteKeychainItem(key: String): Boolean = memScoped {
+        val cfAccount = CFBridgingRetain(key)
+        val cfService = CFBridgingRetain(SERVICE_NAME)
+        try {
+            val query = cfDictionaryOf(
+                mapOf(
+                    kSecClass to kSecClassGenericPassword,
+                    kSecAttrService to cfService,
+                    kSecAttrAccount to cfAccount,
+                ),
+            )
+            val status = SecItemDelete(query)
+            CFBridgingRelease(query)
+            status == errSecSuccess || status == errSecItemNotFound
+        } finally {
+            CFBridgingRelease(cfAccount)
+            CFBridgingRelease(cfService)
+        }
+    }
+
+    private fun MemScope.cfDictionaryOf(map: Map<CFStringRef?, CFTypeRef?>): CFDictionaryRef? {
+        val size = map.size
+        val keys = allocArrayOf(*map.keys.toTypedArray())
+        val values = allocArrayOf(*map.values.toTypedArray())
+        return CFDictionaryCreate(
+            kCFAllocatorDefault,
+            keys.reinterpret(),
+            values.reinterpret(),
+            size.convert(),
+            null,
+            null,
         )
-
-        @Suppress("UNCHECKED_CAST")
-        val cfQuery = CFBridgingRetain(query) as CFDictionaryRef
-
-        val status = SecItemDelete(cfQuery)
-        CFBridgingRelease(cfQuery)
-
-        return status == errSecSuccess || status == errSecItemNotFound
     }
 }
 

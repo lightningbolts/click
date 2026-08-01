@@ -12,7 +12,9 @@ import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: 
 import compose.project.click.click.data.models.MutualAvailability // pragma: allowlist secret
 import compose.project.click.click.data.models.UserAvailability // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
+import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -110,8 +112,19 @@ class AvailabilityViewModel(
         }
     }
 
+    private suspend fun resolveSignedInUserId(): String? {
+        SupabaseConfig.client.auth.currentUserOrNull()?.id?.takeIf { it.isNotBlank() }?.let { return it }
+        // Offline fast-boot can leave AuthState.Success while GoTrue has no session yet.
+        val tokenStorage = createTokenStorage()
+        runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+        SupabaseConfig.client.auth.currentUserOrNull()?.id?.takeIf { it.isNotBlank() }?.let { return it }
+        runCatching { AuthRepository(tokenStorage).refreshSession() }
+        return SupabaseConfig.client.auth.currentUserOrNull()?.id?.takeIf { it.isNotBlank() }
+            ?: AppDataManager.currentUser.value?.id?.takeIf { it.isNotBlank() }
+    }
+
     private suspend fun refreshActiveAvailabilityIntentsInternal() {
-        val uid = SupabaseConfig.client.auth.currentUserOrNull()?.id?.takeIf { it.isNotBlank() }
+        val uid = resolveSignedInUserId()
         if (uid == null) {
             _activeAvailabilityIntents.value = emptyList()
             _hasResolvedActiveAvailabilityIntents.value = false
@@ -144,20 +157,44 @@ class AvailabilityViewModel(
     fun beginEditAvailabilityIntent(row: AvailabilityIntentRow) {
         val id = row.id?.takeIf { it.isNotBlank() } ?: return
         _editingAvailabilityIntentId.value = id
-        _intentTagInput.value = row.intentTag.orEmpty()
-        val tf = row.timeframe?.trim().orEmpty()
-        _intentDuration.value = AvailabilityIntentDuration.entries.find { it.label == tf }
-            ?: AvailabilityIntentDuration.entries.find { entry -> tf.contains(entry.label, ignoreCase = true) }
-            ?: AvailabilityIntentDuration.THREE_HOURS
+        val tag = row.intentTag?.trim().orEmpty()
+        _intentTagInput.value = tag.take(AVAILABILITY_INTENT_TAG_MAX_LENGTH)
+        _intentDuration.value = resolveIntentDuration(row.timeframe)
         _intentSubmitError.value = null
         _intentSubmitting.value = false
+    }
+
+    /** Map stored timeframe labels (and loose variants) back onto a duration chip. */
+    private fun resolveIntentDuration(raw: String?): AvailabilityIntentDuration {
+        val tf = raw?.trim().orEmpty()
+        if (tf.isEmpty()) return AvailabilityIntentDuration.THREE_HOURS
+        AvailabilityIntentDuration.entries.find { it.label.equals(tf, ignoreCase = true) }?.let { return it }
+        AvailabilityIntentDuration.entries.find { entry ->
+            tf.contains(entry.label, ignoreCase = true)
+        }?.let { return it }
+        // Tolerate values like "3h", "180 min", or enum-ish tokens.
+        val compact = tf.lowercase().replace(" ", "")
+        return when {
+            compact.contains("15min") || compact == "15m" -> AvailabilityIntentDuration.FIFTEEN_MIN
+            compact.contains("30min") || compact == "30m" -> AvailabilityIntentDuration.THIRTY_MIN
+            compact.contains("45min") || compact == "45m" -> AvailabilityIntentDuration.FORTY_FIVE_MIN
+            compact.contains("90min") || compact == "90m" -> AvailabilityIntentDuration.NINETY_MIN
+            compact.contains("1hour") || compact == "1h" || compact.contains("60min") ->
+                AvailabilityIntentDuration.ONE_HOUR
+            compact.contains("2hour") || compact == "2h" -> AvailabilityIntentDuration.TWO_HOURS
+            compact.contains("3hour") || compact == "3h" -> AvailabilityIntentDuration.THREE_HOURS
+            compact.contains("6hour") || compact == "6h" -> AvailabilityIntentDuration.SIX_HOURS
+            compact.contains("24hour") || compact.contains("1day") ->
+                AvailabilityIntentDuration.TWENTY_FOUR_HOURS
+            else -> AvailabilityIntentDuration.THREE_HOURS
+        }
     }
 
     fun deleteAvailabilityIntent(intentId: String) {
         viewModelScope.launch {
             val result = supabaseRepository.deleteAvailabilityIntent(intentId)
             refreshActiveAvailabilityIntentsInternal()
-            val uid = SupabaseConfig.client.auth.currentUserOrNull()?.id?.takeIf { it.isNotBlank() }
+            val uid = resolveSignedInUserId()
             if (uid != null) {
                 supabaseRepository.syncUserAvailabilityProfileMirror(uid)
             }
@@ -352,8 +389,8 @@ class AvailabilityViewModel(
     fun submitAvailabilityIntent(onSuccess: () -> Unit) {
         viewModelScope.launch {
             if (_intentSubmitting.value) return@launch
-            // RLS uses auth.uid(); must match JWT subject (not only cached profile id).
-            val userId = SupabaseConfig.client.auth.currentUserOrNull()?.id?.takeIf { it.isNotBlank() }
+            // Offline fast-boot can leave AuthState.Success while currentUserOrNull() is still null.
+            val userId = resolveSignedInUserId()
             if (userId == null) {
                 _intentSubmitError.value = "Sign in to share availability."
                 return@launch
