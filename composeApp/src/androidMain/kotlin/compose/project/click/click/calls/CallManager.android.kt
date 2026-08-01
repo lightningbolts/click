@@ -307,16 +307,25 @@ actual class CallManager {
                 syncStateFromRoom()
 
                 if (videoEnabled) {
-                    val cameraOk = ensureCameraEnabled(liveKitRoom)
+                    // Never hard-fail accept on camera lag — audio stays up; keep retrying publish.
+                    var cameraOk = ensureCameraEnabled(liveKitRoom)
                     cameraEnabled = cameraOk
                     syncStateFromRoom()
-                    if (!cameraOk) {
-                        println("CallManager: camera failed to publish after connect")
-                    } else {
+                    if (!cameraOk ||
+                        liveKitRoom.localParticipant.getTrackPublication(Track.Source.CAMERA)?.track == null
+                    ) {
                         delay(500)
-                        if (room === liveKitRoom &&
-                            liveKitRoom.localParticipant.getTrackPublication(Track.Source.CAMERA)?.track == null
-                        ) {
+                        if (room === liveKitRoom) {
+                            cameraOk = ensureCameraEnabled(liveKitRoom)
+                            cameraEnabled = cameraOk
+                            syncStateFromRoom()
+                        }
+                    }
+                    if (room === liveKitRoom &&
+                        liveKitRoom.localParticipant.getTrackPublication(Track.Source.CAMERA)?.track == null
+                    ) {
+                        delay(750)
+                        if (room === liveKitRoom) {
                             cameraEnabled = ensureCameraEnabled(liveKitRoom)
                             syncStateFromRoom()
                         }
@@ -324,9 +333,7 @@ actual class CallManager {
                     if (room === liveKitRoom &&
                         liveKitRoom.localParticipant.getTrackPublication(Track.Source.CAMERA)?.track == null
                     ) {
-                        // Video call without a published camera — fail visibly instead of silent audio-only.
-                        cleanupRoom(releaseState = false)
-                        markEndedAndDeferIdle("Unable to enable camera")
+                        println("CallManager: camera still unpublished after retries; staying in-call on audio")
                     }
                 }
             } catch (error: Throwable) {

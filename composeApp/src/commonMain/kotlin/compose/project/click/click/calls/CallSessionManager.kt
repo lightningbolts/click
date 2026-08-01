@@ -972,8 +972,6 @@ object CallSessionManager {
 
     private suspend fun acceptAndJoinIncomingCall(invite: CallInvite) {
         val userId = resolvedCurrentUserId() ?: return failCall(invite, "You need to be signed in to start a call")
-        // Notify the caller immediately so Android/iOS can leave "Calling…" before token fetch completes.
-        sendResponse(invite, accepted = true, busy = false)
 
         joinMutex.withLock {
             if (joinStartedCallId == invite.callId) return
@@ -985,6 +983,11 @@ object CallSessionManager {
         }
 
         val participantName = currentUserName ?: "Click User"
+        // Overlap accept signaling with token fetch so Android join is not gated on Realtime RTT.
+        scope.launch {
+            runCatching { sendResponse(invite, accepted = true, busy = false) }
+        }
+
         val tokenResult = coordinator.fetchCallToken(
             connectionId = invite.connectionId,
             roomName = invite.roomName,
