@@ -30,7 +30,6 @@ import compose.project.click.click.data.models.ChatMessageType
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.MessageWithUser
-import compose.project.click.click.data.models.isBeaconChatMessage
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState
 import compose.project.click.click.viewmodel.SecureChatMediaHost
 import kotlinx.coroutines.delay
@@ -199,8 +198,9 @@ internal fun ChatMessageTimeline(
                         val messageWithUser = entry.messageWithUser
                         val msgReactions = reactionsMap[messageWithUser.message.id] ?: emptyList()
                         val mt = messageWithUser.message.messageType.lowercase()
-                        val isCallLog = mt == ChatMessageType.CALL_LOG ||
-                            messageWithUser.message.isBeaconChatMessage()
+                        // Beacons are regular actionable messages (timestamp peek, reply swipe,
+                        // long-press menu). Only call logs skip the gutter/gesture chrome.
+                        val isCallLog = mt == ChatMessageType.CALL_LOG
                         Column(Modifier.padding(top = listGapTop)) {
                             ChatMessageRowWithTimestampGutter(
                                 isCallLog = isCallLog,

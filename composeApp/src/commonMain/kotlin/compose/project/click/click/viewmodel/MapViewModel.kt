@@ -2620,6 +2620,11 @@ class MapViewModel : ViewModel() {
         if (showPulse) _discoveryFeedLoading.value = true
         discoveryProximityJob = viewModelScope.launch {
             var fetchRan = false
+            val pulseStartedAtMs = if (showPulse) {
+                kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+            } else {
+                0L
+            }
             try {
             val centers = resolveDiscoveryProximityCenters()
             if (centers.isEmpty()) return@launch
@@ -2684,7 +2689,15 @@ class MapViewModel : ViewModel() {
             }
             } finally {
                 if (seq == discoveryFetchSeq) {
-                    if (showPulse) _discoveryFeedLoading.value = false
+                    if (showPulse) {
+                        // Hold the indicator long enough for Material pull-to-refresh to settle
+                        // instead of snapping shut on a fast network response.
+                        val elapsed = kotlinx.datetime.Clock.System.now().toEpochMilliseconds() -
+                            pulseStartedAtMs
+                        val remaining = 520L - elapsed
+                        if (remaining > 0L) delay(remaining)
+                        _discoveryFeedLoading.value = false
+                    }
                     if (markInitialComplete) {
                         val hasFeedData = _mapBeacons.value.isNotEmpty() ||
                             _communityHubs.value.isNotEmpty() ||

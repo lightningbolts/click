@@ -12,11 +12,14 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -46,6 +49,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -66,6 +71,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.data.models.MapBeaconKind
@@ -394,6 +400,17 @@ internal fun EventsDiscoveryFullScreen(
     val discoveryItemCount = remember(discoverySections) {
         discoverySections.sumOf { it.items.size }
     }
+    val pullRefreshState = rememberPullToRefreshState()
+    val pullFraction = pullRefreshState.distanceFraction
+    var crossedRefreshThreshold by remember { mutableStateOf(false) }
+    LaunchedEffect(pullFraction, discoveryFeedRefreshing) {
+        val atThreshold = pullFraction >= 1f
+        if (atThreshold && !crossedRefreshThreshold && !discoveryFeedRefreshing) {
+            PlatformHapticsPolicy.lightImpact()
+        }
+        crossedRefreshThreshold = atThreshold
+    }
+    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     Box(
         modifier = Modifier
@@ -402,10 +419,23 @@ internal fun EventsDiscoveryFullScreen(
     ) {
         PullToRefreshBox(
             isRefreshing = discoveryFeedRefreshing,
-            onRefresh = onRefreshDiscovery,
+            onRefresh = {
+                PlatformHapticsPolicy.successNotification()
+                onRefreshDiscovery()
+            },
             modifier = Modifier.fillMaxSize(),
+            state = pullRefreshState,
             indicator = {
-                // Pulse is rendered above the search field so we don't stack a second spinner.
+                PullToRefreshDefaults.Indicator(
+                    state = pullRefreshState,
+                    isRefreshing = discoveryFeedRefreshing,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        // Clear Dynamic Island / status bar so the spinner is fully visible.
+                        .padding(top = statusBarTop + 8.dp),
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    color = MaterialTheme.colorScheme.primary,
+                )
             },
         ) {
             AppScreenScaffold(
@@ -429,18 +459,6 @@ internal fun EventsDiscoveryFullScreen(
                 belowHeaderSpacing = 8.dp,
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                if (discoveryFeedRefreshing) {
-                    item(key = "events_refresh_pulse") {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 2.dp, bottom = 2.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            ClickLogoPulse(logoSize = 40.dp)
-                        }
-                    }
-                }
                 item(key = "events_search") {
                     EventsSheetSearchField(
                         query = eventsQuery,

@@ -17,6 +17,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,6 +39,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -551,21 +553,39 @@ internal fun ReplySwipeSideIcon(
 /**
  * Rich card for a shared map beacon in 1:1 / group chat.
  * Tap opens the full beacon detail bottom sheet (map/nearby content).
+ * Supports the same reply-swipe + long-press actions as normal bubbles.
  */
 @Composable
 internal fun BeaconChatCard(
     message: Message,
     isSent: Boolean,
     onOpenBeacon: (beaconId: String) -> Unit = {},
+    onLongPress: (() -> Unit)? = null,
+    enableContextMenu: Boolean = true,
+    modifier: Modifier = Modifier,
 ) {
     val model = remember(message.id, message.metadata, message.content) {
         BeaconPreviewModel.fromMessage(message)
     }
     val align = if (isSent) Alignment.CenterEnd else Alignment.CenterStart
+    val longPressModifier =
+        if (enableContextMenu && onLongPress != null) {
+            Modifier.pointerInput(message.id) {
+                detectTapGestures(
+                    onLongPress = {
+                        PlatformHapticsPolicy.heavyImpact()
+                        onLongPress()
+                    },
+                )
+            }
+        } else {
+            Modifier
+        }
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp, horizontal = 8.dp),
+            .padding(vertical = 4.dp, horizontal = 8.dp)
+            .then(longPressModifier),
         contentAlignment = align,
     ) {
         BeaconPreviewCard(

@@ -5,6 +5,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -123,6 +124,21 @@ fun InterestEditor(
                         modifier = Modifier.weight(1f),
                         fontWeight = if (isCategorySelected) FontWeight.SemiBold else FontWeight.Normal,
                     )
+                    // Checkmark before expand caret so selecting a category does not shift the caret.
+                    Box(
+                        modifier = Modifier.size(18.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (isCategorySelected) {
+                            Icon(
+                                Icons.Default.Check,
+                                contentDescription = null,
+                                tint = PrimaryBlue,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
                     IconButton(
                         onClick = { expandedCategory = if (isExpanded) null else category.label },
                         modifier = Modifier.size(32.dp),
@@ -131,15 +147,6 @@ fun InterestEditor(
                             imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                        )
-                    }
-                    if (isCategorySelected) {
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Icon(
-                            Icons.Default.Check,
-                            contentDescription = null,
-                            tint = PrimaryBlue,
-                            modifier = Modifier.size(18.dp),
                         )
                     }
                 }

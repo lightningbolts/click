@@ -144,7 +144,7 @@ import kotlinx.serialization.json.booleanOrNull
  * Phase 2 — C13: shared profile bottom sheet displayed when a map pin is tapped.
  *
  * Four subtabs backed by a [SecondaryTabRow] + [HorizontalPager]:
- * **Timeline · Media · Links · Files**. When [ProfileSheetState.userId] and
+ * **Timeline · Beacons · Media · Links · Files**. When [ProfileSheetState.userId] and
  * [ProfileSheetState.viewerUserId] are both provided, the Timeline subtab hydrates the
  * legacy profile rendering (interests, shared interests, availability intents, "Our
  * timeline" encounters) via [SupabaseRepository.fetchUserPublicProfile] — restoring the
@@ -168,10 +168,10 @@ fun ProfileBottomSheet(
     val visibleTabs = remember(state.isGroup) {
         listOf(
             ProfileSheetTab.Timeline,
+            ProfileSheetTab.Beacons,
             ProfileSheetTab.Media,
             ProfileSheetTab.Links,
             ProfileSheetTab.Files,
-            ProfileSheetTab.Beacons,
         ) + if (state.isGroup) listOf(ProfileSheetTab.Members) else emptyList()
     }
     val pagerState = rememberPagerState(pageCount = { visibleTabs.size })

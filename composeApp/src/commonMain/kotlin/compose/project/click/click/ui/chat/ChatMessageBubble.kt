@@ -109,10 +109,12 @@ fun ChatMessageBubble(
         return
     }
     if (message.isBeaconChatMessage()) {
-        BeaconChatCard(
-            message = message,
-            isSent = messageWithUser.isSent,
+        BeaconChatMessageBubble(
+            messageWithUser = messageWithUser,
             onOpenBeacon = onOpenBeacon,
+            onLongPress = onLongPress,
+            onSwipeReply = onSwipeReply,
+            enableMessageContextMenu = enableMessageContextMenu,
         )
         return
     }
@@ -772,6 +774,144 @@ fun ChatMessageBubble(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * Beacon preview with the same reply-swipe + long-press affordances as normal bubbles.
+ */
+@Composable
+private fun BeaconChatMessageBubble(
+    messageWithUser: MessageWithUser,
+    onOpenBeacon: (beaconId: String) -> Unit,
+    onLongPress: (MessageWithUser) -> Unit,
+    onSwipeReply: (MessageWithUser) -> Unit,
+    enableMessageContextMenu: Boolean,
+) {
+    val message = messageWithUser.message
+    val isSent = messageWithUser.isSent
+    val density = LocalDensity.current
+    val swipeThresholdPx = remember(density) { with(density) { 60.dp.toPx() } }
+    val maxSwipeVisualPx = swipeThresholdPx
+    val swipeSoftKneePx = remember(density) { with(density) { 5.dp.toPx() } }
+    val swipeTrackGain = remember { 1f }
+    val swipeOverflowRubberGain = remember { 0.12f }
+    val rawSwipeTravelPx = remember(message.id) { mutableFloatStateOf(0f) }
+    val displayVisualPx = remember(message.id) { mutableFloatStateOf(0f) }
+    val onSwipeReplyState = rememberUpdatedState(onSwipeReply)
+    val messageWithUserState = rememberUpdatedState(messageWithUser)
+    val scope = rememberCoroutineScope()
+    var swipeSettleJob by remember(message.id) { mutableStateOf<Job?>(null) }
+    var replyThresholdHapticFired by remember(message.id) { mutableStateOf(false) }
+
+    val draggableState = rememberDraggableState { delta ->
+        swipeSettleJob?.cancel()
+        swipeSettleJob = null
+        rawSwipeTravelPx.floatValue =
+            (rawSwipeTravelPx.floatValue + delta).coerceIn(-ChatGestureMotion.RawTravelCapPx, ChatGestureMotion.RawTravelCapPx)
+        displayVisualPx.floatValue = swipeVisualFromRawTravel(
+            rawTravelPx = rawSwipeTravelPx.floatValue,
+            isSent = isSent,
+            maxVisualPx = maxSwipeVisualPx,
+            softKneePx = swipeSoftKneePx,
+            trackGain = swipeTrackGain,
+            overflowRubberGain = swipeOverflowRubberGain,
+        )
+        val directed =
+            if (isSent) (-rawSwipeTravelPx.floatValue).coerceAtLeast(0f) else rawSwipeTravelPx.floatValue.coerceAtLeast(0f)
+        if (directed >= swipeThresholdPx && !replyThresholdHapticFired) {
+            replyThresholdHapticFired = true
+            PlatformHapticsPolicy.heavyImpact()
+        }
+    }
+
+    val swipeDragModifier = Modifier.draggable(
+        state = draggableState,
+        orientation = Orientation.Horizontal,
+        onDragStarted = {
+            swipeSettleJob?.cancel()
+            swipeSettleJob = null
+            replyThresholdHapticFired = false
+            if (displayVisualPx.floatValue != 0f) {
+                rawSwipeTravelPx.floatValue = swipeRawTravelFromVisual(
+                    visualPx = displayVisualPx.floatValue,
+                    isSent = isSent,
+                    maxVisualPx = maxSwipeVisualPx,
+                    softKneePx = swipeSoftKneePx,
+                    trackGain = swipeTrackGain,
+                    overflowRubberGain = swipeOverflowRubberGain,
+                ).coerceIn(-ChatGestureMotion.RawTravelCapPx, ChatGestureMotion.RawTravelCapPx)
+            }
+        },
+        onDragStopped = {
+            val raw = rawSwipeTravelPx.floatValue
+            val shouldReply = if (isSent) raw <= -swipeThresholdPx else raw >= swipeThresholdPx
+            if (shouldReply) {
+                PlatformHapticsPolicy.heavyImpact()
+                onSwipeReplyState.value(messageWithUserState.value)
+            }
+            rawSwipeTravelPx.floatValue = 0f
+            swipeSettleJob = scope.launch {
+                try {
+                    animate(
+                        initialValue = displayVisualPx.floatValue,
+                        targetValue = 0f,
+                        animationSpec = spring(
+                            dampingRatio = 0.75f,
+                            stiffness = Spring.StiffnessLow,
+                        ),
+                    ) { v, _ ->
+                        displayVisualPx.floatValue = v
+                    }
+                } finally {
+                    swipeSettleJob = null
+                }
+            }
+        },
+    )
+
+    Box(modifier = Modifier.fillMaxWidth()) {
+        if (!isSent) {
+            ReplySwipeSideIcon(
+                rawSwipeTravelPx = rawSwipeTravelPx,
+                displayVisualPx = displayVisualPx,
+                isSent = false,
+                swipeThresholdPx = swipeThresholdPx,
+                maxSwipeVisualPx = maxSwipeVisualPx,
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .zIndex(0f),
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .zIndex(1f)
+                .then(swipeDragModifier)
+                .graphicsLayer {
+                    translationX = displayVisualPx.floatValue
+                },
+        ) {
+            BeaconChatCard(
+                message = message,
+                isSent = isSent,
+                onOpenBeacon = onOpenBeacon,
+                onLongPress = { onLongPress(messageWithUser) },
+                enableContextMenu = enableMessageContextMenu,
+            )
+        }
+        if (isSent) {
+            ReplySwipeSideIcon(
+                rawSwipeTravelPx = rawSwipeTravelPx,
+                displayVisualPx = displayVisualPx,
+                isSent = true,
+                swipeThresholdPx = swipeThresholdPx,
+                maxSwipeVisualPx = maxSwipeVisualPx,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .zIndex(0f),
+            )
         }
     }
 }

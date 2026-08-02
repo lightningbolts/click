@@ -273,7 +273,10 @@ fun MapScreen(
             eventsCloseJob = eventsScope.launch {
                 eventsVerticalReveal.animateTo(
                     0f,
-                    animationSpec = tween(300, easing = FastOutSlowInEasing),
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMediumLow,
+                    ),
                 )
                 if (!eventsSheetExpanded) finalizeEventsClose()
             }
@@ -298,7 +301,10 @@ fun MapScreen(
                 eventsVerticalReveal.snapTo(0f)
                 eventsVerticalReveal.animateTo(
                     1f,
-                    animationSpec = tween(300, easing = FastOutSlowInEasing),
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMediumLow,
+                    ),
                 )
             } else {
                 eventsVerticalReveal.snapTo(1f)

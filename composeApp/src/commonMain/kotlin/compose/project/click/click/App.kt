@@ -297,38 +297,44 @@ fun App() {
         }
 
         val supabaseRepo = compose.project.click.click.data.repository.SupabaseRepository()
-        // Resolve interests before leaving the loading shimmer so web→mobile first launch
-        // does not flash Interests then jump, or skip Interests incorrectly on an empty row.
-        interestsRemoteResolved = false
+        // Already-onboarded sessions must not wait on network — blocking here left the home
+        // reveal half-finished (black content + nav only) when the fetch raced the entrance.
+        val localOnboardingReady =
+            normalizedSavedState?.interestsCompleted == true ||
+                normalizedSavedState?.isComplete == true ||
+                effectiveHasCompletedOnboarding
+        interestsRemoteResolved = localOnboardingReady
         launch(Dispatchers.IO) {
             try {
-                supabaseRepo.fetchUserInterests(currentUser.id).fold(
-                    onSuccess = { row ->
-                        // Fast-forward Interests only when the account already has a real set
-                        // (completed on web). An empty `user_interests` row from web "skip"
-                        // must still run mobile interests onboarding (min tags).
-                        // Leave welcomeSeen alone so first mobile open still gets Welcome.
-                        val tagCount = row?.tags?.size ?: 0
-                        val interestsSatisfied = tagCount >= INTEREST_ONBOARDING_MIN_TAGS
-                        if (!interestsSatisfied) return@fold
+                kotlinx.coroutines.withTimeoutOrNull(2_500L) {
+                    supabaseRepo.fetchUserInterests(currentUser.id).fold(
+                        onSuccess = { row ->
+                            // Fast-forward Interests only when the account already has a real set
+                            // (completed on web). An empty `user_interests` row from web "skip"
+                            // must still run mobile interests onboarding (min tags).
+                            // Leave welcomeSeen alone so first mobile open still gets Welcome.
+                            val tagCount = row?.tags?.size ?: 0
+                            val interestsSatisfied = tagCount >= INTEREST_ONBOARDING_MIN_TAGS
+                            if (!interestsSatisfied) return@fold
 
-                        val base = onboardingState ?: OnboardingState()
-                        if (base.interestsCompleted) {
+                            val base = onboardingState ?: OnboardingState()
+                            if (base.interestsCompleted) {
+                                tokenStorage.saveTagsInitialized(true)
+                                return@fold
+                            }
+                            val merged = base.copy(
+                                interestsCompleted = true,
+                                flowVersion = base.flowVersion.coerceAtLeast(ONBOARDING_FLOW_VERSION_COMPLETE),
+                            )
+                            onboardingState = merged
                             tokenStorage.saveTagsInitialized(true)
-                            return@fold
-                        }
-                        val merged = base.copy(
-                            interestsCompleted = true,
-                            flowVersion = base.flowVersion.coerceAtLeast(ONBOARDING_FLOW_VERSION_COMPLETE),
-                        )
-                        onboardingState = merged
-                        tokenStorage.saveTagsInitialized(true)
-                        tokenStorage.saveOnboardingState(onboardingJson.encodeToString(merged))
-                    },
-                    onFailure = { err ->
-                        println("App: user_interests fetch failed, using local onboarding only: ${err.message}")
-                    },
-                )
+                            tokenStorage.saveOnboardingState(onboardingJson.encodeToString(merged))
+                        },
+                        onFailure = { err ->
+                            println("App: user_interests fetch failed, using local onboarding only: ${err.message}")
+                        },
+                    )
+                }
             } finally {
                 interestsRemoteResolved = true
             }
@@ -749,24 +755,44 @@ fun App() {
                     onboardingHandoffActive = true
                     try {
                         delay(600)
+                        showHomeRevealOverlay = true
+                        delay(380)
                     } finally {
-                        // Ensure we never get stuck on shimmer if the coroutine is cancelled
-                        // during recomposition/key changes.
+                        // Cancellation mid-handoff previously left the reveal overlay stuck and
+                        // content at alpha 0 — nav bar only on a black screen.
                         onboardingHandoffActive = false
+                        showHomeRevealOverlay = false
+                        hasPlayedHomeEntrance = true
                     }
-                    showHomeRevealOverlay = true
-                    delay(380)
-                    showHomeRevealOverlay = false
-                    hasPlayedHomeEntrance = true
                 }
             }
 
             LaunchedEffect(shouldStartInitialHomeReveal) {
                 if (shouldStartInitialHomeReveal) {
-                    showHomeRevealOverlay = true
-                    delay(180)
-                    showHomeRevealOverlay = false
-                    hasPlayedHomeEntrance = true
+                    try {
+                        showHomeRevealOverlay = true
+                        delay(180)
+                    } finally {
+                        showHomeRevealOverlay = false
+                        hasPlayedHomeEntrance = true
+                    }
+                }
+            }
+
+            // Fail-safe: never leave the main shell invisible after onboarding is complete.
+            LaunchedEffect(onboardingStep, profileGateActive, profileGatePending) {
+                if (
+                    onboardingStep == "complete" &&
+                    !profileGateActive &&
+                    !profileGatePending &&
+                    !hasPlayedHomeEntrance
+                ) {
+                    delay(900)
+                    if (!hasPlayedHomeEntrance) {
+                        showHomeRevealOverlay = false
+                        onboardingHandoffActive = false
+                        hasPlayedHomeEntrance = true
+                    }
                 }
             }
 
@@ -886,7 +912,11 @@ fun App() {
                 label = "home_reveal_overlay_alpha",
             )
             var homeSurfaceVisible by remember(hasPlayedHomeEntrance) { mutableStateOf(hasPlayedHomeEntrance) }
-            LaunchedEffect(showHomeRevealOverlay, onboardingHandoffActive, shouldStartOnboardingHandoff) {
+            LaunchedEffect(showHomeRevealOverlay, onboardingHandoffActive, shouldStartOnboardingHandoff, hasPlayedHomeEntrance) {
+                if (hasPlayedHomeEntrance) {
+                    homeSurfaceVisible = true
+                    return@LaunchedEffect
+                }
                 if (showHomeRevealOverlay || onboardingHandoffActive || shouldStartOnboardingHandoff) {
                     homeSurfaceVisible = false
                 } else {
