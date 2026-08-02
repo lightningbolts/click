@@ -141,6 +141,10 @@ object CallSessionManager {
     /** Wall-clock ms when LiveKit reached [CallState.Connected]; used for call_log duration. */
     private var callConnectedAtMs: Long? = null
 
+    /** Public read of connect timestamp for in-call duration UI. */
+    val connectedAtMs: Long?
+        get() = callConnectedAtMs
+
     /** Ensures we only insert one `completed` call_log per connected session. */
     private var completedCallLogInserted: Boolean = false
 

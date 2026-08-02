@@ -149,10 +149,14 @@ On session end, `CallSessionManager` inserts a message via `SupabaseChatReposito
 
 | File | Role |
 |------|------|
-| `CallOverlays.kt` | Compose overlays bound to `overlayState` |
+| `CallOverlays.kt` | Preview card + full-screen `ActiveCallOverlay` host |
+| `CallActiveLayouts.kt` | `CallParticipantTile`, `CallControlBar`, `CallActiveHeader`, Grid / Speaker |
+| `CallParticipant.kt` | Roster model + `CallLayoutPolicy` (grid vs speaker) |
 | `CallOverlayTransitionPolicy.kt` | Animation policy between overlay states |
-| `CallVideoSurface.kt` | expect/actual video renderer surface |
+| `CallVideoSurface.kt` | expect/actual video renderer by **participantId** |
 | `CallPushPayload.kt` | Push payload parsing helpers |
+
+**Media roster:** Android `CallManager` and iOS `ClickLiveKitBridge` publish a `participants` list on `CallState.Connected` and bind video views per identity (not a single remote track).
 
 ---
 

@@ -2396,6 +2396,7 @@ fun App() {
                                         state = activeCallUiState,
                                         onEndCall = { CallSessionManager.endActiveCall() },
                                         chromeAlpha = activeCallAlpha,
+                                        connectedAtMs = CallSessionManager.connectedAtMs,
                                     )
                                 }
                             }

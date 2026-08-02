@@ -10,10 +10,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import platform.Foundation.NSArray
+import platform.Foundation.NSDictionary
 import platform.Foundation.NSNotification
 import platform.Foundation.NSNotificationCenter
-import platform.Foundation.NSOperationQueue
 import platform.Foundation.NSNumber
+import platform.Foundation.NSOperationQueue
 
 private const val CALL_START_NOTIFICATION = "ClickCallStart"
 private const val CALL_END_NOTIFICATION = "ClickCallEnd"
@@ -115,6 +117,7 @@ actual class CallManager {
             val hasRemoteParticipant = userInfo.boolValue("hasRemoteParticipant") ?: false
             val reportedVideoRequested = userInfo.boolValue("videoRequested") ?: videoRequested
             val reason = userInfo["reason"] as? String
+            val participants = userInfo.participantsValue()
 
             when (status) {
                 "connecting" -> {
@@ -129,6 +132,7 @@ actual class CallManager {
                         remoteVideoAvailable = remoteVideoAvailable,
                         localVideoAvailable = localVideoAvailable,
                         hasRemoteParticipant = hasRemoteParticipant,
+                        participants = participants,
                     )
                 }
                 "ended" -> {
@@ -152,6 +156,38 @@ private fun Map<Any?, *>.boolValue(key: String): Boolean? {
         is Boolean -> value
         is NSNumber -> value.boolValue
         else -> null
+    }
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun Map<Any?, *>.participantsValue(): List<CallParticipant> {
+    val raw = this["participants"] ?: return emptyList()
+    val list: List<*> = when (raw) {
+        is List<*> -> raw
+        is NSArray -> (0 until raw.count.toInt()).map { raw.objectAtIndex(it.toULong()) }
+        else -> return emptyList()
+    }
+    return list.mapNotNull { item ->
+        val dict: Map<*, *> = when (item) {
+            is Map<*, *> -> item
+            is NSDictionary -> item as Map<*, *>
+            else -> return@mapNotNull null
+        }
+        fun anyBool(key: String): Boolean = when (val v = dict[key]) {
+            is Boolean -> v
+            is NSNumber -> v.boolValue
+            else -> false
+        }
+        val identity = dict["identity"] as? String ?: return@mapNotNull null
+        CallParticipant(
+            identity = identity,
+            displayName = (dict["displayName"] as? String)?.ifBlank { null } ?: identity,
+            isLocal = anyBool("isLocal"),
+            isMuted = anyBool("isMuted"),
+            isSpeaking = anyBool("isSpeaking"),
+            cameraEnabled = anyBool("cameraEnabled"),
+            hasVideo = anyBool("hasVideo"),
+        )
     }
 }
 

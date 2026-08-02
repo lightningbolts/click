@@ -16,21 +16,22 @@ import io.livekit.android.renderer.TextureViewRenderer
 import io.livekit.android.room.track.VideoTrack
 
 /**
- * Renders a LiveKit [VideoTrack]. Creates a fresh [TextureViewRenderer] per track instance so
- * EGL init + addRenderer always happen together (avoids black panes from stale/released views).
+ * Renders a LiveKit [VideoTrack] for [participantId]. Creates a fresh [TextureViewRenderer]
+ * per track instance so EGL init + addRenderer always happen together.
  */
 @Composable
 actual fun CallVideoSurface(
     callManager: CallManager,
-    isLocal: Boolean,
+    participantId: String,
     modifier: Modifier,
+    mirror: Boolean,
 ) {
-    var track by remember(callManager, isLocal) { mutableStateOf<VideoTrack?>(null) }
+    var track by remember(callManager, participantId) { mutableStateOf<VideoTrack?>(null) }
 
-    DisposableEffect(callManager, isLocal) {
+    DisposableEffect(callManager, participantId) {
         val listener: (VideoTrack?) -> Unit = { track = it }
-        callManager.addVideoTrackListener(isLocal, listener)
-        onDispose { callManager.removeVideoTrackListener(isLocal, listener) }
+        callManager.addVideoTrackListener(participantId, listener)
+        onDispose { callManager.removeVideoTrackListener(participantId, listener) }
     }
 
     val activeTrack = track
@@ -47,7 +48,7 @@ actual fun CallVideoSurface(
                     isOpaque = true
                     val initialized = callManager.initRenderer(this)
                     if (initialized) {
-                        setMirror(isLocal)
+                        setMirror(mirror)
                         activeTrack.addRenderer(this)
                         tag = activeTrack
                     }
@@ -59,7 +60,7 @@ actual fun CallVideoSurface(
                     bound?.removeRenderer(view)
                     activeTrack.addRenderer(view)
                     view.tag = activeTrack
-                    view.setMirror(isLocal)
+                    view.setMirror(mirror)
                 }
             },
             onRelease = { view ->

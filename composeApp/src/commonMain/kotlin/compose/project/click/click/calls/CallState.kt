@@ -16,6 +16,8 @@ sealed class CallState {
         val localVideoAvailable: Boolean,
         /** True once at least one remote participant is in the LiveKit room (audio and/or video). */
         val hasRemoteParticipant: Boolean = false,
+        /** Local + remote roster for multi-participant Grid / Speaker UI. */
+        val participants: List<CallParticipant> = emptyList(),
     ) : CallState() {
         val hasVideo: Boolean
             get() = cameraEnabled || remoteVideoAvailable || localVideoAvailable

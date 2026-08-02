@@ -22,10 +22,11 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
 
     private var observers: [NSObjectProtocol] = []
     private var room: Room?
-    private var localVideoView = VideoView()
-    private var remoteVideoView = VideoView()
-    private weak var localContainer: UIView?
-    private weak var remoteContainer: UIView?
+    /// participantId → VideoView used for rendering that participant's camera track.
+    private var videoViews: [String: VideoView] = [:]
+    /// participantId → Compose/UIKit container hosting the VideoView.
+    private let containers: NSMapTable<NSString, UIView> = NSMapTable.strongToWeakObjects()
+    private var mirrorFlags: [String: Bool] = [:]
     private var videoRequested = false
     private var microphoneEnabled = true
     private var speakerEnabled = false
@@ -33,13 +34,11 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
     private var endingLocally = false
     private var hadRemoteParticipant = false
     private var started = false
+    private var activeSpeakerIdentities: Set<String> = []
 
     func start() {
         guard !started else { return }
         started = true
-
-        localVideoView.isHidden = false
-        remoteVideoView.isHidden = false
 
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName: ClickCallNotifications.start, object: nil, queue: .main) { [weak self] notification in
@@ -95,6 +94,7 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
         cameraEnabled = videoEnabled
         endingLocally = false
         hadRemoteParticipant = false
+        activeSpeakerIdentities = []
         configureAudioSession()
         postState(status: "connecting")
 
@@ -183,30 +183,41 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
     }
 
     private func handleRegisterVideoView(_ notification: Notification) {
-        guard let container = notification.object as? UIView,
-              let isLocal = notification.userInfo?["isLocal"] as? Bool else { return }
+        guard let container = notification.object as? UIView else { return }
+        let participantId = (notification.userInfo?["participantId"] as? String)
+            ?? legacyParticipantId(isLocal: notification.userInfo?["isLocal"] as? Bool)
+        guard let participantId, !participantId.isEmpty else { return }
 
-        if isLocal {
-            localContainer = container
-            attach(videoView: localVideoView, to: container)
-        } else {
-            remoteContainer = container
-            attach(videoView: remoteVideoView, to: container)
+        if let mirror = notification.userInfo?["mirror"] as? Bool {
+            mirrorFlags[participantId] = mirror
         }
+        containers.setObject(container, forKey: participantId as NSString)
+        let videoView = videoViews[participantId] ?? VideoView()
+        videoViews[participantId] = videoView
+        videoView.mirrorMode = (mirrorFlags[participantId] == true) ? .mirror : .auto
+        attach(videoView: videoView, to: container)
         refreshVideoBindings()
     }
 
     private func handleUnregisterVideoView(_ notification: Notification) {
-        guard let container = notification.object as? UIView,
-              let isLocal = notification.userInfo?["isLocal"] as? Bool else { return }
+        guard let container = notification.object as? UIView else { return }
+        let participantId = (notification.userInfo?["participantId"] as? String)
+            ?? legacyParticipantId(isLocal: notification.userInfo?["isLocal"] as? Bool)
+        guard let participantId else { return }
 
-        if isLocal, localContainer === container {
-            localVideoView.removeFromSuperview()
-            localContainer = nil
-        } else if !isLocal, remoteContainer === container {
-            remoteVideoView.removeFromSuperview()
-            remoteContainer = nil
+        if containers.object(forKey: participantId as NSString) === container {
+            videoViews[participantId]?.removeFromSuperview()
+            containers.removeObject(forKey: participantId as NSString)
         }
+    }
+
+    /// Backward-compatible path if Kotlin still sends isLocal without participantId.
+    private func legacyParticipantId(isLocal: Bool?) -> String? {
+        guard let isLocal else { return nil }
+        if isLocal {
+            return room?.localParticipant.identity?.stringValue ?? "local"
+        }
+        return room?.remoteParticipants.values.first?.identity?.stringValue
     }
 
     private func attach(videoView: VideoView, to container: UIView) {
@@ -221,16 +232,44 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
     }
 
     private func refreshVideoBindings() {
-        localVideoView.track = currentLocalVideoTrack()
-        remoteVideoView.track = currentRemoteVideoTrack()
-        localVideoView.isHidden = localVideoView.track == nil
-        remoteVideoView.isHidden = remoteVideoView.track == nil
-        if let localContainer {
-            attach(videoView: localVideoView, to: localContainer)
+        guard let room else {
+            for view in videoViews.values {
+                view.track = nil
+                view.isHidden = true
+            }
+            return
         }
-        if let remoteContainer {
-            attach(videoView: remoteVideoView, to: remoteContainer)
+
+        let localId = room.localParticipant.identity?.stringValue ?? "local"
+        let trackById = currentVideoTracksByParticipantId(room: room)
+
+        for (participantId, videoView) in videoViews {
+            let track = trackById[participantId]
+            videoView.track = track
+            videoView.isHidden = track == nil
+            videoView.mirrorMode = (mirrorFlags[participantId] == true) ? .mirror : .auto
+            if let container = containers.object(forKey: participantId as NSString) {
+                attach(videoView: videoView, to: container)
+            }
         }
+
+        // Ensure we have views ready for known participants even before Compose registers.
+        _ = localId
+    }
+
+    private func currentVideoTracksByParticipantId(room: Room) -> [String: VideoTrack] {
+        var result: [String: VideoTrack] = [:]
+        let localId = room.localParticipant.identity?.stringValue ?? "local"
+        if let localTrack = currentLocalVideoTrack() {
+            result[localId] = localTrack
+        }
+        for participant in room.remoteParticipants.values {
+            guard let id = participant.identity?.stringValue else { continue }
+            if let track = videoTrack(for: participant) {
+                result[id] = track
+            }
+        }
+        return result
     }
 
     private func currentLocalVideoTrack() -> VideoTrack? {
@@ -239,19 +278,58 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
             .track as? VideoTrack
     }
 
-    private func currentRemoteVideoTrack() -> VideoTrack? {
-        room?.remoteParticipants.values
-            .compactMap { participant in
-                participant.videoTracks
-                    .first(where: { $0.source == .camera && !$0.isMuted && $0.isSubscribed })?
-                    .track as? VideoTrack
-            }
-            .first
+    private func videoTrack(for participant: RemoteParticipant) -> VideoTrack? {
+        if let camera = participant.videoTracks
+            .first(where: { $0.source == .camera && !$0.isMuted && $0.isSubscribed })?
+            .track as? VideoTrack {
+            return camera
+        }
+        return participant.videoTracks
+            .first(where: { !$0.isMuted && $0.isSubscribed })?
+            .track as? VideoTrack
+    }
+
+    private func buildParticipantsPayload() -> [[String: Any]] {
+        guard let room else { return [] }
+        var rows: [[String: Any]] = []
+        let local = room.localParticipant
+        let localId = local.identity?.stringValue ?? "local"
+        let localCam = local.localVideoTracks.first(where: { $0.source == .camera })
+        let localMicMuted = local.localAudioTracks.first(where: { $0.source == .microphone })?.isMuted ?? !microphoneEnabled
+        rows.append([
+            "identity": localId,
+            "displayName": local.name?.isEmpty == false ? (local.name ?? "You") : "You",
+            "isLocal": true,
+            "isMuted": localMicMuted || !microphoneEnabled,
+            "isSpeaking": activeSpeakerIdentities.contains(localId),
+            "cameraEnabled": cameraEnabled && localCam != nil && !(localCam?.isMuted ?? true),
+            "hasVideo": currentLocalVideoTrack() != nil,
+        ])
+        for remote in room.remoteParticipants.values {
+            guard let id = remote.identity?.stringValue else { continue }
+            let micMuted = remote.audioTracks.first(where: { $0.source == .microphone })?.isMuted ?? false
+            let hasVideo = videoTrack(for: remote) != nil
+            let name = (remote.name?.isEmpty == false) ? (remote.name ?? id) : id
+            rows.append([
+                "identity": id,
+                "displayName": name,
+                "isLocal": false,
+                "isMuted": micMuted,
+                "isSpeaking": activeSpeakerIdentities.contains(id),
+                "cameraEnabled": hasVideo,
+                "hasVideo": hasVideo,
+            ])
+        }
+        return rows
     }
 
     private func postState(status: String, reason: String? = nil) {
         if !(room?.remoteParticipants.isEmpty ?? true) {
             hadRemoteParticipant = true
+        }
+        let tracks = room.map { currentVideoTracksByParticipantId(room: $0) } ?? [:]
+        let anyRemoteVideo = tracks.contains { key, _ in
+            key != (room?.localParticipant.identity?.stringValue ?? "local")
         }
         NotificationCenter.default.post(
             name: ClickCallNotifications.stateDidChange,
@@ -264,8 +342,9 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
                 "speakerEnabled": speakerEnabled,
                 "cameraEnabled": cameraEnabled,
                 "localVideoAvailable": currentLocalVideoTrack() != nil,
-                "remoteVideoAvailable": currentRemoteVideoTrack() != nil,
+                "remoteVideoAvailable": anyRemoteVideo,
                 "hasRemoteParticipant": !(room?.remoteParticipants.isEmpty ?? true),
+                "participants": buildParticipantsPayload(),
             ]
         )
     }
@@ -275,22 +354,16 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
     }
 
     private func disconnectCurrentRoom(reportIdle: Bool) async {
-        // Clear video binds before disconnect so hangup cannot freeze on the last frame.
-        localVideoView.track = nil
-        remoteVideoView.track = nil
-        localVideoView.removeFromSuperview()
-        remoteVideoView.removeFromSuperview()
+        for view in videoViews.values {
+            view.track = nil
+            view.removeFromSuperview()
+        }
         if let room {
             await room.disconnect()
         }
         room = nil
         hadRemoteParticipant = false
-        if let localContainer {
-            attach(videoView: localVideoView, to: localContainer)
-        }
-        if let remoteContainer {
-            attach(videoView: remoteVideoView, to: remoteContainer)
-        }
+        activeSpeakerIdentities = []
         cameraEnabled = false
         microphoneEnabled = true
         speakerEnabled = false
@@ -350,6 +423,9 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
     }
 
     func room(_ room: Room, participantDidDisconnect participant: RemoteParticipant) {
+        if let id = participant.identity?.stringValue {
+            videoViews[id]?.track = nil
+        }
         refreshVideoBindings()
         if hadRemoteParticipant && room.remoteParticipants.isEmpty {
             Task { @MainActor in
@@ -378,6 +454,11 @@ final class ClickLiveKitBridge: NSObject, @preconcurrency RoomDelegate {
 
     func room(_ room: Room, participant: LocalParticipant, didUnpublishTrack publication: LocalTrackPublication) {
         refreshVideoBindings()
+        postState(status: "connected")
+    }
+
+    func room(_ room: Room, didUpdateSpeakingParticipants speakingParticipants: [Participant]) {
+        activeSpeakerIdentities = Set(speakingParticipants.compactMap { $0.identity?.stringValue })
         postState(status: "connected")
     }
 }

@@ -13,8 +13,9 @@ private const val CALL_UNREGISTER_VIDEO_VIEW_NOTIFICATION = "ClickCallUnregister
 @Composable
 actual fun CallVideoSurface(
     callManager: CallManager,
-    isLocal: Boolean,
+    participantId: String,
     modifier: Modifier,
+    mirror: Boolean,
 ) {
     UIKitView(
         modifier = modifier,
@@ -22,26 +23,29 @@ actual fun CallVideoSurface(
             UIView().apply {
                 backgroundColor = UIColor.clearColor
                 clipsToBounds = true
-                registerForCallVideo(isLocal = isLocal)
+                registerForCallVideo(participantId = participantId, mirror = mirror)
             }
         },
         update = { view ->
-            view.registerForCallVideo(isLocal = isLocal)
+            view.registerForCallVideo(participantId = participantId, mirror = mirror)
         },
         onRelease = { view ->
             NSNotificationCenter.defaultCenter.postNotificationName(
                 aName = CALL_UNREGISTER_VIDEO_VIEW_NOTIFICATION,
                 `object` = view,
-                userInfo = mapOf("isLocal" to isLocal)
+                userInfo = mapOf("participantId" to participantId),
             )
-        }
+        },
     )
 }
 
-private fun UIView.registerForCallVideo(isLocal: Boolean) {
+private fun UIView.registerForCallVideo(participantId: String, mirror: Boolean) {
     NSNotificationCenter.defaultCenter.postNotificationName(
         aName = CALL_REGISTER_VIDEO_VIEW_NOTIFICATION,
         `object` = this,
-        userInfo = mapOf("isLocal" to isLocal)
+        userInfo = mapOf(
+            "participantId" to participantId,
+            "mirror" to mirror,
+        ),
     )
 }

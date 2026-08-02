@@ -43,10 +43,12 @@ Polish transitions across:
 
 ### 3.2 Active call UI
 
-- Drag/reposition card (if present): follows finger with damping; snaps to safe insets.  
-- Control row: pressed states + haptics on mute/end; end is visually distinct.  
-- Video stage: black flash avoided on cam toggle; pip/layout changes animated.  
-- Voice-only: status text doesn’t jitter width; timer (if any) tabular/stable.  
+- Full-screen Grid / Speaker for video and multi-party; compact voice card for 1:1 audio.  
+- Control capsule: pressed states + haptics on mute/end; end is visually distinct (error red).  
+- Participant tiles: black flash avoided on cam toggle; layout mode toggle in header.  
+- Active speaker: hard primary border + purple mic badge; muted uses mic-off badge.  
+- Duration timer: tabular/monospace from `connectedAtMs`.  
+- Roster driven by LiveKit participants (up to 8); speaking from ActiveSpeakers events.  
 
 ### 3.3 Platform incoming
 

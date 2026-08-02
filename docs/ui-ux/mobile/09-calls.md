@@ -1,10 +1,10 @@
 # 09 — Voice & Video Calls (Compose overlays)
 
-**Scope:** `CallOverlays.kt`, `CallState`, `CallOverlayState`, `CallSessionManager` overlay routing, `PlatformIncomingCallUi` (iOS CallKit / Android notification).  
-**Source:** `calls/CallOverlays.kt`, `calls/CallState.kt`, `calls/CallSessionManager.kt`, `calls/PlatformIncomingCallUi.kt`, `calls/PlatformIncomingCallUi.ios.kt`, `calls/PlatformIncomingCallUi.android.kt`, `App.kt` global overlay host  
-**Out of scope:** Web, backend signaling, LiveKit room internals, chat thread UI (see [08-chat.md](08-chat.md)).
+**Scope:** `CallOverlays.kt`, `CallActiveLayouts.kt`, `CallParticipant` / `CallLayoutPolicy`, `CallState`, `CallOverlayState`, `CallSessionManager` overlay routing, `PlatformIncomingCallUi` (iOS CallKit / Android notification).  
+**Source:** `calls/CallOverlays.kt`, `calls/CallActiveLayouts.kt`, `calls/CallParticipant.kt`, `calls/CallState.kt`, `calls/CallSessionManager.kt`, `calls/PlatformIncomingCallUi.kt`, `App.kt` global overlay host  
+**Out of scope:** Backend signaling internals, chat thread UI (see [08-chat.md](08-chat.md)). Web call UI lives in `click-web/components/chat/CallOverlay.tsx` (parity layouts).
 
-**Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: invented from design system.
+**Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px hard borders, primary `#630ed4`, no glass/blur/gradients.
 
 ---
 
@@ -20,12 +20,12 @@ App root (zIndex 11_000)
 │       ├── "Video call" | "Voice call"
 │       ├── Connecting spinner (Connecting only)
 │       └── Action button(s)
-└── ActiveCallOverlay (in-call controls)
-    └── Draggable Surface card (max 380dp, 94% width)
-        ├── Status label
-        ├── Counterpart name
-        ├── Video stage OR voice status row
-        └── Control row: Mute | Speaker | Camera | End
+└── ActiveCallOverlay (full-screen when video / multi-party)
+    ├── CallActiveHeader (title, duration, N active, layout toggle)
+    ├── CallGridLayout | CallSpeakerLayout
+    │   └── CallParticipantTile (video or initials, mute badge, active border)
+    ├── CompactVoiceCallBody (1:1 voice only)
+    └── CallControlBar (floating capsule: Mic | Camera | Speaker | End)
 
 PlatformIncomingCallUi (outside Compose tree)
 ├── iOS: NSNotification → CallKit / PushKit native sheet
@@ -39,6 +39,16 @@ PlatformIncomingCallUi (outside Compose tree)
 | `CallPreviewOverlay` | `Outgoing`, `Incoming`, `Connecting`, or `Ended` (unless suppressed after active call) |
 | `ActiveCallOverlay` | `CallState.Connected` or short `CallState.Ended` tail while room tears down |
 | Mutual exclusion | Preview hidden while active call visible; ended preview suppressed after connected session ends |
+
+**Layout policy (`CallLayoutPolicy`):**
+
+| Rule | Mode |
+|------|------|
+| `participantCount <= 3` | Speaker (default) |
+| `participantCount >= 4` | Grid (default) |
+| Manual toggle | Sticks until count crosses the 3↔4 threshold |
+
+Group calls remain capped at **8** participants (`MAX_GROUP_CALL_MEMBERS`).
 
 ---
 
@@ -62,14 +72,14 @@ PlatformIncomingCallUi (outside Compose tree)
 
 | Property | Value |
 |----------|-------|
-| Position | Top-center; status-bar + 12dp top; 16dp sides |
-| Card | `Surface`, 16dp corners, solid `surface`, 2dp `#000` border, max 380dp, `fillMaxWidth(0.94f)` |
-| Drag | `detectDragGestures` — horizontal ±`(maxWidth-220dp)/2`, vertical `0…maxHeight/2` |
-| Video stage | `aspectRatio(1.2f)`, min height 180dp, 28dp corners |
-| Remote video | Full stage; placeholder text when `!remoteVideoAvailable` |
-| Local PiP | 96×136dp bottom-end, 20dp corners |
-| Voice row | 56dp avatar circle + status line in bordered row (`surface-container`, 2dp `#000`) |
-| Controls | 48dp tonal buttons + 56dp red end-call |
+| Shell | Full-screen `BackgroundDark` for video / multi-party; compact bordered card for 1:1 voice |
+| Header | Title, live purple status dot, `MM:SS · N active`, layout toggle (grid ↔ speaker) |
+| Grid | 2-column `LazyVerticalGrid`, ~18dp tile corners, 12dp gutters |
+| Speaker | Top row active + one peer; large self tile below with `"You (Name)"`; optional PiP remote |
+| Tile | Video via `CallVideoSurface(participantId)` or purple initials avatar; name scrim; mic badge |
+| Active speaker | 2dp `PrimaryBlue` hard border (no glow) |
+| Controls | Floating capsule: Mic, Camera, Speaker, End (error red) |
+| Duration | From `CallSessionManager.connectedAtMs` |
 
 ### CallState model
 
@@ -78,12 +88,14 @@ sealed class CallState {
     Idle
     Connecting(videoRequested: Boolean)
     Connected(videoRequested, microphoneEnabled, speakerEnabled,
-              cameraEnabled, remoteVideoAvailable, localVideoAvailable)
+              cameraEnabled, remoteVideoAvailable, localVideoAvailable,
+              hasRemoteParticipant, participants: List<CallParticipant>)
     Ended(reason: String?)
 }
 ```
 
-`Connected.hasVideo` = camera OR remote OR local video available.
+`Connected.hasVideo` = camera OR remote OR local video available.  
+`CallVideoSurface` binds by **participant identity** (not a single remote track).
 
 ### CallOverlayState model
 

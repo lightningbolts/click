@@ -145,8 +145,9 @@ actual class CallManager {
     private var videoRequested = false
     /** True once a remote participant has joined — used to end the call when they leave. */
     private var hadRemoteParticipant = false
-    private val localVideoListeners = mutableListOf<(VideoTrack?) -> Unit>()
-    private val remoteVideoListeners = mutableListOf<(VideoTrack?) -> Unit>()
+    /** identity → listeners for that participant's camera VideoTrack. */
+    private val videoTrackListeners = mutableMapOf<String, MutableList<(VideoTrack?) -> Unit>>()
+    private var activeSpeakerIdentities: Set<String> = emptySet()
 
     actual fun startCall(roomName: String, token: String, wsUrl: String, videoEnabled: Boolean) {
         val context = AndroidCallRuntime.appContext()
@@ -252,9 +253,16 @@ actual class CallManager {
                     is RoomEvent.Reconnected,
                     -> syncStateFromRoom()
 
+                    is RoomEvent.ActiveSpeakersChanged -> {
+                        activeSpeakerIdentities = event.speakers.map { it.identity?.value.orEmpty() }
+                            .filter { it.isNotEmpty() }
+                            .toSet()
+                        syncStateFromRoom()
+                    }
+
                     is RoomEvent.ParticipantDisconnected -> {
                         syncStateFromRoom()
-                        // 1:1: when the other party leaves the room, end locally even if Realtime cancel was missed.
+                        // When the last remote leaves, end locally even if Realtime cancel was missed.
                         if (
                             hadRemoteParticipant &&
                             liveKitRoom.remoteParticipants.isEmpty() &&
@@ -417,31 +425,36 @@ actual class CallManager {
         return true
     }
 
-    internal fun currentVideoTrack(isLocal: Boolean): VideoTrack? {
+    internal fun currentVideoTrack(participantId: String): VideoTrack? {
         val activeRoom = room ?: return null
-        return if (isLocal) {
-            activeRoom.localParticipant.getTrackPublication(Track.Source.CAMERA)?.track as? VideoTrack
-        } else {
-            currentRemoteVideoTrack(activeRoom)
+        val localId = activeRoom.localParticipant.identity?.value
+        if (localId != null && localId == participantId) {
+            return activeRoom.localParticipant.getTrackPublication(Track.Source.CAMERA)?.track as? VideoTrack
         }
+        val remote = activeRoom.remoteParticipants.values.firstOrNull {
+            it.identity?.value == participantId
+        } ?: return null
+        return videoTrackForParticipant(remote)
     }
 
-    internal fun addVideoTrackListener(isLocal: Boolean, listener: (VideoTrack?) -> Unit) {
-        val list = if (isLocal) localVideoListeners else remoteVideoListeners
+    internal fun addVideoTrackListener(participantId: String, listener: (VideoTrack?) -> Unit) {
+        val list = videoTrackListeners.getOrPut(participantId) { mutableListOf() }
         list.add(listener)
-        listener(currentVideoTrack(isLocal))
+        listener(currentVideoTrack(participantId))
     }
 
-    internal fun removeVideoTrackListener(isLocal: Boolean, listener: (VideoTrack?) -> Unit) {
-        val list = if (isLocal) localVideoListeners else remoteVideoListeners
+    internal fun removeVideoTrackListener(participantId: String, listener: (VideoTrack?) -> Unit) {
+        val list = videoTrackListeners[participantId] ?: return
         list.remove(listener)
+        if (list.isEmpty()) videoTrackListeners.remove(participantId)
     }
 
     private fun notifyVideoTrackListeners() {
-        val local = currentVideoTrack(isLocal = true)
-        val remote = currentVideoTrack(isLocal = false)
-        localVideoListeners.toList().forEach { it(local) }
-        remoteVideoListeners.toList().forEach { it(remote) }
+        val ids = videoTrackListeners.keys.toList()
+        for (id in ids) {
+            val track = currentVideoTrack(id)
+            videoTrackListeners[id]?.toList()?.forEach { it(track) }
+        }
     }
 
     private fun syncStateFromRoom() {
@@ -451,8 +464,9 @@ actual class CallManager {
         }
         val activeRoom = room ?: return
         ensureRemoteVideoSubscribed(activeRoom)
-        val localTrack = currentVideoTrack(isLocal = true)
-        val remoteTrack = currentVideoTrack(isLocal = false)
+        val participants = buildParticipantRoster(activeRoom)
+        val localTrack = participants.firstOrNull { it.isLocal }?.let { currentVideoTrack(it.identity) }
+        val anyRemoteVideo = participants.any { !it.isLocal && it.hasVideo }
 
         cameraEnabled = localTrack != null && videoRequested
         if (activeRoom.remoteParticipants.isNotEmpty()) {
@@ -463,33 +477,76 @@ actual class CallManager {
             microphoneEnabled = microphoneEnabled,
             speakerEnabled = speakerEnabled,
             cameraEnabled = cameraEnabled,
-            remoteVideoAvailable = remoteTrack != null,
+            remoteVideoAvailable = anyRemoteVideo,
             localVideoAvailable = localTrack != null,
             hasRemoteParticipant = activeRoom.remoteParticipants.isNotEmpty(),
+            participants = participants,
         )
         notifyVideoTrackListeners()
     }
 
-    private fun currentRemoteVideoTrack(activeRoom: Room): VideoTrack? {
-        for (participant in activeRoom.remoteParticipants.values) {
-            val cameraPub = participant.getTrackPublication(Track.Source.CAMERA) as? RemoteTrackPublication
-            if (cameraPub != null) {
-                ensureRemotePublicationReady(cameraPub)
-                val cameraTrack = cameraPub.track as? VideoTrack
-                if (cameraTrack != null && !cameraPub.muted) return cameraTrack
-            }
-            for (publication in participant.trackPublications.values) {
-                if (publication.kind != Track.Kind.VIDEO) continue
-                val remotePub = publication as? RemoteTrackPublication
-                if (remotePub != null) ensureRemotePublicationReady(remotePub)
-                val track = publication.track as? VideoTrack ?: continue
-                if (!publication.muted) return track
-            }
-            for (publication in participant.trackPublications.values) {
-                if (publication.kind != Track.Kind.VIDEO) continue
-                val track = publication.track as? VideoTrack
-                if (track != null) return track
-            }
+    private fun buildParticipantRoster(activeRoom: Room): List<CallParticipant> {
+        val result = mutableListOf<CallParticipant>()
+        val local = activeRoom.localParticipant
+        val localId = local.identity?.value.orEmpty().ifEmpty { "local" }
+        val localCam = local.getTrackPublication(Track.Source.CAMERA)
+        val localMic = local.getTrackPublication(Track.Source.MICROPHONE)
+        val localName = local.name?.takeIf { it.isNotBlank() }
+            ?: local.identity?.value
+            ?: "You"
+        result.add(
+            CallParticipant(
+                identity = localId,
+                displayName = localName,
+                isLocal = true,
+                isMuted = localMic?.muted == true || !microphoneEnabled,
+                isSpeaking = activeSpeakerIdentities.contains(localId),
+                cameraEnabled = cameraEnabled && localCam?.track != null && localCam.muted != true,
+                hasVideo = localCam?.track is VideoTrack && localCam.muted != true,
+            ),
+        )
+        for (remote in activeRoom.remoteParticipants.values) {
+            val id = remote.identity?.value ?: continue
+            val camPub = remote.getTrackPublication(Track.Source.CAMERA) as? RemoteTrackPublication
+            if (camPub != null) ensureRemotePublicationReady(camPub)
+            val micPub = remote.getTrackPublication(Track.Source.MICROPHONE)
+            val videoTrack = videoTrackForParticipant(remote)
+            val displayName = remote.name?.takeIf { it.isNotBlank() } ?: id
+            result.add(
+                CallParticipant(
+                    identity = id,
+                    displayName = displayName,
+                    isLocal = false,
+                    isMuted = micPub?.muted == true,
+                    isSpeaking = activeSpeakerIdentities.contains(id),
+                    cameraEnabled = videoTrack != null && camPub?.muted != true,
+                    hasVideo = videoTrack != null && camPub?.muted != true,
+                ),
+            )
+        }
+        return result
+    }
+
+    private fun videoTrackForParticipant(
+        participant: io.livekit.android.room.participant.RemoteParticipant,
+    ): VideoTrack? {
+        val cameraPub = participant.getTrackPublication(Track.Source.CAMERA) as? RemoteTrackPublication
+        if (cameraPub != null) {
+            ensureRemotePublicationReady(cameraPub)
+            val cameraTrack = cameraPub.track as? VideoTrack
+            if (cameraTrack != null && !cameraPub.muted) return cameraTrack
+        }
+        for (publication in participant.trackPublications.values) {
+            if (publication.kind != Track.Kind.VIDEO) continue
+            val remotePub = publication as? RemoteTrackPublication
+            if (remotePub != null) ensureRemotePublicationReady(remotePub)
+            val track = publication.track as? VideoTrack ?: continue
+            if (!publication.muted) return track
+        }
+        for (publication in participant.trackPublications.values) {
+            if (publication.kind != Track.Kind.VIDEO) continue
+            val track = publication.track as? VideoTrack
+            if (track != null) return track
         }
         return null
     }
@@ -528,6 +585,7 @@ actual class CallManager {
         eventsJob?.cancel()
         eventsJob = null
         hadRemoteParticipant = false
+        activeSpeakerIdentities = emptySet()
 
         val activeRoom = room
         room = null

@@ -57,13 +57,17 @@
 | Incoming | Notification / full-screen → accept | `[KNOWN-11]` |
 | No activity | Background start does not hard-crash | activity-null end |
 | Group call | ≤8 works; &gt;8 shows error (not silent) | |
+| Multi-tile video | Grid (≥4) / Speaker (≤3); layout toggle; each remote has video or initials | |
+| Active speaker | Purple hard border + mic badge updates while speaking | |
 
-**Key code:** `CallManager.android.kt` (`CALL_PERMISSION_REQUEST_CODE = 4013`), `CallSessionManager.kt`, `PlatformIncomingCallUi.android.kt`
+**Key code:** `CallManager.android.kt` (`CALL_PERMISSION_REQUEST_CODE = 4013`), `CallSessionManager.kt`, `CallActiveLayouts.kt`, `PlatformIncomingCallUi.android.kt`
 
 - [ ] Permissions pre-granted → voice call connects
 - [ ] Permissions cleared in system settings → call requests → **after grant, call works**
 - [ ] Incoming from second device while app backgrounded
-
+- [ ] 1:1 video → Speaker layout with self tile + remote
+- [ ] Group video (4+) → Grid; toggle to Speaker and back
+- [ ] Mute remote peer → mic-off badge; camera off → initials avatar
 ---
 
 ## 4. Voice messages
