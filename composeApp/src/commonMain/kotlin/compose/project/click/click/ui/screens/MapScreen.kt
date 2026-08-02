@@ -1498,6 +1498,11 @@ internal fun EventBeaconDetail(
             ?: displayBeacon.metadata.locationName?.trim()?.takeIf { it.isNotEmpty() }
         if (locationLabel != null) {
             Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(2.dp, border, RoundedCornerShape(12.dp))
+                    .background(cardSurface, RoundedCornerShape(12.dp))
+                    .padding(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.Top,
             ) {
@@ -1511,6 +1516,7 @@ internal fun EventBeaconDetail(
                     text = locationLabel,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
                 )
             }
         }
