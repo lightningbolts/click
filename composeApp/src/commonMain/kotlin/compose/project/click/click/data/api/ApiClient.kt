@@ -92,6 +92,7 @@ data class ConnectionTabsGetResponse(
     @SerialName("chatId") val chatId: String,
     val media: List<ConnectionTabMessage> = emptyList(),
     val files: List<ConnectionTabMessage> = emptyList(),
+    val beacons: List<ConnectionTabMessage> = emptyList(),
 )
 
 @Serializable
@@ -1680,6 +1681,53 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         }
     }
 
+    /** GET `/api/beacons/{beaconId}/attendees/directory` — enriched people directory (RSVP or check-in required). */
+    suspend fun getBeaconAttendeeDirectory(beaconId: String): Result<BeaconAttendeeDirectoryResponseDto> {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+        return try {
+            val response: HttpResponse =
+                clickWebClient.get("$clickWebAuthOrigin/api/beacons/$id/attendees/directory")
+            if (response.status.value in 200..299) {
+                Result.success(response.body<BeaconAttendeeDirectoryResponseDto>())
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * GET `/api/connections/{connectionId}/event-recommendation` — one shared upcoming event for a new peer.
+     */
+    suspend fun getConnectionEventRecommendation(
+        connectionId: String,
+        latitude: Double? = null,
+        longitude: Double? = null,
+    ): Result<ConnectionEventRecommendationResponseDto> {
+        val id = connectionId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("connectionId required"))
+        return try {
+            val response: HttpResponse =
+                clickWebClient.get("$clickWebAuthOrigin/api/connections/$id/event-recommendation") {
+                    if (latitude != null) parameter("lat", latitude)
+                    if (longitude != null) parameter("lng", longitude)
+                }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<ConnectionEventRecommendationResponseDto>())
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: ClientRequestException) {
+            Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     /**
      * POST `/api/beacons/{beaconId}/rsvp` — sign up for an event beacon, optionally persisting the
      * attendee's current GPS location for granular tracking.
@@ -1932,6 +1980,53 @@ data class BeaconAttendeeDto(
     @SerialName("user_id") val userId: String,
     val name: String,
     @SerialName("avatar_url") val avatarUrl: String? = null,
+)
+
+@Serializable
+data class MutualViaDto(
+    @SerialName("user_id") val userId: String,
+    val name: String,
+)
+
+@Serializable
+data class DirectoryAttendeeDto(
+    @SerialName("user_id") val userId: String,
+    val name: String,
+    @SerialName("avatar_url") val avatarUrl: String? = null,
+    @SerialName("signed_up_at") val signedUpAt: String? = null,
+    @SerialName("distance_meters") val distanceMeters: Double? = null,
+    @SerialName("shared_interests") val sharedInterests: List<String> = emptyList(),
+    @SerialName("shared_interest_count") val sharedInterestCount: Int = 0,
+    val relationship: String = "stranger",
+    @SerialName("mutual_via") val mutualVia: List<MutualViaDto> = emptyList(),
+    @SerialName("mutual_connection_count") val mutualConnectionCount: Int = 0,
+)
+
+@Serializable
+data class BeaconAttendeeDirectoryResponseDto(
+    @SerialName("beacon_id") val beaconId: String? = null,
+    val attendees: List<DirectoryAttendeeDto> = emptyList(),
+    @SerialName("current_user_signed_up") val currentUserSignedUp: Boolean = false,
+    @SerialName("current_user_checked_in") val currentUserCheckedIn: Boolean = false,
+    @SerialName("mutuals_section_unlocked") val mutualsSectionUnlocked: Boolean = false,
+)
+
+@Serializable
+data class ConnectionEventRecommendationDto(
+    @SerialName("beacon_id") val beaconId: String,
+    val title: String,
+    @SerialName("event_start_at") val eventStartAt: String? = null,
+    @SerialName("event_end_at") val eventEndAt: String? = null,
+    @SerialName("location_name") val locationName: String? = null,
+    @SerialName("peer_name") val peerName: String,
+    @SerialName("peer_user_id") val peerUserId: String,
+    val score: Double = 0.0,
+    @SerialName("shared_category_tags") val sharedCategoryTags: List<String> = emptyList(),
+)
+
+@Serializable
+data class ConnectionEventRecommendationResponseDto(
+    val recommendation: ConnectionEventRecommendationDto? = null,
 )
 
 @Serializable

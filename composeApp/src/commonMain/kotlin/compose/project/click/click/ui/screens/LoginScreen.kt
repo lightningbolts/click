@@ -177,10 +177,24 @@ fun LoginScreen(
                 )
             }
 
-            // Forgot Password — opens web dashboard reset flow in the system browser
+            // Forgot Password — opens web request form (not /reset-password, which needs an email token)
             TextButton(
                 onClick = {
-                    val url = "${ApiConfig.CLICK_WEB_BASE_URL.trimEnd('/')}/reset-password"
+                    val base = ApiConfig.CLICK_WEB_BASE_URL.trimEnd('/')
+                    val trimmed = email.trim()
+                    val url = if (trimmed.isNotBlank()) {
+                        // Minimal query encoding for email (KMP-safe; avoids java.net.URLEncoder)
+                        val encoded = trimmed
+                            .replace("%", "%25")
+                            .replace("&", "%26")
+                            .replace("=", "%3D")
+                            .replace("+", "%2B")
+                            .replace(" ", "%20")
+                            .replace("@", "%40")
+                        "$base/forgot-password?email=$encoded"
+                    } else {
+                        "$base/forgot-password"
+                    }
                     uriHandler.openUri(url)
                 },
                 modifier = Modifier.align(Alignment.End),

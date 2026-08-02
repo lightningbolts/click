@@ -34,7 +34,12 @@ events/EventReminderCoordinator.syncBeacons()
 
 events/EventSchedule.kt ── pure functions
 events/EventReminderCoordinator.kt ── singleton index
+events/EventAttendeeDirectory.kt ── sort modes + relationship helpers for people directory
 ```
+
+### People directory (client)
+
+Pure sorts live in `EventAttendeeDirectory.kt`. Enrichment is served by `GET /api/beacons/{id}/attendees/directory` (RSVP or check-in required). Sort modes: alphabetical, interest overlap, RSVP distance, mutual connection count. **Mutual** = FoF (not mutual-keep).
 
 ### `EventSchedule`
 

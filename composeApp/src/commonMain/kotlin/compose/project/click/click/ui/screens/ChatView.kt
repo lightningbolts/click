@@ -299,7 +299,11 @@ fun ChatView(
     onOpenDisposableRollForChat: ((chatId: String) -> Unit)? = null,
     shareableBeacons: List<compose.project.click.click.data.models.MapBeacon> = emptyList(),
     mapViewModel: compose.project.click.click.viewmodel.MapViewModel? = null,
-    onShareBeaconToChat: ((compose.project.click.click.data.models.MapBeacon) -> Unit)? = null,
+    onShareBeaconToChats: ((
+        beacon: compose.project.click.click.data.models.MapBeacon,
+        chatIds: List<String>,
+        openConnectionId: String?,
+    ) -> Unit)? = null,
     /**
      * When true, timestamp peek is driven by the parent `InteractiveSwipeBackContainer` horizontal
      * drag (register callbacks with [onRegisterSwipeBackRightToLeftPeek]). When false, the chat
@@ -391,6 +395,9 @@ fun ChatView(
     var forwardMessageId by remember { mutableStateOf<String?>(null) }
     var expandedPhotoTarget by remember { mutableStateOf<MessageWithUser?>(null) }
     var openBeaconDetailId by remember { mutableStateOf<String?>(null) }
+    var openBeaconDetailFallback by remember { mutableStateOf<compose.project.click.click.data.models.MapBeacon?>(null) }
+    var openBeaconDetailMetadata by remember { mutableStateOf<kotlinx.serialization.json.JsonObject?>(null) }
+    var openBeaconDetailContent by remember { mutableStateOf<String?>(null) }
     val secureMediaLoadMap by viewModel.secureChatMediaLoadState.collectAsState()
     val toastState = rememberGlassToastState()
     val tetherPayload by EncounterTetherManager.activeTetherPayload.collectAsState()
@@ -1254,7 +1261,23 @@ fun ChatView(
                                 viewModel.downloadChatAttachment(mwu.message.id, env)
                             },
                             onExpandPhoto = { expandedPhotoTarget = it },
-                            onOpenBeacon = { beaconId -> openBeaconDetailId = beaconId },
+                            onOpenBeacon = { beaconId ->
+                                openBeaconDetailId = beaconId
+                                val msg = (viewModel.chatMessagesState.value as? compose.project.click.click.viewmodel.ChatMessagesState.Success)
+                                    ?.messages
+                                    ?.firstOrNull {
+                                        compose.project.click.click.data.models.beaconIdFromMetadata(it.message.metadata) == beaconId
+                                    }
+                                    ?.message
+                                val meta = msg?.metadata as? kotlinx.serialization.json.JsonObject
+                                openBeaconDetailMetadata = meta
+                                openBeaconDetailContent = msg?.content
+                                openBeaconDetailFallback = compose.project.click.click.data.models.mapBeaconFromChatMetadata(
+                                    beaconId = beaconId,
+                                    metadata = meta,
+                                    contentFallback = msg?.content.orEmpty(),
+                                )
+                            },
                             isLoadingOlderMessages = isLoadingOlderMessages,
                             modifier = messageContentModifier
                                 .padding(horizontal = 4.dp)
@@ -1472,8 +1495,16 @@ fun ChatView(
                 beaconId = beaconDetailId,
                 mapViewModel = mapVm,
                 knownBeacons = shareableBeacons,
-                onDismissRequest = { openBeaconDetailId = null },
-                onShareBeaconToChat = onShareBeaconToChat,
+                onDismissRequest = {
+                    openBeaconDetailId = null
+                    openBeaconDetailFallback = null
+                    openBeaconDetailMetadata = null
+                    openBeaconDetailContent = null
+                },
+                onShareBeaconToChats = onShareBeaconToChats,
+                messageFallback = openBeaconDetailFallback,
+                messageMetadata = openBeaconDetailMetadata,
+                messageContent = openBeaconDetailContent,
             )
         } else {
             LaunchedEffect(beaconDetailId) {

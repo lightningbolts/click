@@ -20,6 +20,7 @@ Full matrix: [01-full-checklist.md](01-full-checklist.md) · Known issues: [03-k
 
 - [ ] Add Click → My QR renders a scannable code
 - [ ] Add Click → Scan QR (or second device) → context sheet → connection created
+- [ ] New connection context sheet may show event recommendation (“Go together?”) → Dismiss works
 - [ ] Add Click → Tap-to-Connect starts scanning (BLE/location prompts OK)
 - [ ] `[KNOWN-3]` Two-person tap produces a **1:1** chat (not only a group) when only two phones tap
 - [ ] New connection appears in Clicks → Active
@@ -53,6 +54,7 @@ Full matrix: [01-full-checklist.md](01-full-checklist.md) · Known issues: [03-k
 - [ ] Drop event → pick **Check-in area** scale + **address** (or Use my location) → pin appears → open detail
 - [ ] Event detail: Bookmark toggle survives app force-kill (server + disk cache)
 - [ ] Event detail: labeled **Check in here** CTA (not hero circle); far from pin → snackbar + toggle reverts
+- [ ] Event detail: after RSVP, People → Directory opens sortable attendee list
 - [ ] Event detail: Check-in with location denied → snackbar, stays unchecked
 - [ ] Online green dot visible on Clicks list avatar when peer is online
 - [ ] `[KNOWN-9]` Hazard beacon icon not wildly oversized vs other pins
@@ -62,6 +64,7 @@ Full matrix: [01-full-checklist.md](01-full-checklist.md) · Known issues: [03-k
 ## Settings wrap-up (≤ 1 min)
 
 - [ ] Toggle Ghost Mode on → map dims/grayscale as designed → toggle off
+- [ ] Forgot Password from Login opens `/forgot-password` in browser (request form, not set-password error)
 - [ ] Sign out → Login screen → sign back in
 
 ---

@@ -191,6 +191,7 @@ Soundtrack / community kinds (hazard, SOS, utility, study): same bordered hero +
 | ⋯ overflow (creator, last hero button) | Themed dropdown (opaque surface, 2dp border, zero elevation): Edit / Delete → existing dialogs |
 | Share | System text share (title, schedule, maps HTTPS link) |
 | Bookmark / Check in | Server-backed (`GET/PUT` bookmark, `GET/POST/DELETE` check-in, `GET` engagement). Check-in is a **labeled full-width CTA** (not a hero circle). Requires location + live window (+15m early grace) + venue-scale geofence. Snackbars: “Location access is required to check in” / “Location required to check in” / “Move closer to the event to check in” / “Check-in opens when the event starts”. Impression fired on detail open. Creation may use a geocoded address; attendance check-in still requires being at the venue. |
+| ACTIVE CLICKS avatar stack | → **People** directory section (`EventPeopleDirectorySection`) with Directory sheet: sorts A–Z / Interests / Distance / Mutuals; FoF mutuals unlock after check-in |
 | Join Event Route | Opens HTTPS maps (`maps.google.com`, Apple Maps fallback). Avoid primary `geo:` on iOS |
 | Event RSVP | `"RSVP / Sign Up"` or `"Cancel RSVP"` |
 | Play preview | Audio player on soundtrack beacons |
@@ -259,8 +260,11 @@ Soundtrack / community kinds (hazard, SOS, utility, study): same bordered hero +
 |-----------|-------------|---------------|
 | `inLobby` (occupantCount < 3, currently forced off) | `"Chat unlocks when 3+ join"` | Disabled |
 | `outOfBounds` | `"You are no longer at this location"` | Disabled |
+| Send cooldown (15s after successful send; server 429 is source of truth) | `"Wait {N}s…"` | Disabled |
 | Normal | `"Message the hub…"` | Enabled when draft non-empty |
 | Sending | — | Send disabled; attach dimmed |
+
+**Cooldown:** `HUB_MESSAGE_COOLDOWN_SECONDS = 15`. `POST /api/hub/messages` returns `429` with `{ error: "HUB_MESSAGE_COOLDOWN", retry_after_seconds }` when the same user sends again too soon in the same hub. Client arms a countdown on success and on 429.
 
 Lobby banner (when active): `"You're the first one here! We'll ping you when others join."`
 

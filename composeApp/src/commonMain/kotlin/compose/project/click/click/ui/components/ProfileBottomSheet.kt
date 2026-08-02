@@ -50,6 +50,7 @@ import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Message
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.CircularProgressIndicator
@@ -162,6 +163,7 @@ fun ProfileBottomSheet(
     onOpenDisposableRoll: (() -> Unit)? = null,
     onAvatarClick: (() -> Unit)? = null,
     avatarUploading: Boolean = false,
+    onOpenBeacon: ((beaconId: String) -> Unit)? = null,
 ) {
     val visibleTabs = remember(state.isGroup) {
         listOf(
@@ -169,6 +171,7 @@ fun ProfileBottomSheet(
             ProfileSheetTab.Media,
             ProfileSheetTab.Links,
             ProfileSheetTab.Files,
+            ProfileSheetTab.Beacons,
         ) + if (state.isGroup) listOf(ProfileSheetTab.Members) else emptyList()
     }
     val pagerState = rememberPagerState(pageCount = { visibleTabs.size })
@@ -215,6 +218,9 @@ fun ProfileBottomSheet(
     var connectionTabFiles by remember(state.connectionId, selectedUserId, effectiveViewerUserId) {
         mutableStateOf<List<ProfileSheetFile>>(emptyList())
     }
+    var connectionTabBeacons by remember(state.connectionId, selectedUserId, effectiveViewerUserId) {
+        mutableStateOf<List<ProfileSheetLocalMessage>>(emptyList())
+    }
     var resolvedMediaUrls by remember(state.connectionId, selectedUserId, effectiveViewerUserId) {
         mutableStateOf<Map<String, String>>(emptyMap())
     }
@@ -239,6 +245,7 @@ fun ProfileBottomSheet(
             connectionChatId = null
             connectionTabMedia = emptyList()
             connectionTabFiles = emptyList()
+            connectionTabBeacons = emptyList()
             return@LaunchedEffect
         }
 
@@ -287,6 +294,16 @@ fun ProfileBottomSheet(
             decryptedById[tab.id]?.toProfileSheetFile()
                 ?: tab.toProfileSheetFileFromTab().takeIf { it.canOpenProfileFile() }
         }.orEmpty()
+        connectionTabBeacons = tabsPayload?.beacons.orEmpty().map { tab ->
+            decryptedById[tab.id] ?: ProfileSheetLocalMessage(
+                id = tab.id,
+                content = tab.content,
+                messageType = tab.messageType,
+                timestamp = formatProfileSheetDate(tab.timeCreated),
+                metadata = tab.metadata,
+                sortEpochMs = tab.timeCreated,
+            )
+        }
         } finally {
             profileTabsHydrating = false
         }
@@ -525,6 +542,12 @@ fun ProfileBottomSheet(
             it.messageType == "text" &&
                 (it.content.contains("http://") || it.content.contains("https://"))
         }
+    }
+    val localBeaconMessages = remember(profileLocalMessages, connectionTabBeacons) {
+        val fromLocal = profileLocalMessages.filter { it.messageType.equals("beacon", ignoreCase = true) }
+        val localIds = fromLocal.map { it.id }.toSet()
+        (fromLocal + connectionTabBeacons.filter { it.id !in localIds })
+            .distinctBy { it.id }
     }
 
     val effectiveMedia = remember(localMediaMessages, connectionTabMedia, state.media) {
@@ -844,6 +867,15 @@ fun ProfileBottomSheet(
                     items = effectiveFiles,
                     openingFileIds = openingFileIds,
                     onDownload = handleDownloadFile,
+                )
+                ProfileSheetTab.Beacons -> BeaconsPanel(
+                    messages = localBeaconMessages,
+                    connectionId = state.connectionId,
+                    isGroup = state.isGroup,
+                    onOpenBeacon = { id ->
+                        onOpenBeacon?.invoke(id)
+                            ?: compose.project.click.click.deeplink.EventDeepLinkRouter.setPendingBeaconId(id)
+                    },
                 )
                 ProfileSheetTab.Members -> MembersPanel(
                     members = state.groupMembers,
@@ -1184,6 +1216,7 @@ enum class ProfileSheetTab(val label: String, val icon: ImageVector) {
     Media("Media", Icons.Outlined.Image),
     Links("Links", Icons.Outlined.Link),
     Files("Files", Icons.Outlined.AttachFile),
+    Beacons("Beacons", Icons.Outlined.Place),
     Members("Members", Icons.Outlined.People),
 }
 
@@ -2070,6 +2103,114 @@ private fun MediaPanel(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BeaconsPanel(
+    messages: List<ProfileSheetLocalMessage>,
+    connectionId: String?,
+    isGroup: Boolean,
+    onOpenBeacon: (String) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var recommendation by remember(connectionId) {
+        mutableStateOf<compose.project.click.click.data.api.ConnectionEventRecommendationDto?>(null)
+    }
+    var recommendationDismissed by remember(connectionId) { mutableStateOf(false) }
+    var rsvpInProgress by remember { mutableStateOf(false) }
+
+    LaunchedEffect(connectionId, isGroup) {
+        if (isGroup) return@LaunchedEffect
+        val connId = connectionId?.trim()?.takeIf { it.isNotEmpty() } ?: return@LaunchedEffect
+        recommendation = withContext(Dispatchers.Default) {
+            runCatching {
+                compose.project.click.click.data.api.ApiClient()
+                    .getConnectionEventRecommendation(connId)
+                    .getOrNull()
+                    ?.recommendation
+            }.getOrNull()
+        }
+    }
+
+    val previews = remember(messages) {
+        messages.mapNotNull { msg ->
+            val id = compose.project.click.click.data.models.beaconIdFromMetadata(msg.metadata)
+                ?: return@mapNotNull null
+            val meta = msg.metadata as? kotlinx.serialization.json.JsonObject
+            val title = compose.project.click.click.data.models.beaconTitleFromMetadata(msg.metadata)
+                ?: msg.content.removePrefix("Beacon:").trim().ifBlank { "Beacon" }
+            val typeRaw = compose.project.click.click.data.models.beaconTypeFromMetadata(msg.metadata)
+            val kind = compose.project.click.click.data.models.MapBeaconKind.fromRaw(typeRaw)
+            val schedule = meta?.get("schedule_label")?.let {
+                (it as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
+            }?.trim()?.takeIf { it.isNotEmpty() }
+            val description = meta?.get("description")?.let {
+                (it as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
+            }?.trim()?.takeIf { it.isNotEmpty() }
+            compose.project.click.click.ui.chat.BeaconPreviewModel(
+                beaconId = id,
+                title = title,
+                kindLabel = compose.project.click.click.ui.utils.beaconTypeDisplayLabel(typeRaw, kind),
+                kind = kind,
+                description = description,
+                scheduleLabel = schedule,
+                shareUrl = compose.project.click.click.data.models.beaconShareUrlFromMetadata(msg.metadata)
+                    ?: compose.project.click.click.events.buildEventShareUrl(id),
+                albumArtUrl = meta?.get("album_art_url")?.let {
+                    (it as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
+                },
+            )
+        }.distinctBy { it.beaconId }
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(top = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
+    ) {
+        if (!isGroup) {
+            val rec = recommendation
+            if (rec != null && !recommendationDismissed) {
+                item(key = "event-rec") {
+                    ConnectionEventRecommendationCard(
+                        recommendation = rec,
+                        rsvpInProgress = rsvpInProgress,
+                        onRsvp = {
+                            rsvpInProgress = true
+                            scope.launch(Dispatchers.Default) {
+                                runCatching {
+                                    compose.project.click.click.data.api.ApiClient().postBeaconRsvp(rec.beaconId)
+                                }
+                                withContext(Dispatchers.Main) {
+                                    recommendationDismissed = true
+                                    rsvpInProgress = false
+                                    onOpenBeacon(rec.beaconId)
+                                }
+                            }
+                        },
+                        onDismiss = { recommendationDismissed = true },
+                    )
+                }
+            }
+        }
+
+        if (previews.isEmpty()) {
+            item(key = "empty-beacons") {
+                EmptyTabState(
+                    icon = Icons.Outlined.Place,
+                    title = "No shared beacons",
+                    body = "Events and map pins shared in this chat show up here.",
+                )
+            }
+        } else {
+            items(previews, key = { it.beaconId }) { model ->
+                compose.project.click.click.ui.chat.BeaconPreviewCard(
+                    model = model,
+                    onClick = { onOpenBeacon(model.beaconId) },
+                )
             }
         }
     }

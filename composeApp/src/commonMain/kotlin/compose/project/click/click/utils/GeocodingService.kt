@@ -186,6 +186,47 @@ object GeocodingService {
             emptyList()
         }
     }
+
+    /**
+     * Reverse-geocode GPS coordinates to the closest address label.
+     * Used when dropping an event at “my location” so we never persist “Current location”.
+     */
+    suspend fun reverseGeocode(latitude: Double, longitude: Double): GeocodedPlace? {
+        if (!latitude.isFinite() || !longitude.isFinite()) return null
+        if (latitude == 0.0 && longitude == 0.0) return null
+        return try {
+            val client = HttpClient()
+            try {
+                val response = client.get("https://nominatim.openstreetmap.org/reverse") {
+                    parameter("lat", latitude)
+                    parameter("lon", longitude)
+                    parameter("format", "json")
+                    parameter("addressdetails", "1")
+                    parameter("zoom", "18")
+                    headers {
+                        append("User-Agent", "ClickApp/1.0")
+                    }
+                }
+                val body = response.bodyAsText()
+                val obj = runCatching { Json.parseToJsonElement(body) }.getOrNull() as? JsonObject
+                    ?: return null
+                val display = obj["display_name"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+                if (display.isEmpty()) return null
+                val short = shortLabelFromNominatim(obj, display)
+                GeocodedPlace(
+                    latitude = latitude,
+                    longitude = longitude,
+                    displayName = display,
+                    shortLabel = short.ifBlank { display.substringBefore(',').trim() },
+                )
+            } finally {
+                client.close()
+            }
+        } catch (e: Exception) {
+            println("GeocodingService: Nominatim reverse failed: ${e.redactedRestMessage()}")
+            null
+        }
+    }
 }
 
 /** Metadata keys for event beacon address labels. */

@@ -733,6 +733,7 @@ private fun HubChatInputBar(
     val draft by viewModel.draft.collectAsState()
     val isSending by viewModel.isSending.collectAsState()
     val sendError by viewModel.sendError.collectAsState()
+    val cooldownSec by viewModel.sendCooldownRemainingSec.collectAsState()
 
     val composerStyle = LocalPlatformStyle.current
     val composerRowVPad = if (composerStyle.isIOS) 6.dp else 8.dp
@@ -743,7 +744,8 @@ private fun HubChatInputBar(
     val composerStripInteraction = remember { MutableInteractionSource() }
     var attachmentMenuExpanded by remember { mutableStateOf(false) }
 
-    val enabled = !inLobby && !isOutOfBounds && !isSending
+    val onCooldown = cooldownSec > 0
+    val enabled = !inLobby && !isOutOfBounds && !isSending && !onCooldown
 
     Box(modifier = Modifier.fillMaxWidth().graphicsLayer { clip = true }) {
         Box(
@@ -777,13 +779,15 @@ private fun HubChatInputBar(
                     "Chat unlocks when 3+ join"
                 } else if (isOutOfBounds) {
                     "You are no longer at this location"
+                } else if (onCooldown) {
+                    "Wait ${cooldownSec}s…"
                 } else {
                     "Message the hub…"
                 },
                 enabled = enabled,
                 externallySending = isSending,
                 sendIcon = Icons.AutoMirrored.Filled.Send,
-                sendContentDescription = "Send",
+                sendContentDescription = if (onCooldown) "Wait ${cooldownSec}s" else "Send",
                 onSend = viewModel::sendMessage,
                 attachmentMenuExpanded = attachmentMenuExpanded,
                 onAttachmentMenuExpandedChange = { attachmentMenuExpanded = it },

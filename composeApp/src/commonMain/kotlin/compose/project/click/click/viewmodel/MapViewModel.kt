@@ -134,6 +134,13 @@ data class BeaconRsvpCacheEntry(
     val currentUserSignedUp: Boolean,
 )
 
+data class BeaconDirectoryCacheEntry(
+    val attendees: List<compose.project.click.click.events.DirectoryAttendee>,
+    val currentUserSignedUp: Boolean,
+    val currentUserCheckedIn: Boolean,
+    val mutualsSectionUnlocked: Boolean,
+)
+
 data class BeaconEngagementCacheEntry(
     val bookmarked: Boolean = false,
     val checkedIn: Boolean = false,
@@ -246,6 +253,12 @@ class MapViewModel : ViewModel() {
     /** Cached RSVP state keyed by beacon id — survives tab navigation and sheet dismiss. */
     private val _beaconRsvpById = MutableStateFlow<Map<String, BeaconRsvpCacheEntry>>(emptyMap())
     val beaconRsvpById: StateFlow<Map<String, BeaconRsvpCacheEntry>> = _beaconRsvpById.asStateFlow()
+
+    private val _beaconDirectoryById = MutableStateFlow<Map<String, BeaconDirectoryCacheEntry>>(emptyMap())
+    val beaconDirectoryById: StateFlow<Map<String, BeaconDirectoryCacheEntry>> = _beaconDirectoryById.asStateFlow()
+
+    private val _beaconDirectoryLoadingIds = MutableStateFlow<Set<String>>(emptySet())
+    val beaconDirectoryLoadingIds: StateFlow<Set<String>> = _beaconDirectoryLoadingIds.asStateFlow()
 
     /** Beacon ids with an in-flight GET `/api/beacons/{id}/rsvp`. */
     private val _beaconRsvpLoadingIds = MutableStateFlow<Set<String>>(emptySet())
@@ -1301,6 +1314,57 @@ class MapViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Loads enriched people directory (interests, FoF mutuals, RSVP distance).
+     * Requires viewer RSVP or check-in (403 otherwise — treated as empty/locked).
+     */
+    fun loadBeaconAttendeeDirectory(beaconId: String, forceRefresh: Boolean = false) {
+        val id = beaconId.trim()
+        if (id.isEmpty()) return
+        viewModelScope.launch(Dispatchers.Default) {
+            if (!ensureClickWebAuthReady()) return@launch
+            if (!forceRefresh && _beaconDirectoryById.value.containsKey(id)) return@launch
+            if (id in _beaconDirectoryLoadingIds.value) return@launch
+
+            _beaconDirectoryLoadingIds.update { it + id }
+            try {
+                mapBeaconRepository.fetchBeaconAttendeeDirectory(id).fold(
+                    onSuccess = { payload ->
+                        val mapped = payload.attendees.map { dto ->
+                            compose.project.click.click.events.DirectoryAttendee(
+                                userId = dto.userId,
+                                name = dto.name,
+                                avatarUrl = dto.avatarUrl,
+                                signedUpAt = dto.signedUpAt,
+                                distanceMeters = dto.distanceMeters,
+                                sharedInterests = dto.sharedInterests,
+                                sharedInterestCount = dto.sharedInterestCount,
+                                relationship = compose.project.click.click.events.AttendeeRelationship.fromApi(dto.relationship),
+                                mutualVia = dto.mutualVia.map {
+                                    compose.project.click.click.events.MutualViaPeer(it.userId, it.name)
+                                },
+                                mutualConnectionCount = dto.mutualConnectionCount,
+                            )
+                        }
+                        _beaconDirectoryById.update { current ->
+                            current + (id to BeaconDirectoryCacheEntry(
+                                attendees = mapped,
+                                currentUserSignedUp = payload.currentUserSignedUp,
+                                currentUserCheckedIn = payload.currentUserCheckedIn,
+                                mutualsSectionUnlocked = payload.mutualsSectionUnlocked,
+                            ))
+                        }
+                    },
+                    onFailure = {
+                        // Keep prior cache; directory may be locked until RSVP/check-in.
+                    },
+                )
+            } finally {
+                _beaconDirectoryLoadingIds.update { it - id }
+            }
+        }
+    }
+
     /** Restores/refreshes Supabase session before click-web bearer calls (cold start). */
     private suspend fun ensureClickWebAuthReady(): Boolean {
         val existingToken = SupabaseConfig.client.auth.currentSessionOrNull()?.accessToken?.trim()
@@ -1420,6 +1484,7 @@ class MapViewModel : ViewModel() {
                         ))
                     }
                     _beaconRsvpPendingIds.update { it - id }
+                    loadBeaconAttendeeDirectory(id, forceRefresh = true)
                     onFinished(true)
                 },
                 onFailure = {
@@ -1567,10 +1632,13 @@ class MapViewModel : ViewModel() {
             val base = current[id] ?: BeaconEngagementCacheEntry()
             current + (id to base.copy(bookmarked = nextBookmarked))
         }
+        // Optimistic Home "Saved events" update — do not wait for network or app restart.
+        syncCachedEventBookmarksAfterToggle(id, nextBookmarked)
         PlatformHapticsPolicy.successNotification()
         viewModelScope.launch {
             if (!ensureClickWebAuthReady()) {
                 restoreEngagementSnapshot(id, previous)
+                syncCachedEventBookmarksAfterToggle(id, previous?.bookmarked == true)
                 _beaconEngagementPendingIds.update { it - id }
                 return@launch
             }
@@ -1584,10 +1652,47 @@ class MapViewModel : ViewModel() {
                 },
                 onFailure = {
                     restoreEngagementSnapshot(id, previous)
+                    syncCachedEventBookmarksAfterToggle(id, previous?.bookmarked == true)
                     _beaconEngagementPendingIds.update { it - id }
                     _engagementSnackbar.value = "Couldn't update bookmark"
                 },
             )
+        }
+    }
+
+    private fun syncCachedEventBookmarksAfterToggle(beaconId: String, bookmarked: Boolean) {
+        viewModelScope.launch(Dispatchers.Default) {
+            if (bookmarked) {
+                val beacon = _mapBeacons.value.firstOrNull { it.id == beaconId }
+                val schedule = beacon?.eventSchedule()
+                val item = compose.project.click.click.data.api.EventBookmarkItemDto(
+                    beaconId = beaconId,
+                    bookmarkedAt = Clock.System.now().toString(),
+                    title = beacon?.displayDynamicTitle(),
+                    eventStartAt = schedule?.let {
+                        kotlinx.datetime.Instant.fromEpochMilliseconds(it.startEpochMs).toString()
+                    },
+                    eventEndAt = schedule?.let {
+                        kotlinx.datetime.Instant.fromEpochMilliseconds(it.endEpochMs).toString()
+                    },
+                    latitude = beacon?.latitude,
+                    longitude = beacon?.longitude,
+                    expiresAt = beacon?.expiresAtEpochMs?.let {
+                        kotlinx.datetime.Instant.fromEpochMilliseconds(it).toString()
+                    },
+                )
+                val merged = (listOf(item) + AppDataManager.cachedEventBookmarks.value.filterNot { it.beaconId == beaconId })
+                    .distinctBy { it.beaconId }
+                AppDataManager.updateCachedEventBookmarks(merged)
+            } else {
+                AppDataManager.updateCachedEventBookmarks(
+                    AppDataManager.cachedEventBookmarks.value.filterNot { it.beaconId == beaconId },
+                )
+            }
+            // Reconcile with server list so titles/schedule stay accurate.
+            mapBeaconRepository.fetchMyEventBookmarks().onSuccess { remote ->
+                AppDataManager.updateCachedEventBookmarks(remote.bookmarks)
+            }
         }
     }
 
@@ -1691,6 +1796,9 @@ class MapViewModel : ViewModel() {
                         ))
                     }
                     _beaconEngagementPendingIds.update { it - id }
+                    if (payload.checkedIn) {
+                        loadBeaconAttendeeDirectory(id, forceRefresh = true)
+                    }
                     _engagementSnackbar.value = if (payload.checkedIn) {
                         "Checked in"
                     } else {

@@ -8,6 +8,8 @@
 
 **Track C (2026-07-17):** Remember Me horizontal strip for Core-pinned 1:1s on Active tab; list row spacing left unchanged. Avatar hit = circle; name hit = pill.
 
+**Glossary:** **Mutual keep** = both `should_continue` true on a connection. **Mutual (FoF)** on events = connection-of-connection (2nd degree) — see event people directory; not the same concept.
+
 ---
 
 ## ASCII hierarchy

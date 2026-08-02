@@ -32,6 +32,8 @@ Share deep links and encounter↔event linking remain future (see § Still futur
 | GET | `/api/beacons/{id}/engagement` | `{ bookmarked, checked_in, checked_in_at, check_in_count }` |
 | POST | `/api/beacons/{id}/impressions` | Fire-and-forget `event_view` (2s debounce) |
 | GET/POST/DELETE | `/api/beacons/{id}/rsvp` | Unchanged UX; emits `rsvp_set` / `rsvp_unset` + richer attendee dims |
+| GET | `/api/beacons/{id}/attendees/directory` | Enriched people directory (distance, shared interests, relationship, FoF `mutual_via`). Requires viewer RSVP or check-in. `mutuals_section_unlocked` when checked in. |
+| GET | `/api/connections/{id}/event-recommendation` | One upcoming event the peer RSVP’d that the viewer hasn’t — for new-connection “Go together?” card |
 | GET | `/api/insights/[venueId]/event-engagement` | Aggregates only (website insights) |
 
 Auth: same click-web JWT as RSVP. JSON: `snake_case`, `{ ok: true }` on mutations where applicable.

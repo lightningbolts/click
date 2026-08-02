@@ -9,3 +9,10 @@ fun isPublicUserProfileIncomplete(user: User): Boolean {
     val firstNameMissing = user.firstName.isNullOrBlank()
     return birthdayMissing || firstNameMissing
 }
+
+/** Same gate for BFF [UserCore] rows (e.g. GET /api/users/profile). */
+fun isPublicUserProfileIncomplete(user: UserCore): Boolean {
+    val birthdayMissing = user.birthday.isNullOrBlank()
+    val firstNameMissing = user.firstName.isNullOrBlank()
+    return birthdayMissing || firstNameMissing
+}

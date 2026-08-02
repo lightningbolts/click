@@ -25,7 +25,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.MapBeacon
+import compose.project.click.click.data.models.mapBeaconFromChatMetadata
 import compose.project.click.click.data.repository.MapBeaconRepository
+import compose.project.click.click.ui.components.BeaconShareToChatDialog
 import compose.project.click.click.ui.components.ClickSheetDefaults
 import compose.project.click.click.ui.components.ClickSheetDialogChrome
 import compose.project.click.click.ui.components.GlassSheetTokens
@@ -37,9 +39,12 @@ import compose.project.click.click.ui.utils.haversineDistance
 import compose.project.click.click.viewmodel.MapViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Full map/nearby beacon detail sheet opened from a chat beacon card.
+ * Loads expired / out-of-discovery beacons via authenticated GET; falls back to
+ * chat message metadata so the sheet never dead-ends on "Couldn't load".
  */
 @Composable
 internal fun ChatBeaconDetailSheet(
@@ -47,27 +52,48 @@ internal fun ChatBeaconDetailSheet(
     mapViewModel: MapViewModel,
     knownBeacons: List<MapBeacon>,
     onDismissRequest: () -> Unit,
-    onShareBeaconToChat: ((MapBeacon) -> Unit)? = null,
+    onShareBeaconToChats: ((
+        beacon: MapBeacon,
+        chatIds: List<String>,
+        openConnectionId: String?,
+    ) -> Unit)? = null,
+    /** Snapshot reconstructed from the chat card metadata when the live row is gone. */
+    messageFallback: MapBeacon? = null,
+    messageMetadata: JsonObject? = null,
+    messageContent: String? = null,
 ) {
     val mapBeacons by mapViewModel.mapBeacons.collectAsState()
     val currentUser by AppDataManager.currentUser.collectAsState()
+    val inboxChats by AppDataManager.inboxFeedChats.collectAsState()
     var resolved by remember(beaconId) {
         mutableStateOf(
             knownBeacons.firstOrNull { it.id == beaconId }
-                ?: mapBeacons.firstOrNull { it.id == beaconId },
+                ?: mapBeacons.firstOrNull { it.id == beaconId }
+                ?: messageFallback,
         )
     }
     var loadError by remember(beaconId) { mutableStateOf<String?>(null) }
+    var shareBeaconToChat by remember(beaconId) { mutableStateOf<MapBeacon?>(null) }
     val toastState = rememberUnifiedToastState()
 
-    LaunchedEffect(beaconId) {
-        if (resolved != null) return@LaunchedEffect
+    LaunchedEffect(beaconId, messageMetadata, messageContent) {
+        if (resolved != null && resolved?.id == beaconId &&
+            (knownBeacons.any { it.id == beaconId } || mapBeacons.any { it.id == beaconId })
+        ) {
+            return@LaunchedEffect
+        }
         loadError = null
         val fetched = withContext(Dispatchers.Default) {
             MapBeaconRepository().fetchBeacon(beaconId).getOrNull()
         }
         if (fetched != null) {
             resolved = fetched
+            return@LaunchedEffect
+        }
+        val fromMeta = messageFallback
+            ?: mapBeaconFromChatMetadata(beaconId, messageMetadata, messageContent.orEmpty())
+        if (fromMeta != null) {
+            resolved = fromMeta
         } else {
             loadError = "Couldn't load this beacon."
         }
@@ -108,7 +134,7 @@ internal fun ChatBeaconDetailSheet(
                             distanceMeters = distanceMeters,
                             currentUserId = currentUser?.id,
                             viewModel = mapViewModel,
-                            onShareBeaconToChat = onShareBeaconToChat,
+                            onShareBeaconToChat = { shareBeaconToChat = it },
                             modifier = Modifier
                                 .fillMaxSize()
                                 .verticalScroll(rememberScrollState())
@@ -118,15 +144,14 @@ internal fun ChatBeaconDetailSheet(
                     loadError != null -> {
                         Text(
                             text = loadError ?: "Couldn't load this beacon.",
-                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = onDetailSurface.copy(alpha = 0.7f),
                             modifier = Modifier.padding(24.dp),
                         )
                     }
                     else -> {
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(48.dp),
+                            modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center,
                         ) {
                             CircularProgressIndicator()
@@ -139,11 +164,24 @@ internal fun ChatBeaconDetailSheet(
                 opaque = true,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 24.dp)
-                    .zIndex(100f),
+                    .zIndex(20f)
+                    .padding(bottom = 24.dp),
             )
+            shareBeaconToChat?.let { beaconToShare ->
+                BeaconShareToChatDialog(
+                    beacon = beaconToShare,
+                    chats = inboxChats,
+                    onDismissRequest = { shareBeaconToChat = null },
+                    onShare = { selectedChatIds, openChatConnectionId ->
+                        onShareBeaconToChats?.invoke(
+                            beaconToShare,
+                            selectedChatIds,
+                            openChatConnectionId,
+                        )
+                        shareBeaconToChat = null
+                    },
+                )
+            }
         }
     }
 }

@@ -57,6 +57,11 @@ import compose.project.click.click.ui.components.MapPinKind // pragma: allowlist
 import compose.project.click.click.ui.components.toClusterPin // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProfileBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.EventPeopleDirectorySection
+import compose.project.click.click.ui.components.EventPeopleDirectorySheetContent
+import compose.project.click.click.ui.components.BeaconShareToChatDialog
+import compose.project.click.click.ui.components.ClickFormBottomSheet
+import compose.project.click.click.ui.components.EventDirectoryUserProfileSheet
 import compose.project.click.click.ui.components.ProfileSheetBadge // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProfileSheetState // pragma: allowlist secret
 import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
@@ -80,9 +85,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.zIndex
 import compose.project.click.click.getPlatform
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.rememberCoroutineScope
 import compose.project.click.click.ui.components.CreateHubModal
 import compose.project.click.click.util.oneToOnePeerPairKey
@@ -138,8 +145,15 @@ import compose.project.click.click.ui.components.ClickOutlinedTextField
 fun MapScreen(
     viewModel: MapViewModel = viewModel { MapViewModel() },
     onNavigateToChat: ((String) -> Unit)? = null,
-    /** Share a beacon into a connection/group chat (opens chat picker in App shell). */
-    onShareBeaconToChat: ((MapBeacon) -> Unit)? = null,
+    /**
+     * Called after the in-sheet share picker confirms destinations.
+     * [openConnectionId] is the connection/chat id to navigate to when non-null.
+     */
+    onShareBeaconToChats: ((
+        beacon: MapBeacon,
+        chatIds: List<String>,
+        openConnectionId: String?,
+    ) -> Unit)? = null,
     /** When set, focuses the matching beacon pin once map beacons have loaded. */
     initialBeaconId: String? = null,
     onBeaconFocusConsumed: () -> Unit = {},
@@ -643,13 +657,26 @@ fun MapScreen(
                             null
                         } else {
                             val loc = viewModel.resolveDropLocationForUi()
-                            loc?.let {
-                                compose.project.click.click.utils.GeocodedPlace(
-                                    latitude = it.latitude,
-                                    longitude = it.longitude,
-                                    displayName = "Current location",
-                                    shortLabel = "Current location",
+                            if (loc == null) {
+                                null
+                            } else {
+                                val reverse = compose.project.click.click.utils.GeocodingService.reverseGeocode(
+                                    loc.latitude,
+                                    loc.longitude,
                                 )
+                                reverse ?: run {
+                                    // Never persist the literal "Current location" label.
+                                    // Avoid String.format — not available on Kotlin/Native.
+                                    val lat = (kotlin.math.round(loc.latitude * 100_000.0) / 100_000.0)
+                                    val lon = (kotlin.math.round(loc.longitude * 100_000.0) / 100_000.0)
+                                    val coords = "$lat, $lon"
+                                    compose.project.click.click.utils.GeocodedPlace(
+                                        latitude = loc.latitude,
+                                        longitude = loc.longitude,
+                                        displayName = coords,
+                                        shortLabel = coords,
+                                    )
+                                }
                             }
                         }
                     },
@@ -763,9 +790,16 @@ fun MapScreen(
         val beaconSel = selection as MapSelection.BeaconSelected
         val detailSurface = GlassSheetTokens.OledBlack()
         val onDetailSurface = GlassSheetTokens.OnOled()
+        var shareBeaconToChat by remember(beaconSel.beacon.id) {
+            mutableStateOf<MapBeacon?>(null)
+        }
+        val inboxChats by compose.project.click.click.data.AppDataManager.inboxFeedChats.collectAsState()
         MapBeaconSheetRoot(
             visible = true,
-            onDismissRequest = { viewModel.clearSelection() },
+            onDismissRequest = {
+                shareBeaconToChat = null
+                viewModel.clearSelection()
+            },
             containerColor = detailSurface,
             contentColor = onDetailSurface,
             scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
@@ -788,7 +822,10 @@ fun MapScreen(
                         distanceMeters = beaconSel.distanceMeters,
                         currentUserId = currentUser?.id,
                         viewModel = viewModel,
-                        onShareBeaconToChat = onShareBeaconToChat,
+                        onShareBeaconToChat = { beacon ->
+                            shareBeaconToChat = beacon
+                        },
+                        onNavigateToChat = onNavigateToChat,
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(rememberScrollState())
@@ -805,6 +842,22 @@ fun MapScreen(
                         .padding(bottom = 24.dp)
                         .zIndex(100f),
                 )
+                // Hosted inside the sheet window so it stacks above the sheet on iOS/Android.
+                shareBeaconToChat?.let { beaconToShare ->
+                    BeaconShareToChatDialog(
+                        beacon = beaconToShare,
+                        chats = inboxChats,
+                        onDismissRequest = { shareBeaconToChat = null },
+                        onShare = { selectedChatIds, openChatConnectionId ->
+                            onShareBeaconToChats?.invoke(
+                                beaconToShare,
+                                selectedChatIds,
+                                openChatConnectionId,
+                            )
+                            shareBeaconToChat = null
+                        },
+                    )
+                }
             }
         }
     }
@@ -1168,6 +1221,7 @@ internal fun BeaconDetailSheetContent(
     currentUserId: String?,
     viewModel: MapViewModel,
     onShareBeaconToChat: ((MapBeacon) -> Unit)? = null,
+    onNavigateToChat: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val isCreator = !currentUserId.isNullOrBlank() && beacon.createdByUserId == currentUserId
@@ -1201,6 +1255,7 @@ internal fun BeaconDetailSheetContent(
                 onEdit = openEdit,
                 onDelete = openDelete,
                 onShareToChat = onShareBeaconToChat?.let { cb -> { cb(beacon) } },
+                onNavigateToChat = onNavigateToChat,
                 modifier = Modifier.fillMaxWidth(),
             )
             else -> {
@@ -1376,6 +1431,7 @@ internal fun EventBeaconDetail(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onShareToChat: (() -> Unit)? = null,
+    onNavigateToChat: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val rsvpCache by viewModel.beaconRsvpById.collectAsState()
@@ -1431,6 +1487,15 @@ internal fun EventBeaconDetail(
         ?: hostUser?.name?.trim()?.takeIf { it.isNotEmpty() }
     val hostAvatarUrl = hostUser?.image?.trim()?.takeIf { it.isNotEmpty() }
 
+    val directoryCache by viewModel.beaconDirectoryById.collectAsState()
+    val directoryLoadingIds by viewModel.beaconDirectoryLoadingIds.collectAsState()
+    val directoryEntry = directoryCache[beacon.id]
+    val directoryAttendees = directoryEntry?.attendees.orEmpty()
+    val directoryLoading = beacon.id in directoryLoadingIds
+    val mutualsUnlocked = directoryEntry?.mutualsSectionUnlocked == true || checkedIn
+    var showPeopleDirectory by remember(beacon.id) { mutableStateOf(false) }
+    var directoryProfileUserId by remember(beacon.id) { mutableStateOf<String?>(null) }
+
     LaunchedEffect(displayBeacon.id) {
         viewModel.loadBeaconRsvp(displayBeacon.id, forceRefresh = true)
         viewModel.loadBeaconEngagement(displayBeacon.id, forceRefresh = true)
@@ -1438,6 +1503,12 @@ internal fun EventBeaconDetail(
         // Always hydrate missing Posted / Host / creator / schedule — bookmark & proximity rows
         // often already have schedule, so the old schedule-only gate skipped host+posted forever.
         viewModel.ensureEventBeaconDetail(displayBeacon.id, seed = displayBeacon)
+    }
+
+    LaunchedEffect(displayBeacon.id, currentUserSignedUp, checkedIn) {
+        if (currentUserSignedUp || checkedIn) {
+            viewModel.loadBeaconAttendeeDirectory(displayBeacon.id, forceRefresh = true)
+        }
     }
 
     Column(
@@ -1494,9 +1565,31 @@ internal fun EventBeaconDetail(
             EventCategoryChips(categories = categories, border = border, cardSurface = cardSurface)
         }
 
-        val locationLabel = displayBeacon.metadata.formattedAddress?.trim()?.takeIf { it.isNotEmpty() }
+        val rawLocationLabel = displayBeacon.metadata.formattedAddress?.trim()?.takeIf { it.isNotEmpty() }
             ?: displayBeacon.metadata.locationName?.trim()?.takeIf { it.isNotEmpty() }
-        if (locationLabel != null) {
+        // Legacy drops stored the literal "Current location" — never show that to viewers.
+        var resolvedLocationLabel by remember(displayBeacon.id, rawLocationLabel) {
+            mutableStateOf(
+                rawLocationLabel?.takeUnless { it.equals("Current location", ignoreCase = true) },
+            )
+        }
+        LaunchedEffect(displayBeacon.id, rawLocationLabel, displayBeacon.latitude, displayBeacon.longitude) {
+            if (resolvedLocationLabel != null) return@LaunchedEffect
+            if (
+                rawLocationLabel == null ||
+                rawLocationLabel.equals("Current location", ignoreCase = true)
+            ) {
+                val reverse = withContext(Dispatchers.Default) {
+                    compose.project.click.click.utils.GeocodingService.reverseGeocode(
+                        displayBeacon.latitude,
+                        displayBeacon.longitude,
+                    )
+                }
+                resolvedLocationLabel = reverse?.shortLabel?.takeIf { it.isNotBlank() }
+                    ?: reverse?.displayName?.takeIf { it.isNotBlank() }
+            }
+        }
+        resolvedLocationLabel?.let { locationLabel ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1545,12 +1638,76 @@ internal fun EventBeaconDetail(
             )
         }
 
-        EventAttendeeStack(
-            attendees = attendees,
-            loading = rsvpLoading,
-            border = border,
-            cardSurface = cardSurface,
+        EventPeopleDirectorySection(
+            attendees = directoryAttendees.ifEmpty {
+                attendees.map {
+                    compose.project.click.click.events.DirectoryAttendee(
+                        userId = it.userId,
+                        name = it.name,
+                        avatarUrl = it.avatarUrl,
+                    )
+                }
+            },
+            loading = directoryLoading || rsvpLoading,
+            mutualsSectionUnlocked = mutualsUnlocked,
+            onOpenDirectory = { showPeopleDirectory = true },
         )
+
+        if (showPeopleDirectory) {
+            ClickFormBottomSheet(onDismissRequest = { showPeopleDirectory = false }) {
+                EventPeopleDirectorySheetContent(
+                    attendees = directoryAttendees.ifEmpty {
+                        attendees.map {
+                            compose.project.click.click.events.DirectoryAttendee(
+                                userId = it.userId,
+                                name = it.name,
+                                avatarUrl = it.avatarUrl,
+                            )
+                        }
+                    },
+                    loading = directoryLoading,
+                    mutualsSectionUnlocked = mutualsUnlocked,
+                    onAttendeeClick = { attendee ->
+                        directoryProfileUserId = attendee.userId
+                        showPeopleDirectory = false
+                    },
+                )
+            }
+        }
+
+        directoryProfileUserId?.let { profileId ->
+            val attendee = directoryAttendees.firstOrNull { it.userId == profileId }
+                ?: attendees.map {
+                    compose.project.click.click.events.DirectoryAttendee(
+                        userId = it.userId,
+                        name = it.name,
+                        avatarUrl = it.avatarUrl,
+                    )
+                }.firstOrNull { it.userId == profileId }
+            if (attendee != null) {
+                val viewerId = currentUser?.id
+                val canMessage = compose.project.click.click.events.allowsDirectoryConnectActions(
+                    attendee.relationship,
+                )
+                EventDirectoryUserProfileSheet(
+                    attendee = attendee,
+                    viewerUserId = viewerId,
+                    onDismiss = { directoryProfileUserId = null },
+                    onMessage = if (canMessage) {
+                        {
+                            val conn = compose.project.click.click.data.AppDataManager.connections.value
+                                .firstOrNull { c ->
+                                    attendee.userId in c.user_ids &&
+                                        (viewerId.isNullOrBlank() || viewerId in c.user_ids)
+                                }
+                            conn?.id?.let { onNavigateToChat?.invoke(it) }
+                        }
+                    } else {
+                        null
+                    },
+                )
+            }
+        }
 
         val actionShape = RoundedCornerShape(12.dp)
         val checkInLabel = eventCheckInCtaLabel(checkedIn = checkedIn, pending = checkInPending)

@@ -783,6 +783,15 @@ class ChatApiClient(
                     errorBody.contains("OUT_OF_BOUNDS") -> "OUT_OF_BOUNDS"
                     // 410 Gone: the ephemeral hub geofence is no longer reachable (expired / left range).
                     response.status.value == 410 -> "HUB_OUT_OF_RANGE"
+                    response.status.value == 429 || errorBody.contains("HUB_MESSAGE_COOLDOWN") -> {
+                        val retry = Regex("\"retry_after_seconds\"\\s*:\\s*(\\d+)")
+                            .find(errorBody)
+                            ?.groupValues
+                            ?.getOrNull(1)
+                            ?.toIntOrNull()
+                            ?: 15
+                        "HUB_MESSAGE_COOLDOWN:$retry"
+                    }
                     else -> "Failed to send hub message: ${response.status}"
                 }
                 Result.failure(Exception(message))

@@ -2,7 +2,7 @@
 
 **Product:** Click — Anti-doomscrolling · Stop scrolling, start living.  
 **Scope:** Kotlin Multiplatform mobile (`click/`) — Android + iOS Compose UI only.  
-**Out of scope:** Web companion reset-password UI (`/reset-password` is an external browser handoff only).  
+**Web handoff:** Forgot Password opens the system browser to `{CLICK_WEB_BASE_URL}/forgot-password` (email request form). The email link completes on web via `/api/auth/callback` → `/reset-password`. There is no in-app password-reset UI.  
 **Source of truth:** `LoginScreen.kt`, `SignUpScreen.kt`, `AuthViewModel.kt`, `App.kt` auth gate.  
 **Date:** 2026-07-16  
 
@@ -63,7 +63,7 @@ Top inset: `statusBars` + 24dp. Tap outside fields clears focus (`detectTapGestu
 | Email field | Type | Updates local state; enables Sign In when non-blank |
 | Password field | Type / IME Next → Done | Done submits if both fields non-blank |
 | Visibility toggle | Tap | Toggles `passwordVisible` |
-| Forgot Password? | Tap | Opens system browser: `{CLICK_WEB_BASE_URL}/reset-password` via `LocalUriHandler` |
+| Forgot Password? | Tap | Opens system browser: `{CLICK_WEB_BASE_URL}/forgot-password` (pre-fills `?email=` when the email field is non-blank) via `LocalUriHandler` |
 | Sign In | Tap | `onEmailSignIn(email, password)` if fields non-blank |
 | Continue with Google | Tap | `onGoogleSignIn()` |
 | Continue with Apple | Tap | `onAppleSignIn()` |

@@ -75,6 +75,7 @@ import compose.project.click.click.data.models.ONBOARDING_FLOW_VERSION_COMPLETE
 import compose.project.click.click.data.models.OnboardingState
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.isPublicUserProfileIncomplete
+import compose.project.click.click.ui.components.INTEREST_ONBOARDING_MIN_TAGS
 import compose.project.click.click.data.models.isPendingSync
 import compose.project.click.click.collaboration.CollaborationSession
 import compose.project.click.click.collaboration.CollaborationSessionManager
@@ -296,44 +297,41 @@ fun App() {
         }
 
         val supabaseRepo = compose.project.click.click.data.repository.SupabaseRepository()
-        // Do not block onboarding / dashboard on network — resolve interests in the background.
-        interestsRemoteResolved = true
+        // Resolve interests before leaving the loading shimmer so web→mobile first launch
+        // does not flash Interests then jump, or skip Interests incorrectly on an empty row.
+        interestsRemoteResolved = false
         launch(Dispatchers.IO) {
-            supabaseRepo.fetchUserInterests(currentUser.id).fold(
-                onSuccess = { row ->
-                    if (row != null) {
-                        if (hasCompletedOnboarding != true) {
-                            hasCompletedOnboarding = true
-                            tokenStorage.saveHasCompletedOnboarding(true)
+            try {
+                supabaseRepo.fetchUserInterests(currentUser.id).fold(
+                    onSuccess = { row ->
+                        // Fast-forward Interests only when the account already has a real set
+                        // (completed on web). An empty `user_interests` row from web "skip"
+                        // must still run mobile interests onboarding (min tags).
+                        // Leave welcomeSeen alone so first mobile open still gets Welcome.
+                        val tagCount = row?.tags?.size ?: 0
+                        val interestsSatisfied = tagCount >= INTEREST_ONBOARDING_MIN_TAGS
+                        if (!interestsSatisfied) return@fold
+
+                        val base = onboardingState ?: OnboardingState()
+                        if (base.interestsCompleted) {
+                            tokenStorage.saveTagsInitialized(true)
+                            return@fold
                         }
-                        val base = (onboardingState ?: OnboardingState()).let { state ->
-                            if (hasCompletedOnboarding == true && !state.permissionsCompleted) {
-                                state.copy(permissionsCompleted = true)
-                            } else {
-                                state
-                            }
-                        }
-                        val permissionsCompleted = hasCompletedOnboarding == true || base.permissionsCompleted
                         val merged = base.copy(
-                            welcomeSeen = true,
                             interestsCompleted = true,
-                            permissionsCompleted = permissionsCompleted,
-                            flowVersion = if (permissionsCompleted) ONBOARDING_FLOW_VERSION_COMPLETE else base.flowVersion,
-                            completedAt = base.completedAt ?: if (permissionsCompleted) {
-                                kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
-                            } else {
-                                null
-                            },
+                            flowVersion = base.flowVersion.coerceAtLeast(ONBOARDING_FLOW_VERSION_COMPLETE),
                         )
                         onboardingState = merged
                         tokenStorage.saveTagsInitialized(true)
                         tokenStorage.saveOnboardingState(onboardingJson.encodeToString(merged))
-                    }
-                },
-                onFailure = { err ->
-                    println("App: user_interests fetch failed, using local onboarding only: ${err.message}")
-                },
-            )
+                    },
+                    onFailure = { err ->
+                        println("App: user_interests fetch failed, using local onboarding only: ${err.message}")
+                    },
+                )
+            } finally {
+                interestsRemoteResolved = true
+            }
         }
     }
 
@@ -628,8 +626,6 @@ fun App() {
             val activeCallUiState =
                 if (globalCallState !is CallState.Idle) globalCallState else lastActiveCallPresentedState.value
             val profileApi = remember { ApiClient() }
-            var remoteBirthdayMissing by remember { mutableStateOf<Boolean?>(null) }
-            var remoteFirstNameMissing by remember { mutableStateOf<Boolean?>(null) }
             var remoteAvatarPresent by remember { mutableStateOf<Boolean?>(null) }
             var profileGateCheckReady by remember { mutableStateOf(false) }
 
@@ -639,8 +635,6 @@ fun App() {
                 appDataUser?.id,
             ) {
                 if (!authViewModel.isAuthenticated || currentUser.id.isBlank()) {
-                    remoteBirthdayMissing = null
-                    remoteFirstNameMissing = null
                     remoteAvatarPresent = null
                     profileGateCheckReady = false
                     return@LaunchedEffect
@@ -652,18 +646,23 @@ fun App() {
                         return@LaunchedEffect
                     }
 
-                // Admit immediately from local cache; refresh profile remotely in the background.
-                remoteBirthdayMissing = localUser.birthday.isNullOrBlank()
-                remoteFirstNameMissing = localUser.firstName.isNullOrBlank()
+                // Gate on the merged local user only. A background profile fetch must not reopen
+                // ProfileBasics for web-complete accounts when remote briefly looks incomplete.
                 remoteAvatarPresent = !localUser.image.isNullOrBlank()
                 profileGateCheckReady = true
 
                 launch(Dispatchers.IO) {
                     val remoteUser = profileApi.getUserProfile(currentUser.id).getOrNull()?.user
                     if (remoteUser != null) {
-                        remoteBirthdayMissing = remoteUser.birthday.isNullOrBlank()
-                        remoteFirstNameMissing = remoteUser.firstName.isNullOrBlank()
-                        remoteAvatarPresent = !remoteUser.image.isNullOrBlank()
+                        val remoteHasAvatar = !remoteUser.image.isNullOrBlank()
+                        if (remoteHasAvatar) remoteAvatarPresent = true
+                        // If web has name/birthday but the local cache is still incomplete, refresh.
+                        if (
+                            isPublicUserProfileIncomplete(localUser) &&
+                            !isPublicUserProfileIncomplete(remoteUser)
+                        ) {
+                            AppDataManager.refresh(force = true)
+                        }
                     }
                 }
             }
@@ -718,17 +717,6 @@ fun App() {
 
             val avatarAuthRepo = remember(tokenStorage) { AuthRepository(tokenStorage = tokenStorage) }
 
-            val birthdayMissing = if (appDataUser != null) {
-                remoteBirthdayMissing ?: appDataUser!!.birthday.isNullOrBlank()
-            } else {
-                true
-            }
-            val firstNameMissing = if (appDataUser != null) {
-                remoteFirstNameMissing ?: appDataUser!!.firstName.isNullOrBlank()
-            } else {
-                true
-            }
-
             val profileGatePending =
                 currentUser.id.isNotBlank() &&
                     appDataUser != null &&
@@ -738,7 +726,7 @@ fun App() {
                 currentUser.id.isNotBlank() &&
                     appDataUser != null &&
                     profileGateCheckReady &&
-                    (birthdayMissing || firstNameMissing)
+                    isPublicUserProfileIncomplete(appDataUser!!)
 
             val shouldStartOnboardingHandoff =
                 !hasPlayedHomeEntrance &&
@@ -794,10 +782,8 @@ fun App() {
                     initialFirstName = appDataUser!!.firstName.orEmpty(),
                     initialLastName = appDataUser!!.lastName.orEmpty(),
                     initialBirthdayIso = appDataUser!!.birthday.orEmpty(),
-                    requireBirthday = birthdayMissing,
+                    requireBirthday = appDataUser!!.birthday.isNullOrBlank(),
                     onCompleted = {
-                        remoteBirthdayMissing = false
-                        remoteFirstNameMissing = false
                         profileGateCheckReady = true
                         appScope.launch { AppDataManager.refresh(force = true) }
                     },
@@ -858,16 +844,14 @@ fun App() {
                                         val saveResult = supabaseRepo.updateUserInterests(currentUser.id, tags)
                                         if (saveResult.isSuccess) {
                                             tokenStorage.saveTagsInitialized(true)
-                                            // B2: Phase 2 no longer requires permissionsCompleted to
-                                            // mark onboarding complete — we finalize flowVersion once
-                                            // interests land and let OnboardingViewModel drive the
-                                            // remaining Avatar step.
+                                            // Advance the in-memory step immediately, then persist
+                                            // flowVersion so cold start recognizes Phase 2 completion.
+                                            onboardingVm.onInterestsSaved()
                                             val base = onboardingState ?: OnboardingState()
                                             persistOnboardingState(
                                                 base.copy(
                                                     interestsCompleted = true,
                                                     flowVersion = ONBOARDING_FLOW_VERSION_COMPLETE,
-                                                    completedAt = kotlinx.datetime.Clock.System.now().toEpochMilliseconds(),
                                                 ),
                                             )
                                             AppDataManager.refresh(force = true)
@@ -977,10 +961,6 @@ fun App() {
             val mapViewModel: MapViewModel = viewModel { MapViewModel() }
             val chatViewModel: ChatViewModel = viewModel { ChatViewModel() }
             val shareableMapBeacons by mapViewModel.mapBeacons.collectAsState()
-            var pendingBeaconShareToChat by remember {
-                mutableStateOf<compose.project.click.click.data.models.MapBeacon?>(null)
-            }
-            val chatListForBeaconShare by chatViewModel.chatListState.collectAsState()
             var hubChatArgs by remember { mutableStateOf<HubChatNavArgs?>(null) }
             var hubVerifyInProgress by remember { mutableStateOf(false) }
             var lastHubChatArgs by remember { mutableStateOf<HubChatNavArgs?>(null) }
@@ -1502,8 +1482,13 @@ fun App() {
                                                 },
                                                 shareableBeacons = shareableMapBeacons,
                                                 mapViewModel = mapViewModel,
-                                                onShareBeaconToChat = { beacon ->
-                                                    pendingBeaconShareToChat = beacon
+                                                onShareBeaconToChats = { beacon, chatIds, openConnectionId ->
+                                                    chatIds.forEach { chatId ->
+                                                        chatViewModel.sendBeaconMessageToChat(chatId, beacon)
+                                                    }
+                                                    if (openConnectionId != null) {
+                                                        pendingChatId = openConnectionId
+                                                    }
                                                 },
                                             )
                                         } else {
@@ -1522,8 +1507,14 @@ fun App() {
                                             pendingChatId = connectionId
                                             navigateTo(NavigationItem.Connections.route)
                                         },
-                                        onShareBeaconToChat = { beacon ->
-                                            pendingBeaconShareToChat = beacon
+                                        onShareBeaconToChats = { beacon, chatIds, openConnectionId ->
+                                            chatIds.forEach { chatId ->
+                                                chatViewModel.sendBeaconMessageToChat(chatId, beacon)
+                                            }
+                                            if (openConnectionId != null) {
+                                                pendingChatId = openConnectionId
+                                                navigateTo(NavigationItem.Connections.route)
+                                            }
                                         },
                                         initialBeaconId = pendingBeaconId,
                                         onBeaconFocusConsumed = { pendingBeaconId = null },
@@ -2475,63 +2466,6 @@ fun App() {
                             navigateTo(NavigationItem.Settings.route)
                         },
                     )
-                }
-            }
-            pendingBeaconShareToChat?.let { beaconToShare ->
-                val chatList = (chatListForBeaconShare as? compose.project.click.click.viewmodel.ChatListState.Success)
-                    ?.chats
-                    .orEmpty()
-                androidx.compose.ui.window.Dialog(
-                    onDismissRequest = { pendingBeaconShareToChat = null },
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(24.dp),
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text(
-                                text = "Share to chat",
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                            Text(
-                                text = beaconToShare.displayDynamicTitle(),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            chatList.take(40).forEach { row ->
-                                val chatId = row.chat.id?.trim()?.takeIf { it.isNotEmpty() } ?: return@forEach
-                                val label = row.groupClique?.name?.trim()?.takeIf { it.isNotEmpty() }
-                                    ?: row.otherUser.name?.trim()?.takeIf { it.isNotEmpty() }
-                                    ?: "Chat"
-                                Text(
-                                    text = label,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            chatViewModel.sendBeaconMessageToChat(chatId, beaconToShare)
-                                            pendingBeaconShareToChat = null
-                                            pendingChatId = row.connection.id
-                                            navigateTo(NavigationItem.Connections.route)
-                                        }
-                                        .padding(vertical = 10.dp),
-                                )
-                            }
-                            if (chatList.isEmpty()) {
-                                Text(
-                                    text = "No chats yet. Connect with someone first.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
                 }
             }
             GlobalTetherOverlay(

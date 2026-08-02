@@ -71,6 +71,7 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 
 - [ ] `LoginScreen` — email/password sign-in succeeds
 - [ ] `LoginScreen` — Google OAuth sign-in succeeds (`click://login` deep link)
+- [ ] Forgot Password opens browser to `/forgot-password` (not `/reset-password`); email form sends reset link; link completes on `/reset-password`; can sign in with new password
 - [ ] `SignUpScreen` — new account creation
 - [ ] Invalid credentials show error (no crash; no raw Bearer in message)
 - [ ] Sign out from Settings clears session and returns to login
@@ -394,6 +395,8 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] Event detail shows address label when `location_name` / `formatted_address` set
 - [ ] Submit success adds pin; failure toast
 - [ ] Beacon detail sheet: RSVP, share, navigate, bookmark, labeled check-in CTA
+- [ ] Event people directory: after RSVP, open Directory → sort A–Z / Interests / Distance / Mutuals; relationship signifiers
+- [ ] Event mutuals: after check-in, “Mutuals here” section lists FoF with “via …” and view-only profiles (no Connect)
 - [ ] Bookmark toggle survives app force-kill (server-backed)
 - [ ] Check-in is a full-width labeled button (`Check in here` / `Checked in`) — not a hero icon circle
 - [ ] Check-in CTA updates immediately on tap (optimistic); pending blocks double-tap
@@ -415,6 +418,7 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] Map join hub → proximity verify → `HubChatScreen`
 - [ ] Deep link `click://hub/{id}` / universal link opens hub
 - [ ] `HubChatScreen` — realtime messages in lobby + unlocked chat
+- [ ] Hub send cooldown 15s — composer placeholder `Wait {N}s…`; server enforces 429 `HUB_MESSAGE_COOLDOWN`
 - [ ] Hub settings menu: leave, edit (owner), delete (owner)
 - [ ] Leave hub confirm → `leaveActiveHub`
 - [ ] Delete hub confirm → `deleteActiveHub`
@@ -562,6 +566,11 @@ Prefer the dedicated smoke doc for a timed pass: [02-smoke-10min.md](02-smoke-10
 - [ ] Long-press connection → archive → find in Archived tab
 - [ ] Drop beacon on map → see on map → open detail
 - [ ] Join hub from map → send hub message → leave hub
+- [ ] Hub message cooldown: after send, composer shows `Wait {N}s…` for 15s; rapid sends return 429 / restore draft
+- [ ] Beacon detail sheet: RSVP, share, navigate, bookmark, labeled check-in CTA
+- [ ] Event people directory: after RSVP, open Directory → sort A–Z / Interests / Distance / Mutuals; relationship signifiers
+- [ ] Event mutuals: after check-in, “Mutuals here” section lists FoF with “via …” and view-only profiles (no Connect)
+- [ ] New connection context sheet: optional event recommendation card → RSVP or Dismiss
 - [ ] Incoming call → accept → end
 - [ ] Toggle ghost mode → map grayscales
 - [ ] Global search → open result

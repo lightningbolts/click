@@ -17,6 +17,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
@@ -127,25 +128,41 @@ fun rememberFloatingHeaderTopPadding(
     collapseFraction: Float,
     statusBarTop: Dp = rememberStatusBarTopPadding(),
     belowHeaderSpacing: Dp = AppScreenDefaults.SectionSpacing,
+    /**
+     * Floor for expanded header body height before the first successful measure.
+     * Connections with tabs need more than [AppScreenDefaults.FloatingHeaderLargeHeight].
+     */
+    minimumExpandedBodyHeight: Dp = AppScreenDefaults.FloatingHeaderLargeHeight,
 ): Pair<Dp, Modifier> {
     val density = LocalDensity.current
-    var expandedHeaderBodyHeight by remember {
-        mutableStateOf(AppScreenDefaults.FloatingHeaderLargeHeight)
+    var savedExpandedBodyDp by rememberSaveable { mutableStateOf(0f) }
+    var expandedHeaderBodyHeight by remember(minimumExpandedBodyHeight) {
+        mutableStateOf(
+            if (savedExpandedBodyDp > 0f) {
+                maxOf(savedExpandedBodyDp.dp, minimumExpandedBodyHeight)
+            } else {
+                minimumExpandedBodyHeight
+            },
+        )
     }
-    var hasLockedExpandedHeight by remember { mutableStateOf(false) }
+    var hasLockedExpandedHeight by remember {
+        mutableStateOf(savedExpandedBodyDp > 0f)
+    }
     val measureModifier = Modifier.onGloballyPositioned { coordinates ->
-        if (!hasLockedExpandedHeight && collapseFraction < 0.05f) {
+        if (collapseFraction < 0.05f) {
             val measuredBody = with(density) { coordinates.size.height.toDp() }
             if (measuredBody >= AppScreenDefaults.FloatingHeaderCompactHeight) {
-                expandedHeaderBodyHeight = measuredBody
-                hasLockedExpandedHeight = true
+                if (measuredBody > expandedHeaderBodyHeight || !hasLockedExpandedHeight) {
+                    val next = maxOf(measuredBody, minimumExpandedBodyHeight)
+                    expandedHeaderBodyHeight = next
+                    savedExpandedBodyDp = next.value
+                    hasLockedExpandedHeight = true
+                }
             }
         }
     }
     // Fixed expanded inset — overlay header collapses visually; do not shrink this during
     // scroll (causes jitter on both LazyColumn and verticalScroll screens).
-    // [belowHeaderSpacing] may be reduced (even negative) when the LazyColumn also uses
-    // spacedBy after the inset item, so the *visible* gap under the header stays intentional.
     val topPadding = statusBarTop + expandedHeaderBodyHeight + belowHeaderSpacing
     return topPadding to measureModifier
 }

@@ -143,9 +143,8 @@ class HomeViewModel(
         // Cold-start race: snapshot may restore after HomeViewModel is created.
         viewModelScope.launch {
             AppDataManager.cachedEventBookmarks.collect { cached ->
-                if (cached.isNotEmpty() && _savedEventBookmarks.value.isEmpty()) {
-                    _savedEventBookmarks.value = cached
-                }
+                // Always mirror AppDataManager so Map bookmark toggles refresh Home immediately.
+                _savedEventBookmarks.value = cached
             }
         }
     }

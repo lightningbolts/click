@@ -72,12 +72,17 @@ fun ConnectionsScreen(
     onOpenDisposableRollForChat: ((String) -> Unit)? = null,
     shareableBeacons: List<compose.project.click.click.data.models.MapBeacon> = emptyList(),
     mapViewModel: compose.project.click.click.viewmodel.MapViewModel? = null,
-    onShareBeaconToChat: ((compose.project.click.click.data.models.MapBeacon) -> Unit)? = null,
+    onShareBeaconToChats: ((
+        beacon: compose.project.click.click.data.models.MapBeacon,
+        chatIds: List<String>,
+        openConnectionId: String?,
+    ) -> Unit)? = null,
     viewModel: ChatViewModel = viewModel { ChatViewModel() },
     verifiedCliqueProximityAutofill: VerifiedCliqueProximityIntent? = null,
     onVerifiedCliqueProximityAutofillConsumed: () -> Unit = {},
 ) {
     var selectedChatId by remember { mutableStateOf(initialChatId) }
+    var listRevealEpoch by remember { mutableStateOf(0) }
     val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
     /** Shared with [InteractiveSwipeBackContainer] so the persistent list mirrors layer-1 parallax. */
     val iosChatSwipeDragPx = remember { mutableFloatStateOf(0f) }
@@ -116,6 +121,8 @@ fun ConnectionsScreen(
         onChatOpenStateChanged(false)
         // Bring the already-warm UITabBar to front (alpha stayed 1 while it was behind Compose).
         onChatSuppressesTabBarChanged(false)
+        // Re-measure floating header inset at expanded height so Remember Me never sits under Clicks.
+        listRevealEpoch += 1
     }
 
     fun closeActiveChat(mode: ChatTransitionMode = ChatTransitionMode.Tap) {
@@ -234,6 +241,7 @@ fun ConnectionsScreen(
                     verifiedCliqueProximityAutofill = verifiedCliqueProximityAutofill,
                     onVerifiedCliqueProximityAutofillConsumed = onVerifiedCliqueProximityAutofillConsumed,
                     isListObscured = selectedChatId != null,
+                    listRevealEpoch = listRevealEpoch,
                 )
             }
 
@@ -309,7 +317,7 @@ fun ConnectionsScreen(
                                 onOpenDisposableRollForChat = onOpenDisposableRollForChat,
                                 shareableBeacons = shareableBeacons,
                                 mapViewModel = mapViewModel,
-                                onShareBeaconToChat = onShareBeaconToChat,
+                                onShareBeaconToChats = onShareBeaconToChats,
                             )
                         },
                     )
@@ -407,6 +415,7 @@ fun ConnectionsScreen(
             onGroupAvatarUrlChanged = { url ->
                 groupMembersPickerContext = groupMembersPickerContext?.copy(avatarUrl = url)
             },
+            localMessages = viewModel.currentChatLocalMessages(),
         )
     }
     val removeMemberContext = groupPickerContext

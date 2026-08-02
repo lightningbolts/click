@@ -269,6 +269,8 @@ fun ConnectionsListView(
     verifiedCliqueProximityAutofill: VerifiedCliqueProximityIntent? = null,
     onVerifiedCliqueProximityAutofillConsumed: () -> Unit = {},
     isListObscured: Boolean = false,
+    /** Bumped when returning from chat so header inset remeasures at expanded height. */
+    listRevealEpoch: Int = 0,
 ) {
     val chatListState by viewModel.chatListState.collectAsState()
     val decryptedPreviews by viewModel.decryptedPreviews.collectAsState()
@@ -363,6 +365,11 @@ fun ConnectionsListView(
 
     val connectionsLazyListState = rememberSaveable(saver = LazyListState.Saver) {
         LazyListState(0, 0)
+    }
+    LaunchedEffect(listRevealEpoch) {
+        if (listRevealEpoch <= 0) return@LaunchedEffect
+        // Snap to top so floating-header measure can lock expanded height again.
+        connectionsLazyListState.scrollToItem(0)
     }
     val collapseFraction by remember(connectionsLazyListState) {
         derivedStateOf { connectionsLazyListState.headerCollapseFraction() }
@@ -651,7 +658,11 @@ fun ConnectionsListView(
         }
     }
     val (headerContentPadding, headerMeasureModifier) =
-        rememberFloatingHeaderTopPadding(collapseFraction, statusBarTop)
+        rememberFloatingHeaderTopPadding(
+            collapseFraction = collapseFraction,
+            statusBarTop = statusBarTop,
+            minimumExpandedBodyHeight = 168.dp,
+        )
     val listTopPadding = headerContentPadding
 
     Box(modifier = Modifier.fillMaxSize()) {

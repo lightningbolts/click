@@ -34,10 +34,15 @@ data class OnboardingState(
     val welcomeSeen: Boolean = false,
     val avatarSetOrSkipped: Boolean = false,
 ) {
-    /** Legacy (Phase 1) completion predicate. Kept as-is so the existing migration path in App.kt
-     * continues to recognise already-onboarded accounts while we roll out B2. */
+    /**
+     * Completion predicate for cold-start / restore.
+     * Phase 1: permissions + interests.
+     * Phase 2: Welcome + interests + avatar (permissions are contextual).
+     */
     val isComplete: Boolean
-        get() = flowVersion >= ONBOARDING_FLOW_VERSION_COMPLETE && permissionsCompleted && interestsCompleted
+        get() = flowVersion >= ONBOARDING_FLOW_VERSION_COMPLETE &&
+            interestsCompleted &&
+            (permissionsCompleted || (welcomeSeen && avatarSetOrSkipped))
 }
 
 /**

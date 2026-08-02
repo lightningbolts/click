@@ -8,6 +8,11 @@
 
 **Track C (landed):** `AddClickContent` order is **Tap to Connect** → My Code / Scan grid → hub links (`Create hub` / `Join hub`). Card dimensions unchanged; mock used for hierarchy only.
 
+**Glossary (event social graph):**
+- **Connection** — direct Click edge between you and another user.
+- **Mutual (FoF)** — attendee who is a connection of your connection (2nd degree). Shown for future reference only; **no Connect CTA** from the event directory. Distinct from **mutual keep** (`should_continue` both true).
+- **Mutual keep** — both parties opted to keep the connection in the inbox lifecycle.
+
 ---
 
 ## ASCII hierarchy
@@ -139,6 +144,8 @@ Full-screen flat scrim (black @ 40%, no blur). Centered bordered card max 340dp 
 | Error `"Try Again"` / `"Dismiss"` | Retry handshake or idle |
 
 ### ConnectionContextSheet
+
+For **NewSpark** with a known `connectionId`, the sheet may fetch `GET /api/connections/{id}/event-recommendation` and show a **Go together?** card (peer’s upcoming RSVP the viewer hasn’t joined). CTAs: **RSVP** / **Dismiss**. Reconnect encounter presentation does not show this card.
 
 | Control | Action |
 |---------|--------|
