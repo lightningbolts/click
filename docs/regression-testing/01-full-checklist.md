@@ -395,7 +395,7 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] Event detail shows address label when `location_name` / `formatted_address` set
 - [ ] Submit success adds pin; failure toast
 - [ ] Beacon detail sheet: RSVP, share, navigate, bookmark, labeled check-in CTA
-- [ ] Event people directory: after RSVP, open Directory → sort A–Z / Interests / Distance / Mutuals; relationship signifiers
+- [ ] Event people directory: after RSVP, open Directory → sort A–Z / Interests / Mutuals; relationship / sort-aware metrics; list scrolls to top on chip change; no large blank band at full sheet height
 - [ ] Event mutuals: after check-in, “Mutuals here” section lists FoF with “via …” and view-only profiles (no Connect)
 - [ ] Bookmark toggle survives app force-kill (server-backed)
 - [ ] Check-in is a full-width labeled button (`Check in here` / `Checked in`) — not a hero icon circle
@@ -568,8 +568,14 @@ Prefer the dedicated smoke doc for a timed pass: [02-smoke-10min.md](02-smoke-10
 - [ ] Join hub from map → send hub message → leave hub
 - [ ] Hub message cooldown: after send, composer shows `Wait {N}s…` for 15s; rapid sends return 429 / restore draft
 - [ ] Beacon detail sheet: RSVP, share, navigate, bookmark, labeled check-in CTA
-- [ ] Event people directory: after RSVP, open Directory → sort A–Z / Interests / Distance / Mutuals; relationship signifiers
+- [ ] Event people directory: after RSVP, open Directory → sort A–Z / Interests / Mutuals; relationship / sort-aware metrics; list scrolls to top on chip change; no large blank band at full sheet height
 - [ ] Event mutuals: after check-in, “Mutuals here” section lists FoF with “via …” and view-only profiles (no Connect)
+- [ ] Share to chat: opens with fade/scale enter (not an abrupt popup)
+- [ ] Saved events detail: Share shows Share link / Share to chat (same as map event detail)
+- [ ] Non-event beacon detail (soundtrack / community): Share link / Share to chat available
+- [ ] Nearby search field: typing does not compress the text box
+- [ ] Beacon drop soundtrack URL: placeholder + paste icon vertically centered
+- [ ] Event schedule picker: opening date/time popup does not shift form layout; hour/minute tumblers snap to nearest option after scroll
 - [ ] New connection context sheet: optional event recommendation card → RSVP or Dismiss
 - [ ] Incoming call → accept → end
 - [ ] Toggle ghost mode → map grayscales

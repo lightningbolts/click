@@ -120,7 +120,7 @@ Creator toolbar: `"Edit beacon"` / `"Delete beacon"` icon buttons (creator only)
 | Primary CTA | `"Join Event Route"` → HTTPS Google Maps (Apple Maps fallback). Do **not** use `geo:` as primary on iOS (NSOSStatus -10814) |
 | Secondary CTA | `"RSVP / Sign Up"` / `"Cancel RSVP"` via `MapViewModel` |
 
-Soundtrack / community kinds (hazard, SOS, utility, study): same bordered hero + **⋯** overflow as events; kind badge; Posted/Expires bento cells; optional host card; description card.
+Soundtrack / community kinds (hazard, SOS, utility, study): same bordered hero; **Share** (link + share to chat) + creator **⋯** overflow; kind badge; Posted/Expires bento cells; optional host card; description card.
 
 ### HubChatScreen
 
@@ -189,9 +189,9 @@ Soundtrack / community kinds (hazard, SOS, utility, study): same bordered hero +
 | Action | Result |
 |--------|--------|
 | ⋯ overflow (creator, last hero button) | Themed dropdown (opaque surface, 2dp border, zero elevation): Edit / Delete → existing dialogs |
-| Share | System text share (title, schedule, maps HTTPS link) |
+| Share | System text share (title, schedule, maps HTTPS link) **or** Share to chat picker (animated enter); available on event, soundtrack, and community beacon details (including Home saved events) |
 | Bookmark / Check in | Server-backed (`GET/PUT` bookmark, `GET/POST/DELETE` check-in, `GET` engagement). Check-in is a **labeled full-width CTA** (not a hero circle). Requires location + live window (+15m early grace) + venue-scale geofence. Snackbars: “Location access is required to check in” / “Location required to check in” / “Move closer to the event to check in” / “Check-in opens when the event starts”. Impression fired on detail open. Creation may use a geocoded address; attendance check-in still requires being at the venue. |
-| ACTIVE CLICKS avatar stack | → **People** directory section (`EventPeopleDirectorySection`) with Directory sheet: sorts A–Z / Interests / Distance / Mutuals; FoF mutuals unlock after check-in |
+| ACTIVE CLICKS avatar stack | → **People** directory section (`EventPeopleDirectorySection`) with Directory sheet: sorts A–Z / Interests / Mutuals (sort-aware row metrics; list fills expanded sheet height and resets to top on chip change); FoF mutuals unlock after check-in |
 | Join Event Route | Opens HTTPS maps (`maps.google.com`, Apple Maps fallback). Avoid primary `geo:` on iOS |
 | Event RSVP | `"RSVP / Sign Up"` or `"Cancel RSVP"` |
 | Play preview | Audio player on soundtrack beacons |

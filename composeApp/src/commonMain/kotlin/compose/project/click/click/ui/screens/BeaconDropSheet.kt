@@ -9,9 +9,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
@@ -113,7 +110,6 @@ private val hubCategoryOptions = listOf(
     "gaming", "tech", "art", "fitness", "networking", "party",
 )
 
-private val BeaconSingleLineFieldHeight = 72.dp
 private val BeaconMultilineFieldHeight = 128.dp
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -186,7 +182,6 @@ fun BeaconDropSheetContent(
     val chipContainer = MaterialTheme.colorScheme.surfaceContainerHighest
     val chipSelected = MaterialTheme.colorScheme.primaryContainer
     val scroll = rememberScrollState()
-    val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = MaterialTheme.colorScheme.onSurface,
         unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
@@ -299,10 +294,12 @@ fun BeaconDropSheetContent(
                                 onDismissError()
                             }
                         },
+                        modifier = Modifier.size(40.dp),
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ContentPaste,
                             contentDescription = "Paste link",
+                            modifier = Modifier.size(22.dp),
                         )
                     }
                 },
@@ -770,7 +767,7 @@ fun BeaconDropSheetContent(
                 Text(if (isHubMode) "Create hub" else "Drop pin")
             }
         }
-        Spacer(modifier = Modifier.height(8.dp + imeBottom))
+        Spacer(modifier = Modifier.height(8.dp))
     }
 }
 
@@ -786,32 +783,29 @@ private fun BeaconDropOutlinedField(
     onDismissKeyboard: () -> Unit,
     keyboardType: KeyboardType = KeyboardType.Text,
 ) {
-    val fieldHeight = if (singleLine) BeaconSingleLineFieldHeight else BeaconMultilineFieldHeight
     val lineCount = if (singleLine) 1 else 3
-    Box(
+    ClickOutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
         modifier = Modifier
             .fillMaxWidth()
-            .height(fieldHeight),
-    ) {
-        ClickOutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.fillMaxSize(),
-            placeholder = { Text(placeholder) },
-            singleLine = singleLine,
-            minLines = lineCount,
-            maxLines = lineCount,
-            keyboardOptions = if (singleLine) {
-                KeyboardOptions(
-                    keyboardType = keyboardType,
-                    imeAction = ImeAction.Done,
-                )
-            } else {
-                KeyboardOptions(imeAction = ImeAction.Done)
-            },
-            keyboardActions = KeyboardActions(onDone = { onDismissKeyboard() }),
-            trailingIcon = trailingIcon,
-            colors = colors,
-        )
-    }
+            .then(
+                if (singleLine) Modifier else Modifier.height(BeaconMultilineFieldHeight),
+            ),
+        placeholder = { Text(placeholder) },
+        singleLine = singleLine,
+        minLines = lineCount,
+        maxLines = lineCount,
+        keyboardOptions = if (singleLine) {
+            KeyboardOptions(
+                keyboardType = keyboardType,
+                imeAction = ImeAction.Done,
+            )
+        } else {
+            KeyboardOptions(imeAction = ImeAction.Done)
+        },
+        keyboardActions = KeyboardActions(onDone = { onDismissKeyboard() }),
+        trailingIcon = trailingIcon,
+        colors = colors,
+    )
 }

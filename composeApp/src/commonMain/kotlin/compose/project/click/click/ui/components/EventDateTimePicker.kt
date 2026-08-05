@@ -5,6 +5,7 @@ package compose.project.click.click.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -82,6 +84,7 @@ fun EventDateTimePicker(
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     var pickingStartTime by remember { mutableStateOf(true) }
+    val focusManager = LocalFocusManager.current
 
     val tz = TimeZone.currentSystemDefault()
     val startLocal = remember(schedule.startEpochMs) {
@@ -102,7 +105,13 @@ fun EventDateTimePicker(
         onScheduleChange(EventSchedule(startEpochMs = startMs, endEpochMs = endMs))
     }
 
+    fun openDatePicker() {
+        focusManager.clearFocus(force = true)
+        showDatePicker = true
+    }
+
     fun openTimePicker(forStart: Boolean) {
+        focusManager.clearFocus(force = true)
         pickingStartTime = forStart
         val source = if (forStart) startLocal else endLocal
         val clock = eventClock12hFrom24h(source.hour, source.minute)
@@ -128,12 +137,12 @@ fun EventDateTimePicker(
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ScheduleActionButton(
                 text = "Start: ${formatEventDateOnlyLabel(schedule.startEpochMs, tz)}",
-                onClick = { showDatePicker = true },
+                onClick = { openDatePicker() },
                 modifier = Modifier.weight(1f),
             )
             ScheduleActionButton(
                 text = "End: ${formatEventDateOnlyLabel(schedule.endEpochMs, tz)}",
-                onClick = { showDatePicker = true },
+                onClick = { openDatePicker() },
                 modifier = Modifier.weight(1f),
             )
         }
@@ -196,6 +205,7 @@ fun EventDateTimePicker(
         innerHorizontalPadding = PickerPopupChromePadding,
         bodyHorizontalPadding = 0.dp,
         motion = UnifiedPopupMotion.Picker,
+        focusable = false,
         confirmLabel = "OK",
         confirmEnabled = dateRangeComplete && !dateRangeTooLong,
         onConfirm = {
@@ -289,6 +299,7 @@ fun EventDateTimePicker(
         innerHorizontalPadding = PickerPopupChromePadding,
         bodyHorizontalPadding = PickerPopupChromePadding,
         motion = UnifiedPopupMotion.Picker,
+        focusable = false,
         confirmLabel = "OK",
         onConfirm = {
             val (hour24, minute) = eventClock12hTo24h(
@@ -434,10 +445,13 @@ private fun TumblerColumn(
     val scope = rememberCoroutineScope()
     val edgePadding = TumblerRowHeight * ((TumblerVisibleRows - 1) / 2)
     val safeSelected = selectedIndex.coerceIn(0, (values.size - 1).coerceAtLeast(0))
+    val flingBehavior = rememberSnapFlingBehavior(lazyListState = listState)
 
     LaunchedEffect(safeSelected, values.size) {
         if (values.isEmpty()) return@LaunchedEffect
-        listState.animateScrollToItem(safeSelected)
+        if (listState.firstVisibleItemIndex != safeSelected || listState.firstVisibleItemScrollOffset != 0) {
+            listState.animateScrollToItem(safeSelected)
+        }
     }
 
     LaunchedEffect(listState, values.size) {
@@ -451,9 +465,11 @@ private fun TumblerColumn(
                     val closest = info.visibleItemsInfo.minByOrNull { item ->
                         abs((item.offset + item.size / 2) - viewportCenter)
                     } ?: return@collect
-                    if (closest.index != safeSelected) {
-                        onSelectedIndex(closest.index.coerceIn(0, values.lastIndex))
+                    val index = closest.index.coerceIn(0, values.lastIndex)
+                    if (index != safeSelected) {
+                        onSelectedIndex(index)
                     }
+                    listState.animateScrollToItem(index)
                 }
             }
     }
@@ -463,6 +479,7 @@ private fun TumblerColumn(
         modifier = modifier,
         contentPadding = PaddingValues(vertical = edgePadding),
         horizontalAlignment = Alignment.CenterHorizontally,
+        flingBehavior = flingBehavior,
     ) {
         items(values.size, key = { it }) { index ->
             val selected = index == safeSelected

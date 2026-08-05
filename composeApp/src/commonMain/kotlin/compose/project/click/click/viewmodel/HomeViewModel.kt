@@ -459,7 +459,9 @@ class HomeViewModel(
         try {
             mapBeaconRepository.fetchMyEventBookmarks(limit = 50).fold(
                 onSuccess = { response ->
-                    val next = response.bookmarks.take(5)
+                    val next = response.bookmarks
+                        .distinctBy { it.beaconId }
+                        .sortedByDescending { it.bookmarkedAt.orEmpty() }
                     _savedEventBookmarks.value = next
                     AppDataManager.updateCachedEventBookmarks(next)
                 },

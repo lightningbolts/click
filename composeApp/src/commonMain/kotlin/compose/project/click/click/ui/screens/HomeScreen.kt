@@ -59,6 +59,7 @@ import compose.project.click.click.data.models.ConnectionInsights // pragma: all
 import compose.project.click.click.data.models.ReconnectReminder // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.mostUrgentArchiveNotice // pragma: allowlist secret
+import compose.project.click.click.ui.components.BeaconShareToChatDialog
 import compose.project.click.click.ui.components.ConnectionArchiveWarningBanner // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
@@ -108,6 +109,11 @@ fun HomeScreen(
     onOpenSearch: (() -> Unit)? = null,
     onNavigateToMap: (beaconId: String?) -> Unit = {},
     onNavigateToMapLayer: (MapLayerFilter) -> Unit = {},
+    onShareBeaconToChats: ((
+        MapBeacon,
+        List<String>,
+        String?,
+    ) -> Unit)? = null,
 ) {
     val homeState by homeViewModel.homeState.collectAsState()
     var lastSuccessfulHomeState by remember { mutableStateOf<HomeState.Success?>(null) }
@@ -140,6 +146,7 @@ fun HomeScreen(
     val mapBeacons by mapViewModel.mapBeacons.collectAsState()
     val currentUser by AppDataManager.currentUser.collectAsState()
     var selectedSavedEventBeacon by remember { mutableStateOf<MapBeacon?>(null) }
+    var shareSavedBeaconToChat by remember { mutableStateOf<MapBeacon?>(null) }
     var archiveBannerNow by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
 
     // Use the same auth-aware refresh path as Settings so intents aren't empty after fast boot.
@@ -533,9 +540,13 @@ fun HomeScreen(
             }
             val isCreator = !currentUser?.id.isNullOrBlank() &&
                 detailBeacon.createdByUserId == currentUser?.id
+            val inboxChats by AppDataManager.inboxFeedChats.collectAsState()
             MapBeaconSheetRoot(
                 visible = true,
-                onDismissRequest = { selectedSavedEventBeacon = null },
+                onDismissRequest = {
+                    shareSavedBeaconToChat = null
+                    selectedSavedEventBeacon = null
+                },
                 containerColor = detailSurface,
                 contentColor = onDetailSurface,
                 scrimColor = Color.Black.copy(alpha = ClickSheetDefaults.ScrimAlpha),
@@ -559,6 +570,9 @@ fun HomeScreen(
                             isCreator = isCreator,
                             onEdit = { selectedSavedEventBeacon = null },
                             onDelete = { selectedSavedEventBeacon = null },
+                            onShareToChat = {
+                                shareSavedBeaconToChat = detailBeacon
+                            },
                             modifier = Modifier
                                 .fillMaxSize()
                                 .verticalScroll(rememberScrollState())
@@ -574,6 +588,21 @@ fun HomeScreen(
                             .padding(horizontal = 16.dp)
                             .padding(bottom = 24.dp)
                             .zIndex(100f),
+                    )
+                }
+                shareSavedBeaconToChat?.let { beaconToShare ->
+                    BeaconShareToChatDialog(
+                        beacon = beaconToShare,
+                        chats = inboxChats,
+                        onDismissRequest = { shareSavedBeaconToChat = null },
+                        onShare = { selectedChatIds, openChatConnectionId ->
+                            onShareBeaconToChats?.invoke(
+                                beaconToShare,
+                                selectedChatIds,
+                                openChatConnectionId,
+                            )
+                            shareSavedBeaconToChat = null
+                        },
                     )
                 }
             }

@@ -25,7 +25,6 @@ enum class AttendeeRelationship {
 enum class EventAttendeeSortMode {
     Alphabetical,
     InterestOverlap,
-    RsvpDistance,
     MutualConnections,
 }
 
@@ -62,12 +61,6 @@ fun sortEventAttendees(
             compareByDescending<DirectoryAttendee> { it.sharedInterestCount }
                 .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name },
         )
-    EventAttendeeSortMode.RsvpDistance ->
-        attendees.sortedWith(
-            compareBy<DirectoryAttendee> { it.distanceMeters == null }
-                .thenBy { it.distanceMeters ?: Double.POSITIVE_INFINITY }
-                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name },
-        )
     EventAttendeeSortMode.MutualConnections ->
         attendees.sortedWith(
             compareByDescending<DirectoryAttendee> { it.mutualConnectionCount }
@@ -86,6 +79,41 @@ fun relationshipSubtitle(attendee: DirectoryAttendee): String? = when (attendee.
         if (via.isEmpty()) "Mutual" else "Mutual · via ${via.take(2).joinToString(", ")}"
     }
     AttendeeRelationship.Stranger -> null
+}
+
+/**
+ * Primary metric line under the attendee name for the active directory sort chip.
+ * Keeps one density-matched line instead of always advertising shared interests.
+ */
+fun directorySortMetricSubtitle(
+    attendee: DirectoryAttendee,
+    mode: EventAttendeeSortMode,
+): String? = when (mode) {
+    EventAttendeeSortMode.Alphabetical -> relationshipSubtitle(attendee)
+    EventAttendeeSortMode.InterestOverlap -> {
+        val count = attendee.sharedInterestCount
+        when {
+            count <= 0 -> relationshipSubtitle(attendee)
+            count == 1 -> "1 shared interest"
+            else -> "$count shared interests"
+        }
+    }
+    EventAttendeeSortMode.MutualConnections -> {
+        val count = attendee.mutualConnectionCount
+        when {
+            count > 0 -> {
+                val via = relationshipSubtitle(attendee)
+                if (via != null && attendee.relationship == AttendeeRelationship.Mutual) {
+                    via
+                } else if (count == 1) {
+                    "1 mutual"
+                } else {
+                    "$count mutuals"
+                }
+            }
+            else -> relationshipSubtitle(attendee)
+        }
+    }
 }
 
 /** Profile / connect CTAs: only direct connections get connection actions from the directory. */

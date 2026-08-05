@@ -148,10 +148,16 @@ object AppDataManager {
         StateFlow<List<compose.project.click.click.data.api.EventBookmarkItemDto>> =
         _cachedEventBookmarks.asStateFlow()
 
+    /** Home Saved Events section — keep in sync with API bookmark page size. */
+    private const val SAVED_EVENT_BOOKMARKS_LIMIT = 50
+
     fun updateCachedEventBookmarks(
         bookmarks: List<compose.project.click.click.data.api.EventBookmarkItemDto>,
     ) {
-        _cachedEventBookmarks.value = bookmarks.take(5)
+        _cachedEventBookmarks.value = bookmarks
+            .distinctBy { it.beaconId }
+            .sortedByDescending { it.bookmarkedAt.orEmpty() }
+            .take(SAVED_EVENT_BOOKMARKS_LIMIT)
         schedulePersistSnapshot()
     }
 
@@ -1159,29 +1165,67 @@ object AppDataManager {
                 // GPS may not be ready the instant the app cold-starts. Retry a few times so the
                 // discovery feed is seeded with hubs + beacons without waiting for the user to
                 // open (and acquire bounds from) the expanded map.
+                // GPS may not be ready (or unset on simulator). Try a few short attempts, then
+                // fall through to connection / cache anchors instead of blocking for ~30s.
                 var loc: compose.project.click.click.utils.LocationResult? = null
                 if (locationService.hasLocationPermission()) {
                     var attempt = 0
-                    while (attempt < BEACON_PREFETCH_MAX_ATTEMPTS && currentCoroutineContext().isActive) {
+                    while (attempt < 2 && currentCoroutineContext().isActive) {
                         loc = locationService.getCurrentLocation()
-                            ?: locationService.getHighAccuracyLocation(2_000L)
+                            ?: locationService.getHighAccuracyLocation(1_500L)
                         if (loc != null) break
                         attempt++
-                        if (attempt < BEACON_PREFETCH_MAX_ATTEMPTS) {
-                            delay(BEACON_PREFETCH_RETRY_DELAY_MS)
+                        if (attempt < 2) {
+                            delay(1_000L)
                         }
                     }
                 }
-                // When GPS is still unavailable (common on Android cold start), seed from
-                // connection encounter centroids so events/beacons still hydrate from the API.
+                // When GPS is still unavailable (common on simulators with Location=None), seed
+                // from connection centroids or cached beacon/hub/bookmark coords so Nearby still
+                // hydrates without waiting on a live fix.
                 val resolvedLatLon: Pair<Double, Double>? = loc?.let { it.latitude to it.longitude }
                     ?: run {
                         val geos = _connections.value.mapNotNull { it.connectionMapGeo() }
                         if (geos.isEmpty()) null
                         else geos.map { it.lat }.average() to geos.map { it.lon }.average()
                     }
+                    ?: run {
+                        val coords = buildList {
+                            _prefetchedMapBeacons.value.forEach { b ->
+                                if (
+                                    b.latitude.isFinite() && b.longitude.isFinite() &&
+                                    !(b.latitude == 0.0 && b.longitude == 0.0)
+                                ) {
+                                    add(b.latitude to b.longitude)
+                                }
+                            }
+                            _prefetchedCommunityHubs.value.forEach { h ->
+                                if (
+                                    h.latitude.isFinite() && h.longitude.isFinite() &&
+                                    !(h.latitude == 0.0 && h.longitude == 0.0)
+                                ) {
+                                    add(h.latitude to h.longitude)
+                                }
+                            }
+                            _cachedEventBookmarks.value.forEach { bm ->
+                                val lat = bm.latitude ?: return@forEach
+                                val lon = bm.longitude ?: return@forEach
+                                if (lat.isFinite() && lon.isFinite() && !(lat == 0.0 && lon == 0.0)) {
+                                    add(lat to lon)
+                                }
+                            }
+                        }
+                        if (coords.isEmpty()) null
+                        else coords.map { it.first }.average() to coords.map { it.second }.average()
+                    }
                 val resolved = resolvedLatLon ?: return@runCatching
-                _lastKnownDeviceLocation.value = resolved
+                // Only treat a real GPS fix as last-known device location; cache centroids are
+                // discovery anchors only.
+                if (loc != null) {
+                    _lastKnownDeviceLocation.value = loc.latitude to loc.longitude
+                } else if (_lastKnownDeviceLocation.value == null) {
+                    _lastKnownDeviceLocation.value = resolved
+                }
                 val centerLat = resolved.first
                 val centerLon = resolved.second
                 val latDelta = BEACON_PREFETCH_RADIUS_METERS / 111_320.0

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -493,7 +494,7 @@ internal fun EventsDiscoveryFullScreen(
                             AppEmptyState(
                                 icon = Icons.Default.Place,
                                 title = "Nothing nearby",
-                                body = "Drop a soundtrack or event, or enable more layers to see what's around you.",
+                                body = "Drop a soundtrack or event, enable more layers, or set a simulator location / grant location access so we can load what’s around you.",
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
@@ -560,10 +561,12 @@ private fun EventsSheetSearchField(
     val shape = RoundedCornerShape(16.dp)
     Row(
         modifier = modifier
+            .fillMaxWidth()
+            .height(56.dp)
             .clip(shape)
             .background(clickCardSurface())
             .border(2.dp, clickBorderColor(), shape)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -581,18 +584,25 @@ private fun EventsSheetSearchField(
                 color = MaterialTheme.colorScheme.onSurface,
             ),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
             decorationBox = { inner ->
-                if (query.isEmpty()) {
-                    Text(
-                        text = "Search nearby…",
-                        style = clickTextFieldTextStyle(),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    if (query.isEmpty()) {
+                        Text(
+                            text = "Search nearby…",
+                            style = clickTextFieldTextStyle(),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    inner()
                 }
-                inner()
             },
         )
     }

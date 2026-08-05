@@ -18,6 +18,7 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 
 /**
@@ -39,6 +40,8 @@ actual class LocationService {
         /** Discovery / beacon prefetch: match iOS coarse cache tolerance so Android still seeds the feed. */
         private const val DISCOVERY_LAST_KNOWN_MAX_AGE_MS = 60 * 60_000L
         private const val DISCOVERY_LAST_KNOWN_MAX_ACCURACY_METERS = 5_000f
+        /** Bound cold-start fresh fix so discovery distance is not blocked indefinitely. */
+        private const val FRESH_LOCATION_TIMEOUT_MS = 2_500L
     }
 
     private val context: Context
@@ -135,20 +138,16 @@ actual class LocationService {
         }
 
         return try {
-            // Prefer a fresh high-accuracy fix first.
-            val freshLocation = getFreshLocation()
-            if (freshLocation != null) {
-                println("LocationService.android: Got fresh location: ${freshLocation.latitude}, ${freshLocation.longitude}")
-                return freshLocation
-            }
-
-            // Fall back to a recent last-known fix if a fresh fix is unavailable.
+            // Instant-then-refine: last-known / coarse first so Nearby distance paints immediately.
             val lastLocation = getLastKnownLocation(
                 maxAgeMs = LAST_KNOWN_MAX_AGE_MS,
                 maxAccuracyMeters = LAST_KNOWN_MAX_ACCURACY_METERS,
             )
             if (lastLocation != null) {
-                println("LocationService.android: Falling back to last known location: ${lastLocation.latitude}, ${lastLocation.longitude}")
+                println(
+                    "LocationService.android: Using last known location: " +
+                        "${lastLocation.latitude}, ${lastLocation.longitude}",
+                )
                 return lastLocation
             }
 
@@ -163,8 +162,20 @@ actual class LocationService {
                     "LocationService.android: Coarse last-known for discovery: " +
                         "${coarse.latitude}, ${coarse.longitude}",
                 )
+                return coarse
             }
-            coarse
+
+            // Cold start: wait briefly for a fresh fix, then give up.
+            val freshLocation = withTimeoutOrNull(FRESH_LOCATION_TIMEOUT_MS) { getFreshLocation() }
+            if (freshLocation != null) {
+                println(
+                    "LocationService.android: Got fresh location: " +
+                        "${freshLocation.latitude}, ${freshLocation.longitude}",
+                )
+            } else {
+                println("LocationService.android: Fresh location timed out or unavailable")
+            }
+            freshLocation
         } catch (e: Exception) {
             println("LocationService.android: Error getting location: ${e.message}")
             null

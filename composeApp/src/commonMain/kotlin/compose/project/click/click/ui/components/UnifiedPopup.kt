@@ -100,15 +100,21 @@ fun UnifiedPopupOverlay(
     modifier: Modifier = Modifier,
     scrimAlpha: Float = GlassSheetTokens.ScrimBaseAlpha,
     motion: UnifiedPopupMotion = UnifiedPopupMotion.Default,
+    /**
+     * When false, the overlay does not steal text-field focus (avoids IME collapse layout jumps
+     * under form sheets). Date/time pickers should pass false.
+     */
+    focusable: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val transitionState = remember { MutableTransitionState(false) }
     var userDismissPending by remember { mutableStateOf(false) }
 
-    if (visible && !userDismissPending) {
-        transitionState.targetState = true
-    } else if (!visible && !userDismissPending) {
-        transitionState.targetState = false
+    // Defer enter/exit targeting so AnimatedVisibility actually plays (sync assign on first
+    // mount can skip the enter transition when the host composable appears already visible).
+    LaunchedEffect(visible, userDismissPending) {
+        if (userDismissPending) return@LaunchedEffect
+        transitionState.targetState = visible
     }
 
     fun requestDismiss() {
@@ -166,7 +172,7 @@ fun UnifiedPopupOverlay(
         Popup(
             onDismissRequest = { requestDismiss() },
             properties = PopupProperties(
-                focusable = true,
+                focusable = focusable,
                 dismissOnBackPress = true,
                 dismissOnClickOutside = true,
             ),
@@ -403,12 +409,15 @@ fun UnifiedPopupFormDialog(
     bodyHorizontalPadding: Dp? = null,
     motion: UnifiedPopupMotion = UnifiedPopupMotion.Default,
     confirmEnabled: Boolean = true,
+    /** When false, picker overlays avoid stealing focus from form fields (no IME layout jump). */
+    focusable: Boolean = true,
     body: @Composable () -> Unit,
 ) {
     UnifiedPopupOverlay(
         visible = visible,
         onDismissRequest = onDismissRequest,
         motion = motion,
+        focusable = focusable,
     ) {
         val requestAnimatedDismiss = LocalUnifiedPopupAnimatedDismiss.current
         val surfaceModifier = modifier

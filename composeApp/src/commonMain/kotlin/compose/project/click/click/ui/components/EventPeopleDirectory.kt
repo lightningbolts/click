@@ -1,6 +1,5 @@
 package compose.project.click.click.ui.components
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,15 +8,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -25,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,8 +40,8 @@ import compose.project.click.click.events.AttendeeRelationship
 import compose.project.click.click.events.DirectoryAttendee
 import compose.project.click.click.events.EventAttendeeSortMode
 import compose.project.click.click.events.allowsDirectoryConnectActions
+import compose.project.click.click.events.directorySortMetricSubtitle
 import compose.project.click.click.events.mutualsAtEvent
-import compose.project.click.click.events.relationshipSubtitle
 import compose.project.click.click.events.sortEventAttendees
 import compose.project.click.click.ui.theme.clickBorderColor
 import compose.project.click.click.ui.theme.clickCardSurface
@@ -155,13 +155,24 @@ fun EventPeopleDirectorySheetContent(
     val mutuals = remember(attendees, mutualsSectionUnlocked) {
         if (mutualsSectionUnlocked) mutualsAtEvent(attendees) else emptyList()
     }
+    val listState = rememberLazyListState()
     val border = clickBorderColor()
     val onSurface = MaterialTheme.colorScheme.onSurface
     val onVariant = MaterialTheme.colorScheme.onSurfaceVariant
+    // When Mutuals chip is selected, Everyone is already mutual-ordered — skip duplicate block.
+    val showMutualsSection =
+        mutualsSectionUnlocked &&
+            mutuals.isNotEmpty() &&
+            sortMode != EventAttendeeSortMode.MutualConnections
+
+    LaunchedEffect(sortMode) {
+        listState.scrollToItem(0)
+    }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .fillMaxHeight()
             .padding(horizontal = 20.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -187,31 +198,12 @@ fun EventPeopleDirectorySheetContent(
             SortChip("Interests", sortMode == EventAttendeeSortMode.InterestOverlap) {
                 sortMode = EventAttendeeSortMode.InterestOverlap
             }
-            SortChip("Distance", sortMode == EventAttendeeSortMode.RsvpDistance) {
-                sortMode = EventAttendeeSortMode.RsvpDistance
-            }
             SortChip("Mutuals", sortMode == EventAttendeeSortMode.MutualConnections) {
                 sortMode = EventAttendeeSortMode.MutualConnections
             }
         }
 
-        if (mutualsSectionUnlocked && mutuals.isNotEmpty()) {
-            Text(
-                text = "Mutuals here",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = onSurface,
-            )
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                mutuals.forEach { attendee ->
-                    DirectoryAttendeeRow(
-                        attendee = attendee,
-                        border = border,
-                        onClick = { onAttendeeClick(attendee) },
-                    )
-                }
-            }
-        } else if (!mutualsSectionUnlocked) {
+        if (!mutualsSectionUnlocked) {
             Text(
                 text = "Check in at the event to unlock mutuals (friends of friends) for future reference.",
                 style = MaterialTheme.typography.bodySmall,
@@ -224,7 +216,7 @@ fun EventPeopleDirectorySheetContent(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(120.dp),
+                        .weight(1f),
                     contentAlignment = Alignment.Center,
                 ) {
                     CircularProgressIndicator(strokeWidth = 2.dp)
@@ -238,22 +230,49 @@ fun EventPeopleDirectorySheetContent(
                 )
             }
             else -> {
-                Text(
-                    text = "Everyone",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = onSurface,
-                )
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 420.dp),
+                        .weight(1f),
                     contentPadding = PaddingValues(bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
+                    if (showMutualsSection) {
+                        item(key = "mutuals-header") {
+                            Text(
+                                text = "Mutuals here",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = onSurface,
+                                modifier = Modifier.padding(bottom = 8.dp, top = 4.dp),
+                            )
+                        }
+                        items(mutuals, key = { "mutual-${it.userId}" }) { attendee ->
+                            DirectoryAttendeeRow(
+                                attendee = attendee,
+                                sortMode = EventAttendeeSortMode.MutualConnections,
+                                border = border,
+                                onClick = { onAttendeeClick(attendee) },
+                            )
+                        }
+                    }
+                    item(key = "everyone-header") {
+                        Text(
+                            text = "Everyone",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = onSurface,
+                            modifier = Modifier.padding(
+                                bottom = 8.dp,
+                                top = if (showMutualsSection) 12.dp else 4.dp,
+                            ),
+                        )
+                    }
                     items(sorted, key = { it.userId }) { attendee ->
                         DirectoryAttendeeRow(
                             attendee = attendee,
+                            sortMode = sortMode,
                             border = border,
                             onClick = { onAttendeeClick(attendee) },
                         )
@@ -294,6 +313,7 @@ private fun SortChip(label: String, selected: Boolean, onClick: () -> Unit) {
 @Composable
 private fun DirectoryAttendeeRow(
     attendee: DirectoryAttendee,
+    sortMode: EventAttendeeSortMode,
     border: androidx.compose.ui.graphics.Color,
     onClick: () -> Unit,
 ) {
@@ -302,7 +322,7 @@ private fun DirectoryAttendeeRow(
         AttendeeRelationship.Mutual -> MaterialTheme.colorScheme.outline
         else -> border
     }
-    val subtitle = relationshipSubtitle(attendee)
+    val subtitle = directorySortMetricSubtitle(attendee, sortMode)
     val onSurface = MaterialTheme.colorScheme.onSurface
     val onVariant = MaterialTheme.colorScheme.onSurfaceVariant
     Row(
@@ -338,16 +358,15 @@ private fun DirectoryAttendeeRow(
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = onVariant,
+                    color = if (sortMode == EventAttendeeSortMode.InterestOverlap &&
+                        attendee.sharedInterestCount > 0
+                    ) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        onVariant
+                    },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                )
-            }
-            if (attendee.sharedInterestCount > 0) {
-                Text(
-                    text = "${attendee.sharedInterestCount} shared interest${if (attendee.sharedInterestCount == 1) "" else "s"}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
                 )
             }
         }

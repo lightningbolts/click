@@ -33,7 +33,7 @@ HomeScreen (organism)
         │   ├── AssistChip[] per active intent
         │   ├── AssistChip "Set what you're down for" | "Edit intents"
         │   └── overlap lines (scheme tertiary)
-        ├── Saved events (conditional)  // GET /api/me/event-bookmarks, max 5
+        ├── Saved events (conditional)  // GET /api/me/event-bookmarks, up to 50
         │   └── SavedEventsSection category tiles → EventBeaconDetail sheet (stays on Home)
         ├── ExploreNearbyBeaconsSection (conditional)
         │   └── tiles for nearby MapBeaconKind / Hub counts only

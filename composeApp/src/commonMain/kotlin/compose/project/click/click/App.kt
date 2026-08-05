@@ -1425,6 +1425,15 @@ fun App() {
                                     pendingMapLayerFilter = filter
                                     navigateTo(NavigationItem.Map.route)
                                 },
+                                onShareBeaconToChats = { beacon, chatIds, openConnectionId ->
+                                    chatIds.forEach { chatId ->
+                                        chatViewModel.sendBeaconMessageToChat(chatId, beacon)
+                                    }
+                                    if (openConnectionId != null) {
+                                        pendingChatId = openConnectionId
+                                        navigateTo(NavigationItem.Connections.route)
+                                    }
+                                },
                             )
                         }
                         val movableHomeContent = remember {

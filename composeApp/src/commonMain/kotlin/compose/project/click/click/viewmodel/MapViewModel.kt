@@ -71,6 +71,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
@@ -487,12 +488,44 @@ class MapViewModel : ViewModel() {
     }
 
     private fun canEverResolveProximityCenters(): Boolean {
-        if (locationService.hasLocationPermission()) return true
         if (AppDataManager.lastKnownDeviceLocation.value != null) return true
         if (AppDataManager.connections.value.any { it.connectionMapGeo() != null }) return true
+        if (cachedDiscoveryAnchor() != null) return true
         if (_defaultCameraTarget.value != null || lastKnownCameraTarget != null) return true
         if (_visibleBounds.value != null) return true
+        // Permission alone is not enough on simulators with Location=None — avoid endless GPS retries.
         return false
+    }
+
+    /**
+     * Non-GPS proximity center from disk-cached beacons / hubs / saved events so Nearby still
+     * hydrates when the simulator (or permission) has no live fix.
+     */
+    private fun cachedDiscoveryAnchor(): Pair<Double, Double>? {
+        val coords = buildList {
+            AppDataManager.prefetchedMapBeacons.value.forEach { b ->
+                if (b.hasUsableMapCoordinates()) add(b.latitude to b.longitude)
+            }
+            _mapBeacons.value.forEach { b ->
+                if (b.hasUsableMapCoordinates()) add(b.latitude to b.longitude)
+            }
+            AppDataManager.prefetchedCommunityHubs.value.forEach { h ->
+                if (h.latitude.isFinite() && h.longitude.isFinite() &&
+                    !(h.latitude == 0.0 && h.longitude == 0.0)
+                ) {
+                    add(h.latitude to h.longitude)
+                }
+            }
+            AppDataManager.cachedEventBookmarks.value.forEach { bm ->
+                val lat = bm.latitude ?: return@forEach
+                val lon = bm.longitude ?: return@forEach
+                if (lat.isFinite() && lon.isFinite() && !(lat == 0.0 && lon == 0.0)) {
+                    add(lat to lon)
+                }
+            }
+        }
+        if (coords.isEmpty()) return null
+        return coords.map { it.first }.average() to coords.map { it.second }.average()
     }
 
     private fun finishDiscoveryPrefetchAttempt() {
@@ -968,7 +1001,17 @@ class MapViewModel : ViewModel() {
 
         val valid = connections.mapNotNull { c -> c.connectionMapGeo()?.let { g -> c to g } }
 
-        if (valid.isEmpty()) return
+        if (valid.isEmpty()) {
+            cachedDiscoveryAnchor()?.let { (lat, lon) ->
+                val target = CameraTarget(latitude = lat, longitude = lon, zoom = 12.0)
+                _defaultCameraTarget.value = target
+                if (_cameraTarget.value == null) {
+                    _cameraTarget.value = target
+                }
+                prefetchDiscoveryProximityData(showPulse = false, markInitialComplete = false)
+            }
+            return
+        }
 
         val minLat = valid.minOf { it.second.lat }
         val maxLat = valid.maxOf { it.second.lat }
@@ -2729,9 +2772,12 @@ class MapViewModel : ViewModel() {
         }
 
         // Prefer a live/coarse GPS fix early so Android does not wait solely on map bounds.
+        // Cap wait so simulators with Location=None do not block discovery for seconds.
         if (raw.isEmpty() && locationService.hasLocationPermission()) {
-            val gps = locationService.getCurrentLocation()
-                ?: locationService.getHighAccuracyLocation(1_500L)
+            val gps = withTimeoutOrNull(1_200L) {
+                locationService.getCurrentLocation()
+                    ?: locationService.getHighAccuracyLocation(1_000L)
+            }
             if (gps != null) {
                 AppDataManager.noteDeviceLocation(gps.latitude, gps.longitude)
                 raw += gps.latitude to gps.longitude
@@ -2742,6 +2788,8 @@ class MapViewModel : ViewModel() {
         if (connectionGeos.isNotEmpty()) {
             raw += connectionGeos.map { it.lat }.average() to connectionGeos.map { it.lon }.average()
         }
+
+        cachedDiscoveryAnchor()?.let { raw += it }
 
         listOfNotNull(
             _cameraTarget.value?.let { it.latitude to it.longitude },
@@ -2759,15 +2807,6 @@ class MapViewModel : ViewModel() {
             }
             _visibleBounds.value?.let { bounds ->
                 raw += bounds.centerLat to bounds.centerLon
-            }
-        }
-
-        if (raw.isEmpty() && locationService.hasLocationPermission()) {
-            val gps = locationService.getCurrentLocation()
-                ?: locationService.getHighAccuracyLocation(1_500L)
-            if (gps != null) {
-                AppDataManager.noteDeviceLocation(gps.latitude, gps.longitude)
-                raw += gps.latitude to gps.longitude
             }
         }
 

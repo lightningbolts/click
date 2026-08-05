@@ -34,6 +34,9 @@ data class StoredMapBeacon(
     val albumArtUrl: String? = null,
     val musicUrl: String? = null,
     val originalUrl: String? = null,
+    /** Event venue labels — previously dropped on disk, delaying address text after cold start. */
+    val locationName: String? = null,
+    val formattedAddress: String? = null,
 )
 
 @Serializable
@@ -71,6 +74,8 @@ fun MapBeacon.toStoredMapBeacon(): StoredMapBeacon {
         albumArtUrl = metadata.albumArtUrl,
         musicUrl = metadata.musicUrl,
         originalUrl = metadata.originalUrl,
+        locationName = metadata.locationName,
+        formattedAddress = metadata.formattedAddress,
     )
 }
 
@@ -86,6 +91,8 @@ fun StoredMapBeacon.toMapBeacon(): MapBeacon {
         albumArtUrl = albumArtUrl,
         musicUrl = musicUrl,
         originalUrl = originalUrl,
+        locationName = locationName,
+        formattedAddress = formattedAddress,
     )
     return MapBeacon(
         id = id,
@@ -102,6 +109,8 @@ fun StoredMapBeacon.toMapBeacon(): MapBeacon {
             albumArtUrl = albumArtUrl,
             musicUrl = musicUrl,
             originalUrl = originalUrl,
+            locationName = locationName,
+            formattedAddress = formattedAddress,
             raw = scheduleRaw,
         ),
         createdByUserId = createdByUserId,
@@ -125,10 +134,13 @@ private fun storedEventScheduleRaw(
     albumArtUrl: String? = null,
     musicUrl: String? = null,
     originalUrl: String? = null,
+    locationName: String? = null,
+    formattedAddress: String? = null,
 ): JsonObject? {
     val hasSoundtrack = listOf(trackName, artistName, previewUrl, albumArtUrl, musicUrl, originalUrl)
         .any { !it.isNullOrBlank() }
-    if (title == null && description == null && !hasSoundtrack &&
+    val hasVenue = !locationName.isNullOrBlank() || !formattedAddress.isNullOrBlank()
+    if (title == null && description == null && !hasSoundtrack && !hasVenue &&
         (eventStartAtEpochMs == null || eventEndAtEpochMs == null)
     ) {
         return null
@@ -145,6 +157,8 @@ private fun storedEventScheduleRaw(
         albumArtUrl?.takeIf { it.isNotBlank() }?.let { put("album_art_url", JsonPrimitive(it)) }
         musicUrl?.takeIf { it.isNotBlank() }?.let { put("music_url", JsonPrimitive(it)) }
         originalUrl?.takeIf { it.isNotBlank() }?.let { put("original_url", JsonPrimitive(it)) }
+        locationName?.takeIf { it.isNotBlank() }?.let { put("location_name", JsonPrimitive(it)) }
+        formattedAddress?.takeIf { it.isNotBlank() }?.let { put("formatted_address", JsonPrimitive(it)) }
         if (eventStartAtEpochMs != null && eventEndAtEpochMs != null &&
             eventEndAtEpochMs > eventStartAtEpochMs
         ) {
@@ -205,6 +219,8 @@ internal fun MapBeacon.withPreservedEventScheduleFrom(existing: MapBeacon?): Map
             albumArtUrl = metadata.albumArtUrl ?: existing.metadata.albumArtUrl,
             musicUrl = metadata.musicUrl ?: existing.metadata.musicUrl,
             originalUrl = metadata.originalUrl ?: existing.metadata.originalUrl,
+            locationName = metadata.locationName ?: existing.metadata.locationName,
+            formattedAddress = metadata.formattedAddress ?: existing.metadata.formattedAddress,
             eventCategories = metadata.eventCategories.ifEmpty { existing.metadata.eventCategories },
             raw = mergedRaw ?: existing.metadata.raw,
         ),
@@ -230,7 +246,7 @@ private fun mergeSoundtrackRaw(primary: JsonObject?, fallback: JsonObject?): Jso
     if (fallback == null) return primary
     val keys = listOf(
         "preview_url", "album_art_url", "track_name", "artist_name", "artist",
-        "music_url", "original_url", "title",
+        "music_url", "original_url", "title", "location_name", "formatted_address",
     )
     return buildJsonObject {
         primary.forEach { (k, v) -> put(k, v) }

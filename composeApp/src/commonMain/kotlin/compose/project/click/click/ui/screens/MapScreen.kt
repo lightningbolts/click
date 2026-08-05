@@ -431,15 +431,15 @@ fun MapScreen(
                         communityHubs,
                         mapBeacons,
                         renderData,
-                        userLat,
-                        userLon,
+                        effectiveUserLat,
+                        effectiveUserLon,
                     ) {
                         buildDiscoveryFeedItems(
                             hubs = communityHubs,
                             beacons = mapBeacons,
                             renderData = renderData,
-                            userLat = userLat,
-                            userLon = userLon,
+                            userLat = effectiveUserLat,
+                            userLon = effectiveUserLon,
                         )
                     }
                     val eventNearbyCount = remember(feedItems) {
@@ -1251,6 +1251,7 @@ internal fun BeaconDetailSheetContent(
                 isCreator = isCreator,
                 onEdit = openEdit,
                 onDelete = openDelete,
+                onShareToChat = onShareBeaconToChat?.let { cb -> { cb(beacon) } },
                 modifier = Modifier.fillMaxWidth(),
             )
             MapBeaconKind.EVENT -> EventBeaconDetail(
@@ -1268,9 +1269,11 @@ internal fun BeaconDetailSheetContent(
                 CommunityBeaconDetail(
                     beacon = beacon,
                     distanceMeters = distanceMeters,
+                    viewModel = viewModel,
                     isCreator = isCreator,
                     onEdit = openEdit,
                     onDelete = openDelete,
+                    onShareToChat = onShareBeaconToChat?.let { cb -> { cb(beacon) } },
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -1513,6 +1516,12 @@ internal fun EventBeaconDetail(
 
     LaunchedEffect(displayBeacon.id, currentUserSignedUp, checkedIn) {
         if (currentUserSignedUp || checkedIn) {
+            viewModel.loadBeaconAttendeeDirectory(displayBeacon.id, forceRefresh = false)
+        }
+    }
+
+    LaunchedEffect(showPeopleDirectory, displayBeacon.id) {
+        if (showPeopleDirectory) {
             viewModel.loadBeaconAttendeeDirectory(displayBeacon.id, forceRefresh = true)
         }
     }
@@ -1880,6 +1889,52 @@ private fun EventLiveBadge() {
 }
 
 @Composable
+private fun BeaconShareMenuButton(
+    onShare: () -> Unit,
+    onShareToChat: (() -> Unit)?,
+    border: androidx.compose.ui.graphics.Color,
+    contentDescription: String = "Share",
+) {
+    var shareMenuExpanded by remember { mutableStateOf(false) }
+    Box {
+        EventHeroIconButton(
+            selected = shareMenuExpanded,
+            border = border,
+            onClick = {
+                if (onShareToChat != null) {
+                    shareMenuExpanded = true
+                } else {
+                    onShare()
+                }
+            },
+            contentDescription = contentDescription,
+            icon = Icons.Filled.Share,
+        )
+        DropdownMenu(
+            expanded = shareMenuExpanded,
+            onDismissRequest = { shareMenuExpanded = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text("Share link") },
+                onClick = {
+                    shareMenuExpanded = false
+                    onShare()
+                },
+            )
+            if (onShareToChat != null) {
+                DropdownMenuItem(
+                    text = { Text("Share to chat") },
+                    onClick = {
+                        shareMenuExpanded = false
+                        onShareToChat()
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun EventHeroActions(
     bookmarked: Boolean,
     isCreator: Boolean,
@@ -1891,44 +1946,13 @@ private fun EventHeroActions(
 ) {
     val border = clickBorderColor()
     var menuExpanded by remember { mutableStateOf(false) }
-    var shareMenuExpanded by remember { mutableStateOf(false) }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box {
-            EventHeroIconButton(
-                selected = shareMenuExpanded,
-                border = border,
-                onClick = {
-                    if (onShareToChat != null) {
-                        shareMenuExpanded = true
-                    } else {
-                        onShare()
-                    }
-                },
-                contentDescription = "Share event",
-                icon = Icons.Filled.Share,
-            )
-            DropdownMenu(
-                expanded = shareMenuExpanded,
-                onDismissRequest = { shareMenuExpanded = false },
-            ) {
-                DropdownMenuItem(
-                    text = { Text("Share link") },
-                    onClick = {
-                        shareMenuExpanded = false
-                        onShare()
-                    },
-                )
-                if (onShareToChat != null) {
-                    DropdownMenuItem(
-                        text = { Text("Share to chat") },
-                        onClick = {
-                            shareMenuExpanded = false
-                            onShareToChat()
-                        },
-                    )
-                }
-            }
-        }
+        BeaconShareMenuButton(
+            onShare = onShare,
+            onShareToChat = onShareToChat,
+            border = border,
+            contentDescription = "Share event",
+        )
         EventHeroIconButton(
             selected = bookmarked,
             border = border,
@@ -2211,9 +2235,11 @@ private fun EventAttendeeStack(
 internal fun CommunityBeaconDetail(
     beacon: MapBeacon,
     distanceMeters: Double?,
+    viewModel: MapViewModel,
     isCreator: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onShareToChat: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val border = clickBorderColor()
@@ -2312,13 +2338,28 @@ internal fun CommunityBeaconDetail(
                     )
                 }
             }
-            if (isCreator ||
-                (!currentUser?.id.isNullOrBlank() && beacon.createdByUserId == currentUser?.id)
-            ) {
-                BeaconOwnerOverflowMenu(
-                    onEdit = onEdit,
-                    onDelete = onDelete,
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                BeaconShareMenuButton(
+                    onShare = {
+                        val shareUrl = buildEventShareUrl(beacon.id)
+                        viewModel.recordEventShare(beacon.id, shareUrl = shareUrl)
+                        shareText(
+                            text = buildEventShareText(beacon, scheduleLabel = null, distanceLabel = distanceLabel),
+                            subject = beacon.displayDynamicTitle(),
+                        )
+                    },
+                    onShareToChat = onShareToChat,
+                    border = border,
+                    contentDescription = "Share beacon",
                 )
+                if (isCreator ||
+                    (!currentUser?.id.isNullOrBlank() && beacon.createdByUserId == currentUser?.id)
+                ) {
+                    BeaconOwnerOverflowMenu(
+                        onEdit = onEdit,
+                        onDelete = onDelete,
+                    )
+                }
             }
         }
 
@@ -2386,6 +2427,7 @@ internal fun SoundtrackBeaconDetail(
     isCreator: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onShareToChat: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val mapBeacons by viewModel.mapBeacons.collectAsState()
@@ -2453,13 +2495,28 @@ internal fun SoundtrackBeaconDetail(
                     )
                 }
             }
-            if (isCreator ||
-                (!currentUser?.id.isNullOrBlank() && displayBeacon.createdByUserId == currentUser?.id)
-            ) {
-                BeaconOwnerOverflowMenu(
-                    onEdit = onEdit,
-                    onDelete = onDelete,
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                BeaconShareMenuButton(
+                    onShare = {
+                        val shareUrl = buildEventShareUrl(displayBeacon.id)
+                        viewModel.recordEventShare(displayBeacon.id, shareUrl = shareUrl)
+                        shareText(
+                            text = buildEventShareText(displayBeacon, scheduleLabel = null, distanceLabel = distanceLabel),
+                            subject = trackTitle,
+                        )
+                    },
+                    onShareToChat = onShareToChat,
+                    border = border,
+                    contentDescription = "Share soundtrack",
                 )
+                if (isCreator ||
+                    (!currentUser?.id.isNullOrBlank() && displayBeacon.createdByUserId == currentUser?.id)
+                ) {
+                    BeaconOwnerOverflowMenu(
+                        onEdit = onEdit,
+                        onDelete = onDelete,
+                    )
+                }
             }
         }
 

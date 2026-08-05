@@ -3,6 +3,7 @@ package compose.project.click.click.events
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class EventAttendeeDirectoryTest {
@@ -47,19 +48,6 @@ class EventAttendeeDirectoryTest {
     }
 
     @Test
-    fun sortRsvpDistance_nullsLast() {
-        val sorted = sortEventAttendees(
-            listOf(
-                attendee("a", "Far", distance = 900.0),
-                attendee("b", "Unknown", distance = null),
-                attendee("c", "Near", distance = 50.0),
-            ),
-            EventAttendeeSortMode.RsvpDistance,
-        )
-        assertEquals(listOf("Near", "Far", "Unknown"), sorted.map { it.name })
-    }
-
-    @Test
     fun sortMutualConnections() {
         val sorted = sortEventAttendees(
             listOf(
@@ -83,5 +71,23 @@ class EventAttendeeDirectoryTest {
         assertFalse(allowsDirectoryConnectActions(AttendeeRelationship.Mutual))
         assertFalse(allowsDirectoryConnectActions(AttendeeRelationship.Stranger))
         assertTrue(allowsDirectoryConnectActions(AttendeeRelationship.Connection))
+    }
+
+    @Test
+    fun sortAwareMetricSubtitles() {
+        val withInterests = attendee("a", "Alex", interest = 2)
+        val mutual = attendee(
+            "m",
+            "Morgan",
+            mutualCount = 2,
+            relationship = AttendeeRelationship.Mutual,
+            via = listOf(MutualViaPeer("s", "Sam")),
+        )
+        val stranger = attendee("s", "Sam")
+
+        assertEquals("2 shared interests", directorySortMetricSubtitle(withInterests, EventAttendeeSortMode.InterestOverlap))
+        assertEquals("Mutual · via Sam", directorySortMetricSubtitle(mutual, EventAttendeeSortMode.MutualConnections))
+        assertNull(directorySortMetricSubtitle(stranger, EventAttendeeSortMode.Alphabetical))
+        assertNull(directorySortMetricSubtitle(stranger, EventAttendeeSortMode.MutualConnections))
     }
 }
