@@ -39,7 +39,14 @@ events/EventAttendeeDirectory.kt ── sort modes + relationship helpers for pe
 
 ### People directory (client)
 
-Pure sorts live in `EventAttendeeDirectory.kt`. Enrichment is served by `GET /api/beacons/{id}/attendees/directory` (RSVP or check-in required). Sort modes: alphabetical, interest overlap, RSVP distance, mutual connection count. **Mutual** = FoF (not mutual-keep).
+Pure sorts live in `EventAttendeeDirectory.kt`. Enrichment is served by
+`GET /api/beacons/{id}/attendees/directory` (RSVP or a server-confirmed check-in
+required). The mobile directory exposes **A–Z**, **Interests** (shared-interest count),
+and **Mutuals** (mutual/friends-in-common count); each sort uses display name and user ID
+as stable tie breakers. `Mutuals here` is server-authorized enrichment and is sorted with
+the active chip, then excluded from Everyone to avoid duplicate FoF rows. RSVP fallback
+can show attendee names but never represents interest or mutual metrics. **Mutual** = FoF
+(not mutual-keep).
 
 ### `EventSchedule`
 

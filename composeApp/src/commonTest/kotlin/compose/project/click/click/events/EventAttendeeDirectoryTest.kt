@@ -60,6 +60,27 @@ class EventAttendeeDirectoryTest {
     }
 
     @Test
+    fun metricSortsUseUserIdForStableNameTies() {
+        val interests = sortEventAttendees(
+            listOf(
+                attendee("z", "Alex", interest = 2),
+                attendee("a", "alex", interest = 2),
+            ),
+            EventAttendeeSortMode.InterestOverlap,
+        )
+        val mutuals = sortEventAttendees(
+            listOf(
+                attendee("z", "Alex", mutualCount = 2),
+                attendee("a", "alex", mutualCount = 2),
+            ),
+            EventAttendeeSortMode.MutualConnections,
+        )
+
+        assertEquals(listOf("a", "z"), interests.map { it.userId })
+        assertEquals(listOf("a", "z"), mutuals.map { it.userId })
+    }
+
+    @Test
     fun mutualsAtEventCountsPeopleNotPaths() {
         val list = listOf(
             attendee("m1", "Morgan", mutualCount = 3, relationship = AttendeeRelationship.Mutual),
@@ -68,6 +89,26 @@ class EventAttendeeDirectoryTest {
         )
         assertEquals(2, mutualsAtEvent(list).size)
         assertEquals(listOf("Alex"), everyoneExcludingMutualsSection(list).map { it.name })
+    }
+
+    @Test
+    fun mutualSubsectionUsesActiveSortWithoutDuplicatingEveryone() {
+        val list = listOf(
+            attendee("m1", "Morgan", interest = 1, mutualCount = 1, relationship = AttendeeRelationship.Mutual),
+            attendee("m2", "Sam", interest = 3, mutualCount = 2, relationship = AttendeeRelationship.Mutual),
+            attendee("c", "Alex", interest = 2, relationship = AttendeeRelationship.Connection),
+        )
+
+        val pinned = sortEventAttendees(
+            mutualsAtEvent(list),
+            EventAttendeeSortMode.InterestOverlap,
+        )
+        val everyone = everyoneExcludingMutualsSection(
+            sortEventAttendees(list, EventAttendeeSortMode.InterestOverlap),
+        )
+
+        assertEquals(listOf("Sam", "Morgan"), pinned.map { it.name })
+        assertEquals(listOf("Alex"), everyone.map { it.name })
     }
 
     @Test

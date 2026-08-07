@@ -43,3 +43,12 @@ object GlassSheetTokens {
     /** Flat high-opacity dim (no blur). */
     val ScrimBaseAlpha = 0.40f
 }
+
+/**
+ * Sheet **page** fill: transparent on iOS UIKit Liquid Glass hosts so the system
+ * material shows through; solid OLED elsewhere. Cards/buttons stay opaque.
+ */
+@Composable
+@ReadOnlyComposable
+fun sheetPageBackground(): Color =
+    if (LocalSheetUsesPlatformGrabber.current) Color.Transparent else GlassSheetTokens.OledBlack()

@@ -20,6 +20,7 @@ import androidx.compose.material3.*
 import androidx.compose.ui.platform.LocalUriHandler
 import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDialogChrome // pragma: allowlist secret
+import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.AnimatedClickDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
@@ -744,7 +745,7 @@ fun MapScreen(
                     onDismiss = { viewModel.clearSelection() },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
+                        .sheetBodyScroll()
                         .padding(horizontal = 24.dp, vertical = 12.dp),
                 )
             }
@@ -785,7 +786,7 @@ fun MapScreen(
                     onDismiss = { viewModel.clearSelection() },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
+                        .sheetBodyScroll()
                         .padding(horizontal = 24.dp, vertical = 12.dp),
                 )
             }
@@ -814,11 +815,9 @@ fun MapScreen(
             appTypography = MaterialTheme.typography,
             modifier = Modifier,
         ) {
-            Box(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
+            Box(modifier = Modifier.fillMaxWidth()) {
                 ClickSheetDialogChrome(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight(),
+                    modifier = Modifier.fillMaxWidth(),
                     sheetColor = detailSurface,
                     onSurface = onDetailSurface,
                     alignSemanticColorsToSheet = true,
@@ -833,8 +832,8 @@ fun MapScreen(
                         },
                         onNavigateToChat = onNavigateToChat,
                         modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
+                            .fillMaxWidth()
+                            .sheetBodyScroll()
                             .padding(horizontal = 24.dp, vertical = 12.dp),
                     )
                 }
@@ -877,7 +876,7 @@ fun MapScreen(
         }
         val profileSheetColor = GlassSheetTokens.OledBlack()
         val onProfileSheet = GlassSheetTokens.OnOled()
-        MapBeaconSheetRoot(
+            MapBeaconSheetRoot(
             visible = true,
             onDismissRequest = {
                 selectedProfileId = null
@@ -889,6 +888,8 @@ fun MapScreen(
             contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
             appColorScheme = MaterialTheme.colorScheme,
             appTypography = MaterialTheme.typography,
+            // LazyColumn tabs — Compose scroll + whole-sheet drag dismiss.
+            useUiKitScrollHost = false,
         ) {
             ClickSheetDialogChrome(
                 modifier = Modifier
@@ -1501,7 +1502,9 @@ internal fun EventBeaconDetail(
     val directoryEntry = directoryCache[beacon.id]
     val directoryAttendees = directoryEntry?.attendees.orEmpty()
     val directoryLoading = beacon.id in directoryLoadingIds
-    val mutualsUnlocked = directoryEntry?.mutualsSectionUnlocked == true || checkedIn
+    // Mutuals are server-authorized enrichment. Local/early check-in only changes the CTA;
+    // it must not expose an old or unavailable mutual directory payload.
+    val mutualsUnlocked = directoryEntry?.mutualsSectionUnlocked == true
     var showPeopleDirectory by remember(beacon.id) { mutableStateOf(false) }
     var directoryProfileUserId by remember(beacon.id) { mutableStateOf<String?>(null) }
 
@@ -2215,14 +2218,14 @@ private fun EventAttendeeStack(
                                 .size(48.dp)
                                 .border(2.dp, border, CircleShape)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer),
+                                .background(MaterialTheme.colorScheme.secondaryContainer),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
                                 text = "+$overflow",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
                             )
                         }
                     }
@@ -3071,8 +3074,6 @@ private fun OverlappingMapPinsChooser(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val border = clickBorderColor()
-    val cardSurface = clickCardSurface()
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -3098,45 +3099,29 @@ private fun OverlappingMapPinsChooser(
                 MapPinKind.BEACON_OTHER -> "Beacon"
             }
             val shape = RoundedCornerShape(16.dp)
+            val rowSurface = clickCardSurface()
+            val rowBorder = clickBorderColor()
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(shape)
-                    .background(cardSurface)
-                    .border(2.dp, border, shape)
+                    .background(rowSurface)
+                    .border(2.dp, rowBorder, shape)
                     .clickable { onChoose(pin) }
                     .padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                val art = pin.imageUrl?.takeIf { it.isNotBlank() }
-                if (art != null) {
-                    AsyncImage(
-                        model = art,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .border(2.dp, border, CircleShape),
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary)
-                            .border(2.dp, border, CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = pin.avatarInitials.take(2).ifEmpty { "?" },
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                        )
-                    }
-                }
+                ConnectionListUserAvatarFace(
+                    displayName = pin.title,
+                    email = null,
+                    avatarUrl = pin.imageUrl,
+                    userId = pin.avatarUserId ?: pin.id,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .border(2.dp, rowBorder, CircleShape)
+                        .clip(CircleShape),
+                )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = pin.title.ifBlank { kindLabel },

@@ -50,9 +50,11 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import compose.project.click.click.ui.components.rememberGlassAdaptiveSheetState
 import compose.project.click.click.ui.components.ClickLogoPulse
-import compose.project.click.click.ui.components.GlassAdaptiveBottomSheet
+import compose.project.click.click.ui.components.ClickSheetDefaults
+import compose.project.click.click.ui.components.GlassSheetTokens
+import compose.project.click.click.ui.components.sheetPageBackground
+import compose.project.click.click.ui.sheet.MapBeaconSheetRoot
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.ui.theme.clickBorderColor
 import compose.project.click.click.ui.theme.clickCardSurface
@@ -62,7 +64,7 @@ import compose.project.click.click.viewmodel.SearchResultCategory
 import kotlinx.coroutines.delay
 
 /**
- * In-context global search presented as a Functional Clarity adaptive bottom sheet (replaces [GlobalSearchScreen] routing).
+ * In-context global search presented as a platform bottom sheet (replaces [GlobalSearchScreen] routing).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,16 +77,20 @@ fun UnifiedSearchSheet(
     onNavigateToSettings: () -> Unit = {},
     viewModel: GlobalSearchViewModel = viewModel { GlobalSearchViewModel() },
 ) {
-    val sheetState = rememberGlassAdaptiveSheetState(skipPartiallyExpanded = false)
-    LaunchedEffect(sheetState) {
-        delay(32)
-        runCatching { sheetState.show() }
-    }
-
-    GlassAdaptiveBottomSheet(
+    val sheetColor = GlassSheetTokens.OledBlack()
+    val onSheet = GlassSheetTokens.OnOled()
+    MapBeaconSheetRoot(
+        visible = true,
         onDismissRequest = onDismissRequest,
-        adaptiveSheetState = sheetState,
+        containerColor = sheetColor,
+        contentColor = onSheet,
+        scrimColor = Color.Black.copy(alpha = ClickSheetDefaults.ScrimAlpha),
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+        appColorScheme = MaterialTheme.colorScheme,
+        appTypography = MaterialTheme.typography,
+        expandable = true,
+        // LazyColumn results — Compose owns scroll; UIKit still provides page sheet + grabber.
+        useUiKitScrollHost = false,
     ) {
         UnifiedSearchSheetContent(
             userId = userId,
@@ -133,7 +139,7 @@ private fun UnifiedSearchSheetContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(sheetPageBackground())
             .imePadding()
             .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {

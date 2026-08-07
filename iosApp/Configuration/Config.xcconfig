@@ -6,6 +6,11 @@ PRODUCT_BUNDLE_IDENTIFIER=compose.project.click.click
 CURRENT_PROJECT_VERSION=1
 MARKETING_VERSION=1.1
 
+// Compose Multiplatform / KMP only support iosSimulatorArm64 (and iosArm64).
+// Building "Any iOS Simulator Device" otherwise passes x86_64 and fails with:
+//   Unknown iOS simulator arch: 'x86_64'
+EXCLUDED_ARCHS[sdk=iphonesimulator*] = x86_64
+
 // Native iOS Google Sign-In (optional): create an iOS OAuth client in the SAME GCP project as the web client,
 // then set GOOGLE_IOS_CLIENT_ID and add GIDClientID + reversed URL scheme to iosApp/Info.plist.
 // GOOGLE_IOS_CLIENT_ID =

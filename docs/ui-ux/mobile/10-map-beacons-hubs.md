@@ -195,7 +195,7 @@ Soundtrack / community kinds (hazard, SOS, utility, study): same bordered hero; 
 | Join Event Route | Opens HTTPS maps (`maps.google.com`, Apple Maps fallback). Avoid primary `geo:` on iOS |
 | Event RSVP | `"RSVP / Sign Up"` or `"Cancel RSVP"` |
 | Play preview | Audio player on soundtrack beacons — server enrichment fills `track_name` / `artist_name` / `preview_url` / `album_art_url` from Spotify/Apple Music/YouTube share URLs |
-| Sheet dismiss | Expandable full height restored (iOS medium+large / Android partial). Full window width (no max-width snap). One platform grabber. Body pull-down at scroll top dismisses (Android Material nested scroll; iOS whole page-sheet UIView). Mid-list scroll does not dismiss in the same gesture. |
+| Sheet dismiss | iOS: dark Compose grabber (UIKit system grabber off — it painted a light band). Pull up at scroll top → large detent; pull down → whole page-sheet dismiss. Android: Material grabber + nested-scroll dismiss; full window width; expandable partial/expanded. |
 | `"Play full song"` | Opens original media URL |
 
 ### Hub chat settings (`HubChatSettingsMenu`)

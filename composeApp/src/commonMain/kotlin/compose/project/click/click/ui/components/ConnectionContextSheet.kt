@@ -75,6 +75,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import compose.project.click.click.ui.components.sheetBodyScroll
 
 /** Matches DB limits for profile-style short labels (align with interests max length). */
 private const val CUSTOM_CONTEXT_MAX_LENGTH = 25
@@ -450,7 +451,7 @@ fun ConnectionContextSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
+                .sheetBodyScroll()
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {

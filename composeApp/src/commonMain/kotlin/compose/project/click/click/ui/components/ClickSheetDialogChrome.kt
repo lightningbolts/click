@@ -21,8 +21,11 @@ import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.LocalIsDarkMode
 
 /**
- * Shared OLED sheet chrome (grabber + themed body) used by map beacon sheets and all
- * [ClickPlatformSheet] dialogs.
+ * Shared sheet chrome used by map beacon sheets and [ClickPlatformSheet] dialogs.
+ *
+ * iOS UIKit Liquid Glass ([LocalSheetUsesPlatformGrabber]): page background stays
+ * **transparent** so system glass shows through. Cards / controls stay **solid**
+ * (opaque Functional Clarity surfaces) — never frosted components.
  */
 @Composable
 fun ClickSheetDialogChrome(
@@ -34,7 +37,12 @@ fun ClickSheetDialogChrome(
     content: @Composable () -> Unit,
 ) {
     val darkSheet = LocalIsDarkMode.current
-    val showGrabber = useGrabber && !LocalSheetUsesPlatformGrabber.current
+    val platformGrabber = LocalSheetUsesPlatformGrabber.current
+    val scrollOwnedByHost = LocalSheetScrollOwnedByHost.current
+    val nativeGlassSheet = platformGrabber
+    val showGrabber = useGrabber && !platformGrabber
+    // Transparent page only — components use solid [sheetColor] / elevated surfaces below.
+    val chromeColor = if (nativeGlassSheet) Color.Transparent else sheetColor
     val grabberTint = if (alignSemanticColorsToSheet) {
         if (darkSheet) GlassSheetTokens.OnOledMuted().copy(alpha = 0.42f)
         else contentColorFor(sheetColor).copy(alpha = 0.38f)
@@ -50,6 +58,7 @@ fun ClickSheetDialogChrome(
             val mutedOn =
                 if (darkSheet) GlassSheetTokens.OnOledMuted()
                 else lerp(sheetColor, primaryOn, 0.88f)
+            // Solid card fills — same as non-glass sheets.
             val elevatedSurface =
                 if (darkSheet) GlassSheetTokens.GlassSurface()
                 else lerp(sheetColor, primaryOn, 0.12f)
@@ -78,12 +87,18 @@ fun ClickSheetDialogChrome(
         }
     }
 
-    Column(
-        modifier
-            .fillMaxWidth()
-            .fillMaxHeight()
-            .background(sheetColor),
-    ) {
+    // System grabber needs clearance — Profile / titles were jammed under it.
+    val grabberClearance = if (platformGrabber) Modifier.padding(top = 24.dp) else Modifier
+
+    val columnModifier = modifier
+        .fillMaxWidth()
+        .then(
+            if (scrollOwnedByHost) Modifier else Modifier.fillMaxHeight(),
+        )
+        .then(grabberClearance)
+        .background(chromeColor)
+
+    Column(columnModifier) {
         if (showGrabber) {
             Box(
                 modifier = Modifier
@@ -100,12 +115,18 @@ fun ClickSheetDialogChrome(
                 )
             }
         }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f, fill = true),
-        ) {
-            themedContent()
+        if (scrollOwnedByHost) {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                themedContent()
+            }
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = true),
+            ) {
+                themedContent()
+            }
         }
     }
 }

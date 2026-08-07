@@ -64,6 +64,7 @@ import compose.project.click.click.ui.components.ConnectionArchiveWarningBanner 
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDialogChrome // pragma: allowlist secret
+import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
 import compose.project.click.click.ui.components.ExploreNearbyBeaconsSection // pragma: allowlist secret
 import compose.project.click.click.ui.components.FeaturedEventSection // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
@@ -556,11 +557,9 @@ fun HomeScreen(
                 appColorScheme = MaterialTheme.colorScheme,
                 appTypography = MaterialTheme.typography,
             ) {
-                Box(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
+                Box(modifier = Modifier.fillMaxWidth()) {
                     ClickSheetDialogChrome(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight(),
+                        modifier = Modifier.fillMaxWidth(),
                         sheetColor = detailSurface,
                         onSurface = onDetailSurface,
                         alignSemanticColorsToSheet = true,
@@ -576,8 +575,8 @@ fun HomeScreen(
                                 shareSavedBeaconToChat = detailBeacon
                             },
                             modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(rememberScrollState())
+                                .fillMaxWidth()
+                                .sheetBodyScroll()
                                 .padding(horizontal = 24.dp, vertical = 12.dp),
                         )
                     }

@@ -88,6 +88,8 @@ data class MapPin(
      * (and kind-stable seeds for events/hubs). When null, platforms fall back to [markerHueDegrees].
      */
     val avatarFillArgb: Int? = null,
+    /** Peer / entity id for [ConnectionListUserAvatarFace] color seed (not the connection row id). */
+    val avatarUserId: String? = null,
 ) {
     companion object {
         /**
@@ -117,6 +119,7 @@ data class MapPin(
                 caption = cap,
                 avatarInitials = mapPinAvatarInitials(point.displayName),
                 avatarFillArgb = composeColorToArgb(stableAvatarPlaceholderColor(seed)),
+                avatarUserId = seed,
             )
         }
 

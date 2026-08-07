@@ -586,7 +586,7 @@ Caller opens sheet → platform presents opaque shell → dismiss on action or d
 
 ### 11.6 A11y & Responsive
 
-- iOS: native page sheet + theme re-injection.
+- iOS: UIKit `UISheetPresentationController` Liquid Glass (clear host + light wash; no white content gaps).
 - Android: Calf adaptive, half-height cap for Click sheets.
 
 ---

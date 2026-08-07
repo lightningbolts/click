@@ -139,6 +139,7 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.booleanOrNull
+import compose.project.click.click.ui.components.sheetBodyScroll
 
 /**
  * Phase 2 — C13: shared profile bottom sheet displayed when a map pin is tapped.
@@ -739,9 +740,9 @@ fun ProfileBottomSheet(
         modifier = Modifier
             .fillMaxWidth()
             .fillMaxHeight()
-            .background(GlassSheetTokens.OledBlack())
+            .background(sheetPageBackground())
             .padding(horizontal = 20.dp)
-            .padding(top = 8.dp, bottom = 12.dp),
+            .padding(top = 12.dp, bottom = 12.dp),
     ) {
         Text(
             text = "Profile",
@@ -1449,7 +1450,7 @@ private fun TimelinePanel(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .sheetBodyScroll()
             .padding(top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {

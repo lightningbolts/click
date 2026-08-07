@@ -31,6 +31,7 @@ import compose.project.click.click.ui.components.BeaconShareToChatDialog
 import compose.project.click.click.ui.components.ClickSheetDefaults
 import compose.project.click.click.ui.components.ClickSheetDialogChrome
 import compose.project.click.click.ui.components.GlassSheetTokens
+import compose.project.click.click.ui.components.sheetBodyScroll
 import compose.project.click.click.ui.components.UnifiedToastHost
 import compose.project.click.click.ui.components.rememberUnifiedToastState
 import compose.project.click.click.ui.screens.BeaconDetailSheetContent
@@ -118,11 +119,9 @@ internal fun ChatBeaconDetailSheet(
         appColorScheme = MaterialTheme.colorScheme,
         appTypography = MaterialTheme.typography,
     ) {
-        Box(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
+        Box(modifier = Modifier.fillMaxWidth()) {
             ClickSheetDialogChrome(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(),
+                modifier = Modifier.fillMaxWidth(),
                 sheetColor = detailSurface,
                 onSurface = onDetailSurface,
                 alignSemanticColorsToSheet = true,
@@ -136,8 +135,8 @@ internal fun ChatBeaconDetailSheet(
                             viewModel = mapViewModel,
                             onShareBeaconToChat = { shareBeaconToChat = it },
                             modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(rememberScrollState())
+                                .fillMaxWidth()
+                                .sheetBodyScroll()
                                 .padding(horizontal = 24.dp, vertical = 12.dp),
                         )
                     }

@@ -32,6 +32,7 @@ import compose.project.click.click.data.models.ChatWithDetails // pragma: allowl
 import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.sheetPageBackground
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 
 /**
@@ -86,7 +87,7 @@ internal fun ConnectionActionSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
-                .background(GlassSheetTokens.OledBlack())
+                .background(sheetPageBackground())
                 .padding(bottom = 32.dp),
         ) {
             chatDetails?.let { details ->

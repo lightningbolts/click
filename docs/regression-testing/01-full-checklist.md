@@ -50,8 +50,8 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 
 ## 2. Platform-native UI (all features)
 
-- [ ] `[UI] iOS` Sheets use `UISheetPresentationController` rubber-band + detents (not Compose-only sheet)
-- [ ] `[UI] Android` Sheets use M3 `ModalBottomSheet` drag physics (not Calf)
+- [ ] `[UI] iOS` Sheets use `UISheetPresentationController` system glass + detents (not a Compose-only sheet); begin a dismiss swipe from the body, cards, and blank sheet regions — not only the grabber
+- [ ] `[UI] Android` Sheets use the themed adaptive Material host drag physics; begin a dismiss swipe from the body as well as the grabber
 - [ ] `[UI]` `ClickActionBottomSheet` opens at partial/medium height; `ClickFormBottomSheet` expands for tall content
 - [ ] `[UI] iOS` Simple confirms use `UIAlertController` (block, remove, report, delete message, leave hub)
 - [ ] `[UI] Android` Simple confirms use M3 `BasicAlertDialog` / `AlertDialog`
@@ -396,7 +396,7 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] Submit success adds pin; failure toast
 - [ ] Beacon detail sheet: RSVP, share, navigate, bookmark, labeled check-in CTA
 - [ ] Event people directory: after RSVP, open Directory → sort A–Z / Interests / Mutuals; relationship / sort-aware metrics; list scrolls to top on chip change; no large blank band at full sheet height
-- [ ] Event mutuals: after check-in, “Mutuals here” section lists FoF; Connections show friends-in-common count; view-only FoF profiles (no Connect)
+- [ ] Event mutuals: after server-confirmed check-in, “Mutuals here” section uses the active sort, is not duplicated under Everyone, and is not exposed from an optimistic/early local check-in; Connections show friends-in-common count; view-only FoF profiles (no Connect)
 - [ ] Bookmark toggle survives app force-kill (server-backed)
 - [ ] Check-in is a full-width labeled button (`Check in here` / `Checked in`) — not a hero icon circle
 - [ ] Check-in CTA updates immediately on tap (optimistic); pending blocks double-tap

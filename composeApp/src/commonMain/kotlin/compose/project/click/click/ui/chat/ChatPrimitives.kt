@@ -222,6 +222,7 @@ internal fun ChatAttachmentMenuRow(
     icon: ImageVector,
     onClick: () -> Unit,
     enabled: Boolean = true,
+    supportingText: String? = null,
 ) {
     val onSurface = MaterialTheme.colorScheme.onSurface
     Row(
@@ -239,7 +240,20 @@ internal fun ChatAttachmentMenuRow(
     ) {
         Icon(icon, contentDescription = null, tint = onSurface.copy(alpha = if (enabled) 1f else 0.45f))
         Spacer(Modifier.width(12.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge, color = onSurface.copy(alpha = if (enabled) 1f else 0.45f))
+        Column {
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyLarge,
+                color = onSurface.copy(alpha = if (enabled) 1f else 0.45f),
+            )
+            supportingText?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = onSurface.copy(alpha = 0.45f),
+                )
+            }
+        }
     }
 }
 

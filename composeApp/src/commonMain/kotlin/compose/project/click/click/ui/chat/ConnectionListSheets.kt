@@ -79,6 +79,8 @@ import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secre
 import compose.project.click.click.ui.theme.clickTextFieldTextStyle
 import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.sheetBodyScroll
+import compose.project.click.click.ui.components.sheetPageBackground
 
 private val PickerSelectionPurple = Color(0xFF9D4EDD)
 private val PickerSelectionRingWidth = 2.5.dp
@@ -333,7 +335,7 @@ internal fun ConnectionMemberPickerSheet(
                 .fillMaxWidth()
                 .fillMaxHeight()
                 .imePadding()
-                .background(GlassSheetTokens.OledBlack())
+                .background(sheetPageBackground())
                 .padding(horizontal = 20.dp, vertical = 12.dp),
         ) {
             Text(
@@ -633,7 +635,7 @@ internal fun GroupMembersPickerSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(surface)
-                .verticalScroll(scroll)
+                .sheetBodyScroll(scroll)
                 .padding(bottom = 28.dp),
         ) {
             Text(

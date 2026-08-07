@@ -59,12 +59,14 @@ fun sortEventAttendees(
     EventAttendeeSortMode.InterestOverlap ->
         attendees.sortedWith(
             compareByDescending<DirectoryAttendee> { it.sharedInterestCount }
-                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name },
+                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+                .thenBy { it.userId },
         )
     EventAttendeeSortMode.MutualConnections ->
         attendees.sortedWith(
             compareByDescending<DirectoryAttendee> { it.mutualConnectionCount }
-                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name },
+                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+                .thenBy { it.userId },
         )
 }
 

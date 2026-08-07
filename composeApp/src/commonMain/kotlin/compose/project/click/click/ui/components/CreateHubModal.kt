@@ -55,6 +55,7 @@ import io.ktor.client.plugins.ClientRequestException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import compose.project.click.click.ui.components.sheetBodyScroll
 
 private val hubCategories = listOf(
     "general", "music", "study", "sports", "food", "nightlife",
@@ -80,7 +81,7 @@ fun CreateHubModal(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(GlassSheetTokens.OledBlack()),
+                .background(sheetPageBackground()),
         ) {
             CreateHubSheetBody(
                 initialName = initialName,
@@ -118,12 +119,12 @@ fun JoinCommunityHubSheet(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(GlassSheetTokens.OledBlack()),
+                .background(sheetPageBackground()),
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
+                    .sheetBodyScroll()
                     .padding(horizontal = 24.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
@@ -242,7 +243,7 @@ private fun CreateHubSheetBody(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
+            .sheetBodyScroll()
             .padding(horizontal = 24.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {

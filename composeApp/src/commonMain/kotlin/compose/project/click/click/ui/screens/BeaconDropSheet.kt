@@ -16,7 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
+import compose.project.click.click.ui.components.sheetBodyScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.foundation.layout.Row
@@ -198,7 +198,7 @@ fun BeaconDropSheetContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .verticalScroll(scroll)
+            .sheetBodyScroll(scroll)
             .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {

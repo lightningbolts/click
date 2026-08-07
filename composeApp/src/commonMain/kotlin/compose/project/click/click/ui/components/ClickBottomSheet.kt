@@ -34,12 +34,14 @@ object ClickSheetDefaults {
 
 /**
  * Platform sheet shell matching map beacon dialogs:
- * iOS native medium detent page sheet; Android Calf adaptive sheet capped at half height.
+ * iOS UIKit page sheet (Liquid Glass + system grabber); Android Calf adaptive sheet.
  */
 @Composable
 fun ClickPlatformSheet(
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
+    /** iOS: host in UIScrollView for dismiss-at-top. False for LazyColumn form sheets. */
+    useUiKitScrollHost: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val sheetColor = GlassSheetTokens.OledBlack()
@@ -55,6 +57,7 @@ fun ClickPlatformSheet(
         appTypography = MaterialTheme.typography,
         modifier = modifier,
         expandable = true,
+        useUiKitScrollHost = useUiKitScrollHost,
     ) {
         ProvideSheetSwipeDismiss(onDismissRequest = onDismissRequest) {
             ClickSheetDialogChrome(
@@ -85,7 +88,7 @@ fun ClickSheetChrome(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(GlassSheetTokens.OledBlack())
+            .background(sheetPageBackground())
             .padding(bottom = ClickSheetDefaults.ContentBottomPadding),
     ) {
         if (title != null) {
@@ -138,6 +141,8 @@ fun ClickFormBottomSheet(
     ClickPlatformSheet(
         onDismissRequest = onDismissRequest,
         modifier = modifier,
+        // Forms often embed LazyColumn — Compose owns scroll on iOS.
+        useUiKitScrollHost = false,
         content = content,
     )
 }

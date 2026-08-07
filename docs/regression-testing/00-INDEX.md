@@ -76,9 +76,17 @@ npm test
 npm run build
 ```
 
-High-signal unit tests to keep green: `ChatSwipeMathTest`, `ChatViewModelTest`, `ChatTimestampPeekTest`, `ChatInteractionPolicyTest`, `HomeContinuityPolicyTest`, `BeaconCheckInOptimismTest`, `ConnectionEncounterMergeTest`, `NominatimSearchParseTest`, `ProximityConnectionChangeTargetsTest`, `DiscoveryFeedSectionsTest`, `OfflineBootTest`, proximity codec/matching tests under `composeApp` and `click-web/__tests__/` (incl. `eventEngagement.test.ts`, `event-engagement.route.contract.test.ts`).
+High-signal unit tests to keep green: `ChatSwipeMathTest`, `ChatViewModelTest`, `ChatTimestampPeekTest`, `ChatInteractionPolicyTest`, `HomeContinuityPolicyTest`, `BeaconCheckInOptimismTest`, `EventAttendeeDirectoryTest`, `ConnectionEncounterMergeTest`, `NominatimSearchParseTest`, `ProximityConnectionChangeTargetsTest`, `DiscoveryFeedSectionsTest`, `OfflineBootTest`, proximity codec/matching tests under `composeApp` and `click-web/__tests__/` (incl. `attendeeDirectory.test.ts`, `eventEngagement.test.ts`, `event-engagement.route.contract.test.ts`).
 
 **Last §0 run (Events / check-in / presence / BLE timeline, 2026-08-01):** Android `compileDebugKotlinAndroid` PASS · iOS `compileKotlinIosSimulatorArm64` PASS · `testDebugUnitTest` PASS · `iosSimulatorArm64Test` PASS · click-web `npm test` PASS (175) · `npm run build` PASS.
+
+**Last verification (native sheets / event directory, 2026-08-07):** Android
+`compileDebugKotlinAndroid` + `testDebugUnitTest` PASS · iOS
+`compileKotlinIosSimulatorArm64` PASS · `iosSimulatorArm64Test` blocked because
+`xcrun xcodebuild -version` is unavailable in the local Xcode command-line-tools
+configuration · click-web `attendeeDirectory` Jest target PASS (13) and `npm run build`
+PASS. The unrelated full click-web Jest suite remains red in telemetry skip-reason and
+Dashboard `ThemeProvider` tests.
 
 **Last §0 run (UI interaction polish, 2026-07-19):** Android `compileDebugKotlinAndroid` PASS · iOS `compileKotlinIosSimulatorArm64` PASS · `testDebugUnitTest` high-signal subset PASS (`BeaconCheckInOptimismTest`, `HomeContinuityPolicyTest`, `ChatTimestampPeekTest`, `ChatSwipeMathTest`, `ChatInteractionPolicyTest`). Device smoke: chat row press; chat/events overlay continuity; optimistic check-in; reply cancel; long-press without native selection; IME lockstep.
 

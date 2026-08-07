@@ -254,6 +254,7 @@ import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: a
 import compose.project.click.click.util.LruMemoryCache // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickOutlinedTextField
+import compose.project.click.click.ui.components.sheetPageBackground
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1158,7 +1159,7 @@ private fun HubActionSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
-                .background(GlassSheetTokens.OledBlack())
+                .background(sheetPageBackground())
                 .padding(bottom = 32.dp),
         ) {
             val title = details?.name ?: hub.name

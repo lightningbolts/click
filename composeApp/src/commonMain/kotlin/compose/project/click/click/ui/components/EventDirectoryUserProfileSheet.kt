@@ -42,6 +42,7 @@ import compose.project.click.click.events.relationshipSubtitle
 import compose.project.click.click.ui.theme.clickBorderColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import compose.project.click.click.ui.components.sheetBodyScroll
 
 /**
  * Lightweight profile sheet opened from the event people directory.
@@ -107,7 +108,7 @@ fun EventDirectoryUserProfileSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
+                .sheetBodyScroll()
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {

@@ -119,14 +119,14 @@ fun EventPeopleDirectorySection(
                                 .size(48.dp)
                                 .border(2.dp, border, CircleShape)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer),
+                                .background(MaterialTheme.colorScheme.secondaryContainer),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
                                 text = "+$overflow",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
                             )
                         }
                     }
@@ -163,6 +163,9 @@ fun EventPeopleDirectorySheetContent(
     val sorted = remember(attendees, sortMode) { sortEventAttendees(attendees, sortMode) }
     val mutuals = remember(attendees, mutualsSectionUnlocked) {
         if (mutualsSectionUnlocked) mutualsAtEvent(attendees) else emptyList()
+    }
+    val sortedMutuals = remember(mutuals, sortMode) {
+        sortEventAttendees(mutuals, sortMode)
     }
     val listState = rememberLazyListState()
     val border = clickBorderColor()
@@ -260,7 +263,7 @@ fun EventPeopleDirectorySheetContent(
                                 modifier = Modifier.padding(bottom = 8.dp, top = 4.dp),
                             )
                         }
-                        items(mutuals, key = { "mutual-${it.userId}" }) { attendee ->
+                        items(sortedMutuals, key = { "mutual-${it.userId}" }) { attendee ->
                             DirectoryAttendeeRow(
                                 attendee = attendee,
                                 sortMode = EventAttendeeSortMode.MutualConnections,

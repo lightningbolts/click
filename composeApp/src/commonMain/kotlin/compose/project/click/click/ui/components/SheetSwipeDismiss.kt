@@ -2,7 +2,9 @@ package compose.project.click.click.ui.components
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
@@ -19,25 +21,23 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 
-/**
- * Reports whether the active sheet body scroll is at the top.
- * Default true so non-scrollable sheets can dismiss from a downward pull.
- */
 val LocalSheetScrollAtTop = compositionLocalOf { { true } }
 
-/** Dismiss callback for the hosting bottom sheet. */
 val LocalSheetOnDismissRequest = compositionLocalOf { {} }
 
 /**
- * When true, [ClickSheetDialogChrome] hides its Compose grabber — the platform sheet already
- * draws one (UIKit page-sheet grabber or Material/Calf dragHandle).
+ * When true, [ClickSheetDialogChrome] hides its Compose grabber because the host draws one
+ * (UIKit system grabber / Material dragHandle).
  */
 val LocalSheetUsesPlatformGrabber = compositionLocalOf { false }
 
 /**
- * Drives the **entire** platform sheet surface (iOS page-sheet UIView). Never used to translate
- * Compose content inside fixed chrome.
+ * When true (iOS UIKit [UIScrollView] host), Compose must not use [verticalScroll] —
+ * the host owns scroll-edge expand and swipe-to-dismiss. Use [Modifier.sheetBodyScroll].
  */
+val LocalSheetScrollOwnedByHost = compositionLocalOf { false }
+
+/** Translates the entire page-sheet UIView (iOS). Never translate Compose content alone. */
 val LocalSheetSurfaceDragOffsetPx = compositionLocalOf<(Float) -> Unit> { {} }
 
 val LocalSheetSurfaceDragActive = compositionLocalOf { false }
@@ -74,16 +74,22 @@ fun ScrollState.isSheetScrollAtTop(): Boolean = value <= 0
 fun LazyListState.isSheetScrollAtTop(): Boolean =
     firstVisibleItemIndex == 0 && firstVisibleItemScrollOffset <= 0
 
+/**
+ * Vertical scroll for sheet bodies. No-op when [LocalSheetScrollOwnedByHost] is true.
+ */
+@Composable
+fun Modifier.sheetBodyScroll(
+    state: ScrollState = rememberScrollState(),
+): Modifier {
+    if (LocalSheetScrollOwnedByHost.current) return this
+    return this.verticalScroll(state)
+}
+
 private val SheetFingerDismissThresholdDp = 88.dp
 
 /**
- * Body swipe-to-dismiss coordination.
- *
- * - **Android (surface drag inactive):** pass-through so Material/Calf moves the real sheet.
- *   If this gesture already scrolled content, eat downward overscroll so dismiss waits for a
- *   new gesture.
- * - **iOS (surface drag active):** when already at top for this gesture, drag the page-sheet
- *   UIView; never translate Compose content (grabber stays on the curved top).
+ * - Android / Material: same-gesture gate only (leave leftovers for sheet).
+ * - iOS fill sheets: pull-down at scroll top translates the whole page-sheet UIView.
  */
 @Composable
 fun Modifier.sheetSwipeDismissWhenAtTop(
@@ -136,13 +142,11 @@ fun Modifier.sheetSwipeDismissWhenAtTop(
                 if (source != NestedScrollSource.UserInput) return Offset.Zero
                 noteUserInput()
 
-                // Any content scroll before a dismiss-drag means this gesture is a list scroll.
                 if (dragOffsetPx.floatValue <= 0f && consumed.y != 0f) {
                     contentScrolledThisGesture = true
                 }
 
                 if (contentScrolledThisGesture) {
-                    // Mid-list / same-gesture scroll-to-top: never start dismiss, never move surface.
                     if (dragOffsetPx.floatValue > 0f) setSurfaceDrag(0f)
                     if (available.y > 0f) return Offset(0f, available.y)
                     return Offset.Zero
@@ -151,11 +155,10 @@ fun Modifier.sheetSwipeDismissWhenAtTop(
                 if (!scrollAtTopUpdated()) return Offset.Zero
 
                 if (!surfaceDragActive) {
-                    // Android: let Material/Calf consume overscroll on the real sheet chrome.
+                    // Material/Calf / UIScrollView host — leave leftovers to the sheet.
                     return Offset.Zero
                 }
 
-                // iOS: own overscroll and move the page-sheet UIView as a whole.
                 if (available.y > 0f || dragOffsetPx.floatValue > 0f) {
                     val next = (dragOffsetPx.floatValue + available.y).coerceAtLeast(0f)
                     val delta = next - dragOffsetPx.floatValue

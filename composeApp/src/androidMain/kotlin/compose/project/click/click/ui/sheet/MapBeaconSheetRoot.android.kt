@@ -32,9 +32,14 @@ actual fun MapBeaconSheetRoot(
     appTypography: Typography,
     modifier: Modifier,
     expandable: Boolean,
+    useUiKitScrollHost: Boolean,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     if (!visible) return
+
+    // Android ignores useUiKitScrollHost — Material/Calf owns nested scroll.
+    @Suppress("UNUSED_VARIABLE")
+    val ignoredScrollHost = useUiKitScrollHost
 
     val sheetState = rememberGlassAdaptiveSheetState(
         skipPartiallyExpanded = !expandable,

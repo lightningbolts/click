@@ -1405,12 +1405,12 @@ class MapViewModel : ViewModel() {
                                 signedUpAt = dto.signedUpAt,
                                 distanceMeters = dto.distanceMeters,
                                 sharedInterests = dto.sharedInterests,
-                                sharedInterestCount = dto.sharedInterestCount,
+                                sharedInterestCount = dto.sharedInterestCount.coerceAtLeast(0),
                                 relationship = compose.project.click.click.events.AttendeeRelationship.fromApi(dto.relationship),
                                 mutualVia = dto.mutualVia.map {
                                     compose.project.click.click.events.MutualViaPeer(it.userId, it.name)
                                 },
-                                mutualConnectionCount = dto.mutualConnectionCount,
+                                mutualConnectionCount = dto.mutualConnectionCount.coerceAtLeast(0),
                             )
                         }
                         _beaconDirectoryById.update { current ->
@@ -1430,6 +1430,10 @@ class MapViewModel : ViewModel() {
                 _beaconDirectoryLoadingIds.update { it - id }
             }
         }
+    }
+
+    private fun invalidateBeaconAttendeeDirectory(beaconId: String) {
+        _beaconDirectoryById.update { it - beaconId }
     }
 
     /** Restores/refreshes Supabase session before click-web bearer calls (cold start). */
@@ -1591,6 +1595,10 @@ class MapViewModel : ViewModel() {
                         ))
                     }
                     _beaconRsvpPendingIds.update { it - id }
+                    invalidateBeaconAttendeeDirectory(id)
+                    if (_beaconEngagementById.value[id]?.checkedIn == true) {
+                        loadBeaconAttendeeDirectory(id, forceRefresh = true)
+                    }
                     onFinished(true)
                 },
                 onFailure = {
@@ -1787,7 +1795,13 @@ class MapViewModel : ViewModel() {
                     return@launch
                 }
                 mapBeaconRepository.checkOutBeacon(id).fold(
-                    onSuccess = { _beaconEngagementPendingIds.update { it - id } },
+                    onSuccess = {
+                        _beaconEngagementPendingIds.update { it - id }
+                        invalidateBeaconAttendeeDirectory(id)
+                        if (_beaconRsvpById.value[id]?.currentUserSignedUp == true) {
+                            loadBeaconAttendeeDirectory(id, forceRefresh = true)
+                        }
+                    },
                     onFailure = {
                         if (previous?.localEarlyCheckIn == true) earlyCheckInBeaconIds += id
                         restoreEngagementSnapshot(id, previous)
@@ -1866,7 +1880,8 @@ class MapViewModel : ViewModel() {
                         ))
                     }
                     _beaconEngagementPendingIds.update { it - id }
-                    if (payload.checkedIn) {
+                    invalidateBeaconAttendeeDirectory(id)
+                    if (payload.checkedIn || _beaconRsvpById.value[id]?.currentUserSignedUp == true) {
                         loadBeaconAttendeeDirectory(id, forceRefresh = true)
                     }
                     _engagementSnackbar.value = if (payload.checkedIn) {
@@ -1897,6 +1912,7 @@ class MapViewModel : ViewModel() {
                                 ))
                             }
                             _beaconEngagementPendingIds.update { it - id }
+                            invalidateBeaconAttendeeDirectory(id)
                             _engagementSnackbar.value = "Checked in early — see you at the event"
                             return@fold
                         }

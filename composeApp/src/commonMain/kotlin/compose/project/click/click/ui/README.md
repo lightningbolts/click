@@ -44,7 +44,7 @@ App.kt (navigation shell)
 | Layer | Responsibility | Examples |
 |-------|----------------|----------|
 | `screens/` | Route-level layout, navigation callbacks, ViewModel wiring | `ConnectionsScreen`, `ChatView`, `MapScreen` |
-| `components/` | Cross-screen glass primitives | `GlassCard`, `GlassModalBottomSheet`, `AppScreenScaffold` |
+| `components/` | Cross-screen glass primitives | `GlassCard`, `ClickPlatformSheet`, `AppScreenScaffold` |
 | `chat/` | Chat-only composables (keeps `ChatView` readable) | `ChatMessageBubble`, `ConnectionChatMessageComposer` |
 | `theme/` | Design tokens | `Color.kt`, `Typography.kt`, `PlatformTheme.kt` |
 | `utils/` | Composable-side platform hooks | `LocationPermissionRequester`, `MapUtils` |
@@ -56,12 +56,24 @@ Click's visual language is **liquid glass**: frosted surfaces, grabbers, adaptiv
 | Component | Role |
 |-----------|------|
 | `GlassCard` / `AdaptiveCard` | Bento tiles, settings rows, discovery cards |
-| `GlassModalBottomSheet` / `GlassAdaptiveBottomSheet` | Connection context, availability, beacon detail |
+| `ClickPlatformSheet` / `ClickActionBottomSheet` / `ClickFormBottomSheet` | Canonical action/form/profile/beacon sheet entry points |
+| `MapBeaconSheetRoot` | Platform presentation boundary: iOS native page sheet / iOS 26 system glass, Android adaptive Material sheet |
 | `GlassSheetTokens` / `GlassSheetGesturePhysics` | Shared corner radii, drag thresholds, spring physics |
 | `GlassFullscreenMediaOverlay` | Full-bleed photo/video preview in chat |
 | `UnifiedToastHost` (`GlassSnackbarHost` aliases) | Transient bottom feedback — always pad with `rememberBottomChromePadding()` so toasts sit above the tab bar |
 | `AppScreenScaffold` / `ScreenChrome` | Safe-area + keyboard-aware chrome for chat and sheets |
 | `LiquidGlassPill` / `BentoGlassOptionRow` | Segmented controls and option lists |
+
+### Sheet authoring contract
+
+All bottom-sheet-style UI must enter through `ClickActionBottomSheet` or
+`ClickFormBottomSheet`, which share `MapBeaconSheetRoot`; do not introduce raw
+Material/Calf sheet hosts. iOS 26+ uses the system Liquid Glass page-sheet treatment
+with the system grabber and interactive dismissal; earlier iOS releases retain the
+matching native page-sheet fallback. Android uses the app theme through the adaptive
+Material host. Use `sheetBodyScroll()` for a scroll-hosted sheet body and
+`ClickFormBottomSheet` for nested/Lazy content so the platform owns drag and dismissal
+without competing content gestures.
 
 ### Key screen flows
 

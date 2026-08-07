@@ -34,6 +34,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Image
@@ -93,6 +94,7 @@ internal fun ConnectionChatMessageComposer(
     pingTetherLoading: Boolean = false,
     onPingTether: () -> Unit = {},
     shareableBeacons: List<compose.project.click.click.data.models.MapBeacon> = emptyList(),
+    onRefreshShareableBeacons: () -> Unit = {},
 ) {
     val messageInput by viewModel.messageInput.collectAsState()
     val messageSendError by viewModel.messageSendError.collectAsState()
@@ -352,7 +354,10 @@ internal fun ConnectionChatMessageComposer(
                 sendContentDescription = if (editingMessageId != null) "Confirm edit" else "Send",
                 onSend = viewModel::sendMessage,
                 attachmentMenuExpanded = attachmentMenuExpanded,
-                onAttachmentMenuExpandedChange = { attachmentMenuExpanded = it },
+                onAttachmentMenuExpandedChange = { expanded ->
+                    attachmentMenuExpanded = expanded
+                    if (expanded) onRefreshShareableBeacons()
+                },
                 attachBackground = PrimaryBlue.copy(alpha = if (isSending) 0.12f else 0.24f),
                 attachTint = attachTint,
                 attachmentMenuContent = {
@@ -371,8 +376,13 @@ internal fun ConnectionChatMessageComposer(
                             )
                             ChatAttachmentMenuRow(
                                 label = "Share beacon",
-                                icon = Icons.Filled.Explore,
+                                icon = Icons.Filled.Place,
                                 enabled = shareableBeacons.isNotEmpty(),
+                                supportingText = if (shareableBeacons.isEmpty()) {
+                                    "No nearby beacons available"
+                                } else {
+                                    null
+                                },
                                 onClick = {
                                     if (shareableBeacons.isEmpty()) return@ChatAttachmentMenuRow
                                     PlatformHapticsPolicy.heavyImpact()

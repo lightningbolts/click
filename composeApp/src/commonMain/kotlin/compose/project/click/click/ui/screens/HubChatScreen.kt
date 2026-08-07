@@ -123,6 +123,7 @@ import compose.project.click.click.viewmodel.HubChatViewModel // pragma: allowli
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import compose.project.click.click.ui.components.ClickOutlinedTextField
+import compose.project.click.click.ui.components.sheetPageBackground
 
 data class HubChatNavArgs(
     val hubId: String,
@@ -538,7 +539,7 @@ fun HubChatScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight()
-                    .background(GlassSheetTokens.OledBlack())
+                    .background(sheetPageBackground())
                     .padding(bottom = 32.dp),
             ) {
                 Text(

@@ -72,6 +72,7 @@ import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: 
 import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.sheetBodyScroll
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.ConnectionEncounter // pragma: allowlist secret
 import compose.project.click.click.data.ContextTagTaxonomy
@@ -812,12 +813,12 @@ fun UserProfileBottomSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
-                .background(GlassSheetTokens.OledBlack())
+                .background(sheetPageBackground())
         ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
+                .sheetBodyScroll()
                 .padding(horizontal = 16.dp, vertical = 8.dp)
                 .padding(bottom = 28.dp)
         ) {

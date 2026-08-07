@@ -1432,6 +1432,9 @@ fun ChatView(
                                     )
                                 },
                                 shareableBeacons = shareableBeacons,
+                                onRefreshShareableBeacons = {
+                                    mapViewModel?.refreshDiscoveryFeed()
+                                },
                             )
                         }
                     }
