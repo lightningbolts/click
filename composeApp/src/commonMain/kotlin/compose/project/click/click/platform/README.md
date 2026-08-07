@@ -120,8 +120,8 @@ Parsed primarily in `QRModels.kt`, `ConnectionDeepLinkRouter.kt`, `ChatDeepLinkM
 | **`click://hub/{hub_id}`** | Community hub | `ChatDeepLinkManager.setPendingCommunityHub` |
 | **`click://c/{uuid}`** | Connection deep link | `ConnectionDeepLinkRouter` |
 | **`click://connect/{uuid}`** | Legacy connection link | `ConnectionDeepLinkRouter` |
-| **`https://click-us.vercel.app/c/{uuid}`** | Universal Link (connection) | `ConnectionDeepLinkRouter.handleIncomingUrl` |
-| **`https://click-us.vercel.app/hub/{id}`** | Universal Link (hub) | Hub intent filter → `ChatDeepLinkManager` |
+| **`https://joinclick.co/c/{uuid}`** | Universal Link (connection) | `ConnectionDeepLinkRouter.handleIncomingUrl` |
+| **`https://joinclick.co/hub/{id}`** | Universal Link (hub) | Hub intent filter → `ChatDeepLinkManager` |
 
 **App Clip / Instant App:** Android manifest includes preview activity for unauthenticated deep-link previews.
 

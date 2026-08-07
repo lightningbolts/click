@@ -143,7 +143,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             return path
         }
         if url.scheme?.lowercased() == "https" || url.scheme?.lowercased() == "http" {
-            guard url.host?.lowercased() == "click-us.vercel.app" else { return nil }
+            let host = url.host?.lowercased()
+            guard host == "joinclick.co" || host == "www.joinclick.co" || host == "click-us.vercel.app" else { return nil }
             let parts = url.path.split(separator: "/").map(String.init)
             guard parts.count >= 2, parts[0].lowercased() == "hub" else { return nil }
             let id = parts[1]

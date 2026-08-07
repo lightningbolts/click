@@ -99,7 +99,7 @@ Append-only `event_engagement_events` (service-role). Current-state rows stay ri
 | Item | Notes |
 |------|-------|
 | Home “Saved events” | `GET /api/me/event-bookmarks` → Home section after Featured Event |
-| Share deep-link | `https://click-us.vercel.app/e/{beaconId}` in share text; `POST /api/beacons/{id}/share`; Universal Links; insights Shares |
+| Share deep-link | `https://joinclick.co/e/{beaconId}` in share text; `POST /api/beacons/{id}/share`; Universal Links; insights Shares |
 | Encounter ↔ event | RSVP **+ active check-in** gate: every participant in `beacon_attendees` **and** `event_check_ins` (`checked_out_at IS NULL`) + live geofence → `event_beacon_id` + `at_event` tag + Timeline |
 
 ## 5b. Still future

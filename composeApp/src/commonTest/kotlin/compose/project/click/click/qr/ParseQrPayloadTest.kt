@@ -10,13 +10,13 @@ class ParseQrPayloadTest {
 
     @Test
     fun branchA_universalLink_extractsUuid() {
-        val url = "https://click-us.vercel.app/c/$fixtureUuid"
+        val url = "https://joinclick.co/c/$fixtureUuid"
         assertEquals(fixtureUuid, parseQrPayload(url))
     }
 
     @Test
     fun branchA_httpWithQuery_extractsUuid() {
-        val url = "https://click-us.vercel.app/c/$fixtureUuid?utm_source=qr"
+        val url = "https://joinclick.co/c/$fixtureUuid?utm_source=qr"
         assertEquals(fixtureUuid, parseQrPayload(url))
     }
 
@@ -28,7 +28,7 @@ class ParseQrPayloadTest {
 
     @Test
     fun legacyConnectUrl_delegatedViaParseQrCode_notParseQrPayloadAlone() {
-        val url = "https://click-us.vercel.app/connect/$fixtureUuid"
+        val url = "https://joinclick.co/connect/$fixtureUuid"
         assertNull(parseQrPayload(url))
         val parsed = parseQrCode(url)
         assertEquals(fixtureUuid, (parsed as QrParseResult.Legacy).userId)
@@ -44,7 +44,7 @@ class ParseQrPayloadTest {
 
     @Test
     fun tokenUniversalLink_routesThroughTokenFlow() {
-        val url = "https://click-us.vercel.app/c/$fixtureUuid?token=abc123&exp=9999999999999&iat=123"
+        val url = "https://joinclick.co/c/$fixtureUuid?token=abc123&exp=9999999999999&iat=123"
         assertNull(parseQrPayload(url))
         val parsed = parseQrCode(url) as QrParseResult.TokenBased
         assertEquals(fixtureUuid, parsed.payload.userId)
@@ -55,7 +55,7 @@ class ParseQrPayloadTest {
 
     @Test
     fun tokenUniversalLink_supportsAppClipAliasesAndVenue() {
-        val url = "https://click-us.vercel.app/c/$fixtureUuid?qt=abc123&expires_at=9999999999999&venue_id=hub-1"
+        val url = "https://joinclick.co/c/$fixtureUuid?qt=abc123&expires_at=9999999999999&venue_id=hub-1"
         val parsed = parseQrCode(url) as QrParseResult.TokenBased
         assertEquals(fixtureUuid, parsed.payload.userId)
         assertEquals("abc123", parsed.payload.token)

@@ -137,7 +137,7 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 
 ### 5.5 Deep links & App Clip
 
-- [ ] `https://click-us.vercel.app/c/{uuid}` → `ConnectionDeepLinkRouter` → context sheet
+- [ ] `https://joinclick.co/c/{uuid}` → `ConnectionDeepLinkRouter` → context sheet
 - [ ] `click://c/{uuid}` and legacy `click://connect/{uuid}` parse correctly
 - [ ] Cold start deep link routes after auth
 - [ ] Warm start deep link while app open

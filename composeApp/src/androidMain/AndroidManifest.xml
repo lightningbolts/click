@@ -75,26 +75,50 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data
                     android:scheme="https"
+                    android:host="joinclick.co"
+                    android:pathPrefix="/hub"/>
+                <data
+                    android:scheme="https"
+                    android:host="www.joinclick.co"
+                    android:pathPrefix="/hub"/>
+                <data
+                    android:scheme="https"
                     android:host="click-us.vercel.app"
                     android:pathPrefix="/hub"/>
             </intent-filter>
 
-            <!-- Universal Link connection routing: https://click-us.vercel.app/c/{userId} -->
+            <!-- Universal Link connection routing: https://joinclick.co/c/{userId} -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data
                     android:scheme="https"
+                    android:host="joinclick.co"
+                    android:pathPrefix="/c"/>
+                <data
+                    android:scheme="https"
+                    android:host="www.joinclick.co"
+                    android:pathPrefix="/c"/>
+                <data
+                    android:scheme="https"
                     android:host="click-us.vercel.app"
                     android:pathPrefix="/c"/>
             </intent-filter>
 
-            <!-- Event share Universal Link: https://click-us.vercel.app/e/{beaconId} -->
+            <!-- Event share Universal Link: https://joinclick.co/e/{beaconId} -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="https"
+                    android:host="joinclick.co"
+                    android:pathPrefix="/e"/>
+                <data
+                    android:scheme="https"
+                    android:host="www.joinclick.co"
+                    android:pathPrefix="/e"/>
                 <data
                     android:scheme="https"
                     android:host="click-us.vercel.app"
@@ -149,6 +173,14 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data
                     android:scheme="https"
+                    android:host="joinclick.co"
+                    android:pathPrefix="/connect"/>
+                <data
+                    android:scheme="https"
+                    android:host="www.joinclick.co"
+                    android:pathPrefix="/connect"/>
+                <data
+                    android:scheme="https"
                     android:host="click-us.vercel.app"
                     android:pathPrefix="/connect"/>
             </intent-filter>
@@ -156,6 +188,14 @@
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="https"
+                    android:host="joinclick.co"
+                    android:pathPrefix="/c"/>
+                <data
+                    android:scheme="https"
+                    android:host="www.joinclick.co"
+                    android:pathPrefix="/c"/>
                 <data
                     android:scheme="https"
                     android:host="click-us.vercel.app"

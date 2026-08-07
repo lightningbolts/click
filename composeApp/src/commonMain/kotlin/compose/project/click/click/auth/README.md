@@ -177,7 +177,7 @@ Click is a proximity-first social app for real-world connection. Every feature b
 - **Onboarding** — Welcome → interests → avatar flow for new accounts.
 - **Google/email auth** — Sign in with Google OAuth or email/password via Supabase Auth.
 - **Push notifications** — Message, call, archive, and reveal alerts.
-- **Deep links & App Clip** — Open connections via `https://click-us.vercel.app/c/{id}` or `click://` URLs.
+- **Deep links & App Clip** — Open connections via `https://joinclick.co/c/{id}` or `click://` URLs.
 - **Web dashboard** — Manage connections and insights from the browser.
 - **Business insights** — Opt-in analytics for venue/business partners.
 - **Event reminders** — Day-of and one-hour-before beacon reminders.

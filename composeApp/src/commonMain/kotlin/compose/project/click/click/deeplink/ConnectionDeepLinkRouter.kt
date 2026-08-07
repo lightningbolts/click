@@ -17,7 +17,7 @@ object ConnectionDeepLinkRouter {
 
     /**
      * Parse a connection user id from a Universal Link or deep link URL.
-     * Supports `https://click-us.vercel.app/c/{uuid}`, legacy `/connect/{uuid}`, and `click://` variants.
+     * Supports `https://joinclick.co/c/{uuid}`, legacy `/connect/{uuid}`, and `click://` variants.
      */
     fun parseConnectionUserId(url: String): String? {
         val trimmed = url.trim()

@@ -40,15 +40,15 @@ App.kt LaunchedEffect observes → starts connection handshake on Add Click flow
 
 `consume()` clears pending ID after `App.kt` handles it, preventing duplicate handshakes.
 
-### Universal Links — `click-us.vercel.app/c/`
+### Universal Links — `joinclick.co/c/`
 
 Apple Associated Domains + Android App Links point to the Vercel web host:
 
 | Pattern | Example |
 |---------|---------|
-| `https://click-us.vercel.app/c/{uuid}` | Primary universal link |
-| `https://click-us.vercel.app/connect/{uuid}` | Legacy path |
-| `https://click-us.vercel.app/hub/{hub_id}` | Community hub (routed via `ChatDeepLinkManager`) |
+| `https://joinclick.co/c/{uuid}` | Primary universal link |
+| `https://joinclick.co/connect/{uuid}` | Legacy path |
+| `https://joinclick.co/hub/{hub_id}` | Community hub (routed via `ChatDeepLinkManager`) |
 
 `QRModels.kt` (`toUserIdFromClickUrl()`) extracts UUID from HTTPS paths and normalizes trailing slashes / query strings.
 
@@ -64,7 +64,7 @@ click://hub/{hub_id}
 
 Parsed in `QRModels.kt` via `DEEP_LINK_HUB_PATTERN`. `Click.kt` exposes `openHubFromDeepLink(hubId)` for iOS entry. `ChatDeepLinkManager.setPendingCommunityHub(hubId)` queues navigation; `App.kt` calls `launchCommunityHubJoin(hubId)`.
 
-HTTPS equivalent: `https://click-us.vercel.app/hub/{hub_id}`.
+HTTPS equivalent: `https://joinclick.co/hub/{hub_id}`.
 
 ### `click://login` handler
 
@@ -101,7 +101,7 @@ After OAuth completes, `AuthViewModel.observeOAuthCompletion()` detects `Session
 | iOS `AppDelegate` | Universal Links, custom scheme | `ConnectionDeepLinkRouter` + OAuth |
 | `QRScannerScreen` | Scanned QR content | `parseQrPayload` inline |
 | Push notification extras | `connection_id`, `hub_id` | `ChatDeepLinkManager` |
-| Share sheet / Safari | `https://click-us.vercel.app/c/{id}` | Universal Link → router |
+| Share sheet / Safari | `https://joinclick.co/c/{id}` | Universal Link → router |
 
 ---
 
@@ -172,7 +172,7 @@ Click is a proximity-first social app for real-world connection. Every feature b
 - **Onboarding** — Welcome → interests → avatar flow for new accounts.
 - **Google/email auth** — Sign in with Google OAuth or email/password via Supabase Auth.
 - **Push notifications** — Message, call, archive, and reveal alerts.
-- **Deep links & App Clip** — Open connections via `https://click-us.vercel.app/c/{id}` or `click://` URLs.
+- **Deep links & App Clip** — Open connections via `https://joinclick.co/c/{id}` or `click://` URLs.
 - **Web dashboard** — Manage connections and insights from the browser.
 - **Business insights** — Opt-in analytics for venue/business partners.
 - **Event reminders** — Day-of and one-hour-before beacon reminders.

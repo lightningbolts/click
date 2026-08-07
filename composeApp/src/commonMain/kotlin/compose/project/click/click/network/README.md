@@ -70,7 +70,7 @@ expect class NetworkConnectivityMonitor() {
 Default companion URL (from `QRModels.kt`):
 
 ```kotlin
-const val CLICK_WEB_BASE_URL = "https://click-us.vercel.app"
+const val CLICK_WEB_BASE_URL = "https://joinclick.co"
 ```
 
 ### `ApiClient` (Ktor)

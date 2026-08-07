@@ -72,7 +72,7 @@ private fun parseJsonEpochMs(element: JsonElement?): Long? {
 /**
  * Displays the user's QR code for scanning.
  *
- * Encodes a Universal Link (`https://click-us.vercel.app/c/{userId}`) so native OS cameras
+ * Encodes a Universal Link (`https://joinclick.co/c/{userId}`) so native OS cameras
  * route through the web/App Clip layer instead of misinterpreting raw JSON as phone numbers.
  * Optionally registers initiator GPS with the server in the background for proximity verification.
  */

@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /** Base URL for the Click web app — used when generating profile QR codes. */
-const val CLICK_WEB_BASE_URL = "https://click-us.vercel.app"
+const val CLICK_WEB_BASE_URL = "https://joinclick.co"
 
 /** App Store listing for the full Click iOS app (App Clip CTA). */
 const val CLICK_IOS_APP_STORE_ID = "6757996346"

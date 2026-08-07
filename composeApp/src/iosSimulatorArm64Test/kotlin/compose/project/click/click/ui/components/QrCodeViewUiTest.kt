@@ -54,7 +54,7 @@ class QrCodeViewUiTest {
     @Test
     fun universalLinkPayload_usesConnectionPath() {
         val link = buildConnectionUniversalLink(fixtureUser.id)
-        assertEquals("https://click-us.vercel.app/c/${fixtureUser.id}", link)
+        assertEquals("https://joinclick.co/c/${fixtureUser.id}", link)
         val parsed = parseQrCode(link)
         val legacy = assertIs<QrParseResult.Legacy>(parsed)
         assertEquals(fixtureUser.id, legacy.userId)
