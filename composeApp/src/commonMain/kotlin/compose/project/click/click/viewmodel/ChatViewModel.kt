@@ -2673,6 +2673,12 @@ class ChatViewModel(
     private fun migrateOptimisticSecureImage(tempId: String, serverMessageId: String) {
         val cachedBytes = secureImageBytesCache.get(tempId)
             ?: _secureChatMediaLoadState.value[tempId]?.imageBytes
+        // Keep decoded bitmaps across temp→server id so Click Drop send does not flash blank.
+        compose.project.click.click.ui.chat.secureChatImageBitmapCache.get(tempId)?.let { bmp ->
+            compose.project.click.click.ui.chat.secureChatImageBitmapCache.put(serverMessageId, bmp)
+            compose.project.click.click.ui.chat.secureChatImageBitmapCache.remove(tempId)
+        }
+        compose.project.click.click.ui.chat.migrateLockedDropBlurCacheKey(tempId, serverMessageId)
         if (cachedBytes != null && cachedBytes.isNotEmpty()) {
             secureImageBytesCache.put(serverMessageId, cachedBytes)
             secureImageBytesCache.remove(tempId)

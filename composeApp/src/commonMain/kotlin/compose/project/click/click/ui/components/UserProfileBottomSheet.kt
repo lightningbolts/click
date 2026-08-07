@@ -808,6 +808,7 @@ fun UserProfileBottomSheet(
 
     ClickFormBottomSheet(
         onDismissRequest = onDismiss,
+        useUiKitScrollHost = false,
     ) {
         Box(
             modifier = Modifier

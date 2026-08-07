@@ -54,8 +54,8 @@ Full matrix: [01-full-checklist.md](01-full-checklist.md) · Known issues: [03-k
 - [ ] Drop event → pick **Check-in area** scale + **address** (or Use my location) → pin appears → open detail
 - [ ] Event detail: Bookmark toggle survives app force-kill (server + disk cache)
 - [ ] Event detail: labeled **Check in here** CTA (not hero circle); far from pin → snackbar + toggle reverts
-- [ ] Event detail: after RSVP, People → Directory opens sortable attendee list; Interests and Mutuals show their per-person metrics
-- [ ] Event detail: server-confirmed check-in unlocks a sorted Mutuals here section with no duplicates under Everyone; early/local check-in does not expose stale mutuals
+- [ ] Event detail: People → Directory opens for every signed-in viewer; Interests and Mutuals show their per-person metrics before RSVP/check-in
+- [ ] Event detail: Mutuals here uses the active sort with no duplicates under Everyone; RSVP/check-in only changes engagement CTAs
 - [ ] Sheet smoke: dismiss an action, form, and directory sheet with a downward swipe begun in body content (not only the grabber) on both platforms
 - [ ] Event detail: Check-in with location denied → snackbar, stays unchecked
 - [ ] Online green dot visible on Clicks list avatar when peer is online

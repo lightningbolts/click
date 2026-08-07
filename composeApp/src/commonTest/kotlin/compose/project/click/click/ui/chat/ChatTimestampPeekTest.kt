@@ -15,10 +15,10 @@ class ChatTimestampPeekTest {
     }
 
     @Test
-    fun applyTimestampPeekDragStep_rightwardDragCollapsesRevealedPeek() {
-        val raw = mutableFloatStateOf(80f)
+    fun applyTimestampPeekDragStep_matchesReplySwipeRubberBand() {
         val maxReveal = 56f
         val softKnee = 5f
+        val raw = mutableFloatStateOf(80f)
         val display = mutableFloatStateOf(
             swipeVisualFromRawTravel(
                 rawTravelPx = raw.floatValue,
@@ -39,5 +39,16 @@ class ChatTimestampPeekTest {
         )
         assertTrue(raw.floatValue < 80f)
         assertTrue(display.floatValue < initialDisplay)
+        // Past-cap resistance matches reply: overflow * 0.12
+        val pastCap = swipeVisualFromRawTravel(
+            rawTravelPx = 120f,
+            isSent = false,
+            maxVisualPx = maxReveal,
+            softKneePx = softKnee,
+            trackGain = 1f,
+            overflowRubberGain = 0.12f,
+        )
+        assertTrue(pastCap > maxReveal)
+        assertTrue(pastCap - maxReveal < 120f - maxReveal)
     }
 }

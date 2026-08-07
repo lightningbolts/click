@@ -38,10 +38,6 @@ internal object ChatTimestampStripDefaults {
     val GutterDp = 80.dp
 }
 
-/** Same gains as swipe-to-reply in [ChatMessageBubble] (do not change reply; mirror here). */
-private const val TimestampPeekTrackGain = 1f
-private const val TimestampPeekOverflowRubberGain = 0.12f
-
 @Composable
 internal fun rememberTimestampPeekRevealPx(): Float {
     val density = LocalDensity.current
@@ -81,8 +77,8 @@ internal fun applyTimestampPeekDragStep(
             isSent = false,
             maxVisualPx = maxR,
             softKneePx = soft,
-            trackGain = TimestampPeekTrackGain,
-            overflowRubberGain = TimestampPeekOverflowRubberGain,
+            trackGain = 1f,
+            overflowRubberGain = 0.12f,
         )
 }
 
@@ -103,8 +99,8 @@ internal fun restoreTimestampPeekRawFromDisplay(
             isSent = false,
             maxVisualPx = maxR,
             softKneePx = soft,
-            trackGain = TimestampPeekTrackGain,
-            overflowRubberGain = TimestampPeekOverflowRubberGain,
+            trackGain = 1f,
+            overflowRubberGain = 0.12f,
         ).coerceIn(0f, ChatGestureMotion.RawTravelCapPx)
 }
 

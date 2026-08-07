@@ -18,7 +18,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -1342,12 +1341,12 @@ fun App() {
 
             // On iOS the native UITabBar cannot be covered by Compose. Hiding/showing it remounts
             // Liquid Glass after chat back-swipe. Keep it visible for connections chat; chat pads
-            // above it. Still hide for hub/disposable-roll/calls that fully own the bottom edge.
+            // above it. Disposable-roll camera is a full-screen overlay — never toggle the iOS
+            // tab bar for it (that resize was flashing the whole chat on send/dismiss).
             val hideMainBottomBar =
                 (!isIOS && connectionsChatSuppressesTabBar) ||
                     hubChatArgs != null ||
-                    showConnectionDisposableRoll ||
-                    disposableRollOpening ||
+                    (!isIOS && (showConnectionDisposableRoll || disposableRollOpening)) ||
                     callOwnsNativeChrome
 
             // Wrap Scaffold in a Box to allow search overlay to be positioned at true screen bottom
@@ -2278,11 +2277,9 @@ fun App() {
                                         stiffness = Spring.StiffnessMediumLow,
                                     ),
                                 ),
-                            exit = fadeOut(animationSpec = tween(140, easing = FastOutSlowInEasing)) +
-                                scaleOut(
-                                    targetScale = 0.08f,
-                                    animationSpec = tween(220, easing = FastOutSlowInEasing),
-                                ),
+                            // No scaleOut — shrinking the camera over the open thread made the
+                            // entire chat flash when sending a Click Drop.
+                            exit = fadeOut(animationSpec = tween(90, easing = FastOutSlowInEasing)),
                             modifier = Modifier
                                 .fillMaxSize()
                                 .zIndex(10_500f),
@@ -2294,7 +2291,8 @@ fun App() {
                                     if (cameraSession != null && !cameraConnectionId.isNullOrBlank()) {
                                         connectionScope.launch {
                                             chatViewModel.setCurrentUser(currentUser.id)
-                                            chatViewModel.loadChatMessages(cameraConnectionId)
+                                            // Do not reload the open thread — that forced a full
+                                            // timeline refresh and briefly flickered the chat.
                                             chatViewModel.sendDisposableRollPhoto(
                                                 bytes = bytes,
                                                 encounterId = cameraSession.encounterId,

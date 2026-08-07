@@ -582,11 +582,18 @@ ClickActionBottomSheet / ClickFormBottomSheet
 
 ### 11.5 Flow Sequence
 
-Caller opens sheet → platform presents opaque shell → dismiss on action or drag.
+Caller opens sheet → platform presents opaque shell → dismiss on action or drag. Nested
+sheets (directory, share, create-click) stack on the active page sheet; sibling top-level
+sheets replace. Grabber clearance padding is applied *after* the sheet background so the
+system grabber never reveals a black host strip.
 
 ### 11.6 A11y & Responsive
 
-- iOS: UIKit `UISheetPresentationController` Liquid Glass (clear host + light wash; no white content gaps).
+- iOS: UIKit `UISheetPresentationController` with native presentation material over the
+  active app-themed page surface; scroll-hosted bodies measure unbounded height so the
+  UIScrollView can reach footers (RSVP, Join Event Route, Cancel). Nested sheets stack;
+  profile LazyColumn sheets opt out of the scroll host. Create-click / share-beacon use the
+  same Drop-beacon scroll-host + `sheetBodyScroll` contract.
 - Android: Calf adaptive, half-height cap for Click sheets.
 
 ---

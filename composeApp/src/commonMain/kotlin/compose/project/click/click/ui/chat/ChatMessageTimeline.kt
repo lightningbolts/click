@@ -48,7 +48,11 @@ internal suspend fun scrollChatTimelineToLatest(
     listState: LazyListState,
     suppressKeyboardDismiss: MutableState<Boolean>,
 ) {
+    // Never interrupt an in-flight user fling — that is what feels like stutter/jump
+    // when heavy attachment rows are still measuring.
+    if (listState.isScrollInProgress) return
     repeat(12) {
+        if (listState.isScrollInProgress) return
         if (listState.layoutInfo.totalItemsCount > 0) {
             suppressKeyboardDismiss.value = true
             try {

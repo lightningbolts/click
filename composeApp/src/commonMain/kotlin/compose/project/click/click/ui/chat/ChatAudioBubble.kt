@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -156,6 +157,8 @@ private fun VoiceNoteChromeShell(
 ) {
     Row(
         modifier = modifier
+            // Reserve a stable shell height so decrypt/loading → ready does not jump the timeline.
+            .heightIn(min = chatBubbleScaledDp(72f))
             .clip(ShellShape)
             .border(1.dp, palette.shellBorder, ShellShape)
             .background(palette.shellBg, ShellShape)

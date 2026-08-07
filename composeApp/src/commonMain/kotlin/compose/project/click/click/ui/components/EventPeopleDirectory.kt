@@ -6,17 +6,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -24,7 +18,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,13 +39,14 @@ import compose.project.click.click.events.mutualsAtEvent
 import compose.project.click.click.events.sortEventAttendees
 import compose.project.click.click.ui.theme.clickBorderColor
 import compose.project.click.click.ui.theme.clickCardSurface
+import compose.project.click.click.ui.components.sheetBodyScroll
 
 @Composable
 fun EventPeopleDirectorySection(
     attendees: List<DirectoryAttendee>,
     loading: Boolean,
     mutualsSectionUnlocked: Boolean,
-    /** True when enriched directory payload is available (not RSVP-only fallback). */
+    /** True when personalized relationship metrics are available. */
     directoryEnriched: Boolean = true,
     onOpenDirectory: () -> Unit,
     modifier: Modifier = Modifier,
@@ -89,7 +83,7 @@ fun EventPeopleDirectorySection(
                 CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(28.dp))
             attendees.isEmpty() ->
                 Text(
-                    text = "RSVP to see who’s going.",
+                    text = "No attendees yet.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -157,6 +151,8 @@ fun EventPeopleDirectorySheetContent(
     attendees: List<DirectoryAttendee>,
     loading: Boolean,
     mutualsSectionUnlocked: Boolean,
+    /** False for the public RSVP fallback, which has names but no personalized metrics. */
+    directoryEnriched: Boolean,
     onAttendeeClick: (DirectoryAttendee) -> Unit,
 ) {
     var sortMode by remember { mutableStateOf(EventAttendeeSortMode.Alphabetical) }
@@ -167,7 +163,6 @@ fun EventPeopleDirectorySheetContent(
     val sortedMutuals = remember(mutuals, sortMode) {
         sortEventAttendees(mutuals, sortMode)
     }
-    val listState = rememberLazyListState()
     val border = clickBorderColor()
     val onSurface = MaterialTheme.colorScheme.onSurface
     val onVariant = MaterialTheme.colorScheme.onSurfaceVariant
@@ -180,15 +175,12 @@ fun EventPeopleDirectorySheetContent(
         if (showMutualsSection) everyoneExcludingMutualsSection(sorted) else sorted
     }
 
-    LaunchedEffect(sortMode) {
-        listState.scrollToItem(0)
-    }
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .fillMaxHeight()
-            .padding(horizontal = 20.dp, vertical = 8.dp),
+            .sheetBodyScroll()
+            .padding(horizontal = 20.dp, vertical = 8.dp)
+            .padding(bottom = 28.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
@@ -218,20 +210,12 @@ fun EventPeopleDirectorySheetContent(
             }
         }
 
-        if (!mutualsSectionUnlocked) {
-            Text(
-                text = "Check in at the event to unlock mutuals (friends of friends) for future reference.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
         when {
             loading && sorted.isEmpty() -> {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f),
+                        .padding(vertical = 48.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     CircularProgressIndicator(strokeWidth = 2.dp)
@@ -245,53 +229,40 @@ fun EventPeopleDirectorySheetContent(
                 )
             }
             else -> {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentPadding = PaddingValues(bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    if (showMutualsSection) {
-                        item(key = "mutuals-header") {
-                            Text(
-                                text = "Mutuals here",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = onSurface,
-                                modifier = Modifier.padding(bottom = 8.dp, top = 4.dp),
-                            )
-                        }
-                        items(sortedMutuals, key = { "mutual-${it.userId}" }) { attendee ->
-                            DirectoryAttendeeRow(
-                                attendee = attendee,
-                                sortMode = EventAttendeeSortMode.MutualConnections,
-                                border = border,
-                                onClick = { onAttendeeClick(attendee) },
-                            )
-                        }
-                    }
-                    item(key = "everyone-header") {
-                        Text(
-                            text = "Everyone",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = onSurface,
-                            modifier = Modifier.padding(
-                                bottom = 8.dp,
-                                top = if (showMutualsSection) 12.dp else 4.dp,
-                            ),
-                        )
-                    }
-                    items(everyone, key = { it.userId }) { attendee ->
+                if (showMutualsSection) {
+                    Text(
+                        text = "Mutuals here",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = onSurface,
+                        modifier = Modifier.padding(bottom = 4.dp, top = 4.dp),
+                    )
+                    sortedMutuals.forEach { attendee ->
                         DirectoryAttendeeRow(
                             attendee = attendee,
-                            sortMode = sortMode,
+                            sortMode = EventAttendeeSortMode.MutualConnections,
                             border = border,
                             onClick = { onAttendeeClick(attendee) },
                         )
                     }
+                }
+                Text(
+                    text = "Everyone",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = onSurface,
+                    modifier = Modifier.padding(
+                        bottom = 4.dp,
+                        top = if (showMutualsSection) 12.dp else 4.dp,
+                    ),
+                )
+                everyone.forEach { attendee ->
+                    DirectoryAttendeeRow(
+                        attendee = attendee,
+                        sortMode = sortMode,
+                        border = border,
+                        onClick = { onAttendeeClick(attendee) },
+                    )
                 }
             }
         }

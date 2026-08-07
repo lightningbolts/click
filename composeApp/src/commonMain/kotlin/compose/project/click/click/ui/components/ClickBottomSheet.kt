@@ -40,12 +40,12 @@ object ClickSheetDefaults {
 fun ClickPlatformSheet(
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
-    /** iOS: host in UIScrollView for dismiss-at-top. False for LazyColumn form sheets. */
+    /** iOS: host in UIScrollView for dismiss-at-top (same path as Drop beacon). */
     useUiKitScrollHost: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val sheetColor = GlassSheetTokens.OledBlack()
-    val onSheet = GlassSheetTokens.OnOled()
+    val sheetColor = MaterialTheme.colorScheme.surface
+    val onSheet = MaterialTheme.colorScheme.onSurface
     MapBeaconSheetRoot(
         visible = true,
         onDismissRequest = onDismissRequest,
@@ -65,10 +65,12 @@ fun ClickPlatformSheet(
                 onSurface = onSheet,
                 alignSemanticColorsToSheet = true,
             ) {
+                // Scroll-hosted sheets must wrap content height (not fillMaxHeight) so the
+                // UIKit UIScrollView receives the full intrinsic size.
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .fillMaxHeight(),
+                        .then(if (useUiKitScrollHost) Modifier else Modifier.fillMaxHeight()),
                     content = content,
                 )
             }
@@ -122,7 +124,7 @@ fun ClickActionBottomSheet(
     )
 }
 
-/** Forms and tall content (profile, availability, connection context, verified click). */
+/** Forms and tall content — same UIKit scroll-host contract as Drop beacon by default. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ClickFormBottomSheet(
@@ -136,13 +138,17 @@ fun ClickFormBottomSheet(
     @Suppress("UNUSED_PARAMETER") contentWindowInsets: @Composable () -> WindowInsets =
         { WindowInsets(0, 0, 0, 0) },
     @Suppress("UNUSED_PARAMETER") dragHandle: @Composable () -> Unit = {},
+    /**
+     * iOS: prefer true (Drop-beacon path). Set false only for sheets that embed LazyColumn
+     * tabs and must own Compose scroll (profile).
+     */
+    useUiKitScrollHost: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     ClickPlatformSheet(
         onDismissRequest = onDismissRequest,
         modifier = modifier,
-        // Forms often embed LazyColumn — Compose owns scroll on iOS.
-        useUiKitScrollHost = false,
+        useUiKitScrollHost = useUiKitScrollHost,
         content = content,
     )
 }

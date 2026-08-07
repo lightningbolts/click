@@ -116,17 +116,14 @@ fun Modifier.sheetSwipeDismissWhenAtTop(
     ) {
         object : NestedScrollConnection {
             private var gestureActive = false
-            private var contentScrolledThisGesture = false
 
             private fun noteUserInput() {
                 if (gestureActive) return
                 gestureActive = true
-                contentScrolledThisGesture = false
             }
 
             private fun endGestureTracking() {
                 gestureActive = false
-                contentScrolledThisGesture = false
             }
 
             private fun setSurfaceDrag(offset: Float) {
@@ -141,16 +138,6 @@ fun Modifier.sheetSwipeDismissWhenAtTop(
             ): Offset {
                 if (source != NestedScrollSource.UserInput) return Offset.Zero
                 noteUserInput()
-
-                if (dragOffsetPx.floatValue <= 0f && consumed.y != 0f) {
-                    contentScrolledThisGesture = true
-                }
-
-                if (contentScrolledThisGesture) {
-                    if (dragOffsetPx.floatValue > 0f) setSurfaceDrag(0f)
-                    if (available.y > 0f) return Offset(0f, available.y)
-                    return Offset.Zero
-                }
 
                 if (!scrollAtTopUpdated()) return Offset.Zero
 
@@ -171,10 +158,6 @@ fun Modifier.sheetSwipeDismissWhenAtTop(
 
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
                 try {
-                    if (contentScrolledThisGesture) {
-                        if (dragOffsetPx.floatValue > 0f) setSurfaceDrag(0f)
-                        return if (available.y > 0f) available else Velocity.Zero
-                    }
                     if (!surfaceDragActive) {
                         dragOffsetPx.floatValue = 0f
                         return Velocity.Zero

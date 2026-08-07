@@ -884,22 +884,27 @@ private fun BeaconChatMessageBubble(
                     .zIndex(0f),
             )
         }
-        Box(
+        // Match normal bubbles: reply-drag only on the card, not the full row width.
+        // A full-width draggable steals the chat→connections back gesture in this Y band.
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .zIndex(1f)
-                .then(swipeDragModifier)
-                .graphicsLayer {
-                    translationX = displayVisualPx.floatValue
-                },
+                .zIndex(1f),
+            horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start,
         ) {
-            BeaconChatCard(
-                message = message,
-                isSent = isSent,
-                onOpenBeacon = onOpenBeacon,
-                onLongPress = { onLongPress(messageWithUser) },
-                enableContextMenu = enableMessageContextMenu,
-            )
+            Box(
+                modifier = Modifier
+                    .graphicsLayer { translationX = displayVisualPx.floatValue }
+                    .then(swipeDragModifier),
+            ) {
+                BeaconChatCard(
+                    message = message,
+                    isSent = isSent,
+                    onOpenBeacon = onOpenBeacon,
+                    onLongPress = { onLongPress(messageWithUser) },
+                    enableContextMenu = enableMessageContextMenu,
+                )
+            }
         }
         if (isSent) {
             ReplySwipeSideIcon(

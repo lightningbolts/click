@@ -395,8 +395,8 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] Event detail shows address label when `location_name` / `formatted_address` set
 - [ ] Submit success adds pin; failure toast
 - [ ] Beacon detail sheet: RSVP, share, navigate, bookmark, labeled check-in CTA
-- [ ] Event people directory: after RSVP, open Directory → sort A–Z / Interests / Mutuals; relationship / sort-aware metrics; list scrolls to top on chip change; no large blank band at full sheet height
-- [ ] Event mutuals: after server-confirmed check-in, “Mutuals here” section uses the active sort, is not duplicated under Everyone, and is not exposed from an optimistic/early local check-in; Connections show friends-in-common count; view-only FoF profiles (no Connect)
+- [ ] Event people directory: every signed-in viewer can open Directory → sort A–Z / Interests / Mutuals; relationship / sort-aware metrics; list scrolls to top on chip change; no large blank band at full sheet height
+- [ ] Event mutuals: “Mutuals here” section uses the active sort and is not duplicated under Everyone; Connections show friends-in-common count; view-only FoF profiles (no Connect)
 - [ ] Bookmark toggle survives app force-kill (server-backed)
 - [ ] Check-in is a full-width labeled button (`Check in here` / `Checked in`) — not a hero icon circle
 - [ ] Check-in CTA updates immediately on tap (optimistic); pending blocks double-tap
@@ -570,8 +570,8 @@ Prefer the dedicated smoke doc for a timed pass: [02-smoke-10min.md](02-smoke-10
 - [ ] Join hub from map → send hub message → leave hub
 - [ ] Hub message cooldown: after send, composer shows `Wait {N}s…` for 15s; rapid sends return 429 / restore draft
 - [ ] Beacon detail sheet: RSVP, share, navigate, bookmark, labeled check-in CTA
-- [ ] Event people directory: after RSVP, open Directory → sort A–Z / Interests / Mutuals; relationship / sort-aware metrics show **N mutuals** (friends-in-common); list scrolls to top on chip change; no large blank band at full sheet height
-- [ ] Event mutuals: after check-in, “Mutuals here” section lists FoF; Connections show friends-in-common count; Mutuals not duplicated under Everyone
+- [ ] Event people directory: open Directory before RSVP/check-in → sort A–Z / Interests / Mutuals; relationship / sort-aware metrics show **N mutuals** (friends-in-common); list scrolls to top on chip change; no large blank band at full sheet height
+- [ ] Event mutuals: “Mutuals here” section lists FoF; Connections show friends-in-common count; Mutuals not duplicated under Everyone
 - [ ] Share to chat: opens with fade/scale enter (not an abrupt popup)
 - [ ] Saved events detail: location/address visible on first open (no Map navigation required); Share shows Share link / Share to chat
 - [ ] Non-event beacon detail (soundtrack / community): Share link / Share to chat available; soundtrack create persists track/artist/preview/art

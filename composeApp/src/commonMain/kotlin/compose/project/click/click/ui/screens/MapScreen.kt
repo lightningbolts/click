@@ -631,8 +631,8 @@ fun MapScreen(
     }
 
     if (showBeaconDropSheet) {
-        val dropSheetColor = GlassSheetTokens.OledBlack()
-        val onDropSheet = GlassSheetTokens.OnOled()
+        val dropSheetColor = MaterialTheme.colorScheme.surface
+        val onDropSheet = MaterialTheme.colorScheme.onSurface
         MapBeaconSheetRoot(
             visible = true,
             onDismissRequest = { showBeaconDropSheet = false },
@@ -718,8 +718,8 @@ fun MapScreen(
 
     if (showOverlappingPinsSheet && selection is MapSelection.OverlappingPinsSelected) {
         val stack = selection as MapSelection.OverlappingPinsSelected
-        val sheetBg = GlassSheetTokens.OledBlack()
-        val onSheet = GlassSheetTokens.OnOled()
+        val sheetBg = MaterialTheme.colorScheme.surface
+        val onSheet = MaterialTheme.colorScheme.onSurface
         MapBeaconSheetRoot(
             visible = true,
             onDismissRequest = { viewModel.clearSelection() },
@@ -754,8 +754,8 @@ fun MapScreen(
 
     if (showCommunityHubSheet && selection is MapSelection.HubSelected) {
         val hubSel = selection as MapSelection.HubSelected
-        val hubSheetBg = GlassSheetTokens.OledBlack()
-        val onHubSheet = GlassSheetTokens.OnOled()
+        val hubSheetBg = MaterialTheme.colorScheme.surface
+        val onHubSheet = MaterialTheme.colorScheme.onSurface
         MapBeaconSheetRoot(
             visible = true,
             onDismissRequest = { viewModel.clearSelection() },
@@ -795,8 +795,8 @@ fun MapScreen(
 
     if (showBeaconDetailSheet && selection is MapSelection.BeaconSelected) {
         val beaconSel = selection as MapSelection.BeaconSelected
-        val detailSurface = GlassSheetTokens.OledBlack()
-        val onDetailSurface = GlassSheetTokens.OnOled()
+        val detailSurface = MaterialTheme.colorScheme.surface
+        val onDetailSurface = MaterialTheme.colorScheme.onSurface
         var shareBeaconToChat by remember(beaconSel.beacon.id) {
             mutableStateOf<MapBeacon?>(null)
         }
@@ -874,8 +874,8 @@ fun MapScreen(
         val sheetData = remember(connectionSelection, viewerUserId) {
             buildProfileSheetState(connectionSelection, viewerUserId)
         }
-        val profileSheetColor = GlassSheetTokens.OledBlack()
-        val onProfileSheet = GlassSheetTokens.OnOled()
+        val profileSheetColor = MaterialTheme.colorScheme.surface
+        val onProfileSheet = MaterialTheme.colorScheme.onSurface
             MapBeaconSheetRoot(
             visible = true,
             onDismissRequest = {
@@ -1449,7 +1449,7 @@ internal fun EventBeaconDetail(
     val rsvpPendingIds by viewModel.beaconRsvpPendingIds.collectAsState()
     val entry = rsvpCache[beacon.id]
     val attendees = entry?.attendees.orEmpty()
-    val currentUserSignedUp = entry?.currentUserSignedUp == true
+    val rsvpCacheSignedUp = entry?.currentUserSignedUp == true
     val rsvpLoading = entry == null && beacon.id in rsvpLoadingIds
     val rsvpPending = beacon.id in rsvpPendingIds
     var rsvpError by remember(beacon.id) { mutableStateOf<String?>(null) }
@@ -1457,7 +1457,7 @@ internal fun EventBeaconDetail(
     val engagementPendingIds by viewModel.beaconEngagementPendingIds.collectAsState()
     val engagement = engagementCache[beacon.id]
     val bookmarked = engagement?.bookmarked == true
-    val checkedIn = engagement?.checkedIn == true || engagement?.localEarlyCheckIn == true
+    val engagementCheckedIn = engagement?.checkedIn == true || engagement?.localEarlyCheckIn == true
     val checkInPending = beacon.id in engagementPendingIds
     val uriHandler = LocalUriHandler.current
     val currentUser by AppDataManager.currentUser.collectAsState()
@@ -1502,11 +1502,19 @@ internal fun EventBeaconDetail(
     val directoryEntry = directoryCache[beacon.id]
     val directoryAttendees = directoryEntry?.attendees.orEmpty()
     val directoryLoading = beacon.id in directoryLoadingIds
+    // The enriched directory independently returns the viewer's RSVP/check-in state.
+    // Prefer a positive answer from either cache so a stale engagement response cannot
+    // hide Cancel RSVP / Check out controls.
+    val currentUserSignedUp =
+        rsvpCacheSignedUp || directoryEntry?.currentUserSignedUp == true
+    val checkedIn =
+        engagementCheckedIn || directoryEntry?.currentUserCheckedIn == true
     // Mutuals are server-authorized enrichment. Local/early check-in only changes the CTA;
     // it must not expose an old or unavailable mutual directory payload.
     val mutualsUnlocked = directoryEntry?.mutualsSectionUnlocked == true
     var showPeopleDirectory by remember(beacon.id) { mutableStateOf(false) }
     var directoryProfileUserId by remember(beacon.id) { mutableStateOf<String?>(null) }
+    var pendingDirectoryProfileUserId by remember(beacon.id) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(displayBeacon.id) {
         viewModel.loadBeaconRsvp(displayBeacon.id, forceRefresh = true)
@@ -1518,14 +1526,26 @@ internal fun EventBeaconDetail(
     }
 
     LaunchedEffect(displayBeacon.id, currentUserSignedUp, checkedIn) {
-        if (currentUserSignedUp || checkedIn) {
-            viewModel.loadBeaconAttendeeDirectory(displayBeacon.id, forceRefresh = false)
-        }
+        viewModel.loadBeaconAttendeeDirectory(displayBeacon.id, forceRefresh = false)
     }
 
     LaunchedEffect(showPeopleDirectory, displayBeacon.id) {
         if (showPeopleDirectory) {
-            viewModel.loadBeaconAttendeeDirectory(displayBeacon.id, forceRefresh = true)
+            // Prefer cache; only refresh if we never enriched this beacon.
+            viewModel.loadBeaconAttendeeDirectory(
+                displayBeacon.id,
+                forceRefresh = directoryEntry == null,
+            )
+        }
+    }
+    // UIKit cannot present the profile sheet while the directory's dismiss animation is active.
+    // Queue the presentation until the first page sheet has fully left the screen.
+    LaunchedEffect(showPeopleDirectory, pendingDirectoryProfileUserId) {
+        val pendingId = pendingDirectoryProfileUserId
+        if (!showPeopleDirectory && pendingId != null) {
+            delay(450)
+            directoryProfileUserId = pendingId
+            pendingDirectoryProfileUserId = null
         }
     }
 
@@ -1668,7 +1688,7 @@ internal fun EventBeaconDetail(
             },
             loading = directoryLoading || rsvpLoading,
             mutualsSectionUnlocked = mutualsUnlocked,
-            directoryEnriched = directoryAttendees.isNotEmpty(),
+            directoryEnriched = directoryEntry != null,
             onOpenDirectory = { showPeopleDirectory = true },
         )
 
@@ -1686,8 +1706,9 @@ internal fun EventBeaconDetail(
                     },
                     loading = directoryLoading,
                     mutualsSectionUnlocked = mutualsUnlocked,
+                    directoryEnriched = directoryEntry != null,
                     onAttendeeClick = { attendee ->
-                        directoryProfileUserId = attendee.userId
+                        pendingDirectoryProfileUserId = attendee.userId
                         showPeopleDirectory = false
                     },
                 )
@@ -1850,6 +1871,7 @@ internal fun EventBeaconDetail(
                 )
             }
         }
+
         if (rsvpPending) {
             Text(
                 text = "Saving in the background...",

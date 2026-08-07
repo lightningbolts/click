@@ -24,6 +24,8 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.uikit.LocalUIViewController
 import androidx.compose.ui.window.ComposeUIViewController
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.ui.Alignment
 import compose.project.click.click.ui.components.LocalSheetOnDismissRequest
 import compose.project.click.click.ui.components.LocalSheetScrollOwnedByHost
 import compose.project.click.click.ui.components.LocalSheetUsesPlatformGrabber
@@ -34,7 +36,6 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
 import platform.CoreGraphics.CGAffineTransformMakeTranslation
 import platform.CoreGraphics.CGSizeMake
-import platform.Foundation.NSProcessInfo
 import platform.UIKit.NSLayoutConstraint
 import platform.UIKit.UIAdaptivePresentationControllerDelegateProtocol
 import platform.UIKit.UIColor
@@ -58,7 +59,7 @@ import kotlin.math.abs
 /**
  * iOS platform sheets — native [UISheetPresentationController] Liquid Glass.
  *
- * - **Page background**: clear (system glass). No OLED wash.
+ * - **Page background**: app-themed opaque surface below the native presentation material.
  * - **Components**: solid (via [ClickSheetDialogChrome] theme).
  * - [useUiKitScrollHost]: UIScrollView owns scroll → system swipe-down dismiss at top.
  * - Otherwise: Compose scroll + whole-sheet UIView drag-to-dismiss.
@@ -77,12 +78,10 @@ private class MapIosNativeSheetDelegate(
     }
 }
 
-private fun iosMajorVersion(): Long =
-    NSProcessInfo.processInfo.operatingSystemVersion.useContents { majorVersion }
-
 private class MapIosNativeSheetManager(
     private val parentUIViewController: UIViewController,
     private var isChromeDark: Boolean,
+    private var sheetColor: Color,
     private val expandable: Boolean,
     private val useUiKitScrollHost: Boolean,
     private val onDismissFromSwipe: () -> Unit,
@@ -95,6 +94,7 @@ private class MapIosNativeSheetManager(
                 isPresented = false
                 isAnimating = false
                 resetSurfaceDrag()
+                popActive()
                 onDismissFromSwipe()
             },
         )
@@ -106,6 +106,23 @@ private class MapIosNativeSheetManager(
     private var contentHeightConstraint: NSLayoutConstraint? = null
     private var lastContentHeightPt = 0.0
     private var retainedComposeVc: UIViewController? = null
+
+    private companion object {
+        /** Bottom of stack = root sheet; top = currently interactive sheet. */
+        private val presentationStack = mutableListOf<MapIosNativeSheetManager>()
+
+        val activeManager: MapIosNativeSheetManager?
+            get() = presentationStack.lastOrNull()
+    }
+
+    private fun pushActive() {
+        presentationStack.remove(this)
+        presentationStack.add(this)
+    }
+
+    private fun popActive() {
+        presentationStack.remove(this)
+    }
 
     private val scrollView: UIScrollView by lazy {
         UIScrollView().apply {
@@ -142,14 +159,43 @@ private class MapIosNativeSheetManager(
         sheetViewController.view.setTransform(CGAffineTransformMakeTranslation(0.0, 0.0))
     }
 
-    private fun applyClearHost(host: UIViewController) {
-        host.view.backgroundColor = UIColor.clearColor
-        host.view.setOpaque(false)
-        host.view.layer.backgroundColor = UIColor.clearColor.CGColor
-        if (iosMajorVersion() < 26L) {
-            host.view.backgroundColor =
-                UIColor.colorWithRed(0.0, green = 0.0, blue = 0.0, alpha = 0.45)
+    private fun sheetUIColor(): UIColor = UIColor(
+        red = sheetColor.red.toDouble(),
+        green = sheetColor.green.toDouble(),
+        blue = sheetColor.blue.toDouble(),
+        alpha = 1.0,
+    )
+
+    private fun applyThemedHost(host: UIViewController) {
+        val background = sheetUIColor()
+        host.view.backgroundColor = background
+        host.view.setOpaque(true)
+        host.view.layer.backgroundColor = background.CGColor
+        // Scroll-hosted sheets otherwise leave clear UIScrollView / compose gaps that
+        // read as black strips under the system grabber and below short content.
+        if (useUiKitScrollHost && isInitialized) {
+            scrollView.backgroundColor = background
+            scrollView.setOpaque(true)
+            composeContainer.backgroundColor = background
+            composeContainer.setOpaque(true)
+            retainedComposeVc?.view?.let { composeView ->
+                composeView.backgroundColor = background
+                composeView.setOpaque(true)
+            }
         }
+    }
+
+    /** True when this manager's Compose parent lives inside [active]'s presented sheet. */
+    private fun shouldStackOn(active: MapIosNativeSheetManager): Boolean {
+        if (parentUIViewController == active.sheetViewController) return true
+        active.retainedComposeVc?.let { if (parentUIViewController == it) return true }
+        val activeView = active.sheetViewController.view
+        var view: UIView? = parentUIViewController.view
+        while (view != null) {
+            if (view === activeView) return true
+            view = view.superview
+        }
+        return false
     }
 
     private fun configurePageSheet(host: UIViewController) {
@@ -169,7 +215,7 @@ private class MapIosNativeSheetManager(
         )
         sheet?.prefersGrabberVisible = true
         sheet?.prefersScrollingExpandsWhenScrolledToEdge = useUiKitScrollHost
-        applyClearHost(host)
+        applyThemedHost(host)
     }
 
     private fun buildFillSheet(): UIViewController {
@@ -206,18 +252,19 @@ private class MapIosNativeSheetManager(
             }
         }
         configurePageSheet(host)
-        applyClearHost(host)
+        applyThemedHost(host)
         isInitialized = true
         return host
     }
 
     private fun buildScrollHostedSheet(): UIViewController {
         val screenHeightPt = UIScreen.mainScreen.bounds.useContents { size.height }
+        val initialBackground = sheetUIColor()
         val host = object : UIViewController(nibName = null, bundle = null) {
             override fun viewDidLoad() {
                 super.viewDidLoad()
-                view.backgroundColor = UIColor.clearColor
-                view.setOpaque(false)
+                view.backgroundColor = initialBackground
+                view.setOpaque(true)
                 view.addSubview(scrollView)
                 NSLayoutConstraint.activateConstraints(
                     listOf(
@@ -229,6 +276,10 @@ private class MapIosNativeSheetManager(
                 )
             }
         }
+        scrollView.backgroundColor = initialBackground
+        scrollView.setOpaque(true)
+        composeContainer.backgroundColor = initialBackground
+        composeContainer.setOpaque(true)
 
         val composeVc = ComposeUIViewController {
             val scheme = schemeState.value
@@ -243,6 +294,11 @@ private class MapIosNativeSheetManager(
                         Column(
                             modifier = modifierState.value
                                 .fillMaxWidth()
+                                // Parent UIView is initially screen-sized. Without unbounded
+                                // wrap, Compose clamps to that height and UIScrollView never
+                                // learns the true content size — Join Event Route / footers
+                                // clip with nowhere to scroll.
+                                .wrapContentHeight(align = Alignment.Top, unbounded = true)
                                 .onSizeChanged { size ->
                                     updateComposeContentHeightPx(size.height.toDouble())
                                 },
@@ -256,8 +312,8 @@ private class MapIosNativeSheetManager(
 
         val composeView = composeVc.view
         composeView.translatesAutoresizingMaskIntoConstraints = false
-        composeView.backgroundColor = UIColor.clearColor
-        composeView.setOpaque(false)
+        composeView.backgroundColor = initialBackground
+        composeView.setOpaque(true)
         composeContainer.addSubview(composeView)
         val heightConstraint = composeView.heightAnchor.constraintEqualToConstant(screenHeightPt)
         contentHeightConstraint = heightConstraint
@@ -308,12 +364,13 @@ private class MapIosNativeSheetManager(
     lateinit var contentState: androidx.compose.runtime.State<@Composable ColumnScope.() -> Unit>
     lateinit var modifierState: androidx.compose.runtime.State<Modifier>
 
-    fun syncFromParent(scheme: ColorScheme, typography: Typography) {
+    fun syncFromParent(scheme: ColorScheme, typography: Typography, containerColor: Color) {
         schemeState.value = scheme
         typographyState.value = typography
+        sheetColor = containerColor
         isChromeDark = scheme.background.luminance() < 0.5f
         applyTheme(isChromeDark)
-        if (isInitialized) applyClearHost(sheetViewController)
+        if (isInitialized) applyThemedHost(sheetViewController)
     }
 
     fun applyTheme(dark: Boolean) {
@@ -327,19 +384,75 @@ private class MapIosNativeSheetManager(
         }
     }
 
-    fun show() {
-        if (isPresented || isAnimating) return
-        isAnimating = true
+    private fun presentationRoot(): UIViewController {
+        var root = parentUIViewController
+        while (root.presentingViewController != null) {
+            root = root.presentingViewController ?: break
+        }
+        return root
+    }
+
+    private fun presentFrom(host: UIViewController) {
         applyTheme(isChromeDark)
-        applyClearHost(sheetViewController)
-        parentUIViewController.presentViewController(
+        applyThemedHost(sheetViewController)
+        host.presentViewController(
             viewControllerToPresent = sheetViewController,
             animated = true,
             completion = {
                 isPresented = true
                 isAnimating = false
+                pushActive()
             },
         )
+    }
+
+    private fun dismissForReplacement(onComplete: () -> Unit) {
+        if (!isPresented || isAnimating) {
+            onComplete()
+            return
+        }
+        isAnimating = true
+        resetSurfaceDrag()
+        sheetViewController.dismissViewControllerAnimated(
+            flag = true,
+            completion = {
+                isPresented = false
+                isAnimating = false
+                retainedComposeVc = null
+                popActive()
+                onDismissFromSwipe()
+                onComplete()
+            },
+        )
+    }
+
+    fun show() {
+        if (isPresented || isAnimating) return
+        isAnimating = true
+        val active = activeManager
+        if (active != null && active !== this) {
+            // Directory / share / profile sheets composed inside an open sheet must stack
+            // on that sheet. Replacing the parent destroys nested Compose state (Directory
+            // never opens; create-click footers vanish mid-transition).
+            if (shouldStackOn(active)) {
+                presentFrom(active.sheetViewController)
+                return
+            }
+            active.dismissForReplacement {
+                presentFrom(presentationRoot())
+            }
+            return
+        }
+        val root = presentationRoot()
+        val alreadyPresented = root.presentedViewController
+        if (alreadyPresented != null && alreadyPresented != sheetViewController) {
+            root.dismissViewControllerAnimated(
+                flag = true,
+                completion = { presentFrom(root) },
+            )
+        } else {
+            presentFrom(root)
+        }
     }
 
     fun hide() {
@@ -352,6 +465,7 @@ private class MapIosNativeSheetManager(
                 isPresented = false
                 isAnimating = false
                 retainedComposeVc = null
+                popActive()
             },
         )
     }
@@ -386,6 +500,7 @@ actual fun MapBeaconSheetRoot(
         val m = MapIosNativeSheetManager(
             parentUIViewController = parent,
             isChromeDark = appColorScheme.background.luminance() < 0.5f,
+            sheetColor = containerColor,
             expandable = expandable,
             useUiKitScrollHost = useUiKitScrollHost,
             onDismissFromSwipe = { onDismissState.value.invoke() },
@@ -398,7 +513,7 @@ actual fun MapBeaconSheetRoot(
     }
 
     SideEffect {
-        manager.syncFromParent(appColorScheme, appTypography)
+        manager.syncFromParent(appColorScheme, appTypography, containerColor)
     }
 
     DisposableEffect(manager) {

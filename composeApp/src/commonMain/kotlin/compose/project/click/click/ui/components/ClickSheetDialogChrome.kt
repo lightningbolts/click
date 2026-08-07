@@ -23,9 +23,9 @@ import compose.project.click.click.ui.theme.LocalIsDarkMode
 /**
  * Shared sheet chrome used by map beacon sheets and [ClickPlatformSheet] dialogs.
  *
- * iOS UIKit Liquid Glass ([LocalSheetUsesPlatformGrabber]): page background stays
- * **transparent** so system glass shows through. Cards / controls stay **solid**
- * (opaque Functional Clarity surfaces) — never frosted components.
+ * The page, cards, and controls all inherit the active Click theme. UIKit owns the
+ * system grabber and presentation material, but Compose never leaves a transparent
+ * page that can expose an off-theme system surface behind its content.
  */
 @Composable
 fun ClickSheetDialogChrome(
@@ -39,10 +39,8 @@ fun ClickSheetDialogChrome(
     val darkSheet = LocalIsDarkMode.current
     val platformGrabber = LocalSheetUsesPlatformGrabber.current
     val scrollOwnedByHost = LocalSheetScrollOwnedByHost.current
-    val nativeGlassSheet = platformGrabber
     val showGrabber = useGrabber && !platformGrabber
-    // Transparent page only — components use solid [sheetColor] / elevated surfaces below.
-    val chromeColor = if (nativeGlassSheet) Color.Transparent else sheetColor
+    val chromeColor = sheetColor
     val grabberTint = if (alignSemanticColorsToSheet) {
         if (darkSheet) GlassSheetTokens.OnOledMuted().copy(alpha = 0.42f)
         else contentColorFor(sheetColor).copy(alpha = 0.38f)
@@ -87,16 +85,15 @@ fun ClickSheetDialogChrome(
         }
     }
 
-    // System grabber needs clearance — Profile / titles were jammed under it.
-    val grabberClearance = if (platformGrabber) Modifier.padding(top = 24.dp) else Modifier
-
+    // Background MUST come before grabber padding. Padding-before-background leaves a
+    // transparent band under the system grabber that shows the UIKit host (black strip).
     val columnModifier = modifier
         .fillMaxWidth()
         .then(
             if (scrollOwnedByHost) Modifier else Modifier.fillMaxHeight(),
         )
-        .then(grabberClearance)
         .background(chromeColor)
+        .then(if (platformGrabber) Modifier.padding(top = 24.dp) else Modifier)
 
     Column(columnModifier) {
         if (showGrabber) {

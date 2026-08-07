@@ -6,6 +6,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -64,14 +66,35 @@ private val lockedDropBlurBitmapCache: LruMemoryCache<String, ImageBitmap> =
     LruMemoryCache(LOCKED_DROP_BLUR_CACHE_MAX_ENTRIES)
 
 /** Bump when blur strength changes so stale weak pixels are not reused. */
-private const val LOCKED_DROP_BLUR_CACHE_VERSION = 3
+private const val LOCKED_DROP_BLUR_CACHE_VERSION = 5
+
+private fun lockedDropCacheKey(messageId: String, source: ImageBitmap): String =
+    "$messageId#${source.width}x${source.height}#v$LOCKED_DROP_BLUR_CACHE_VERSION"
 
 private fun lockedDropDisplayBitmap(messageId: String, source: ImageBitmap): ImageBitmap {
-    val key = "$messageId#v$LOCKED_DROP_BLUR_CACHE_VERSION"
+    val key = lockedDropCacheKey(messageId, source)
     lockedDropBlurBitmapCache.get(key)?.let { return it }
     val blurred = runCatching { source.softBlurredForLockedDrop() }.getOrDefault(source)
     lockedDropBlurBitmapCache.put(key, blurred)
     return blurred
+}
+
+/** Prefer localSentAt identity so temp→server id swaps do not reset bitmap slots. */
+private fun photoBitmapSlotKey(message: Message): String {
+    val stamp = message.localSentAt
+    return if (stamp != null) "out-${message.user_id}-$stamp" else message.id
+}
+
+/** Re-key blurred locked-drop bitmaps when optimistic temp ids become server ids. */
+internal fun migrateLockedDropBlurCacheKey(tempId: String, serverMessageId: String) {
+    val prefix = "$tempId#"
+    lockedDropBlurBitmapCache.entriesSnapshot().forEach { (key, bmp) ->
+        if (key.startsWith(prefix)) {
+            val migrated = key.replaceFirst(tempId, serverMessageId)
+            lockedDropBlurBitmapCache.put(migrated, bmp)
+            lockedDropBlurBitmapCache.remove(key)
+        }
+    }
 }
 
 /**
@@ -136,18 +159,22 @@ internal fun ChatBubblePhotoContent(
     }
     Box(modifier = modifier.fillMaxWidth()) {
         val localPreviewBytes = secureState?.imageBytes
-        // Stable bitmap slot — prefer process cache so reply/swipe recompositions never flash
-        // a spinner when the decoded image is already available.
-        var displayBitmap by remember(message.id) {
+        val bitmapSlotKey = remember(message.id, message.localSentAt, message.user_id) {
+            photoBitmapSlotKey(message)
+        }
+        // Stable bitmap slot — keyed by localSentAt when present so temp→server id swaps
+        // do not remount into a spinner (Click Drop send flicker).
+        var displayBitmap by remember(bitmapSlotKey) {
             mutableStateOf(secureChatImageBitmapCache.get(message.id))
         }
         // Re-read cache on every composition without resetting state when the item remounts
-        // with the same message id after a brief dispose (reply banner / back-swipe layout).
+        // with the same slot key after a brief dispose (reply banner / back-swipe layout).
         val cachedBitmap = secureChatImageBitmapCache.get(message.id)
         val bitmap = displayBitmap ?: cachedBitmap
-        LaunchedEffect(message.id, localPreviewBytes) {
+        LaunchedEffect(bitmapSlotKey, message.id, localPreviewBytes, rollLocked) {
             secureChatImageBitmapCache.get(message.id)?.let {
                 if (displayBitmap !== it) displayBitmap = it
+                if (rollLocked) lockedDropDisplayBitmap(message.id, it)
                 return@LaunchedEffect
             }
             val bytes = localPreviewBytes ?: return@LaunchedEffect
@@ -160,6 +187,8 @@ internal fun ChatBubblePhotoContent(
                 .getOrNull()
             if (decoded != null) {
                 secureChatImageBitmapCache.put(message.id, decoded)
+                // Warm locked-drop pixels off the scroll path so fling does not hitch on first paint.
+                if (rollLocked) lockedDropDisplayBitmap(message.id, decoded)
                 displayBitmap = decoded
             }
         }
@@ -167,7 +196,9 @@ internal fun ChatBubblePhotoContent(
             bitmap != null -> {
                 PhotoBitmapContent(
                     bitmap = if (rollLocked) {
-                        remember(message.id, bitmap) { lockedDropDisplayBitmap(message.id, bitmap) }
+                        remember(bitmapSlotKey, bitmap.width, bitmap.height) {
+                            lockedDropDisplayBitmap(message.id, bitmap)
+                        }
                     } else {
                         bitmap
                     },
@@ -194,6 +225,7 @@ internal fun ChatBubblePhotoContent(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .aspectRatio(4f / 3f)
                         .heightIn(max = chatBubbleScaledDp(330f)),
                 ) {
                     AsyncImage(
@@ -201,7 +233,7 @@ internal fun ChatBubblePhotoContent(
                         contentDescription = "Photo",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
-                            .fillMaxWidth()
+                            .fillMaxSize()
                             .then(photoGestureModifier)
                             .then(
                                 if (borderIfReceived) {
@@ -214,7 +246,7 @@ internal fun ChatBubblePhotoContent(
                             // No live Modifier.blur — flickers hard under reply/back translation.
                             .then(
                                 if (rollLocked) {
-                                    Modifier.graphicsLayer { alpha = 0.55f }
+                                    Modifier.graphicsLayer { alpha = 0.28f }
                                 } else {
                                     Modifier
                                 },
@@ -247,7 +279,8 @@ private fun SecurePhotoLoadingPlaceholder() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = chatBubbleScaledDp(120f), max = chatBubbleScaledDp(220f))
+            .aspectRatio(4f / 3f)
+            .heightIn(min = chatBubbleScaledDp(120f), max = chatBubbleScaledDp(330f))
             .clip(chatPhotoAttachmentShape)
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
         contentAlignment = Alignment.Center,
@@ -272,6 +305,7 @@ private fun PhotoBitmapContent(
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .aspectRatio(4f / 3f)
             .heightIn(max = chatBubbleScaledDp(330f)),
     ) {
         Image(
@@ -279,7 +313,7 @@ private fun PhotoBitmapContent(
             contentDescription = "Photo",
             contentScale = ContentScale.Crop,
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .then(photoGestureModifier)
                 .then(
                     if (borderIfReceived) {

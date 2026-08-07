@@ -40,8 +40,18 @@ internal sealed interface ChatTimelineEntry {
 /** LazyColumn [contentType] so keyboard resize reuses row nodes instead of remounting bubbles. */
 internal fun ChatTimelineEntry.timelineContentType(): Any = when (this) {
     is ChatTimelineEntry.DaySeparator -> "day_separator"
-    is ChatTimelineEntry.MessageEntry ->
-        messageWithUser.message.messageType?.takeIf { it.isNotBlank() } ?: ChatMessageType.TEXT
+    is ChatTimelineEntry.MessageEntry -> {
+        val mt = messageWithUser.message.messageType?.takeIf { it.isNotBlank() } ?: ChatMessageType.TEXT
+        // Subtype keeps heavy attachment rows from recycling into text bubbles mid-fling
+        // (height mismatch = visible jump).
+        when (mt.lowercase()) {
+            ChatMessageType.IMAGE -> "image"
+            ChatMessageType.AUDIO -> "audio"
+            ChatMessageType.BEACON -> "beacon"
+            ChatMessageType.CALL_LOG -> "call_log"
+            else -> mt
+        }
+    }
 }
 
 /**

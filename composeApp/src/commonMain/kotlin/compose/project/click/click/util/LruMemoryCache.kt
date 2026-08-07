@@ -33,6 +33,9 @@ class LruMemoryCache<K, V>(private val maxEntries: Int) {
 
     fun valuesSnapshot(): List<V> = accessOrder.mapNotNull { key -> values[key] }
 
+    fun entriesSnapshot(): List<Pair<K, V>> =
+        accessOrder.mapNotNull { key -> values[key]?.let { key to it } }
+
     fun clear() {
         values.clear()
         accessOrder.clear()

@@ -64,6 +64,7 @@ import compose.project.click.click.events.formatEventScheduleRange
 import compose.project.click.click.ui.components.ClickFormBottomSheet
 import compose.project.click.click.ui.components.ClickSheetChrome
 import compose.project.click.click.ui.components.ClickSheetDefaults
+import compose.project.click.click.ui.components.sheetBodyScroll
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.ui.theme.clickBorderColor
 import compose.project.click.click.ui.theme.clickCardSurface
@@ -95,7 +96,7 @@ internal fun ShareBeaconBottomSheet(
             title = "Share a beacon",
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight()
+                .sheetBodyScroll()
                 .padding(horizontal = ClickSheetDefaults.ContentHorizontalPadding),
         ) {
             Text(
@@ -109,19 +110,14 @@ internal fun ShareBeaconBottomSheet(
                     text = "No nearby beacons yet. Drop one on the map first.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(vertical = 24.dp),
+                    modifier = Modifier.padding(vertical = 24.dp),
                 )
             } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(bottom = 12.dp),
                 ) {
-                    items(beacons, key = { it.id }) { beacon ->
+                    beacons.forEach { beacon ->
                         val isSelected = beacon.id == selectedId
                         BeaconPreviewCard(
                             model = BeaconPreviewModel.fromMapBeacon(beacon),
@@ -319,6 +315,7 @@ internal fun BeaconPreviewCard(
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
+                minLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             if (model.scheduleLabel != null) {
@@ -334,7 +331,7 @@ internal fun BeaconPreviewCard(
                         text = model.scheduleLabel,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
@@ -344,7 +341,8 @@ internal fun BeaconPreviewCard(
                     text = model.description,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 3,
+                    maxLines = 2,
+                    minLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }

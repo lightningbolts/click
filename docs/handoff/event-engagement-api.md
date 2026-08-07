@@ -32,7 +32,7 @@ Share deep links and encounter↔event linking remain future (see § Still futur
 | GET | `/api/beacons/{id}/engagement` | `{ bookmarked, checked_in, checked_in_at, check_in_count }` |
 | POST | `/api/beacons/{id}/impressions` | Fire-and-forget `event_view` (2s debounce) |
 | GET/POST/DELETE | `/api/beacons/{id}/rsvp` | Unchanged UX; emits `rsvp_set` / `rsvp_unset` + richer attendee dims |
-| GET | `/api/beacons/{id}/attendees/directory` | Enriched people directory (distance, shared interests, relationship, FoF `mutual_via`). `mutual_connection_count` = friends-in-common with the viewer (FoF via length, or shared peers for direct Connections). Requires viewer RSVP or check-in. `mutuals_section_unlocked` when checked in. |
+| GET | `/api/beacons/{id}/attendees/directory` | Enriched people directory for every authenticated viewer (distance, shared interests, relationship, FoF `mutual_via`). `mutual_connection_count` = friends-in-common with the viewer (FoF via length, or shared peers for direct Connections). RSVP/check-in only control engagement CTAs; `mutuals_section_unlocked` is available to signed-in directory viewers. |
 | GET | `/api/connections/{id}/event-recommendation` | One upcoming event the peer RSVP’d that the viewer hasn’t — for new-connection “Go together?” card |
 | GET | `/api/insights/[venueId]/event-engagement` | Aggregates only (website insights) |
 

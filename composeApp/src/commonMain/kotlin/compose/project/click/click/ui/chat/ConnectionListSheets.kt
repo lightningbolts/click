@@ -333,10 +333,11 @@ internal fun ConnectionMemberPickerSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight()
                 .imePadding()
+                .sheetBodyScroll()
                 .background(sheetPageBackground())
-                .padding(horizontal = 20.dp, vertical = 12.dp),
+                .padding(horizontal = 20.dp, vertical = 12.dp)
+                .padding(bottom = 28.dp),
         ) {
             Text(
                 text = title,
@@ -403,7 +404,6 @@ internal fun ConnectionMemberPickerSheet(
                     color = onVariant,
                     modifier = Modifier.padding(vertical = 8.dp),
                 )
-                Spacer(modifier = Modifier.weight(1f))
             } else if (filteredCandidates.isEmpty()) {
                 Text(
                     text = "No matches for \"$searchQuery\".",
@@ -411,35 +411,24 @@ internal fun ConnectionMemberPickerSheet(
                     color = onVariant,
                     modifier = Modifier.padding(vertical = 8.dp),
                 )
-                Spacer(modifier = Modifier.weight(1f))
             } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f, fill = true),
-                ) {
-                    itemsIndexed(
-                        items = filteredCandidates,
-                        // distinctBy above; index in key guards any residual id collision.
-                        key = { index, user -> "picker-${user.id}-$index" },
-                    ) { _, user ->
-                        val selected = user.id in selectedIds
-                        val enabled = selected ||
-                            (eligibilityReady && (eligibilityMask.isEmpty() || eligibilityMask[user.id] == true))
-                        ConnectionPickerUserRow(
-                            user = user,
-                            selected = selected,
-                            enabled = enabled,
-                            onToggle = { toggleUser(user.id) },
-                        )
-                    }
+                filteredCandidates.forEachIndexed { index, user ->
+                    val selected = user.id in selectedIds
+                    val enabled = selected ||
+                        (eligibilityReady && (eligibilityMask.isEmpty() || eligibilityMask[user.id] == true))
+                    ConnectionPickerUserRow(
+                        user = user,
+                        selected = selected,
+                        enabled = enabled,
+                        onToggle = { toggleUser(user.id) },
+                    )
                 }
             }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
-                    .padding(top = 8.dp),
+                    .padding(top = 12.dp),
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {

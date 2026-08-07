@@ -3044,6 +3044,7 @@ fun TabbedUserProfileSheet(
 
     ClickFormBottomSheet(
         onDismissRequest = onDismiss,
+        useUiKitScrollHost = false,
     ) {
         ProfileBottomSheet(
             state = state,
@@ -3173,6 +3174,7 @@ fun TabbedGroupProfileSheet(
 
     ClickFormBottomSheet(
         onDismissRequest = onDismiss,
+        useUiKitScrollHost = false,
     ) {
         ProfileBottomSheet(
             state = state,

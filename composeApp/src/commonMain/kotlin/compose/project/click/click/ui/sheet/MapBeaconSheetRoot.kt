@@ -13,7 +13,8 @@ import androidx.compose.ui.graphics.Color
  * Shared bottom sheet shell for Click action, form, profile, and map beacon flows.
  *
  * Android: Calf [AdaptiveBottomSheet]; [expandable] maps to `skipPartiallyExpanded`.
- * iOS: native [UISheetPresentationController] Liquid Glass (clear host + light dark wash).
+ * iOS: native [UISheetPresentationController] with the app-themed page surface under the
+ * system presentation material.
  * Compose fills the detent (no UIScrollView content gap / white strips). iOS scroll-hosted
  * bodies use [sheetBodyScroll] so UIKit owns the native system grabber, expand, and dismiss
  * interaction; nested Compose lists use the platform surface drag host instead.
