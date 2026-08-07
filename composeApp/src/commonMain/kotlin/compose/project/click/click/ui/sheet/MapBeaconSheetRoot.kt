@@ -13,9 +13,8 @@ import androidx.compose.ui.graphics.Color
  * Bottom sheet shell for **map beacon flows only** (drop pin + beacon detail).
  * Connection/profile sheet on the map stays on [com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet] unchanged.
  *
- * Android: Calf [AdaptiveBottomSheet] with a hard half-height cap on the sheet.
- * iOS: native `UISheet` with **medium detent only** (Calf’s iOS path always uses `.largeDetent()` when
- * `skipPartiallyExpanded = true`, which forces full-screen and causes gray/white bands above short content).
+ * Android: Calf [AdaptiveBottomSheet]; [expandable] maps to `skipPartiallyExpanded`.
+ * iOS: native page sheet — medium detent, plus large when [expandable] (swipe up to full height).
  *
  * [appColorScheme] and [appTypography] must match the in-app theme (from the main window’s
  * [MaterialTheme]): the iOS sheet runs in a separate [ComposeUIViewController] and does not inherit
@@ -32,7 +31,7 @@ expect fun MapBeaconSheetRoot(
     appColorScheme: ColorScheme,
     appTypography: Typography,
     modifier: Modifier = Modifier,
-    /** Unused: map sheets stay single-height to avoid drag size/width jumps. Kept for API stability. */
-    expandable: Boolean = false,
+    /** When true, sheet can expand to full height (iOS medium+large / Android partial allowed). */
+    expandable: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 )

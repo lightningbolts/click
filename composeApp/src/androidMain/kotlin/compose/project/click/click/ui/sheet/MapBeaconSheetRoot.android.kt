@@ -36,10 +36,8 @@ actual fun MapBeaconSheetRoot(
 ) {
     if (!visible) return
 
-    // Single settled height (skip partial) — Partial↔Expanded with sheetMaxWidth caused a
-    // sudden width expand/contract while dragging. Body dismiss still works via nested scroll.
     val sheetState = rememberGlassAdaptiveSheetState(
-        skipPartiallyExpanded = true,
+        skipPartiallyExpanded = !expandable,
     )
 
     LaunchedEffect(Unit) {
@@ -57,7 +55,7 @@ actual fun MapBeaconSheetRoot(
             onDismissRequest = onDismissRequest,
             modifier = modifier.fillMaxWidth(),
             adaptiveSheetState = sheetState,
-            // Unspecified = always full window width (no max-width snap during drag).
+            // Full window width — avoids max-width snap during drag without blocking expand.
             sheetMaxWidth = Dp.Unspecified,
             scrimColor = scrimColor,
             contentWindowInsets = contentWindowInsets,

@@ -43,9 +43,10 @@ import platform.UIKit.sheetPresentationController
 import platform.darwin.NSObject
 
 /**
- * iOS map beacon sheet: native page sheet, **medium detent only** (no medium↔large size jump).
- * System grabber + UIView drag for body dismiss-at-top (Compose scroll is not a UIScrollView,
- * so UIKit cannot hand off by itself).
+ * iOS map beacon sheet: native page sheet.
+ * - [expandable]: medium + large (swipe up to full height); otherwise medium only.
+ * - System grabber only (Compose grabber hidden).
+ * - Body dismiss-at-top moves the whole page-sheet UIView (not Compose content).
  */
 private class MapIosHalfSheetDelegate(
     private val onDismissed: () -> Unit,
@@ -63,6 +64,7 @@ private class MapIosHalfSheetManager(
     private val parentUIViewController: UIViewController,
     private var isChromeDark: Boolean,
     private var containerColor: Color,
+    private val expandable: Boolean,
     private val onDismissFromSwipe: () -> Unit,
     private val schemeState: MutableState<ColorScheme>,
     private val typographyState: MutableState<Typography>,
@@ -151,12 +153,19 @@ private class MapIosHalfSheetManager(
             modalPresentationStyle = UIModalPresentationPageSheet
             modalTransitionStyle = UIModalTransitionStyleCoverVertical
             presentationController?.delegate = delegate
-            // Medium only — adding large detent caused sudden expand/contract on swipe up/down.
             sheetPresentationController?.setDetents(
-                listOf(UISheetPresentationControllerDetent.mediumDetent()),
+                if (expandable) {
+                    listOf(
+                        UISheetPresentationControllerDetent.mediumDetent(),
+                        UISheetPresentationControllerDetent.largeDetent(),
+                    )
+                } else {
+                    listOf(UISheetPresentationControllerDetent.mediumDetent())
+                },
             )
             sheetPresentationController?.prefersGrabberVisible = true
-            sheetPresentationController?.prefersScrollingExpandsWhenScrolledToEdge = false
+            // Allow swipe-up to large when expandable; dismiss-at-top is handled by surface drag.
+            sheetPresentationController?.prefersScrollingExpandsWhenScrolledToEdge = expandable
             isInitialized = true
         }
     }
@@ -236,11 +245,12 @@ actual fun MapBeaconSheetRoot(
     val schemeState = remember { mutableStateOf(appColorScheme) }
     val typographyState = remember { mutableStateOf(appTypography) }
 
-    val manager = remember(parent) {
+    val manager = remember(parent, expandable) {
         val m = MapIosHalfSheetManager(
             parentUIViewController = parent,
             isChromeDark = appColorScheme.background.luminance() < 0.5f,
             containerColor = containerColorState.value,
+            expandable = expandable,
             onDismissFromSwipe = { onDismissState.value.invoke() },
             schemeState = schemeState,
             typographyState = typographyState,

@@ -54,7 +54,7 @@ fun ClickPlatformSheet(
         appColorScheme = MaterialTheme.colorScheme,
         appTypography = MaterialTheme.typography,
         modifier = modifier,
-        expandable = false,
+        expandable = true,
     ) {
         ProvideSheetSwipeDismiss(onDismissRequest = onDismissRequest) {
             ClickSheetDialogChrome(
