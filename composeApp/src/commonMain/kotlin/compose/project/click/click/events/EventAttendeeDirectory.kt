@@ -71,12 +71,32 @@ fun sortEventAttendees(
 fun mutualsAtEvent(attendees: List<DirectoryAttendee>): List<DirectoryAttendee> =
     attendees.filter { it.relationship == AttendeeRelationship.Mutual }
 
+/** Everyone list when Mutuals section is shown — avoid listing FoF twice. */
+fun everyoneExcludingMutualsSection(attendees: List<DirectoryAttendee>): List<DirectoryAttendee> =
+    attendees.filter { it.relationship != AttendeeRelationship.Mutual }
+
+fun mutualCountLabel(count: Int): String = when {
+    count <= 0 -> ""
+    count == 1 -> "1 mutual"
+    else -> "$count mutuals"
+}
+
 fun relationshipSubtitle(attendee: DirectoryAttendee): String? = when (attendee.relationship) {
     AttendeeRelationship.Self -> "You"
-    AttendeeRelationship.Connection -> "Connection"
+    AttendeeRelationship.Connection -> {
+        val count = attendee.mutualConnectionCount
+        if (count > 0) mutualCountLabel(count) else "Connection"
+    }
     AttendeeRelationship.Mutual -> {
+        val countLabel = mutualCountLabel(attendee.mutualConnectionCount)
         val via = attendee.mutualVia.map { it.name.trim() }.filter { it.isNotEmpty() }
-        if (via.isEmpty()) "Mutual" else "Mutual · via ${via.take(2).joinToString(", ")}"
+        when {
+            countLabel.isNotEmpty() && via.isNotEmpty() ->
+                "$countLabel · via ${via.take(2).joinToString(", ")}"
+            countLabel.isNotEmpty() -> countLabel
+            via.isNotEmpty() -> "Mutual · via ${via.take(2).joinToString(", ")}"
+            else -> "Mutual"
+        }
     }
     AttendeeRelationship.Stranger -> null
 }
@@ -102,13 +122,12 @@ fun directorySortMetricSubtitle(
         val count = attendee.mutualConnectionCount
         when {
             count > 0 -> {
-                val via = relationshipSubtitle(attendee)
-                if (via != null && attendee.relationship == AttendeeRelationship.Mutual) {
-                    via
-                } else if (count == 1) {
-                    "1 mutual"
+                val via = attendee.mutualVia.map { it.name.trim() }.filter { it.isNotEmpty() }
+                val countLabel = mutualCountLabel(count)
+                if (attendee.relationship == AttendeeRelationship.Mutual && via.isNotEmpty()) {
+                    "$countLabel · via ${via.take(2).joinToString(", ")}"
                 } else {
-                    "$count mutuals"
+                    countLabel
                 }
             }
             else -> relationshipSubtitle(attendee)

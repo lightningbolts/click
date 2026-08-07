@@ -56,6 +56,7 @@ import compose.project.click.click.utils.LocationResult // pragma: allowlist sec
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import compose.project.click.click.utils.resolveHubGatekeeperLocation
 import kotlinx.serialization.json.JsonObject // pragma: allowlist secret
+import kotlinx.serialization.json.JsonPrimitive // pragma: allowlist secret
 import kotlinx.serialization.json.buildJsonObject // pragma: allowlist secret
 import kotlinx.serialization.json.put // pragma: allowlist secret
 import kotlinx.serialization.json.putJsonArray // pragma: allowlist secret
@@ -1173,12 +1174,23 @@ class MapViewModel : ViewModel() {
         val needsPosted = current.createdAtEpochMs == null
         val needsCreator = current.createdByUserId.isNullOrBlank()
         val needsHostName = current.creatorDisplayName.isNullOrBlank()
+        val needsVenueLabel =
+            current.hasUsableMapCoordinates() &&
+                current.metadata.locationName.isNullOrBlank() &&
+                current.metadata.formattedAddress.isNullOrBlank()
         val alreadyHydrated = id in eventDetailHydratedIds
-        if (alreadyHydrated && !needsSchedule && !needsPosted && !needsCreator && !needsHostName) {
+        if (
+            alreadyHydrated &&
+            !needsSchedule &&
+            !needsPosted &&
+            !needsCreator &&
+            !needsHostName &&
+            !needsVenueLabel
+        ) {
             return
         }
         // First open always hits the network once so Host / Posted can't stay blank forever.
-        if (alreadyHydrated && !needsSchedule && !needsPosted && !needsCreator) {
+        if (alreadyHydrated && !needsSchedule && !needsPosted && !needsCreator && !needsVenueLabel) {
             return
         }
         viewModelScope.launch(Dispatchers.Default) {
@@ -1216,6 +1228,16 @@ class MapViewModel : ViewModel() {
                     val keepCoords = hasUsableMapCoordinates()
                     fun String?.orHydrated(other: String?): String? =
                         this?.takeIf { it.isNotBlank() } ?: other?.takeIf { it.isNotBlank() }
+                    val locationName = metadata.locationName.orHydrated(full.metadata.locationName)
+                    val formattedAddress =
+                        metadata.formattedAddress.orHydrated(full.metadata.formattedAddress)
+                    val mergedRawBase = buildJsonObject {
+                        // Prefer server raw (venue keys) then local overlay keys.
+                        full.metadata.raw?.forEach { (k, v) -> put(k, v) }
+                        metadata.raw?.forEach { (k, v) -> put(k, v) }
+                        locationName?.let { put("location_name", JsonPrimitive(it)) }
+                        formattedAddress?.let { put("formatted_address", JsonPrimitive(it)) }
+                    }
                     return copy(
                         latitude = if (keepCoords) latitude else full.latitude,
                         longitude = if (keepCoords) longitude else full.longitude,
@@ -1229,13 +1251,15 @@ class MapViewModel : ViewModel() {
                             albumArtUrl = metadata.albumArtUrl.orHydrated(full.metadata.albumArtUrl),
                             musicUrl = metadata.musicUrl.orHydrated(full.metadata.musicUrl),
                             originalUrl = metadata.originalUrl.orHydrated(full.metadata.originalUrl),
+                            locationName = locationName,
+                            formattedAddress = formattedAddress,
                             eventCategories = metadata.eventCategories.ifEmpty {
                                 full.metadata.eventCategories
                             },
                             raw = if (schedule != null) {
-                                mergeEventScheduleIntoRaw(metadata.raw, schedule)
+                                mergeEventScheduleIntoRaw(mergedRawBase, schedule)
                             } else {
-                                full.metadata.raw ?: metadata.raw
+                                mergedRawBase
                             },
                         ),
                         createdByUserId = createdByUserId ?: full.createdByUserId,
@@ -1718,6 +1742,9 @@ class MapViewModel : ViewModel() {
                     eventEndAt = schedule?.let {
                         kotlinx.datetime.Instant.fromEpochMilliseconds(it.endEpochMs).toString()
                     },
+                    locationName = beacon?.metadata?.locationName,
+                    formattedAddress = beacon?.metadata?.formattedAddress,
+                    eventCategories = beacon?.metadata?.eventCategories.orEmpty(),
                     latitude = beacon?.latitude,
                     longitude = beacon?.longitude,
                     expiresAt = beacon?.expiresAtEpochMs?.let {

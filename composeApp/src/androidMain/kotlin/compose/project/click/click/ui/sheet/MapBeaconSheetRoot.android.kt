@@ -9,10 +9,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import compose.project.click.click.ui.components.GlassAdaptiveBottomSheet
+import compose.project.click.click.ui.components.LocalSheetOnDismissRequest
 import compose.project.click.click.ui.components.rememberGlassAdaptiveSheetState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -54,7 +56,15 @@ actual fun MapBeaconSheetRoot(
             sheetMaxWidth = BottomSheetDefaults.SheetMaxWidth,
             scrimColor = scrimColor,
             contentWindowInsets = contentWindowInsets,
-            content = content,
+            // ClickSheetDialogChrome draws the grabber; avoid a second Material handle.
+            dragHandle = null,
+            content = {
+                CompositionLocalProvider(
+                    LocalSheetOnDismissRequest provides onDismissRequest,
+                ) {
+                    content()
+                }
+            },
         )
     }
 }

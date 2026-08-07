@@ -169,7 +169,7 @@ Date picker: `DatePickerDialog` with opaque bordered sheet theming (`GlassSheetT
 | Avatar circle | Tap | `mediaPickers.openPhotoLibrary()` |
 | Remove photo | Tap | Clears `pendingAvatarBytes` / mime |
 | First / Last name | Type | Required for submit |
-| Birthday | Type or calendar | Normalizes `/` → `-`; opens `DatePickerDialog` |
+| Birthday | Type or calendar | Digit mask auto-inserts dashes (`20000417` → `2000-04-17`); `/` normalized; calendar syncs selection via UTC-midnight helpers |
 | Date picker OK | Tap | Sets `birthdayIso` from selected millis |
 | Date picker Cancel | Tap | Dismisses dialog |
 | Email / passwords | Type | Validation gates Create Account |

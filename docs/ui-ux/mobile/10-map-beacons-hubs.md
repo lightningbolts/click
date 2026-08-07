@@ -191,10 +191,11 @@ Soundtrack / community kinds (hazard, SOS, utility, study): same bordered hero; 
 | ⋯ overflow (creator, last hero button) | Themed dropdown (opaque surface, 2dp border, zero elevation): Edit / Delete → existing dialogs |
 | Share | System text share (title, schedule, maps HTTPS link) **or** Share to chat picker (animated enter); available on event, soundtrack, and community beacon details (including Home saved events) |
 | Bookmark / Check in | Server-backed (`GET/PUT` bookmark, `GET/POST/DELETE` check-in, `GET` engagement). Check-in is a **labeled full-width CTA** (not a hero circle). Requires location + live window (+15m early grace) + venue-scale geofence. Snackbars: “Location access is required to check in” / “Location required to check in” / “Move closer to the event to check in” / “Check-in opens when the event starts”. Impression fired on detail open. Creation may use a geocoded address; attendance check-in still requires being at the venue. |
-| ACTIVE CLICKS avatar stack | → **People** directory section (`EventPeopleDirectorySection`) with Directory sheet: sorts A–Z / Interests / Mutuals (sort-aware row metrics; list fills expanded sheet height and resets to top on chip change); FoF mutuals unlock after check-in |
+| ACTIVE CLICKS avatar stack | → **People** directory section (`EventPeopleDirectorySection`) with Directory sheet: sorts A–Z / Interests / Mutuals; row subtitle shows **N mutuals** (friends-in-common); FoF “Mutuals here” unlocks after check-in (excluded from Everyone when that section is shown); list fills expanded sheet height and resets to top on chip change |
 | Join Event Route | Opens HTTPS maps (`maps.google.com`, Apple Maps fallback). Avoid primary `geo:` on iOS |
 | Event RSVP | `"RSVP / Sign Up"` or `"Cancel RSVP"` |
-| Play preview | Audio player on soundtrack beacons |
+| Play preview | Audio player on soundtrack beacons — server enrichment fills `track_name` / `artist_name` / `preview_url` / `album_art_url` from Spotify/Apple Music/YouTube share URLs |
+| Sheet dismiss | From scroll top, sheet **follows the finger** on a slow downward drag; release past ~50% travel or a flick commits dismiss, otherwise it springs back. Scrolling mid-list to the top in one gesture does not dismiss — a second swipe from the top does. |
 | `"Play full song"` | Opens original media URL |
 
 ### Hub chat settings (`HubChatSettingsMenu`)
@@ -328,7 +329,7 @@ All user-visible strings quoted below.
 ### CreateHubModal
 
 - `"Create community hub"`
-- `"Ephemeral 24h space — GPS anchors the venue ring."`
+- `"Place-scoped chat — GPS anchors the venue ring."`
 - `"Hub name"` (label)
 - `"Category"`, `"Custom…"`, `"Custom category"` (label)
 - `"Locking GPS…"`

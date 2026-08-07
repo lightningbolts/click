@@ -60,17 +60,40 @@ class EventAttendeeDirectoryTest {
     }
 
     @Test
+    fun mutualsAtEventCountsPeopleNotPaths() {
+        val list = listOf(
+            attendee("m1", "Morgan", mutualCount = 3, relationship = AttendeeRelationship.Mutual),
+            attendee("m2", "Sam", mutualCount = 1, relationship = AttendeeRelationship.Mutual),
+            attendee("c", "Alex", mutualCount = 2, relationship = AttendeeRelationship.Connection),
+        )
+        assertEquals(2, mutualsAtEvent(list).size)
+        assertEquals(listOf("Alex"), everyoneExcludingMutualsSection(list).map { it.name })
+    }
+
+    @Test
     fun mutualSubtitleAndConnectGate() {
         val mutual = attendee(
             "m",
             "Morgan",
+            mutualCount = 2,
             relationship = AttendeeRelationship.Mutual,
             via = listOf(MutualViaPeer("s", "Sam"), MutualViaPeer("j", "Jordan")),
         )
-        assertEquals("Mutual · via Sam, Jordan", relationshipSubtitle(mutual))
+        assertEquals("2 mutuals · via Sam, Jordan", relationshipSubtitle(mutual))
         assertFalse(allowsDirectoryConnectActions(AttendeeRelationship.Mutual))
         assertFalse(allowsDirectoryConnectActions(AttendeeRelationship.Stranger))
         assertTrue(allowsDirectoryConnectActions(AttendeeRelationship.Connection))
+    }
+
+    @Test
+    fun connectionShowsFriendsInCommonCount() {
+        val connection = attendee(
+            "c",
+            "Alex",
+            mutualCount = 3,
+            relationship = AttendeeRelationship.Connection,
+        )
+        assertEquals("3 mutuals", relationshipSubtitle(connection))
     }
 
     @Test
@@ -86,7 +109,7 @@ class EventAttendeeDirectoryTest {
         val stranger = attendee("s", "Sam")
 
         assertEquals("2 shared interests", directorySortMetricSubtitle(withInterests, EventAttendeeSortMode.InterestOverlap))
-        assertEquals("Mutual · via Sam", directorySortMetricSubtitle(mutual, EventAttendeeSortMode.MutualConnections))
+        assertEquals("2 mutuals · via Sam", directorySortMetricSubtitle(mutual, EventAttendeeSortMode.MutualConnections))
         assertNull(directorySortMetricSubtitle(stranger, EventAttendeeSortMode.Alphabetical))
         assertNull(directorySortMetricSubtitle(stranger, EventAttendeeSortMode.MutualConnections))
     }

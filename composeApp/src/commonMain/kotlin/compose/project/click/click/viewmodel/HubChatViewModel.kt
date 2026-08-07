@@ -780,6 +780,8 @@ class HubChatViewModel(
                 if (cooldownSec != null) {
                     armSendCooldown(cooldownSec)
                     _sendError.value = "Please wait ${cooldownSec}s before sending again."
+                } else if (isHubExpired(e)) {
+                    _sendError.value = HUB_EXPIRED_MESSAGE
                 } else if (isHubOutOfRange(e)) {
                     _outOfBounds.value = true
                     _sendError.value = HUB_OUT_OF_RANGE_MESSAGE
@@ -840,6 +842,8 @@ class HubChatViewModel(
                 if (cooldownSec != null) {
                     armSendCooldown(cooldownSec)
                     _sendError.value = "Please wait ${cooldownSec}s before sending again."
+                } else if (isHubExpired(e)) {
+                    _sendError.value = HUB_EXPIRED_MESSAGE
                 } else if (isHubOutOfRange(e)) {
                     _outOfBounds.value = true
                     _sendError.value = HUB_OUT_OF_RANGE_MESSAGE
@@ -1064,13 +1068,21 @@ class HubChatViewModel(
     }
 
     companion object {
-        /** Shown when the geofence rejects a send (out of bounds) or the ephemeral hub is gone (410). */
+        /** Shown when the geofence rejects a send (out of bounds). */
         const val HUB_OUT_OF_RANGE_MESSAGE = "No longer near hub. Move closer to send a message."
+
+        /** Shown when the hub venue has an expires_at in the past (legacy / admin-set). */
+        const val HUB_EXPIRED_MESSAGE = "This hub is no longer active."
 
         /** Maps the gatekeeper rejection markers surfaced by [ChatApiClient] into the user-facing state. */
         fun isHubOutOfRange(e: Throwable): Boolean {
             val msg = e.message ?: return false
             return msg.contains("OUT_OF_BOUNDS") || msg.contains("HUB_OUT_OF_RANGE")
+        }
+
+        fun isHubExpired(e: Throwable): Boolean {
+            val msg = e.message ?: return false
+            return msg.contains("HUB_EXPIRED")
         }
 
         /** Parses `HUB_MESSAGE_COOLDOWN:N` from [ChatApiClient] 429 responses. */

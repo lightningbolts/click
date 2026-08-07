@@ -48,40 +48,20 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.repository.SupabaseRepository
+import compose.project.click.click.ui.components.ClickOutlinedTextField
+import compose.project.click.click.ui.components.birthdayIsoToUtcMidnightMillis
+import compose.project.click.click.ui.components.formatBirthdayDigitsInput
+import compose.project.click.click.ui.components.parseBirthdayIsoLocalDate
+import compose.project.click.click.ui.components.utcMidnightMillisToBirthdayIso
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
-import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.until
-import compose.project.click.click.ui.components.ClickOutlinedTextField
 
 private const val MinSignupAgeYears = 13
-
-private fun parseIsoLocalDate(raw: String): LocalDate? =
-    runCatching {
-        val trimmed = raw.trim()
-        val canonical = when {
-            trimmed.contains('T') -> trimmed.substringBefore('T')
-            trimmed.contains(' ') -> trimmed.substringBefore(' ')
-            else -> trimmed
-        }
-        LocalDate.parse(canonical)
-    }.getOrNull()
-
-private fun normalizeBirthdayInput(raw: String): String {
-    val trimmed = raw.trim().replace('/', '-')
-    return when {
-        trimmed.contains('T') -> trimmed.substringBefore('T')
-        trimmed.contains(' ') -> trimmed.substringBefore(' ')
-        else -> trimmed
-    }
-}
-
-private fun utcMillisToIsoDate(millis: Long): String =
-    Instant.fromEpochMilliseconds(millis).toString().take(10)
 
 private fun isAtLeastAge(birthDate: LocalDate, years: Int): Boolean {
     val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
@@ -104,7 +84,7 @@ fun ProfileBasicsGateScreen(
 ) {
     var firstName by remember { mutableStateOf(initialFirstName) }
     var lastName by remember { mutableStateOf(initialLastName) }
-    var birthdayIso by remember { mutableStateOf(normalizeBirthdayInput(initialBirthdayIso)) }
+    var birthdayIso by remember { mutableStateOf(formatBirthdayDigitsInput(initialBirthdayIso)) }
     var showBirthdayPicker by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
@@ -115,14 +95,14 @@ fun ProfileBasicsGateScreen(
     LaunchedEffect(initialFirstName, initialLastName, initialBirthdayIso) {
         val incomingFirst = initialFirstName.trim()
         val incomingLast = initialLastName.trim()
-        val incomingBirthday = normalizeBirthdayInput(initialBirthdayIso)
+        val incomingBirthday = formatBirthdayDigitsInput(initialBirthdayIso)
 
         if (firstName.isBlank() && incomingFirst.isNotBlank()) firstName = incomingFirst
         if (lastName.isBlank() && incomingLast.isNotBlank()) lastName = incomingLast
         if (birthdayIso.isBlank() && incomingBirthday.isNotBlank()) birthdayIso = incomingBirthday
     }
 
-    val parsedBirth = remember(birthdayIso) { parseIsoLocalDate(birthdayIso) }
+    val parsedBirth = remember(birthdayIso) { parseBirthdayIsoLocalDate(birthdayIso) }
     val birthdayValid = parsedBirth != null && isAtLeastAge(parsedBirth, MinSignupAgeYears)
     val birthdayHelper = when {
         birthdayIso.isBlank() -> "Required — type YYYY-MM-DD or use calendar"
@@ -178,7 +158,7 @@ fun ProfileBasicsGateScreen(
         if (requireBirthday) {
             ClickOutlinedTextField(
                 value = birthdayIso,
-                onValueChange = { birthdayIso = normalizeBirthdayInput(it) },
+                onValueChange = { birthdayIso = formatBirthdayDigitsInput(it) },
                 label = { Text("Birthday") },
                 placeholder = { Text("YYYY-MM-DD") },
                 trailingIcon = {
@@ -199,7 +179,17 @@ fun ProfileBasicsGateScreen(
                     .testTag("profile-gate-birthday-field"),
             )
             if (showBirthdayPicker) {
-                val birthdayPickerState = rememberDatePickerState()
+                val initialMillis = remember(birthdayIso) { birthdayIsoToUtcMidnightMillis(birthdayIso) }
+                val birthdayPickerState = rememberDatePickerState(
+                    initialSelectedDateMillis = initialMillis,
+                )
+                LaunchedEffect(showBirthdayPicker, birthdayIso) {
+                    if (showBirthdayPicker) {
+                        birthdayIsoToUtcMidnightMillis(birthdayIso)?.let { ms ->
+                            birthdayPickerState.selectedDateMillis = ms
+                        }
+                    }
+                }
                 DatePickerDialog(
                     onDismissRequest = { showBirthdayPicker = false },
                     colors = DatePickerDefaults.colors(
@@ -224,7 +214,7 @@ fun ProfileBasicsGateScreen(
                         TextButton(
                             onClick = {
                                 birthdayPickerState.selectedDateMillis?.let { selectedMillis ->
-                                    birthdayIso = utcMillisToIsoDate(selectedMillis)
+                                    birthdayIso = utcMidnightMillisToBirthdayIso(selectedMillis)
                                 }
                                 showBirthdayPicker = false
                             },

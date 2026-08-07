@@ -259,7 +259,7 @@ private fun CreateHubSheetBody(
             color = GlassSheetTokens.OnOled(),
         )
         Text(
-            text = "Ephemeral 24h space — GPS anchors the venue ring.",
+            text = "Place-scoped chat — GPS anchors the venue ring.",
             style = MaterialTheme.typography.bodyMedium,
             color = GlassSheetTokens.OnOledMuted(),
         )

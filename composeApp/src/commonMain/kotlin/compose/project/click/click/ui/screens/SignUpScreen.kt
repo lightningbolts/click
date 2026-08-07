@@ -50,14 +50,12 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.until
 import compose.project.click.click.ui.components.ClickOutlinedTextField
+import compose.project.click.click.ui.components.birthdayIsoToUtcMidnightMillis
+import compose.project.click.click.ui.components.formatBirthdayDigitsInput
+import compose.project.click.click.ui.components.parseBirthdayIsoLocalDate
+import compose.project.click.click.ui.components.utcMidnightMillisToBirthdayIso
 
 private const val MinSignupAgeYears = 13
-
-private fun parseIsoLocalDate(raw: String): LocalDate? =
-    runCatching { LocalDate.parse(raw.trim()) }.getOrNull()
-
-private fun utcMillisToIsoDate(millis: Long): String =
-    Instant.fromEpochMilliseconds(millis).toString().take(10)
 
 private fun isAtLeastAge(birthDate: LocalDate, years: Int): Boolean {
     val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
@@ -106,7 +104,7 @@ fun SignUpScreen(
     val focusManager = LocalFocusManager.current
     val scrollState = rememberScrollState()
 
-    val parsedBirth = remember(birthdayIso) { parseIsoLocalDate(birthdayIso) }
+    val parsedBirth = remember(birthdayIso) { parseBirthdayIsoLocalDate(birthdayIso) }
     val birthdayValid = parsedBirth != null && isAtLeastAge(parsedBirth, MinSignupAgeYears)
     val birthdayHelper = when {
         birthdayIso.isBlank() -> "Required — type YYYY-MM-DD or use calendar"
@@ -305,7 +303,7 @@ fun SignUpScreen(
 
             ClickOutlinedTextField(
                 value = birthdayIso,
-                onValueChange = { birthdayIso = it.replace('/', '-') },
+                onValueChange = { birthdayIso = formatBirthdayDigitsInput(it) },
                 label = { Text("Birthday") },
                 placeholder = { Text("YYYY-MM-DD") },
                 leadingIcon = {
@@ -343,7 +341,17 @@ fun SignUpScreen(
             )
 
             if (showBirthdayPicker) {
-                val birthdayPickerState = rememberDatePickerState()
+                val initialMillis = remember(birthdayIso) { birthdayIsoToUtcMidnightMillis(birthdayIso) }
+                val birthdayPickerState = rememberDatePickerState(
+                    initialSelectedDateMillis = initialMillis,
+                )
+                LaunchedEffect(showBirthdayPicker, birthdayIso) {
+                    if (showBirthdayPicker) {
+                        birthdayIsoToUtcMidnightMillis(birthdayIso)?.let { ms ->
+                            birthdayPickerState.selectedDateMillis = ms
+                        }
+                    }
+                }
                 DatePickerDialog(
                     onDismissRequest = { showBirthdayPicker = false },
                     colors = DatePickerDefaults.colors(
@@ -368,7 +376,7 @@ fun SignUpScreen(
                         TextButton(
                             onClick = {
                                 birthdayPickerState.selectedDateMillis?.let { selectedMillis ->
-                                    birthdayIso = utcMillisToIsoDate(selectedMillis)
+                                    birthdayIso = utcMidnightMillisToBirthdayIso(selectedMillis)
                                 }
                                 showBirthdayPicker = false
                                 focusManager.clearFocus()

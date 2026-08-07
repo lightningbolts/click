@@ -23,6 +23,9 @@ import compose.project.click.click.ui.theme.LocalIsDarkMode
 /**
  * Shared OLED sheet chrome (grabber + themed body) used by map beacon sheets and all
  * [ClickPlatformSheet] dialogs.
+ *
+ * Body supports swipe-down dismiss from anywhere when [LocalSheetScrollAtTop] reports top
+ * (see [sheetSwipeDismissWhenAtTop]).
  */
 @Composable
 fun ClickSheetDialogChrome(
@@ -40,6 +43,7 @@ fun ClickSheetDialogChrome(
     } else {
         onSurface.copy(alpha = 0.3f)
     }
+    val onDismiss = LocalSheetOnDismissRequest.current
 
     @Composable
     fun themedContent() {
@@ -81,7 +85,8 @@ fun ClickSheetDialogChrome(
         modifier
             .fillMaxWidth()
             .fillMaxHeight()
-            .background(sheetColor),
+            .background(sheetColor)
+            .sheetSwipeDismissWhenAtTop(onDismissRequest = onDismiss),
     ) {
         if (useGrabber) {
             Box(

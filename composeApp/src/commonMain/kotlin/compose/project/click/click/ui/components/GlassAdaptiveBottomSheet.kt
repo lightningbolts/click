@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
@@ -16,8 +17,8 @@ import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
 import com.mohamedrejeb.calf.ui.sheet.AdaptiveSheetState
 
 /**
- * Calf [AdaptiveBottomSheet] with OLED shell + [GlassSheetGrabber], matching Material
- * [GlassModalBottomSheet] aesthetics on iOS and Android.
+ * Calf [AdaptiveBottomSheet] with OLED shell + optional [GlassSheetGrabber].
+ * Body supports swipe-down dismiss when scrolled to top via [sheetSwipeDismissWhenAtTop].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -28,7 +29,7 @@ fun GlassAdaptiveBottomSheet(
     sheetMaxWidth: Dp = BottomSheetDefaults.SheetMaxWidth,
     scrimColor: Color = Color.Black.copy(alpha = GlassSheetTokens.ScrimBaseAlpha),
     contentWindowInsets: @Composable () -> WindowInsets = { BottomSheetDefaults.windowInsets },
-    dragHandle: @Composable () -> Unit = { GlassSheetGrabber() },
+    dragHandle: @Composable (() -> Unit)? = { GlassSheetGrabber() },
     content: @Composable ColumnScope.() -> Unit,
 ) {
     AdaptiveBottomSheet(
@@ -40,19 +41,24 @@ fun GlassAdaptiveBottomSheet(
         contentColor = GlassSheetTokens.OnOled(),
         scrimColor = scrimColor,
         contentWindowInsets = contentWindowInsets,
-        dragHandle = dragHandle,
+        dragHandle = dragHandle ?: {},
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(GlassSheetTokens.OledBlack()),
+        CompositionLocalProvider(
+            LocalSheetOnDismissRequest provides onDismissRequest,
         ) {
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(GlassSheetTokens.OledBlack()),
-                content = content,
-            )
+                    .background(GlassSheetTokens.OledBlack())
+                    .sheetSwipeDismissWhenAtTop(onDismissRequest = onDismissRequest),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(GlassSheetTokens.OledBlack()),
+                    content = content,
+                )
+            }
         }
     }
 }

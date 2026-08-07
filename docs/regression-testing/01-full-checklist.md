@@ -396,7 +396,7 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] Submit success adds pin; failure toast
 - [ ] Beacon detail sheet: RSVP, share, navigate, bookmark, labeled check-in CTA
 - [ ] Event people directory: after RSVP, open Directory → sort A–Z / Interests / Mutuals; relationship / sort-aware metrics; list scrolls to top on chip change; no large blank band at full sheet height
-- [ ] Event mutuals: after check-in, “Mutuals here” section lists FoF with “via …” and view-only profiles (no Connect)
+- [ ] Event mutuals: after check-in, “Mutuals here” section lists FoF; Connections show friends-in-common count; view-only FoF profiles (no Connect)
 - [ ] Bookmark toggle survives app force-kill (server-backed)
 - [ ] Check-in is a full-width labeled button (`Check in here` / `Checked in`) — not a hero icon circle
 - [ ] Check-in CTA updates immediately on tap (optimistic); pending blocks double-tap
@@ -414,11 +414,13 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 
 ## 12. Community hubs
 
-- [ ] `CreateHubModal` — create hub with name/category
+- [ ] `CreateHubModal` — create hub with name/category (permanent; no 24h expiry)
+- [ ] Created hubs stay on map / Groups after creation day (not removed by TTL)
 - [ ] Map join hub → proximity verify → `HubChatScreen`
 - [ ] Deep link `click://hub/{id}` / universal link opens hub
 - [ ] `HubChatScreen` — realtime messages in lobby + unlocked chat
 - [ ] Hub send cooldown 15s — composer placeholder `Wait {N}s…`; server enforces 429 `HUB_MESSAGE_COOLDOWN`
+- [ ] Outside geofence send → “No longer near hub…” (not expired copy)
 - [ ] Hub settings menu: leave, edit (owner), delete (owner)
 - [ ] Leave hub confirm → `leaveActiveHub`
 - [ ] Delete hub confirm → `deleteActiveHub`
@@ -568,14 +570,16 @@ Prefer the dedicated smoke doc for a timed pass: [02-smoke-10min.md](02-smoke-10
 - [ ] Join hub from map → send hub message → leave hub
 - [ ] Hub message cooldown: after send, composer shows `Wait {N}s…` for 15s; rapid sends return 429 / restore draft
 - [ ] Beacon detail sheet: RSVP, share, navigate, bookmark, labeled check-in CTA
-- [ ] Event people directory: after RSVP, open Directory → sort A–Z / Interests / Mutuals; relationship / sort-aware metrics; list scrolls to top on chip change; no large blank band at full sheet height
-- [ ] Event mutuals: after check-in, “Mutuals here” section lists FoF with “via …” and view-only profiles (no Connect)
+- [ ] Event people directory: after RSVP, open Directory → sort A–Z / Interests / Mutuals; relationship / sort-aware metrics show **N mutuals** (friends-in-common); list scrolls to top on chip change; no large blank band at full sheet height
+- [ ] Event mutuals: after check-in, “Mutuals here” section lists FoF; Connections show friends-in-common count; Mutuals not duplicated under Everyone
 - [ ] Share to chat: opens with fade/scale enter (not an abrupt popup)
-- [ ] Saved events detail: Share shows Share link / Share to chat (same as map event detail)
-- [ ] Non-event beacon detail (soundtrack / community): Share link / Share to chat available
+- [ ] Saved events detail: location/address visible on first open (no Map navigation required); Share shows Share link / Share to chat
+- [ ] Non-event beacon detail (soundtrack / community): Share link / Share to chat available; soundtrack create persists track/artist/preview/art
 - [ ] Nearby search field: typing does not compress the text box
 - [ ] Beacon drop soundtrack URL: placeholder + paste icon vertically centered
 - [ ] Event schedule picker: opening date/time popup does not shift form layout; hour/minute tumblers snap to nearest option after scroll
+- [ ] Birthday onboarding: typing digits auto-inserts dashes; calendar picker syncs with typed date
+- [ ] Bottom sheets: from scroll top, slow drag follows the finger then springs back or commits; flick dismisses; mid-list downward drag scrolls first without same-gesture dismiss
 - [ ] New connection context sheet: optional event recommendation card → RSVP or Dismiss
 - [ ] Incoming call → accept → end
 - [ ] Toggle ghost mode → map grayscales

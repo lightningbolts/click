@@ -41,6 +41,7 @@ import compose.project.click.click.events.DirectoryAttendee
 import compose.project.click.click.events.EventAttendeeSortMode
 import compose.project.click.click.events.allowsDirectoryConnectActions
 import compose.project.click.click.events.directorySortMetricSubtitle
+import compose.project.click.click.events.everyoneExcludingMutualsSection
 import compose.project.click.click.events.mutualsAtEvent
 import compose.project.click.click.events.sortEventAttendees
 import compose.project.click.click.ui.theme.clickBorderColor
@@ -51,6 +52,8 @@ fun EventPeopleDirectorySection(
     attendees: List<DirectoryAttendee>,
     loading: Boolean,
     mutualsSectionUnlocked: Boolean,
+    /** True when enriched directory payload is available (not RSVP-only fallback). */
+    directoryEnriched: Boolean = true,
     onOpenDirectory: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -128,7 +131,7 @@ fun EventPeopleDirectorySection(
                         }
                     }
                 }
-                if (mutualsSectionUnlocked) {
+                if (mutualsSectionUnlocked && directoryEnriched) {
                     val mutualCount = mutualsAtEvent(attendees).size
                     if (mutualCount > 0) {
                         Text(
@@ -137,6 +140,12 @@ fun EventPeopleDirectorySection(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                } else if (mutualsSectionUnlocked && loading) {
+                    Text(
+                        text = "Loading mutuals…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
@@ -164,6 +173,9 @@ fun EventPeopleDirectorySheetContent(
         mutualsSectionUnlocked &&
             mutuals.isNotEmpty() &&
             sortMode != EventAttendeeSortMode.MutualConnections
+    val everyone = remember(sorted, showMutualsSection) {
+        if (showMutualsSection) everyoneExcludingMutualsSection(sorted) else sorted
+    }
 
     LaunchedEffect(sortMode) {
         listState.scrollToItem(0)
@@ -269,7 +281,7 @@ fun EventPeopleDirectorySheetContent(
                             ),
                         )
                     }
-                    items(sorted, key = { it.userId }) { attendee ->
+                    items(everyone, key = { it.userId }) { attendee ->
                         DirectoryAttendeeRow(
                             attendee = attendee,
                             sortMode = sortMode,

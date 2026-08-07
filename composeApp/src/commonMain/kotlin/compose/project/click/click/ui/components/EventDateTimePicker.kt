@@ -41,7 +41,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -74,51 +73,61 @@ private val DateRangePickerHeight = 440.dp
 private val TumblerRowHeight = 36.dp
 private val TumblerVisibleRows = 5
 
+/**
+ * Shared open-state for schedule fields (in scroll) vs dialogs (sibling outside scroll).
+ * Keeps UnifiedPopupFormDialog out of verticalScroll measurement.
+ */
+class EventSchedulePickerUiState {
+    var showDatePicker by mutableStateOf(false)
+        internal set
+    var showTimePicker by mutableStateOf(false)
+        internal set
+    var pickingStartTime by mutableStateOf(true)
+        internal set
+    var pendingHour12 by mutableIntStateOf(1)
+        internal set
+    var pendingMinute by mutableIntStateOf(0)
+        internal set
+    var pendingIsPm by mutableStateOf(false)
+        internal set
+
+    fun openDatePicker() {
+        showDatePicker = true
+    }
+
+    fun openTimePicker(forStart: Boolean, hour12: Int, minute: Int, isPm: Boolean) {
+        pickingStartTime = forStart
+        pendingHour12 = hour12
+        pendingMinute = minute
+        pendingIsPm = isPm
+        showTimePicker = true
+    }
+}
+
+@Composable
+fun rememberEventSchedulePickerUiState(): EventSchedulePickerUiState =
+    remember { EventSchedulePickerUiState() }
+
+/**
+ * Schedule field buttons only — safe to place under [verticalScroll].
+ * Pair with [EventSchedulePickerDialogs] as a sibling outside the scroll column.
+ */
 @Composable
 fun EventDateTimePicker(
     schedule: EventSchedule,
     onScheduleChange: (EventSchedule) -> Unit,
     validationError: EventScheduleValidationError?,
     modifier: Modifier = Modifier,
+    uiState: EventSchedulePickerUiState = rememberEventSchedulePickerUiState(),
+    /** When true, also compose dialogs here (legacy). Prefer false + [EventSchedulePickerDialogs]. */
+    includeDialogs: Boolean = false,
 ) {
-    var showDatePicker by remember { mutableStateOf(false) }
-    var showTimePicker by remember { mutableStateOf(false) }
-    var pickingStartTime by remember { mutableStateOf(true) }
-    val focusManager = LocalFocusManager.current
-
     val tz = TimeZone.currentSystemDefault()
     val startLocal = remember(schedule.startEpochMs) {
         Instant.fromEpochMilliseconds(schedule.startEpochMs).toLocalDateTime(tz)
     }
     val endLocal = remember(schedule.endEpochMs) {
         Instant.fromEpochMilliseconds(schedule.endEpochMs).toLocalDateTime(tz)
-    }
-    val sameDay = startLocal.date == endLocal.date
-
-    var pendingHour12 by remember { mutableIntStateOf(1) }
-    var pendingMinute by remember { mutableIntStateOf(0) }
-    var pendingIsPm by remember { mutableStateOf(false) }
-
-    val pickerDialogTitleStyle = MaterialTheme.typography.titleSmall
-
-    fun applySchedule(startMs: Long, endMs: Long) {
-        onScheduleChange(EventSchedule(startEpochMs = startMs, endEpochMs = endMs))
-    }
-
-    fun openDatePicker() {
-        focusManager.clearFocus(force = true)
-        showDatePicker = true
-    }
-
-    fun openTimePicker(forStart: Boolean) {
-        focusManager.clearFocus(force = true)
-        pickingStartTime = forStart
-        val source = if (forStart) startLocal else endLocal
-        val clock = eventClock12hFrom24h(source.hour, source.minute)
-        pendingHour12 = clock.hour12
-        pendingMinute = clock.minute
-        pendingIsPm = clock.isPm
-        showTimePicker = true
     }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -137,24 +146,40 @@ fun EventDateTimePicker(
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ScheduleActionButton(
                 text = "Start: ${formatEventDateOnlyLabel(schedule.startEpochMs, tz)}",
-                onClick = { openDatePicker() },
+                onClick = { uiState.openDatePicker() },
                 modifier = Modifier.weight(1f),
             )
             ScheduleActionButton(
                 text = "End: ${formatEventDateOnlyLabel(schedule.endEpochMs, tz)}",
-                onClick = { openDatePicker() },
+                onClick = { uiState.openDatePicker() },
                 modifier = Modifier.weight(1f),
             )
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ScheduleActionButton(
                 text = "Start: ${formatEventClockLabel(startLocal.hour, startLocal.minute)}",
-                onClick = { openTimePicker(forStart = true) },
+                onClick = {
+                    val clock = eventClock12hFrom24h(startLocal.hour, startLocal.minute)
+                    uiState.openTimePicker(
+                        forStart = true,
+                        hour12 = clock.hour12,
+                        minute = clock.minute,
+                        isPm = clock.isPm,
+                    )
+                },
                 modifier = Modifier.weight(1f),
             )
             ScheduleActionButton(
                 text = "End: ${formatEventClockLabel(endLocal.hour, endLocal.minute)}",
-                onClick = { openTimePicker(forStart = false) },
+                onClick = {
+                    val clock = eventClock12hFrom24h(endLocal.hour, endLocal.minute)
+                    uiState.openTimePicker(
+                        forStart = false,
+                        hour12 = clock.hour12,
+                        minute = clock.minute,
+                        isPm = clock.isPm,
+                    )
+                },
                 modifier = Modifier.weight(1f),
             )
         }
@@ -172,12 +197,42 @@ fun EventDateTimePicker(
         }
     }
 
+    if (includeDialogs) {
+        EventSchedulePickerDialogs(
+            schedule = schedule,
+            onScheduleChange = onScheduleChange,
+            uiState = uiState,
+        )
+    }
+}
+
+/** Date/time popups — compose as a sibling of the form [verticalScroll], not inside it. */
+@Composable
+fun EventSchedulePickerDialogs(
+    schedule: EventSchedule,
+    onScheduleChange: (EventSchedule) -> Unit,
+    uiState: EventSchedulePickerUiState,
+) {
+    val tz = TimeZone.currentSystemDefault()
+    val startLocal = remember(schedule.startEpochMs) {
+        Instant.fromEpochMilliseconds(schedule.startEpochMs).toLocalDateTime(tz)
+    }
+    val endLocal = remember(schedule.endEpochMs) {
+        Instant.fromEpochMilliseconds(schedule.endEpochMs).toLocalDateTime(tz)
+    }
+    val sameDay = startLocal.date == endLocal.date
+    val pickerDialogTitleStyle = MaterialTheme.typography.titleSmall
+
+    fun applySchedule(startMs: Long, endMs: Long) {
+        onScheduleChange(EventSchedule(startEpochMs = startMs, endEpochMs = endMs))
+    }
+
     val dateRangeState = rememberDateRangePickerState(
         initialSelectedStartDateMillis = localDateToUtcMidnightMillis(startLocal.date),
         initialSelectedEndDateMillis = localDateToUtcMidnightMillis(endLocal.date),
     )
-    LaunchedEffect(showDatePicker, schedule.startEpochMs, schedule.endEpochMs) {
-        if (showDatePicker) {
+    LaunchedEffect(uiState.showDatePicker, schedule.startEpochMs, schedule.endEpochMs) {
+        if (uiState.showDatePicker) {
             dateRangeState.setSelection(
                 localDateToUtcMidnightMillis(startLocal.date),
                 localDateToUtcMidnightMillis(endLocal.date),
@@ -195,8 +250,8 @@ fun EventDateTimePicker(
     }
 
     UnifiedPopupFormDialog(
-        visible = showDatePicker,
-        onDismissRequest = { showDatePicker = false },
+        visible = uiState.showDatePicker,
+        onDismissRequest = { uiState.showDatePicker = false },
         title = "Select date range",
         titleStyle = pickerDialogTitleStyle,
         contentMaxWidth = null,
@@ -219,7 +274,7 @@ fun EventDateTimePicker(
             )
         },
         body = {
-            if (showDatePicker) {
+            if (uiState.showDatePicker) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     val startUtc = dateRangeState.selectedStartDateMillis
                     val endUtc = dateRangeState.selectedEndDateMillis
@@ -252,7 +307,7 @@ fun EventDateTimePicker(
                                 ),
                             )
                         } else {
-                            Spacer(Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
                         }
                     }
                     DateRangePicker(
@@ -289,9 +344,9 @@ fun EventDateTimePicker(
     )
 
     UnifiedPopupFormDialog(
-        visible = showTimePicker,
-        onDismissRequest = { showTimePicker = false },
-        title = if (pickingStartTime) "Start time" else "End time",
+        visible = uiState.showTimePicker,
+        onDismissRequest = { uiState.showTimePicker = false },
+        title = if (uiState.pickingStartTime) "Start time" else "End time",
         titleStyle = pickerDialogTitleStyle,
         contentMaxWidth = null,
         surfaceHorizontalPadding = PickerPopupSurfacePadding,
@@ -303,9 +358,13 @@ fun EventDateTimePicker(
         confirmLabel = "OK",
         onConfirm = {
             val (hour24, minute) = eventClock12hTo24h(
-                EventClock12h(hour12 = pendingHour12, minute = pendingMinute, isPm = pendingIsPm),
+                EventClock12h(
+                    hour12 = uiState.pendingHour12,
+                    minute = uiState.pendingMinute,
+                    isPm = uiState.pendingIsPm,
+                ),
             )
-            if (pickingStartTime) {
+            if (uiState.pickingStartTime) {
                 val coerced = if (sameDay) {
                     coerceSameDayEventTimes(
                         editingStart = true,
@@ -340,14 +399,14 @@ fun EventDateTimePicker(
             }
         },
         body = {
-            if (showTimePicker) {
+            if (uiState.showTimePicker) {
                 EventTimeTumbler(
-                    hour12 = pendingHour12,
-                    minute = pendingMinute,
-                    isPm = pendingIsPm,
-                    onHour12Change = { pendingHour12 = it },
-                    onMinuteChange = { pendingMinute = it },
-                    onIsPmChange = { pendingIsPm = it },
+                    hour12 = uiState.pendingHour12,
+                    minute = uiState.pendingMinute,
+                    isPm = uiState.pendingIsPm,
+                    onHour12Change = { uiState.pendingHour12 = it },
+                    onMinuteChange = { uiState.pendingMinute = it },
+                    onIsPmChange = { uiState.pendingIsPm = it },
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -373,9 +432,10 @@ private fun ScheduleActionButton(
     ) {
         Text(
             text = text,
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
+            maxLines = 2,
+            textAlign = TextAlign.Center,
         )
     }
 }

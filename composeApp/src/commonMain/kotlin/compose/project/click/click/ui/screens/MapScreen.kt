@@ -1665,6 +1665,7 @@ internal fun EventBeaconDetail(
             },
             loading = directoryLoading || rsvpLoading,
             mutualsSectionUnlocked = mutualsUnlocked,
+            directoryEnriched = directoryAttendees.isNotEmpty(),
             onOpenDirectory = { showPeopleDirectory = true },
         )
 

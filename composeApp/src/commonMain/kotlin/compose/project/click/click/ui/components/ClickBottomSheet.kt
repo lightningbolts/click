@@ -56,17 +56,19 @@ fun ClickPlatformSheet(
         modifier = modifier,
         expandable = true,
     ) {
-        ClickSheetDialogChrome(
-            sheetColor = sheetColor,
-            onSurface = onSheet,
-            alignSemanticColorsToSheet = true,
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(),
-                content = content,
-            )
+        ProvideSheetSwipeDismiss(onDismissRequest = onDismissRequest) {
+            ClickSheetDialogChrome(
+                sheetColor = sheetColor,
+                onSurface = onSheet,
+                alignSemanticColorsToSheet = true,
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(),
+                    content = content,
+                )
+            }
         }
     }
 }

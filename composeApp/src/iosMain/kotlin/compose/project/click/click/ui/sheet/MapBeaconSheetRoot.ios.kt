@@ -24,6 +24,9 @@ import androidx.compose.ui.uikit.LocalUIViewController
 import androidx.compose.ui.window.ComposeUIViewController
 import com.mohamedrejeb.calf.ui.utils.toUIColor
 import compose.project.click.click.ui.theme.PlatformStyleProvider
+import compose.project.click.click.ui.components.LocalSheetOnDismissRequest
+import compose.project.click.click.ui.components.sheetSwipeDismissWhenAtTop
+import androidx.compose.runtime.CompositionLocalProvider
 import platform.UIKit.UIAdaptivePresentationControllerDelegateProtocol
 import platform.UIKit.UIUserInterfaceStyle
 import platform.UIKit.UIModalPresentationPageSheet
@@ -102,12 +105,17 @@ private class MapIosHalfSheetManager(
                 typography = typography,
             ) {
                 PlatformStyleProvider {
-                    Column(
-                        modifierState.value
-                            .fillMaxWidth()
-                            .fillMaxHeight(),
+                    CompositionLocalProvider(
+                        LocalSheetOnDismissRequest provides onDismissFromSwipe,
                     ) {
-                        contentState.value(this)
+                        Column(
+                            modifierState.value
+                                .fillMaxWidth()
+                                .fillMaxHeight()
+                                .sheetSwipeDismissWhenAtTop(onDismissRequest = onDismissFromSwipe),
+                        ) {
+                            contentState.value(this)
+                        }
                     }
                 }
             }
@@ -125,7 +133,8 @@ private class MapIosHalfSheetManager(
                     listOf(UISheetPresentationControllerDetent.mediumDetent())
                 },
             )
-            sheetPresentationController?.prefersGrabberVisible = false
+            sheetPresentationController?.prefersGrabberVisible = true
+            sheetPresentationController?.prefersScrollingExpandsWhenScrolledToEdge = true
             isInitialized = true
         }
     }

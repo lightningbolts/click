@@ -80,10 +80,12 @@ import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.data.models.MapBeaconKind
 import compose.project.click.click.data.models.MapBeaconMetadata
 import compose.project.click.click.ui.utils.haversineDistance
+import compose.project.click.click.ui.utils.hasUsableMapCoordinates
 import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapViewModel
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.foundation.verticalScroll
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.coroutines.delay
@@ -987,6 +989,7 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
 /**
  * Resolve a bookmarked event into a [MapBeacon] for the Home detail sheet (no Map tab jump).
  * Bookmark `event_start_at` / `event_end_at` win over any stale map cache so Start Time matches Home.
+ * Bookmark lat/lng and venue labels fill gaps when the map cache is sparse/null-island.
  */
 private fun resolveSavedEventBeacon(
     bookmark: EventBookmarkItemDto,
@@ -1002,20 +1005,47 @@ private fun resolveSavedEventBeacon(
 }
 
 private fun MapBeacon.withBookmarkScheduleOverlay(bookmark: EventBookmarkItemDto): MapBeacon {
-    val startIso = bookmark.eventStartAt?.trim()?.takeIf { it.isNotEmpty() } ?: return this
-    val endIso = bookmark.eventEndAt?.trim()?.takeIf { it.isNotEmpty() } ?: return this
+    val startIso = bookmark.eventStartAt?.trim()?.takeIf { it.isNotEmpty() }
+    val endIso = bookmark.eventEndAt?.trim()?.takeIf { it.isNotEmpty() }
+    val locationName = bookmark.locationName?.trim()?.takeIf { it.isNotEmpty() }
+    val formattedAddress = bookmark.formattedAddress?.trim()?.takeIf { it.isNotEmpty() }
+    val categories = bookmark.eventCategories.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+    val bookmarkLat = bookmark.latitude
+    val bookmarkLon = bookmark.longitude
+    val adoptBookmarkCoords =
+        !hasUsableMapCoordinates() &&
+            bookmarkLat != null &&
+            bookmarkLon != null &&
+            bookmarkLat.isFinite() &&
+            bookmarkLon.isFinite() &&
+            !(bookmarkLat == 0.0 && bookmarkLon == 0.0)
+
     val existing = metadata.raw
     val merged = buildJsonObject {
         existing?.forEach { (k, v) -> put(k, v) }
-        put("event_start_at", JsonPrimitive(startIso))
-        put("event_end_at", JsonPrimitive(endIso))
+        startIso?.let { put("event_start_at", JsonPrimitive(it)) }
+        endIso?.let { put("event_end_at", JsonPrimitive(it)) }
         bookmark.title?.trim()?.takeIf { it.isNotEmpty() }?.let { title ->
             if (existing?.get("title") == null) put("title", JsonPrimitive(title))
         }
+        if (metadata.locationName.isNullOrBlank() && locationName != null) {
+            put("location_name", JsonPrimitive(locationName))
+        }
+        if (metadata.formattedAddress.isNullOrBlank() && formattedAddress != null) {
+            put("formatted_address", JsonPrimitive(formattedAddress))
+        }
+        if (metadata.eventCategories.isEmpty() && categories.isNotEmpty()) {
+            put("event_categories", JsonArray(categories.map { JsonPrimitive(it) }))
+        }
     }
     return copy(
+        latitude = if (adoptBookmarkCoords) bookmarkLat!! else latitude,
+        longitude = if (adoptBookmarkCoords) bookmarkLon!! else longitude,
         metadata = metadata.copy(
             title = metadata.title ?: bookmark.title?.trim()?.takeIf { it.isNotEmpty() },
+            locationName = metadata.locationName?.takeIf { it.isNotBlank() } ?: locationName,
+            formattedAddress = metadata.formattedAddress?.takeIf { it.isNotBlank() } ?: formattedAddress,
+            eventCategories = metadata.eventCategories.ifEmpty { categories },
             raw = merged,
         ),
     )
@@ -1025,11 +1055,19 @@ private fun EventBookmarkItemDto.toSyntheticMapBeacon(): MapBeacon {
     val lat = latitude ?: 0.0
     val lon = longitude ?: 0.0
     val title = this.title?.takeIf { it.isNotBlank() }
+    val locationName = this.locationName?.takeIf { it.isNotBlank() }
+    val formattedAddress = this.formattedAddress?.takeIf { it.isNotBlank() }
+    val categories = eventCategories.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
     val raw = buildJsonObject {
         title?.let { put("title", JsonPrimitive(it)) }
         title?.let { put("description", JsonPrimitive(it)) }
         eventStartAt?.takeIf { it.isNotBlank() }?.let { put("event_start_at", JsonPrimitive(it)) }
         eventEndAt?.takeIf { it.isNotBlank() }?.let { put("event_end_at", JsonPrimitive(it)) }
+        locationName?.let { put("location_name", JsonPrimitive(it)) }
+        formattedAddress?.let { put("formatted_address", JsonPrimitive(it)) }
+        if (categories.isNotEmpty()) {
+            put("event_categories", JsonArray(categories.map { JsonPrimitive(it) }))
+        }
     }
     val expiresMs = expiresAt
         ?.let { compose.project.click.click.data.models.parseEpochMs(it) }
@@ -1041,6 +1079,9 @@ private fun EventBookmarkItemDto.toSyntheticMapBeacon(): MapBeacon {
         metadata = MapBeaconMetadata(
             title = title,
             description = title,
+            locationName = locationName,
+            formattedAddress = formattedAddress,
+            eventCategories = categories,
             raw = raw,
         ),
         createdAtEpochMs = null,

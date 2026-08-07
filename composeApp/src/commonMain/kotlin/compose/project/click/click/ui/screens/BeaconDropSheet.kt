@@ -60,6 +60,8 @@ import compose.project.click.click.events.EventVenueScale
 import compose.project.click.click.events.defaultEventSchedule
 import compose.project.click.click.events.validateEventSchedule
 import compose.project.click.click.ui.components.EventDateTimePicker
+import compose.project.click.click.ui.components.EventSchedulePickerDialogs
+import compose.project.click.click.ui.components.rememberEventSchedulePickerUiState
 import compose.project.click.click.ui.components.ClickOutlinedTextField
 import compose.project.click.click.utils.GeocodedPlace
 import compose.project.click.click.utils.GeocodingService
@@ -182,6 +184,7 @@ fun BeaconDropSheetContent(
     val chipContainer = MaterialTheme.colorScheme.surfaceContainerHighest
     val chipSelected = MaterialTheme.colorScheme.primaryContainer
     val scroll = rememberScrollState()
+    val schedulePickerUi = rememberEventSchedulePickerUiState()
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = MaterialTheme.colorScheme.onSurface,
         unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
@@ -191,8 +194,9 @@ fun BeaconDropSheetContent(
         unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
     )
 
+    Box(modifier = modifier.fillMaxWidth()) {
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             .verticalScroll(scroll)
             .padding(horizontal = 20.dp, vertical = 12.dp),
@@ -338,6 +342,8 @@ fun BeaconDropSheetContent(
                         onDismissError()
                     },
                     validationError = eventScheduleError,
+                    uiState = schedulePickerUi,
+                    includeDialogs = false,
                 )
                 Text(
                     text = "Categories",
@@ -768,6 +774,18 @@ fun BeaconDropSheetContent(
             }
         }
         Spacer(modifier = Modifier.height(8.dp))
+    }
+    if (isEvent) {
+        EventSchedulePickerDialogs(
+            schedule = eventSchedule,
+            onScheduleChange = { next ->
+                eventSchedule = next
+                eventScheduleError = validateEventSchedule(next.startEpochMs, next.endEpochMs)
+                onDismissError()
+            },
+            uiState = schedulePickerUi,
+        )
+    }
     }
 }
 
