@@ -152,7 +152,7 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] Save applies tags; skip/cancel dismisses without corrupting state (host abandon does not create group)
 - [ ] Reconnect encounter path (`saveReconnectEncounter` / `ReconnectEncounter` presentation)
 - [ ] After BLE reconnect / encounter save, peer **Our timeline** shows the new encounter **without** clearing app cache
-- [ ] `at_event` attachment only when all participants have RSVP **and** active check-in
+- [ ] `at_event` attachment per reporting user who has RSVP **and** active check-in (not all-or-nothing); non-engaged viewers do not see event title on timeline / Beacons tab
 - [ ] Memory capsule sensor capture when opted in (noise, barometric)
 - [ ] `[UI]` Save uses `ClickPlatformButton`; chips use `ClickPlatformSegmentedControl`
 
@@ -375,7 +375,7 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] Community hub pins; tap → hub detail sheet → join geofence flow
 - [ ] Beacon pins; tap → beacon detail
 - [ ] `[KNOWN-4]` Events visible on map also appear in discovery list view (and vice versa for in-range events)
-- [ ] Event encounter attach (`at_event`): only when all participants RSVPed **and** actively checked in
+- [ ] Event encounter attach (`at_event`): per reporting user with RSVP **and** active check-in; exact title on Timeline; Beacons tab opens event for eligible viewers only
 - [ ] Map layer filter dropdown (connections, hubs, beacons / events)
 - [ ] Zoom controls (`MapZoomGlassControls`)
 - [ ] `[UI]` Map overlay icon buttons platform-native

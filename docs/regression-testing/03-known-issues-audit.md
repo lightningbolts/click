@@ -55,7 +55,7 @@ Continuation status: [`../handoff/functional-clarity-continuation.md`](../handof
 
 **Code audit hardenings (2026-07-17):** client 503 → `recoverPendingProximityHandshake`; confirm path fetch-by-`preflightConnectionId` + duplicate-key re-lookup; Success “Message” CTA; `BeaconPinMetrics` + SOS standalone; Keychain `SecItemUpdate` / `-50` retry.
 
-**Handshake UX hardenings (docs synced):** host multi-select (`awaiting_selection`) for incomplete group registration; inbox/map peer collapse for duplicate UI chats/pins; `ReconnectEncounter` on reconnect; ~5s listen window; `at_event` requires RSVP **and** active check-in. Status remains **code fix landed — needs device repro**.
+**Handshake UX hardenings (docs synced):** host multi-select (`awaiting_selection`) for incomplete group registration; inbox/map peer collapse for duplicate UI chats/pins; `ReconnectEncounter` on reconnect; ~5s listen window; `at_event` requires RSVP **and** active check-in **per reporting user** (not all-or-nothing). Status remains **code fix landed — needs device repro**.
 
 ---
 

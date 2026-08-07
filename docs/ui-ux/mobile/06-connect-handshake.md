@@ -510,7 +510,7 @@ flowchart TD
 
 ## 6. Event context on connect
 
-When connecting via Tap (or logging a reconnect encounter) while GPS is inside a **live** map event geofence, attach the event only if **every** participant has **RSVPed** (`beacon_attendees`) **and** an **active check-in** (`event_check_ins` with `checked_out_at IS NULL`). Persist `event_beacon_id` + denorm fields and merge context tag `at_event`. Spec: [10-map-beacons-hubs.md](10-map-beacons-hubs.md) §7.
+When connecting via Tap (or logging a reconnect encounter) while GPS is inside a **live** map event geofence, attach the event on that member’s encounter row only if **they** have **RSVPed** (`beacon_attendees`) **and** an **active check-in** (`event_check_ins` with `checked_out_at IS NULL`). Persist `event_beacon_id` + denorm title/schedule and merge context tag `at_event`. Non-checked-in peers do not get the attachment, and connection payloads strip event fields for viewers who are not engaged. Spec: [10-map-beacons-hubs.md](10-map-beacons-hubs.md) §7.
 
 ---
 

@@ -299,6 +299,6 @@ flowchart TD
 
 ## 7. Event on encounter timeline
 
-When a connection is formed (or an encounter is logged) while both people are at a map **event** (in geofence + live schedule window) **and both have RSVPed and an active check-in**, that event appears on the connection Timeline — title, schedule, “View on map”, and context tag `at_event` (“At event”). RSVP alone is not enough; missing or checked-out check-ins skip attachment.
+When a connection is formed (or an encounter is logged) while the reporting user is at a map **event** (in geofence + live schedule window) **and they have RSVPed and an active check-in**, that event appears on their view of the connection Timeline — exact title, schedule, “View on map”, and context tag `at_event` (“At event”). It also appears in the connection **Beacons** tab for eligible viewers. Peers who did not RSVP/check in do not get the attachment, and connection payloads strip event fields for non-engaged viewers. RSVP alone is not enough; missing or checked-out check-ins skip attachment.
 
 See [10-map-beacons-hubs.md](10-map-beacons-hubs.md) §7 and [06-connect-handshake.md](06-connect-handshake.md).

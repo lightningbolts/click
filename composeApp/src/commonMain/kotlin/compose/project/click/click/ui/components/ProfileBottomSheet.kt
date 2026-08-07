@@ -2202,7 +2202,7 @@ private fun BeaconsPanel(
                 EmptyTabState(
                     icon = Icons.Outlined.Place,
                     title = "No shared beacons",
-                    body = "Events and map pins shared in this chat show up here.",
+                    body = "Events from handshakes and map pins shared in this chat show up here.",
                 )
             }
         } else {

@@ -431,13 +431,14 @@ flowchart TD
 
 ## 7. Event ↔ encounter integration
 
-When two users connect (Tap / QR / connection create / encounter log) while GPS is inside a **live** map event geofence **and every participant has RSVPed** (`beacon_attendees`) **and an active check-in** (`event_check_ins`, `checked_out_at IS NULL`), attach that event to the encounter.
+When two users connect (Tap / QR / connection create / encounter log) while GPS is inside a **live** map event geofence, attach that event to the **reporting user’s** encounter when **they** have RSVPed (`beacon_attendees`) **and** an active check-in (`event_check_ins`, `checked_out_at IS NULL`). Peers who did not RSVP/check in do not get the attachment on their rows, and viewers who are not engaged do not see event fields on shared timelines.
 
 | Concern | Intent |
 |---------|--------|
-| Trigger | Successful connect while device GPS is inside the event beacon radius **and** live window (`isEventLiveForCheckIn`) **and** all participants RSVPed **and** actively checked in |
-| Persist | `event_beacon_id` + denorm title/schedule; merge context tag `at_event` |
-| Surface | Profile **Timeline** — event title, schedule, “View on map”; `at_event` chip label “At event” |
+| Trigger | Successful connect while device GPS is inside the event beacon radius **and** live window (`isEventLiveForCheckIn`) **and** the reporting user RSVPed **and** actively checked in |
+| Persist | `event_beacon_id` + denorm title/schedule; merge context tag `at_event` (per reporting user) |
+| Surface | Profile **Timeline** — exact event title, schedule, “View on map”; `at_event` chip label “At event”; connection **Beacons** tab lists the same event for eligible viewers |
+| Visibility | Strip `event_beacon_*` / `at_event` from connection payloads for viewers without RSVP + active check-in for that beacon |
 | Non-goals | Creating RSVPs or check-ins as a side effect of connecting (read-only gate) |
 
 Cross-links: [06-connect-handshake.md](06-connect-handshake.md), [12-profile-memories.md](12-profile-memories.md).
