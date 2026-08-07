@@ -1,10 +1,6 @@
 package compose.project.click.click.ui.components
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutLinearInEasing
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.ScrollState
 import androidx.compose.runtime.Composable
@@ -12,29 +8,41 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 
 /**
  * Reports whether the active sheet body scroll is at the top.
- * Default true so non-scrollable action sheets dismiss on any downward swipe.
+ * Default true so non-scrollable sheets can dismiss from a downward pull.
  */
 val LocalSheetScrollAtTop = compositionLocalOf { { true } }
 
-/** Dismiss callback for the hosting bottom sheet (platform sheet / adaptive sheet). */
+/** Dismiss callback for the hosting bottom sheet. */
 val LocalSheetOnDismissRequest = compositionLocalOf { {} }
+
+/**
+ * When true, [ClickSheetDialogChrome] hides its Compose grabber — the platform sheet already
+ * draws one (UIKit page-sheet grabber or Material/Calf dragHandle).
+ */
+val LocalSheetUsesPlatformGrabber = compositionLocalOf { false }
+
+/**
+ * Drives the **entire** platform sheet surface (iOS page-sheet UIView). Never used to translate
+ * Compose content inside fixed chrome.
+ */
+val LocalSheetSurfaceDragOffsetPx = compositionLocalOf<(Float) -> Unit> { {} }
+
+val LocalSheetSurfaceDragActive = compositionLocalOf { false }
+
+val LocalSheetFingerDismissInstalled = compositionLocalOf { false }
 
 @Composable
 fun ProvideSheetSwipeDismiss(
@@ -49,40 +57,59 @@ fun ProvideSheetSwipeDismiss(
     )
 }
 
+@Composable
+fun ProvideSheetSurfaceDrag(
+    onDragOffsetPx: (Float) -> Unit,
+    content: @Composable () -> Unit,
+) {
+    CompositionLocalProvider(
+        LocalSheetSurfaceDragOffsetPx provides onDragOffsetPx,
+        LocalSheetSurfaceDragActive provides true,
+        content = content,
+    )
+}
+
 fun ScrollState.isSheetScrollAtTop(): Boolean = value <= 0
 
 fun LazyListState.isSheetScrollAtTop(): Boolean =
     firstVisibleItemIndex == 0 && firstVisibleItemScrollOffset <= 0
 
+private val SheetFingerDismissThresholdDp = 88.dp
+
 /**
- * Swipe-down dismiss when nested content is already at the top **and this gesture did not
- * scroll content**.
+ * Body swipe-to-dismiss coordination.
  *
- * Slow drags translate the sheet with the finger; on release the sheet either springs back or
- * commits dismiss (same thresholds as [shouldCommitVerticalDismiss] / glass sheet physics).
- * A continuous drag that scrolls the list to the top must not also dismiss — lift and swipe
- * again from the top.
+ * - **Android (surface drag inactive):** pass-through so Material/Calf moves the real sheet.
+ *   If this gesture already scrolled content, eat downward overscroll so dismiss waits for a
+ *   new gesture.
+ * - **iOS (surface drag active):** when already at top for this gesture, drag the page-sheet
+ *   UIView; never translate Compose content (grabber stays on the curved top).
  */
 @Composable
 fun Modifier.sheetSwipeDismissWhenAtTop(
     onDismissRequest: () -> Unit = LocalSheetOnDismissRequest.current,
     scrollAtTop: () -> Boolean = LocalSheetScrollAtTop.current,
 ): Modifier {
-    val density = LocalDensity.current
-    val minTravelPx = with(density) { 240.dp.toPx() }
-    val dismissOvershootPx = with(density) { 64.dp.toPx() }
+    if (LocalSheetFingerDismissInstalled.current) return this
 
+    val density = LocalDensity.current
+    val thresholdPx = with(density) { SheetFingerDismissThresholdDp.toPx() }
     val dragOffsetPx = remember { mutableFloatStateOf(0f) }
-    val sheetHeightPx = remember { mutableFloatStateOf(0f) }
-    var settling by remember { mutableStateOf(false) }
 
     val onDismissUpdated by rememberUpdatedState(onDismissRequest)
     val scrollAtTopUpdated by rememberUpdatedState(scrollAtTop)
+    val surfaceDragUpdated by rememberUpdatedState(LocalSheetSurfaceDragOffsetPx.current)
+    val surfaceDragActive = LocalSheetSurfaceDragActive.current
 
-    val connection = remember(minTravelPx, dismissOvershootPx) {
+    val connection = remember(
+        thresholdPx,
+        surfaceDragActive,
+        onDismissUpdated,
+        scrollAtTopUpdated,
+        surfaceDragUpdated,
+    ) {
         object : NestedScrollConnection {
             private var gestureActive = false
-            /** True once any nested child consumed scroll during this finger gesture. */
             private var contentScrolledThisGesture = false
 
             private fun noteUserInput() {
@@ -96,108 +123,102 @@ fun Modifier.sheetSwipeDismissWhenAtTop(
                 contentScrolledThisGesture = false
             }
 
+            private fun setSurfaceDrag(offset: Float) {
+                dragOffsetPx.floatValue = offset
+                surfaceDragUpdated(offset)
+            }
+
             override fun onPostScroll(
                 consumed: Offset,
                 available: Offset,
                 source: NestedScrollSource,
             ): Offset {
-                if (settling) return Offset.Zero
                 if (source != NestedScrollSource.UserInput) return Offset.Zero
                 noteUserInput()
-                if (consumed.y != 0f) {
+
+                // Any content scroll before a dismiss-drag means this gesture is a list scroll.
+                if (dragOffsetPx.floatValue <= 0f && consumed.y != 0f) {
                     contentScrolledThisGesture = true
-                    if (dragOffsetPx.floatValue > 0f) {
-                        dragOffsetPx.floatValue = 0f
-                    }
+                }
+
+                if (contentScrolledThisGesture) {
+                    // Mid-list / same-gesture scroll-to-top: never start dismiss, never move surface.
+                    if (dragOffsetPx.floatValue > 0f) setSurfaceDrag(0f)
+                    if (available.y > 0f) return Offset(0f, available.y)
                     return Offset.Zero
                 }
-                if (contentScrolledThisGesture) return Offset.Zero
+
                 if (!scrollAtTopUpdated()) return Offset.Zero
 
-                val current = dragOffsetPx.floatValue
-                if (current <= 0f && available.y <= 0f) return Offset.Zero
+                if (!surfaceDragActive) {
+                    // Android: let Material/Calf consume overscroll on the real sheet chrome.
+                    return Offset.Zero
+                }
 
-                val next = (current + available.y).coerceAtLeast(0f)
-                val delta = next - current
-                if (delta == 0f) return Offset.Zero
-                dragOffsetPx.floatValue = next
-                return Offset(0f, delta)
+                // iOS: own overscroll and move the page-sheet UIView as a whole.
+                if (available.y > 0f || dragOffsetPx.floatValue > 0f) {
+                    val next = (dragOffsetPx.floatValue + available.y).coerceAtLeast(0f)
+                    val delta = next - dragOffsetPx.floatValue
+                    if (delta == 0f && available.y == 0f) return Offset.Zero
+                    setSurfaceDrag(next)
+                    return Offset(0f, available.y)
+                }
+                return Offset.Zero
             }
 
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-                if (settling) {
-                    endGestureTracking()
-                    return Velocity.Zero
-                }
                 try {
-                    val offset = dragOffsetPx.floatValue
-                    if (contentScrolledThisGesture || offset <= 0f) {
-                        if (offset > 0f) {
-                            settleBackToRest()
-                        }
+                    if (contentScrolledThisGesture) {
+                        if (dragOffsetPx.floatValue > 0f) setSurfaceDrag(0f)
+                        return if (available.y > 0f) available else Velocity.Zero
+                    }
+                    if (!surfaceDragActive) {
+                        dragOffsetPx.floatValue = 0f
                         return Velocity.Zero
                     }
-
-                    val travel = sheetHeightPx.floatValue.coerceAtLeast(minTravelPx)
-                    val commit = shouldCommitVerticalDismiss(
-                        offsetPx = offset,
-                        travelPx = travel,
-                        velocityPxPerSec = available.y,
-                    )
-                    if (commit) {
-                        settling = true
-                        val anim = Animatable(offset)
-                        anim.animateTo(
-                            targetValue = travel + dismissOvershootPx,
-                            animationSpec = tween(
-                                durationMillis = 220,
-                                easing = FastOutLinearInEasing,
-                            ),
-                        ) {
-                            dragOffsetPx.floatValue = value
-                        }
-                        onDismissUpdated()
-                        return available
-                    }
-
-                    settleBackToRest()
-                    return Velocity.Zero
+                    val offset = dragOffsetPx.floatValue
+                    if (offset <= 0f) return Velocity.Zero
+                    val commit = offset >= thresholdPx ||
+                        available.y > GlassGestureFlickVelocityPxPerSec
+                    setSurfaceDrag(0f)
+                    if (commit) onDismissUpdated()
+                    return if (commit) available else Velocity.Zero
                 } finally {
                     endGestureTracking()
-                }
-            }
-
-            private suspend fun settleBackToRest() {
-                val start = dragOffsetPx.floatValue
-                if (start <= 0f) return
-                settling = true
-                try {
-                    val anim = Animatable(start)
-                    anim.animateTo(
-                        targetValue = 0f,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioNoBouncy,
-                            stiffness = Spring.StiffnessMedium,
-                        ),
-                    ) {
-                        dragOffsetPx.floatValue = value
-                    }
-                } finally {
-                    dragOffsetPx.floatValue = 0f
-                    settling = false
                 }
             }
         }
     }
 
-    return this
-        .onSizeChanged { size ->
-            sheetHeightPx.floatValue = size.height.toFloat()
+    return this.nestedScroll(connection)
+}
+
+@Composable
+fun SheetFingerDismissHost(
+    onDismissRequest: () -> Unit,
+    scrollAtTop: () -> Boolean = { true },
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    if (LocalSheetFingerDismissInstalled.current) {
+        content()
+        return
+    }
+    CompositionLocalProvider(
+        LocalSheetOnDismissRequest provides onDismissRequest,
+        LocalSheetScrollAtTop provides scrollAtTop,
+    ) {
+        Box(
+            modifier = modifier.sheetSwipeDismissWhenAtTop(
+                onDismissRequest = onDismissRequest,
+                scrollAtTop = scrollAtTop,
+            ),
+        ) {
+            CompositionLocalProvider(LocalSheetFingerDismissInstalled provides true) {
+                content()
+            }
         }
-        .graphicsLayer {
-            translationY = dragOffsetPx.floatValue
-        }
-        .nestedScroll(connection)
+    }
 }
 
 @Composable

@@ -1,7 +1,6 @@
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.WindowInsets
@@ -18,7 +17,9 @@ import com.mohamedrejeb.calf.ui.sheet.AdaptiveSheetState
 
 /**
  * Calf [AdaptiveBottomSheet] with OLED shell + optional [GlassSheetGrabber].
- * Body supports swipe-down dismiss when scrolled to top via [sheetSwipeDismissWhenAtTop].
+ *
+ * Swipe-to-dismiss is owned by Material/Calf. [SheetFingerDismissHost] only blocks
+ * same-gesture dismiss after scrolling (no Compose content translation).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,12 +46,13 @@ fun GlassAdaptiveBottomSheet(
     ) {
         CompositionLocalProvider(
             LocalSheetOnDismissRequest provides onDismissRequest,
+            LocalSheetUsesPlatformGrabber provides (dragHandle != null),
         ) {
-            Box(
+            SheetFingerDismissHost(
+                onDismissRequest = onDismissRequest,
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(GlassSheetTokens.OledBlack())
-                    .sheetSwipeDismissWhenAtTop(onDismissRequest = onDismissRequest),
+                    .background(GlassSheetTokens.OledBlack()),
             ) {
                 Column(
                     modifier = Modifier

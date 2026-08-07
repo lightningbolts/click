@@ -32,7 +32,7 @@ expect fun MapBeaconSheetRoot(
     appColorScheme: ColorScheme,
     appTypography: Typography,
     modifier: Modifier = Modifier,
-    /** When true, sheet opens at half height but can expand to full screen (medium + large detent). */
-    expandable: Boolean = true,
+    /** Unused: map sheets stay single-height to avoid drag size/width jumps. Kept for API stability. */
+    expandable: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 )

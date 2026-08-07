@@ -11,6 +11,7 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.SideEffect
@@ -23,25 +24,28 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.uikit.LocalUIViewController
 import androidx.compose.ui.window.ComposeUIViewController
 import com.mohamedrejeb.calf.ui.utils.toUIColor
-import compose.project.click.click.ui.theme.PlatformStyleProvider
 import compose.project.click.click.ui.components.LocalSheetOnDismissRequest
-import compose.project.click.click.ui.components.sheetSwipeDismissWhenAtTop
-import androidx.compose.runtime.CompositionLocalProvider
+import compose.project.click.click.ui.components.LocalSheetUsesPlatformGrabber
+import compose.project.click.click.ui.components.ProvideSheetSurfaceDrag
+import compose.project.click.click.ui.components.SheetFingerDismissHost
+import compose.project.click.click.ui.theme.PlatformStyleProvider
+import kotlinx.cinterop.ExperimentalForeignApi
+import platform.CoreGraphics.CGAffineTransformMakeTranslation
 import platform.UIKit.UIAdaptivePresentationControllerDelegateProtocol
-import platform.UIKit.UIUserInterfaceStyle
 import platform.UIKit.UIModalPresentationPageSheet
 import platform.UIKit.UIModalTransitionStyleCoverVertical
 import platform.UIKit.UIPresentationController
 import platform.UIKit.UISheetPresentationControllerDetent
+import platform.UIKit.UIUserInterfaceStyle
 import platform.UIKit.UIViewController
 import platform.UIKit.presentationController
 import platform.UIKit.sheetPresentationController
 import platform.darwin.NSObject
 
 /**
- * iOS: Calf’s [AdaptiveBottomSheet] uses `.largeDetent()` whenever `skipPartiallyExpanded = true`,
- * which is always full-screen. We present a page sheet with **medium detent only** so the panel
- * matches a half-height sheet and avoids empty gray/white bands above short Compose content.
+ * iOS map beacon sheet: native page sheet, **medium detent only** (no medium↔large size jump).
+ * System grabber + UIView drag for body dismiss-at-top (Compose scroll is not a UIScrollView,
+ * so UIKit cannot hand off by itself).
  */
 private class MapIosHalfSheetDelegate(
     private val onDismissed: () -> Unit,
@@ -59,7 +63,6 @@ private class MapIosHalfSheetManager(
     private val parentUIViewController: UIViewController,
     private var isChromeDark: Boolean,
     private var containerColor: Color,
-    private val expandable: Boolean,
     private val onDismissFromSwipe: () -> Unit,
     private val schemeState: MutableState<ColorScheme>,
     private val typographyState: MutableState<Typography>,
@@ -76,6 +79,7 @@ private class MapIosHalfSheetManager(
     private fun markDismissedByPresentation() {
         isPresented = false
         isAnimating = false
+        resetSurfaceDrag()
     }
 
     private var isInitialized = false
@@ -89,11 +93,24 @@ private class MapIosHalfSheetManager(
     ) {
         schemeState.value = scheme
         typographyState.value = typography
-        // Follow app color scheme — sheet surfaces are theme-aware (no forced OLED dark).
         isChromeDark = scheme.background.luminance() < 0.5f
         containerColor = container
         applyTheme(isChromeDark)
         applyContainerColor(container)
+    }
+
+    /** Move the whole page-sheet UIView (curved chrome + system grabber + content). */
+    @OptIn(ExperimentalForeignApi::class)
+    fun setSurfaceDragOffsetPx(offsetPx: Float) {
+        if (!isInitialized) return
+        val y = if (offsetPx <= 0.5f) 0.0 else offsetPx.toDouble()
+        sheetViewController.view.setTransform(CGAffineTransformMakeTranslation(0.0, y))
+    }
+
+    @OptIn(ExperimentalForeignApi::class)
+    private fun resetSurfaceDrag() {
+        if (!isInitialized) return
+        sheetViewController.view.setTransform(CGAffineTransformMakeTranslation(0.0, 0.0))
     }
 
     private val sheetViewController: UIViewController by lazy {
@@ -107,14 +124,25 @@ private class MapIosHalfSheetManager(
                 PlatformStyleProvider {
                     CompositionLocalProvider(
                         LocalSheetOnDismissRequest provides onDismissFromSwipe,
+                        LocalSheetUsesPlatformGrabber provides true,
                     ) {
-                        Column(
-                            modifierState.value
-                                .fillMaxWidth()
-                                .fillMaxHeight()
-                                .sheetSwipeDismissWhenAtTop(onDismissRequest = onDismissFromSwipe),
+                        ProvideSheetSurfaceDrag(
+                            onDragOffsetPx = { setSurfaceDragOffsetPx(it) },
                         ) {
-                            contentState.value(this)
+                            SheetFingerDismissHost(
+                                onDismissRequest = onDismissFromSwipe,
+                                modifier = modifierState.value
+                                    .fillMaxWidth()
+                                    .fillMaxHeight(),
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .fillMaxHeight(),
+                                ) {
+                                    contentState.value(this)
+                                }
+                            }
                         }
                     }
                 }
@@ -123,18 +151,12 @@ private class MapIosHalfSheetManager(
             modalPresentationStyle = UIModalPresentationPageSheet
             modalTransitionStyle = UIModalTransitionStyleCoverVertical
             presentationController?.delegate = delegate
+            // Medium only — adding large detent caused sudden expand/contract on swipe up/down.
             sheetPresentationController?.setDetents(
-                if (expandable) {
-                    listOf(
-                        UISheetPresentationControllerDetent.mediumDetent(),
-                        UISheetPresentationControllerDetent.largeDetent(),
-                    )
-                } else {
-                    listOf(UISheetPresentationControllerDetent.mediumDetent())
-                },
+                listOf(UISheetPresentationControllerDetent.mediumDetent()),
             )
             sheetPresentationController?.prefersGrabberVisible = true
-            sheetPresentationController?.prefersScrollingExpandsWhenScrolledToEdge = true
+            sheetPresentationController?.prefersScrollingExpandsWhenScrolledToEdge = false
             isInitialized = true
         }
     }
@@ -178,6 +200,7 @@ private class MapIosHalfSheetManager(
     fun hide() {
         if (!isPresented || isAnimating) return
         isAnimating = true
+        resetSurfaceDrag()
         sheetViewController.dismissViewControllerAnimated(
             flag = true,
             completion = {
@@ -218,7 +241,6 @@ actual fun MapBeaconSheetRoot(
             parentUIViewController = parent,
             isChromeDark = appColorScheme.background.luminance() < 0.5f,
             containerColor = containerColorState.value,
-            expandable = expandable,
             onDismissFromSwipe = { onDismissState.value.invoke() },
             schemeState = schemeState,
             typographyState = typographyState,
