@@ -33,6 +33,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -83,9 +84,9 @@ fun ChatMessageBubble(
     showPeerAvatarInGroup: Boolean = false,
     secureMediaHost: SecureChatMediaHost? = null,
     /**
-     * Pre-resolved secure media load state for this message. Hoist the [SecureChatMediaHost.secureChatMediaLoadState]
-     * collector out of LazyColumn items and pass only the relevant entry here to avoid every row observing the full map.
-     * If null, falls back to collecting from [secureMediaHost] internally (legacy path).
+     * Optional pre-resolved state. Prefer null and [secureMediaHost] so each row observes only
+     * its own map entry (via [produceState]) instead of recomposing the whole timeline on every
+     * attachment decode.
      */
     secureMediaState: SecureChatMediaLoadState? = null,
     activeChatId: String? = null,
@@ -124,8 +125,23 @@ fun ChatMessageBubble(
     val mediaUrl = message.mediaUrlOrNull()
     val audioDurSec = message.parsedMediaMetadata()?.durationSeconds
     val encryptedMedia = message.isEncryptedMedia()
-    val secureSt = secureMediaState
-        ?: secureMediaHost?.secureChatMediaLoadState?.collectAsState()?.value?.get(message.id)
+    val mediaLoadFlow = secureMediaHost?.secureChatMediaLoadState
+    val secureStFromHost by produceState(
+        initialValue = mediaLoadFlow?.value?.get(message.id),
+        message.id,
+        mediaLoadFlow,
+    ) {
+        val flow = mediaLoadFlow
+        if (flow == null) {
+            value = null
+            return@produceState
+        }
+        flow.collect { map ->
+            val next = map[message.id]
+            if (next != value) value = next
+        }
+    }
+    val secureSt = secureMediaState ?: secureStFromHost
     val isImageMessage = mt == ChatMessageType.IMAGE &&
         (!mediaUrl.isNullOrBlank() || secureSt?.imageBytes != null)
     val attachmentEnvelope = remember(message.id, message.content, message.metadata) {
@@ -364,7 +380,10 @@ fun ChatMessageBubble(
                     }
                     Column(
                         horizontalAlignment = if (isSent) Alignment.End else Alignment.Start,
+                        // Cap width to the bubble — fillMaxWidth photos otherwise expand this
+                        // Column across the row and steal interactive-back in attachment bands.
                         modifier = Modifier
+                            .widthIn(max = bubbleContentMaxWidth)
                             .graphicsLayer { translationX = displayVisualPx.floatValue }
                             .then(swipeDragModifier)
                             .then(messageLongPressModifier),

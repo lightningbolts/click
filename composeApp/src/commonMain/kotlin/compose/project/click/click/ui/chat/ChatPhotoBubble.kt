@@ -40,8 +40,10 @@ import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.util.LruMemoryCache
 import compose.project.click.click.util.redactedRestMessage
 import compose.project.click.click.utils.softBlurredForLockedDrop
-import compose.project.click.click.utils.toImageBitmap
+import compose.project.click.click.utils.toChatDisplayImageBitmap
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private val chatPhotoAttachmentShape = RoundedCornerShape(16.dp)
 
@@ -167,42 +169,78 @@ internal fun ChatBubblePhotoContent(
         var displayBitmap by remember(bitmapSlotKey) {
             mutableStateOf(secureChatImageBitmapCache.get(message.id))
         }
+        var lockedBitmap by remember(bitmapSlotKey, rollLocked) {
+            val src = secureChatImageBitmapCache.get(message.id)
+            val warmed =
+                if (rollLocked && src != null) {
+                    lockedDropBlurBitmapCache.get(lockedDropCacheKey(message.id, src))
+                } else {
+                    null
+                }
+            mutableStateOf(warmed)
+        }
         // Re-read cache on every composition without resetting state when the item remounts
         // with the same slot key after a brief dispose (reply banner / back-swipe layout).
         val cachedBitmap = secureChatImageBitmapCache.get(message.id)
         val bitmap = displayBitmap ?: cachedBitmap
         LaunchedEffect(bitmapSlotKey, message.id, localPreviewBytes, rollLocked) {
+            suspend fun ensureLocked(source: ImageBitmap) {
+                if (!rollLocked) {
+                    lockedBitmap = null
+                    return
+                }
+                val key = lockedDropCacheKey(message.id, source)
+                lockedDropBlurBitmapCache.get(key)?.let {
+                    lockedBitmap = it
+                    return
+                }
+                val blurred = withContext(Dispatchers.Default) {
+                    lockedDropDisplayBitmap(message.id, source)
+                }
+                lockedBitmap = blurred
+            }
+
             secureChatImageBitmapCache.get(message.id)?.let {
                 if (displayBitmap !== it) displayBitmap = it
-                if (rollLocked) lockedDropDisplayBitmap(message.id, it)
+                ensureLocked(it)
                 return@LaunchedEffect
             }
             val bytes = localPreviewBytes ?: return@LaunchedEffect
-            val decoded = runCatching { bytes.toImageBitmap() }
-                .onFailure { e ->
-                    println(
-                        "ChatBubblePhotoContent: failed to decode local preview for message=${message.id}: ${e.redactedRestMessage()}",
-                    )
-                }
-                .getOrNull()
-            if (decoded != null) {
-                secureChatImageBitmapCache.put(message.id, decoded)
-                // Warm locked-drop pixels off the scroll path so fling does not hitch on first paint.
-                if (rollLocked) lockedDropDisplayBitmap(message.id, decoded)
-                displayBitmap = decoded
-            }
+            // Decode + optional pixelation off the main thread so fling/back stay at 120Hz.
+            val decoded = withContext(Dispatchers.Default) {
+                runCatching { bytes.toChatDisplayImageBitmap() }
+                    .onFailure { e ->
+                        println(
+                            "ChatBubblePhotoContent: failed to decode local preview for message=${message.id}: ${e.redactedRestMessage()}",
+                        )
+                    }
+                    .getOrNull()
+            } ?: return@LaunchedEffect
+            secureChatImageBitmapCache.put(message.id, decoded)
+            displayBitmap = decoded
+            ensureLocked(decoded)
         }
         when {
+            bitmap != null && rollLocked -> {
+                val locked = lockedBitmap
+                if (locked != null) {
+                    PhotoBitmapContent(
+                        bitmap = locked,
+                        rollLocked = true,
+                        countdownLabel = countdownLabel,
+                        borderIfReceived = borderIfReceived,
+                        photoGestureModifier = photoGestureModifier,
+                        uploadProgress = secureState?.uploadProgress,
+                    )
+                } else {
+                    // Keep 4:3 placeholder until pixelation finishes — never flash a clear frame.
+                    SecurePhotoLoadingPlaceholder()
+                }
+            }
             bitmap != null -> {
                 PhotoBitmapContent(
-                    bitmap = if (rollLocked) {
-                        remember(bitmapSlotKey, bitmap.width, bitmap.height) {
-                            lockedDropDisplayBitmap(message.id, bitmap)
-                        }
-                    } else {
-                        bitmap
-                    },
-                    rollLocked = rollLocked,
+                    bitmap = bitmap,
+                    rollLocked = false,
                     countdownLabel = countdownLabel,
                     borderIfReceived = borderIfReceived,
                     photoGestureModifier = photoGestureModifier,

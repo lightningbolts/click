@@ -10,9 +10,32 @@ import org.jetbrains.skia.MipmapMode
 import org.jetbrains.skia.Rect
 import org.jetbrains.skia.SamplingMode
 import org.jetbrains.skia.Surface
+import kotlin.math.max
 
 actual fun ByteArray.toImageBitmap(): ImageBitmap {
     return Image.makeFromEncoded(this).toComposeImageBitmap()
+}
+
+actual fun ByteArray.toChatDisplayImageBitmap(maxEdgePx: Int): ImageBitmap {
+    val edge = maxEdgePx.coerceAtLeast(64)
+    val full = Image.makeFromEncoded(this)
+    val srcEdge = max(full.width, full.height).coerceAtLeast(1)
+    if (srcEdge <= edge) {
+        return full.toComposeImageBitmap()
+    }
+    val scale = edge.toFloat() / srcEdge.toFloat()
+    val tw = (full.width * scale).toInt().coerceAtLeast(1)
+    val th = (full.height * scale).toInt().coerceAtLeast(1)
+    val surface = Surface.makeRasterN32Premul(tw, th)
+    surface.canvas.drawImageRect(
+        full,
+        Rect.makeWH(full.width.toFloat(), full.height.toFloat()),
+        Rect.makeWH(tw.toFloat(), th.toFloat()),
+        SamplingMode.LINEAR,
+        null,
+        true,
+    )
+    return surface.makeImageSnapshot().toComposeImageBitmap()
 }
 
 actual fun ImageBitmap.softBlurredForLockedDrop(): ImageBitmap {

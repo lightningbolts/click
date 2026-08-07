@@ -239,8 +239,14 @@ fun InteractiveSwipeBackContainer(
 
     val rightToLeftPeekState = rememberUpdatedState(rightToLeftPeek)
     val onHorizontalDragStartedState = rememberUpdatedState(onHorizontalDragStarted)
-    val dragState = rememberDraggableState { delta ->
-            if (isSettling) return@rememberDraggableState
+        val dragState = rememberDraggableState { delta ->
+            // Allow interrupting an in-flight settle (quick back↔forward) without waiting
+            // for the spring to finish — previously `enabled = !isSettling` blocked new drags.
+            if (isSettling) {
+                settleJob?.cancel()
+                settleJob = null
+                isSettling = false
+            }
             val offset = offsetPx.floatValue
             val peek = rightToLeftPeekState.value
             when {
@@ -270,8 +276,8 @@ fun InteractiveSwipeBackContainer(
             Modifier.draggable(
                 state = dragState,
                 orientation = Orientation.Horizontal,
-                enabled = !isSettling,
-                startDragImmediately = isGestureActive,
+                enabled = true,
+                startDragImmediately = isGestureActive || isSettling,
                 onDragStarted = {
                     settleJob?.cancel()
                     settleJob = null

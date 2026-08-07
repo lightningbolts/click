@@ -5,9 +5,23 @@ import android.graphics.BitmapFactory
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import kotlin.math.max
 
 actual fun ByteArray.toImageBitmap(): ImageBitmap {
     return BitmapFactory.decodeByteArray(this, 0, size).asImageBitmap()
+}
+
+actual fun ByteArray.toChatDisplayImageBitmap(maxEdgePx: Int): ImageBitmap {
+    val edge = maxEdgePx.coerceAtLeast(64)
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(this, 0, size, bounds)
+    val srcEdge = max(bounds.outWidth, bounds.outHeight).coerceAtLeast(1)
+    var sample = 1
+    while (srcEdge / sample > edge) {
+        sample *= 2
+    }
+    val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+    return BitmapFactory.decodeByteArray(this, 0, size, opts).asImageBitmap()
 }
 
 actual fun ImageBitmap.softBlurredForLockedDrop(): ImageBitmap {

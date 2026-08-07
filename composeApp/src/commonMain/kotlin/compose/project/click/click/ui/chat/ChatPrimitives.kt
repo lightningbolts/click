@@ -604,8 +604,8 @@ internal fun BeaconChatCard(
     ) {
         BeaconPreviewCard(
             model = model,
-            compact = false,
-            modifier = Modifier.widthIn(max = 300.dp),
+            compact = true,
+            modifier = Modifier.widthIn(max = 280.dp),
             onClick = {
                 PlatformHapticsPolicy.lightImpact()
                 val id = model.beaconId.trim()

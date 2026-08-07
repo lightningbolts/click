@@ -164,7 +164,6 @@ fun HubChatScreen(
     val messages by viewModel.messages.collectAsState()
     val occupantCount by viewModel.occupantCount.collectAsState()
     val outOfBounds by viewModel.outOfBounds.collectAsState()
-    val secureMediaLoadMap by viewModel.secureChatMediaLoadState.collectAsState()
 
     val isCreator by viewModel.isCreator.collectAsState()
     val resolvedCreatorId by viewModel.resolvedCreatorId.collectAsState()
@@ -478,7 +477,6 @@ fun HubChatScreen(
                     isGroupChat = true,
                     currentUserId = currentUserId,
                     reactionsMap = emptyMap(),
-                    secureMediaLoadMap = secureMediaLoadMap,
                     secureMediaHost = viewModel,
                     activeChatId = hubIdForSecureMedia,
                     onToggleReaction = { _, _ -> },

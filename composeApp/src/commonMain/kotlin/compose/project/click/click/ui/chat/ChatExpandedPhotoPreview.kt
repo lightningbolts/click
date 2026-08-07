@@ -39,9 +39,12 @@ import compose.project.click.click.data.models.mediaUrlOrNull
 import compose.project.click.click.ui.components.GlassFullscreenMediaOverlay
 import compose.project.click.click.ui.components.GlassSheetTokens
 import compose.project.click.click.ui.components.UnifiedPopupTokens
-import compose.project.click.click.utils.toImageBitmap
-import compose.project.click.click.viewmodel.SecureChatMediaLoadState
+import compose.project.click.click.utils.toChatDisplayImageBitmap
+import compose.project.click.click.viewmodel.SecureChatMediaHost
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import androidx.compose.runtime.produceState
 
 /**
  * Tap-to-expand lightbox for chat photo messages (matches profile media preview UX).
@@ -49,7 +52,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun ChatExpandedPhotoPreview(
     target: MessageWithUser?,
-    secureMediaLoadMap: Map<String, SecureChatMediaLoadState>,
+    secureMediaHost: SecureChatMediaHost,
     onDismiss: () -> Unit,
 ) {
     var model by remember { mutableStateOf<MessageWithUser?>(null) }
@@ -80,12 +83,31 @@ fun ChatExpandedPhotoPreview(
 
     val mediaUrl = message.mediaUrlOrNull().orEmpty()
     val isEncrypted = message.isEncryptedMedia()
-    val secureState = secureMediaLoadMap[message.id]
-    val bitmap = secureState?.imageBytes?.let { bytes ->
-        secureChatImageBitmapCache.get(message.id)
-            ?: runCatching { bytes.toImageBitmap() }.getOrNull()?.also {
-                secureChatImageBitmapCache.put(message.id, it)
-            }
+    val mediaFlow = secureMediaHost.secureChatMediaLoadState
+    val secureState by produceState(
+        initialValue = mediaFlow.value[message.id],
+        message.id,
+        mediaFlow,
+    ) {
+        mediaFlow.collect { map ->
+            val next = map[message.id]
+            if (next != value) value = next
+        }
+    }
+    var bitmap by remember(message.id) {
+        mutableStateOf(secureChatImageBitmapCache.get(message.id))
+    }
+    LaunchedEffect(message.id, secureState?.imageBytes) {
+        secureChatImageBitmapCache.get(message.id)?.let {
+            bitmap = it
+            return@LaunchedEffect
+        }
+        val bytes = secureState?.imageBytes ?: return@LaunchedEffect
+        val decoded = withContext(Dispatchers.Default) {
+            runCatching { bytes.toChatDisplayImageBitmap() }.getOrNull()
+        } ?: return@LaunchedEffect
+        secureChatImageBitmapCache.put(message.id, decoded)
+        bitmap = decoded
     }
     val previewImageFade = remember(message.id) { Animatable(0f) }
 
@@ -121,20 +143,23 @@ fun ChatExpandedPhotoPreview(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 when {
-                    isEncrypted && bitmap != null -> {
-                        Image(
-                            bitmap = bitmap,
-                            contentDescription = "Photo",
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 420.dp)
-                                .graphicsLayer { alpha = previewImageFade.value }
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                        )
+                    isEncrypted -> {
+                        val bmp = bitmap
+                        if (bmp != null) {
+                            Image(
+                                bitmap = bmp,
+                                contentDescription = "Photo",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 420.dp)
+                                    .graphicsLayer { alpha = previewImageFade.value }
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                            )
+                        }
                     }
-                    !isEncrypted && mediaUrl.isNotBlank() -> {
+                    mediaUrl.isNotBlank() -> {
                         AsyncImage(
                             model = mediaUrl,
                             contentDescription = "Photo",

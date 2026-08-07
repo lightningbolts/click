@@ -30,7 +30,6 @@ import compose.project.click.click.data.models.ChatMessageType
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.MessageWithUser
-import compose.project.click.click.viewmodel.SecureChatMediaLoadState
 import compose.project.click.click.viewmodel.SecureChatMediaHost
 import kotlinx.coroutines.delay
 import kotlin.math.abs
@@ -122,7 +121,6 @@ internal fun ChatMessageTimeline(
     isGroupChat: Boolean,
     currentUserId: String?,
     reactionsMap: Map<String, List<MessageReaction>>,
-    secureMediaLoadMap: Map<String, SecureChatMediaLoadState>,
     secureMediaHost: SecureChatMediaHost,
     activeChatId: String?,
     onToggleReaction: (messageId: String, reaction: String) -> Unit,
@@ -231,7 +229,6 @@ internal fun ChatMessageTimeline(
                                         onSwipeReply = { onSwipeReplyState.value(it) },
                                         showPeerAvatarInGroup = isGroupChat,
                                         secureMediaHost = secureMediaHost,
-                                        secureMediaState = secureMediaLoadMap[messageWithUser.message.id],
                                         activeChatId = activeChatId,
                                         enableMessageContextMenu = enableMessageContextMenu,
                                         onDownloadAttachment = { mwu, env ->

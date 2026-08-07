@@ -5,11 +5,9 @@ import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -18,7 +16,6 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
@@ -192,8 +189,8 @@ internal fun ChatMessageRowWithTimestampGutter(
     stripVisualPx: MutableFloatState,
     maxRevealPx: Float,
     modifier: Modifier = Modifier,
-    meshConnection: Connection? = null,
-    useHubNeutralMesh: Boolean = false,
+    @Suppress("UNUSED_PARAMETER") meshConnection: Connection? = null,
+    @Suppress("UNUSED_PARAMETER") useHubNeutralMesh: Boolean = false,
     bubble: @Composable () -> Unit,
 ) {
     if (isCallLog) {
@@ -215,16 +212,8 @@ internal fun ChatMessageRowWithTimestampGutter(
                     },
             contentAlignment = if (isSent) Alignment.CenterEnd else Alignment.CenterStart,
         ) {
-            if (isSent && !isCallLog) {
-                ChatBubbleSentMeshTint(
-                    connection = meshConnection,
-                    isHubNeutral = useHubNeutralMesh,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(22.dp))
-                        .graphicsLayer { alpha = 0.42f },
-                )
-            }
+            // No full-row mesh plate — it painted fillMaxSize behind every sent bubble and
+            // burned GPU fill-rate during fast scroll / interactive back over heavy threads.
             bubble()
         }
         Box(

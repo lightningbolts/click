@@ -374,9 +374,13 @@ fun ChatView(
     var imeClearedForInteractiveBackSwipe by remember { mutableStateOf(false) }
     LaunchedEffect(parentInteractiveBackSwipePx) {
         val ref = parentInteractiveBackSwipePx ?: return@LaunchedEffect
+        // Defer IME teardown until the swipe is well underway (~28% width). Hiding the
+        // keyboard at 8px resized the LazyColumn mid-gesture and tanked interactive-back fps.
         snapshotFlow { ref.floatValue }.collect { offset ->
+            // width isn't on the float ref — use a generous px threshold (~120dp ≈ mid peek).
+            val commitPx = with(density) { 120.dp.toPx() }
             when {
-                offset > 8f && !imeClearedForInteractiveBackSwipe -> {
+                offset > commitPx && !imeClearedForInteractiveBackSwipe -> {
                     imeClearedForInteractiveBackSwipe = true
                     keyboardControllerState.value?.hide()
                     focusManagerState.value.clearFocus()
@@ -398,7 +402,6 @@ fun ChatView(
     var openBeaconDetailFallback by remember { mutableStateOf<compose.project.click.click.data.models.MapBeacon?>(null) }
     var openBeaconDetailMetadata by remember { mutableStateOf<kotlinx.serialization.json.JsonObject?>(null) }
     var openBeaconDetailContent by remember { mutableStateOf<String?>(null) }
-    val secureMediaLoadMap by viewModel.secureChatMediaLoadState.collectAsState()
     val toastState = rememberGlassToastState()
     val tetherPayload by EncounterTetherManager.activeTetherPayload.collectAsState()
     var tetherToastMessage by remember { mutableStateOf<String?>(null) }
@@ -1248,7 +1251,6 @@ fun ChatView(
                             isGroupChat = isGroupChat,
                             currentUserId = currentUserId,
                             reactionsMap = reactionsMap,
-                            secureMediaLoadMap = secureMediaLoadMap,
                             secureMediaHost = viewModel,
                             activeChatId = activeApiChatId ?: chatDetails.chat.id,
                             onToggleReaction = { messageId, reaction ->
@@ -1485,7 +1487,7 @@ fun ChatView(
     Box(modifier = Modifier.fillMaxSize()) {
         ChatExpandedPhotoPreview(
             target = expandedPhotoTarget,
-            secureMediaLoadMap = secureMediaLoadMap,
+            secureMediaHost = viewModel,
             onDismiss = { expandedPhotoTarget = null },
         )
     }
