@@ -575,7 +575,9 @@ class HomeViewModel(
     }
 
     /**
-     * Send one contextual icebreaker as a chat message (same catalog as in-chat icebreakers).
+     * Send this connection's handcrafted "Question of the Day" as a chat message.
+     * The question is picked once per connection (stable, not date-based — see
+     * [IcebreakerRepository.getQuestionOfTheDay]) and there is no skip/reshuffle.
      */
     fun sendPollPairIcebreaker(suggestion: PollPairSuggestion) {
         val currentUser = AppDataManager.currentUser.value ?: return
@@ -583,7 +585,7 @@ class HomeViewModel(
         viewModelScope.launch {
             homeIcebreakerSendMutex.withLock {
                 if (_icebreakerSendCooldownRemainingSec.value > 0) {
-                    _nudgeResult.value = "Icebreaker on cooldown — ${_icebreakerSendCooldownRemainingSec.value}s"
+                    _nudgeResult.value = "Question of the Day on cooldown — ${_icebreakerSendCooldownRemainingSec.value}s"
                 } else {
                     try {
                         val details = chatRepository.fetchChatWithDetails(suggestion.connectionId, currentUser.id)
@@ -591,19 +593,17 @@ class HomeViewModel(
                         if (chatId == null) {
                             _nudgeResult.value = "Couldn't open chat"
                         } else {
-                            val contextTag = details?.connection?.context_tag ?: suggestion.contextTag
-                            val prompt = IcebreakerRepository.getPromptsForContext(contextTag, count = 1).firstOrNull()
-                                ?: IcebreakerRepository.getRandomPrompt()
+                            val prompt = IcebreakerRepository.getQuestionOfTheDay(suggestion.connectionId)
                             val msg = chatRepository.sendMessage(chatId, currentUser.id, prompt.text)
                             if (msg != null) {
-                                _nudgeResult.value = "Icebreaker sent to $name!"
+                                _nudgeResult.value = "Question of the Day sent to $name!"
                                 armHomeIcebreakerSendCooldown()
                             } else {
-                                _nudgeResult.value = "Failed to send icebreaker"
+                                _nudgeResult.value = "Failed to send question"
                             }
                         }
                     } catch (_: Exception) {
-                        _nudgeResult.value = "Failed to send icebreaker"
+                        _nudgeResult.value = "Failed to send question"
                     }
                 }
             }

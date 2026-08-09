@@ -11,7 +11,8 @@ enum class IcebreakerCategory {
     FUN_QUESTIONS,      // General fun questions
     DEEP_QUESTIONS,     // More meaningful questions
     ACTIVITY_BASED,     // Suggestions for activities
-    GETTING_TO_KNOW     // Basic getting to know you questions
+    GETTING_TO_KNOW,    // Basic getting to know you questions
+    QUESTION_OF_THE_DAY // Handcrafted prompt sent from Home / archive-banner "Question of the Day" button
 }
 
 /**
@@ -261,6 +262,87 @@ object IcebreakerRepository {
         )
     )
     
+    // Handcrafted "Question of the Day" prompts — used only by the Home / archive-banner
+    // "Question of the Day" button, kept separate from the general icebreaker catalog above
+    // so in-chat icebreaker suggestions (ChatViewModel) are unaffected.
+    private val questionOfTheDayPrompts = listOf(
+        IcebreakerPrompt(
+            id = "qotd_1",
+            text = "What's a small thing that made you smile this week?",
+            category = IcebreakerCategory.QUESTION_OF_THE_DAY
+        ),
+        IcebreakerPrompt(
+            id = "qotd_2",
+            text = "If you had a completely free Saturday with no obligations, what would you do?",
+            category = IcebreakerCategory.QUESTION_OF_THE_DAY
+        ),
+        IcebreakerPrompt(
+            id = "qotd_3",
+            text = "What's a skill you wish you had more time to practice?",
+            category = IcebreakerCategory.QUESTION_OF_THE_DAY
+        ),
+        IcebreakerPrompt(
+            id = "qotd_4",
+            text = "What's the best piece of advice someone's given you recently?",
+            category = IcebreakerCategory.QUESTION_OF_THE_DAY
+        ),
+        IcebreakerPrompt(
+            id = "qotd_5",
+            text = "What's something you're looking forward to right now?",
+            category = IcebreakerCategory.QUESTION_OF_THE_DAY
+        ),
+        IcebreakerPrompt(
+            id = "qotd_6",
+            text = "What's a song you've had on repeat lately?",
+            category = IcebreakerCategory.QUESTION_OF_THE_DAY
+        ),
+        IcebreakerPrompt(
+            id = "qotd_7",
+            text = "If you could pick up any hobby tomorrow with instant skill, what would you choose?",
+            category = IcebreakerCategory.QUESTION_OF_THE_DAY
+        ),
+        IcebreakerPrompt(
+            id = "qotd_8",
+            text = "What's a place you'd love to visit that you haven't been to yet?",
+            category = IcebreakerCategory.QUESTION_OF_THE_DAY
+        ),
+        IcebreakerPrompt(
+            id = "qotd_9",
+            text = "What's your comfort show or movie you always go back to?",
+            category = IcebreakerCategory.QUESTION_OF_THE_DAY
+        ),
+        IcebreakerPrompt(
+            id = "qotd_10",
+            text = "What's something you've changed your mind about recently?",
+            category = IcebreakerCategory.QUESTION_OF_THE_DAY
+        ),
+        IcebreakerPrompt(
+            id = "qotd_11",
+            text = "What's a meal you could eat every day and not get tired of?",
+            category = IcebreakerCategory.QUESTION_OF_THE_DAY
+        ),
+        IcebreakerPrompt(
+            id = "qotd_12",
+            text = "What's a random fact you know that most people don't?",
+            category = IcebreakerCategory.QUESTION_OF_THE_DAY
+        ),
+        IcebreakerPrompt(
+            id = "qotd_13",
+            text = "What's one thing on your bucket list you actually plan on doing?",
+            category = IcebreakerCategory.QUESTION_OF_THE_DAY
+        ),
+        IcebreakerPrompt(
+            id = "qotd_14",
+            text = "What's a habit you've picked up this year that stuck?",
+            category = IcebreakerCategory.QUESTION_OF_THE_DAY
+        ),
+        IcebreakerPrompt(
+            id = "qotd_15",
+            text = "What's something you're weirdly good at?",
+            category = IcebreakerCategory.QUESTION_OF_THE_DAY
+        )
+    )
+
     /**
      * Get icebreaker prompts based on connection context.
      * Returns contextual prompts if a matching context is found, otherwise returns general prompts.
@@ -315,6 +397,7 @@ object IcebreakerRepository {
             IcebreakerCategory.DEEP_QUESTIONS -> deepPrompts
             IcebreakerCategory.ACTIVITY_BASED -> activityPrompts
             IcebreakerCategory.GETTING_TO_KNOW -> gettingToKnowPrompts
+            IcebreakerCategory.QUESTION_OF_THE_DAY -> questionOfTheDayPrompts
         }
         return prompts.shuffled().take(count)
     }
@@ -332,5 +415,20 @@ object IcebreakerRepository {
      */
     fun getAllPrompts(): List<IcebreakerPrompt> {
         return contextPrompts + funPrompts + deepPrompts + activityPrompts + gettingToKnowPrompts
+    }
+
+    /**
+     * "Question of the Day" for the Home / archive-banner button: one handcrafted prompt,
+     * chosen at random per connection (not date-based — each connection gets one fixed
+     * question via a stable seed on [connectionId], so it doesn't change if the user
+     * re-opens the app, but different connections can land on different questions).
+     * There is no skip/reshuffle — this is the single question offered for that connection.
+     *
+     * @param connectionId Used as the stable random seed so the same connection always
+     *   gets the same question.
+     */
+    fun getQuestionOfTheDay(connectionId: String): IcebreakerPrompt {
+        val random = Random(stableRandomSeed(connectionId))
+        return questionOfTheDayPrompts.random(random)
     }
 }
