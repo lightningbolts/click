@@ -58,6 +58,7 @@ class FakeChatRepository(
     var onSendMessage: suspend (String, String, String, String, JsonElement?, Long?) -> Message? =
         { _, _, _, _, _, _ -> null },
     var onEnsureChatForConnection: suspend (String) -> Chat? = { null },
+    var onEnsureChatForGroup: suspend (String) -> Chat? = { null },
     var onGetUserById: suspend (String) -> User? = { null },
     var onUnifiedSearchSupplement: suspend (viewerUserId: String, peerUserIds: List<String>) -> UnifiedSearchSupplement =
         { _, _ -> UnifiedSearchSupplement.EMPTY },
@@ -142,11 +143,15 @@ class FakeChatRepository(
         messageType: String,
         metadata: JsonElement?,
         clientLocalSentAtMs: Long?,
+        connectionId: String?,
     ): Message? =
         onSendMessage(chatId, userId, content, messageType, metadata, clientLocalSentAtMs)
 
     override suspend fun ensureChatForConnection(connectionId: String): Chat? =
         onEnsureChatForConnection(connectionId)
+
+    override suspend fun ensureChatForGroup(groupId: String): Chat? =
+        onEnsureChatForGroup(groupId)
 
     override suspend fun sendMessageForConnection(
         connectionId: String,

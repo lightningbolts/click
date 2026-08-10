@@ -549,20 +549,22 @@ Apply `OledSheetTheme` on Map profile path; theme-aware search field fill; drop 
 |-------|--------|
 | **Type** | Bug |
 | **Area** | Groups / FAB picker |
-| **Status** | Confirmed |
+| **Status** | Code fix landed — needs device repro |
 | **Priority** | P0 |
 
 ### Expected
 
-Scrolling and tapping members in Create verified click never crashes.
+Scrolling and tapping members in Create verified click never crashes. Focusing Search connections must not dismiss the sheet / bounce to Home.
 
 ### Evidence
 
-`ConnectionMemberPickerSheet` uses `Column(fillMaxHeight)` + `LazyColumn(weight(1f))` while `ClickFormBottomSheet`’s intermediate `Column` is only `fillMaxWidth()` → unbounded max height → classic LazyColumn infinity crash on measure.
+`ConnectionMemberPickerSheet` uses `Column(fillMaxHeight)` + `LazyColumn(weight(1f))` while `ClickFormBottomSheet`’s intermediate `Column` is only `fillMaxWidth()` → unbounded max height → classic LazyColumn infinity crash on measure. Later native-sheet work keyed iOS sheet lifecycle on `LocalUIViewController`, so keyboard focus recreated/dismissed the page sheet.
 
-### Fix direction
+### Fix landed (2026-08-10)
 
-`ClickBottomSheet` inner column `fillMaxHeight()` / `fillMaxSize()`.
+- `ClickFormBottomSheet` defaults: `useUiKitScrollHost=false`, `expandable=true`, IME window insets.
+- Picker restored to Compose `LazyColumn` + `fillMaxHeight` (no UIKit scroll host).
+- iOS `MapBeaconSheetRoot` no longer recreates the sheet manager when the local VC changes; does not dismiss unrelated presented VCs on re-show.
 
 ---
 

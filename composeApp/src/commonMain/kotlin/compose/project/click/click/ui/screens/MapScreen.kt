@@ -643,6 +643,10 @@ fun MapScreen(
             appColorScheme = MaterialTheme.colorScheme,
             appTypography = MaterialTheme.typography,
             modifier = Modifier,
+            // Expandable full-height; Compose-owned scroll avoids UIKit content-height thrash
+            // when Hub↔Event tabs swap (keyboard open). Swipe-dismiss stays via surface drag.
+            expandable = true,
+            useUiKitScrollHost = false,
         ) {
             ClickSheetDialogChrome(
                 modifier = Modifier
@@ -655,6 +659,7 @@ fun MapScreen(
                 BeaconDropSheetContent(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .fillMaxHeight()
                         .padding(bottom = 12.dp),
                     errorMessage = beaconInsertError,
                     onDismissError = { viewModel.clearBeaconInsertError() },
@@ -1454,11 +1459,13 @@ internal fun EventBeaconDetail(
     val rsvpPending = beacon.id in rsvpPendingIds
     var rsvpError by remember(beacon.id) { mutableStateOf<String?>(null) }
     val engagementCache by viewModel.beaconEngagementById.collectAsState()
-    val engagementPendingIds by viewModel.beaconEngagementPendingIds.collectAsState()
+    val checkInPendingIds by viewModel.beaconCheckInPendingIds.collectAsState()
+    val bookmarkPendingIds by viewModel.beaconBookmarkPendingIds.collectAsState()
     val engagement = engagementCache[beacon.id]
     val bookmarked = engagement?.bookmarked == true
     val engagementCheckedIn = engagement?.checkedIn == true || engagement?.localEarlyCheckIn == true
-    val checkInPending = beacon.id in engagementPendingIds
+    val checkInPending = beacon.id in checkInPendingIds
+    val bookmarkPending = beacon.id in bookmarkPendingIds
     val uriHandler = LocalUriHandler.current
     val currentUser by AppDataManager.currentUser.collectAsState()
     val connectedUsers by AppDataManager.connectedUsers.collectAsState()
@@ -1580,6 +1587,7 @@ internal fun EventBeaconDetail(
             }
             EventHeroActions(
                 bookmarked = bookmarked,
+                bookmarkPending = bookmarkPending,
                 isCreator = isCreator ||
                     (!currentUser?.id.isNullOrBlank() && displayBeacon.createdByUserId == currentUser?.id),
                 onShare = {
@@ -1591,7 +1599,9 @@ internal fun EventBeaconDetail(
                     )
                 },
                 onShareToChat = onShareToChat,
-                onToggleBookmark = { viewModel.toggleBeaconBookmark(displayBeacon.id) },
+                onToggleBookmark = {
+                    if (!bookmarkPending) viewModel.toggleBeaconBookmark(displayBeacon.id)
+                },
                 onEdit = onEdit,
                 onDelete = onDelete,
             )
@@ -1827,7 +1837,10 @@ internal fun EventBeaconDetail(
                     if (rsvpPending) return@Button
                     rsvpError = null
                     viewModel.cancelRsvpToBeacon(displayBeacon.id) { ok ->
-                        if (!ok) rsvpError = "Could not update RSVP. Please try again."
+                        if (!ok) {
+                            rsvpError = viewModel.engagementSnackbar.value
+                                ?: "Could not update RSVP. Please try again."
+                        }
                     }
                 },
                 enabled = !rsvpPending,
@@ -1853,7 +1866,10 @@ internal fun EventBeaconDetail(
                     if (rsvpPending) return@OutlinedButton
                     rsvpError = null
                     viewModel.rsvpToBeacon(displayBeacon.id) { ok ->
-                        if (!ok) rsvpError = "Could not update RSVP. Please try again."
+                        if (!ok) {
+                            rsvpError = viewModel.engagementSnackbar.value
+                                ?: "Could not update RSVP. Please try again."
+                        }
                     }
                 },
                 enabled = !rsvpPending,
@@ -1963,6 +1979,7 @@ private fun BeaconShareMenuButton(
 @Composable
 private fun EventHeroActions(
     bookmarked: Boolean,
+    bookmarkPending: Boolean = false,
     isCreator: Boolean,
     onShare: () -> Unit,
     onShareToChat: (() -> Unit)? = null,
@@ -1983,6 +2000,7 @@ private fun EventHeroActions(
             selected = bookmarked,
             border = border,
             onClick = onToggleBookmark,
+            enabled = !bookmarkPending,
             contentDescription = if (bookmarked) "Remove bookmark" else "Bookmark event",
             icon = if (bookmarked) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
         )

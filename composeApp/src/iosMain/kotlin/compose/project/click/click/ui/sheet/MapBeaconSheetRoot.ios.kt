@@ -79,7 +79,7 @@ private class MapIosNativeSheetDelegate(
 }
 
 private class MapIosNativeSheetManager(
-    private val parentUIViewController: UIViewController,
+    parentUIViewController: UIViewController,
     private var isChromeDark: Boolean,
     private var sheetColor: Color,
     private val expandable: Boolean,
@@ -88,6 +88,8 @@ private class MapIosNativeSheetManager(
     private val schemeState: MutableState<ColorScheme>,
     private val typographyState: MutableState<Typography>,
 ) {
+    /** Updated via SideEffect — do not recreate the manager when keyboard changes the local VC. */
+    var parentUIViewController: UIViewController = parentUIViewController
     private val delegate by lazy {
         MapIosNativeSheetDelegate(
             onDismissed = {
@@ -214,7 +216,9 @@ private class MapIosNativeSheetManager(
             },
         )
         sheet?.prefersGrabberVisible = true
-        sheet?.prefersScrollingExpandsWhenScrolledToEdge = useUiKitScrollHost
+        // Expand-to-large on scroll edge for UIKit hosts; Compose-owned scroll still has
+        // medium+large detents when [expandable] so users can drag to full height.
+        sheet?.prefersScrollingExpandsWhenScrolledToEdge = expandable
         applyThemedHost(host)
     }
 
@@ -445,11 +449,10 @@ private class MapIosNativeSheetManager(
         }
         val root = presentationRoot()
         val alreadyPresented = root.presentedViewController
+        // Never dismiss an unrelated presented VC just because LocalUIViewController
+        // changed (keyboard focus) — that looked like "exited to Home".
         if (alreadyPresented != null && alreadyPresented != sheetViewController) {
-            root.dismissViewControllerAnimated(
-                flag = true,
-                completion = { presentFrom(root) },
-            )
+            presentFrom(alreadyPresented)
         } else {
             presentFrom(root)
         }
@@ -496,7 +499,9 @@ actual fun MapBeaconSheetRoot(
     val schemeState = remember { mutableStateOf(appColorScheme) }
     val typographyState = remember { mutableStateOf(appTypography) }
 
-    val manager = remember(parent, expandable, useUiKitScrollHost) {
+    // Key only on sheet mode — keyboard focus can change LocalUIViewController and must
+    // not tear down / re-present the native sheet (create-group search → Home).
+    val manager = remember(expandable, useUiKitScrollHost) {
         val m = MapIosNativeSheetManager(
             parentUIViewController = parent,
             isChromeDark = appColorScheme.background.luminance() < 0.5f,
@@ -513,6 +518,7 @@ actual fun MapBeaconSheetRoot(
     }
 
     SideEffect {
+        manager.parentUIViewController = parent
         manager.syncFromParent(appColorScheme, appTypography, containerColor)
     }
 

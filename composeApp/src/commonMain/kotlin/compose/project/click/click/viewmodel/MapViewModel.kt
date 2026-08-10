@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.data.ClickWebAuthCoordinator
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.collapseOneToOneConnectionsByPeer // pragma: allowlist secret
@@ -69,9 +70,7 @@ import compose.project.click.click.utils.GeocodedPlace
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.realtime.PostgresAction
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
@@ -276,8 +275,13 @@ class MapViewModel : ViewModel() {
         _beaconEngagementById.asStateFlow()
 
     private val _beaconEngagementPendingIds = MutableStateFlow<Set<String>>(emptySet())
+    /** Combined pending set (legacy); prefer [beaconBookmarkPendingIds] / [beaconCheckInPendingIds]. */
     val beaconEngagementPendingIds: StateFlow<Set<String>> =
         _beaconEngagementPendingIds.asStateFlow()
+    private val _beaconBookmarkPendingIds = MutableStateFlow<Set<String>>(emptySet())
+    val beaconBookmarkPendingIds: StateFlow<Set<String>> = _beaconBookmarkPendingIds.asStateFlow()
+    private val _beaconCheckInPendingIds = MutableStateFlow<Set<String>>(emptySet())
+    val beaconCheckInPendingIds: StateFlow<Set<String>> = _beaconCheckInPendingIds.asStateFlow()
 
     /**
      * Beacon ids the user early-checked-in (HTTP 409). Survives force-refresh races that can
@@ -1437,32 +1441,8 @@ class MapViewModel : ViewModel() {
     }
 
     /** Restores/refreshes Supabase session before click-web bearer calls (cold start). */
-    private suspend fun ensureClickWebAuthReady(): Boolean {
-        val existingToken = SupabaseConfig.client.auth.currentSessionOrNull()?.accessToken?.trim()
-        if (!existingToken.isNullOrEmpty()) return true
-        if (SupabaseConfig.client.auth.currentSessionOrNull()?.accessToken.isNullOrBlank()) {
-            authRepository.restoreSession()
-        }
-        authRepository.refreshSession()
-        return awaitClickWebAuthSession()
-    }
-
-    /** Blocks until click-web bearer auth is available, or times out without caching failure. */
-    private suspend fun awaitClickWebAuthSession(timeoutMs: Long = 20_000L): Boolean {
-        return try {
-            withTimeout(timeoutMs) {
-                while (true) {
-                    val token = SupabaseConfig.client.auth.currentSessionOrNull()?.accessToken?.trim()
-                    if (!token.isNullOrEmpty()) return@withTimeout true
-                    delay(100)
-                }
-                @Suppress("UNREACHABLE_CODE")
-                false
-            }
-        } catch (_: TimeoutCancellationException) {
-            false
-        }
-    }
+    private suspend fun ensureClickWebAuthReady(): Boolean =
+        ClickWebAuthCoordinator.ensureReady(authRepository)
 
     private fun currentUserAsAttendee(): BeaconAttendeeDto? {
         val user = AppDataManager.currentUser.value ?: return null
@@ -1529,6 +1509,7 @@ class MapViewModel : ViewModel() {
             if (!ensureClickWebAuthReady()) {
                 restoreRsvpSnapshot(id, previous)
                 _beaconRsvpPendingIds.update { it - id }
+                _engagementSnackbar.value = "Sign-in still loading — try RSVP again"
                 onFinished(false)
                 return@launch
             }
@@ -1558,9 +1539,11 @@ class MapViewModel : ViewModel() {
                     loadBeaconAttendeeDirectory(id, forceRefresh = true)
                     onFinished(true)
                 },
-                onFailure = {
+                onFailure = { e ->
                     restoreRsvpSnapshot(id, previous)
                     _beaconRsvpPendingIds.update { it - id }
+                    _engagementSnackbar.value =
+                        e.message?.takeIf { it.isNotBlank() } ?: "Could not update RSVP. Please try again."
                     onFinished(false)
                 },
             )
@@ -1579,6 +1562,7 @@ class MapViewModel : ViewModel() {
             if (!ensureClickWebAuthReady()) {
                 restoreRsvpSnapshot(id, previous)
                 _beaconRsvpPendingIds.update { it - id }
+                _engagementSnackbar.value = "Sign-in still loading — try RSVP again"
                 onFinished(false)
                 return@launch
             }
@@ -1601,9 +1585,11 @@ class MapViewModel : ViewModel() {
                     }
                     onFinished(true)
                 },
-                onFailure = {
+                onFailure = { e ->
                     restoreRsvpSnapshot(id, previous)
                     _beaconRsvpPendingIds.update { it - id }
+                    _engagementSnackbar.value =
+                        e.message?.takeIf { it.isNotBlank() } ?: "Could not update RSVP. Please try again."
                     onFinished(false)
                 },
             )
@@ -1699,22 +1685,23 @@ class MapViewModel : ViewModel() {
 
     fun toggleBeaconBookmark(beaconId: String) {
         val id = beaconId.trim()
-        if (id.isEmpty() || id in _beaconEngagementPendingIds.value) return
+        if (id.isEmpty() || id in _beaconBookmarkPendingIds.value) return
         val previous = _beaconEngagementById.value[id]
         val nextBookmarked = !(previous?.bookmarked ?: false)
-        _beaconEngagementPendingIds.update { it + id }
+        _beaconBookmarkPendingIds.update { it + id }
         updateBeaconEngagementCache { current ->
             val base = current[id] ?: BeaconEngagementCacheEntry()
             current + (id to base.copy(bookmarked = nextBookmarked))
         }
         // Optimistic Home "Saved events" update — do not wait for network or app restart.
-        syncCachedEventBookmarksAfterToggle(id, nextBookmarked)
+        applyOptimisticCachedBookmark(id, nextBookmarked)
         PlatformHapticsPolicy.successNotification()
         viewModelScope.launch {
             if (!ensureClickWebAuthReady()) {
                 restoreEngagementSnapshot(id, previous)
-                syncCachedEventBookmarksAfterToggle(id, previous?.bookmarked == true)
-                _beaconEngagementPendingIds.update { it - id }
+                applyOptimisticCachedBookmark(id, previous?.bookmarked == true)
+                _beaconBookmarkPendingIds.update { it - id }
+                _engagementSnackbar.value = "Sign-in still loading — try bookmark again"
                 return@launch
             }
             mapBeaconRepository.setBeaconBookmark(
@@ -1723,52 +1710,61 @@ class MapViewModel : ViewModel() {
                 engagementTelemetry(bookmarked = nextBookmarked),
             ).fold(
                 onSuccess = {
-                    _beaconEngagementPendingIds.update { it - id }
+                    _beaconBookmarkPendingIds.update { it - id }
+                    // Reconcile after PUT lands so Home list isn't wiped by a premature GET.
+                    reconcileCachedEventBookmarksFromServer()
                 },
-                onFailure = {
+                onFailure = { e ->
                     restoreEngagementSnapshot(id, previous)
-                    syncCachedEventBookmarksAfterToggle(id, previous?.bookmarked == true)
-                    _beaconEngagementPendingIds.update { it - id }
-                    _engagementSnackbar.value = "Couldn't update bookmark"
+                    applyOptimisticCachedBookmark(id, previous?.bookmarked == true)
+                    _beaconBookmarkPendingIds.update { it - id }
+                    _engagementSnackbar.value =
+                        e.message?.takeIf { it.isNotBlank() } ?: "Couldn't update bookmark"
                 },
             )
         }
     }
 
-    private fun syncCachedEventBookmarksAfterToggle(beaconId: String, bookmarked: Boolean) {
+    private fun applyOptimisticCachedBookmark(beaconId: String, bookmarked: Boolean) {
+        if (bookmarked) {
+            val beacon = _mapBeacons.value.firstOrNull { it.id == beaconId }
+            val schedule = beacon?.eventSchedule()
+            val item = compose.project.click.click.data.api.EventBookmarkItemDto(
+                beaconId = beaconId,
+                bookmarkedAt = Clock.System.now().toString(),
+                title = beacon?.displayDynamicTitle(),
+                eventStartAt = schedule?.let {
+                    kotlinx.datetime.Instant.fromEpochMilliseconds(it.startEpochMs).toString()
+                },
+                eventEndAt = schedule?.let {
+                    kotlinx.datetime.Instant.fromEpochMilliseconds(it.endEpochMs).toString()
+                },
+                locationName = beacon?.metadata?.locationName,
+                formattedAddress = beacon?.metadata?.formattedAddress,
+                eventCategories = beacon?.metadata?.eventCategories.orEmpty(),
+                latitude = beacon?.latitude,
+                longitude = beacon?.longitude,
+                expiresAt = beacon?.expiresAtEpochMs?.let {
+                    kotlinx.datetime.Instant.fromEpochMilliseconds(it).toString()
+                },
+            )
+            val merged = (listOf(item) + AppDataManager.cachedEventBookmarks.value.filterNot { it.beaconId == beaconId })
+                .distinctBy { it.beaconId }
+            AppDataManager.updateCachedEventBookmarks(merged)
+        } else {
+            AppDataManager.updateCachedEventBookmarks(
+                AppDataManager.cachedEventBookmarks.value.filterNot { it.beaconId == beaconId },
+            )
+        }
+    }
+
+    private fun reconcileCachedEventBookmarksFromServer() {
         viewModelScope.launch(Dispatchers.Default) {
-            if (bookmarked) {
-                val beacon = _mapBeacons.value.firstOrNull { it.id == beaconId }
-                val schedule = beacon?.eventSchedule()
-                val item = compose.project.click.click.data.api.EventBookmarkItemDto(
-                    beaconId = beaconId,
-                    bookmarkedAt = Clock.System.now().toString(),
-                    title = beacon?.displayDynamicTitle(),
-                    eventStartAt = schedule?.let {
-                        kotlinx.datetime.Instant.fromEpochMilliseconds(it.startEpochMs).toString()
-                    },
-                    eventEndAt = schedule?.let {
-                        kotlinx.datetime.Instant.fromEpochMilliseconds(it.endEpochMs).toString()
-                    },
-                    locationName = beacon?.metadata?.locationName,
-                    formattedAddress = beacon?.metadata?.formattedAddress,
-                    eventCategories = beacon?.metadata?.eventCategories.orEmpty(),
-                    latitude = beacon?.latitude,
-                    longitude = beacon?.longitude,
-                    expiresAt = beacon?.expiresAtEpochMs?.let {
-                        kotlinx.datetime.Instant.fromEpochMilliseconds(it).toString()
-                    },
-                )
-                val merged = (listOf(item) + AppDataManager.cachedEventBookmarks.value.filterNot { it.beaconId == beaconId })
-                    .distinctBy { it.beaconId }
-                AppDataManager.updateCachedEventBookmarks(merged)
-            } else {
-                AppDataManager.updateCachedEventBookmarks(
-                    AppDataManager.cachedEventBookmarks.value.filterNot { it.beaconId == beaconId },
-                )
-            }
-            // Reconcile with server list so titles/schedule stay accurate.
             mapBeaconRepository.fetchMyEventBookmarks().onSuccess { remote ->
+                // Avoid wiping Home "Saved" when a flaky empty response races an optimistic save.
+                if (remote.bookmarks.isEmpty() && AppDataManager.cachedEventBookmarks.value.isNotEmpty()) {
+                    return@onSuccess
+                }
                 AppDataManager.updateCachedEventBookmarks(remote.bookmarks)
             }
         }
@@ -1776,12 +1772,12 @@ class MapViewModel : ViewModel() {
 
     fun toggleBeaconCheckIn(beaconId: String) {
         val id = beaconId.trim()
-        if (id.isEmpty() || id in _beaconEngagementPendingIds.value) return
+        if (id.isEmpty() || id in _beaconCheckInPendingIds.value) return
         val previous = _beaconEngagementById.value[id]
         val currentlyCheckedIn = previous?.checkedIn == true
         if (currentlyCheckedIn) {
             earlyCheckInBeaconIds -= id
-            _beaconEngagementPendingIds.update { it + id }
+            _beaconCheckInPendingIds.update { it + id }
             updateBeaconEngagementCache { current ->
                 val base = current[id] ?: BeaconEngagementCacheEntry()
                 current + (id to base.copy(checkedIn = false, checkedInAt = null, localEarlyCheckIn = false))
@@ -1791,12 +1787,12 @@ class MapViewModel : ViewModel() {
                 if (!ensureClickWebAuthReady()) {
                     if (previous?.localEarlyCheckIn == true) earlyCheckInBeaconIds += id
                     restoreEngagementSnapshot(id, previous)
-                    _beaconEngagementPendingIds.update { it - id }
+                    _beaconCheckInPendingIds.update { it - id }
                     return@launch
                 }
                 mapBeaconRepository.checkOutBeacon(id).fold(
                     onSuccess = {
-                        _beaconEngagementPendingIds.update { it - id }
+                        _beaconCheckInPendingIds.update { it - id }
                         invalidateBeaconAttendeeDirectory(id)
                         if (_beaconRsvpById.value[id]?.currentUserSignedUp == true) {
                             loadBeaconAttendeeDirectory(id, forceRefresh = true)
@@ -1805,7 +1801,7 @@ class MapViewModel : ViewModel() {
                     onFailure = {
                         if (previous?.localEarlyCheckIn == true) earlyCheckInBeaconIds += id
                         restoreEngagementSnapshot(id, previous)
-                        _beaconEngagementPendingIds.update { it - id }
+                        _beaconCheckInPendingIds.update { it - id }
                         _engagementSnackbar.value = "Couldn't undo check-in"
                     },
                 )
@@ -1815,7 +1811,7 @@ class MapViewModel : ViewModel() {
 
         // Optimistic UI only — do not persist until the server confirms (or in-geofence early 409).
         // Persisting mid-flight caused "checked in" to survive app kill after a 403 far-away reject.
-        _beaconEngagementPendingIds.update { it + id }
+        _beaconCheckInPendingIds.update { it + id }
         updateBeaconEngagementCache(persistDisk = false) { current ->
             val base = current[id] ?: BeaconEngagementCacheEntry()
             current + (id to base.copy(checkedIn = true, localEarlyCheckIn = false))
@@ -1824,7 +1820,7 @@ class MapViewModel : ViewModel() {
         viewModelScope.launch {
             if (!locationService.hasLocationPermission()) {
                 restoreEngagementSnapshot(id, previous)
-                _beaconEngagementPendingIds.update { it - id }
+                _beaconCheckInPendingIds.update { it - id }
                 _engagementSnackbar.value = "Location access is required to check in"
                 return@launch
             }
@@ -1835,7 +1831,7 @@ class MapViewModel : ViewModel() {
                 (loc.latitude == 0.0 && loc.longitude == 0.0)
             ) {
                 restoreEngagementSnapshot(id, previous)
-                _beaconEngagementPendingIds.update { it - id }
+                _beaconCheckInPendingIds.update { it - id }
                 _engagementSnackbar.value = "Location required to check in"
                 return@launch
             }
@@ -1851,14 +1847,14 @@ class MapViewModel : ViewModel() {
                 )
                 if (distanceM > radiusM) {
                     restoreEngagementSnapshot(id, previous)
-                    _beaconEngagementPendingIds.update { it - id }
+                    _beaconCheckInPendingIds.update { it - id }
                     _engagementSnackbar.value = "You're too far to check in"
                     return@launch
                 }
             }
             if (!ensureClickWebAuthReady()) {
                 restoreEngagementSnapshot(id, previous)
-                _beaconEngagementPendingIds.update { it - id }
+                _beaconCheckInPendingIds.update { it - id }
                 _engagementSnackbar.value = "Couldn't check in — try again"
                 return@launch
             }
@@ -1879,7 +1875,7 @@ class MapViewModel : ViewModel() {
                             localEarlyCheckIn = false,
                         ))
                     }
-                    _beaconEngagementPendingIds.update { it - id }
+                    _beaconCheckInPendingIds.update { it - id }
                     invalidateBeaconAttendeeDirectory(id)
                     if (payload.checkedIn || _beaconRsvpById.value[id]?.currentUserSignedUp == true) {
                         loadBeaconAttendeeDirectory(id, forceRefresh = true)
@@ -1911,14 +1907,14 @@ class MapViewModel : ViewModel() {
                                     localEarlyCheckIn = true,
                                 ))
                             }
-                            _beaconEngagementPendingIds.update { it - id }
+                            _beaconCheckInPendingIds.update { it - id }
                             invalidateBeaconAttendeeDirectory(id)
                             _engagementSnackbar.value = "Checked in early — see you at the event"
                             return@fold
                         }
                     }
                     restoreEngagementSnapshot(id, previous)
-                    _beaconEngagementPendingIds.update { it - id }
+                    _beaconCheckInPendingIds.update { it - id }
                     _engagementSnackbar.value = beaconCheckInFailureMessage(
                         httpStatus = http?.status,
                         fallback = http?.message,
@@ -2210,6 +2206,13 @@ class MapViewModel : ViewModel() {
                 sourceBeaconType = insert.kind,
                 showCreatorName = showCreatorName,
             )
+            if (!ensureClickWebAuthReady()) {
+                _beaconInsertError.value = "Sign in again to drop beacons"
+                onRejectedEarly()
+                onRemoteFinished(false)
+                return@launch
+            }
+
             _mapBeacons.value = _mapBeacons.value + optimisticBeacon
             EventReminderCoordinator.rememberBeacon(optimisticBeacon)
             PlatformHapticsPolicy.heavyImpact()

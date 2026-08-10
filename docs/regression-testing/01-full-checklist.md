@@ -390,6 +390,12 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 ## 11. Beacons (`BeaconDropSheet`, beacon detail)
 
 - [ ] Drop beacon FAB / entry opens drop sheet
+- [ ] Drop sheet: switch Hub ↔ Event tabs without full-height flash / duplicated offset sheet
+- [ ] Drop sheet: text fields open keyboard flush to sheet bottom (no black gap)
+- [ ] Create verified click: tap Search connections stays in sheet (does not exit to Home)
+- [ ] Connection map pins stay at first-meet location after later community-beacon encounters
+- [ ] Home Saved events section loads after cold start / sign-in (retries when auth warms)
+- [ ] Group chat with blank `chat.id`: send creates group chat row then delivers message
 - [ ] Create event / vibe / social / hazard beacon with required fields
 - [ ] Event create: **Check-in area** chips set venue scale (`intimate` / `neighborhood` / `venue` / `campus`)
 - [ ] Event create: **address search** or “Use my location” required; can create event without being at the venue

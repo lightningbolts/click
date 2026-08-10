@@ -106,9 +106,14 @@ interface ChatRepository {
         metadata: JsonElement? = null,
         /** Client clock (ms) forwarded to click-web for `local_sent_at` on the inserted row. */
         clientLocalSentAtMs: Long? = null,
+        /** Fallback for gatekeeper when [chatId] is missing/invalid. */
+        connectionId: String? = null,
     ): Message?
 
     suspend fun ensureChatForConnection(connectionId: String): Chat?
+
+    /** Ensure a `chats` row exists for a verified group (keyed by `group_id`, not connection_id). */
+    suspend fun ensureChatForGroup(groupId: String): Chat?
 
     suspend fun sendMessageForConnection(
         connectionId: String,

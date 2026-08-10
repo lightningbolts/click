@@ -157,9 +157,14 @@ fun HomeScreen(
         if (currentUser?.id != null) {
             availabilityViewModel.refreshActiveAvailabilityIntents()
             homeViewModel.refreshHomeAvailabilityIntents()
+            homeViewModel.retrySavedEventBookmarksIfNeeded()
+            // Nearby tiles used to appear only after Map tab opened — prefetch from Home too.
+            AppDataManager.requestMapDiscoveryPrefetch()
         }
     }
     LaunchedEffect(Unit) {
+        homeViewModel.retrySavedEventBookmarksIfNeeded()
+        AppDataManager.requestMapDiscoveryPrefetch()
         while (isActive) {
             delay(60_000)
             archiveBannerNow = Clock.System.now().toEpochMilliseconds()

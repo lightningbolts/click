@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -40,8 +41,11 @@ object ClickSheetDefaults {
 fun ClickPlatformSheet(
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
-    /** iOS: host in UIScrollView for dismiss-at-top (same path as Drop beacon). */
+    /** When true, sheet can expand to full height (medium+large / Android partial). */
+    expandable: Boolean = true,
+    /** iOS: host in UIScrollView for dismiss-at-top. Prefer false for text-entry / LazyColumn forms. */
     useUiKitScrollHost: Boolean = true,
+    contentWindowInsets: @Composable () -> WindowInsets = { WindowInsets(0, 0, 0, 0) },
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val sheetColor = MaterialTheme.colorScheme.surface
@@ -52,11 +56,11 @@ fun ClickPlatformSheet(
         containerColor = sheetColor,
         contentColor = onSheet,
         scrimColor = Color.Black.copy(alpha = ClickSheetDefaults.ScrimAlpha),
-        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+        contentWindowInsets = contentWindowInsets,
         appColorScheme = MaterialTheme.colorScheme,
         appTypography = MaterialTheme.typography,
         modifier = modifier,
-        expandable = true,
+        expandable = expandable,
         useUiKitScrollHost = useUiKitScrollHost,
     ) {
         ProvideSheetSwipeDismiss(onDismissRequest = onDismissRequest) {
@@ -100,7 +104,7 @@ fun ClickSheetChrome(
                 fontWeight = FontWeight.SemiBold,
                 color = GlassSheetTokens.OnOled(),
             )
-            Spacer(Modifier.height(ClickSheetDefaults.TitleBottomSpacing))
+            Spacer(modifier.height(ClickSheetDefaults.TitleBottomSpacing))
         }
         content()
     }
@@ -124,7 +128,12 @@ fun ClickActionBottomSheet(
     )
 }
 
-/** Forms and tall content — same UIKit scroll-host contract as Drop beacon by default. */
+/**
+ * Forms and tall text-entry content.
+ *
+ * Compose owns scroll + IME (`useUiKitScrollHost=false`) so keyboard focus stays stable;
+ * sheets remain expandable to full height with platform swipe-to-dismiss.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ClickFormBottomSheet(
@@ -135,20 +144,22 @@ fun ClickFormBottomSheet(
     @Suppress("UNUSED_PARAMETER") sheetMaxWidth: Dp = Dp.Unspecified,
     @Suppress("UNUSED_PARAMETER") scrimColor: Color =
         Color.Black.copy(alpha = ClickSheetDefaults.ScrimAlpha),
-    @Suppress("UNUSED_PARAMETER") contentWindowInsets: @Composable () -> WindowInsets =
-        { WindowInsets(0, 0, 0, 0) },
+    contentWindowInsets: @Composable () -> WindowInsets = { WindowInsets.ime },
     @Suppress("UNUSED_PARAMETER") dragHandle: @Composable () -> Unit = {},
     /**
-     * iOS: prefer true (Drop-beacon path). Set false only for sheets that embed LazyColumn
-     * tabs and must own Compose scroll (profile).
+     * iOS: false so Compose owns scroll + IME for text fields / LazyColumn.
+     * Set true only when UIKit scroll-host dismiss-at-top is required.
      */
-    useUiKitScrollHost: Boolean = true,
+    useUiKitScrollHost: Boolean = false,
+    expandable: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     ClickPlatformSheet(
         onDismissRequest = onDismissRequest,
         modifier = modifier,
+        expandable = expandable,
         useUiKitScrollHost = useUiKitScrollHost,
+        contentWindowInsets = contentWindowInsets,
         content = content,
     )
 }

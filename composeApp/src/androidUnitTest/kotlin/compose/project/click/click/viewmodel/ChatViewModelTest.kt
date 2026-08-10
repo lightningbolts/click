@@ -7,6 +7,7 @@ import compose.project.click.click.data.models.Chat
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.GeoLocation
+import compose.project.click.click.data.models.GroupCliqueDetails
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageDeliveryState
 import compose.project.click.click.data.models.User
@@ -722,5 +723,88 @@ class ChatViewModelTest {
         val list = vm.chatListState.value as ChatListState.Success
         assertEquals("Live preview text", list.chats.first().lastMessage?.content)
         assertEquals(msgTs, list.chats.first().lastMessage?.timeCreated)
+    }
+
+    @Test
+    fun sendMessage_groupChatWithBlankChatId_ensuresGroupChatThenSends() = runVmTest {
+        val selfId = "user-self"
+        val otherId = "user-other"
+        val groupId = "group-1"
+        val connectionId = groupId
+        val ensuredChatId = "chat-group-1"
+        val now = 1_700_000_000_000L
+
+        val connection = Connection(
+            id = connectionId,
+            created = now,
+            expiry = Long.MAX_VALUE,
+            geo_location = GeoLocation(0.0, 0.0),
+            user_ids = listOf(selfId, otherId),
+            chat = Chat(id = null, groupId = groupId),
+            has_begun = true,
+            expiry_state = "active",
+            isGroup = true,
+        )
+        val details = ChatWithDetails(
+            chat = connection.chat,
+            connection = connection,
+            otherUser = User(id = otherId, name = "Other"),
+            lastMessage = null,
+            unreadCount = 0,
+            groupClique = GroupCliqueDetails(
+                groupId = groupId,
+                name = "Squad",
+                createdByUserId = selfId,
+                keyAnchorUserId = selfId,
+                memberUserIds = listOf(selfId, otherId),
+            ),
+        )
+
+        var ensureGroupCalls = 0
+        val fake = FakeChatRepository(
+            onFetchChatWithDetails = { _, uid -> if (uid == selfId) details else null },
+            onFetchMessagesForChat = { _, _ -> emptyList() },
+            onFetchChatParticipants = {
+                listOf(User(id = selfId, name = "Me"), User(id = otherId, name = "Other"))
+            },
+            onFetchReactionsForChat = { emptyList() },
+            onEnsureChatForGroup = { gid ->
+                ensureGroupCalls += 1
+                assertEquals(groupId, gid)
+                Chat(id = ensuredChatId, groupId = groupId)
+            },
+            onSendMessage = { chatId, _, content, _, _, _ ->
+                assertEquals(ensuredChatId, chatId)
+                Message(
+                    id = "msg-group-1",
+                    user_id = selfId,
+                    content = content,
+                    timeCreated = now + 1,
+                    isRead = false,
+                )
+            },
+            onGetUserById = { id ->
+                when (id) {
+                    selfId -> User(id = selfId, name = "Me", createdAt = 0L)
+                    otherId -> User(id = otherId, name = "Other", createdAt = 0L)
+                    else -> null
+                }
+            },
+        )
+
+        val vm = testChatViewModel(chatRepository = fake)
+        vm.setCurrentUser(selfId)
+        advanceUntilIdle()
+        vm.loadChatMessages(connectionId)
+        advanceUntilIdle()
+        vm.updateMessageInput("group hi")
+        vm.sendMessage()
+        advanceUntilIdle()
+
+        assertEquals(1, ensureGroupCalls)
+        val messagesState = vm.chatMessagesState.value
+        assertIs<ChatMessagesState.Success>(messagesState)
+        assertTrue(messagesState.messages.any { it.message.id == "msg-group-1" })
+        assertEquals(ensuredChatId, messagesState.chatDetails.chat.id)
     }
 }

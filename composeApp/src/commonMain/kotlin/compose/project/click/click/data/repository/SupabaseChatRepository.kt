@@ -784,6 +784,12 @@ class SupabaseChatRepository(
     )
 
     @Serializable
+    private data class GroupChatInsert(
+        @SerialName("group_id")
+        val groupId: String
+    )
+
+    @Serializable
     private data class MessageRow(
         val id: String,
         @SerialName("chat_id")
@@ -1462,6 +1468,7 @@ class SupabaseChatRepository(
         messageType: String,
         metadata: JsonElement?,
         clientLocalSentAtMs: Long?,
+        connectionId: String?,
     ): Message? {
         return try {
             val crypto = resolveChatCrypto(chatId, userId)
@@ -1479,6 +1486,8 @@ class SupabaseChatRepository(
                 ?: tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
                 ?: return null
             val enrichedMetadata = enrichMediaEncryptionMetadata(messageType, metadata)
+            val resolvedConnectionId = connectionId
+                ?: ChatSessionCaches.peekConnectionIdForChat(chatId)
 
             val firstSend = apiClient.sendMessage(
                 chatId = chatId,
@@ -1488,20 +1497,33 @@ class SupabaseChatRepository(
                 messageType = messageType,
                 metadata = enrichedMetadata,
                 localSentAtMs = clientLocalSentAtMs,
+                connectionId = resolvedConnectionId,
             )
             val insertedWire = firstSend.getOrElse { firstError ->
+                println(
+                    "ChatRepository: sendMessage failed chatId=$chatId: ${firstError.redactedRestMessage()}",
+                )
                 val refreshed = if (firstError.isAuthFailure()) refreshedJwtAfterAuthFailure() else null
-                refreshed?.let { freshJwt ->
+                if (refreshed != null) {
                     apiClient.sendMessage(
                         chatId = chatId,
                         userId = userId,
                         content = wireContent,
-                        authToken = freshJwt,
+                        authToken = refreshed,
                         messageType = messageType,
                         metadata = enrichedMetadata,
                         localSentAtMs = clientLocalSentAtMs,
-                    ).getOrNull()
-                } ?: return null
+                        connectionId = resolvedConnectionId,
+                    ).getOrElse { retryError ->
+                        println(
+                            "ChatRepository: sendMessage retry failed chatId=$chatId: " +
+                                retryError.redactedRestMessage(),
+                        )
+                        throw retryError
+                    }
+                } else {
+                    throw firstError
+                }
             }
 
             val decrypted = decryptMessage(insertedWire, crypto)
@@ -1536,7 +1558,8 @@ class SupabaseChatRepository(
             decrypted
         } catch (e: Exception) {
             println("Error sending message: ${e.redactedRestMessage()}")
-            null
+            // Propagate so ChatViewModel can surface the gatekeeper/API error body.
+            throw e
         }
     }
 
@@ -1586,19 +1609,114 @@ class SupabaseChatRepository(
             )
         }
 
-        val inserted = supabase.from("chats")
-            .insert(ChatInsert(connectionId = connectionId)) {
-                select()
-            }
-            .decodeSingle<ChatRow>()
+        return try {
+            val inserted = supabase.from("chats")
+                .insert(ChatInsert(connectionId = connectionId)) {
+                    select()
+                }
+                .decodeSingle<ChatRow>()
 
-        inserted.connectionId?.let { rememberChatConnectionRouting(inserted.id, it) }
-        return Chat(
-            id = inserted.id,
-            connectionId = inserted.connectionId,
-            groupId = inserted.groupId,
-            messages = emptyList(),
-        )
+            inserted.connectionId?.let { rememberChatConnectionRouting(inserted.id, it) }
+            Chat(
+                id = inserted.id,
+                connectionId = inserted.connectionId,
+                groupId = inserted.groupId,
+                messages = emptyList(),
+            )
+        } catch (e: Exception) {
+            // Unique-constraint race: another client created the row first.
+            val raced = supabase.from("chats")
+                .select {
+                    filter { eq("connection_id", connectionId) }
+                    limit(1)
+                }
+                .decodeList<ChatRow>()
+                .firstOrNull()
+            if (raced != null) {
+                raced.connectionId?.let { rememberChatConnectionRouting(raced.id, it) }
+                return Chat(
+                    id = raced.id,
+                    connectionId = raced.connectionId,
+                    groupId = raced.groupId,
+                    messages = emptyList(),
+                )
+            }
+            throw e
+        }
+    }
+
+    override suspend fun ensureChatForGroup(groupId: String): Chat? {
+        return try {
+            runCatching { ensureFreshJwtForChat() }
+            ensureChatForGroupOnce(groupId)
+        } catch (e: Exception) {
+            if (e.isAuthFailure()) {
+                val refreshed = refreshedJwtAfterAuthFailure()
+                if (refreshed != null) {
+                    return try {
+                        ensureChatForGroupOnce(groupId)
+                    } catch (retry: Exception) {
+                        println(
+                            "Error ensuring chat for group $groupId after refresh: " +
+                                retry.redactedRestMessage(),
+                        )
+                        null
+                    }
+                }
+            }
+            println("Error ensuring chat for group $groupId: ${e.redactedRestMessage()}")
+            null
+        }
+    }
+
+    private suspend fun ensureChatForGroupOnce(groupId: String): Chat? {
+        val existing = supabase.from("chats")
+            .select {
+                filter { eq("group_id", groupId) }
+                limit(1)
+            }
+            .decodeList<ChatRow>()
+            .firstOrNull()
+
+        if (existing != null) {
+            return Chat(
+                id = existing.id,
+                connectionId = existing.connectionId,
+                groupId = existing.groupId,
+                messages = emptyList(),
+            )
+        }
+
+        return try {
+            val inserted = supabase.from("chats")
+                .insert(GroupChatInsert(groupId = groupId)) {
+                    select()
+                }
+                .decodeSingle<ChatRow>()
+            Chat(
+                id = inserted.id,
+                connectionId = inserted.connectionId,
+                groupId = inserted.groupId,
+                messages = emptyList(),
+            )
+        } catch (e: Exception) {
+            val raced = supabase.from("chats")
+                .select {
+                    filter { eq("group_id", groupId) }
+                    limit(1)
+                }
+                .decodeList<ChatRow>()
+                .firstOrNull()
+            if (raced != null) {
+                return Chat(
+                    id = raced.id,
+                    connectionId = raced.connectionId,
+                    groupId = raced.groupId,
+                    messages = emptyList(),
+                )
+            }
+            throw e
+        }
     }
 
     override suspend fun sendMessageForConnection(
@@ -1828,8 +1946,17 @@ class SupabaseChatRepository(
 
     private suspend fun normalizeChatDetailsRow(row: ChatWithDetails): ChatWithDetails {
         return runCatching {
-            if (!row.chat.id.isNullOrBlank() || row.groupClique != null) {
+            if (!row.chat.id.isNullOrBlank()) {
                 row
+            } else if (row.groupClique != null) {
+                val groupId = row.groupClique.groupId
+                val ensured = ensureChatForGroup(groupId) ?: return@runCatching row
+                row.copy(
+                    chat = row.chat.copy(
+                        id = ensured.id,
+                        groupId = groupId,
+                    ),
+                )
             } else {
                 val ensured = ensureChatForConnection(row.connection.id) ?: return@runCatching row
                 row.copy(

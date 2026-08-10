@@ -609,7 +609,10 @@ data class Connection(
         return user_ids.indexOf(userId).takeIf { it >= 0 }
     }
 
-    /** Map-ready coordinates: legacy [geo_location], then latest encounter GPS. */
+    /**
+     * Map pin coordinates: legacy [geo_location], then **origin** (first-meet) encounter GPS.
+     * Do not use [latestEncounter] for pins — later beacon/proximity crossings would move the pin.
+     */
     fun connectionMapGeo(): GeoLocation? {
         val direct = geo_location
         if (direct != null && direct.lat.isFinite() && direct.lon.isFinite() &&
@@ -617,7 +620,7 @@ data class Connection(
         ) {
             return direct
         }
-        val e = latestEncounter() ?: originEncounter
+        val e = originEncounter ?: latestEncounter()
         val la = e?.gpsLat
         val lo = e?.gpsLon
         if (la != null && lo != null && la.isFinite() && lo.isFinite() &&
@@ -625,7 +628,9 @@ data class Connection(
         ) {
             return GeoLocation(lat = la, lon = lo)
         }
-        return latestMemoryCapsule()?.geoLocation?.takeIf { g ->
+        return originMemoryCapsule()?.geoLocation?.takeIf { g ->
+            g.lat.isFinite() && g.lon.isFinite() && !(g.lat == 0.0 && g.lon == 0.0)
+        } ?: latestMemoryCapsule()?.geoLocation?.takeIf { g ->
             g.lat.isFinite() && g.lon.isFinite() && !(g.lat == 0.0 && g.lon == 0.0)
         }
     }

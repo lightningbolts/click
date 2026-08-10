@@ -3,6 +3,7 @@ package compose.project.click.click.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.ClickWebAuthCoordinator
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.collapseOneToOneConnectionsByPeer // pragma: allowlist secret
@@ -455,10 +456,18 @@ class HomeViewModel(
         }
     }
 
+    private var bookmarksFetchPending = false
+
     private suspend fun loadSavedEventBookmarks() {
         try {
+            if (!ClickWebAuthCoordinator.ensureReady()) {
+                bookmarksFetchPending = true
+                println("Saved event bookmarks: click-web auth not ready; will retry")
+                return
+            }
             mapBeaconRepository.fetchMyEventBookmarks(limit = 50).fold(
                 onSuccess = { response ->
+                    bookmarksFetchPending = false
                     val next = response.bookmarks
                         .distinctBy { it.beaconId }
                         .sortedByDescending { it.bookmarkedAt.orEmpty() }
@@ -466,12 +475,24 @@ class HomeViewModel(
                     AppDataManager.updateCachedEventBookmarks(next)
                 },
                 onFailure = { e ->
+                    bookmarksFetchPending = true
                     println("Error loading saved event bookmarks: ${e.redactedRestMessage()}")
                     // Keep disk-cached bookmarks visible; do not flash an empty section.
                 },
             )
         } catch (e: Exception) {
+            bookmarksFetchPending = true
             println("Error loading saved event bookmarks: ${e.redactedRestMessage()}")
+        }
+    }
+
+    /** Retry Home saved-events fetch after auth becomes ready (sign-in / tab focus). */
+    fun retrySavedEventBookmarksIfNeeded() {
+        // Always refetch when empty (covers cold start where cache missed) or prior auth miss.
+        if (!bookmarksFetchPending && _savedEventBookmarks.value.isNotEmpty()) return
+        bookmarksFetchPending = true
+        viewModelScope.launch {
+            loadSavedEventBookmarks()
         }
     }
 
@@ -652,7 +673,9 @@ class HomeViewModel(
      */
     fun refresh() {
         dataLoaded = false
+        bookmarksFetchPending = true
         AppDataManager.refresh(force = true)
+        retrySavedEventBookmarksIfNeeded()
     }
     
     /**

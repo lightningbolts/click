@@ -329,12 +329,18 @@ internal fun ConnectionMemberPickerSheet(
         }
     }
 
-    ClickFormBottomSheet(onDismissRequest = onDismissRequest) {
+    // Compose-owned scroll + IME (not UIKit scroll host) so search focus cannot
+    // recreate/dismiss the native page sheet and bounce to Home.
+    ClickFormBottomSheet(
+        onDismissRequest = onDismissRequest,
+        useUiKitScrollHost = false,
+        expandable = true,
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .fillMaxHeight()
                 .imePadding()
-                .sheetBodyScroll()
                 .background(sheetPageBackground())
                 .padding(horizontal = 20.dp, vertical = 12.dp)
                 .padding(bottom = 28.dp),
@@ -397,31 +403,44 @@ internal fun ConnectionMemberPickerSheet(
                 modifier = Modifier.padding(vertical = 4.dp),
                 color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f),
             )
-            if (candidates.isEmpty()) {
-                Text(
-                    text = "No eligible connections yet.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = onVariant,
-                    modifier = Modifier.padding(vertical = 8.dp),
-                )
-            } else if (filteredCandidates.isEmpty()) {
-                Text(
-                    text = "No matches for \"$searchQuery\".",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = onVariant,
-                    modifier = Modifier.padding(vertical = 8.dp),
-                )
-            } else {
-                filteredCandidates.forEachIndexed { index, user ->
-                    val selected = user.id in selectedIds
-                    val enabled = selected ||
-                        (eligibilityReady && (eligibilityMask.isEmpty() || eligibilityMask[user.id] == true))
-                    ConnectionPickerUserRow(
-                        user = user,
-                        selected = selected,
-                        enabled = enabled,
-                        onToggle = { toggleUser(user.id) },
+            when {
+                candidates.isEmpty() -> {
+                    Text(
+                        text = "No eligible connections yet.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = onVariant,
+                        modifier = Modifier.padding(vertical = 8.dp),
                     )
+                }
+                filteredCandidates.isEmpty() -> {
+                    Text(
+                        text = "No matches for \"$searchQuery\".",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = onVariant,
+                        modifier = Modifier.padding(vertical = 8.dp),
+                    )
+                }
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = true),
+                    ) {
+                        items(
+                            items = filteredCandidates,
+                            key = { it.id },
+                        ) { user ->
+                            val selected = user.id in selectedIds
+                            val enabled = selected ||
+                                (eligibilityReady && (eligibilityMask.isEmpty() || eligibilityMask[user.id] == true))
+                            ConnectionPickerUserRow(
+                                user = user,
+                                selected = selected,
+                                enabled = enabled,
+                                onToggle = { toggleUser(user.id) },
+                            )
+                        }
+                    }
                 }
             }
             Row(

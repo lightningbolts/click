@@ -70,6 +70,7 @@ import compose.project.click.click.ui.components.ProfileSheetLocalMessage // pra
 import compose.project.click.click.network.ConnectivityMonitor
 import compose.project.click.click.network.NetworkConnectivityMonitor
 import compose.project.click.click.util.isOfflineNetworkFailure
+import compose.project.click.click.util.isPersistedApiChatId
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import compose.project.click.click.util.dedupeOneToOneChatsByPeer
 import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
@@ -1104,7 +1105,9 @@ class ChatViewModel(
         }
         val lastAt = listOfNotNull(connection.last_message_at, lastMessage.timeCreated).maxOrNull()
         return listRow.copy(
-            chat = listRow.chat.copy(id = thread.chatId),
+            chat = listRow.chat.copy(
+                id = thread.chatId.takeIf { isPersistedApiChatId(it) } ?: listRow.chat.id,
+            ),
             connection = connection.copy(
                 last_message_at = lastAt,
                 chat = connection.chat.copy(messages = listOf(lastMessage)),
@@ -1795,39 +1798,44 @@ class ChatViewModel(
 
                 val resolvedConnectionId = chatDetails.connection.id
 
-                var apiChatId = chatDetails.chat.id?.takeIf { it.isNotBlank() }
+                var apiChatId = chatDetails.chat.id?.takeIf { isPersistedApiChatId(it) }
                 var ensureAttempt = 0
-                while (apiChatId.isNullOrBlank() && ensureAttempt < 4) {
+                while (!isPersistedApiChatId(apiChatId) && ensureAttempt < 4) {
                     if (ensureAttempt > 0) delay(120L * ensureAttempt)
                     ensureActive()
-                    apiChatId = chatDetails.chat.id?.takeIf { it.isNotBlank() }
-                        ?: resolveOrCreateApiChatId(resolvedConnectionId)
+                    apiChatId = chatDetails.chat.id?.takeIf { isPersistedApiChatId(it) }
+                        ?: resolveOrCreateApiChatId(resolvedConnectionId, chatDetails)
                     ensureAttempt++
                 }
-                if (apiChatId.isNullOrBlank()) {
+                val persistedApiChatId = apiChatId?.takeIf { isPersistedApiChatId(it) } ?: run {
                     _chatMessagesState.value = ChatMessagesState.Error("Unable to start chat")
                     return@launch
                 }
-                currentApiChatId = apiChatId
+                currentApiChatId = persistedApiChatId
 
-                if (previousApiChatId != null && previousApiChatId != apiChatId) {
+                if (previousApiChatId != null && previousApiChatId != persistedApiChatId) {
                     chatRepository.leaveChatEphemeralChannel(previousApiChatId)
                 }
 
-                val hydratedChatDetails = if (chatDetails.chat.id == apiChatId) {
+                val hydratedChatDetails = if (chatDetails.chat.id == persistedApiChatId) {
                     chatDetails
                 } else {
                     chatDetails.copy(
                         chat = chatDetails.chat.copy(
-                            id = apiChatId,
-                            connectionId = resolvedConnectionId,
+                            id = persistedApiChatId,
+                            connectionId = if (chatDetails.groupClique != null) {
+                                chatDetails.chat.connectionId
+                            } else {
+                                resolvedConnectionId
+                            },
+                            groupId = chatDetails.groupClique?.groupId ?: chatDetails.chat.groupId,
                         ),
                     )
                 }
 
                 if (hydratedChatDetails.groupClique == null) {
                     chatRepository.cacheEncryptionKeys(
-                        apiChatId,
+                        persistedApiChatId,
                         hydratedChatDetails.connection.id,
                         hydratedChatDetails.connection.user_ids,
                     )
@@ -1857,7 +1865,7 @@ class ChatViewModel(
 
                 val ephemeralDeferred = async {
                     chatRepository.joinChatEphemeralChannel(
-                        apiChatId,
+                        persistedApiChatId,
                         userId,
                         hydratedChatDetails.otherUser.id,
                     )
@@ -1867,17 +1875,17 @@ class ChatViewModel(
                     if (payload != null && payload.messages.isNotEmpty()) {
                         scheduleBackgroundChatPayloadRefresh(
                             hydratedChatDetails = hydratedChatDetails,
-                            apiChatId = apiChatId,
+                            apiChatId = persistedApiChatId,
                             userId = userId,
                             connectionId = resolvedConnectionId,
                         )
                     } else {
-                        payload = buildChatPayloadWithRetry(hydratedChatDetails, apiChatId, userId)
+                        payload = buildChatPayloadWithRetry(hydratedChatDetails, persistedApiChatId, userId)
                     }
                 } else {
                     scheduleBackgroundChatPayloadRefresh(
                         hydratedChatDetails = hydratedChatDetails,
-                        apiChatId = apiChatId,
+                        apiChatId = persistedApiChatId,
                         userId = userId,
                         connectionId = resolvedConnectionId,
                     )
@@ -1890,7 +1898,7 @@ class ChatViewModel(
                 syncPrefetchFromHotTimeline(resolvedConnectionId)
                 applyOpenedChatPayload(
                     hydratedChatDetails = hydratedChatDetails,
-                    apiChatId = apiChatId,
+                    apiChatId = persistedApiChatId,
                     userId = userId,
                     connectionId = resolvedConnectionId,
                     payload = payload,
@@ -1898,10 +1906,10 @@ class ChatViewModel(
 
                 ephemeralDeferred.await()
 
-                subscribeToNewMessages(apiChatId, userId)
-                startTypingMonitoring(apiChatId)
-                startPeerOnlineMonitoring(apiChatId, hydratedChatDetails.otherUser.id)
-                startActiveChatSync(apiChatId, userId)
+                subscribeToNewMessages(persistedApiChatId, userId)
+                startTypingMonitoring(persistedApiChatId)
+                startPeerOnlineMonitoring(persistedApiChatId, hydratedChatDetails.otherUser.id)
+                startActiveChatSync(persistedApiChatId, userId)
 
                 if (vibeCheckEnabled) {
                     startVibeCheckTimer(chatDetails.connection, userId)
@@ -2917,39 +2925,72 @@ class ChatViewModel(
         AppDataManager.updateInboxFeedChatActivity(resolvedListKey, message)
     }
 
-    private suspend fun resolveOrCreateApiChatId(connectionId: String): String? {
+    private suspend fun resolveOrCreateApiChatId(
+        connectionId: String,
+        detailsOverride: ChatWithDetails? = null,
+    ): String? {
         val currentState = _chatMessagesState.value as? ChatMessagesState.Success
-        if (currentState?.chatDetails?.groupClique != null) {
-            val id = currentState.chatDetails.chat.id?.takeIf { it.isNotBlank() } ?: return null
-            currentApiChatId = id
-            return id
+        val details = detailsOverride
+            ?: currentState?.chatDetails?.takeIf {
+                it.connection.id == connectionId ||
+                    it.groupClique?.groupId == connectionId ||
+                    it.chat.groupId == connectionId
+            }
+        val groupClique = details?.groupClique
+        if (groupClique != null) {
+            val existingId = details.chat.id?.takeIf { isPersistedApiChatId(it) }
+            if (existingId != null) {
+                currentApiChatId = existingId
+                return existingId
+            }
+            val ensured = chatRepository.ensureChatForGroup(groupClique.groupId) ?: return null
+            val ensuredId = ensured.id?.takeIf { isPersistedApiChatId(it) } ?: return null
+            currentApiChatId = ensuredId
+            if (currentState != null &&
+                (currentState.chatDetails.groupClique?.groupId == groupClique.groupId ||
+                    currentState.chatDetails.connection.id == connectionId)
+            ) {
+                _chatMessagesState.value = currentState.copy(
+                    chatDetails = currentState.chatDetails.copy(
+                        chat = currentState.chatDetails.chat.copy(
+                            id = ensuredId,
+                            groupId = groupClique.groupId,
+                        )
+                    )
+                )
+            }
+            return ensuredId
         }
-        val existingChatId = currentState
-            ?.takeIf { it.chatDetails.connection.id == connectionId }
-            ?.chatDetails
-            ?.chat
-            ?.id
+        val existingChatId = details?.chat?.id?.takeIf { isPersistedApiChatId(it) }
+            ?: currentState
+                ?.takeIf { it.chatDetails.connection.id == connectionId }
+                ?.chatDetails
+                ?.chat
+                ?.id
+                ?.takeIf { isPersistedApiChatId(it) }
+            ?: currentApiChatId?.takeIf { isPersistedApiChatId(it) }
 
-        if (!existingChatId.isNullOrBlank()) {
+        if (existingChatId != null) {
             currentApiChatId = existingChatId
             return existingChatId
         }
 
         val ensuredChat = chatRepository.ensureChatForConnection(connectionId) ?: return null
-        currentApiChatId = ensuredChat.id
+        val ensuredId = ensuredChat.id?.takeIf { isPersistedApiChatId(it) } ?: return null
+        currentApiChatId = ensuredId
 
         if (currentState != null && currentState.chatDetails.connection.id == connectionId) {
             _chatMessagesState.value = currentState.copy(
                 chatDetails = currentState.chatDetails.copy(
                     chat = currentState.chatDetails.chat.copy(
-                        id = ensuredChat.id,
+                        id = ensuredId,
                         connectionId = connectionId
                     )
                 )
             )
         }
 
-        return ensuredChat.id
+        return ensuredId
     }
 
     fun sendMessage() {
@@ -2984,21 +3025,23 @@ class ChatViewModel(
         localTypingIdleJob = null
         _isLocalTypingActive.value = false
         val successState = _chatMessagesState.value as? ChatMessagesState.Success
-        val typingChatId = successState?.chatDetails?.chat?.id?.takeIf { it.isNotBlank() }
-            ?: currentApiChatId?.takeIf { it.isNotBlank() }
+        val typingChatId = successState?.chatDetails?.chat?.id?.takeIf { isPersistedApiChatId(it) }
+            ?: currentApiChatId?.takeIf { isPersistedApiChatId(it) }
         if (typingChatId != null) {
             onUserStoppedTyping(typingChatId)
         }
 
         viewModelScope.launch(Dispatchers.Main.immediate) {
-            val provisionalChatId = successState?.chatDetails?.chat?.id?.takeIf { it.isNotBlank() }
-                ?: currentApiChatId?.takeIf { it.isNotBlank() }
+            val openThreadReady = successState != null && (
+                successState.chatDetails.connection.id == connectionId ||
+                    successState.chatDetails.groupClique?.groupId == connectionId
+                )
             val localMs = Clock.System.now().toEpochMilliseconds()
             val tempId = "temp-$localMs-${Random.nextLong()}"
             val currentUserFast = AppDataManager.currentUser.value?.takeIf { it.id == userId }
                 ?: User(id = userId, name = "You", createdAt = 0L)
 
-            if (provisionalChatId != null) {
+            if (openThreadReady) {
                 val optimistic = Message(
                     id = tempId,
                     user_id = userId,
@@ -3015,7 +3058,16 @@ class ChatViewModel(
             }
 
             val apiChatId = resolveOrCreateApiChatId(connectionId) ?: run {
-                if (provisionalChatId != null) {
+                if (openThreadReady) {
+                    markOptimisticSendFailed(tempId)
+                }
+                _messageSendError.value = "Failed to send — unable to start chat"
+                _messageInput.value = content
+                updateMessageInput(content)
+                return@launch
+            }
+            if (!isPersistedApiChatId(apiChatId)) {
+                if (openThreadReady) {
                     markOptimisticSendFailed(tempId)
                 }
                 _messageSendError.value = "Failed to send — unable to start chat"
@@ -3025,8 +3077,14 @@ class ChatViewModel(
             }
             onUserStoppedTyping(apiChatId)
             val currentUser = resolveMessageUser(userId, apiChatId) ?: currentUserFast
+            // Prefer real connection UUID for gatekeeper fallback (never a group id / blank).
+            val sendConnectionId = successState?.chatDetails?.chat?.connectionId
+                ?.takeIf { it.isNotBlank() && it != apiChatId }
+                ?: successState?.chatDetails?.connection?.id
+                    ?.takeIf { it.isNotBlank() && successState.chatDetails.groupClique == null }
+                ?: connectionId.takeIf { successState?.chatDetails?.groupClique == null }
 
-            if (provisionalChatId == null) {
+            if (!openThreadReady) {
                 val optimistic = Message(
                     id = tempId,
                     user_id = userId,
@@ -3051,6 +3109,7 @@ class ChatViewModel(
                         content = content,
                         metadata = metadataCaptured,
                         clientLocalSentAtMs = localMs,
+                        connectionId = sendConnectionId,
                     )
                     if (message != null) {
                         _replyingTo.value = null
@@ -3072,11 +3131,11 @@ class ChatViewModel(
                         _messageSendError.value = OFFLINE_SEND_NOTICE
                     } else {
                         markOptimisticSendFailed(tempId)
-                        _messageSendError.value =
-                            "Failed to send — ${e.redactedRestMessage().ifBlank { "encryption or network error" }}"
+                        val detail = e.redactedRestMessage().ifBlank { "encryption or network error" }
+                        _messageSendError.value = "Failed to send — $detail"
                         _messageInput.value = content
                         updateMessageInput(content)
-                        println("Error sending message: ${e.redactedRestMessage()}")
+                        println("Error sending message: $detail")
                     }
                 } finally {
                     _isMessageSubmitInProgress.value = false

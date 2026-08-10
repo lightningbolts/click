@@ -5,6 +5,7 @@ import compose.project.click.click.qr.CLICK_WEB_BASE_URL
 import compose.project.click.click.util.redactedRestMessage
 import io.ktor.client.*
 import io.ktor.client.call.*
+import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
@@ -120,7 +121,8 @@ class ChatApiClient(
 
     @Serializable
     private data class ClickWebSendMessageBody(
-        @SerialName("chat_id") val chat_id: String,
+        @SerialName("chat_id") val chat_id: String? = null,
+        @SerialName("connection_id") val connection_id: String? = null,
         @SerialName("user_id") val user_id: String,
         val content: String,
         @SerialName("message_type") val message_type: String? = null,
@@ -457,6 +459,7 @@ class ChatApiClient(
         messageType: String? = null,
         metadata: JsonElement? = null,
         localSentAtMs: Long? = null,
+        connectionId: String? = null,
     ): Result<Message> {
         return try {
             val response = client.post("$clickWebBaseUrl/api/chat/messages") {
@@ -464,7 +467,11 @@ class ChatApiClient(
                 contentType(ContentType.Application.Json)
                 setBody(
                     ClickWebSendMessageBody(
-                        chat_id = chatId,
+                        // Never send optimistic/temp ids as chat_id (Postgres UUID + "Chat not found").
+                        chat_id = chatId.takeIf {
+                            compose.project.click.click.util.isPersistedApiChatId(it)
+                        },
+                        connection_id = connectionId?.takeIf { it.isNotBlank() },
                         user_id = userId,
                         content = content,
                         message_type = messageType,
@@ -478,12 +485,27 @@ class ChatApiClient(
                 val envelope = response.body<ClickWebMessageEnvelope>()
                 Result.success(envelope.message.toMessage())
             } else {
-                Result.failure(Exception("Failed to send message: ${response.status}"))
+                Result.failure(Exception(readClickWebErrorMessage(response)))
             }
         } catch (e: Exception) {
             println("Error sending message: ${e.redactedRestMessage()}")
             Result.failure(e)
         }
+    }
+
+    private suspend fun readClickWebErrorMessage(response: HttpResponse): String {
+        val status = response.status.value
+        val fromJson = runCatching { response.body<ErrorResponse>() }.getOrNull()?.error?.trim().orEmpty()
+        if (fromJson.isNotEmpty()) return fromJson.take(200)
+        val raw = runCatching { response.bodyAsText() }.getOrNull()?.trim().orEmpty()
+        if (raw.contains("<!DOCTYPE", ignoreCase = true) || raw.contains("<html", ignoreCase = true)) {
+            return when (status) {
+                401, 403 -> "Session expired. Sign in again."
+                in 500..599 -> "Server error ($status). Try again later."
+                else -> "Request failed ($status)."
+            }
+        }
+        return raw.take(200).ifEmpty { "Failed to send message: $status" }
     }
 
     /**

@@ -80,6 +80,21 @@ High-signal unit tests to keep green: `ChatSwipeMathTest`, `ChatViewModelTest`, 
 
 **Last §0 run (Events / check-in / presence / BLE timeline, 2026-08-01):** Android `compileDebugKotlinAndroid` PASS · iOS `compileKotlinIosSimulatorArm64` PASS · `testDebugUnitTest` PASS · `iosSimulatorArm64Test` PASS · click-web `npm test` PASS (175) · `npm run build` PASS.
 
+**Last verification (chat/map-pin/sheet/home-bookmark regressions, 2026-08-10):** Android
+`compileDebugKotlinAndroid` + high-signal `testDebugUnitTest` PASS (`ConnectionMapGeoTest`,
+`ChatViewModelTest` group ensure, `CallLayoutPolicyTest`, `ResolveChatBeaconForDetailTest`) ·
+iOS `compileKotlinIosSimulatorArm64` (run in §0 gate) · click-web Jest targets PASS
+(`connectionMapPinGeo`, `event-bookmarks.route`, `hubMessageCooldown`, `callLayoutPolicy`).
+Fixes: origin map pins; form sheets Compose-owned IME (no UIKit scroll-host recreate);
+group `ensureChatForGroup`; Home bookmarks auth-ready retry; beacon POST never 500s after
+successful insert.
+
+**Last verification (chat-not-found / RSVP / bookmark / Home / sheets, 2026-08-10 follow-up):**
+Reject temp/`non-UUID` `chat_id` client+server; message POST falls through to `connection_id`
+on stale chat UUID; RSVP DELETE uses admin client; bookmark/check-in pending sets split;
+Home requests map discovery prefetch; sheets stay `expandable=true` with Compose scroll;
+Hub↔Event clears focus before category swap; event date-range re-applies selection span.
+
 **Last verification (native sheets / event directory, 2026-08-07):** Android
 `compileDebugKotlinAndroid` + `testDebugUnitTest` PASS · iOS
 `compileKotlinIosSimulatorArm64` PASS · `iosSimulatorArm64Test` blocked because

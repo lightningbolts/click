@@ -239,6 +239,20 @@ fun EventSchedulePickerDialogs(
             )
         }
     }
+    // Material DateRangePicker on some targets selects the end day without painting the
+    // in-range span until selection is re-applied — re-set once both ends exist.
+    LaunchedEffect(
+        dateRangeState.selectedStartDateMillis,
+        dateRangeState.selectedEndDateMillis,
+        uiState.showDatePicker,
+    ) {
+        if (!uiState.showDatePicker) return@LaunchedEffect
+        val startMs = dateRangeState.selectedStartDateMillis ?: return@LaunchedEffect
+        val endMs = dateRangeState.selectedEndDateMillis ?: return@LaunchedEffect
+        if (endMs >= startMs) {
+            dateRangeState.setSelection(startMs, endMs)
+        }
+    }
 
     val dateRangeComplete =
         dateRangeState.selectedStartDateMillis != null &&

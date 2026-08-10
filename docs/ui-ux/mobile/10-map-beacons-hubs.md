@@ -195,7 +195,8 @@ Soundtrack / community kinds (hazard, SOS, utility, study): same bordered hero; 
 | Join Event Route | Opens HTTPS maps (`maps.google.com`, Apple Maps fallback). Avoid primary `geo:` on iOS |
 | Event RSVP | `"RSVP / Sign Up"` or `"Cancel RSVP"` |
 | Play preview | Audio player on soundtrack beacons — server enrichment fills `track_name` / `artist_name` / `preview_url` / `album_art_url` from Spotify/Apple Music/YouTube share URLs |
-| Sheet dismiss | iOS: dark Compose grabber (UIKit system grabber off — it painted a light band). Pull up at scroll top → large detent; pull down → whole page-sheet dismiss. Android: Material grabber + nested-scroll dismiss; full window width; expandable partial/expanded. |
+| Sheet dismiss | iOS: dark Compose grabber (UIKit system grabber off — it painted a light band). Pull up at scroll top → large detent; pull down → whole page-sheet dismiss. Android: Material grabber + nested-scroll dismiss; full window width; expandable partial/expanded. **Drop beacon + form sheets:** `expandable=true` (medium+large) with Compose-owned scroll (`useUiKitScrollHost=false`) so swipe-dismiss/expand stay intact; Hub↔Event swaps clear IME before remounting fields to avoid height thrash. |
+| Connection map pins | Prefer stored `geo_location`, then **origin** (first-meet) encounter GPS. Later beacon/proximity crossings must not move the pin. |
 | `"Play full song"` | Opens original media URL |
 
 ### Hub chat settings (`HubChatSettingsMenu`)

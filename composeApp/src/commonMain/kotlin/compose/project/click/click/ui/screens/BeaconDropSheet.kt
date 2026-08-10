@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
@@ -194,7 +195,7 @@ fun BeaconDropSheetContent(
         unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
     )
 
-    Box(modifier = modifier.fillMaxWidth()) {
+    Box(modifier = modifier.fillMaxWidth().imePadding()) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -218,9 +219,15 @@ fun BeaconDropSheetContent(
                 FilterChip(
                     selected = category.value == cat,
                         onClick = {
-                        category.value = cat
-                        submitValidationError = null
-                        onDismissError()
+                        if (category.value == cat) return@FilterChip
+                        // Dismiss IME before swapping Hub↔Event forms to avoid sheet height thrash.
+                        focusManager.clearFocus(force = true)
+                        scope.launch {
+                            delay(40)
+                            category.value = cat
+                            submitValidationError = null
+                            onDismissError()
+                        }
                     },
                     label = {
                         Text(
