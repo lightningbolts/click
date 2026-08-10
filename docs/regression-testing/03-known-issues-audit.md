@@ -296,30 +296,16 @@ Either product expects colorful tiles and dark style is wrong, or “not in colo
 |-------|--------|
 | **Type** | Bug / feature gap |
 | **Area** | Calls (Android) |
-| **Status** | Confirmed |
+| **Status** | Code fix landed — needs device repro |
 | **Priority** | P0 |
 
 ### Expected
 
 Users can place and receive voice and video calls on Android.
 
-### Evidence
+### Evidence (historical)
 
-[`CallManager.android.kt`](../../composeApp/src/androidMain/kotlin/compose/project/click/click/calls/CallManager.android.kt):
-
-```kotlin
-if (missingPermissions.isNotEmpty()) {
-    activity.runOnUiThread {
-        ActivityCompat.requestPermissions(..., CALL_PERMISSION_REQUEST_CODE) // 4013
-    }
-    _callState.value = CallState.Ended("Camera or microphone permission required")
-    return
-}
-```
-
-There is **no** `onRequestPermissionsResult` / Activity Result retry that restarts the call after grant. First call after install always ends when permissions were missing.
-
-Also: `currentActivity()` null → immediate `CallState.Ended("Call context unavailable")` (cold start from notification).
+[`CallManager.android.kt`](../../composeApp/src/androidMain/kotlin/compose/project/click/click/calls/CallManager.android.kt) previously ended the call immediately when permissions were missing. That path is replaced by `AndroidCallRuntime` + Activity Result (see **Fix landed** below).
 
 Incoming: [`PlatformIncomingCallUi.android.kt`](../../composeApp/src/androidMain/kotlin/compose/project/click/click/calls/PlatformIncomingCallUi.android.kt) depends on `POST_NOTIFICATIONS` (API 33+).
 
@@ -328,9 +314,9 @@ Incoming: [`PlatformIncomingCallUi.android.kt`](../../composeApp/src/androidMain
 - [ ] Fresh install → deny then grant mic/camera → **retry call succeeds without force-kill**
 - [ ] Outgoing voice + video with permissions pre-granted
 - [ ] Incoming call notification → accept → media connects
-- [ ] Group call ≤8 members; &gt;8 shows error (today: silent no-op in `CallSessionManager`)
+- [ ] Group call ≤8 members; >8 shows error message
 
-### Fix direction (not in this docs pass)
+### Fix direction (historical)
 
 Await permission result, then continue `startCall`; or use Activity Result API + queue pending invite.
 
@@ -500,7 +486,7 @@ Open-ended investigation — track concrete items here and in [04-android-focus.
 
 | Item | Link | Notes |
 |------|------|-------|
-| Calls permission ends call | [#6](#6-android-calls-not-working) | Confirmed |
+| Calls permission ends call | [#6](#6-android-calls-not-working) | Code fix landed — needs device repro |
 | Voice record crash risk | [#7](#7-voice-message-crashes-android-app) | Confirmed risk |
 | Activity null on call start | #6 | Cold start from notification |
 | FCM / `POST_NOTIFICATIONS` | #6, checklist §18 | Incoming call UI |

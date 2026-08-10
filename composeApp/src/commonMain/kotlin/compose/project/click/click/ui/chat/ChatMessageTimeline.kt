@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.ChatMessageType
 import compose.project.click.click.data.models.Connection
+import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.viewmodel.SecureChatMediaHost
@@ -129,7 +130,7 @@ internal fun ChatMessageTimeline(
     onSwipeReply: (MessageWithUser) -> Unit,
     onDownloadAttachment: suspend (MessageWithUser, compose.project.click.click.chat.attachments.AttachmentCrypto.Envelope) -> ChatAttachmentDownloadOutcome,
     onExpandPhoto: (MessageWithUser) -> Unit = {},
-    onOpenBeacon: (beaconId: String) -> Unit = {},
+    onOpenBeacon: (Message) -> Unit = {},
     isLoadingOlderMessages: Boolean = false,
     interMessageBaseCompact: Dp = ChatInterMessageListBaseCompact,
     enableMessageContextMenu: Boolean = true,

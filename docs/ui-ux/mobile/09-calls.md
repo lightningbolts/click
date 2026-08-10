@@ -47,7 +47,10 @@ PlatformIncomingCallUi (outside Compose tree)
 | `participantCount <= 3` | Speaker (default) |
 | `participantCount >= 4` | Grid (default) |
 | Manual toggle | Sticks until count crosses the 3↔4 threshold |
+| `participantCount > 4` | **Always Grid** — speaker layout can show at most 3 remotes (+ local); override cannot hide participants |
+| Per-call reset | Layout override is keyed to `connectedAtMs` so back-to-back calls start on auto default |
 
+**Control bar safe area:** `CallControlBar` pads `28.dp` + `navigationBars` inset so End/Mic clear the home indicator / gesture nav.
 Group calls remain capped at **8** participants (`MAX_GROUP_CALL_MEMBERS`).
 
 ---
@@ -120,8 +123,8 @@ sealed class CallOverlayState {
 | Outgoing | Red end icon | `"Cancel call"` | `onCancel` → `CallSessionManager.cancelCurrentCall()` |
 | Connecting | Red end icon | `"Cancel call"` | `onCancel` |
 | Incoming | Red end | `"Decline call"` | `onDecline` → `declineIncomingCall()` |
-| Incoming | Blue gradient | `"Accept call"` | `onAccept` → `acceptIncomingCall()` |
-| Ended | Blue gradient check | `"Dismiss"` | `onDismissEnded` → `dismissEndedCall()` |
+| Incoming | Solid `PrimaryBlue` | `"Accept call"` | `onAccept` → `acceptIncomingCall()` |
+| Ended | Solid `PrimaryBlue` check | `"Dismiss"` | `onDismissEnded` → `dismissEndedCall()` |
 
 Accept icon: `Videocam` when video invite, else `Call`.
 
@@ -134,9 +137,9 @@ Accept icon: `Videocam` when video invite, else `Call`.
 | Videocam / VideocamOff | `"Turn camera off"` when on, else `"Turn camera on"` | `setCameraEnabled(!camera)` |
 | Red CallEnd | `"End call"` | `onEndCall` → `endActiveCall()` |
 
-### Drag (active overlay only)
+### Drag
 
-Entire in-call card is draggable within computed horizontal/vertical bounds (does not end call).
+Preview overlay is a top card only. **ActiveCallOverlay is full-screen and not draggable.**
 
 ### Chat header entry (caller)
 
@@ -390,7 +393,7 @@ Push / realtime invite
 
 ```
 CallState.Connected
-  → ActiveCallOverlay visible (draggable card)
+  → ActiveCallOverlay visible (full-screen; not draggable)
   → Toggle mute / speaker / camera (labels flip per state)
   → Video: remote full-bleed + local PiP
   → Voice: avatar row + "Voice call in progress"
@@ -450,7 +453,7 @@ Channel `click_calls_v2` / `"Incoming calls"`, importance HIGH, ringtone + vibra
 |-----------|---------------------------|------------|
 | Idle | Idle | None |
 | Idle | Outgoing / Incoming / Connecting | Preview only |
-| Connecting | Connecting | Preview and/or Active (transition) |
+| Connecting | Connecting | Preview owns connecting; Active shows only when `Connected` (brief Ended tail allowed) |
 | Connected | Idle (preview cleared) | ActiveCallOverlay |
 | Ended | Ended or Idle | Active tail, then optional Ended preview |
 

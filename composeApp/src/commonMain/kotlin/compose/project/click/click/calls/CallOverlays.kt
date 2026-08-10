@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -272,6 +273,7 @@ fun ActiveCallOverlay(
         else -> false
     }
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val blankVideoSurfaces = state is CallState.Ended
     val connected = state as? CallState.Connected
     val participants = connected?.participants.orEmpty()
@@ -300,8 +302,8 @@ fun ActiveCallOverlay(
         )
     }
     val activeSpeaker = CallLayoutPolicy.pickActiveSpeaker(roster)
-    var manualOverride by remember { androidx.compose.runtime.mutableStateOf<CallLayoutMode?>(null) }
-    var overrideAtCount by remember { androidx.compose.runtime.mutableStateOf(0) }
+    var manualOverride by remember(connectedAtMs) { androidx.compose.runtime.mutableStateOf<CallLayoutMode?>(null) }
+    var overrideAtCount by remember(connectedAtMs) { androidx.compose.runtime.mutableStateOf(0) }
     val layoutMode = CallLayoutPolicy.resolveMode(
         participantCount = roster.size,
         manualOverride = manualOverride,
@@ -379,7 +381,7 @@ fun ActiveCallOverlay(
             chromeAlpha = chromeAlpha,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 28.dp),
+                .padding(bottom = 28.dp + bottomInset),
         )
     }
 }

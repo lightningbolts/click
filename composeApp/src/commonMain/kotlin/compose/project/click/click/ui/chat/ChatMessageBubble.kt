@@ -55,6 +55,7 @@ import coil3.compose.AsyncImage
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.chat.attachments.AttachmentCrypto
 import compose.project.click.click.data.models.ChatMessageType
+import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.hasLocalMediaUri
@@ -102,7 +103,7 @@ fun ChatMessageBubble(
         { _, _ -> ChatAttachmentDownloadOutcome.Failure("Download not available in this context.") },
     onExpandPhoto: (MessageWithUser) -> Unit = {},
     /** Opens the full map beacon detail sheet for a shared beacon card. */
-    onOpenBeacon: (beaconId: String) -> Unit = {},
+    onOpenBeacon: (Message) -> Unit = {},
 ) {
     val message = messageWithUser.message
     if (message.messageType == "call_log") {
@@ -803,7 +804,7 @@ fun ChatMessageBubble(
 @Composable
 private fun BeaconChatMessageBubble(
     messageWithUser: MessageWithUser,
-    onOpenBeacon: (beaconId: String) -> Unit,
+    onOpenBeacon: (Message) -> Unit,
     onLongPress: (MessageWithUser) -> Unit,
     onSwipeReply: (MessageWithUser) -> Unit,
     enableMessageContextMenu: Boolean,

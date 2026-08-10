@@ -13,13 +13,13 @@
 |------------|---------|---------------|---------------|
 | Location | Map, handshake, hubs | No pins / handshake degrade | Settings → re-enter Map / Tap |
 | Bluetooth / Nearby | Tri-Factor BLE | Handshake fails or GPS-only | Re-run Tap |
-| Microphone | Calls, voice notes, ultrasonic | `[KNOWN-6]` call ends; `[KNOWN-7]` record may crash | Must retry call after grant (today broken) |
-| Camera | Video call, QR, roll | Video call / scan fail | Retry flow |
+| Microphone | Calls, voice notes, ultrasonic | `[KNOWN-6]` requests permission; `[KNOWN-7]` record may crash | Grant resumes via Activity Result (`AndroidCallRuntime`) |
+| Camera | Video call, QR, roll | `[KNOWN-6]` requests permission; video call / scan fail | Grant resumes call via Activity Result; retry scan |
 | Notifications (`POST_NOTIFICATIONS`) | Incoming call UI, FCM | Silent miss of incoming call | Grant → retest incoming |
 | Photo library | Chat media | Picker fail toast | Retry |
 
 - [ ] Fresh install: walk each permission deny → rationale / settings → feature recovers
-- [ ] `[KNOWN-6]` Mic/camera: first call requests permission **and** completes after grant (currently ends immediately)
+- [ ] `[KNOWN-6]` Mic/camera: first call requests permission **and** completes after grant (Activity Result resumes `startCall`)
 
 ---
 
@@ -56,8 +56,10 @@
 | Outgoing video | Camera preview + remote | `[KNOWN-6]` |
 | Incoming | Notification / full-screen → accept | `[KNOWN-11]` |
 | No activity | Background start does not hard-crash | activity-null end |
-| Group call | ≤8 works; &gt;8 shows error (not silent) | |
-| Multi-tile video | Grid (≥4) / Speaker (≤3); layout toggle; each remote has video or initials | |
+| Multi-tile video | Grid (≥4) / Speaker (≤3); layout toggle; **Speaker forced off when count > 4** (max 3 remotes) | |
+| Group call | ≤8 works; >8 shows error (not silent) | |
+| Safe area | End/Mic clear home-indicator / gesture nav inset | |
+| Layout reset | Back-to-back calls reset layout override to auto default | |
 | Active speaker | Purple hard border + mic badge updates while speaking | |
 
 **Key code:** `CallManager.android.kt` (`CALL_PERMISSION_REQUEST_CODE = 4013`), `CallSessionManager.kt`, `CallActiveLayouts.kt`, `PlatformIncomingCallUi.android.kt`
@@ -66,7 +68,9 @@
 - [ ] Permissions cleared in system settings → call requests → **after grant, call works**
 - [ ] Incoming from second device while app backgrounded
 - [ ] 1:1 video → Speaker layout with self tile + remote
-- [ ] Group video (4+) → Grid; toggle to Speaker and back
+- [ ] Group video (4+) → Grid; toggle to Speaker at 4 participants; at 5+ stays Grid (all remotes visible)
+- [ ] End-call button clears home-indicator inset
+- [ ] Back-to-back calls reset layout mode to auto default
 - [ ] Mute remote peer → mic-off badge; camera off → initials avatar
 ---
 
