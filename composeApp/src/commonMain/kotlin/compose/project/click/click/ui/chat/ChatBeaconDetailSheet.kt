@@ -25,7 +25,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.MapBeacon
+import compose.project.click.click.data.models.MapBeaconKind
+import compose.project.click.click.data.models.chatBeaconLooksLikeEvent
 import compose.project.click.click.data.models.mapBeaconFromChatMetadata
+import compose.project.click.click.data.models.resolveChatBeaconForDetail
 import compose.project.click.click.data.repository.MapBeaconRepository
 import compose.project.click.click.ui.components.BeaconShareToChatDialog
 import compose.project.click.click.ui.components.ClickSheetDefaults
@@ -68,9 +71,12 @@ internal fun ChatBeaconDetailSheet(
     val inboxChats by AppDataManager.inboxFeedChats.collectAsState()
     var resolved by remember(beaconId) {
         mutableStateOf(
-            knownBeacons.firstOrNull { it.id == beaconId }
-                ?: mapBeacons.firstOrNull { it.id == beaconId }
-                ?: messageFallback,
+            resolveChatBeaconForDetail(
+                cached = knownBeacons.firstOrNull { it.id == beaconId }
+                    ?: mapBeacons.firstOrNull { it.id == beaconId },
+                messageFallback = messageFallback,
+                messageMetadata = messageMetadata,
+            ) ?: messageFallback,
         )
     }
     var loadError by remember(beaconId) { mutableStateOf<String?>(null) }
@@ -78,9 +84,14 @@ internal fun ChatBeaconDetailSheet(
     val toastState = rememberUnifiedToastState()
 
     LaunchedEffect(beaconId, messageMetadata, messageContent) {
-        if (resolved != null && resolved?.id == beaconId &&
-            (knownBeacons.any { it.id == beaconId } || mapBeacons.any { it.id == beaconId })
+        val looksLikeEvent = chatBeaconLooksLikeEvent(messageFallback, messageMetadata)
+        val cacheHit = knownBeacons.any { it.id == beaconId } || mapBeacons.any { it.id == beaconId }
+        val current = resolved
+        // Skip network only when cache already has the correct EVENT kind for event cards.
+        if (current != null && current.id == beaconId && cacheHit &&
+            (!looksLikeEvent || current.kind == MapBeaconKind.EVENT)
         ) {
+            resolved = resolveChatBeaconForDetail(current, messageFallback, messageMetadata)
             return@LaunchedEffect
         }
         loadError = null
@@ -88,13 +99,13 @@ internal fun ChatBeaconDetailSheet(
             MapBeaconRepository().fetchBeacon(beaconId).getOrNull()
         }
         if (fetched != null) {
-            resolved = fetched
+            resolved = resolveChatBeaconForDetail(fetched, messageFallback, messageMetadata)
             return@LaunchedEffect
         }
         val fromMeta = messageFallback
             ?: mapBeaconFromChatMetadata(beaconId, messageMetadata, messageContent.orEmpty())
         if (fromMeta != null) {
-            resolved = fromMeta
+            resolved = resolveChatBeaconForDetail(fromMeta, messageFallback, messageMetadata)
         } else {
             loadError = "Couldn't load this beacon."
         }

@@ -47,11 +47,38 @@ class CallLayoutPolicyTest {
             ),
         )
         assertEquals(
-            CallLayoutMode.Speaker,
+            CallLayoutMode.Grid,
             CallLayoutPolicy.resolveMode(
                 participantCount = 5,
                 manualOverride = CallLayoutMode.Speaker,
                 overrideAtCount = 5,
+            ),
+        )
+        assertEquals(
+            CallLayoutMode.Speaker,
+            CallLayoutPolicy.resolveMode(
+                participantCount = 4,
+                manualOverride = CallLayoutMode.Speaker,
+                overrideAtCount = 4,
+            ),
+        )
+    }
+
+    @Test
+    fun resolveMode_forcesGridAboveSpeakerLayoutMax() {
+        assertEquals(
+            CallLayoutMode.Grid,
+            CallLayoutPolicy.resolveMode(
+                participantCount = 5,
+                manualOverride = null,
+            ),
+        )
+        assertEquals(
+            CallLayoutMode.Grid,
+            CallLayoutPolicy.resolveMode(
+                participantCount = 8,
+                manualOverride = CallLayoutMode.Speaker,
+                overrideAtCount = 8,
             ),
         )
     }

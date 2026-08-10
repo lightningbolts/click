@@ -76,7 +76,7 @@ import kotlin.random.Random
 
 private const val HUB_CHAT_DRAFT_MAX_LENGTH = 1000
 /** Server + client send spacing for community hub messages (seconds). */
-const val HUB_MESSAGE_COOLDOWN_SECONDS = 15
+const val HUB_MESSAGE_COOLDOWN_SECONDS = 5
 
 @Serializable
 private data class HubDetailsRow(

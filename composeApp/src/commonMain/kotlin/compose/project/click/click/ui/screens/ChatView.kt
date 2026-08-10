@@ -1263,22 +1263,22 @@ fun ChatView(
                                 viewModel.downloadChatAttachment(mwu.message.id, env)
                             },
                             onExpandPhoto = { expandedPhotoTarget = it },
-                            onOpenBeacon = { beaconId ->
-                                openBeaconDetailId = beaconId
-                                val msg = (viewModel.chatMessagesState.value as? compose.project.click.click.viewmodel.ChatMessagesState.Success)
-                                    ?.messages
-                                    ?.firstOrNull {
-                                        compose.project.click.click.data.models.beaconIdFromMetadata(it.message.metadata) == beaconId
-                                    }
-                                    ?.message
-                                val meta = msg?.metadata as? kotlinx.serialization.json.JsonObject
-                                openBeaconDetailMetadata = meta
-                                openBeaconDetailContent = msg?.content
-                                openBeaconDetailFallback = compose.project.click.click.data.models.mapBeaconFromChatMetadata(
-                                    beaconId = beaconId,
-                                    metadata = meta,
-                                    contentFallback = msg?.content.orEmpty(),
-                                )
+                            onOpenBeacon = { msg ->
+                                val beaconId = compose.project.click.click.data.models
+                                    .beaconIdFromMetadata(msg.metadata)
+                                    ?.trim()
+                                    .orEmpty()
+                                if (beaconId.isNotEmpty()) {
+                                    openBeaconDetailId = beaconId
+                                    val meta = msg.metadata as? kotlinx.serialization.json.JsonObject
+                                    openBeaconDetailMetadata = meta
+                                    openBeaconDetailContent = msg.content
+                                    openBeaconDetailFallback = compose.project.click.click.data.models.mapBeaconFromChatMetadata(
+                                        beaconId = beaconId,
+                                        metadata = meta,
+                                        contentFallback = msg.content,
+                                    )
+                                }
                             },
                             isLoadingOlderMessages = isLoadingOlderMessages,
                             modifier = messageContentModifier

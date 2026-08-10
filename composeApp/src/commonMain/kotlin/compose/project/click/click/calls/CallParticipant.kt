@@ -29,6 +29,12 @@ enum class CallLayoutMode {
 object CallLayoutPolicy {
     const val SPEAKER_MAX_PARTICIPANTS = 3
 
+    /**
+     * Speaker layout can show at most 3 remote tiles (+ local). Above this count,
+     * always use Grid so participants are not silently dropped.
+     */
+    const val SPEAKER_LAYOUT_MAX_PARTICIPANTS = 4
+
     fun defaultMode(participantCount: Int): CallLayoutMode =
         if (participantCount <= SPEAKER_MAX_PARTICIPANTS) {
             CallLayoutMode.Speaker
@@ -46,6 +52,9 @@ object CallLayoutPolicy {
         manualOverride: CallLayoutMode?,
         overrideAtCount: Int = 0,
     ): CallLayoutMode {
+        if (participantCount > SPEAKER_LAYOUT_MAX_PARTICIPANTS) {
+            return CallLayoutMode.Grid
+        }
         if (manualOverride == null) return defaultMode(participantCount)
         val wasSpeakerSide = overrideAtCount <= SPEAKER_MAX_PARTICIPANTS
         val isSpeakerSide = participantCount <= SPEAKER_MAX_PARTICIPANTS

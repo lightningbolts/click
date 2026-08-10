@@ -573,7 +573,7 @@ internal fun ReplySwipeSideIcon(
 internal fun BeaconChatCard(
     message: Message,
     isSent: Boolean,
-    onOpenBeacon: (beaconId: String) -> Unit = {},
+    onOpenBeacon: (Message) -> Unit = {},
     onLongPress: (() -> Unit)? = null,
     enableContextMenu: Boolean = true,
     modifier: Modifier = Modifier,
@@ -609,7 +609,7 @@ internal fun BeaconChatCard(
             onClick = {
                 PlatformHapticsPolicy.lightImpact()
                 val id = model.beaconId.trim()
-                if (id.isNotEmpty()) onOpenBeacon(id)
+                if (id.isNotEmpty()) onOpenBeacon(message)
             },
         )
     }

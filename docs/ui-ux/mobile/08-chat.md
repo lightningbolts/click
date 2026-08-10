@@ -135,6 +135,7 @@ Both routes call `CallSessionManager.startOutgoingCall` or `startOutgoingGroupCa
 | Swipe left (local) | Timeline | Timestamp peek reveal (unless integrated with iOS swipe-back) |
 | Long-press | Bubble | `MessageActionSheet` + `PlatformHapticsPolicy.heavyImpact()` |
 | Tap photo | Image bubble | `ChatExpandedPhotoPreview` |
+| Tap beacon card | `BeaconChatCard` | Opens `ChatBeaconDetailSheet` with the **tapped** message metadata; event cards hydrate bookmark / RSVP / check-in (`loadBeaconEngagement` / `loadBeaconRsvp`) even when the map cache has a stale non-`EVENT` kind |
 | Tap reaction chip | Bubble footer | Toggle reaction |
 | Near list end | LazyColumn | `loadOlderMessages()` when within 3 items of oldest |
 

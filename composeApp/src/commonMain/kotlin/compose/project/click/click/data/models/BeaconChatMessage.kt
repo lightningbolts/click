@@ -53,6 +53,45 @@ fun MapBeacon.toBeaconChatMetadata(): JsonObject {
 }
 
 /**
+ * True when chat card metadata / fallback indicates an event beacon (RSVP / bookmark /
+ * check-in detail path).
+ */
+fun chatBeaconLooksLikeEvent(
+    messageFallback: MapBeacon?,
+    messageMetadata: JsonObject?,
+): Boolean {
+    if (messageFallback?.kind == MapBeaconKind.EVENT) return true
+    val typeRaw = messageMetadata?.get("beacon_type")?.let {
+        (it as? JsonPrimitive)?.contentOrNull
+    } ?: messageMetadata?.get("beaconType")?.let {
+        (it as? JsonPrimitive)?.contentOrNull
+    }
+    return MapBeaconKind.fromRaw(typeRaw) == MapBeaconKind.EVENT
+}
+
+/**
+ * Prefer chat-message EVENT kind when a map-cache stub is wrong/stale so
+ * [compose.project.click.click.ui.screens.EventBeaconDetail] (and engagement sync)
+ * still mounts from the timeline card.
+ */
+fun resolveChatBeaconForDetail(
+    cached: MapBeacon?,
+    messageFallback: MapBeacon?,
+    messageMetadata: JsonObject?,
+): MapBeacon? {
+    val base = cached ?: messageFallback ?: return null
+    if (chatBeaconLooksLikeEvent(messageFallback, messageMetadata) &&
+        base.kind != MapBeaconKind.EVENT
+    ) {
+        return base.copy(
+            kind = MapBeaconKind.EVENT,
+            sourceBeaconType = base.sourceBeaconType?.takeIf { it.isNotBlank() } ?: "event",
+        )
+    }
+    return base
+}
+
+/**
  * Reconstruct a [MapBeacon] from chat message metadata when the live map row is
  * expired / out of discovery scope. Coordinates stay exact for routing.
  */

@@ -790,7 +790,7 @@ class ChatApiClient(
                             ?.groupValues
                             ?.getOrNull(1)
                             ?.toIntOrNull()
-                            ?: 15
+                            ?: 5
                         "HUB_MESSAGE_COOLDOWN:$retry"
                     }
                     else -> "Failed to send hub message: ${response.status}"

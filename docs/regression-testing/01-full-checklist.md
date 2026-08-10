@@ -339,8 +339,9 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] Outgoing voice call from chat → `CallPreviewOverlay` → connected
 - [ ] Outgoing video call
 - [ ] Incoming call UI → accept / decline
-- [ ] `ActiveCallOverlay` in-call controls (mute, speaker, end)
+- [ ] `ActiveCallOverlay` in-call controls (mute, speaker, end); control bar clears nav-bar / home-indicator inset
 - [ ] End call returns to chat; overlay dismisses cleanly
+- [ ] Group video 5+: layout stays Grid (all remotes visible); layout override resets on next call
 - [ ] `[P] iOS` CallKit integration; VoIP push path (no Firebase for VoIP)
 - [ ] `[KNOWN-6]` `[P] Android` LiveKit — outgoing voice/video after granting mic/camera (permission retry)
 - [ ] `[P] Android` Incoming call intent / notification (`POST_NOTIFICATIONS`)
@@ -395,6 +396,8 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] Event detail shows address label when `location_name` / `formatted_address` set
 - [ ] Submit success adds pin; failure toast
 - [ ] Beacon detail sheet: RSVP, share, navigate, bookmark, labeled check-in CTA
+- [ ] Chat timeline event beacon card (1:1 and group): detail opens with bookmarked / RSVPed / checked-in state synced
+- [ ] Profile Beacons tab: tap still focuses map / opens event if on map (not the chat detail sheet)
 - [ ] Event people directory: every signed-in viewer can open Directory → sort A–Z / Interests / Mutuals; relationship / sort-aware metrics; list scrolls to top on chip change; no large blank band at full sheet height
 - [ ] Event mutuals: “Mutuals here” section uses the active sort and is not duplicated under Everyone; Connections show friends-in-common count; view-only FoF profiles (no Connect)
 - [ ] Bookmark toggle survives app force-kill (server-backed)
@@ -419,7 +422,7 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] Map join hub → proximity verify → `HubChatScreen`
 - [ ] Deep link `click://hub/{id}` / universal link opens hub
 - [ ] `HubChatScreen` — realtime messages in lobby + unlocked chat
-- [ ] Hub send cooldown 15s — composer placeholder `Wait {N}s…`; server enforces 429 `HUB_MESSAGE_COOLDOWN`
+- [ ] Hub send cooldown 5s — composer placeholder `Wait {N}s…`; server enforces 429 `HUB_MESSAGE_COOLDOWN`
 - [ ] Outside geofence send → “No longer near hub…” (not expired copy)
 - [ ] Hub settings menu: leave, edit (owner), delete (owner)
 - [ ] Leave hub confirm → `leaveActiveHub`
@@ -568,7 +571,7 @@ Prefer the dedicated smoke doc for a timed pass: [02-smoke-10min.md](02-smoke-10
 - [ ] Long-press connection → archive → find in Archived tab
 - [ ] Drop beacon on map → see on map → open detail
 - [ ] Join hub from map → send hub message → leave hub
-- [ ] Hub message cooldown: after send, composer shows `Wait {N}s…` for 15s; rapid sends return 429 / restore draft
+- [ ] Hub message cooldown: after send, composer shows `Wait {N}s…` for 5s; rapid sends return 429 / restore draft
 - [ ] Beacon detail sheet: RSVP, share, navigate, bookmark, labeled check-in CTA
 - [ ] Event people directory: open Directory before RSVP/check-in → sort A–Z / Interests / Mutuals; relationship / sort-aware metrics show **N mutuals** (friends-in-common); list scrolls to top on chip change; no large blank band at full sheet height
 - [ ] Event mutuals: “Mutuals here” section lists FoF; Connections show friends-in-common count; Mutuals not duplicated under Everyone
