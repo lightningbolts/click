@@ -53,6 +53,8 @@ BEGIN
     INSERT INTO public.connection_archives (user_id, connection_id)
     SELECT p.user_id, p.connection_id
     FROM pairs p
+    -- FK is public.users(id); skip deleted/orphan profile rows so cron doesn't abort.
+    INNER JOIN public.users usr ON usr.id = p.user_id
     ON CONFLICT (user_id, connection_id) DO NOTHING;
 
     GET DIAGNOSTICS inserted = ROW_COUNT;
