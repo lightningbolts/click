@@ -3450,19 +3450,48 @@ class ChatViewModel(
         viewModelScope.launch {
             outboundChatMessageMutex.withLock {
                 _isMessageSubmitInProgress.value = true
+                var tempId: String? = null
                 try {
                 val apiChatId = resolveOrCreateApiChatId(connectionId) ?: run {
                     _messageSendError.value = "Failed to send — unable to start chat"
                     return@withLock
                 }
+                val localMs = Clock.System.now().toEpochMilliseconds()
+                tempId = "temp-audio-$localMs-${Random.nextLong()}"
+                val replyTarget = _replyingTo.value
+                val optimisticMeta = buildJsonObject {
+                    put("original_mime_type", mimeType)
+                    put("is_encrypted_media", true)
+                    if (durationSeconds != null) put("duration_seconds", durationSeconds)
+                    if (replyTarget != null) {
+                        put("reply_to_id", replyTarget.message.id)
+                        put("reply_to_content", replySnippetForMessage(replyTarget.message))
+                    }
+                }
+                val currentUser = resolveMessageUser(userId, apiChatId)
+                    ?: AppDataManager.currentUser.value?.takeIf { it.id == userId }
+                    ?: User(id = userId, name = "You", createdAt = 0L)
+                appendOutgoingOptimistic(
+                    Message(
+                        id = tempId!!,
+                        user_id = userId,
+                        content = if (caption.isEmpty()) " " else caption,
+                        timeCreated = localMs,
+                        messageType = ChatMessageType.AUDIO,
+                        metadata = optimisticMeta,
+                        localSentAt = localMs,
+                        deliveryState = MessageDeliveryState.PENDING,
+                    ),
+                    currentUser,
+                )
                 val ext = extensionForChatMedia(mimeType, isImage = false)
                 val unique = "${Clock.System.now().toEpochMilliseconds()}-${Random.nextInt(1_000_000_000)}"
                 val path = "$userId/$apiChatId/$unique.$ext"
                 val url = chatRepository.uploadChatMedia(bytes, path, mimeType) ?: run {
+                    markOptimisticSendFailed(tempId!!)
                     _messageSendError.value = "Failed to upload audio"
                     return@withLock
                 }
-                val replyTarget = _replyingTo.value
                 val meta = if (replyTarget != null) {
                     buildJsonObject {
                         put("media_url", url)
@@ -3486,20 +3515,20 @@ class ChatViewModel(
                     content = if (caption.isEmpty()) " " else caption,
                     messageType = ChatMessageType.AUDIO,
                     metadata = meta,
+                    clientLocalSentAtMs = localMs,
                 )
                 if (message != null) {
                     _messageInput.value = ""
                     updateMessageInput("")
                     _replyingTo.value = null
-                    val currentUser = resolveMessageUser(userId, apiChatId)
-                        ?: AppDataManager.currentUser.value?.takeIf { it.id == userId }
-                        ?: User(id = userId, name = "You", createdAt = 0L)
-                    applyInsertedMessage(message, currentUser, userId)
+                    applyInsertedMessage(message, currentUser, userId, optimisticTempId = tempId)
                     activateConnectionIfPending(connectionId)
                 } else {
+                    markOptimisticSendFailed(tempId!!)
                     _messageSendError.value = "Failed to send voice message"
                 }
                 } catch (e: Exception) {
+                    tempId?.let { markOptimisticSendFailed(it) }
                     _messageSendError.value = "Failed to send audio — ${e.redactedRestMessage().ifBlank { "error" }}"
                 } finally {
                     _isMessageSubmitInProgress.value = false
@@ -3534,11 +3563,39 @@ class ChatViewModel(
         viewModelScope.launch {
             outboundChatMessageMutex.withLock {
                 _isMessageSubmitInProgress.value = true
+                var tempId: String? = null
                 try {
                 val apiChatId = resolveOrCreateApiChatId(connectionId) ?: run {
                     _messageSendError.value = "Failed to send — unable to start chat"
                     return@withLock
                 }
+                val localMs = Clock.System.now().toEpochMilliseconds()
+                tempId = "temp-file-$localMs-${Random.nextLong()}"
+                val replyTarget = _replyingTo.value
+                val currentUser = resolveMessageUser(userId, apiChatId)
+                    ?: AppDataManager.currentUser.value?.takeIf { it.id == userId }
+                    ?: User(id = userId, name = "You", createdAt = 0L)
+                appendOutgoingOptimistic(
+                    Message(
+                        id = tempId!!,
+                        user_id = userId,
+                        content = trimmedName,
+                        timeCreated = localMs,
+                        messageType = ChatMessageType.FILE,
+                        metadata = buildJsonObject {
+                            put("attachment_name", trimmedName)
+                            put("attachment_mime", mimeType)
+                            put("attachment_size", bytes.size.toLong())
+                            if (replyTarget != null) {
+                                put("reply_to_id", replyTarget.message.id)
+                                put("reply_to_content", replySnippetForMessage(replyTarget.message))
+                            }
+                        },
+                        localSentAt = localMs,
+                        deliveryState = MessageDeliveryState.PENDING,
+                    ),
+                    currentUser,
+                )
                 val uploaded = chatRepository.uploadEncryptedBlob(
                     bucketName = CHAT_ATTACHMENTS_BUCKET,
                     chatId = apiChatId,
@@ -3547,6 +3604,7 @@ class ChatViewModel(
                     mimeType = mimeType,
                     fileName = trimmedName,
                 ) ?: run {
+                    markOptimisticSendFailed(tempId!!)
                     _messageSendError.value = "Failed to upload attachment"
                     return@withLock
                 }
@@ -3562,7 +3620,6 @@ class ChatViewModel(
                 )
                 val envelopeBody = AttachmentCrypto.encodeEnvelope(envelope)
 
-                val replyTarget = _replyingTo.value
                 val meta = buildJsonObject {
                     put("attachment_path", uploaded.path)
                     put("attachment_name", uploaded.fileName)
@@ -3580,18 +3637,18 @@ class ChatViewModel(
                     content = envelopeBody,
                     messageType = ChatMessageType.FILE,
                     metadata = meta,
+                    clientLocalSentAtMs = localMs,
                 )
                 if (message != null) {
                     _replyingTo.value = null
-                    val currentUser = resolveMessageUser(userId, apiChatId)
-                        ?: AppDataManager.currentUser.value?.takeIf { it.id == userId }
-                        ?: User(id = userId, name = "You", createdAt = 0L)
-                    applyInsertedMessage(message, currentUser, userId)
+                    applyInsertedMessage(message, currentUser, userId, optimisticTempId = tempId)
                     activateConnectionIfPending(connectionId)
                 } else {
+                    markOptimisticSendFailed(tempId!!)
                     _messageSendError.value = "Failed to send attachment"
                 }
                 } catch (e: Exception) {
+                    tempId?.let { markOptimisticSendFailed(it) }
                     _messageSendError.value = "Failed to send attachment — ${e.redactedRestMessage().ifBlank { "error" }}"
                     println("Error sending attachment: ${e.redactedRestMessage()}")
                 } finally {
@@ -3896,26 +3953,45 @@ class ChatViewModel(
         val connectionId = successState.chatDetails.connection.id
         viewModelScope.launch {
             _isMessageSubmitInProgress.value = true
+            var tempId: String? = null
             try {
+                val content = beacon.toBeaconChatContent()
+                val meta = beacon.toBeaconChatMetadata()
+                val localMs = Clock.System.now().toEpochMilliseconds()
+                tempId = "temp-beacon-$localMs-${Random.nextLong()}"
+                val currentUserFast = AppDataManager.currentUser.value?.takeIf { it.id == userId }
+                    ?: User(id = userId, name = "You", createdAt = 0L)
+                appendOutgoingOptimistic(
+                    Message(
+                        id = tempId!!,
+                        user_id = userId,
+                        content = content,
+                        timeCreated = localMs,
+                        messageType = ChatMessageType.BEACON,
+                        metadata = meta,
+                        localSentAt = localMs,
+                        deliveryState = MessageDeliveryState.PENDING,
+                    ),
+                    currentUserFast,
+                )
                 val apiChatId = resolveOrCreateApiChatId(connectionId) ?: run {
+                    markOptimisticSendFailed(tempId!!)
                     _messageSendError.value = "Failed to send — unable to start chat"
                     return@launch
                 }
-                val content = beacon.toBeaconChatContent()
-                val meta = beacon.toBeaconChatMetadata()
                 val message = chatRepository.sendMessage(
                     chatId = apiChatId,
                     userId = userId,
                     content = content,
                     messageType = ChatMessageType.BEACON,
                     metadata = meta,
+                    clientLocalSentAtMs = localMs,
                 )
                 if (message != null) {
                     val coerced = message.withCoercedBeaconType()
                     val currentUser = resolveMessageUser(userId, apiChatId)
-                        ?: AppDataManager.currentUser.value?.takeIf { it.id == userId }
-                        ?: User(id = userId, name = "You", createdAt = 0L)
-                    applyInsertedMessage(coerced, currentUser, userId)
+                        ?: currentUserFast
+                    applyInsertedMessage(coerced, currentUser, userId, optimisticTempId = tempId)
                     activateConnectionIfPending(connectionId)
                     val shareUrl = meta["share_url"]?.let { (it as? JsonPrimitive)?.contentOrNull }
                     mapBeaconRepository.recordBeaconShare(
@@ -3924,9 +4000,11 @@ class ChatViewModel(
                         shareUrl = shareUrl,
                     )
                 } else {
+                    markOptimisticSendFailed(tempId!!)
                     _messageSendError.value = "Failed to share beacon"
                 }
             } catch (e: Exception) {
+                tempId?.let { markOptimisticSendFailed(it) }
                 _messageSendError.value =
                     "Failed to share beacon — ${e.redactedRestMessage().ifBlank { "error" }}"
             } finally {
@@ -3943,15 +4021,38 @@ class ChatViewModel(
         val targetChatId = chatId.trim().takeIf { it.isNotEmpty() } ?: return
         viewModelScope.launch {
             _isMessageSubmitInProgress.value = true
+            var tempId: String? = null
             try {
                 val content = beacon.toBeaconChatContent()
                 val meta = beacon.toBeaconChatMetadata()
+                val open = _chatMessagesState.value as? ChatMessagesState.Success
+                val threadOpen = open?.chatDetails?.chat?.id == targetChatId
+                val localMs = Clock.System.now().toEpochMilliseconds()
+                val currentUserFast = AppDataManager.currentUser.value?.takeIf { it.id == userId }
+                    ?: User(id = userId, name = "You", createdAt = 0L)
+                if (threadOpen) {
+                    tempId = "temp-beacon-$localMs-${Random.nextLong()}"
+                    appendOutgoingOptimistic(
+                        Message(
+                            id = tempId!!,
+                            user_id = userId,
+                            content = content,
+                            timeCreated = localMs,
+                            messageType = ChatMessageType.BEACON,
+                            metadata = meta,
+                            localSentAt = localMs,
+                            deliveryState = MessageDeliveryState.PENDING,
+                        ),
+                        currentUserFast,
+                    )
+                }
                 val message = chatRepository.sendMessage(
                     chatId = targetChatId,
                     userId = userId,
                     content = content,
                     messageType = ChatMessageType.BEACON,
                     metadata = meta,
+                    clientLocalSentAtMs = localMs,
                 )
                 if (message != null) {
                     val coerced = message.withCoercedBeaconType()
@@ -3961,17 +4062,17 @@ class ChatViewModel(
                         telemetry = compose.project.click.click.data.api.EngagementTelemetryBody(surface = "chat"),
                         shareUrl = shareUrl,
                     )
-                    val open = _chatMessagesState.value as? ChatMessagesState.Success
-                    if (open?.chatDetails?.chat?.id == targetChatId) {
+                    if (threadOpen) {
                         val currentUser = resolveMessageUser(userId, targetChatId)
-                            ?: AppDataManager.currentUser.value?.takeIf { it.id == userId }
-                            ?: User(id = userId, name = "You", createdAt = 0L)
-                        applyInsertedMessage(coerced, currentUser, userId)
+                            ?: currentUserFast
+                        applyInsertedMessage(coerced, currentUser, userId, optimisticTempId = tempId)
                     }
                 } else {
+                    tempId?.let { markOptimisticSendFailed(it) }
                     _messageSendError.value = "Failed to share beacon"
                 }
             } catch (e: Exception) {
+                tempId?.let { markOptimisticSendFailed(it) }
                 _messageSendError.value =
                     "Failed to share beacon — ${e.redactedRestMessage().ifBlank { "error" }}"
             } finally {

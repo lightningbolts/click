@@ -146,7 +146,8 @@ fun ClickActionBottomSheet(
 /**
  * Forms and tall text-entry content.
  *
- * Defaults to UIKit scroll-host (same dismiss path as which-pin / view-event).
+ * Defaults to UIKit scroll-host for Column wrap-content (which-pin / view-event).
+ * Pass [useUiKitScrollHost]=false for LazyColumn / pager / sticky-IME sheets.
  * Text fields use [sheetImePadding] — Compose `imePadding()` is unreliable in UIKit sheets.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -162,8 +163,9 @@ fun ClickFormBottomSheet(
     contentWindowInsets: @Composable () -> WindowInsets = { WindowInsets.ime },
     @Suppress("UNUSED_PARAMETER") dragHandle: @Composable () -> Unit = {},
     /**
-     * iOS: true (default) so UIKit owns scroll-edge dismiss like which-pin / view-event.
-     * Do not flip false for forms — that reintroduces Compose surface-drag flicker.
+     * iOS: true (default) for Column/`sheetBodyScroll` wrap-content sheets (which-pin /
+     * view-event). Set **false** for LazyColumn / HorizontalPager / `weight(1f)` /
+     * sticky-IME sheets — UIKit unbounded wrap measures those with infinity max height.
      */
     useUiKitScrollHost: Boolean = true,
     expandable: Boolean = true,

@@ -81,6 +81,7 @@ import compose.project.click.click.events.EventReminderCoordinator
 import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.data.models.MapBeaconKind
 import compose.project.click.click.data.models.MapBeaconMetadata
+import compose.project.click.click.data.models.withPreservedEventScheduleFrom
 import compose.project.click.click.ui.utils.haversineDistance
 import compose.project.click.click.ui.utils.hasUsableMapCoordinates
 import compose.project.click.click.ui.utils.mergeMapBeaconLists
@@ -575,8 +576,17 @@ fun HomeScreen(
             )
         }
 
-        val detailBeacon = selectedSavedEventBeacon
-        if (detailBeacon != null) {
+        val detailBeaconSeed = selectedSavedEventBeacon
+        if (detailBeaconSeed != null) {
+            // Keep sheet seed in sync with map/prefetch hydration so Host/Posted update live.
+            val detailBeacon = remember(detailBeaconSeed, mapBeacons, prefetchedBeacons) {
+                val live = mapBeacons.firstOrNull { it.id == detailBeaconSeed.id }
+                    ?: prefetchedBeacons.firstOrNull { it.id == detailBeaconSeed.id }
+                live?.withPreservedEventScheduleFrom(detailBeaconSeed) ?: detailBeaconSeed
+            }
+            LaunchedEffect(detailBeaconSeed.id) {
+                mapViewModel.ensureEventBeaconDetail(detailBeaconSeed.id, seed = detailBeaconSeed)
+            }
             val detailSurface = GlassSheetTokens.OledBlack()
             val onDetailSurface = GlassSheetTokens.OnOled()
             val distanceMeters = AppDataManager.lastKnownDeviceLocation.value?.let { (lat, lon) ->

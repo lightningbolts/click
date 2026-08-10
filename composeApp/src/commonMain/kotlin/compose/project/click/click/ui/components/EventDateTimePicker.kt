@@ -84,6 +84,9 @@ class EventSchedulePickerUiState {
         internal set
     var pickingStartTime by mutableStateOf(true)
         internal set
+    /** When true, open the range picker with only start selected so the next tap sets end. */
+    var datePickerFocusEnd by mutableStateOf(false)
+        internal set
     var pendingHour12 by mutableIntStateOf(1)
         internal set
     var pendingMinute by mutableIntStateOf(0)
@@ -91,7 +94,8 @@ class EventSchedulePickerUiState {
     var pendingIsPm by mutableStateOf(false)
         internal set
 
-    fun openDatePicker() {
+    fun openDatePicker(focusEnd: Boolean = false) {
+        datePickerFocusEnd = focusEnd
         showDatePicker = true
     }
 
@@ -146,12 +150,12 @@ fun EventDateTimePicker(
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ScheduleActionButton(
                 text = "Start: ${formatEventDateOnlyLabel(schedule.startEpochMs, tz)}",
-                onClick = { uiState.openDatePicker() },
+                onClick = { uiState.openDatePicker(focusEnd = false) },
                 modifier = Modifier.weight(1f),
             )
             ScheduleActionButton(
                 text = "End: ${formatEventDateOnlyLabel(schedule.endEpochMs, tz)}",
-                onClick = { uiState.openDatePicker() },
+                onClick = { uiState.openDatePicker(focusEnd = true) },
                 modifier = Modifier.weight(1f),
             )
         }
@@ -231,12 +235,19 @@ fun EventSchedulePickerDialogs(
         initialSelectedStartDateMillis = localDateToUtcMidnightMillis(startLocal.date),
         initialSelectedEndDateMillis = localDateToUtcMidnightMillis(endLocal.date),
     )
-    LaunchedEffect(uiState.showDatePicker, schedule.startEpochMs, schedule.endEpochMs) {
+    LaunchedEffect(uiState.showDatePicker, uiState.datePickerFocusEnd, schedule.startEpochMs, schedule.endEpochMs) {
         if (uiState.showDatePicker) {
-            dateRangeState.setSelection(
-                localDateToUtcMidnightMillis(startLocal.date),
-                localDateToUtcMidnightMillis(endLocal.date),
-            )
+            val startMs = localDateToUtcMidnightMillis(startLocal.date)
+            if (uiState.datePickerFocusEnd) {
+                // Keep start; clear end so the next calendar tap becomes the end date
+                // and paints the in-range highlight immediately.
+                dateRangeState.setSelection(startMs, null)
+            } else {
+                dateRangeState.setSelection(
+                    startMs,
+                    localDateToUtcMidnightMillis(endLocal.date),
+                )
+            }
         }
     }
     // Material DateRangePicker on some targets selects the end day without painting the

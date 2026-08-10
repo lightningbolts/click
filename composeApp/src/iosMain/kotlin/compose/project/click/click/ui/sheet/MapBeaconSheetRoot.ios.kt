@@ -36,10 +36,23 @@ import compose.project.click.click.ui.theme.PlatformStyleProvider
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
 import platform.CoreGraphics.CGAffineTransformMakeTranslation
+import platform.CoreGraphics.CGPointMake
 import platform.CoreGraphics.CGSizeMake
+import platform.Foundation.NSNotification
+import platform.Foundation.NSNotificationCenter
+import platform.Foundation.NSNumber
+import platform.Foundation.NSOperationQueue
+import platform.Foundation.NSValue
+import platform.UIKit.CGRectValue
 import platform.UIKit.NSLayoutConstraint
 import platform.UIKit.UIAdaptivePresentationControllerDelegateProtocol
 import platform.UIKit.UIColor
+import platform.UIKit.UIEdgeInsetsMake
+import platform.UIKit.UIKeyboardAnimationCurveUserInfoKey
+import platform.UIKit.UIKeyboardAnimationDurationUserInfoKey
+import platform.UIKit.UIKeyboardFrameEndUserInfoKey
+import platform.UIKit.UIKeyboardWillChangeFrameNotification
+import platform.UIKit.UIKeyboardWillHideNotification
 import platform.UIKit.UIModalPresentationPageSheet
 import platform.UIKit.UIModalTransitionStyleCoverVertical
 import platform.UIKit.UIPresentationController
@@ -47,6 +60,7 @@ import platform.UIKit.UIScreen
 import platform.UIKit.UIScrollView
 import platform.UIKit.UIScrollViewContentInsetAdjustmentBehavior
 import platform.UIKit.UISheetPresentationControllerDetent
+import platform.UIKit.UISheetPresentationControllerDetentIdentifierLarge
 import platform.UIKit.UIUserInterfaceStyle
 import platform.UIKit.UIView
 import platform.UIKit.UIViewController
@@ -97,6 +111,7 @@ private class MapIosNativeSheetManager(
                 isPresented = false
                 isAnimating = false
                 resetSurfaceDrag()
+                uninstallKeyboardDetentObservers()
                 popActive()
                 onDismissFromSwipe()
             },
@@ -109,6 +124,10 @@ private class MapIosNativeSheetManager(
     private var contentHeightConstraint: NSLayoutConstraint? = null
     private var lastContentHeightPt = 0.0
     private var retainedComposeVc: UIViewController? = null
+    private var keyboardExpandObserver: Any? = null
+    private var keyboardCollapseObserver: Any? = null
+    private var keyboardExpanded = false
+    private var lastAppliedKeyboardOverlapPt = Float.NaN
 
     private companion object {
         /** Bottom of stack = root sheet; top = currently interactive sheet. */
@@ -135,7 +154,9 @@ private class MapIosNativeSheetManager(
             backgroundColor = UIColor.clearColor
             setOpaque(false)
             contentInsetAdjustmentBehavior =
-                UIScrollViewContentInsetAdjustmentBehavior.UIScrollViewContentInsetAdjustmentAutomatic
+                // Compose applies [sheetImePadding]; Automatic double-insets leave a black
+                // gap between the focused field and the keyboard (esp. at medium detent).
+                UIScrollViewContentInsetAdjustmentBehavior.UIScrollViewContentInsetAdjustmentNever
         }
     }
 
@@ -214,12 +235,8 @@ private class MapIosNativeSheetManager(
         return false
     }
 
-    private fun configurePageSheet(host: UIViewController) {
-        host.modalPresentationStyle = UIModalPresentationPageSheet
-        host.modalTransitionStyle = UIModalTransitionStyleCoverVertical
-        host.presentationController?.delegate = delegate
-        val sheet = host.sheetPresentationController
-        sheet?.setDetents(
+    private fun applyDefaultDetents(sheet: platform.UIKit.UISheetPresentationController) {
+        sheet.setDetents(
             if (expandable) {
                 listOf(
                     UISheetPresentationControllerDetent.mediumDetent(),
@@ -229,6 +246,154 @@ private class MapIosNativeSheetManager(
                 listOf(UISheetPresentationControllerDetent.mediumDetent())
             },
         )
+    }
+
+    /**
+     * Seat the focused field just above the keyboard without rebuilding the detent *list*
+     * (list swaps stutter). Expand to large via selectedDetentIdentifier, then apply
+     * UIScrollView contentInset in sync with the keyboard animation and scroll the
+     * first-responder (or content bottom) into the visible band above the keyboard.
+     */
+    private fun applyKeyboardBottomInset(
+        overlapPoints: Float,
+        durationSeconds: Double,
+        animationCurve: Long,
+    ) {
+        if (!useUiKitScrollHost || !isInitialized) return
+        val overlap = overlapPoints.toDouble().coerceAtLeast(0.0)
+        if (
+            !lastAppliedKeyboardOverlapPt.isNaN() &&
+            abs(overlapPoints - lastAppliedKeyboardOverlapPt) < 1.5f
+        ) {
+            return
+        }
+        lastAppliedKeyboardOverlapPt = overlapPoints
+        if (overlap > 0.5) {
+            ensureLargeDetentForKeyboard()
+        }
+        val inset = UIEdgeInsetsMake(0.0, 0.0, overlap, 0.0)
+        val animations = {
+            scrollView.contentInset = inset
+            scrollView.scrollIndicatorInsets = inset
+            if (overlap > 0.5) {
+                scrollFocusedContentAboveKeyboard(overlap, animated = false)
+            }
+        }
+        if (durationSeconds > 0.001) {
+            UIView.animateWithDuration(
+                duration = durationSeconds,
+                delay = 0.0,
+                options = (animationCurve shl 16).toULong(),
+                animations = animations,
+                completion = { _ ->
+                    if (overlap > 0.5) {
+                        scrollFocusedContentAboveKeyboard(overlap, animated = true)
+                    }
+                },
+            )
+        } else {
+            animations()
+        }
+        keyboardExpanded = overlap > 0.5
+    }
+
+    /** Prefer selecting large over replacing detents — avoids sheet rebuild flicker. */
+    private fun ensureLargeDetentForKeyboard() {
+        if (!expandable) return
+        val sheet = sheetViewController.sheetPresentationController ?: return
+        if (sheet.selectedDetentIdentifier == UISheetPresentationControllerDetentIdentifierLarge) {
+            return
+        }
+        sheet.animateChanges {
+            sheet.selectedDetentIdentifier = UISheetPresentationControllerDetentIdentifierLarge
+        }
+    }
+
+    private fun scrollFocusedContentAboveKeyboard(keyboardOverlapPt: Double, animated: Boolean) {
+        val padding = 16.0
+        val visibleH = scrollView.bounds.useContents { size.height } - keyboardOverlapPt
+        if (visibleH <= padding) return
+        val currentY = scrollView.contentOffset.useContents { y }
+        val responder = findFirstResponder(sheetViewController.view)
+        val targetY = if (responder != null) {
+            val frame = responder.convertRect(responder.bounds, toView = scrollView)
+            val responderBottom = frame.useContents { origin.y + size.height }
+            val responderTop = frame.useContents { origin.y }
+            when {
+                responderBottom > currentY + visibleH - padding ->
+                    (responderBottom - visibleH + padding).coerceAtLeast(0.0)
+                responderTop < currentY + padding ->
+                    (responderTop - padding).coerceAtLeast(0.0)
+                else -> return
+            }
+        } else {
+            // Compose may not expose a UIKit first responder — nudge so bottom fields clear IME.
+            val contentH = scrollView.contentSize.useContents { height }
+            val maxOffset = (contentH + keyboardOverlapPt - scrollView.bounds.useContents { size.height })
+                .coerceAtLeast(0.0)
+            (currentY + keyboardOverlapPt * 0.35).coerceIn(0.0, maxOffset)
+        }
+        if (abs(targetY - currentY) < 1.0) return
+        scrollView.setContentOffset(CGPointMake(0.0, targetY), animated = animated)
+    }
+
+    private fun findFirstResponder(view: UIView): UIView? {
+        if (view.isFirstResponder) return view
+        val subviews = view.subviews
+        for (i in 0 until subviews.size.toInt()) {
+            val child = subviews[i] as? UIView ?: continue
+            findFirstResponder(child)?.let { return it }
+        }
+        return null
+    }
+
+    private fun installKeyboardDetentObservers() {
+        if (!useUiKitScrollHost || keyboardExpandObserver != null) return
+        val center = NSNotificationCenter.defaultCenter
+        keyboardExpandObserver = center.addObserverForName(
+            name = UIKeyboardWillChangeFrameNotification,
+            `object` = null,
+            queue = NSOperationQueue.mainQueue,
+        ) { notification: NSNotification? ->
+            val overlap = notification.sheetKeyboardOverlapPoints()
+            applyKeyboardBottomInset(
+                overlapPoints = overlap,
+                durationSeconds = notification.sheetKeyboardDurationSeconds(),
+                animationCurve = notification.sheetKeyboardAnimationCurve(),
+            )
+        }
+        keyboardCollapseObserver = center.addObserverForName(
+            name = UIKeyboardWillHideNotification,
+            `object` = null,
+            queue = NSOperationQueue.mainQueue,
+        ) { notification: NSNotification? ->
+            applyKeyboardBottomInset(
+                overlapPoints = 0f,
+                durationSeconds = notification.sheetKeyboardDurationSeconds(),
+                animationCurve = notification.sheetKeyboardAnimationCurve(),
+            )
+        }
+    }
+
+    private fun uninstallKeyboardDetentObservers() {
+        val center = NSNotificationCenter.defaultCenter
+        keyboardExpandObserver?.let { center.removeObserver(it) }
+        keyboardCollapseObserver?.let { center.removeObserver(it) }
+        keyboardExpandObserver = null
+        keyboardCollapseObserver = null
+        lastAppliedKeyboardOverlapPt = Float.NaN
+        if (isInitialized && useUiKitScrollHost) {
+            applyKeyboardBottomInset(0f, durationSeconds = 0.0, animationCurve = 0L)
+        }
+        keyboardExpanded = false
+    }
+
+    private fun configurePageSheet(host: UIViewController) {
+        host.modalPresentationStyle = UIModalPresentationPageSheet
+        host.modalTransitionStyle = UIModalTransitionStyleCoverVertical
+        host.presentationController?.delegate = delegate
+        val sheet = host.sheetPresentationController
+        sheet?.let { applyDefaultDetents(it) }
         // Always show the system grabber — same path as action sheets. Compose surface-drag
         // transforms fought UISheetPresentationController and flickered on profile/drop dismiss.
         sheet?.prefersGrabberVisible = true
@@ -403,6 +568,7 @@ private class MapIosNativeSheetManager(
 
         configurePageSheet(host)
         isInitialized = true
+        installKeyboardDetentObservers()
         return host
     }
 
@@ -474,6 +640,7 @@ private class MapIosNativeSheetManager(
         }
         isAnimating = true
         resetSurfaceDrag()
+        uninstallKeyboardDetentObservers()
         sheetViewController.dismissViewControllerAnimated(
             flag = true,
             completion = {
@@ -520,6 +687,7 @@ private class MapIosNativeSheetManager(
         if (!isPresented || isAnimating) return
         isAnimating = true
         resetSurfaceDrag()
+        uninstallKeyboardDetentObservers()
         sheetViewController.dismissViewControllerAnimated(
             flag = true,
             completion = {
@@ -530,6 +698,37 @@ private class MapIosNativeSheetManager(
             },
         )
     }
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun NSNotification?.sheetKeyboardOverlapPoints(): Float {
+    val frame = this?.userInfo?.get(UIKeyboardFrameEndUserInfoKey) as? NSValue ?: return 0f
+    val screenHeight = UIScreen.mainScreen.bounds.useContents { size.height }
+    val (frameTop, frameBottom) = frame.CGRectValue().useContents {
+        origin.y to (origin.y + size.height)
+    }
+    val touchesBottomEdge = frameBottom >= screenHeight - 1.0
+    return if (touchesBottomEdge) {
+        (screenHeight - frameTop).coerceAtLeast(0.0).toFloat()
+    } else {
+        0f
+    }
+}
+
+private fun NSNotification?.sheetKeyboardDurationSeconds(): Double {
+    return this?.userInfo
+        ?.get(UIKeyboardAnimationDurationUserInfoKey)
+        .let { it as? NSNumber }
+        ?.doubleValue
+        ?: 0.0
+}
+
+private fun NSNotification?.sheetKeyboardAnimationCurve(): Long {
+    return this?.userInfo
+        ?.get(UIKeyboardAnimationCurveUserInfoKey)
+        .let { it as? NSNumber }
+        ?.longValue
+        ?: 0L
 }
 
 @Suppress("UNUSED_PARAMETER")

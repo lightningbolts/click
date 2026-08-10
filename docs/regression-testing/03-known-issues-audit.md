@@ -562,15 +562,15 @@ Scrolling and tapping members in Create verified click never crashes. Focusing S
 
 ### Fix landed (2026-08-10)
 
-- `ClickFormBottomSheet` defaults: `useUiKitScrollHost=true`, `expandable=true` (native UIKit scroll-host like which-pin / view-event).
-- Text-input sheets use `sheetImePadding` + `ClickSheetDefaults.ContentTopPaddingUnderGrabber` (global search template).
-- Picker / profile / drop beacon no longer force Compose fill-sheet surface-drag (flicker path).
+- `ClickFormBottomSheet` defaults: `useUiKitScrollHost=true` for Column/`sheetBodyScroll` wrap-content (native UIKit scroll-host like which-pin / view-event).
+- **LazyColumn / HorizontalPager / sticky-IME sheets must set `useUiKitScrollHost=false`** (Compose fill). UIKit unbounded wrap caused infinity-height crashes (profile Beacons/Media), empty search results, and empty verified-click contact lists.
+- Text-input fill sheets use `sheetImePadding` + `ClickSheetDefaults.ContentTopPaddingUnderGrabber` (global search + availability intent).
 - iOS `MapBeaconSheetRoot` no longer recreates the sheet manager when the local VC changes; does not dismiss unrelated presented VCs on re-show.
 - `prefersScrollingExpandsWhenScrolledToEdge` only when `useUiKitScrollHost`.
 
 ### Fix landed (2026-08-10 earlier fill-sheet attempt)
 
-- Temporary fill-sheet defaults (`useUiKitScrollHost=false`) + surface-drag restored dismiss but flickered on full-body swipe; superseded by UIKit scroll-host unification above.
+- Temporary fill-sheet defaults (`useUiKitScrollHost=false`) + surface-drag restored dismiss but flickered on full-body swipe; superseded by selective UIKit scroll-host (Column forms) vs Compose fill (lazy/pager/IME) above.
 
 ---
 

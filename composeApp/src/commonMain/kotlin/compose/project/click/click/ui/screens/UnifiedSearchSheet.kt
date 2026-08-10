@@ -4,12 +4,12 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -60,8 +62,12 @@ import compose.project.click.click.ui.theme.clickBorderColor
 import compose.project.click.click.ui.theme.clickCardSurface
 import compose.project.click.click.ui.theme.clickTextFieldTextStyle
 import compose.project.click.click.viewmodel.GlobalSearchViewModel
+import compose.project.click.click.viewmodel.SearchResult
 import compose.project.click.click.viewmodel.SearchResultCategory
 import kotlinx.coroutines.delay
+
+/** Caps LazyColumn under UIKit scroll-host so Compose never allocates a >16384px Metal texture. */
+private val SearchResultsMaxHeight = 520.dp
 
 /**
  * In-context global search presented as a platform bottom sheet (replaces [GlobalSearchScreen] routing).
@@ -89,7 +95,7 @@ fun UnifiedSearchSheet(
         appColorScheme = MaterialTheme.colorScheme,
         appTypography = MaterialTheme.typography,
         expandable = true,
-        // UIKit scroll-host — same dismiss path as which-pin / view-event.
+        // UIKit dismiss path; results use a height-capped LazyColumn (Metal 16384px limit).
         useUiKitScrollHost = true,
     ) {
         UnifiedSearchSheetContent(
@@ -140,6 +146,7 @@ private fun UnifiedSearchSheetContent(
         modifier = Modifier
             .fillMaxWidth()
             .background(sheetPageBackground())
+            // Host-owned IME inset when UIKit scroll-host is on (avoids Metal-tall padding).
             .sheetImePadding()
             .padding(
                 start = 16.dp,
@@ -147,6 +154,7 @@ private fun UnifiedSearchSheetContent(
                 top = ClickSheetDefaults.ContentTopPaddingUnderGrabber,
                 bottom = 8.dp,
             ),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -206,8 +214,7 @@ private fun UnifiedSearchSheetContent(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(top = 8.dp, bottom = 4.dp),
+                .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             FilterChip(
@@ -227,10 +234,13 @@ private fun UnifiedSearchSheetContent(
             }
         }
 
+        // Fixed height (not only heightIn) so LazyColumn never sees unbounded maxHeight under
+        // UIKit wrapContentHeight(unbounded=true) — that path measures every row into one
+        // Metal texture and crashes past 16384px.
         Box(
             modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .height(SearchResultsMaxHeight),
         ) {
             when {
                 isSearching -> {
@@ -267,14 +277,33 @@ private fun UnifiedSearchSheetContent(
                 }
 
                 else -> {
-                    UnifiedSearchResultsList(
-                        results = visibleResults,
-                        bottomPadding = listBottomPad,
-                        onNavigateToChat = onNavigateToChat,
-                        onNavigateToMap = onNavigateToMap,
-                        onNavigateToBeacon = onNavigateToBeacon,
-                        onNavigateToSettings = onNavigateToSettings,
-                    )
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = listBottomPad),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        item(key = "header") { SearchSectionHeader(label = "Results") }
+                        items(
+                            items = visibleResults,
+                            key = { searchResultStableKey(it) },
+                            contentType = { "search_result" },
+                        ) { row ->
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                color = clickCardSurface(),
+                                border = BorderStroke(1.dp, clickBorderColor()),
+                            ) {
+                                SearchResultRow(
+                                    result = row,
+                                    onNavigateToChat = onNavigateToChat,
+                                    onNavigateToMap = onNavigateToMap,
+                                    onNavigateToBeacon = onNavigateToBeacon,
+                                    onNavigateToSettings = onNavigateToSettings,
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

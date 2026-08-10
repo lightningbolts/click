@@ -371,13 +371,14 @@ fun ChatView(
         )
     }
 
-    var imeClearedForInteractiveBackSwipe by remember { mutableStateOf(false) }
+    var imeClearedForInteractiveBackSwipe = false
     LaunchedEffect(parentInteractiveBackSwipePx) {
         val ref = parentInteractiveBackSwipePx ?: return@LaunchedEffect
         // Defer IME teardown until the swipe is well underway (~28% width). Hiding the
         // keyboard at 8px resized the LazyColumn mid-gesture and tanked interactive-back fps.
+        // Use a plain flag (not mutableState) — writing Compose state here recomposed the
+        // entire ChatView (all image bubbles) every threshold cross and made backswipe laggy.
         snapshotFlow { ref.floatValue }.collect { offset ->
-            // width isn't on the float ref — use a generous px threshold (~120dp ≈ mid peek).
             val commitPx = with(density) { 120.dp.toPx() }
             when {
                 offset > commitPx && !imeClearedForInteractiveBackSwipe -> {
@@ -416,6 +417,9 @@ fun ChatView(
 
     LaunchedEffect(chatId, currentUserId) {
         if (currentUserId.isNullOrBlank()) return@LaunchedEffect
+        // Yield a couple frames so ConnectionsScreen enter slide can paint before a
+        // prefetch-warm Success with dozens of image bubbles lands on the main thread.
+        delay(48)
         viewModel.loadChatMessages(chatId)
     }
 

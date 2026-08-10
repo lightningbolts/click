@@ -210,7 +210,7 @@ fun BeaconDropSheetContent(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            // Native keyboard overlap on iOS page sheets — WindowInsets.ime is 0 there.
+            // No-ops under UIKit scroll-host (host contentInset seats the field).
             .sheetImePadding(),
     ) {
     Column(

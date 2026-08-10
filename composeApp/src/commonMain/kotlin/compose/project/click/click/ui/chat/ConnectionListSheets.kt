@@ -33,6 +33,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import compose.project.click.click.ui.components.sheetImePadding
+import compose.project.click.click.ui.components.ClickSheetDefaults
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -334,21 +335,24 @@ internal fun ConnectionMemberPickerSheet(
 
     val listState = rememberLazyListState()
     val scrollAtTop = rememberSheetScrollAtTop(listState)
-    // Compose-owned scroll + IME (not UIKit scroll host) so search focus cannot
-    // recreate/dismiss the native page sheet and bounce to Home.
+    // UIKit scroll-host for native body-swipe dismiss. Candidate list is height-capped so
+    // Compose never allocates a Metal texture taller than 16384px.
     ClickFormBottomSheet(
         onDismissRequest = onDismissRequest,
         expandable = true,
+        useUiKitScrollHost = true,
     ) {
         ProvideSheetSwipeDismiss(onDismissRequest = onDismissRequest, scrollAtTop = scrollAtTop) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight()
                 .sheetImePadding()
                 .background(sheetPageBackground())
-                .padding(horizontal = 20.dp, vertical = 12.dp)
-                .padding(bottom = 28.dp),
+                .padding(horizontal = 20.dp)
+                .padding(
+                    top = ClickSheetDefaults.ContentTopPaddingUnderGrabber,
+                    bottom = 28.dp,
+                ),
         ) {
             Text(
                 text = title,
@@ -430,7 +434,7 @@ internal fun ConnectionMemberPickerSheet(
                         state = listState,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f, fill = true),
+                            .height(420.dp),
                     ) {
                         items(
                             items = filteredCandidates,

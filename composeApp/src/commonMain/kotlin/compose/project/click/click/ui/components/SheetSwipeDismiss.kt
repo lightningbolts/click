@@ -117,8 +117,14 @@ fun Modifier.sheetBodyScroll(
 /**
  * IME inset for form sheets. `imePadding()` is unreliable inside iOS UIKit page sheets
  * (WindowInsets.ime stays 0) — use the native keyboard overlap there instead.
+ *
+ * When [LocalSheetScrollOwnedByHost] is true, the UIKit `UIScrollView` applies
+ * `contentInset` + scroll-to-focused-field — Compose padding here would double-inset
+ * and leave a large gap under the caret (drop beacon / search).
  */
 fun Modifier.sheetImePadding(): Modifier = composed {
+    if (LocalSheetScrollOwnedByHost.current) return@composed this
+
     val isIos = LocalPlatformStyle.current.isIOS
     if (!isIos) return@composed this.imePadding()
 
@@ -193,6 +199,8 @@ fun Modifier.sheetSwipeDismissWhenAtTop(
             private var dragOffsetPx = 0f
             /** True after this gesture scrolled content (block dismiss until a new gesture). */
             private var contentScrolledThisGesture = false
+            /** Ignore tiny rubber-band pulls so timeline overscroll does not flicker the sheet. */
+            private val surfaceDragDeadzonePx = thresholdPx * 0.18f
 
             private fun isAtTop(): Boolean {
                 refs.scrollAtTopOverride?.let { return it() }
@@ -202,7 +210,12 @@ fun Modifier.sheetSwipeDismissWhenAtTop(
 
             private fun setSurfaceDrag(offset: Float) {
                 dragOffsetPx = offset
-                refs.surfaceDrag(offset)
+                val visual = if (offset <= surfaceDragDeadzonePx) {
+                    0f
+                } else {
+                    offset - surfaceDragDeadzonePx
+                }
+                refs.surfaceDrag(visual)
             }
 
             private fun clearDragIfNeeded() {

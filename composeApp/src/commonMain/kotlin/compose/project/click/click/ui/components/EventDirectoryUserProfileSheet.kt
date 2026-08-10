@@ -104,7 +104,11 @@ fun EventDirectoryUserProfileSheet(
     val onSurface = MaterialTheme.colorScheme.onSurface
     val onVariant = MaterialTheme.colorScheme.onSurfaceVariant
 
-    ClickFormBottomSheet(onDismissRequest = onDismiss) {
+    ClickFormBottomSheet(
+        onDismissRequest = onDismiss,
+        // Column + sheetBodyScroll — UIKit host (native body swipe, no fill-sheet flicker).
+        useUiKitScrollHost = true,
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

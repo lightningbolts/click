@@ -311,41 +311,44 @@ fun InteractiveSwipeBackContainer(
                 if (enabled && useFullWidthHorizontalDrag) dragModifier else Modifier
             )
 
-        // Strict 3-layer stack: (1) previous route + parallax, (2) scrim (opacity only), (3) current route + finger offset.
-        if (showPreviousLayer) {
-            // Layer 1 — background / previous route: parallax translation only on this Box.
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .then(
-                        if (opaquePreviousBackground) {
-                            Modifier.background(MaterialTheme.colorScheme.background)
-                        } else {
-                            Modifier
-                        }
-                    )
-                    .graphicsLayer {
-                        val currentSwipeOffset = offsetPx.floatValue.coerceIn(0f, widthPx)
-                        val progress = (currentSwipeOffset / widthPx).coerceIn(0f, 1f)
-                        translationX = -(size.width * ParallaxBackgroundPeek) * (1f - progress)
-                    },
-            ) {
+        // Keep layer boxes always in the tree (stable slot for [currentContent]). Gating the
+        // whole underlay with `if (showPreviousLayer)` remounted ChatView at gesture start —
+        // every image bubble reloaded and interactive-back hitch followed the finger.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(
+                    if (opaquePreviousBackground) {
+                        Modifier.background(MaterialTheme.colorScheme.background)
+                    } else {
+                        Modifier
+                    }
+                )
+                .graphicsLayer {
+                    val currentSwipeOffset = offsetPx.floatValue.coerceIn(0f, widthPx)
+                    val active = currentSwipeOffset > 0.5f || isSettling
+                    alpha = if (active) 1f else 0f
+                    val progress = (currentSwipeOffset / widthPx).coerceIn(0f, 1f)
+                    translationX = -(size.width * ParallaxBackgroundPeek) * (1f - progress)
+                },
+        ) {
+            if (showPreviousLayer) {
                 previousContent()
             }
-            // Layer 2 — scrim over background, under foreground: no translation, opacity only (draw-phase progress).
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .drawBehind {
-                        val w = size.width.coerceAtLeast(1f)
-                        val currentSwipeOffset = offsetPx.floatValue.coerceIn(0f, w)
-                        val progress = (currentSwipeOffset / w).coerceIn(0f, 1f)
-                        drawRect(Color.Black.copy(alpha = 0.5f * (1f - progress)))
-                    },
-            )
         }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .drawBehind {
+                    val w = size.width.coerceAtLeast(1f)
+                    val currentSwipeOffset = offsetPx.floatValue.coerceIn(0f, w)
+                    if (currentSwipeOffset <= 0.5f && !isSettling) return@drawBehind
+                    val progress = (currentSwipeOffset / w).coerceIn(0f, 1f)
+                    drawRect(Color.Black.copy(alpha = 0.5f * (1f - progress)))
+                },
+        )
 
-        // Layer 3 — foreground: follows the finger; drawn above layers 1–2 when they are present.
+        // Layer 3 — foreground: follows the finger; drawn above layers 1–2.
         Box(
             modifier = Modifier
                 .fillMaxSize()

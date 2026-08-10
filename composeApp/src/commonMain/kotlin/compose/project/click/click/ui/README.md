@@ -73,14 +73,18 @@ with the system grabber and interactive dismissal; earlier iOS releases retain t
 matching native page-sheet fallback. Android uses the app theme through the adaptive
 Material host.
 
-- **Default (all body sheets):** `useUiKitScrollHost=true` — UIKit `UIScrollView` owns
+- **Default (Column / wrap-content sheets):** `useUiKitScrollHost=true` — UIKit `UIScrollView` owns
   expand-at-edge and swipe-dismiss (same path as which-pin / view-event). Use
   `sheetBodyScroll()` so Compose does not compete. Top chrome should clear the system
-  grabber via `ClickSheetDefaults.ContentTopPaddingUnderGrabber`.
-- **Text-input sheets (global search, drop beacon, pickers):** keep sticky search/field
-  chrome above the scroll body; use `sheetImePadding()` (Compose `imePadding()` stays 0
-  inside UIKit page sheets). Do **not** flip `useUiKitScrollHost=false` for forms —
-  that reintroduces Compose surface-drag flicker.
+  grabber via `ClickSheetDefaults.ContentTopPaddingUnderGrabber`. Includes directory,
+  search, profile (Column tab bodies), drop beacon, and view-event.
+- **LazyColumn / `weight(1f)` pickers that cannot convert yet:** set `useUiKitScrollHost=false`
+  (Compose fill sheet) and keep surface-drag deadzoned. Prefer converting to Column +
+  UIKit host over fill-sheet when possible.
+- **Text-input UIKit sheets (drop beacon, search, availability):** use `sheetImePadding()`.
+  On iOS scroll-host sheets, keyboard forces the **large** detent so the caret sits above
+  the keyboard at half-height; UIScrollView content-inset adjustment is **Never** to avoid
+  a double-inset black gap with `sheetImePadding`.
 - **Android:** the flag is ignored; Material/Calf nested-scroll dismiss still applies.
   `ProvideSheetSwipeDismiss` + `rememberSheetScrollAtTop` remain useful on Android.
 

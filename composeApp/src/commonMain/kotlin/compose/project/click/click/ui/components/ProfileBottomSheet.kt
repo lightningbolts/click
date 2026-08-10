@@ -13,7 +13,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -29,20 +28,17 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Description
@@ -156,6 +152,9 @@ import compose.project.click.click.ui.components.sheetBodyScroll
  * [UserProfileBottomSheet]. Media / Links / Files are derived client-side from
  * [ProfileSheetState.localMessages] because chat message content is E2EE on the wire.
  */
+/** Bounded pager height under UIKit scroll-host (Metal texture max 16384px @3x). */
+private val ProfileSheetPagerHeight = 560.dp
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileBottomSheet(
@@ -180,30 +179,30 @@ fun ProfileBottomSheet(
     }
     val pagerState = rememberPagerState(pageCount = { visibleTabs.size })
     val timelineScroll = rememberScrollState()
-    val mediaListState = rememberLazyListState()
-    val linksListState = rememberLazyListState()
-    val filesListState = rememberLazyListState()
-    val beaconsListState = rememberLazyListState()
-    val membersListState = rememberLazyListState()
+    val mediaScroll = rememberScrollState()
+    val linksScroll = rememberScrollState()
+    val filesScroll = rememberScrollState()
+    val beaconsScroll = rememberScrollState()
+    val membersScroll = rememberScrollState()
     val sheetOnDismiss = LocalSheetOnDismissRequest.current
     val profileScrollAtTop = remember(
         pagerState,
         visibleTabs,
         timelineScroll,
-        mediaListState,
-        linksListState,
-        filesListState,
-        beaconsListState,
-        membersListState,
+        mediaScroll,
+        linksScroll,
+        filesScroll,
+        beaconsScroll,
+        membersScroll,
     ) {
         {
             when (visibleTabs.getOrNull(pagerState.currentPage)) {
                 ProfileSheetTab.Timeline -> timelineScroll.isSheetScrollAtTop()
-                ProfileSheetTab.Media -> mediaListState.isSheetScrollAtTop()
-                ProfileSheetTab.Links -> linksListState.isSheetScrollAtTop()
-                ProfileSheetTab.Files -> filesListState.isSheetScrollAtTop()
-                ProfileSheetTab.Beacons -> beaconsListState.isSheetScrollAtTop()
-                ProfileSheetTab.Members -> membersListState.isSheetScrollAtTop()
+                ProfileSheetTab.Media -> mediaScroll.isSheetScrollAtTop()
+                ProfileSheetTab.Links -> linksScroll.isSheetScrollAtTop()
+                ProfileSheetTab.Files -> filesScroll.isSheetScrollAtTop()
+                ProfileSheetTab.Beacons -> beaconsScroll.isSheetScrollAtTop()
+                ProfileSheetTab.Members -> membersScroll.isSheetScrollAtTop()
                 null -> true
             }
         }
@@ -771,11 +770,12 @@ fun ProfileBottomSheet(
         onDismissRequest = sheetOnDismiss,
         scrollAtTop = profileScrollAtTop,
     ) {
-    Box(modifier = Modifier.fillMaxSize()) {
+    val scrollOwnedByHost = LocalSheetScrollOwnedByHost.current
+    Box(modifier = Modifier.fillMaxWidth().then(if (scrollOwnedByHost) Modifier else Modifier.fillMaxSize())) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .fillMaxHeight()
+            .then(if (scrollOwnedByHost) Modifier else Modifier.fillMaxHeight())
             .background(sheetPageBackground())
             .padding(horizontal = 20.dp)
             .padding(top = 12.dp, bottom = 12.dp),
@@ -850,11 +850,27 @@ fun ProfileBottomSheet(
             thickness = 1.dp,
         )
 
+        // Stop media preview / audio when leaving Media so tab switches never freeze the sheet.
+        LaunchedEffect(pagerState.currentPage) {
+            val tab = visibleTabs.getOrNull(pagerState.currentPage)
+            if (tab != ProfileSheetTab.Media && selectedMediaForPreview != null) {
+                selectedMediaForPreview = null
+            }
+        }
+
         HorizontalPager(
             state = pagerState,
-            modifier = Modifier.fillMaxSize(),
+            // Fixed page height under UIKit host keeps the Compose Metal texture under the
+            // 16384px GPU limit and lets each tab scroll internally + swipe horizontally.
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(
+                    if (scrollOwnedByHost) Modifier.height(ProfileSheetPagerHeight)
+                    else Modifier.fillMaxSize(),
+                ),
             verticalAlignment = Alignment.Top,
             pageSpacing = 14.dp,
+            userScrollEnabled = true,
         ) { pageIndex ->
             when (visibleTabs[pageIndex]) {
                 ProfileSheetTab.Timeline -> TimelinePanel(
@@ -887,7 +903,7 @@ fun ProfileBottomSheet(
                     onDeleteJournalEntry = deleteJournalEntry,
                 )
                 ProfileSheetTab.Media -> MediaPanel(
-                    listState = mediaListState,
+                    scrollState = mediaScroll,
                     items = effectiveMedia,
                     resolvedUrls = resolvedMediaUrls,
                     resolvedBitmaps = resolvedMediaBitmaps,
@@ -902,18 +918,18 @@ fun ProfileBottomSheet(
                     },
                 )
                 ProfileSheetTab.Links -> LinksPanel(
-                    listState = linksListState,
+                    scrollState = linksScroll,
                     items = effectiveLinks,
                     onOpen = handleOpenLink,
                 )
                 ProfileSheetTab.Files -> FilesPanel(
-                    listState = filesListState,
+                    scrollState = filesScroll,
                     items = effectiveFiles,
                     openingFileIds = openingFileIds,
                     onDownload = handleDownloadFile,
                 )
                 ProfileSheetTab.Beacons -> BeaconsPanel(
-                    listState = beaconsListState,
+                    scrollState = beaconsScroll,
                     messages = localBeaconMessages,
                     connectionId = state.connectionId,
                     isGroup = state.isGroup,
@@ -923,7 +939,7 @@ fun ProfileBottomSheet(
                     },
                 )
                 ProfileSheetTab.Members -> MembersPanel(
-                    listState = membersListState,
+                    scrollState = membersScroll,
                     members = state.groupMembers,
                     viewerUserId = state.viewerUserId,
                     groupCreatorId = state.groupCreatorId,
@@ -1496,8 +1512,11 @@ private fun TimelinePanel(
     val hasTimelineItems = items.isNotEmpty()
     Column(
         modifier = Modifier
+            .fillMaxWidth()
             .fillMaxSize()
-            .sheetBodyScroll(scrollState)
+            // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
+            // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
+            .verticalScroll(scrollState)
             .padding(top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -1894,7 +1913,7 @@ private fun TimelineRow(item: ProfileSheetTimelineItem) {
 
 @Composable
 private fun MediaPanel(
-    listState: LazyListState,
+    scrollState: ScrollState,
     items: List<ProfileSheetMedia>,
     resolvedUrls: Map<String, String>,
     resolvedBitmaps: Map<String, ImageBitmap>,
@@ -1955,13 +1974,17 @@ private fun MediaPanel(
         return
     }
 
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize().padding(top = 12.dp),
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .fillMaxSize()
+            // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
+            // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
+            .verticalScroll(scrollState)
+            .padding(top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
-        contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        items(imageRows, key = { row -> row.firstOrNull()?.id ?: "row" }) { row ->
+        imageRows.forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                 row.forEach { media ->
                     val rollLocked = media.isDisposableRollLocked()
@@ -2069,7 +2092,7 @@ private fun MediaPanel(
         }
 
         if (audioItems.isNotEmpty()) {
-            items(audioItems, key = { it.id }) { media ->
+            audioItems.forEach { media ->
                 val stream = resolvedUrls[media.id] ?: media.mediaUrl
                 val local = resolvedAudioLocalPaths[media.id]
                 val canPlay = !local.isNullOrBlank() ||
@@ -2160,7 +2183,7 @@ private fun MediaPanel(
 
 @Composable
 private fun BeaconsPanel(
-    listState: LazyListState,
+    scrollState: ScrollState,
     messages: List<ProfileSheetLocalMessage>,
     connectionId: String?,
     isGroup: Boolean,
@@ -2217,17 +2240,20 @@ private fun BeaconsPanel(
         }.distinctBy { it.beaconId }
     }
 
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize().padding(top = 12.dp),
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .fillMaxSize()
+            // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
+            // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
+            .verticalScroll(scrollState)
+            .padding(top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         if (!isGroup) {
             val rec = recommendation
             if (rec != null && !recommendationDismissed) {
-                item(key = "event-rec") {
-                    ConnectionEventRecommendationCard(
+                ConnectionEventRecommendationCard(
                         recommendation = rec,
                         rsvpInProgress = rsvpInProgress,
                         onRsvp = {
@@ -2245,20 +2271,17 @@ private fun BeaconsPanel(
                         },
                         onDismiss = { recommendationDismissed = true },
                     )
-                }
             }
         }
 
         if (previews.isEmpty()) {
-            item(key = "empty-beacons") {
-                EmptyTabState(
-                    icon = Icons.Outlined.Place,
-                    title = "No shared beacons",
-                    body = "Events from handshakes and map pins shared in this chat show up here.",
-                )
-            }
+            EmptyTabState(
+                icon = Icons.Outlined.Place,
+                title = "No shared beacons",
+                body = "Events from handshakes and map pins shared in this chat show up here.",
+            )
         } else {
-            items(previews, key = { it.beaconId }) { model ->
+            previews.forEach { model ->
                 compose.project.click.click.ui.chat.BeaconPreviewCard(
                     model = model,
                     onClick = { onOpenBeacon(model.beaconId) },
@@ -2270,7 +2293,7 @@ private fun BeaconsPanel(
 
 @Composable
 private fun LinksPanel(
-    listState: LazyListState,
+    scrollState: ScrollState,
     items: List<ProfileSheetLink>,
     onOpen: (String) -> Unit,
 ) {
@@ -2282,13 +2305,17 @@ private fun LinksPanel(
         )
         return
     }
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize().padding(top = 12.dp),
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .fillMaxSize()
+            // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
+            // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
+            .verticalScroll(scrollState)
+            .padding(top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        items(items, key = { it.id }) { link ->
+        items.forEach { link ->
             val linkShape = RoundedCornerShape(14.dp)
             val cardBorder = GlassSheetTokens.GlassBorder()
             val cardBg = GlassSheetTokens.GlassSurface()
@@ -2333,7 +2360,7 @@ private fun LinksPanel(
 
 @Composable
 private fun MembersPanel(
-    listState: LazyListState,
+    scrollState: ScrollState,
     members: List<User>,
     viewerUserId: String?,
     groupCreatorId: String?,
@@ -2342,29 +2369,29 @@ private fun MembersPanel(
     onMemberClick: ((String) -> Unit)?,
 ) {
     val isGroupAdmin = !viewerUserId.isNullOrBlank() && viewerUserId == groupCreatorId
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize().padding(top = 12.dp),
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .fillMaxSize()
+            // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
+            // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
+            .verticalScroll(scrollState)
+            .padding(top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         if (onAddMember != null) {
-            item("add_member") {
-                TextButton(onClick = onAddMember) {
-                    Text("Add member")
-                }
+            TextButton(onClick = onAddMember) {
+                Text("Add member")
             }
         }
         if (members.isEmpty()) {
-            item("empty") {
-                EmptyTabState(
-                    icon = Icons.Outlined.People,
-                    title = "No members yet",
-                    body = "People in this group will show up here.",
-                )
-            }
+            EmptyTabState(
+                icon = Icons.Outlined.People,
+                title = "No members yet",
+                body = "People in this group will show up here.",
+            )
         } else {
-            items(members, key = { it.id }) { user ->
+            members.forEach { user ->
                 val label = user.name?.trim()?.takeIf { it.isNotEmpty() } ?: "Member"
                 val canRemove = isGroupAdmin &&
                     onRemoveMember != null &&
@@ -2418,7 +2445,7 @@ private fun MembersPanel(
 
 @Composable
 private fun FilesPanel(
-    listState: LazyListState,
+    scrollState: ScrollState,
     items: List<ProfileSheetFile>,
     openingFileIds: Set<String>,
     onDownload: (ProfileSheetFile) -> Unit,
@@ -2431,13 +2458,17 @@ private fun FilesPanel(
         )
         return
     }
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize().padding(top = 12.dp),
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .fillMaxSize()
+            // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
+            // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
+            .verticalScroll(scrollState)
+            .padding(top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        items(items, key = { it.id }) { file ->
+        items.forEach { file ->
             val opening = file.id in openingFileIds
             val fileShape = RoundedCornerShape(14.dp)
             Row(
@@ -3104,6 +3135,8 @@ fun TabbedUserProfileSheet(
 
     ClickFormBottomSheet(
         onDismissRequest = onDismiss,
+        // Profile tabs use Column bodies under UIKit scroll-host (which-pin dismiss path).
+        useUiKitScrollHost = true,
     ) {
         ProfileBottomSheet(
             state = state,
@@ -3233,6 +3266,7 @@ fun TabbedGroupProfileSheet(
 
     ClickFormBottomSheet(
         onDismissRequest = onDismiss,
+        useUiKitScrollHost = true,
     ) {
         ProfileBottomSheet(
             state = state,

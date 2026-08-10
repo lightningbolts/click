@@ -78,13 +78,26 @@ npm run build
 
 High-signal unit tests to keep green: `ChatSwipeMathTest`, `ChatViewModelTest`, `ChatTimestampPeekTest`, `ChatInteractionPolicyTest`, `HomeContinuityPolicyTest`, `BeaconCheckInOptimismTest`, `EventAttendeeDirectoryTest`, `ConnectionEncounterMergeTest`, `NominatimSearchParseTest`, `ProximityConnectionChangeTargetsTest`, `DiscoveryFeedSectionsTest`, `OfflineBootTest`, proximity codec/matching tests under `composeApp` and `click-web/__tests__/` (incl. `attendeeDirectory.test.ts`, `eventEngagement.test.ts`, `event-engagement.route.contract.test.ts`).
 
+**Last verification (sheet dismiss + drop IME + date range, 2026-08-10):** Directory/search/profile
+on UIKit scroll-host (Column bodies; no surface-drag flicker) · drop-beacon keyboard expands to
+large detent + Never content-inset with `sheetImePadding` · End date picker opens with start-only
+selection so one tap paints the range · profile media preview clears on tab change · Android+iOS
+compile PASS.
+
+**Last verification (production regression sweep follow-up, 2026-08-10):** LazyColumn/pager
+sheets (`useUiKitScrollHost=false`) for search / profile / verified-click picker /
+availability IME · saved-event host hydration via live map+prefetch+GET · optimistic
+beacon/audio/file send animations · Android+iOS compile PASS · high-signal unit tests PASS
+(`EnsureFreshAccessTokenTest`, `GeocodingServiceCacheTest`, `BeaconPreviewModelEnrichmentTest`,
+`NetworkFailureUtilTest`, `GlobalSearchResultsTest`).
+
 **Last verification (production regression sweep, 2026-08-10):** UIKit scroll-host default for
-all body sheets (which-pin / view-event path) + global-search IME/`sheetImePadding` + grabber
+Column wrap-content sheets (which-pin / view-event path) + global-search IME/`sheetImePadding` + grabber
 top inset · shared `EnsureFreshAccessToken` for chat/presence/Realtime/pending sync · soft
 `JWT expired` no longer hard-logout · Home reminders rebind on prefetch + engagement ·
 `ensureEventBeaconDetail` host-name hydration · chat beacon card enrichment · geocode LRU ·
 read-heavy rate limit GET-only (RSVP mutations excluded).
-Android `compileDebugKotlinAndroid` + iOS `compileKotlinIosSimulatorArm64` PASS ·
+Android `compileDebugKotlinAndroid` + iOS `compileKotlinIosArm64` PASS ·
 `testDebugUnitTest` high-signal PASS (`NetworkFailureUtilTest`, `EnsureFreshAccessTokenTest`,
 `GeocodingServiceCacheTest`, `BeaconPreviewModelEnrichmentTest`, `ResolveChatBeaconForDetailTest`,
 `BeaconCheckInOptimismTest`) · click-web `readHeavyRateLimit` Jest PASS.

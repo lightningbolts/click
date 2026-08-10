@@ -33,6 +33,15 @@ import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AvailabilityIntentDuration // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AvailabilityViewModel // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickSheetDefaults
+import compose.project.click.click.ui.components.sheetImePadding
+import compose.project.click.click.ui.components.sheetBodyScroll
+import compose.project.click.click.ui.components.ProvideSheetSwipeDismiss
+import compose.project.click.click.ui.components.rememberSheetScrollAtTop
+import compose.project.click.click.ui.components.sheetPageBackground
+import compose.project.click.click.ui.components.GlassSheetTokens
+import compose.project.click.click.ui.components.ClickFormBottomSheet
+import compose.project.click.click.ui.components.ClickOutlinedTextField
 
 /**
  * Availability intent editor — same shell as Memory Map’s connection sheet ([MapScreen] + [AdaptiveBottomSheet]):
@@ -66,20 +75,26 @@ fun AvailabilitySheet(
 
     ClickFormBottomSheet(
         onDismissRequest = onDismiss,
+        // Short Column form — UIKit scroll-host for native body-swipe dismiss (no surface-drag flicker).
+        useUiKitScrollHost = true,
     ) {
         ProvideSheetSwipeDismiss(onDismissRequest = onDismiss, scrollAtTop = scrollAtTop) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight()
-                .background(sheetPageBackground()),
+                .background(sheetPageBackground())
+                .sheetImePadding(),
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .fillMaxHeight()
                     .sheetBodyScroll(scroll)
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                    .padding(
+                        start = 24.dp,
+                        end = 24.dp,
+                        top = ClickSheetDefaults.ContentTopPaddingUnderGrabber,
+                        bottom = 16.dp,
+                    ),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 Text(

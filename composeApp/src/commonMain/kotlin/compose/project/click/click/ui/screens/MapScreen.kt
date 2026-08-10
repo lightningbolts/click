@@ -69,6 +69,7 @@ import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.data.repository.MapBeaconRepository
 import compose.project.click.click.events.EventReminderCoordinator
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapState // pragma: allowlist secret
@@ -874,7 +875,8 @@ fun MapScreen(
             contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
             appColorScheme = MaterialTheme.colorScheme,
             appTypography = MaterialTheme.typography,
-            // UIKit scroll-host — same dismiss path as which-pin / view-event.
+            // Profile Column tabs under UIKit scroll-host (native dismiss; no surface-drag flicker).
+            useUiKitScrollHost = true,
         ) {
             ClickSheetDialogChrome(
                 modifier = Modifier
@@ -1450,23 +1452,17 @@ internal fun EventBeaconDetail(
     val currentUser by AppDataManager.currentUser.collectAsState()
     val connectedUsers by AppDataManager.connectedUsers.collectAsState()
     val mapBeacons by viewModel.mapBeacons.collectAsState()
-    val displayBeacon = remember(beacon, mapBeacons) {
-        val fromMap = mapBeacons.firstOrNull { it.id == beacon.id }
+    val prefetchedBeacons by AppDataManager.prefetchedMapBeacons.collectAsState()
+    // Direct GET override — Home saved/bookmark seeds often lack host until fetch completes.
+    var networkDetail by remember(beacon.id) { mutableStateOf<MapBeacon?>(null) }
+    // Key on the matching row (not the whole list) so host/posted patches invalidate remember.
+    val fromMap = mapBeacons.firstOrNull { it.id == beacon.id }
+    val fromPrefetch = prefetchedBeacons.firstOrNull { it.id == beacon.id }
+    val displayBeacon = remember(beacon, fromMap, fromPrefetch, networkDetail) {
+        val live = networkDetail ?: fromMap ?: fromPrefetch
         when {
-            fromMap == null -> beacon
-            else -> fromMap.withPreservedEventScheduleFrom(beacon)
-                .let { merged ->
-                    // Prefer whichever side still has schedule if merge left it null.
-                    when {
-                        merged.eventSchedule() != null -> merged
-                        beacon.eventSchedule() != null ->
-                            beacon.copy(
-                                latitude = merged.latitude,
-                                longitude = merged.longitude,
-                            )
-                        else -> merged
-                    }
-                }
+            live == null -> beacon
+            else -> live.withPreservedEventScheduleFrom(beacon)
         }
     }
     val schedule = displayBeacon.eventSchedule()
@@ -1510,6 +1506,17 @@ internal fun EventBeaconDetail(
         // Always hydrate missing Posted / Host / creator / schedule — bookmark & proximity rows
         // often already have schedule, so the old schedule-only gate skipped host+posted forever.
         viewModel.ensureEventBeaconDetail(displayBeacon.id, seed = displayBeacon)
+        val hostIncomplete = displayBeacon.creatorDisplayName.isNullOrBlank() ||
+            (displayBeacon.showCreatorName && displayBeacon.createdByUserId.isNullOrBlank())
+        if (hostIncomplete) {
+            val fetched = withContext(Dispatchers.Default) {
+                MapBeaconRepository().fetchBeacon(displayBeacon.id).getOrNull()
+            }
+            if (fetched != null) {
+                networkDetail = fetched
+                viewModel.ensureEventBeaconDetail(displayBeacon.id, seed = fetched)
+            }
+        }
     }
 
     LaunchedEffect(displayBeacon.id, currentUserSignedUp, checkedIn) {
@@ -1686,6 +1693,8 @@ internal fun EventBeaconDetail(
             ClickFormBottomSheet(
                 onDismissRequest = { showPeopleDirectory = false },
                 expandable = true,
+                // Column + sheetBodyScroll — UIKit scroll-host (same as view-event; no surface-drag flicker).
+                useUiKitScrollHost = true,
             ) {
                 EventPeopleDirectorySheetContent(
                     attendees = directoryAttendees.ifEmpty {
