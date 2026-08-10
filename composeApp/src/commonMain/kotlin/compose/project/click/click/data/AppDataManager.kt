@@ -47,6 +47,7 @@ import compose.project.click.click.util.chatMediaDispatcher
 import compose.project.click.click.util.isOfflineNetworkFailure
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import compose.project.click.click.ui.utils.CommunityHubPin
+import io.github.jan.supabase.auth.auth
 import compose.project.click.click.ui.utils.mergeCommunityHubLists
 import compose.project.click.click.ui.utils.mergeMapBeaconLists
 import kotlinx.coroutines.awaitAll
@@ -105,6 +106,8 @@ object AppDataManager {
     private var realtimeCoordinatorJob: Job? = null
     private var lastSyncedInboxVersion = 0L
     private var beaconPrefetchedThisSession = false
+    /** One retry when cold-start prefetch ran before auth/GPS and left caches empty. */
+    private var discoveryPrefetchEmptyRetryUsed = false
     private var profilePrefetchJob: Job? = null
     private var queuedProfilePrefetchIds: Set<String> = emptySet()
     private var pendingSyncPausedForAuth: Boolean = false
@@ -147,6 +150,17 @@ object AppDataManager {
     val cachedEventBookmarks:
         StateFlow<List<compose.project.click.click.data.api.EventBookmarkItemDto>> =
         _cachedEventBookmarks.asStateFlow()
+
+    /**
+     * Bumped when RSVP / bookmark / check-in local caches change so Home can rebuild
+     * Featured + Event reminder sections without waiting for the next prefetch.
+     */
+    private val _eventEngagementVersion = MutableSharedFlow<Unit>(extraBufferCapacity = 8)
+    val eventEngagementVersion: SharedFlow<Unit> = _eventEngagementVersion.asSharedFlow()
+
+    fun notifyEventEngagementChanged() {
+        _eventEngagementVersion.tryEmit(Unit)
+    }
 
     /** Home Saved Events section — keep in sync with API bookmark page size. */
     private const val SAVED_EVENT_BOOKMARKS_LIMIT = 50
@@ -350,7 +364,6 @@ object AppDataManager {
     private const val PRESENCE_HEARTBEAT_MS = 30_000L
     private const val PENDING_SYNC_RETRY_MS = 15_000L
     private const val STARTUP_TIMEOUT_MS = 15_000L
-    private const val TOKEN_REFRESH_SKEW_MS = 60_000L
     private const val FOREGROUND_RECOVERY_DEBOUNCE_MS = 900L
     private const val CHAT_PREFETCH_LIMIT = 12
     private const val CHAT_PREFETCH_MAX_MESSAGES = 80
@@ -533,7 +546,7 @@ object AppDataManager {
                 println(
                     "AppDataManager: session recovery failed ($reason): ${e.redactedRestMessage()}",
                 )
-            }.isSuccess
+            }.getOrDefault(false)
             _foregroundRealtimeRecovery.emit(Unit)
             // RealtimeCoordinator.stop() runs inside recovery — re-subscribe with the fresh JWT.
             _currentUser.value?.id?.takeIf { it.isNotBlank() }?.let { uid ->
@@ -858,10 +871,20 @@ object AppDataManager {
         }
     }
 
-    /** Map tab opened — allow one beacon/hub prefetch per session. */
+    /** Map tab or Home — prefetch nearby beacons/hubs (retries once if caches stay empty). */
     fun requestMapDiscoveryPrefetch() {
-        if (_ghostModeEnabled.value || beaconPrefetchedThisSession) return
-        beaconPrefetchedThisSession = true
+        if (_ghostModeEnabled.value) return
+        if (beaconPrefetchJob?.isActive == true) return
+        val hasDiscoveryCache =
+            _prefetchedMapBeacons.value.isNotEmpty() ||
+                _prefetchedCommunityHubs.value.isNotEmpty()
+        if (beaconPrefetchedThisSession && hasDiscoveryCache) return
+        if (beaconPrefetchedThisSession && discoveryPrefetchEmptyRetryUsed) return
+        if (beaconPrefetchedThisSession && !hasDiscoveryCache) {
+            discoveryPrefetchEmptyRetryUsed = true
+        } else if (!beaconPrefetchedThisSession) {
+            beaconPrefetchedThisSession = true
+        }
         startBeaconPrefetch()
     }
 
@@ -928,7 +951,7 @@ object AppDataManager {
             
             println("AppDataManager: Loading data for user $effectiveUserId")
 
-            // Beacon prefetch deferred until map tab opens (see requestMapDiscoveryPrefetch).
+            requestMapDiscoveryPrefetch()
 
             withTimeout(STARTUP_TIMEOUT_MS) {
                 val snapshotDeferred = async {
@@ -1162,6 +1185,10 @@ object AppDataManager {
         beaconPrefetchJob = scope.launch {
             try {
             runCatching {
+                // Cold start: session may not be hydrated yet when Home requests prefetch.
+                if (SupabaseConfig.client.auth.currentSessionOrNull()?.accessToken.isNullOrBlank()) {
+                    runCatching { ClickWebAuthCoordinator.ensureReady(authRepository) }
+                }
                 // GPS may not be ready the instant the app cold-starts. Retry a few times so the
                 // discovery feed is seeded with hubs + beacons without waiting for the user to
                 // open (and acquire bounds from) the expanded map.
@@ -1337,6 +1364,7 @@ object AppDataManager {
         realtimeCoordinatorJob = null
         RealtimeCoordinator.stop()
         beaconPrefetchedThisSession = false
+        discoveryPrefetchEmptyRetryUsed = false
         silentChatPrefetchCompleted = false
         lastSyncedInboxVersion = 0L
         profilePrefetchJob?.cancel()
@@ -1758,8 +1786,16 @@ object AppDataManager {
             while (_currentUser.value?.id == userId) {
                 if (!_ghostModeEnabled.value) {
                     val now = Clock.System.now().toEpochMilliseconds()
-                    supabaseRepository.updateUserLastPolled(userId, now)
-                    _currentUser.value = _currentUser.value?.copy(lastPolled = now)
+                    val jwt = compose.project.click.click.data.auth.EnsureFreshAccessToken.get(
+                        tokenStorage = tokenStorage,
+                        authRepository = authRepository,
+                    )
+                    if (jwt.isNullOrBlank()) {
+                        println("AppDataManager: Skipping last_polled — no fresh JWT")
+                    } else {
+                        supabaseRepository.updateUserLastPolled(userId, now)
+                        _currentUser.value = _currentUser.value?.copy(lastPolled = now)
+                    }
                 }
                 delay(PRESENCE_HEARTBEAT_MS)
             }
@@ -1960,30 +1996,15 @@ object AppDataManager {
     }
 
     private suspend fun resolveJwtForPendingSync(forceRefresh: Boolean = false): String? {
-        val now = Clock.System.now().toEpochMilliseconds()
-        val existingJwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
-        val expiresAt = tokenStorage.getExpiresAt()
-        val needsRefresh = forceRefresh ||
-            existingJwt == null ||
-            (expiresAt != null && expiresAt <= now + TOKEN_REFRESH_SKEW_MS)
-
-        if (!needsRefresh) return existingJwt
-
-        authRepository.refreshSession()
-            .onFailure { println("AppDataManager: Session refresh for pending sync failed: ${it.message}") }
-
-        tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
-
-        val restoreResult = authRepository.restoreSession()
-        if (restoreResult.isFailure) {
-            println("AppDataManager: Session restore for pending sync failed: ${restoreResult.exceptionOrNull()?.message}")
-            return null
+        return compose.project.click.click.data.auth.EnsureFreshAccessToken.get(
+            tokenStorage = tokenStorage,
+            authRepository = authRepository,
+            forceRefresh = forceRefresh,
+        ).also { jwt ->
+            if (jwt.isNullOrBlank()) {
+                println("AppDataManager: Session refresh for pending sync failed: no usable JWT")
+            }
         }
-
-        authRepository.refreshSession()
-            .onFailure { println("AppDataManager: Session refresh after restore failed: ${it.message}") }
-
-        return tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
     }
 
     private fun startNetworkConnectivityObserver() {

@@ -5,15 +5,20 @@ private val PERSISTED_CHAT_UUID = Regex(
 )
 
 /**
- * True for a server `chats.id` UUID. Rejects optimistic message ids (`temp-…`) and other
- * client-local placeholders that must never be sent as `chat_id`.
+ * True for a server UUID (chats / messages / etc.). Rejects optimistic ids (`temp-…`) and
+ * other client-local placeholders that must never hit PostgREST uuid columns.
  */
-fun isPersistedApiChatId(id: String?): Boolean {
+fun isPersistedApiUuid(id: String?): Boolean {
     val trimmed = id?.trim().orEmpty()
     if (trimmed.isEmpty()) return false
     if (trimmed.startsWith("temp-", ignoreCase = true)) return false
     if (trimmed.startsWith("temp_", ignoreCase = true)) return false
     if (trimmed.startsWith("client-opt:", ignoreCase = true)) return false
     if (trimmed.startsWith("optimistic:", ignoreCase = true)) return false
+    if (trimmed.startsWith("temp-img-", ignoreCase = true)) return false
+    if (trimmed.startsWith("temp-roll-", ignoreCase = true)) return false
     return PERSISTED_CHAT_UUID.matches(trimmed)
 }
+
+/** Alias for chat row ids — same rules as [isPersistedApiUuid]. */
+fun isPersistedApiChatId(id: String?): Boolean = isPersistedApiUuid(id)

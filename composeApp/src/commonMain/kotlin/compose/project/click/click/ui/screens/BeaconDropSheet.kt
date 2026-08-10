@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
@@ -17,7 +16,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import compose.project.click.click.ui.components.LocalSheetOnDismissRequest
+import compose.project.click.click.ui.components.ProvideSheetSwipeDismiss
+import compose.project.click.click.ui.components.ClickSheetDefaults
+import compose.project.click.click.ui.components.rememberSheetScrollAtTop
 import compose.project.click.click.ui.components.sheetBodyScroll
+import compose.project.click.click.ui.components.sheetImePadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.foundation.layout.Row
@@ -185,6 +189,7 @@ fun BeaconDropSheetContent(
     val chipContainer = MaterialTheme.colorScheme.surfaceContainerHighest
     val chipSelected = MaterialTheme.colorScheme.primaryContainer
     val scroll = rememberScrollState()
+    val scrollAtTop = rememberSheetScrollAtTop(scroll)
     val schedulePickerUi = rememberEventSchedulePickerUiState()
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = MaterialTheme.colorScheme.onSurface,
@@ -195,12 +200,29 @@ fun BeaconDropSheetContent(
         unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
     )
 
-    Box(modifier = modifier.fillMaxWidth().imePadding()) {
+    val onSheetDismiss = LocalSheetOnDismissRequest.current
+    // Report scroll edge to ClickPlatformSheet's dismiss host — do not attach a second
+    // nested-scroll dismiss (double surface-drag was opening map gaps above the sheet).
+    ProvideSheetSwipeDismiss(
+        onDismissRequest = onSheetDismiss,
+        scrollAtTop = scrollAtTop,
+    ) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            // Native keyboard overlap on iOS page sheets — WindowInsets.ime is 0 there.
+            .sheetImePadding(),
+    ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .sheetBodyScroll(scroll)
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(
+                start = 20.dp,
+                end = 20.dp,
+                top = ClickSheetDefaults.ContentTopPaddingUnderGrabber,
+                bottom = 12.dp,
+            ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
@@ -792,6 +814,7 @@ fun BeaconDropSheetContent(
             },
             uiState = schedulePickerUi,
         )
+    }
     }
     }
 }

@@ -5,6 +5,7 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.Test
 
@@ -179,6 +180,17 @@ class MessageCryptoTest {
         } catch (_: IllegalArgumentException) {
             // expected
         }
+    }
+
+    @Test
+    fun groupMasterKey_tryDecodeRejectsWireCiphertextWithoutThrowing() {
+        assertNull(MessageCrypto.tryDecodeGroupMasterKeyBase64("e2e:not-valid-base64:payload"))
+        assertNull(MessageCrypto.tryDecodeGroupMasterKeyBase64("e2e_grp:abc"))
+        assertNull(MessageCrypto.tryDecodeGroupMasterKeyBase64(""))
+        assertNull(MessageCrypto.tryDecodeGroupMasterKeyBase64(Base64.encode(ByteArray(24))))
+        val master = ByteArray(MessageCrypto.GROUP_MASTER_KEY_BYTES) { it.toByte() }
+        val ok = MessageCrypto.encodeGroupMasterKeyBase64(master)
+        assertTrue(master.contentEquals(MessageCrypto.tryDecodeGroupMasterKeyBase64(ok)!!))
     }
 
     // ── Media (binary) round-trip ───────────────────────────────────────────

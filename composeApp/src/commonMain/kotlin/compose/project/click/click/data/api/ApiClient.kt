@@ -18,10 +18,7 @@ import compose.project.click.click.util.redactedRestMessage
 import io.github.jan.supabase.auth.auth
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
-import io.ktor.client.plugins.auth.Auth
 import io.ktor.client.plugins.ClientRequestException
-import io.ktor.client.plugins.auth.providers.BearerTokens
-import io.ktor.client.plugins.auth.providers.bearer
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
@@ -380,9 +377,6 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
 
         private val clickWebAuthOrigin: String
             get() = ApiConfig.CLICK_WEB_BASE_URL.trimEnd('/')
-
-        private val clickWebAuthHost: String
-            get() = io.ktor.http.Url(clickWebAuthOrigin).host
     }
 
     private val json = Json {
@@ -404,46 +398,7 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
         install(ContentNegotiation) {
             json(json)
         }
-        install(Auth) {
-            bearer {
-                loadTokens {
-                    // Prefer live SDK session; fall back to TokenStorage so click-web calls
-                    // still authenticate after offline fast-boot (UI logged in, GoTrue empty).
-                    val session = SupabaseConfig.client.auth.currentSessionOrNull()
-                    if (session != null) {
-                        val access = session.accessToken
-                        if (access.isNotBlank()) {
-                            return@loadTokens BearerTokens(access, session.refreshToken.orEmpty())
-                        }
-                    }
-                    val stored = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
-                        ?: return@loadTokens null
-                    val refresh = tokenStorage.getRefreshToken()?.trim().orEmpty()
-                    BearerTokens(stored, refresh)
-                }
-                refreshTokens {
-                    try {
-                        SupabaseConfig.client.auth.refreshCurrentSession()
-                    } catch (_: Exception) {
-                        // Fall through to TokenStorage / AuthRepository-style restore below.
-                    }
-                    val session = SupabaseConfig.client.auth.currentSessionOrNull()
-                    if (session != null) {
-                        val access = session.accessToken
-                        if (access.isNotBlank()) {
-                            return@refreshTokens BearerTokens(access, session.refreshToken.orEmpty())
-                        }
-                    }
-                    val stored = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
-                        ?: return@refreshTokens null
-                    val refresh = tokenStorage.getRefreshToken()?.trim().orEmpty()
-                    BearerTokens(stored, refresh)
-                }
-                sendWithoutRequest { request ->
-                    request.url.host == clickWebAuthHost
-                }
-            }
-        }
+        installClickWebBearerAuth(tokenStorage)
     }
 
     /** click-web calls without bearer (only public routes). */

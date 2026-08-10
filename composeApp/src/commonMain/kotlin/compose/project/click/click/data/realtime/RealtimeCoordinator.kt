@@ -10,6 +10,7 @@ import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
+import io.github.jan.supabase.realtime.realtime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -107,6 +108,9 @@ object RealtimeCoordinator {
             while (isActive) {
                 var sub: ChatMessageSubscription? = null
                 try {
+                    // Ensure fresh JWT before subscribe — expired Realtime auth causes 8s timeouts.
+                    compose.project.click.click.data.auth.EnsureFreshAccessToken.get()
+                    runCatching { SupabaseConfig.client.realtime.connect() }
                     // subscribeToMessageInserts() registers postgresChangeFlow synchronously;
                     // attach() must run before collect() but after listener registration.
                     val (subscription, flow) = chatRepository.subscribeToMessageInserts()
@@ -140,6 +144,8 @@ object RealtimeCoordinator {
         connectionsCollectJob = scope.launch {
             var debounceJob: Job? = null
             try {
+                compose.project.click.click.data.auth.EnsureFreshAccessToken.get()
+                runCatching { SupabaseConfig.client.realtime.connect() }
                 val channel = SupabaseConfig.client.channel("app:connections:$userId")
                 connectionsChannel = channel
                 merge(

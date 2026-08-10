@@ -1,11 +1,13 @@
 package compose.project.click.click.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
@@ -16,6 +18,7 @@ import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -29,6 +32,8 @@ import compose.project.click.click.ui.sheet.MapBeaconSheetRoot
 object ClickSheetDefaults {
     val ContentHorizontalPadding = 20.dp
     val ContentBottomPadding = 24.dp
+    /** Clearance under the iOS system grabber / sheet handle before primary chrome. */
+    val ContentTopPaddingUnderGrabber = 20.dp
     val TitleBottomSpacing = 12.dp
     val ScrimAlpha = 0.55f
 }
@@ -63,20 +68,30 @@ fun ClickPlatformSheet(
         expandable = expandable,
         useUiKitScrollHost = useUiKitScrollHost,
     ) {
-        ProvideSheetSwipeDismiss(onDismissRequest = onDismissRequest) {
-            ClickSheetDialogChrome(
-                sheetColor = sheetColor,
-                onSurface = onSheet,
-                alignSemanticColorsToSheet = true,
+        // Nested ProvideSheetSwipeDismiss reports scroll-at-top into SheetFingerDismissHost's
+        // holder (iOS fill sheets / Android adaptive). Do not nest a second holder here.
+        CompositionLocalProvider(
+            LocalSheetOnDismissRequest provides onDismissRequest,
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (useUiKitScrollHost) Modifier else Modifier.fillMaxSize()),
             ) {
-                // Scroll-hosted sheets must wrap content height (not fillMaxHeight) so the
-                // UIKit UIScrollView receives the full intrinsic size.
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .then(if (useUiKitScrollHost) Modifier else Modifier.fillMaxHeight()),
-                    content = content,
-                )
+                ClickSheetDialogChrome(
+                    sheetColor = sheetColor,
+                    onSurface = onSheet,
+                    alignSemanticColorsToSheet = true,
+                ) {
+                    // Scroll-hosted sheets must wrap content height (not fillMaxHeight) so the
+                    // UIKit UIScrollView receives the full intrinsic size.
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(if (useUiKitScrollHost) Modifier else Modifier.fillMaxHeight()),
+                        content = content,
+                    )
+                }
             }
         }
     }
@@ -131,8 +146,8 @@ fun ClickActionBottomSheet(
 /**
  * Forms and tall text-entry content.
  *
- * Compose owns scroll + IME (`useUiKitScrollHost=false`) so keyboard focus stays stable;
- * sheets remain expandable to full height with platform swipe-to-dismiss.
+ * Defaults to UIKit scroll-host (same dismiss path as which-pin / view-event).
+ * Text fields use [sheetImePadding] — Compose `imePadding()` is unreliable in UIKit sheets.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -147,10 +162,10 @@ fun ClickFormBottomSheet(
     contentWindowInsets: @Composable () -> WindowInsets = { WindowInsets.ime },
     @Suppress("UNUSED_PARAMETER") dragHandle: @Composable () -> Unit = {},
     /**
-     * iOS: false so Compose owns scroll + IME for text fields / LazyColumn.
-     * Set true only when UIKit scroll-host dismiss-at-top is required.
+     * iOS: true (default) so UIKit owns scroll-edge dismiss like which-pin / view-event.
+     * Do not flip false for forms — that reintroduces Compose surface-drag flicker.
      */
-    useUiKitScrollHost: Boolean = false,
+    useUiKitScrollHost: Boolean = true,
     expandable: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {

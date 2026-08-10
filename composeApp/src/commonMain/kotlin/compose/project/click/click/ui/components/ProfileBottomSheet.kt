@@ -30,13 +30,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -176,6 +179,35 @@ fun ProfileBottomSheet(
         ) + if (state.isGroup) listOf(ProfileSheetTab.Members) else emptyList()
     }
     val pagerState = rememberPagerState(pageCount = { visibleTabs.size })
+    val timelineScroll = rememberScrollState()
+    val mediaListState = rememberLazyListState()
+    val linksListState = rememberLazyListState()
+    val filesListState = rememberLazyListState()
+    val beaconsListState = rememberLazyListState()
+    val membersListState = rememberLazyListState()
+    val sheetOnDismiss = LocalSheetOnDismissRequest.current
+    val profileScrollAtTop = remember(
+        pagerState,
+        visibleTabs,
+        timelineScroll,
+        mediaListState,
+        linksListState,
+        filesListState,
+        beaconsListState,
+        membersListState,
+    ) {
+        {
+            when (visibleTabs.getOrNull(pagerState.currentPage)) {
+                ProfileSheetTab.Timeline -> timelineScroll.isSheetScrollAtTop()
+                ProfileSheetTab.Media -> mediaListState.isSheetScrollAtTop()
+                ProfileSheetTab.Links -> linksListState.isSheetScrollAtTop()
+                ProfileSheetTab.Files -> filesListState.isSheetScrollAtTop()
+                ProfileSheetTab.Beacons -> beaconsListState.isSheetScrollAtTop()
+                ProfileSheetTab.Members -> membersListState.isSheetScrollAtTop()
+                null -> true
+            }
+        }
+    }
     val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
     var selectedMediaForPreview by remember { mutableStateOf<ProfileSheetMedia?>(null) }
@@ -735,6 +767,10 @@ fun ProfileBottomSheet(
         }
     }
 
+    ProvideSheetSwipeDismiss(
+        onDismissRequest = sheetOnDismiss,
+        scrollAtTop = profileScrollAtTop,
+    ) {
     Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
@@ -822,6 +858,7 @@ fun ProfileBottomSheet(
         ) { pageIndex ->
             when (visibleTabs[pageIndex]) {
                 ProfileSheetTab.Timeline -> TimelinePanel(
+                    scrollState = timelineScroll,
                     items = state.timeline,
                     legacyProfile = legacyProfile,
                     legacyLoading = legacyLoading,
@@ -850,6 +887,7 @@ fun ProfileBottomSheet(
                     onDeleteJournalEntry = deleteJournalEntry,
                 )
                 ProfileSheetTab.Media -> MediaPanel(
+                    listState = mediaListState,
                     items = effectiveMedia,
                     resolvedUrls = resolvedMediaUrls,
                     resolvedBitmaps = resolvedMediaBitmaps,
@@ -863,13 +901,19 @@ fun ProfileBottomSheet(
                         }
                     },
                 )
-                ProfileSheetTab.Links -> LinksPanel(items = effectiveLinks, onOpen = handleOpenLink)
+                ProfileSheetTab.Links -> LinksPanel(
+                    listState = linksListState,
+                    items = effectiveLinks,
+                    onOpen = handleOpenLink,
+                )
                 ProfileSheetTab.Files -> FilesPanel(
+                    listState = filesListState,
                     items = effectiveFiles,
                     openingFileIds = openingFileIds,
                     onDownload = handleDownloadFile,
                 )
                 ProfileSheetTab.Beacons -> BeaconsPanel(
+                    listState = beaconsListState,
                     messages = localBeaconMessages,
                     connectionId = state.connectionId,
                     isGroup = state.isGroup,
@@ -879,6 +923,7 @@ fun ProfileBottomSheet(
                     },
                 )
                 ProfileSheetTab.Members -> MembersPanel(
+                    listState = membersListState,
                     members = state.groupMembers,
                     viewerUserId = state.viewerUserId,
                     groupCreatorId = state.groupCreatorId,
@@ -1092,6 +1137,7 @@ fun ProfileBottomSheet(
                     }
             }
         }
+    }
     }
 }
 
@@ -1419,6 +1465,7 @@ private fun ProfileActionCard(
 
 @Composable
 private fun TimelinePanel(
+    scrollState: ScrollState,
     items: List<ProfileSheetTimelineItem>,
     legacyProfile: UserPublicProfile?,
     legacyLoading: Boolean,
@@ -1450,7 +1497,7 @@ private fun TimelinePanel(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .sheetBodyScroll()
+            .sheetBodyScroll(scrollState)
             .padding(top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -1847,6 +1894,7 @@ private fun TimelineRow(item: ProfileSheetTimelineItem) {
 
 @Composable
 private fun MediaPanel(
+    listState: LazyListState,
     items: List<ProfileSheetMedia>,
     resolvedUrls: Map<String, String>,
     resolvedBitmaps: Map<String, ImageBitmap>,
@@ -1908,6 +1956,7 @@ private fun MediaPanel(
     }
 
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize().padding(top = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
         contentPadding = PaddingValues(bottom = 24.dp),
@@ -2111,6 +2160,7 @@ private fun MediaPanel(
 
 @Composable
 private fun BeaconsPanel(
+    listState: LazyListState,
     messages: List<ProfileSheetLocalMessage>,
     connectionId: String?,
     isGroup: Boolean,
@@ -2168,6 +2218,7 @@ private fun BeaconsPanel(
     }
 
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize().padding(top = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(bottom = 24.dp),
@@ -2218,7 +2269,11 @@ private fun BeaconsPanel(
 }
 
 @Composable
-private fun LinksPanel(items: List<ProfileSheetLink>, onOpen: (String) -> Unit) {
+private fun LinksPanel(
+    listState: LazyListState,
+    items: List<ProfileSheetLink>,
+    onOpen: (String) -> Unit,
+) {
     if (items.isEmpty()) {
         EmptyTabState(
             icon = Icons.Outlined.Link,
@@ -2228,6 +2283,7 @@ private fun LinksPanel(items: List<ProfileSheetLink>, onOpen: (String) -> Unit) 
         return
     }
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize().padding(top = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(bottom = 24.dp),
@@ -2277,6 +2333,7 @@ private fun LinksPanel(items: List<ProfileSheetLink>, onOpen: (String) -> Unit) 
 
 @Composable
 private fun MembersPanel(
+    listState: LazyListState,
     members: List<User>,
     viewerUserId: String?,
     groupCreatorId: String?,
@@ -2286,6 +2343,7 @@ private fun MembersPanel(
 ) {
     val isGroupAdmin = !viewerUserId.isNullOrBlank() && viewerUserId == groupCreatorId
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize().padding(top = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(bottom = 24.dp),
@@ -2360,6 +2418,7 @@ private fun MembersPanel(
 
 @Composable
 private fun FilesPanel(
+    listState: LazyListState,
     items: List<ProfileSheetFile>,
     openingFileIds: Set<String>,
     onDownload: (ProfileSheetFile) -> Unit,
@@ -2373,6 +2432,7 @@ private fun FilesPanel(
         return
     }
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize().padding(top = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(bottom = 24.dp),
@@ -3044,7 +3104,6 @@ fun TabbedUserProfileSheet(
 
     ClickFormBottomSheet(
         onDismissRequest = onDismiss,
-        useUiKitScrollHost = false,
     ) {
         ProfileBottomSheet(
             state = state,
@@ -3174,7 +3233,6 @@ fun TabbedGroupProfileSheet(
 
     ClickFormBottomSheet(
         onDismissRequest = onDismiss,
-        useUiKitScrollHost = false,
     ) {
         ProfileBottomSheet(
             state = state,

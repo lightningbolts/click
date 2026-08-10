@@ -10,6 +10,7 @@ import compose.project.click.click.data.api.CommunityHubNearbyDto // pragma: all
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconInsert // pragma: allowlist secret
 import compose.project.click.click.data.models.parseMapBeaconRows // pragma: allowlist secret
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlin.math.PI
@@ -26,6 +27,20 @@ class MapBeaconRepository(
 ) {
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+
+    private fun isRateLimited(error: Throwable): Boolean {
+        val msg = error.message?.lowercase().orEmpty()
+        return msg.contains("too many requests") || msg.contains("429")
+    }
+
+    /** One short backoff retry on transient middleware 429s. */
+    private suspend fun <T> withRateLimitRetry(block: suspend () -> Result<T>): Result<T> {
+        val first = block()
+        val err = first.exceptionOrNull() ?: return first
+        if (!isRateLimited(err)) return first
+        delay(1_200L)
+        return block()
+    }
 
     suspend fun fetchLocalBeacons(
         minLat: Double,
@@ -79,10 +94,14 @@ class MapBeaconRepository(
         accuracyMeters: Double? = null,
         platform: String? = null,
     ): Result<BeaconAttendeeDto> =
-        apiClient.postBeaconRsvp(beaconId, latitude, longitude, accuracyMeters, platform)
+        withRateLimitRetry {
+            apiClient.postBeaconRsvp(beaconId, latitude, longitude, accuracyMeters, platform)
+        }
 
     suspend fun cancelRsvp(beaconId: String): Result<Unit> =
-        apiClient.deleteBeaconRsvp(beaconId)
+        withRateLimitRetry {
+            apiClient.deleteBeaconRsvp(beaconId)
+        }
 
     suspend fun fetchBeaconEngagement(beaconId: String) =
         apiClient.getBeaconEngagement(beaconId)

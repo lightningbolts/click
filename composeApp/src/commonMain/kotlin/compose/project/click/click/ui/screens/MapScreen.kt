@@ -631,93 +631,74 @@ fun MapScreen(
     }
 
     if (showBeaconDropSheet) {
-        val dropSheetColor = MaterialTheme.colorScheme.surface
-        val onDropSheet = MaterialTheme.colorScheme.onSurface
-        MapBeaconSheetRoot(
-            visible = true,
+        // ClickFormBottomSheet owns chrome + scroll-at-top holder. IME is handled inside
+        // BeaconDropSheetContent via sheetImePadding (WindowInsets.ime is 0 in UIKit sheets).
+        ClickFormBottomSheet(
             onDismissRequest = { showBeaconDropSheet = false },
-            containerColor = dropSheetColor,
-            contentColor = onDropSheet,
-            scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
             contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
-            appColorScheme = MaterialTheme.colorScheme,
-            appTypography = MaterialTheme.typography,
-            modifier = Modifier,
-            // Expandable full-height; Compose-owned scroll avoids UIKit content-height thrash
-            // when Hub↔Event tabs swap (keyboard open). Swipe-dismiss stays via surface drag.
             expandable = true,
-            useUiKitScrollHost = false,
         ) {
-            ClickSheetDialogChrome(
+            BeaconDropSheetContent(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .fillMaxHeight(),
-                sheetColor = dropSheetColor,
-                onSurface = onDropSheet,
-                alignSemanticColorsToSheet = true,
-            ) {
-                BeaconDropSheetContent(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight()
-                        .padding(bottom = 12.dp),
-                    errorMessage = beaconInsertError,
-                    onDismissError = { viewModel.clearBeaconInsertError() },
-                    submitLocked = beaconSubmitInFlight,
-                    onResolveCurrentLocation = {
-                        if (!viewModel.hasLocationPermission()) {
+                    .fillMaxHeight()
+                    .padding(bottom = 12.dp),
+                errorMessage = beaconInsertError,
+                onDismissError = { viewModel.clearBeaconInsertError() },
+                submitLocked = beaconSubmitInFlight,
+                onResolveCurrentLocation = {
+                    if (!viewModel.hasLocationPermission()) {
+                        null
+                    } else {
+                        val loc = viewModel.resolveDropLocationForUi()
+                        if (loc == null) {
                             null
                         } else {
-                            val loc = viewModel.resolveDropLocationForUi()
-                            if (loc == null) {
-                                null
-                            } else {
-                                val reverse = compose.project.click.click.utils.GeocodingService.reverseGeocode(
-                                    loc.latitude,
-                                    loc.longitude,
+                            val reverse = compose.project.click.click.utils.GeocodingService.reverseGeocode(
+                                loc.latitude,
+                                loc.longitude,
+                            )
+                            reverse ?: run {
+                                // Never persist the literal "Current location" label.
+                                // Avoid String.format — not available on Kotlin/Native.
+                                val lat = (kotlin.math.round(loc.latitude * 100_000.0) / 100_000.0)
+                                val lon = (kotlin.math.round(loc.longitude * 100_000.0) / 100_000.0)
+                                val coords = "$lat, $lon"
+                                compose.project.click.click.utils.GeocodedPlace(
+                                    latitude = loc.latitude,
+                                    longitude = loc.longitude,
+                                    displayName = coords,
+                                    shortLabel = coords,
                                 )
-                                reverse ?: run {
-                                    // Never persist the literal "Current location" label.
-                                    // Avoid String.format — not available on Kotlin/Native.
-                                    val lat = (kotlin.math.round(loc.latitude * 100_000.0) / 100_000.0)
-                                    val lon = (kotlin.math.round(loc.longitude * 100_000.0) / 100_000.0)
-                                    val coords = "$lat, $lon"
-                                    compose.project.click.click.utils.GeocodedPlace(
-                                        latitude = loc.latitude,
-                                        longitude = loc.longitude,
-                                        displayName = coords,
-                                        shortLabel = coords,
-                                    )
-                                }
                             }
                         }
-                    },
-                    onSubmit = { kind, title, description, soundtrackUrl, ttlMs, showCreatorName, visibilityAudience, eventSchedule, eventCategories, venueScale, eventLocation, onRejectedEarly ->
-                        viewModel.submitBeaconDrop(
-                            kind = kind,
-                            title = title,
-                            description = description,
-                            soundtrackUrl = soundtrackUrl,
-                            ttlMs = ttlMs,
-                            showCreatorName = showCreatorName,
-                            visibilityAudience = visibilityAudience,
-                            eventSchedule = eventSchedule,
-                            eventCategories = eventCategories,
-                            venueScale = venueScale,
-                            eventLocation = eventLocation,
-                            onAcceptedLocally = { showBeaconDropSheet = false },
-                            onRejectedEarly = onRejectedEarly,
-                            onRemoteFinished = { },
-                        )
-                    },
-                    onCreateHub = { name, hubCat ->
-                        showBeaconDropSheet = false
-                        showCreateHubModal = true
-                        pendingHubName = name
-                        pendingHubCategory = hubCat
-                    },
-                )
-            }
+                    }
+                },
+                onSubmit = { kind, title, description, soundtrackUrl, ttlMs, showCreatorName, visibilityAudience, eventSchedule, eventCategories, venueScale, eventLocation, onRejectedEarly ->
+                    viewModel.submitBeaconDrop(
+                        kind = kind,
+                        title = title,
+                        description = description,
+                        soundtrackUrl = soundtrackUrl,
+                        ttlMs = ttlMs,
+                        showCreatorName = showCreatorName,
+                        visibilityAudience = visibilityAudience,
+                        eventSchedule = eventSchedule,
+                        eventCategories = eventCategories,
+                        venueScale = venueScale,
+                        eventLocation = eventLocation,
+                        onAcceptedLocally = { showBeaconDropSheet = false },
+                        onRejectedEarly = onRejectedEarly,
+                        onRemoteFinished = { },
+                    )
+                },
+                onCreateHub = { name, hubCat ->
+                    showBeaconDropSheet = false
+                    showCreateHubModal = true
+                    pendingHubName = name
+                    pendingHubCategory = hubCat
+                },
+            )
         }
     }
 
@@ -893,8 +874,7 @@ fun MapScreen(
             contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
             appColorScheme = MaterialTheme.colorScheme,
             appTypography = MaterialTheme.typography,
-            // LazyColumn tabs — Compose scroll + whole-sheet drag dismiss.
-            useUiKitScrollHost = false,
+            // UIKit scroll-host — same dismiss path as which-pin / view-event.
         ) {
             ClickSheetDialogChrome(
                 modifier = Modifier
@@ -1703,7 +1683,10 @@ internal fun EventBeaconDetail(
         )
 
         if (showPeopleDirectory) {
-            ClickFormBottomSheet(onDismissRequest = { showPeopleDirectory = false }) {
+            ClickFormBottomSheet(
+                onDismissRequest = { showPeopleDirectory = false },
+                expandable = true,
+            ) {
                 EventPeopleDirectorySheetContent(
                     attendees = directoryAttendees.ifEmpty {
                         attendees.map {

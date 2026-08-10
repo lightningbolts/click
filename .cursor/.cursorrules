@@ -2,6 +2,12 @@ MCP TOOL USAGE
 - Use the `codebase-memory` MCP server exclusively for structural searches.
 - When commanded to "Index this project", run `index_repository` immediately with zero preliminary exploration or verification searches.
 
+### Auth & Caching Rules
+1. **Thread-Safe Auth Refresh:** Wrap Supabase token refresh in a single Mutex lock in Ktor/Network interceptors. Queued requests must await the refresh to prevent concurrent rotation calls.
+2. **Atomic Token Persistence:** Synchronously persist both `accessToken` and `refreshToken` to native `TokenStorage` (Keychain/EncryptedSharedPreferences) on every session update.
+3. **Offline-First Reads:** Always serve read queries (chats, connections, profiles) from local disk storage (SQLite/Settings) first. Only perform delta or event-driven fetches to minimize Supabase network calls and egress.
+4. **Transparent Write Recovery:** On 401/403 network responses for write operations, trigger a single mutex-locked token refresh and transparently retry the request before throwing an error.
+
 CODE PRACTICES
 - Make sure all test cases pass and builds compile correctly for all iOS, Android, and Web whenever applicable.
 - Ensure NO regressions to the UI layout and backend existing logic. It is imperative for the implementation to be 100% correct because this will go into production and our company will depend on these features.

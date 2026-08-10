@@ -52,6 +52,7 @@ import compose.project.click.click.viewmodel.HomeViewModel // pragma: allowlist 
 import compose.project.click.click.viewmodel.HomeState // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.api.EventBookmarkItemDto
+import compose.project.click.click.data.api.CommunityHubNearbyDto
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
@@ -82,6 +83,7 @@ import compose.project.click.click.data.models.MapBeaconKind
 import compose.project.click.click.data.models.MapBeaconMetadata
 import compose.project.click.click.ui.utils.haversineDistance
 import compose.project.click.click.ui.utils.hasUsableMapCoordinates
+import compose.project.click.click.ui.utils.mergeMapBeaconLists
 import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapViewModel
 import androidx.compose.material.icons.filled.Groups
@@ -147,6 +149,9 @@ fun HomeScreen(
     val prefetchedBeacons by AppDataManager.prefetchedMapBeacons.collectAsState()
     val prefetchedHubs by AppDataManager.prefetchedCommunityHubs.collectAsState()
     val mapBeacons by mapViewModel.mapBeacons.collectAsState()
+    val mapCommunityHubs by mapViewModel.communityHubs.collectAsState()
+    val cachedEventBookmarks by AppDataManager.cachedEventBookmarks.collectAsState()
+    val discoveryPrefetchComplete by AppDataManager.discoveryMapPrefetchComplete.collectAsState()
     val currentUser by AppDataManager.currentUser.collectAsState()
     var selectedSavedEventBeacon by remember { mutableStateOf<MapBeacon?>(null) }
     var shareSavedBeaconToChat by remember { mutableStateOf<MapBeacon?>(null) }
@@ -159,6 +164,13 @@ fun HomeScreen(
             homeViewModel.refreshHomeAvailabilityIntents()
             homeViewModel.retrySavedEventBookmarksIfNeeded()
             // Nearby tiles used to appear only after Map tab opened — prefetch from Home too.
+            AppDataManager.requestMapDiscoveryPrefetch()
+            mapViewModel.warmDiscoveryFeed()
+        }
+    }
+    LaunchedEffect(discoveryPrefetchComplete) {
+        if (discoveryPrefetchComplete) {
+            homeViewModel.retrySavedEventBookmarksIfNeeded()
             AppDataManager.requestMapDiscoveryPrefetch()
         }
     }
@@ -190,8 +202,32 @@ fun HomeScreen(
         }
     }
 
-    val exploreTiles = remember(prefetchedBeacons, prefetchedHubs) {
-        buildHomeExploreTiles(prefetchedBeacons, prefetchedHubs)
+    val displayedSavedBookmarks = remember(savedEventBookmarks, cachedEventBookmarks) {
+        if (savedEventBookmarks.isNotEmpty()) savedEventBookmarks else cachedEventBookmarks
+    }
+
+    val exploreTiles = remember(prefetchedBeacons, prefetchedHubs, mapBeacons, mapCommunityHubs) {
+        val mergedBeacons = mergeMapBeaconLists(prefetchedBeacons, mapBeacons)
+        val hubDtos = buildList {
+            addAll(prefetchedHubs)
+            val seen = prefetchedHubs.map { it.hubId }.toSet()
+            mapCommunityHubs.forEach { pin ->
+                if (pin.hubId !in seen) {
+                    add(
+                        CommunityHubNearbyDto(
+                            hubId = pin.hubId,
+                            name = pin.name,
+                            latitude = pin.latitude,
+                            longitude = pin.longitude,
+                            radiusMeters = pin.radiusMeters,
+                            activeUserCount = pin.activeUserCount,
+                            distanceMeters = pin.reportedDistanceMeters ?: 0.0,
+                        ),
+                    )
+                }
+            }
+        }
+        buildHomeExploreTiles(mergedBeacons, hubDtos)
     }
 
     val featuredEvent = homeEventReminders.firstOrNull()
@@ -341,10 +377,10 @@ fun HomeScreen(
                             }
                         }
 
-                        if (savedEventBookmarks.isNotEmpty()) {
+                        if (displayedSavedBookmarks.isNotEmpty()) {
                             item(key = "saved_events") {
                                 SavedEventsSection(
-                                    bookmarks = savedEventBookmarks,
+                                    bookmarks = displayedSavedBookmarks,
                                     onBookmarkClick = { bookmark ->
                                         selectedSavedEventBeacon = resolveSavedEventBeacon(
                                             bookmark = bookmark,

@@ -9,6 +9,7 @@ import io.ktor.client.statement.bodyAsText
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlinx.serialization.json.Json
@@ -136,6 +137,28 @@ private fun shortLabelFromNominatim(obj: JsonObject, displayName: String): Strin
  * Prefer results near [nearLat]/[nearLon] when provided (viewbox bias + client rank).
  */
 object GeocodingService {
+    private const val REVERSE_CACHE_CAPACITY = 64
+    private const val FORWARD_CACHE_CAPACITY = 48
+    private const val COORD_DECIMALS = 5
+
+    private val reverseCache =
+        compose.project.click.click.util.LruMemoryCache<String, GeocodedPlace>(REVERSE_CACHE_CAPACITY)
+    private val forwardCache =
+        compose.project.click.click.util.LruMemoryCache<String, List<GeocodedPlace>>(FORWARD_CACHE_CAPACITY)
+
+    internal fun reverseCacheKey(latitude: Double, longitude: Double): String {
+        val factor = 10.0.pow(COORD_DECIMALS)
+        val lat = (kotlin.math.round(latitude * factor) / factor)
+        val lon = (kotlin.math.round(longitude * factor) / factor)
+        return "$lat,$lon"
+    }
+
+    /** Test / reset helper. */
+    fun clearCachesForTests() {
+        reverseCache.clear()
+        forwardCache.clear()
+    }
+
     suspend fun searchAddresses(
         query: String,
         limit: Int = 5,
@@ -144,6 +167,13 @@ object GeocodingService {
     ): List<GeocodedPlace> {
         val trimmed = query.trim()
         if (trimmed.length < 2) return emptyList()
+        val nearKey = if (nearLat != null && nearLon != null) {
+            reverseCacheKey(nearLat, nearLon)
+        } else {
+            ""
+        }
+        val cacheKey = "$trimmed|$limit|$nearKey"
+        forwardCache.get(cacheKey)?.let { return it }
         return try {
             val client = HttpClient()
             try {
@@ -171,13 +201,15 @@ object GeocodingService {
                     }
                 }
                 val parsed = parseNominatimSearchResults(response.bodyAsText(), limit = fetchLimit)
-                rankGeocodedPlaces(
+                val ranked = rankGeocodedPlaces(
                     places = parsed,
                     query = trimmed,
                     nearLat = nearLat,
                     nearLon = nearLon,
                     limit = limit,
                 )
+                forwardCache.put(cacheKey, ranked)
+                ranked
             } finally {
                 client.close()
             }
@@ -190,10 +222,13 @@ object GeocodingService {
     /**
      * Reverse-geocode GPS coordinates to the closest address label.
      * Used when dropping an event at “my location” so we never persist “Current location”.
+     * Results are cached by rounded lat/lon (~1m at 5 decimals).
      */
     suspend fun reverseGeocode(latitude: Double, longitude: Double): GeocodedPlace? {
         if (!latitude.isFinite() || !longitude.isFinite()) return null
         if (latitude == 0.0 && longitude == 0.0) return null
+        val key = reverseCacheKey(latitude, longitude)
+        reverseCache.get(key)?.let { return it }
         return try {
             val client = HttpClient()
             try {
@@ -213,12 +248,14 @@ object GeocodingService {
                 val display = obj["display_name"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
                 if (display.isEmpty()) return null
                 val short = shortLabelFromNominatim(obj, display)
-                GeocodedPlace(
+                val place = GeocodedPlace(
                     latitude = latitude,
                     longitude = longitude,
                     displayName = display,
                     shortLabel = short.ifBlank { display.substringBefore(',').trim() },
                 )
+                reverseCache.put(key, place)
+                place
             } finally {
                 client.close()
             }

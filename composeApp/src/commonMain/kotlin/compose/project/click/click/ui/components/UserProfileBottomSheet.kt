@@ -72,6 +72,8 @@ import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: 
 import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.ProvideSheetSwipeDismiss
+import compose.project.click.click.ui.components.rememberSheetScrollAtTop
 import compose.project.click.click.ui.components.sheetBodyScroll
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.ConnectionEncounter // pragma: allowlist secret
@@ -806,10 +808,15 @@ fun UserProfileBottomSheet(
         onDismiss()
     }
 
+    val profileScroll = rememberScrollState()
+    val profileScrollAtTop = rememberSheetScrollAtTop(profileScroll)
     ClickFormBottomSheet(
         onDismissRequest = onDismiss,
-        useUiKitScrollHost = false,
     ) {
+        ProvideSheetSwipeDismiss(
+            onDismissRequest = onDismiss,
+            scrollAtTop = profileScrollAtTop,
+        ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -819,7 +826,7 @@ fun UserProfileBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .sheetBodyScroll()
+                .sheetBodyScroll(profileScroll)
                 .padding(horizontal = 16.dp, vertical = 8.dp)
                 .padding(bottom = 28.dp)
         ) {
@@ -1003,6 +1010,7 @@ fun UserProfileBottomSheet(
                     Text("Profile unavailable", color = GlassSheetTokens.OnOledMuted())
                 }
             }
+        }
         }
         }
     }

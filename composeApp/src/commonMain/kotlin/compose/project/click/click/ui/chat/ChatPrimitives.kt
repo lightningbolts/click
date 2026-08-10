@@ -48,6 +48,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -69,7 +70,13 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.Message
+import compose.project.click.click.data.models.beaconIdFromMetadata
+import compose.project.click.click.data.storage.BeaconEngagementPersistence
+import compose.project.click.click.data.storage.BeaconRsvpPersistence
+import compose.project.click.click.data.storage.createTokenStorage
+import compose.project.click.click.events.EventReminderCoordinator
 import compose.project.click.click.ui.theme.LightBlue
 import compose.project.click.click.ui.theme.PrimaryBlue
 
@@ -578,8 +585,49 @@ internal fun BeaconChatCard(
     enableContextMenu: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    val model = remember(message.id, message.metadata, message.content) {
-        BeaconPreviewModel.fromMessage(message)
+    val beaconId = remember(message.id, message.metadata) {
+        beaconIdFromMetadata(message.metadata).orEmpty()
+    }
+    val prefetched by AppDataManager.prefetchedMapBeacons.collectAsState()
+    val knownBeacon = remember(beaconId, prefetched) {
+        if (beaconId.isBlank()) null
+        else prefetched.firstOrNull { it.id == beaconId }
+            ?: EventReminderCoordinator.beaconById(beaconId)
+    }
+    val currentUserId = AppDataManager.currentUser.value?.id
+    var signedUp by remember(beaconId) { mutableStateOf(false) }
+    var bookmarked by remember(beaconId) { mutableStateOf(false) }
+    var checkedIn by remember(beaconId) { mutableStateOf(false) }
+    LaunchedEffect(beaconId, currentUserId) {
+        if (beaconId.isBlank() || currentUserId.isNullOrBlank()) {
+            signedUp = false
+            bookmarked = false
+            checkedIn = false
+            return@LaunchedEffect
+        }
+        val tokenStorage = createTokenStorage()
+        val rsvp = BeaconRsvpPersistence.load(tokenStorage, currentUserId)[beaconId]
+        val engagement = BeaconEngagementPersistence.load(tokenStorage, currentUserId)[beaconId]
+        signedUp = rsvp?.currentUserSignedUp == true
+        bookmarked = engagement?.bookmarked == true
+        checkedIn = engagement?.checkedIn == true || engagement?.localEarlyCheckIn == true
+    }
+    val model = remember(
+        message.id,
+        message.metadata,
+        message.content,
+        knownBeacon,
+        signedUp,
+        bookmarked,
+        checkedIn,
+    ) {
+        BeaconPreviewModel.fromMessage(
+            message = message,
+            knownBeacon = knownBeacon,
+            signedUp = signedUp,
+            bookmarked = bookmarked,
+            checkedIn = checkedIn,
+        )
     }
     val align = if (isSent) Alignment.CenterEnd else Alignment.CenterStart
     val longPressModifier =

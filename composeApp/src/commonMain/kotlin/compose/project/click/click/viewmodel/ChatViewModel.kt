@@ -71,6 +71,7 @@ import compose.project.click.click.network.ConnectivityMonitor
 import compose.project.click.click.network.NetworkConnectivityMonitor
 import compose.project.click.click.util.isOfflineNetworkFailure
 import compose.project.click.click.util.isPersistedApiChatId
+import compose.project.click.click.util.isPersistedApiUuid
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import compose.project.click.click.util.dedupeOneToOneChatsByPeer
 import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
@@ -188,7 +189,7 @@ class ChatViewModel(
     private val tokenStorage: TokenStorage = createTokenStorage(),
     private val chatRepository: ChatRepository = SupabaseChatRepository(tokenStorage = tokenStorage),
     private val supabaseRepository: SupabaseRepository = SupabaseRepository(),
-    private val chatApi: ChatApiClient = ChatApiClient(),
+    private val chatApi: ChatApiClient = ChatApiClient(tokenStorage = tokenStorage),
     private val connectivityMonitor: ConnectivityMonitor = NetworkConnectivityMonitor(),
     private val mapBeaconRepository: compose.project.click.click.data.repository.MapBeaconRepository =
         compose.project.click.click.data.repository.MapBeaconRepository(),
@@ -1982,6 +1983,9 @@ class ChatViewModel(
 
     private fun prefetchChatPayloads(userId: String, chats: List<ChatWithDetails>) {
         viewModelScope.launch {
+            // Refresh once before the parallel prefetch storm — each fetch used to call
+            // ensureFreshJwtForChat independently and amplify /token rate limits.
+            runCatching { chatRepository.ensureFreshAuthToken() }
             val targets = chats
                 .sortedByDescending { chatListActivityTimestamp(it) }
                 .take(prefetchedChatLimit)
@@ -2549,10 +2553,13 @@ class ChatViewModel(
 
     private suspend fun syncActiveChatReactions(chatId: String) {
         if ((_chatMessagesState.value as? ChatMessagesState.Success)?.chatDetails?.chat?.id != chatId) return
+        if (!isPersistedApiChatId(chatId)) return
         val messageIds = (_chatMessagesState.value as? ChatMessagesState.Success)
             ?.messages
             ?.map { it.message.id }
+            ?.filter { isPersistedApiUuid(it) }
             .orEmpty()
+        if (messageIds.isEmpty()) return
         val server = runCatching {
             chatRepository.fetchReactionsForChat(chatId, messageIds).groupBy { it.messageId }
         }.getOrElse { return }

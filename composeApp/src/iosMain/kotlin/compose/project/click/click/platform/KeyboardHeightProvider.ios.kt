@@ -172,3 +172,5 @@ private fun NSNotification?.animationCurve(): Int {
 }
 
 private const val UIKIT_ANIMATION_CURVE_EASE_IN_OUT = 0
+
+actual fun currentNativeKeyboardHeightPoints(): Float = latestKeyboardHeight

@@ -178,6 +178,10 @@ internal data class BeaconPreviewModel(
     val scheduleLabel: String?,
     val shareUrl: String,
     val albumArtUrl: String?,
+    val locationLabel: String? = null,
+    val signedUp: Boolean = false,
+    val bookmarked: Boolean = false,
+    val checkedIn: Boolean = false,
 ) {
     companion object {
         fun fromMapBeacon(beacon: MapBeacon): BeaconPreviewModel {
@@ -186,6 +190,8 @@ internal data class BeaconPreviewModel(
                 ?: listOfNotNull(beacon.metadata.artistName, beacon.metadata.trackName)
                     .joinToString(" · ")
                     .takeIf { it.isNotBlank() && it != title }
+            val location = beacon.metadata.locationName?.trim()?.takeIf { it.isNotEmpty() }
+                ?: beacon.metadata.formattedAddress?.trim()?.takeIf { it.isNotEmpty() }
             return BeaconPreviewModel(
                 beaconId = beacon.id,
                 title = title,
@@ -197,33 +203,54 @@ internal data class BeaconPreviewModel(
                 albumArtUrl = beacon.metadata.albumArtUrl?.takeIf {
                     beacon.kind == MapBeaconKind.SOUNDTRACK && it.isNotBlank()
                 },
+                locationLabel = location,
             )
         }
 
-        fun fromMessage(message: Message): BeaconPreviewModel {
+        fun fromMessage(
+            message: Message,
+            knownBeacon: MapBeacon? = null,
+            signedUp: Boolean = false,
+            bookmarked: Boolean = false,
+            checkedIn: Boolean = false,
+        ): BeaconPreviewModel {
+            val fromKnown = knownBeacon?.let { fromMapBeacon(it) }
             val root = message.metadata as? JsonObject
-            val title = beaconTitleFromMetadata(message.metadata)
+            val title = fromKnown?.title
+                ?: beaconTitleFromMetadata(message.metadata)
                 ?: message.content.removePrefix("Beacon:").trim().ifBlank { "Beacon" }
             val typeRaw = beaconTypeFromMetadata(message.metadata)
-            val kind = MapBeaconKind.fromRaw(typeRaw)
-            val shareUrl = beaconShareUrlFromMetadata(message.metadata)
+            val kind = fromKnown?.kind ?: MapBeaconKind.fromRaw(typeRaw)
+            val shareUrl = fromKnown?.shareUrl
+                ?: beaconShareUrlFromMetadata(message.metadata)
                 ?: beaconIdFromMetadata(message.metadata)?.let { buildEventShareUrl(it) }
                 ?: ""
-            val description = root?.get("description")?.jsonPrimitive?.contentOrNull
-                ?.trim()?.takeIf { it.isNotEmpty() && it != title }
-            val schedule = root?.get("schedule_label")?.jsonPrimitive?.contentOrNull
-                ?.trim()?.takeIf { it.isNotEmpty() }
-            val albumArt = root?.get("album_art_url")?.jsonPrimitive?.contentOrNull
-                ?.trim()?.takeIf { it.isNotEmpty() }
+            val description = fromKnown?.description
+                ?: root?.get("description")?.jsonPrimitive?.contentOrNull
+                    ?.trim()?.takeIf { it.isNotEmpty() && it != title }
+            val schedule = fromKnown?.scheduleLabel
+                ?: root?.get("schedule_label")?.jsonPrimitive?.contentOrNull
+                    ?.trim()?.takeIf { it.isNotEmpty() }
+            val albumArt = fromKnown?.albumArtUrl
+                ?: root?.get("album_art_url")?.jsonPrimitive?.contentOrNull
+                    ?.trim()?.takeIf { it.isNotEmpty() }
+            val location = fromKnown?.locationLabel
+                ?: root?.get("location_name")?.jsonPrimitive?.contentOrNull
+                    ?.trim()?.takeIf { it.isNotEmpty() }
             return BeaconPreviewModel(
-                beaconId = beaconIdFromMetadata(message.metadata).orEmpty(),
+                beaconId = knownBeacon?.id
+                    ?: beaconIdFromMetadata(message.metadata).orEmpty(),
                 title = title,
-                kindLabel = beaconTypeDisplayLabel(typeRaw, kind),
+                kindLabel = fromKnown?.kindLabel ?: beaconTypeDisplayLabel(typeRaw, kind),
                 kind = kind,
                 description = description,
                 scheduleLabel = schedule,
                 shareUrl = shareUrl,
                 albumArtUrl = albumArt,
+                locationLabel = location,
+                signedUp = signedUp,
+                bookmarked = bookmarked,
+                checkedIn = checkedIn,
             )
         }
     }
@@ -335,6 +362,30 @@ internal fun BeaconPreviewCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            }
+            if (model.locationLabel != null) {
+                Text(
+                    text = model.locationLabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            val engagementBits = buildList {
+                if (model.signedUp) add("Going")
+                if (model.bookmarked) add("Saved")
+                if (model.checkedIn) add("Checked in")
+            }
+            if (engagementBits.isNotEmpty()) {
+                Text(
+                    text = engagementBits.joinToString(" · "),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = PrimaryBlue,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
             if (model.description != null && !compact) {
                 Text(

@@ -42,13 +42,13 @@ fun Throwable.isHardAuthFailure(): Boolean {
         return true
     }
     val message = redactedRestMessage().lowercase()
+    // Soft "JWT expired" / access-token expiry is refreshable — never treat as hard failure.
+    // Only dead refresh credentials force re-login.
     return message.contains("invalid refresh") ||
         message.contains("refresh token not found") ||
         message.contains("refresh_token_not_found") ||
         message.contains("session not found") ||
         message.contains("session_not_found") ||
-        message.contains("invalid jwt") ||
-        message.contains("jwt expired") ||
         message.contains("user from sub claim in jwt does not exist") ||
         message.contains("invalid login credentials") ||
         (message.contains("refresh") && message.contains("invalid"))

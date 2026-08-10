@@ -1,7 +1,10 @@
 package compose.project.click.click.data.api
 
 import compose.project.click.click.data.models.*
+import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.qr.CLICK_WEB_BASE_URL
+import compose.project.click.click.data.storage.createTokenStorage
+import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.util.redactedRestMessage
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -28,7 +31,8 @@ import kotlinx.serialization.json.put
 class ChatApiClient(
     private val baseUrl: String = ApiConfig.BASE_URL,
     private val clickWebBaseUrl: String = CLICK_WEB_BASE_URL.trimEnd('/'),
-    private val httpClient: HttpClient? = null
+    private val tokenStorage: TokenStorage = createTokenStorage(),
+    private val httpClient: HttpClient? = null,
 ) {
     /**
      * Ktor already emits `form-data; name="<append key>"` for this part — only add `filename=` here.
@@ -48,6 +52,7 @@ class ChatApiClient(
                 prettyPrint = true
             })
         }
+        installClickWebBearerAuth(tokenStorage)
     }
 
     private fun bearerAuthHeader(rawToken: String): String {
@@ -462,31 +467,49 @@ class ChatApiClient(
         connectionId: String? = null,
     ): Result<Message> {
         return try {
-            val response = client.post("$clickWebBaseUrl/api/chat/messages") {
-                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
-                contentType(ContentType.Application.Json)
-                setBody(
-                    ClickWebSendMessageBody(
-                        // Never send optimistic/temp ids as chat_id (Postgres UUID + "Chat not found").
-                        chat_id = chatId.takeIf {
-                            compose.project.click.click.util.isPersistedApiChatId(it)
-                        },
-                        connection_id = connectionId?.takeIf { it.isNotBlank() },
-                        user_id = userId,
-                        content = content,
-                        message_type = messageType,
-                        metadata = metadata,
-                        local_sent_at = localSentAtMs,
-                    ),
-                )
+            suspend fun postOnce(bearer: String): Result<Message> {
+                val response = client.post("$clickWebBaseUrl/api/chat/messages") {
+                    header(HttpHeaders.Authorization, clickWebBearerHeader(bearer))
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        ClickWebSendMessageBody(
+                            chat_id = chatId.takeIf {
+                                compose.project.click.click.util.isPersistedApiChatId(it)
+                            },
+                            connection_id = connectionId?.takeIf { it.isNotBlank() },
+                            user_id = userId,
+                            content = content,
+                            message_type = messageType,
+                            metadata = metadata,
+                            local_sent_at = localSentAtMs,
+                        ),
+                    )
+                }
+                return if (response.status.value in 200..299) {
+                    val envelope = response.body<ClickWebMessageEnvelope>()
+                    Result.success(envelope.message.toMessage())
+                } else {
+                    Result.failure(Exception(readClickWebErrorMessage(response)))
+                }
             }
 
-            if (response.status.value in 200..299) {
-                val envelope = response.body<ClickWebMessageEnvelope>()
-                Result.success(envelope.message.toMessage())
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
+            val token = resolveClickWebAccessToken(tokenStorage)
+                ?: authToken.trim().takeIf { it.isNotEmpty() }
+            if (token.isNullOrBlank()) {
+                return Result.failure(Exception("Session expired. Sign in again."))
             }
+            val first = postOnce(token)
+            if (first.isFailure) {
+                val msg = first.exceptionOrNull()?.redactedRestMessage()?.lowercase()
+                if (msg?.contains("unauthorized") == true || msg?.contains("401") == true) {
+                    AuthRepository(tokenStorage).refreshSession()
+                    val retry = resolveClickWebAccessToken(tokenStorage)
+                    if (!retry.isNullOrBlank()) {
+                        return postOnce(retry)
+                    }
+                }
+            }
+            return first
         } catch (e: Exception) {
             println("Error sending message: ${e.redactedRestMessage()}")
             Result.failure(e)

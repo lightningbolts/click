@@ -78,6 +78,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import compose.project.click.click.util.compressOutgoingChatImageForUpload
 import compose.project.click.click.util.chatMediaDispatcher
+import compose.project.click.click.util.isHardAuthFailure
 import compose.project.click.click.util.isOfflineNetworkFailure
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import compose.project.click.click.util.chatMediaVaultLocalPath
@@ -91,9 +92,9 @@ import compose.project.click.click.util.writeChatMediaVaultFile
  * Uses the Python API for CRUD operations and Supabase Realtime for instant message updates
  */
 class SupabaseChatRepository(
-    private val apiClient: ChatApiClient = ChatApiClient(),
-    private val tokenStorage: TokenStorage
+    private val tokenStorage: TokenStorage,
 ) : ChatRepository {
+    private val apiClient = ChatApiClient(tokenStorage = tokenStorage)
     /** Lazy so [AppDataManager] construction does not eagerly create the Supabase client. */
     private val supabase by lazy { SupabaseConfig.client }
     private val supabaseRepository = SupabaseRepository()
@@ -106,129 +107,33 @@ class SupabaseChatRepository(
     private fun Connection.withEncountersSortedNewestFirst(): Connection =
         copy(connectionEncounters = connectionEncounters.mergeRichestEncounterEvents().sortedByDescending { it.encounteredAt })
 
-    private suspend fun ensureFreshJwtForChat(): String? {
-        val now = Clock.System.now().toEpochMilliseconds()
-
-        fun usableAccessToken(token: String?, expiresAtMs: Long?): String? {
-            val t = token?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-            val exp = expiresAtMs ?: jwtExpEpochMs(t)
-            // Only reject tokens that are clearly long-dead. Near-expiry tokens are still usable
-            // for a short window and must not hard-block chat when refresh fails.
-            if (exp != null && exp <= now - 5 * 60_000L) return null
-            return t
-        }
-
-        // 1) Prefer live GoTrue session. Never import TokenStorage over it (that caused AuthRestException
-        //    + "no fresh JWT" after staying signed in).
-        val sdkSession = supabase.auth.currentSessionOrNull()
-        if (sdkSession != null) {
-            usableAccessToken(
-                sdkSession.accessToken,
-                sdkSession.expiresAt?.toEpochMilliseconds(),
-            )?.let { token ->
-                runCatching {
-                    tokenStorage.saveTokens(
-                        jwt = sdkSession.accessToken,
-                        refreshToken = sdkSession.refreshToken,
-                        expiresAt = sdkSession.expiresAt?.toEpochMilliseconds(),
-                        tokenType = sdkSession.tokenType,
-                    )
-                }
-                val exp = sdkSession.expiresAt?.toEpochMilliseconds() ?: jwtExpEpochMs(token)
-                if (exp != null && exp <= now + 90_000L) {
-                    authRepository.refreshSession()
-                        .onFailure {
-                            println("ChatRepository: ensureFreshJwt refresh failed: ${it.redactedRestMessage()}")
-                        }
-                    val refreshed = supabase.auth.currentSessionOrNull()
-                    usableAccessToken(
-                        refreshed?.accessToken,
-                        refreshed?.expiresAt?.toEpochMilliseconds(),
-                    )?.let { return it }
-                }
-                return token
-            }
-        }
-
-        // 2) SDK empty — hydrate from TokenStorage, then refresh once under AuthRepository mutex.
-        runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
-        authRepository.refreshSession()
-            .onFailure {
-                println("ChatRepository: ensureFreshJwt refresh-after-import failed: ${it.redactedRestMessage()}")
-            }
-
-        val after = supabase.auth.currentSessionOrNull()
-        if (after != null) {
-            usableAccessToken(
-                after.accessToken,
-                after.expiresAt?.toEpochMilliseconds(),
-            )?.let { token ->
-                runCatching {
-                    tokenStorage.saveTokens(
-                        jwt = after.accessToken,
-                        refreshToken = after.refreshToken,
-                        expiresAt = after.expiresAt?.toEpochMilliseconds(),
-                        tokenType = after.tokenType,
-                    )
-                }
-                return token
-            }
-        }
-
-        // 3) Last resort: whatever TokenStorage still has. Never return null solely because refresh
-        //    failed — that hard-blocked chat until sign-out ("no fresh JWT").
-        return tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
-    }
-
-    /** Best-effort JWT `exp` (seconds) → epoch ms; null if unparseable. */
-    private fun jwtExpEpochMs(jwt: String?): Long? {
-        if (jwt.isNullOrBlank()) return null
-        val parts = jwt.split('.')
-        if (parts.size < 2) return null
-        val payload = parts[1]
-            .replace('-', '+')
-            .replace('_', '/')
-            .let { raw ->
-                val pad = (4 - raw.length % 4) % 4
-                raw + "=".repeat(pad)
-            }
-        return runCatching {
-            val json = kotlinx.serialization.json.Json.parseToJsonElement(
-                payload.decodeBase64ToString(),
-            )
-            val exp = (json as? kotlinx.serialization.json.JsonObject)
-                ?.get("exp")
-                ?.let { el ->
-                    when (el) {
-                        is kotlinx.serialization.json.JsonPrimitive ->
-                            el.content.toLongOrNull() ?: el.content.toDoubleOrNull()?.toLong()
-                        else -> null
-                    }
-                }
-            exp?.times(1000L)
-        }.getOrNull()
-    }
-
-    @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
-    private fun String.decodeBase64ToString(): String {
-        val bytes = kotlin.io.encoding.Base64.decode(this)
-        return bytes.decodeToString()
-    }
+    private suspend fun ensureFreshJwtForChat(): String? =
+        compose.project.click.click.data.auth.EnsureFreshAccessToken.get(
+            tokenStorage = tokenStorage,
+            authRepository = authRepository,
+        )
 
     private suspend fun refreshedJwtAfterAuthFailure(): String? {
         // Do not import TokenStorage over a live SDK session — that can rotate to a stale refresh token.
         if (supabase.auth.currentSessionOrNull() == null) {
             runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
         }
-        authRepository.refreshSession()
-            .onFailure { println("ChatRepository: token refresh failed: ${it.redactedRestMessage()}") }
-        supabase.auth.currentSessionOrNull()?.accessToken?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
-        tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
-        authRepository.restoreSession()
-        authRepository.refreshSession()
-            .onFailure { println("ChatRepository: token refresh after restore failed: ${it.redactedRestMessage()}") }
+        val refreshResult = authRepository.refreshSession()
+        refreshResult.onFailure { err ->
+            println("ChatRepository: token refresh failed: ${err.redactedRestMessage()}")
+            if (err.isHardAuthFailure()) {
+                // Do not cascade restoreSession + second refresh — that amplifies rate limits
+                // and can re-import a poisoned refresh token.
+                return null
+            }
+        }
         return supabase.auth.currentSessionOrNull()?.accessToken?.trim()?.takeIf { it.isNotEmpty() }
-            ?: tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+            ?: tokenStorage.getJwt()?.trim()?.takeIf { jwt ->
+                jwt.isNotEmpty() && run {
+                    val exp = compose.project.click.click.data.auth.EnsureFreshAccessToken.jwtExpEpochMs(jwt)
+                    exp == null || exp > Clock.System.now().toEpochMilliseconds()
+                }
+            }
     }
 
     private fun Throwable.isAuthFailure(): Boolean {
@@ -571,7 +476,9 @@ class SupabaseChatRepository(
                     listOf(viewerUserId, wrapPeer).sorted(),
                 )
                 val plain = MessageCrypto.decryptContent(memberRow.encryptedGroupKey, keys)
-                MessageCrypto.decodeGroupMasterKeyBase64(plain)
+                // HMAC failure returns the e2e: wire string unchanged — do not Base64-decode it
+                // (that throws "Invalid symbol ':' at index 3").
+                MessageCrypto.tryDecodeGroupMasterKeyBase64(plain)
             }
         } catch (e: Exception) {
             println("ChatRepository: unwrap group key failed: ${e.redactedRestMessage()}")
@@ -1489,40 +1396,49 @@ class SupabaseChatRepository(
             val resolvedConnectionId = connectionId
                 ?: ChatSessionCaches.peekConnectionIdForChat(chatId)
 
-            val firstSend = apiClient.sendMessage(
-                chatId = chatId,
-                userId = userId,
-                content = wireContent,
-                authToken = authToken,
-                messageType = messageType,
-                metadata = enrichedMetadata,
-                localSentAtMs = clientLocalSentAtMs,
-                connectionId = resolvedConnectionId,
-            )
+            val persistedChatId = chatId.takeIf {
+                compose.project.click.click.util.isPersistedApiChatId(it)
+            }
+            suspend fun postOnce(token: String, useChatId: String?) =
+                apiClient.sendMessage(
+                    chatId = useChatId.orEmpty(),
+                    userId = userId,
+                    content = wireContent,
+                    authToken = token,
+                    messageType = messageType,
+                    metadata = enrichedMetadata,
+                    localSentAtMs = clientLocalSentAtMs,
+                    connectionId = resolvedConnectionId,
+                )
+
+            var activeToken = authToken
+            val firstSend = postOnce(activeToken, persistedChatId)
             val insertedWire = firstSend.getOrElse { firstError ->
                 println(
                     "ChatRepository: sendMessage failed chatId=$chatId: ${firstError.redactedRestMessage()}",
                 )
-                val refreshed = if (firstError.isAuthFailure()) refreshedJwtAfterAuthFailure() else null
-                if (refreshed != null) {
-                    apiClient.sendMessage(
-                        chatId = chatId,
-                        userId = userId,
-                        content = wireContent,
-                        authToken = refreshed,
-                        messageType = messageType,
-                        metadata = enrichedMetadata,
-                        localSentAtMs = clientLocalSentAtMs,
-                        connectionId = resolvedConnectionId,
-                    ).getOrElse { retryError ->
+                var lastError: Throwable = firstError
+                if (firstError.isAuthFailure()) {
+                    val refreshed = refreshedJwtAfterAuthFailure()
+                    if (refreshed != null) {
+                        activeToken = refreshed
+                        postOnce(activeToken, persistedChatId).getOrElse { authRetryError ->
+                            lastError = authRetryError
+                            null
+                        }?.let { return@getOrElse it }
+                    }
+                }
+                // Omit chat_id so gatekeeper resolves via connection_id (stale/missing chat rows).
+                if (!resolvedConnectionId.isNullOrBlank()) {
+                    postOnce(activeToken, useChatId = null).getOrElse { connError ->
                         println(
-                            "ChatRepository: sendMessage retry failed chatId=$chatId: " +
-                                retryError.redactedRestMessage(),
+                            "ChatRepository: sendMessage connection fallback failed: " +
+                                connError.redactedRestMessage(),
                         )
-                        throw retryError
+                        throw lastError
                     }
                 } else {
-                    throw firstError
+                    throw lastError
                 }
             }
 
@@ -1781,6 +1697,8 @@ class SupabaseChatRepository(
         chatId: String,
         viewerUserId: String,
     ): Pair<ChatMessageSubscription, Flow<ChatRealtimeEvent>> {
+        ensureFreshJwtForChat()
+        runCatching { supabase.realtime.connect() }
         val preloaded = resolveChatCrypto(chatId, viewerUserId)
 
         val channel = supabase.channel("messages:$chatId")
@@ -1846,6 +1764,8 @@ class SupabaseChatRepository(
     }
 
     override suspend fun subscribeToMessageInserts(): Pair<ChatMessageSubscription, Flow<MessageListInsertEvent>> {
+        ensureFreshJwtForChat()
+        runCatching { supabase.realtime.connect() }
         val channel = supabase.channel("clicks:msg-list:${Clock.System.now().toEpochMilliseconds()}")
         // Register postgres listeners before subscribe() — same contract as [subscribeToMessages].
         // Do NOT defer postgresChangeFlow into channelFlow/callbackFlow collect; attach() runs first
@@ -2154,13 +2074,24 @@ class SupabaseChatRepository(
     /** Fetch reactions for messages in a given chat (optionally scoped to [messageIds]). */
     override suspend fun fetchReactionsForChat(chatId: String, messageIds: List<String>?): List<MessageReaction> {
         return try {
-            val ids = messageIds?.filter { it.isNotBlank() }?.distinct()?.takeIf { it.isNotEmpty() }
-                ?: supabase.from("messages")
-                    .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id")) {
-                        filter { eq("chat_id", chatId) }
+            // Never query uuid columns with optimistic temp-* ids (PostgREST 22P02).
+            val ids = messageIds
+                ?.map { it.trim() }
+                ?.filter { compose.project.click.click.util.isPersistedApiUuid(it) }
+                ?.distinct()
+                ?.takeIf { it.isNotEmpty() }
+                ?: run {
+                    if (!compose.project.click.click.util.isPersistedApiChatId(chatId)) {
+                        return emptyList()
                     }
-                    .decodeList<MessageIdOnly>()
-                    .map { it.id }
+                    supabase.from("messages")
+                        .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id")) {
+                            filter { eq("chat_id", chatId) }
+                        }
+                        .decodeList<MessageIdOnly>()
+                        .map { it.id }
+                        .filter { compose.project.click.click.util.isPersistedApiUuid(it) }
+                }
 
             if (ids.isEmpty()) return emptyList()
 

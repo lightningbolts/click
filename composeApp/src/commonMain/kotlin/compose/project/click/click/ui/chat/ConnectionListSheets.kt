@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -27,11 +26,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
+import compose.project.click.click.ui.components.sheetImePadding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -79,6 +80,8 @@ import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secre
 import compose.project.click.click.ui.theme.clickTextFieldTextStyle
 import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.ProvideSheetSwipeDismiss
+import compose.project.click.click.ui.components.rememberSheetScrollAtTop
 import compose.project.click.click.ui.components.sheetBodyScroll
 import compose.project.click.click.ui.components.sheetPageBackground
 
@@ -329,18 +332,20 @@ internal fun ConnectionMemberPickerSheet(
         }
     }
 
+    val listState = rememberLazyListState()
+    val scrollAtTop = rememberSheetScrollAtTop(listState)
     // Compose-owned scroll + IME (not UIKit scroll host) so search focus cannot
     // recreate/dismiss the native page sheet and bounce to Home.
     ClickFormBottomSheet(
         onDismissRequest = onDismissRequest,
-        useUiKitScrollHost = false,
         expandable = true,
     ) {
+        ProvideSheetSwipeDismiss(onDismissRequest = onDismissRequest, scrollAtTop = scrollAtTop) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
-                .imePadding()
+                .sheetImePadding()
                 .background(sheetPageBackground())
                 .padding(horizontal = 20.dp, vertical = 12.dp)
                 .padding(bottom = 28.dp),
@@ -422,6 +427,7 @@ internal fun ConnectionMemberPickerSheet(
                 }
                 else -> {
                     LazyColumn(
+                        state = listState,
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f, fill = true),
@@ -468,6 +474,7 @@ internal fun ConnectionMemberPickerSheet(
                     Text(primaryButtonLabel)
                 }
             }
+        }
         }
     }
 }

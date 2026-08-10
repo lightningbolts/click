@@ -3,6 +3,7 @@ package compose.project.click.click.data.repository
 import compose.project.click.click.auth.LocalSessionCache
 import compose.project.click.click.auth.LocalSessionIdentity
 import compose.project.click.click.data.SupabaseConfig
+import compose.project.click.click.data.auth.SessionRefreshCoordinator
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.Apple
 import io.github.jan.supabase.auth.providers.Google
@@ -23,8 +24,6 @@ import compose.project.click.click.auth.GoogleOAuthConfig
 import compose.project.click.click.getPlatform
 import compose.project.click.click.proximity.isSimulatorOrEmulatorRuntime
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
 
 class AuthRepository(
@@ -33,7 +32,6 @@ class AuthRepository(
     /** Lazy so [AppDataManager] and JVM tests can load without touching Supabase / Android crypto. */
     private val supabase by lazy { SupabaseConfig.client }
     private val clickWebApi by lazy { ApiClient() }
-    private val refreshMutex = Mutex()
     private companion object {
         const val AUTH_TIMEOUT_MS = 12_000L
         const val AUTH_INTERACTIVE_TIMEOUT_MS = 120_000L
@@ -435,7 +433,7 @@ class AuthRepository(
 
     suspend fun hasValidLocalSession(): Boolean = LocalSessionCache.read(tokenStorage) != null
 
-    suspend fun refreshSession(): Result<Unit> = refreshMutex.withLock {
+    suspend fun refreshSession(): Result<Unit> = SessionRefreshCoordinator.singleFlightRefresh {
         try {
             // Prefer the live GoTrue / SettingsSessionManager session. Re-importing TokenStorage
             // over it can overwrite a good refresh token with a stale one (then AuthRestException
@@ -461,7 +459,7 @@ class AuthRepository(
                     expiresAt = existingExp,
                     tokenType = existing.tokenType,
                 )
-                return@withLock Result.success(Unit)
+                return@singleFlightRefresh Result.success(Unit)
             }
             // Session token present but user missing — re-import identity from JWT before refresh.
             if (existing != null && supabase.auth.currentUserOrNull()?.id.isNullOrBlank()) {

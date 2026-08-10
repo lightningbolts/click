@@ -33,4 +33,48 @@ class GlassSheetGesturePhysicsTest {
             ),
         )
     }
+
+    @Test
+    fun surfaceDismissAllowedOnlyAtTopWithoutPriorScrollOrKeyboardBlock() {
+        assertTrue(
+            shouldAllowSheetSurfaceDismiss(
+                atTop = true,
+                contentScrolledThisGesture = false,
+                surfaceDragActive = true,
+                blockSurfaceDrag = false,
+            ),
+        )
+        assertFalse(
+            shouldAllowSheetSurfaceDismiss(
+                atTop = false,
+                contentScrolledThisGesture = false,
+                surfaceDragActive = true,
+                blockSurfaceDrag = false,
+            ),
+        )
+        assertFalse(
+            shouldAllowSheetSurfaceDismiss(
+                atTop = true,
+                contentScrolledThisGesture = true,
+                surfaceDragActive = true,
+                blockSurfaceDrag = false,
+            ),
+        )
+        assertFalse(
+            shouldAllowSheetSurfaceDismiss(
+                atTop = true,
+                contentScrolledThisGesture = false,
+                surfaceDragActive = true,
+                blockSurfaceDrag = true,
+            ),
+        )
+        assertFalse(
+            shouldAllowSheetSurfaceDismiss(
+                atTop = true,
+                contentScrolledThisGesture = false,
+                surfaceDragActive = false,
+                blockSurfaceDrag = false,
+            ),
+        )
+    }
 }

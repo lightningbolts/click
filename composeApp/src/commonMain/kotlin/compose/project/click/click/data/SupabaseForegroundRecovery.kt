@@ -21,14 +21,14 @@ object SupabaseForegroundRecovery {
         client: SupabaseClient,
         tokenStorage: TokenStorage = createTokenStorage(),
         authRepository: AuthRepository = AuthRepository(tokenStorage),
-    ) {
+    ): Boolean {
         runCatching { client.realtime.disconnect() }
         // Only hydrate TokenStorage into GoTrue when the SDK has no session. Blind re-import
         // overwrites a good SettingsSessionManager refresh token and breaks chat until sign-out.
         if (client.auth.currentSessionOrNull() == null) {
             runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
         }
-        authRepository.refreshSession()
+        val refreshOk = authRepository.refreshSession()
             .onSuccess {
                 runCatching { client.auth.startAutoRefreshForCurrentSession() }
             }
@@ -37,9 +37,15 @@ object SupabaseForegroundRecovery {
                     "SupabaseForegroundRecovery: refresh failed: ${e.redactedRestMessage()}",
                 )
             }
+            .isSuccess
+        if (!refreshOk) {
+            // Do not reconnect Realtime with a dead JWT — callers pause sync / force re-login.
+            return false
+        }
         runCatching { client.realtime.connect() }
         // Tear down stale RealtimeCoordinator channels so the next ensureStarted() re-subscribes
         // with the refreshed JWT (jobs may still look "active" with a dead socket auth).
         runCatching { RealtimeCoordinator.stopAndAwait() }
+        return true
     }
 }

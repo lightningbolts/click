@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -32,9 +31,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
-import compose.project.click.click.ui.components.sheetBodyScroll
 import compose.project.click.click.viewmodel.AvailabilityIntentDuration // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AvailabilityViewModel // pragma: allowlist secret
 
@@ -65,10 +61,13 @@ fun AvailabilitySheet(
     }
 
     val canSubmit = tag.trim().isNotEmpty() && !submitting
+    val scroll = rememberScrollState()
+    val scrollAtTop = rememberSheetScrollAtTop(scroll)
 
     ClickFormBottomSheet(
         onDismissRequest = onDismiss,
     ) {
+        ProvideSheetSwipeDismiss(onDismissRequest = onDismiss, scrollAtTop = scrollAtTop) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -79,7 +78,7 @@ fun AvailabilitySheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight()
-                    .sheetBodyScroll()
+                    .sheetBodyScroll(scroll)
                     .padding(horizontal = 24.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
@@ -183,6 +182,7 @@ fun AvailabilitySheet(
 
                 Spacer(modifier = Modifier.height(12.dp))
             }
+        }
         }
     }
 }

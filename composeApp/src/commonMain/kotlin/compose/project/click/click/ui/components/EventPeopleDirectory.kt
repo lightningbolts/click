@@ -194,6 +194,13 @@ fun EventPeopleDirectorySheetContent(
             style = MaterialTheme.typography.bodySmall,
             color = onVariant,
         )
+        if (!directoryEnriched && !loading) {
+            Text(
+                text = "Interest and mutual counts are unavailable right now. Pull to reopen after reconnecting.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
 
         Row(
             modifier = Modifier.fillMaxWidth(),

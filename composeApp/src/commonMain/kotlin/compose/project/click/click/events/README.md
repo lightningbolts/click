@@ -29,7 +29,8 @@ MapBeaconRepository ──► beacon metadata JSON
         ▼
 events/EventReminderCoordinator.syncBeacons()
         │
-        ├──► HomeViewModel / HomeScreen (reminder cards)
+        ├──► HomeViewModel observes prefetchedMapBeacons + eventEngagementVersion
+        │     and reloads homeReminders() after prefetch / RSVP (Featured + reminders)
         └──► Push / local notification (future hooks)
 
 events/EventSchedule.kt ── pure functions

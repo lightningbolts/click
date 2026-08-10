@@ -86,12 +86,59 @@ internal fun MessageActionSheet(
         onDismiss()
     }
 
+    // Confirm dialogs must live *inside* the sheet composition so Popup stacks above the
+    // UIKit page sheet (sibling popups on the parent VC render underneath).
     ClickActionBottomSheet(
         onDismissRequest = onDismiss,
     ) {
         val sheetBg = GlassSheetTokens.OledBlack()
         val onSurface = GlassSheetTokens.OnOled()
         val onVariant = GlassSheetTokens.OnOledMuted()
+        if (showDeleteMessageConfirm) {
+            GlassAlertDialog(
+                onDismissRequest = { showDeleteMessageConfirm = false },
+                title = { Text("Delete Message?") },
+                text = { Text("This message will be permanently deleted. This cannot be undone.") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showDeleteMessageConfirm = false
+                            showDeleteMessageFinalConfirm = true
+                        },
+                    ) {
+                        Text("Delete", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteMessageConfirm = false }) {
+                        Text("Cancel")
+                    }
+                },
+            )
+        }
+        if (showDeleteMessageFinalConfirm) {
+            GlassAlertDialog(
+                onDismissRequest = { showDeleteMessageFinalConfirm = false },
+                title = { Text("Delete Message Permanently?") },
+                text = { Text("This action is permanent and cannot be undone.") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.deleteMessage(message.id)
+                            showDeleteMessageFinalConfirm = false
+                            dismiss()
+                        },
+                    ) {
+                        Text("Yes, Delete", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteMessageFinalConfirm = false }) {
+                        Text("Cancel")
+                    }
+                },
+            )
+        }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -323,52 +370,5 @@ internal fun MessageActionSheet(
                 }
             }
         }
-    }
-
-    if (showDeleteMessageConfirm) {
-        GlassAlertDialog(
-            onDismissRequest = { showDeleteMessageConfirm = false },
-            title = { Text("Delete Message?") },
-            text = { Text("This message will be permanently deleted. This cannot be undone.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDeleteMessageConfirm = false
-                        showDeleteMessageFinalConfirm = true
-                    },
-                ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteMessageConfirm = false }) {
-                    Text("Cancel")
-                }
-            },
-        )
-    }
-
-    if (showDeleteMessageFinalConfirm) {
-        GlassAlertDialog(
-            onDismissRequest = { showDeleteMessageFinalConfirm = false },
-            title = { Text("Delete Message Permanently?") },
-            text = { Text("This action is permanent and cannot be undone.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.deleteMessage(message.id)
-                        showDeleteMessageFinalConfirm = false
-                        dismiss()
-                    },
-                ) {
-                    Text("Yes, Delete", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteMessageFinalConfirm = false }) {
-                    Text("Cancel")
-                }
-            },
-        )
     }
 }

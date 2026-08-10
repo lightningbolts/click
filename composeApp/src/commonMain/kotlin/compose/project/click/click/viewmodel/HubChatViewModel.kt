@@ -171,7 +171,7 @@ class HubChatViewModel(
     private val creatorId: String? = null,
     private val hubLocationResolver: suspend () -> LocationResult? = { null },
     private val tokenStorage: TokenStorage = createTokenStorage(),
-    private val chatApi: ChatApiClient = ChatApiClient(),
+    private val chatApi: ChatApiClient = ChatApiClient(tokenStorage = tokenStorage),
     private val hubLifecycleGateway: HubLifecycleGateway = ChatApiHubLifecycleGateway(chatApi),
     private val activeHubCache: ActiveHubCache = AppDataManagerActiveHubCache,
     private val mutationDispatcher: CoroutineDispatcher = chatMediaDispatcher,

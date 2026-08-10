@@ -148,6 +148,22 @@ class HomeViewModel(
                 _savedEventBookmarks.value = cached
             }
         }
+        // Prefetch / map merge fill EventReminderCoordinator after the first one-shot load —
+        // rebind Featured + Event reminders when the beacon index changes.
+        viewModelScope.launch {
+            AppDataManager.prefetchedMapBeacons.collect { beacons ->
+                if (beacons.isEmpty()) return@collect
+                val userId = AppDataManager.currentUser.value?.id?.takeIf { it.isNotBlank() }
+                    ?: return@collect
+                EventReminderCoordinator.syncBeacons(beacons)
+                loadHomeEventReminders(userId)
+            }
+        }
+        viewModelScope.launch {
+            AppDataManager.eventEngagementVersion.collect {
+                refreshEventSectionsAfterEngagement()
+            }
+        }
     }
 
     /**
@@ -492,6 +508,16 @@ class HomeViewModel(
         if (!bookmarksFetchPending && _savedEventBookmarks.value.isNotEmpty()) return
         bookmarksFetchPending = true
         viewModelScope.launch {
+            loadSavedEventBookmarks()
+        }
+    }
+
+    /** Call after RSVP / bookmark mutations so Featured + Saved sections stay current. */
+    fun refreshEventSectionsAfterEngagement() {
+        val userId = AppDataManager.currentUser.value?.id?.takeIf { it.isNotBlank() } ?: return
+        viewModelScope.launch {
+            loadHomeEventReminders(userId)
+            bookmarksFetchPending = true
             loadSavedEventBookmarks()
         }
     }

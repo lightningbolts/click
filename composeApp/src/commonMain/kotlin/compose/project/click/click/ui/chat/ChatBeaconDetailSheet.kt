@@ -30,6 +30,7 @@ import compose.project.click.click.data.models.chatBeaconLooksLikeEvent
 import compose.project.click.click.data.models.mapBeaconFromChatMetadata
 import compose.project.click.click.data.models.resolveChatBeaconForDetail
 import compose.project.click.click.data.repository.MapBeaconRepository
+import compose.project.click.click.events.eventSchedule
 import compose.project.click.click.ui.components.BeaconShareToChatDialog
 import compose.project.click.click.ui.components.ClickSheetDefaults
 import compose.project.click.click.ui.components.ClickSheetDialogChrome
@@ -83,15 +84,23 @@ internal fun ChatBeaconDetailSheet(
     var shareBeaconToChat by remember(beaconId) { mutableStateOf<MapBeacon?>(null) }
     val toastState = rememberUnifiedToastState()
 
-    LaunchedEffect(beaconId, messageMetadata, messageContent) {
+    LaunchedEffect(beaconId, messageMetadata, messageContent, mapBeacons) {
         val looksLikeEvent = chatBeaconLooksLikeEvent(messageFallback, messageMetadata)
-        val cacheHit = knownBeacons.any { it.id == beaconId } || mapBeacons.any { it.id == beaconId }
-        val current = resolved
-        // Skip network only when cache already has the correct EVENT kind for event cards.
-        if (current != null && current.id == beaconId && cacheHit &&
-            (!looksLikeEvent || current.kind == MapBeaconKind.EVENT)
-        ) {
-            resolved = resolveChatBeaconForDetail(current, messageFallback, messageMetadata)
+        val cached = knownBeacons.firstOrNull { it.id == beaconId }
+            ?: mapBeacons.firstOrNull { it.id == beaconId }
+        val current = resolveChatBeaconForDetail(cached, messageFallback, messageMetadata)
+            ?: messageFallback
+        val incomplete = current == null ||
+            (looksLikeEvent && current.kind != MapBeaconKind.EVENT) ||
+            current.creatorDisplayName.isNullOrBlank() ||
+            (looksLikeEvent && current.eventSchedule() == null) ||
+            (current.showCreatorName && current.createdByUserId.isNullOrBlank())
+        if (current != null && !incomplete) {
+            resolved = current
+            // Still refresh engagement even when detail fields are complete.
+            mapViewModel.loadBeaconRsvp(beaconId, forceRefresh = true)
+            mapViewModel.loadBeaconEngagement(beaconId, forceRefresh = true)
+            mapViewModel.ensureEventBeaconDetail(beaconId, seed = current)
             return@LaunchedEffect
         }
         loadError = null
@@ -100,12 +109,18 @@ internal fun ChatBeaconDetailSheet(
         }
         if (fetched != null) {
             resolved = resolveChatBeaconForDetail(fetched, messageFallback, messageMetadata)
+            mapViewModel.loadBeaconRsvp(beaconId, forceRefresh = true)
+            mapViewModel.loadBeaconEngagement(beaconId, forceRefresh = true)
+            mapViewModel.ensureEventBeaconDetail(beaconId, seed = resolved)
             return@LaunchedEffect
         }
         val fromMeta = messageFallback
             ?: mapBeaconFromChatMetadata(beaconId, messageMetadata, messageContent.orEmpty())
         if (fromMeta != null) {
             resolved = resolveChatBeaconForDetail(fromMeta, messageFallback, messageMetadata)
+            mapViewModel.loadBeaconRsvp(beaconId, forceRefresh = true)
+            mapViewModel.loadBeaconEngagement(beaconId, forceRefresh = true)
+            mapViewModel.ensureEventBeaconDetail(beaconId, seed = resolved)
         } else {
             loadError = "Couldn't load this beacon."
         }

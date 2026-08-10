@@ -22,3 +22,5 @@ actual class KeyboardHeightProvider actual constructor() {
 
     actual fun dispose() = Unit
 }
+
+actual fun currentNativeKeyboardHeightPoints(): Float = 0f

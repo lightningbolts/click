@@ -71,9 +71,18 @@ All bottom-sheet-style UI must enter through `ClickActionBottomSheet` or
 Material/Calf sheet hosts. iOS 26+ uses the system Liquid Glass page-sheet treatment
 with the system grabber and interactive dismissal; earlier iOS releases retain the
 matching native page-sheet fallback. Android uses the app theme through the adaptive
-Material host. Use `sheetBodyScroll()` for a scroll-hosted sheet body and
-`ClickFormBottomSheet` for nested/Lazy content so the platform owns drag and dismissal
-without competing content gestures.
+Material host.
+
+- **Default (all body sheets):** `useUiKitScrollHost=true` — UIKit `UIScrollView` owns
+  expand-at-edge and swipe-dismiss (same path as which-pin / view-event). Use
+  `sheetBodyScroll()` so Compose does not compete. Top chrome should clear the system
+  grabber via `ClickSheetDefaults.ContentTopPaddingUnderGrabber`.
+- **Text-input sheets (global search, drop beacon, pickers):** keep sticky search/field
+  chrome above the scroll body; use `sheetImePadding()` (Compose `imePadding()` stays 0
+  inside UIKit page sheets). Do **not** flip `useUiKitScrollHost=false` for forms —
+  that reintroduces Compose surface-drag flicker.
+- **Android:** the flag is ignored; Material/Calf nested-scroll dismiss still applies.
+  `ProvideSheetSwipeDismiss` + `rememberSheetScrollAtTop` remain useful on Android.
 
 ### Key screen flows
 

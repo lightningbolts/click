@@ -130,6 +130,18 @@ object MessageCrypto {
         return raw
     }
 
+    /**
+     * Soft decode for group-master unwrap. Returns null when [b64] is still ciphertext
+     * (`e2e:…`), empty, or not exactly 32 decoded bytes — never throws on `:` in wire text.
+     */
+    @OptIn(ExperimentalEncodingApi::class)
+    fun tryDecodeGroupMasterKeyBase64(b64: String): ByteArray? {
+        val trimmed = b64.trim()
+        if (trimmed.isEmpty()) return null
+        if (trimmed.startsWith(E2EE_PREFIX) || trimmed.startsWith(E2EE_GROUP_MSG_PREFIX)) return null
+        return runCatching { decodeGroupMasterKeyBase64(trimmed) }.getOrNull()
+    }
+
     // ── Encrypt / Decrypt ───────────────────────────────────────────────────
 
     @OptIn(ExperimentalEncodingApi::class)

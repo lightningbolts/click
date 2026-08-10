@@ -554,17 +554,23 @@ Apply `OledSheetTheme` on Map profile path; theme-aware search field fill; drop 
 
 ### Expected
 
-Scrolling and tapping members in Create verified click never crashes. Focusing Search connections must not dismiss the sheet / bounce to Home.
+Scrolling and tapping members in Create verified click never crashes. Focusing Search connections must not dismiss the sheet / bounce to Home. After content is scrolled back to top, a downward drag from anywhere in the sheet body must dismiss (surface-drag), including with the keyboard open without map glitch bands.
 
 ### Evidence
 
-`ConnectionMemberPickerSheet` uses `Column(fillMaxHeight)` + `LazyColumn(weight(1f))` while `ClickFormBottomSheet`’s intermediate `Column` is only `fillMaxWidth()` → unbounded max height → classic LazyColumn infinity crash on measure. Later native-sheet work keyed iOS sheet lifecycle on `LocalUIViewController`, so keyboard focus recreated/dismissed the page sheet.
+`ConnectionMemberPickerSheet` uses `Column(fillMaxHeight)` + `LazyColumn(weight(1f))` while `ClickFormBottomSheet`’s intermediate `Column` is only `fillMaxWidth()` → unbounded max height → classic LazyColumn infinity crash on measure. Later native-sheet work keyed iOS sheet lifecycle on `LocalUIViewController`, so keyboard focus recreated/dismissed the page sheet. A follow-up removed `ProvideSheetSurfaceDrag`/`SheetFingerDismissHost` from iOS fill sheets to stop grabber flicker, which also removed body swipe-dismiss.
 
 ### Fix landed (2026-08-10)
 
-- `ClickFormBottomSheet` defaults: `useUiKitScrollHost=false`, `expandable=true`, IME window insets.
-- Picker restored to Compose `LazyColumn` + `fillMaxHeight` (no UIKit scroll host).
+- `ClickFormBottomSheet` defaults: `useUiKitScrollHost=true`, `expandable=true` (native UIKit scroll-host like which-pin / view-event).
+- Text-input sheets use `sheetImePadding` + `ClickSheetDefaults.ContentTopPaddingUnderGrabber` (global search template).
+- Picker / profile / drop beacon no longer force Compose fill-sheet surface-drag (flicker path).
 - iOS `MapBeaconSheetRoot` no longer recreates the sheet manager when the local VC changes; does not dismiss unrelated presented VCs on re-show.
+- `prefersScrollingExpandsWhenScrolledToEdge` only when `useUiKitScrollHost`.
+
+### Fix landed (2026-08-10 earlier fill-sheet attempt)
+
+- Temporary fill-sheet defaults (`useUiKitScrollHost=false`) + surface-drag restored dismiss but flickered on full-body swipe; superseded by UIKit scroll-host unification above.
 
 ---
 

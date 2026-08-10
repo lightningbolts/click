@@ -78,7 +78,29 @@ npm run build
 
 High-signal unit tests to keep green: `ChatSwipeMathTest`, `ChatViewModelTest`, `ChatTimestampPeekTest`, `ChatInteractionPolicyTest`, `HomeContinuityPolicyTest`, `BeaconCheckInOptimismTest`, `EventAttendeeDirectoryTest`, `ConnectionEncounterMergeTest`, `NominatimSearchParseTest`, `ProximityConnectionChangeTargetsTest`, `DiscoveryFeedSectionsTest`, `OfflineBootTest`, proximity codec/matching tests under `composeApp` and `click-web/__tests__/` (incl. `attendeeDirectory.test.ts`, `eventEngagement.test.ts`, `event-engagement.route.contract.test.ts`).
 
+**Last verification (production regression sweep, 2026-08-10):** UIKit scroll-host default for
+all body sheets (which-pin / view-event path) + global-search IME/`sheetImePadding` + grabber
+top inset · shared `EnsureFreshAccessToken` for chat/presence/Realtime/pending sync · soft
+`JWT expired` no longer hard-logout · Home reminders rebind on prefetch + engagement ·
+`ensureEventBeaconDetail` host-name hydration · chat beacon card enrichment · geocode LRU ·
+read-heavy rate limit GET-only (RSVP mutations excluded).
+Android `compileDebugKotlinAndroid` + iOS `compileKotlinIosSimulatorArm64` PASS ·
+`testDebugUnitTest` high-signal PASS (`NetworkFailureUtilTest`, `EnsureFreshAccessTokenTest`,
+`GeocodingServiceCacheTest`, `BeaconPreviewModelEnrichmentTest`, `ResolveChatBeaconForDetailTest`,
+`BeaconCheckInOptimismTest`) · click-web `readHeavyRateLimit` Jest PASS.
+
 **Last §0 run (Events / check-in / presence / BLE timeline, 2026-08-01):** Android `compileDebugKotlinAndroid` PASS · iOS `compileKotlinIosSimulatorArm64` PASS · `testDebugUnitTest` PASS · `iosSimulatorArm64Test` PASS · click-web `npm test` PASS (175) · `npm run build` PASS.
+
+**Last verification (auth refresh storm / web chat+profile / fill-sheet dismiss, 2026-08-10):**
+Android `compileDebugKotlinAndroid` + `testDebugUnitTest` PASS (`SessionRefreshCoordinatorTest`,
+`MessageCryptoTest`, `GlassSheetGesturePhysicsTest`) · iOS `compileKotlinIosSimulatorArm64` PASS ·
+click-web Jest PASS (`supabaseAuth`, `freshAuthHeaders`, `resolveChatForTabsParam`).
+`SessionRefreshCoordinator` single-flights JWT refresh across AuthRepository + ApiClient;
+chat auth-failure retry no longer cascades restore+second refresh; group unwrap soft-fails
+on `e2e:` ciphertext. click-web restores `getSupabaseFromRouteRequest` auth (no cookie-as-JWT),
+`getFreshAuthHeaders` + tabs `group_id` resolution + profile group master key. iOS fill sheets
+restore `ProvideSheetSurfaceDrag` + `SheetFingerDismissHost` with keyboard block and
+same-gesture scroll gate; create-group uses `sheetImePadding`.
 
 **Last verification (chat/map-pin/sheet/home-bookmark regressions, 2026-08-10):** Android
 `compileDebugKotlinAndroid` + high-signal `testDebugUnitTest` PASS (`ConnectionMapGeoTest`,

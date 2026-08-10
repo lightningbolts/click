@@ -23,6 +23,9 @@ expect class KeyboardHeightProvider() {
     fun dispose()
 }
 
+/** Process-wide last keyboard overlap in points (0 when hidden). Main-thread only on iOS. */
+expect fun currentNativeKeyboardHeightPoints(): Float
+
 @Composable
 fun rememberKeyboardHeightProvider(): KeyboardHeightProvider {
     val provider = remember { KeyboardHeightProvider() }

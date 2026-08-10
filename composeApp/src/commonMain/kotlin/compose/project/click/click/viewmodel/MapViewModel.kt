@@ -567,6 +567,7 @@ class MapViewModel : ViewModel() {
     private fun updateBeaconRsvpCache(transform: (Map<String, BeaconRsvpCacheEntry>) -> Map<String, BeaconRsvpCacheEntry>) {
         _beaconRsvpById.update(transform)
         persistBeaconRsvpCache()
+        AppDataManager.notifyEventEngagementChanged()
     }
 
     private suspend fun hydrateBeaconEngagementFromDisk(userId: String? = null) {
@@ -617,7 +618,10 @@ class MapViewModel : ViewModel() {
         transform: (Map<String, BeaconEngagementCacheEntry>) -> Map<String, BeaconEngagementCacheEntry>,
     ) {
         _beaconEngagementById.update(transform)
-        if (persistDisk) persistBeaconEngagementCache()
+        if (persistDisk) {
+            persistBeaconEngagementCache()
+            AppDataManager.notifyEventEngagementChanged()
+        }
     }
 
     private fun mergeEngagementFromServer(
@@ -1183,6 +1187,7 @@ class MapViewModel : ViewModel() {
                 current.metadata.locationName.isNullOrBlank() &&
                 current.metadata.formattedAddress.isNullOrBlank()
         val alreadyHydrated = id in eventDetailHydratedIds
+        // Hydrate whenever any detail field is still missing — including host display name.
         if (
             alreadyHydrated &&
             !needsSchedule &&
@@ -1191,10 +1196,6 @@ class MapViewModel : ViewModel() {
             !needsHostName &&
             !needsVenueLabel
         ) {
-            return
-        }
-        // First open always hits the network once so Host / Posted can't stay blank forever.
-        if (alreadyHydrated && !needsSchedule && !needsPosted && !needsCreator && !needsVenueLabel) {
             return
         }
         viewModelScope.launch(Dispatchers.Default) {

@@ -25,7 +25,8 @@ class NetworkFailureUtilTest {
     fun isHardAuthFailure_matchesInvalidRefresh() {
         assertTrue(Exception("Invalid Refresh Token").isHardAuthFailure())
         assertTrue(Exception("Refresh Token Not Found").isHardAuthFailure())
-        assertTrue(Exception("JWT expired").isHardAuthFailure())
+        // Soft access-token expiry is refreshable — not a hard failure.
+        assertFalse(Exception("JWT expired").isHardAuthFailure())
     }
 
     @Test

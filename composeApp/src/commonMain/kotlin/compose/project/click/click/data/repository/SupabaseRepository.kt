@@ -882,10 +882,15 @@ class SupabaseRepository {
     }
 
     /**
-     * Update user's last polled timestamp
+     * Update user's last polled timestamp.
+     * Callers must ensure a fresh JWT ([EnsureFreshAccessToken]) before invoking.
      */
     suspend fun updateUserLastPolled(userId: String, timestamp: Long): Boolean {
         if (lastPolledWritesDisabled) return true
+        // Soft refresh if SDK session is near expiry — avoids "JWT expired" spam every 30s.
+        runCatching {
+            compose.project.click.click.data.auth.EnsureFreshAccessToken.get()
+        }
         return try {
             supabase.from("users")
                 .update({

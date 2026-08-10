@@ -34,6 +34,21 @@ internal fun shouldCommitVerticalDismiss(
         velocityPxPerSec > GlassGestureFlickVelocityPxPerSec
 }
 
+/**
+ * Whether a downward nested-scroll leftover may drive sheet surface-drag dismiss.
+ * Mid-list scrolls must finish before a new at-top gesture can dismiss.
+ */
+internal fun shouldAllowSheetSurfaceDismiss(
+    atTop: Boolean,
+    contentScrolledThisGesture: Boolean,
+    surfaceDragActive: Boolean,
+    blockSurfaceDrag: Boolean,
+): Boolean {
+    if (!surfaceDragActive || blockSurfaceDrag) return false
+    if (contentScrolledThisGesture) return false
+    return atTop
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun rememberGlassModalBottomSheetState(

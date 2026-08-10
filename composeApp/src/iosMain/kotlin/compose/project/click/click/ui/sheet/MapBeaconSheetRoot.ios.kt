@@ -5,8 +5,10 @@ package compose.project.click.click.ui.sheet // pragma: allowlist secret
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
@@ -18,14 +20,13 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.uikit.LocalUIViewController
 import androidx.compose.ui.window.ComposeUIViewController
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.ui.Alignment
 import compose.project.click.click.ui.components.LocalSheetOnDismissRequest
 import compose.project.click.click.ui.components.LocalSheetScrollOwnedByHost
 import compose.project.click.click.ui.components.LocalSheetUsesPlatformGrabber
@@ -152,14 +153,27 @@ private class MapIosNativeSheetManager(
 
     fun setSurfaceDragOffsetPx(offsetPx: Float) {
         if (!isInitialized) return
+        // Keyboard + sheet transform fight: translating while IME is up leaves a map band.
+        if (compose.project.click.click.platform.currentNativeKeyboardHeightPoints() > 0.5f) {
+            resetSurfaceDrag()
+            return
+        }
         val y = if (offsetPx <= 0.5f) 0.0 else offsetPx.toDouble()
-        sheetViewController.view.setTransform(CGAffineTransformMakeTranslation(0.0, y))
+        // Transform the *inner* content host only — never the presented page-sheet VC.
+        // Translating sheetViewController.view fights UISheetPresentationController and
+        // blank/flickers (event directory + drop beacon regression).
+        surfaceDragContentView()?.setTransform(CGAffineTransformMakeTranslation(0.0, y))
     }
 
     private fun resetSurfaceDrag() {
         if (!isInitialized) return
-        sheetViewController.view.setTransform(CGAffineTransformMakeTranslation(0.0, 0.0))
+        surfaceDragContentView()?.setTransform(CGAffineTransformMakeTranslation(0.0, 0.0))
     }
+
+    /** Inner content host for fill-sheet surface-drag (never the presented page-sheet VC). */
+    private var fillSurfaceDragView: UIView? = null
+
+    private fun surfaceDragContentView(): UIView? = fillSurfaceDragView
 
     private fun sheetUIColor(): UIColor = UIColor(
         red = sheetColor.red.toDouble(),
@@ -215,15 +229,43 @@ private class MapIosNativeSheetManager(
                 listOf(UISheetPresentationControllerDetent.mediumDetent())
             },
         )
+        // Always show the system grabber — same path as action sheets. Compose surface-drag
+        // transforms fought UISheetPresentationController and flickered on profile/drop dismiss.
         sheet?.prefersGrabberVisible = true
         // Expand-to-large on scroll edge for UIKit hosts; Compose-owned scroll still has
         // medium+large detents when [expandable] so users can drag to full height.
-        sheet?.prefersScrollingExpandsWhenScrolledToEdge = expandable
+        sheet?.prefersScrollingExpandsWhenScrolledToEdge = expandable && useUiKitScrollHost
         applyThemedHost(host)
     }
 
     private fun buildFillSheet(): UIViewController {
-        val host = ComposeUIViewController {
+        val background = sheetUIColor()
+        // Outer host is what UISheetPresentationController owns. Inner content view is what
+        // we translate for swipe-dismiss — avoids blank/flicker from fighting the sheet chrome.
+        val host = object : UIViewController(nibName = null, bundle = null) {
+            override fun viewDidLoad() {
+                super.viewDidLoad()
+                view.backgroundColor = background
+                view.setOpaque(true)
+            }
+        }
+        val contentHost = UIView().apply {
+            translatesAutoresizingMaskIntoConstraints = false
+            backgroundColor = background
+            setOpaque(true)
+        }
+        fillSurfaceDragView = contentHost
+        host.view.addSubview(contentHost)
+        NSLayoutConstraint.activateConstraints(
+            listOf(
+                contentHost.topAnchor.constraintEqualToAnchor(host.view.topAnchor),
+                contentHost.leadingAnchor.constraintEqualToAnchor(host.view.leadingAnchor),
+                contentHost.trailingAnchor.constraintEqualToAnchor(host.view.trailingAnchor),
+                contentHost.bottomAnchor.constraintEqualToAnchor(host.view.bottomAnchor),
+            ),
+        )
+
+        val composeVc = ComposeUIViewController {
             val scheme = schemeState.value
             val typography = typographyState.value
             MaterialTheme(colorScheme = scheme, typography = typography) {
@@ -240,7 +282,7 @@ private class MapIosNativeSheetManager(
                                 onDismissRequest = onDismissFromSwipe,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .fillMaxHeight(),
+                                    .fillMaxSize(),
                             ) {
                                 Column(
                                     modifier = modifierState.value
@@ -255,6 +297,21 @@ private class MapIosNativeSheetManager(
                 }
             }
         }
+        retainedComposeVc = composeVc
+        val composeView = composeVc.view
+        composeView.translatesAutoresizingMaskIntoConstraints = false
+        composeView.backgroundColor = background
+        composeView.setOpaque(true)
+        contentHost.addSubview(composeView)
+        NSLayoutConstraint.activateConstraints(
+            listOf(
+                composeView.topAnchor.constraintEqualToAnchor(contentHost.topAnchor),
+                composeView.leadingAnchor.constraintEqualToAnchor(contentHost.leadingAnchor),
+                composeView.trailingAnchor.constraintEqualToAnchor(contentHost.trailingAnchor),
+                composeView.bottomAnchor.constraintEqualToAnchor(contentHost.bottomAnchor),
+            ),
+        )
+
         configurePageSheet(host)
         applyThemedHost(host)
         isInitialized = true
@@ -432,6 +489,7 @@ private class MapIosNativeSheetManager(
 
     fun show() {
         if (isPresented || isAnimating) return
+        resetSurfaceDrag()
         isAnimating = true
         val active = activeManager
         if (active != null && active !== this) {
