@@ -9,19 +9,17 @@ Click is a privacy-first social connection app. The repo contains:
 | Component | Location | Tech |
 |---|---|---|
 | KMP mobile app | `composeApp/` | Kotlin Multiplatform + Compose Multiplatform (Android/iOS) |
-| Flask API server | `server/` | Python 3, Flask 3.0 |
-| Supabase Edge Functions | `supabase/functions/` | Deno/TypeScript |
-| DB migrations | `database/` | PostgreSQL SQL files |
+| Supabase Edge Functions | `supabase/functions/` | Deno/TypeScript (mobile-owned + mirrored shared) |
+| DB migrations (mirror) | `supabase/migrations/` | Subset mirrored from **click-web** (source of truth) |
+| Legacy SQL notes | `database/` | PostgreSQL SQL files / historical notes |
+
+Backend HTTP APIs live in the sibling **`click-web`** Next.js app (`CLICK_WEB_BASE_URL`). The old Flask `server/` tree has been **removed** — do not recreate it.
 
 See `README.md` for architecture details and `AI.md` for coding guidelines.
 
 ### Running services
 
-**Flask server** (required for backend API):
-```
-cd server && source venv/bin/activate && python app.py
-```
-Runs on port 5000. Requires `server/.env` with `SUPABASE_URL`, `SUPABASE_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. Without real Supabase credentials the server starts but DB-dependent endpoints will error; the root `/` endpoint returns "Hello World!" regardless.
+**No local Flask/API server is required.** Point `CLICK_WEB_BASE_URL` in `composeApp/src/commonMain/kotlin/QRModels.kt` at deployed click-web (`https://joinclick.co`) or a local Next.js instance (`http://localhost:3000` for simulator).
 
 **Android build:**
 ```
@@ -33,12 +31,13 @@ Requires `local.properties` with `sdk.dir=/opt/android-sdk` and `MAPS_API_KEY=<k
 
 - **Kotlin unit tests:** `./gradlew :composeApp:testDebugUnitTest`
 - **All Kotlin tests:** `./gradlew :composeApp:allTests`
-- **No Python test suite** exists for the Flask server; test manually with `curl`.
+- **Supabase drift (when `../click-web` is present):** `bash scripts/check-supabase-drift.sh`
 
 ### Non-obvious caveats
 
 - The `google-secrets` Gradle plugin reads `MAPS_API_KEY` from `local.properties`, with `local.defaults.properties` as a checked-in fallback for CI/Xcode when the gitignored file is absent. A placeholder value is sufficient for compilation but Google Maps features won't work at runtime without a real key.
 - iOS builds require Xcode (macOS only) and are not runnable in Cloud Agent VMs.
-- The `click-web` Next.js companion app (LiveKit token endpoint, QR flows) is a **separate repository** and not present in this workspace.
-- Supabase Edge Functions require the Supabase CLI to deploy/serve locally; they are not needed for basic server or mobile build testing.
-- `server/.env` and `local.properties` are both gitignored. They must be recreated on each fresh checkout (or rely on `local.defaults.properties` for Gradle configure-only steps such as iOS framework embedding).
+- The `click-web` Next.js companion app (LiveKit token endpoint, QR flows, chat gatekeeper) is a **separate repository**. Prefer checking it out as a sibling `../click-web`.
+- **`click-web/supabase` is the source of truth** for shared migrations and `bind-proximity-connection`. Sync mirrors with `bash scripts/sync-supabase-from-click-web.sh`. Mobile-only functions (`send-push-notification`, `expire-*`, `verify-hub-proximity`) stay in this repo.
+- Supabase Edge Functions require the Supabase CLI to deploy/serve locally; they are not needed for basic mobile build testing.
+- `local.properties` is gitignored. Recreate it on each fresh checkout (or rely on `local.defaults.properties` for Gradle configure-only steps such as iOS framework embedding).

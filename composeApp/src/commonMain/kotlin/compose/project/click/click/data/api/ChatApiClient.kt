@@ -26,10 +26,9 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 /**
- * API client for chat-related operations with the Flask backend
+ * API client for chat-related operations via the Next.js companion (`click-web`).
  */
 class ChatApiClient(
-    private val baseUrl: String = ApiConfig.BASE_URL,
     private val clickWebBaseUrl: String = CLICK_WEB_BASE_URL.trimEnd('/'),
     private val tokenStorage: TokenStorage = createTokenStorage(),
     private val httpClient: HttpClient? = null,
@@ -368,90 +367,32 @@ class ChatApiClient(
     )
 
     /**
-     * Get all chats for a user with details
+     * Get all chats for a user with details.
+     * Legacy Flask path — superseded by Supabase / click-web inbox; kept as an explicit failure.
      */
-    suspend fun getUserChats(userId: String, authToken: String): Result<List<ChatWithDetails>> {
-        return try {
-            val response = client.get("$baseUrl/api/chats/user/$userId") {
-                header("Authorization", authToken)
-            }
-
-            if (response.status.value in 200..299) {
-                val chatsResponse = response.body<ChatsResponse>()
-                val chats = chatsResponse.chats.map { it.toChatWithDetails() }
-                Result.success(chats)
-            } else {
-                Result.failure(Exception("Failed to fetch chats: ${response.status}"))
-            }
-        } catch (e: Exception) {
-            println("Error fetching user chats: ${e.redactedRestMessage()}")
-            Result.failure(e)
-        }
-    }
+    suspend fun getUserChats(userId: String, authToken: String): Result<List<ChatWithDetails>> =
+        Result.failure(Exception("getUserChats is no longer served; use Supabase chat list"))
 
     /**
-     * Get a specific user by ID
+     * Get a specific user by ID.
+     * Legacy Flask path — use click-web `GET /api/users/{id}/profile` via [ApiClient] instead.
      */
-    suspend fun getUser(userId: String, authToken: String): Result<User> {
-        return try {
-            val response = client.get("$baseUrl/api/users/$userId") {
-                header("Authorization", authToken)
-            }
-
-            if (response.status.value in 200..299) {
-                val userApiModel = response.body<UserApiModel>()
-                Result.success(userApiModel.toUser())
-            } else {
-                Result.failure(Exception("Failed to fetch user: ${response.status}"))
-            }
-        } catch (e: Exception) {
-            println("Error fetching user: ${e.redactedRestMessage()}")
-            Result.failure(e)
-        }
-    }
+    suspend fun getUser(userId: String, authToken: String): Result<User> =
+        Result.failure(Exception("getUser is no longer served; use ApiClient.getUserProfile"))
 
     /**
-     * Get a specific user by ID
+     * Get a specific chat by ID.
+     * Legacy Flask path — superseded by Supabase chats table.
      */
-    suspend fun getChat(chatId: String, authToken: String): Result<Chat> {
-        return try {
-            val response = client.get("$baseUrl/api/chats/$chatId") {
-                header("Authorization", authToken)
-            }
-
-            if (response.status.value in 200..299) {
-                val chatResponse = response.body<ChatResponse>()
-                Result.success(Chat(messages = emptyList())) // Chat structure simplified
-            } else {
-                Result.failure(Exception("Failed to fetch chat: ${response.status}"))
-            }
-        } catch (e: Exception) {
-            println("Error fetching chat: ${e.redactedRestMessage()}")
-            Result.failure(e)
-        }
-    }
+    suspend fun getChat(chatId: String, authToken: String): Result<Chat> =
+        Result.failure(Exception("getChat is no longer served; use Supabase chats"))
 
     /**
-     * Get all messages for a specific chat
+     * Get all messages for a specific chat.
+     * Legacy Flask path — use click-web `GET /api/chat/messages` or Supabase Realtime.
      */
-    suspend fun getChatMessages(chatId: String, authToken: String): Result<List<Message>> {
-        return try {
-            val response = client.get("$baseUrl/api/chats/$chatId/messages") {
-                header("Authorization", authToken)
-            }
-
-            if (response.status.value in 200..299) {
-                val messagesResponse = response.body<MessagesResponse>()
-                val messages = messagesResponse.messages.map { it.toMessage() }
-                Result.success(messages)
-            } else {
-                Result.failure(Exception("Failed to fetch messages: ${response.status}"))
-            }
-        } catch (e: Exception) {
-            println("Error fetching messages: ${e.redactedRestMessage()}")
-            Result.failure(e)
-        }
-    }
+    suspend fun getChatMessages(chatId: String, authToken: String): Result<List<Message>> =
+        Result.failure(Exception("getChatMessages is no longer served; use click-web /api/chat/messages"))
 
     /**
      * Insert an encrypted (or plaintext) message row via [clickWebBaseUrl]/api/chat/messages (gatekeeper).
@@ -532,26 +473,14 @@ class ChatApiClient(
     }
 
     /**
-     * Mark messages as read for a user
+     * Legacy Flask mark-read — superseded by [markChatAsRead] (click-web).
      */
     suspend fun markMessagesAsRead(
         chatId: String,
         userId: String,
         authToken: String
-    ): Result<Boolean> {
-        return try {
-            val response = client.post("$baseUrl/api/chats/$chatId/mark_read") {
-                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
-                contentType(ContentType.Application.Json)
-                setBody(MarkReadRequest(userId))
-            }
-
-            Result.success(response.status.value in 200..299)
-        } catch (e: Exception) {
-            println("Error marking messages as read: ${e.redactedRestMessage()}")
-            Result.failure(e)
-        }
-    }
+    ): Result<Boolean> =
+        Result.failure(Exception("markMessagesAsRead is no longer served; use markChatAsRead"))
 
     /**
      * Patch message content via Next.js gatekeeper (E2EE ciphertext).
@@ -1033,7 +962,7 @@ class ChatApiClient(
     }
 
     /**
-     * Delete a message
+     * Delete a message via click-web gatekeeper (`DELETE /api/chat/messages?messageId=`).
      */
     suspend fun deleteMessage(
         chatId: String,
@@ -1042,13 +971,35 @@ class ChatApiClient(
         authToken: String
     ): Result<Boolean> {
         return try {
-            val response = client.delete("$baseUrl/api/chats/$chatId/messages/$messageId") {
-                header("Authorization", authToken)
-                contentType(ContentType.Application.Json)
-                setBody(DeleteMessageRequest(userId))
+            suspend fun deleteOnce(bearer: String): Result<Boolean> {
+                val response = client.delete("$clickWebBaseUrl/api/chat/messages") {
+                    header(HttpHeaders.Authorization, clickWebBearerHeader(bearer))
+                    parameter("messageId", messageId)
+                }
+                return if (response.status.value in 200..299) {
+                    Result.success(true)
+                } else {
+                    Result.failure(Exception(readClickWebErrorMessage(response)))
+                }
             }
 
-            Result.success(response.status.value in 200..299)
+            val token = resolveClickWebAccessToken(tokenStorage)
+                ?: authToken.trim().takeIf { it.isNotEmpty() }
+            if (token.isNullOrBlank()) {
+                return Result.failure(Exception("Session expired. Sign in again."))
+            }
+            val first = deleteOnce(token)
+            if (first.isFailure) {
+                val msg = first.exceptionOrNull()?.redactedRestMessage()?.lowercase()
+                if (msg?.contains("unauthorized") == true || msg?.contains("401") == true) {
+                    AuthRepository(tokenStorage).refreshSession()
+                    val retry = resolveClickWebAccessToken(tokenStorage)
+                    if (!retry.isNullOrBlank()) {
+                        return deleteOnce(retry)
+                    }
+                }
+            }
+            first
         } catch (e: Exception) {
             println("Error deleting message: ${e.redactedRestMessage()}")
             Result.failure(e)
@@ -1056,70 +1007,28 @@ class ChatApiClient(
     }
 
     /**
-     * Get chat for a connection
+     * Get chat for a connection — legacy Flask; use Supabase `chats` by connection_id.
      */
     suspend fun getChatForConnection(
         connectionId: String,
         authToken: String
-    ): Result<Chat> {
-        return try {
-            val response = client.get("$baseUrl/api/chats/connection/$connectionId") {
-                header("Authorization", authToken)
-            }
-
-            if (response.status.value in 200..299) {
-                val chatResponse = response.body<ChatResponse>()
-                Result.success(Chat(messages = emptyList())) // Chat structure simplified
-            } else {
-                Result.failure(Exception("Failed to fetch chat for connection: ${response.status}"))
-            }
-        } catch (e: Exception) {
-            println("Error fetching chat for connection: ${e.redactedRestMessage()}")
-            Result.failure(e)
-        }
-    }
+    ): Result<Chat> =
+        Result.failure(Exception("getChatForConnection is no longer served; use Supabase chats"))
 
     /**
-     * Get participants in a chat
+     * Get participants in a chat — legacy Flask; use Supabase connection/group members.
      */
     suspend fun getChatParticipants(
         chatId: String,
         authToken: String
-    ): Result<List<User>> {
-        return try {
-            val response = client.get("$baseUrl/api/chats/$chatId/participants") {
-                header("Authorization", authToken)
-            }
-
-            if (response.status.value in 200..299) {
-                val participantsResponse = response.body<ParticipantsResponse>()
-                val participants = participantsResponse.participants.map { it.toUser() }
-                Result.success(participants)
-            } else {
-                Result.failure(Exception("Failed to fetch participants: ${response.status}"))
-            }
-        } catch (e: Exception) {
-            println("Error fetching participants: ${e.redactedRestMessage()}")
-            Result.failure(e)
-        }
-    }
+    ): Result<List<User>> =
+        Result.failure(Exception("getChatParticipants is no longer served; use Supabase members"))
 
     /**
-     * Get reactions for a message
+     * Get reactions for a message — legacy Flask; reactions arrive with message payloads / Realtime.
      */
-    suspend fun getMessageReactions(messageId: String, authToken: String): Result<List<MessageReaction>> {
-        return try {
-            val response = client.get("$baseUrl/api/messages/$messageId/reactions") {
-                header("Authorization", authToken)
-            }
-            if (response.status.value in 200..299) {
-                val reactionsResponse = response.body<ReactionsResponse>()
-                Result.success(reactionsResponse.reactions.map { it.toReaction() })
-            } else Result.failure(Exception("Failed to fetch reactions: ${response.status}"))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun getMessageReactions(messageId: String, authToken: String): Result<List<MessageReaction>> =
+        Result.failure(Exception("getMessageReactions is no longer served; use message payload reactions"))
 
     /**
      * Add a reaction via Next.js gatekeeper.
@@ -1179,106 +1088,40 @@ class ChatApiClient(
     }
 
     /**
-     * Set typing status for a chat
+     * Set typing status — legacy Flask; typing is local / Realtime only now.
      */
-    suspend fun setTyping(chatId: String, userId: String, authToken: String): Result<Boolean> {
-        return try {
-            val response = client.post("$baseUrl/api/chats/$chatId/typing") {
-                header("Authorization", authToken)
-                contentType(ContentType.Application.Json)
-                setBody(TypingRequest(user_id = userId))
-            }
-            Result.success(response.status.value in 200..299)
-        } catch (e: Exception) { Result.failure(e) }
-    }
-
-    @Serializable
-    data class TypingUsersResponse(val user_ids: List<String>)
+    suspend fun setTyping(chatId: String, userId: String, authToken: String): Result<Boolean> =
+        Result.failure(Exception("setTyping is no longer served"))
 
     /**
-     * Get list of users currently typing in a chat
+     * Get list of users currently typing — legacy Flask.
      */
-    suspend fun getTypingUsers(chatId: String, authToken: String): Result<List<String>> {
-        return try {
-            val response = client.get("$baseUrl/api/chats/$chatId/typing") { header("Authorization", authToken) }
-            if (response.status.value in 200..299) {
-                val typingResponse = response.body<TypingUsersResponse>()
-                Result.success(typingResponse.user_ids)
-            } else Result.failure(Exception("Failed to fetch typing users: ${response.status}"))
-        } catch (e: Exception) { Result.failure(e) }
-    }
+    suspend fun getTypingUsers(chatId: String, authToken: String): Result<List<String>> =
+        Result.failure(Exception("getTypingUsers is no longer served"))
 
     /**
-     * Update the status of a message
+     * Update message delivery/read status — legacy Flask; use click-web delivered/read patches.
      */
-    suspend fun updateMessageStatus(messageId: String, status: String, authToken: String): Result<Boolean> {
-        return try {
-            val response = client.post("$baseUrl/api/messages/$messageId/status") {
-                header("Authorization", authToken)
-                contentType(ContentType.Application.Json)
-                setBody(StatusUpdateRequest(status = status))
-            }
-            Result.success(response.status.value in 200..299)
-        } catch (e: Exception) { Result.failure(e) }
-    }
+    suspend fun updateMessageStatus(messageId: String, status: String, authToken: String): Result<Boolean> =
+        Result.failure(Exception("updateMessageStatus is no longer served; use markMessagesDelivered / markChatAsRead"))
 
     /**
-     * Forward a message to another chat
+     * Forward a message — not yet implemented on click-web; do not call a dead Flask host.
      */
-    suspend fun forwardMessage(messageId: String, targetChatId: String, userId: String, authToken: String): Result<Message> {
-        return try {
-            val response = client.post("$baseUrl/api/messages/$messageId/forward") {
-                header("Authorization", authToken)
-                contentType(ContentType.Application.Json)
-                setBody(ForwardMessageRequest(target_chat_id = targetChatId, user_id = userId))
-            }
-            if (response.status.value in 200..299) {
-                val msgResponse = response.body<MessageResponse>()
-                Result.success(msgResponse.message.toMessage())
-            } else Result.failure(Exception("Failed to forward message: ${response.status}"))
-        } catch (e: Exception) { Result.failure(e) }
-    }
+    suspend fun forwardMessage(messageId: String, targetChatId: String, userId: String, authToken: String): Result<Message> =
+        Result.failure(Exception("forwardMessage is not available on click-web yet"))
 
     /**
-     * Search messages in a chat
+     * Search messages — legacy Flask; clients filter locally via repository.
      */
-    suspend fun searchMessages(chatId: String, query: String, authToken: String): Result<List<Message>> {
-        return try {
-            val response = client.get("$baseUrl/api/chats/$chatId/search") {
-                header("Authorization", authToken)
-                url { parameters.append("q", query) }
-            }
-            if (response.status.value in 200..299) {
-                val searchResponse = response.body<SearchMessagesResponse>()
-                Result.success(searchResponse.messages.map { it.toMessage() })
-            } else Result.failure(Exception("Failed to search messages: ${response.status}"))
-        } catch (e: Exception) { Result.failure(e) }
-    }
+    suspend fun searchMessages(chatId: String, query: String, authToken: String): Result<List<Message>> =
+        Result.failure(Exception("searchMessages is no longer served; use local/repository search"))
 
     /**
-     * Resolve display names for a batch of user IDs.
-     * Uses backend service credentials so it still works when users table is protected by RLS.
+     * Resolve display names — legacy Flask; use profile BFF / Supabase users.
      */
-    suspend fun getDisplayNames(userIds: List<String>, authToken: String): Result<Map<String, String>> {
-        return try {
-            if (userIds.isEmpty()) return Result.success(emptyMap())
-
-            val response = client.post("$baseUrl/api/users/display-names") {
-                header("Authorization", authToken)
-                contentType(ContentType.Application.Json)
-                setBody(DisplayNamesRequest(user_ids = userIds))
-            }
-
-            if (response.status.value in 200..299) {
-                val body = response.body<DisplayNamesResponse>()
-                Result.success(body.names)
-            } else {
-                Result.failure(Exception("Failed to fetch display names: ${response.status}"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun getDisplayNames(userIds: List<String>, authToken: String): Result<Map<String, String>> =
+        Result.failure(Exception("getDisplayNames is no longer served; use profile BFF"))
 
     // Extension functions to convert API models to domain models
     private fun ChatApiModel.toChatWithDetails(): ChatWithDetails {

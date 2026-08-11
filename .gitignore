@@ -50,7 +50,6 @@ local.properties
 iosApp/ci_scripts/.java_home
 
 ### Python ###
-server/venv/
 .DS_Store
 local.properties
 

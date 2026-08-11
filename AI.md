@@ -1,6 +1,6 @@
 # Click — AI & contributor context (Cursor / agents)
 
-This file is **authoritative guidance** for future developers and AI assistants working on the Click monorepo (`click/` KMP app, `click-web/` Next.js companion, Supabase functions under `click/supabase/`). It encodes architectural decisions and pitfalls that are easy to get wrong from training data alone.
+This file is **authoritative guidance** for future developers and AI assistants working on the Click monorepo (`click/` KMP app, `click-web/` Next.js companion). Shared Supabase migrations and `bind-proximity-connection` are owned by **`click-web/supabase`**; this repo mirrors a subset under `click/supabase/` (see `click/supabase/README.md`). Mobile-only Edge Functions such as **`send-push-notification`** remain under `click/supabase/functions/`. It encodes architectural decisions and pitfalls that are easy to get wrong from training data alone.
 
 ---
 

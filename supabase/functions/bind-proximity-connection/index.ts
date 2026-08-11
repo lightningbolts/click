@@ -249,6 +249,16 @@ function isDuplicateKeyError(err: { message?: string; code?: string } | null): b
   return code === '23505' || msg.includes('duplicate key') || msg.includes('unique constraint');
 }
 
+function isEncounterRateLimitError(err: { message?: string; details?: string; hint?: string } | null): boolean {
+  if (!err) return false;
+  const combined = [
+    err.message ?? '',
+    err.details ?? '',
+    err.hint ?? '',
+  ].join(' ');
+  return combined.includes('encounter_rate_limit_3h');
+}
+
 /** Client `context_tags`: trimmed non-empty strings, order preserved, deduped. */
 function normalizeContextTagsArray(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
@@ -567,7 +577,6 @@ Deno.serve(async (req) => {
   };
   try {
     body = await req.json();
-    console.log("INCOMING_HANDSHAKE_PAYLOAD:", JSON.stringify(body, null, 2));
   } catch {
     return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
       status: 400,
@@ -914,8 +923,7 @@ Deno.serve(async (req) => {
     if (encLat == null || encLon == null || newBlock == null) {
       const { error: encErr } = await admin.from('connection_encounters').insert(insertRow);
       if (encErr) {
-        const msg = encErr.message ?? '';
-        if (msg.includes('encounter_rate_limit_3h')) {
+        if (isEncounterRateLimitError(encErr)) {
           const nowMs = Date.now();
           await admin.from('chats').update({ updated_at: nowMs }).eq('connection_id', connectionId);
           return 'rate_limited';
@@ -979,8 +987,7 @@ Deno.serve(async (req) => {
 
     const { error: encErr } = await admin.from('connection_encounters').insert(insertRow);
     if (encErr) {
-      const msg = encErr.message ?? '';
-      if (msg.includes('encounter_rate_limit_3h')) {
+      if (isEncounterRateLimitError(encErr)) {
         const nowMs = Date.now();
         await admin.from('chats').update({ updated_at: nowMs }).eq('connection_id', connectionId);
         return 'rate_limited';
@@ -1066,6 +1073,8 @@ Deno.serve(async (req) => {
     }
     if (resolvedWeather != null) bindingInsertRow.weather_snapshot = resolvedWeather;
 
+    // Lossless spatial telemetry: one row per matched member with their individual handshake GPS.
+    // Never average coordinates — centroid snapping happens client-side on the B2B map.
     let outcome: EncounterMutationOutcome = 'inserted';
     for (const memberId of memberIds) {
       const { lat: memberLat, lon: memberLon } = memberGpsFromHandshake(
@@ -1160,7 +1169,7 @@ Deno.serve(async (req) => {
             : 0,
       connection_id: meta?.connectionId ?? null,
       encounter_logged,
-      is_new_connection: meta?.isNewConnection ?? true,
+      is_new_connection: meta != null ? meta.isNewConnection : false,
       encounter_persisted_on_bind: meta?.encounterPersistedOnBind ?? false,
       ...(meta?.reason ? { reason: meta.reason } : {}),
     };
@@ -1192,6 +1201,7 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Re-engagement: existing friends unlock Disposable Roll + Squad map drops.
   if (sharedConnectionId != null) {
     const collaborationTtl = computeCollaborationTtl(timezoneOffsetMinutes);
     const participantIds = [...new Set([uid, ...memberIds])].sort();

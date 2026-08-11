@@ -11,7 +11,7 @@ concurrency:
 jobs:
   build-debug:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -38,6 +38,13 @@ jobs:
           sdk.dir=${ANDROID_SDK_ROOT}
           MAPS_API_KEY=${MAPS_API_KEY:-dummy_key_for_ci}
           EOF
+
+      - name: Unit tests
+        run: ./gradlew :composeApp:testDebugUnitTest --no-daemon --stacktrace
+
+      - name: Supabase drift check (vs sibling click-web)
+        run: bash scripts/check-supabase-drift.sh
+        continue-on-error: false
 
       - name: Build debug APK
         run: ./gradlew :composeApp:assembleDebug --no-daemon --stacktrace

@@ -1,7 +1,7 @@
 # `network/` — Connectivity observation & HTTP client boundary
 
 > **Anti-doomscrolling · Stop scrolling, start living.**  
-> The `network/` package defines **how the app knows it is online** and documents the **Ktor HTTP layer** that talks to Click's Flask BFF and Next.js companion (`click-web`).
+> The `network/` package defines **how the app knows it is online** and documents the **Ktor HTTP layer** that talks to Click's Next.js companion (`click-web`) and Supabase.
 
 ---
 
@@ -36,9 +36,8 @@ There is no separate `CallApiClient` class — **voice/video token fetch** is `A
 └────────────────────────┘    └──────────────┬───────────────┘
              │                               │
              ▼                               ▼
-    Android: ConnectivityManager      ApiConfig.BASE_URL (Flask :5000)
-    iOS: NWPathMonitor                ApiConfig.CLICK_WEB_BASE_URL (click-web)
-                                      Supabase REST (via supabase-kt)
+    Android: ConnectivityManager      ApiConfig.CLICK_WEB_BASE_URL (click-web)
+    iOS: NWPathMonitor                Supabase REST (via supabase-kt)
 ```
 
 ### `NetworkConnectivityMonitor`
@@ -62,10 +61,7 @@ expect class NetworkConnectivityMonitor() {
 
 | Constant | Purpose |
 |----------|---------|
-| `BASE_URL` | Flask API — local `http://{LAN_IP}:5000` or production |
-| `CLICK_WEB_BASE_URL` | Delegates to `qr.CLICK_WEB_BASE_URL` (Next.js companion) |
-| `USE_LOCAL_SERVER` | Dev toggle for LAN vs production |
-| `getBaseUrlForPlatform()` | Android emulator → `10.0.2.2` host alias |
+| `CLICK_WEB_BASE_URL` | Delegates to `qr.CLICK_WEB_BASE_URL` (Next.js companion — sole HTTP API base) |
 
 Default companion URL (from `QRModels.kt`):
 
@@ -85,7 +81,7 @@ Representative endpoints consumed by the app:
 
 | Endpoint area | Examples |
 |---------------|----------|
-| Auth / session | Sign-up, login helpers, `GET /api/ping` secure ping |
+| Auth / session | `GET /api/ping` secure ping (Supabase auth is client-side) |
 | Profiles | `GET /api/users/{id}/profile`, patch profile |
 | Connections | Proximity bind, timeline, block/report |
 | Map | Beacon CRUD, RSVP, community hub nearby |
@@ -104,7 +100,7 @@ Dedicated client for **chat-heavy** operations:
 | Click-web message sync | BFF tunnel for message operations where direct Supabase is insufficient |
 | Bearer auth | Normalized `Bearer ` prefix handling |
 
-Uses `ApiConfig.BASE_URL` for Flask and `CLICK_WEB_BASE_URL` for companion routes.
+All routes use `CLICK_WEB_BASE_URL` (the legacy Flask `BASE_URL` was removed).
 
 ### Call token flow (no `CallApiClient`)
 
@@ -142,7 +138,7 @@ LiveKit Android SDK / iOS ClickLiveKitBridge
 1. **Never log raw JWTs or apikey headers** — use `util/redactedRestMessage()`.
 2. **Offline-first** — HTTP failures classified by `isOfflineNetworkFailure()` must not wipe `AppDataManager` caches.
 3. **Ghost mode** — `AppDataManager` blocks background refresh; monitors may still report online but sync is gated upstream.
-4. **Android emulator networking** — use `10.0.2.2` not `localhost` for Flask on host machine.
+4. **No Flask / LAN API bases** — never reintroduce `localhost:5000` or hardcoded developer LAN IPs; companion traffic uses `CLICK_WEB_BASE_URL` only.
 5. **Multipart compatibility** — `ChatApiClient` disposition headers must stay Ktor/Node-compatible (documented in source).
 6. **CLICK_WEB_BASE_URL single source** — change only in `QRModels.kt`; `ApiConfig` re-exports.
 
@@ -172,7 +168,7 @@ LiveKit Android SDK / iOS ClickLiveKitBridge
 Network layer enables every online feature; users see graceful degradation when offline.
 
 ### Connect in person (Tri-Factor)
-Proximity bind `POST` to Flask; offline queue in `TokenStorage` syncs on `NetworkConnectivityMonitor` online.
+Proximity bind `POST` to click-web `/api/connections/proximity`; offline queue in `TokenStorage` syncs on `NetworkConnectivityMonitor` online.
 
 ### Scan QR
 Token redemption HTTP to BFF; QR fallback increments `TelemetryBatcher.recordQrFallback()`.

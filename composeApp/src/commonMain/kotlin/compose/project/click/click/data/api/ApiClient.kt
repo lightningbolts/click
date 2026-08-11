@@ -1,11 +1,7 @@
 package compose.project.click.click.data.api
 
 import compose.project.click.click.data.SupabaseConfig
-import compose.project.click.click.data.models.AuthResponse
 import compose.project.click.click.data.models.ErrorResponse
-import compose.project.click.click.data.models.LoginRequest
-import compose.project.click.click.data.models.SignUpRequest
-import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.ProfileTimelinePayload
@@ -361,20 +357,13 @@ private data class CommunityHubNearbyEnvelope(
     val hubs: List<CommunityHubNearbyDto> = emptyList(),
 )
 
-class ApiClient(private val baseUrl: String = BASE_URL) {
+/**
+ * HTTP client for the Next.js companion (`click-web`). Auth uses Supabase JWT via Ktor Auth bearer.
+ * Legacy Flask routes were removed — do not reintroduce `localhost:5000` / LAN API bases.
+ */
+class ApiClient {
 
     companion object {
-        /**
-         * Base URL for the Click Python/Flask backend.
-         *
-         * • Local dev (iOS simulator): http://localhost:5000
-         * • Local dev (Android emulator): http://10.0.2.2:5000
-         *   (Android emulator maps 10.0.2.2 → host machine's localhost)
-         * • Production: replace with your deployed server URL
-         *   e.g. https://api.your-domain.com
-         */
-        const val BASE_URL = "http://localhost:5000"
-
         private val clickWebAuthOrigin: String
             get() = ApiConfig.CLICK_WEB_BASE_URL.trimEnd('/')
     }
@@ -385,13 +374,6 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
     }
 
     private val tokenStorage by lazy { createTokenStorage() }
-
-    /** HTTP client for Flask backend calls — no bearer-auth plugin. */
-    private val client = HttpClient {
-        install(ContentNegotiation) {
-            json(json)
-        }
-    }
 
     /** HTTP client for click-web (Next.js) calls — attaches Supabase JWT automatically. */
     private val clickWebClient = HttpClient {
@@ -405,152 +387,6 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
     private val clickWebPlainClient = HttpClient {
         install(ContentNegotiation) {
             json(json)
-        }
-    }
-
-    suspend fun login(email: String, password: String): Result<AuthResponse> {
-        return try {
-            val response = client.post("$baseUrl/login") {
-                contentType(ContentType.Application.Json)
-                setBody(LoginRequest(email, password))
-            }
-
-            if (response.status.value in 200..299) {
-                Result.success(response.body<AuthResponse>())
-            } else {
-                val error = try {
-                    response.body<ErrorResponse>()
-                } catch (e: Exception) {
-                    ErrorResponse("Login failed")
-                }
-                Result.failure(Exception(error.error))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun signUp(
-        email: String,
-        password: String,
-        firstName: String,
-        lastName: String,
-        birthdayIso: String,
-    ): Result<AuthResponse> {
-        return try {
-            val response = client.post("$baseUrl/create_account") {
-                contentType(ContentType.Application.Json)
-                setBody(SignUpRequest(email, password, firstName, lastName, birthdayIso))
-            }
-
-            if (response.status.value in 200..299) {
-                Result.success(response.body<AuthResponse>())
-            } else {
-                val error = try {
-                    response.body<ErrorResponse>()
-                } catch (e: Exception) {
-                    ErrorResponse("Sign up failed")
-                }
-                Result.failure(Exception(error.error))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun authenticateWithGoogle(token: String): Result<AuthResponse> {
-        return try {
-            val response = client.post("$baseUrl/google") {
-                parameter("token", token)
-            }
-
-            if (response.status.value in 200..299) {
-                Result.success(response.body<AuthResponse>())
-            } else {
-                Result.failure(Exception("Google authentication failed"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun refreshToken(refreshToken: String): Result<String> {
-        return try {
-            val response = client.post("$baseUrl/refresh") {
-                header("Authorization", refreshToken)
-            }
-
-            if (response.status.value in 200..299) {
-                Result.success(response.body<String>())
-            } else {
-                Result.failure(Exception("Token refresh failed"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun logout(refreshToken: String): Result<Unit> {
-        return try {
-            val response = client.post("$baseUrl/logout") {
-                header("Authorization", refreshToken)
-            }
-
-            if (response.status.value in 200..299) {
-                Result.success(Unit)
-            } else {
-                Result.failure(Exception("Logout failed"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun createConnection(
-        authToken: String,
-        user1Id: String,
-        user2Id: String,
-        latitude: Double,
-        longitude: Double,
-        contextTag: String? = null
-    ): Result<Connection> {
-        return try {
-            val response = client.post("$baseUrl/connection/new/") {
-                header("Authorization", authToken)
-                contentType(ContentType.Application.Json)
-                parameter("id1", user1Id)
-                parameter("id2", user2Id)
-                parameter("lat", latitude)
-                parameter("long", longitude)
-                contextTag?.let { parameter("context_tag_id", it) }
-            }
-
-            if (response.status.value in 200..299) {
-                Result.success(response.body<Connection>())
-            } else {
-                val error = try {
-                    response.body<ErrorResponse>()
-                } catch (e: Exception) {
-                    ErrorResponse("Failed to create connection")
-                }
-                Result.failure(Exception(error.error))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun getUserById(userId: String): Result<User> {
-        return try {
-            val response = client.get("$baseUrl/user/$userId")
-
-            if (response.status.value in 200..299) {
-                Result.success(response.body<User>())
-            } else {
-                Result.failure(Exception("User not found"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
@@ -1906,7 +1742,6 @@ class ApiClient(private val baseUrl: String = BASE_URL) {
     }
 
     fun close() {
-        client.close()
         clickWebClient.close()
         clickWebPlainClient.close()
     }

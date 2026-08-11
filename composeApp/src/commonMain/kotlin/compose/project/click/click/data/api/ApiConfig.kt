@@ -1,55 +1,21 @@
 package compose.project.click.click.data.api
 
-import compose.project.click.click.getPlatform
 import compose.project.click.click.qr.CLICK_WEB_BASE_URL as QrClickWebBaseUrl
 
 /**
- * API Configuration for different environments
+ * API configuration.
+ *
+ * All companion HTTP traffic goes through the Next.js app (`click-web`).
+ * The legacy Flask server has been removed — do not reintroduce LAN/localhost API bases.
  */
 object ApiConfig {
-    // Change this to match your environment
-    private const val USE_LOCAL_SERVER = true
-
-    // Your Mac's local IP (find with: ifconfig | grep "inet " | grep -v 127.0.0.1)
-    private const val LOCAL_IP = "10.19.165.221"
-    private const val LOCAL_PORT = 5000
-
-    private const val PRODUCTION_URL = "https://your-production-api.com"
-
-    /**
-     * Base URL for the Flask API
-     */
-    val BASE_URL: String
-        get() = if (USE_LOCAL_SERVER) {
-            val isAndroid = getPlatform().name.contains("Android", ignoreCase = true)
-            val host = if (isAndroid) "10.0.2.2" else LOCAL_IP 
-            "http://$host:$LOCAL_PORT"
-        } else {
-            PRODUCTION_URL
-        }
-
-    /**
-     * Get the appropriate base URL for the current platform
-     */
-    fun getBaseUrlForPlatform(isAndroidEmulator: Boolean = false): String {
-        return if (USE_LOCAL_SERVER) {
-            if (isAndroidEmulator) {
-                "http://10.0.2.2:$LOCAL_PORT"
-            } else {
-                "http://$LOCAL_IP:$LOCAL_PORT"
-            }
-        } else {
-            PRODUCTION_URL
-        }
-    }
-
     /**
      * Supabase configuration (for Realtime only)
      */
     const val SUPABASE_REALTIME_ENABLED = true
 
     /**
-     * Next.js companion (`click-web`) — profile QR, secure API tunnel, LiveKit token, etc.
+     * Next.js companion (`click-web`) — profile QR, secure API tunnel, LiveKit token, chat gatekeeper, etc.
      * Single source of truth lives in [compose.project.click.click.qr.CLICK_WEB_BASE_URL].
      */
     val CLICK_WEB_BASE_URL: String get() = QrClickWebBaseUrl
