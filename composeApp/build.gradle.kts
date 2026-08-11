@@ -70,6 +70,12 @@ kotlin {
             export("com.mohamedrejeb.calf:calf-ui:0.12.0")
         }
 
+        // CI (Xcode 16.2) fails linkDebugTestIosSimulatorArm64 with
+        // `ld: framework '_LocationEssentials' not found` unless CoreLocation is explicit.
+        iosTarget.binaries.all {
+            linkerOpts("-framework", "CoreLocation")
+        }
+
         val nativeHeaderDir = rootProject.file("iosApp/SharedNative")
 
         iosTarget.compilations.getByName("main") {
