@@ -58,3 +58,16 @@ keystore.properties
 *.jks
 *.keystore
 composeApp/keystore/
+
+### Vendored tooling / release artifacts (do not commit) ###
+pepk.jar
+output.zip
+*.aab
+composeApp/release/
+*.tgz
+
+### IDE / per-user state ###
+.idea/
+composeApp/.idea/
+**/xcuserdata/
+*.xcuserstate

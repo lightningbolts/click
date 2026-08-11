@@ -133,7 +133,7 @@ Optional: [`quick_start_chat.sh`](./quick_start_chat.sh) for guided prompts arou
 
 ## Performance & scale
 
-See [`PERFORMANCE.md`](PERFORMANCE.md) for hotspots, scale failure modes, and July 2026 remediation (inbox RPC, `RealtimeCoordinator`, gated map prefetch).
+See [`docs/archive/PERFORMANCE.md`](docs/archive/PERFORMANCE.md) (archived July 2026 notes) for hotspots, scale failure modes, and remediation (inbox RPC, `RealtimeCoordinator`, gated map prefetch).
 
 **Compile (Android + iOS):**
 

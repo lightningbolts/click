@@ -1,3 +1,5 @@
+**Status:** archived (as of 2026-08-11) — not authoritative; see `docs/archive/README.md`.
+
 # Click — Performance audit
 
 Performance hotspots in the Click KMP app (`composeApp/`), ordered by impact. This doc tracks what was fixed in the **andorid-bugfix → main** merge (PR #40), what still risks failure at scale, and how to prevent it.

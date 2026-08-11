@@ -1,15 +1,17 @@
+**Status:** archived (as of 2026-08-11) — not authoritative; see `docs/archive/README.md`.
+
 # Click Regression Checklist
 
 **This file is a stub.** The canonical regression docs live here:
 
-→ **[docs/regression-testing/00-INDEX.md](docs/regression-testing/00-INDEX.md)**
+→ **[../regression-testing/00-INDEX.md](../regression-testing/00-INDEX.md)**
 
 | Doc | Use |
 |-----|-----|
-| [Full checklist](docs/regression-testing/01-full-checklist.md) | ~200 items, 25 sections — both platforms |
-| [10-min smoke](docs/regression-testing/02-smoke-10min.md) | Pre-merge sanity |
-| [Known issues audit](docs/regression-testing/03-known-issues-audit.md) | Issue sheet #1–11 + code evidence |
-| [Android focus](docs/regression-testing/04-android-focus.md) | Calls, voice, BLE, map on Android |
+| [Full checklist](../regression-testing/01-full-checklist.md) | ~200 items, 25 sections — both platforms |
+| [10-min smoke](../regression-testing/02-smoke-10min.md) | Pre-merge sanity |
+| [Known issues audit](../regression-testing/03-known-issues-audit.md) | Issue sheet #1–11 + code evidence |
+| [Android focus](../regression-testing/04-android-focus.md) | Calls, voice, BLE, map on Android |
 
 Do not treat the old Copilot-era bullets below as complete coverage; they are preserved only for historical reference and are superseded by the docs above.
 

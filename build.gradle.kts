@@ -8,7 +8,21 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform) apply false
     alias(libs.plugins.kotlinSerialization) apply false
     alias(libs.plugins.googleSecrets) apply false
+    alias(libs.plugins.spotless)
 }
 
-
-
+spotless {
+    // Only enforce style on lines changed since main — avoids a repo-wide reformat.
+    ratchetFrom("origin/main")
+    kotlin {
+        target(
+            "composeApp/src/**/*.kt",
+            "composeApp/*.kt",
+        )
+        ktlint()
+    }
+    kotlinGradle {
+        target("*.gradle.kts", "composeApp/*.gradle.kts", "gradle/*.gradle.kts")
+        ktlint()
+    }
+}

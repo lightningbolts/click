@@ -1,5 +1,6 @@
 # Click Mobile — Consumer UI/UX Blueprint Index
 
+**Status:** durable  
 **Product:** Click — Anti-doomscrolling · Stop scrolling, start living.  
 **Scope:** Kotlin Multiplatform mobile app (`click/`) — Android + iOS Compose UI, App Clip handshake, CallKit/PushKit overlays.  
 **Out of scope:** Web companion (`click-web/`), B2B Insights, Admin, business signup, backend/APIs/Edge Functions/RLS. Network and permission failures appear only as **user-visible** states.  
@@ -8,8 +9,8 @@
 
 **Regression / QA:** After major changes, run [../../regression-testing/00-INDEX.md](../../regression-testing/00-INDEX.md) (full checklist, smoke, known-issues audit). These UI/UX files describe expected behavior; they are not a test plan.
 
-**Continuation status (addressed / open / Track C):** [../../handoff/functional-clarity-continuation.md](../../handoff/functional-clarity-continuation.md).  
-**Next Track C revamp handoff:** [../../handoff/track-c-next-revamps.md](../../handoff/track-c-next-revamps.md) — suggested next: **Events discovery** (`MapDiscoveryLayout` / `MapScreen`).
+**Continuation status (archived — addressed / open / Track C):** [../../archive/handoff/functional-clarity-continuation.md](../../archive/handoff/functional-clarity-continuation.md).  
+**Next Track C revamp handoff (archived):** [../../archive/handoff/track-c-next-revamps.md](../../archive/handoff/track-c-next-revamps.md) — suggested next: **Events discovery** (`MapDiscoveryLayout` / `MapScreen`).
 **Interaction polish (post-theme):** [../polish/00-INDEX.md](../polish/00-INDEX.md) — motion, IME, swipe-back continuity (**P0: Home back-gesture flicker still open**), liquid-glass tab bar, chat/calls/connect delight, component reuse. **One-shot Fable plan** → Grok implementation.
 
 ---

@@ -1,3 +1,5 @@
+**Status:** archived (as of 2026-08-11) — not authoritative; see `docs/archive/README.md`.
+
 # Phase 4 — Remaining `name` / `full_name` references (cleanup checklist)
 
 After running `migrate_user_names_and_birthday.sql`, new signups populate `first_name`, `last_name`, and `birthday`. The following files still mention legacy single-field names for display, APIs, or tests. Update them to prefer `"${firstName} ${lastName}".trim()` (or `displayNameFromUserMetadata` on web) where a human-readable label is needed.

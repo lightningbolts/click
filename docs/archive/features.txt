@@ -1,3 +1,5 @@
+**Status:** archived (as of 2026-08-11) — not authoritative; see `docs/archive/README.md`.
+
 Part 1: The Core Product (The MVP)
 The Problem
 The "Connection Graveyard": Students meet, exchange Instagrams, and never talk again.

@@ -1,3 +1,5 @@
+**Status:** archived (as of 2026-08-11) — not authoritative; see `docs/archive/README.md`.
+
 # Track C continuation — next revamps
 
 **Date:** 2026-07-18  
@@ -139,8 +141,8 @@ Optional later (after related device OK): Nav chrome v2, Chat composer polish, P
 
 ```text
 Continue Click Track C using:
-click/docs/handoff/track-c-next-revamps.md
-and click/docs/handoff/functional-clarity-continuation.md
+click/docs/archive/handoff/track-c-next-revamps.md
+and click/docs/archive/handoff/functional-clarity-continuation.md
 
 DONE — do not redo unless regressing:
 - Event detail (LIVE, bento, categories, host, Active Clicks, Share/Bookmark/Check in, Route + RSVP)
@@ -173,7 +175,7 @@ Rules:
 
 | Concern | Path |
 |---------|------|
-| Prior handoff | `docs/handoff/functional-clarity-continuation.md` |
+| Prior handoff | `docs/archive/handoff/functional-clarity-continuation.md` |
 | Home (done) | `docs/ui-ux/mobile/05-home.md` |
 | Settings (done) | `docs/ui-ux/mobile/14-settings-privacy.md`, `docs/design-assets/settings/` |
 | Inbox (Remember Me done) | `docs/ui-ux/mobile/07-connections-inbox.md`, `docs/design-assets/chat/` |

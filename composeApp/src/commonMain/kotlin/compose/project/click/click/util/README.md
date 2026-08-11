@@ -127,7 +127,7 @@ Batch-fetches peer availability bubbles and writes overlap results into `Availab
 
 `ConnectionItem` reads cache only — no per-row network I/O.
 
-See also `PERFORMANCE.md` § Scale failure modes.
+See also `docs/archive/PERFORMANCE.md` § Scale failure modes.
 
 ### `CollectAsStateLifecycleAware.kt`
 

@@ -1,3 +1,5 @@
+**Status:** archived (as of 2026-08-11) — not authoritative; see `docs/archive/README.md`.
+
 # Functional Clarity Revamp — Continuation Handoff
 
 **Date:** 2026-07-17  
@@ -189,8 +191,8 @@ GlassSheetTokens.OledBlack() / OnOled()
 
 ```text
 Continue Click Track C using:
-click/docs/handoff/track-c-next-revamps.md
-and click/docs/handoff/functional-clarity-continuation.md
+click/docs/archive/handoff/track-c-next-revamps.md
+and click/docs/archive/handoff/functional-clarity-continuation.md
 
 DONE — do not redo unless regressing:
 Home IA (+ greeting LiquidGlassPageHeader), Settings grouping, Inbox Remember Me (pill names), Add Click hero, Tap how-it-works simulator-only.

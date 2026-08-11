@@ -1,5 +1,6 @@
 # Click Mobile — Interaction Polish Brief (for Claude Fable 5)
 
+**Status:** durable  
 **Product:** Click KMP mobile (`click/composeApp`) — Android + iOS Compose  
 **Date:** 2026-07-18  
 **Audience:** Claude Fable 5 (planning) → Cursor Grok 4.5 (implementation)  
@@ -7,7 +8,7 @@
 
 **Related (read only if needed):**  
 - Theme / feature specs: [`../mobile/00-INDEX.md`](../mobile/00-INDEX.md)  
-- What already shipped / known flicker fixes: [`../../handoff/functional-clarity-continuation.md`](../../handoff/functional-clarity-continuation.md)  
+- What already shipped / known flicker fixes (archived): [`../../archive/handoff/functional-clarity-continuation.md`](../../archive/handoff/functional-clarity-continuation.md)  
 - Tokens: [`../../design-assets/functional_clarity/DESIGN.md`](../../design-assets/functional_clarity/DESIGN.md)
 
 ---

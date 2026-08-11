@@ -3,12 +3,12 @@ package compose.project.click.click.data.api
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.models.ErrorResponse
 import compose.project.click.click.data.models.MapBeacon
-import compose.project.click.click.data.models.User
-import compose.project.click.click.data.models.ProfileTimelinePayload
 import compose.project.click.click.data.models.MapBeaconInsert
-import compose.project.click.click.data.models.parseMapBeaconRows
-import compose.project.click.click.data.models.UserCore
 import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble
+import compose.project.click.click.data.models.ProfileTimelinePayload
+import compose.project.click.click.data.models.User
+import compose.project.click.click.data.models.UserCore
+import compose.project.click.click.data.models.parseMapBeaconRows
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.util.redactedRestMessage
 import io.github.jan.supabase.auth.auth
@@ -29,11 +29,11 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
-import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -308,9 +308,17 @@ data class ProximityBindIgnoredResponseDto(
 )
 
 sealed class ProximityHandshakePostResult {
-    data class InstantMatch(val body: ProximityBindOkResponseDto) : ProximityHandshakePostResult()
-    data class PendingMatch(val body: ProximityBindPendingResponseDto) : ProximityHandshakePostResult()
-    data class IgnoredEmptyPayload(val body: ProximityBindIgnoredResponseDto) : ProximityHandshakePostResult()
+    data class InstantMatch(
+        val body: ProximityBindOkResponseDto,
+    ) : ProximityHandshakePostResult()
+
+    data class PendingMatch(
+        val body: ProximityBindPendingResponseDto,
+    ) : ProximityHandshakePostResult()
+
+    data class IgnoredEmptyPayload(
+        val body: ProximityBindIgnoredResponseDto,
+    ) : ProximityHandshakePostResult()
 }
 
 @Serializable
@@ -362,16 +370,16 @@ private data class CommunityHubNearbyEnvelope(
  * Legacy Flask routes were removed — do not reintroduce `localhost:5000` / LAN API bases.
  */
 class ApiClient {
-
     companion object {
         private val clickWebAuthOrigin: String
             get() = ApiConfig.CLICK_WEB_BASE_URL.trimEnd('/')
     }
 
-    private val json = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-    }
+    private val json =
+        Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+        }
 
     private val tokenStorage by lazy { createTokenStorage() }
 
@@ -379,30 +387,32 @@ class ApiClient {
      * Lazy so constructing [ApiClient] (e.g. via [MapBeaconRepository] in Robolectric unit tests)
      * does not touch AndroidKeyStore until an HTTP call actually runs.
      */
-    private val clickWebClientLazy = lazy {
-        HttpClient {
-            install(ContentNegotiation) {
-                json(json)
+    private val clickWebClientLazy =
+        lazy {
+            HttpClient {
+                install(ContentNegotiation) {
+                    json(json)
+                }
+                installClickWebBearerAuth(tokenStorage)
             }
-            installClickWebBearerAuth(tokenStorage)
         }
-    }
     private val clickWebClient: HttpClient get() = clickWebClientLazy.value
 
-    private val clickWebPlainClientLazy = lazy {
-        HttpClient {
-            install(ContentNegotiation) {
-                json(json)
+    private val clickWebPlainClientLazy =
+        lazy {
+            HttpClient {
+                install(ContentNegotiation) {
+                    json(json)
+                }
             }
         }
-    }
     private val clickWebPlainClient: HttpClient get() = clickWebPlainClientLazy.value
 
     /**
      * Temporary helper: calls Next.js `GET /api/ping` with a Supabase JWT (see Ktor [Auth] bearer config).
      */
-    suspend fun testSecurePing(): Result<SecurePingResponse> {
-        return try {
+    suspend fun testSecurePing(): Result<SecurePingResponse> =
+        try {
             val response: HttpResponse = clickWebClient.get("$clickWebAuthOrigin/api/ping")
             if (response.status.value in 200..299) {
                 val body = response.body<SecurePingResponse>()
@@ -420,11 +430,15 @@ class ApiClient {
             println("ApiClient.testSecurePing: exception ${e.redactedRestMessage()}")
             Result.failure(e)
         }
-    }
 
     private suspend fun readClickWebErrorMessage(response: HttpResponse): String {
         val status = response.status.value
-        val fromJson = runCatching { response.body<ErrorResponse>() }.getOrNull()?.error?.trim().orEmpty()
+        val fromJson =
+            runCatching { response.body<ErrorResponse>() }
+                .getOrNull()
+                ?.error
+                ?.trim()
+                .orEmpty()
         if (fromJson.isNotEmpty()) return fromJson.take(200)
         val raw = runCatching { response.bodyAsText() }.getOrNull()?.trim().orEmpty()
         if (raw.contains("<!DOCTYPE", ignoreCase = true) || raw.contains("<html", ignoreCase = true)) {
@@ -445,37 +459,40 @@ class ApiClient {
     }
 
     private suspend fun currentAccessToken(): String? =
-        tokenStorage.getJwt()
+        tokenStorage
+            .getJwt()
             ?.trim()
             ?.takeIf { it.isNotEmpty() }
-            ?: SupabaseConfig.client.auth.currentSessionOrNull()
-            ?.accessToken
-            ?.trim()
-            ?.takeIf { it.isNotEmpty() }
+            ?: SupabaseConfig.client.auth
+                .currentSessionOrNull()
+                ?.accessToken
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
 
-    /**
-     * PATCH `/api/users/{userId}/profile` on click-web (JWT via Ktor Auth bearer).
-     * Provide at least one of [firstName], [lastName], [image], [tags].
-     */
     /**
      * POST `/api/user/avatar` on click-web (JSON base64 `file_b64` + JWT bearer).
      * Returns the new public image URL.
      */
     @OptIn(ExperimentalEncodingApi::class)
-    suspend fun uploadAvatar(imageBytes: ByteArray, mimeType: String): Result<String> {
+    suspend fun uploadAvatar(
+        imageBytes: ByteArray,
+        mimeType: String,
+    ): Result<String> {
         if (imageBytes.isEmpty()) {
             return Result.failure(IllegalArgumentException("Empty image"))
         }
         val normalizedMime = mimeType.trim().ifEmpty { "image/jpeg" }
         return try {
-            val payload = AvatarUploadBodyDto(
-                fileBase64 = Base64.encode(imageBytes),
-                mimeType = normalizedMime,
-            )
-            val response = clickWebClient.post("$clickWebAuthOrigin/api/user/avatar") {
-                contentType(ContentType.Application.Json)
-                setBody(payload)
-            }
+            val payload =
+                AvatarUploadBodyDto(
+                    fileBase64 = Base64.encode(imageBytes),
+                    mimeType = normalizedMime,
+                )
+            val response =
+                clickWebClient.post("$clickWebAuthOrigin/api/user/avatar") {
+                    contentType(ContentType.Application.Json)
+                    setBody(payload)
+                }
             if (response.status.value in 200..299) {
                 val dto = response.body<AvatarUploadResponseDto>()
                 val url = dto.image.trim()
@@ -493,7 +510,11 @@ class ApiClient {
     }
 
     @OptIn(ExperimentalEncodingApi::class)
-    suspend fun uploadGroupAvatar(groupId: String, imageBytes: ByteArray, mimeType: String): Result<String> {
+    suspend fun uploadGroupAvatar(
+        groupId: String,
+        imageBytes: ByteArray,
+        mimeType: String,
+    ): Result<String> {
         val gid = groupId.trim()
         if (gid.isEmpty()) return Result.failure(IllegalArgumentException("groupId required"))
         if (imageBytes.isEmpty()) {
@@ -501,14 +522,16 @@ class ApiClient {
         }
         val normalizedMime = mimeType.trim().ifEmpty { "image/jpeg" }
         return try {
-            val payload = AvatarUploadBodyDto(
-                fileBase64 = Base64.encode(imageBytes),
-                mimeType = normalizedMime,
-            )
-            val response = clickWebClient.post("$clickWebAuthOrigin/api/groups/$gid/avatar") {
-                contentType(ContentType.Application.Json)
-                setBody(payload)
-            }
+            val payload =
+                AvatarUploadBodyDto(
+                    fileBase64 = Base64.encode(imageBytes),
+                    mimeType = normalizedMime,
+                )
+            val response =
+                clickWebClient.post("$clickWebAuthOrigin/api/groups/$gid/avatar") {
+                    contentType(ContentType.Application.Json)
+                    setBody(payload)
+                }
             if (response.status.value in 200..299) {
                 val dto = response.body<AvatarUploadResponseDto>()
                 val url = dto.image.trim()
@@ -525,7 +548,6 @@ class ApiClient {
         }
     }
 
-
     /**
      * GET `/api/users/{userId}/profile` on click-web (JWT via Ktor Auth bearer).
      *
@@ -538,9 +560,10 @@ class ApiClient {
         val id = userId.trim()
         if (id.isEmpty()) return Result.failure(IllegalArgumentException("userId required"))
         return try {
-            val response: HttpResponse = clickWebClient.get(
-                "$clickWebAuthOrigin/api/users/$id/profile",
-            )
+            val response: HttpResponse =
+                clickWebClient.get(
+                    "$clickWebAuthOrigin/api/users/$id/profile",
+                )
             if (response.status.value in 200..299) {
                 Result.success(response.body<UserProfileGetResponse>())
             } else {
@@ -551,19 +574,23 @@ class ApiClient {
         }
     }
 
-    suspend fun getProfileTimeline(targetType: String, targetId: String): Result<ProfileTimelinePayload> {
+    suspend fun getProfileTimeline(
+        targetType: String,
+        targetId: String,
+    ): Result<ProfileTimelinePayload> {
         val type = targetType.trim()
         val id = targetId.trim()
         if (type.isEmpty() || id.isEmpty()) return Result.failure(IllegalArgumentException("Timeline target required"))
         return try {
             val bearer = currentAccessToken()
-            val response: HttpResponse = clickWebClient.get("$clickWebAuthOrigin/api/profile/timeline") {
-                bearer?.let { token ->
-                    header("Authorization", "Bearer $token")
+            val response: HttpResponse =
+                clickWebClient.get("$clickWebAuthOrigin/api/profile/timeline") {
+                    bearer?.let { token ->
+                        header("Authorization", "Bearer $token")
+                    }
+                    parameter("target_type", type)
+                    parameter("target_id", id)
                 }
-                parameter("target_type", type)
-                parameter("target_id", id)
-            }
             if (response.status.value in 200..299) {
                 Result.success(response.body<ProfileTimelinePayload>())
             } else {
@@ -588,20 +615,21 @@ class ApiClient {
         if (text.isEmpty()) return Result.failure(IllegalArgumentException("Journal entry required"))
         return try {
             val bearer = currentAccessToken()
-            val response: HttpResponse = clickWebClient.post("$clickWebAuthOrigin/api/profile/timeline") {
-                contentType(ContentType.Application.Json)
-                bearer?.let { token ->
-                    header("Authorization", "Bearer $token")
+            val response: HttpResponse =
+                clickWebClient.post("$clickWebAuthOrigin/api/profile/timeline") {
+                    contentType(ContentType.Application.Json)
+                    bearer?.let { token ->
+                        header("Authorization", "Bearer $token")
+                    }
+                    setBody(
+                        ProfileTimelinePostBody(
+                            targetType = type,
+                            targetId = id,
+                            body = text,
+                            visibility = vis,
+                        ),
+                    )
                 }
-                setBody(
-                    ProfileTimelinePostBody(
-                        targetType = type,
-                        targetId = id,
-                        body = text,
-                        visibility = vis,
-                    ),
-                )
-            }
             if (response.status.value in 200..299) {
                 Result.success(response.body<ProfileTimelinePayload>())
             } else {
@@ -624,13 +652,14 @@ class ApiClient {
         if (text.isEmpty()) return Result.failure(IllegalArgumentException("Journal entry body required"))
         return try {
             val bearer = currentAccessToken()
-            val response: HttpResponse = clickWebClient.put("$clickWebAuthOrigin/api/profile/timeline") {
-                contentType(ContentType.Application.Json)
-                bearer?.let { token ->
-                    header("Authorization", "Bearer $token")
+            val response: HttpResponse =
+                clickWebClient.put("$clickWebAuthOrigin/api/profile/timeline") {
+                    contentType(ContentType.Application.Json)
+                    bearer?.let { token ->
+                        header("Authorization", "Bearer $token")
+                    }
+                    setBody(ProfileTimelineMutateBody(id = entryId, body = text, visibility = vis))
                 }
-                setBody(ProfileTimelineMutateBody(id = entryId, body = text, visibility = vis))
-            }
             if (response.status.value in 200..299) {
                 Result.success(response.body<ProfileTimelinePayload>())
             } else {
@@ -646,13 +675,14 @@ class ApiClient {
         if (entryId.isEmpty()) return Result.failure(IllegalArgumentException("Journal entry required"))
         return try {
             val bearer = currentAccessToken()
-            val response: HttpResponse = clickWebClient.delete("$clickWebAuthOrigin/api/profile/timeline") {
-                contentType(ContentType.Application.Json)
-                bearer?.let { token ->
-                    header("Authorization", "Bearer $token")
+            val response: HttpResponse =
+                clickWebClient.delete("$clickWebAuthOrigin/api/profile/timeline") {
+                    contentType(ContentType.Application.Json)
+                    bearer?.let { token ->
+                        header("Authorization", "Bearer $token")
+                    }
+                    setBody(ProfileTimelineMutateBody(id = entryId))
                 }
-                setBody(ProfileTimelineMutateBody(id = entryId))
-            }
             if (response.status.value in 200..299) {
                 Result.success(response.body<ProfileTimelinePayload>())
             } else {
@@ -672,9 +702,10 @@ class ApiClient {
         val id = connectionId.trim()
         if (id.isEmpty()) return Result.failure(IllegalArgumentException("connectionId required"))
         return try {
-            val response: HttpResponse = clickWebClient.get(
-                "$clickWebAuthOrigin/api/connections/$id/tabs",
-            )
+            val response: HttpResponse =
+                clickWebClient.get(
+                    "$clickWebAuthOrigin/api/connections/$id/tabs",
+                )
             if (response.status.value in 200..299) {
                 Result.success(response.body<ConnectionTabsGetResponse>())
             } else {
@@ -696,23 +727,25 @@ class ApiClient {
         if (firstName == null && lastName == null && image == null && tags == null && birthday == null) {
             return Result.failure(IllegalArgumentException("No profile fields to update"))
         }
-        val body = buildJsonObject {
-            firstName?.let { put("first_name", it) }
-            lastName?.let { put("last_name", it) }
-            image?.let { put("image", it) }
-            tags?.let { list ->
-                put("tags", JsonArray(list.map { JsonPrimitive(it) }))
+        val body =
+            buildJsonObject {
+                firstName?.let { put("first_name", it) }
+                lastName?.let { put("last_name", it) }
+                image?.let { put("image", it) }
+                tags?.let { list ->
+                    put("tags", JsonArray(list.map { JsonPrimitive(it) }))
+                }
+                birthday?.let { put("birthday", it) }
             }
-            birthday?.let { put("birthday", it) }
-        }
         if (body.isEmpty()) {
             return Result.failure(IllegalArgumentException("No profile fields to update"))
         }
         return try {
-            val response = clickWebClient.patch("$clickWebAuthOrigin/api/users/$userId/profile") {
-                contentType(ContentType.Application.Json)
-                setBody(body)
-            }
+            val response =
+                clickWebClient.patch("$clickWebAuthOrigin/api/users/$userId/profile") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
             if (response.status.value in 200..299) {
                 val dto = response.body<UserProfilePatchResponseDto>()
                 Result.success(dto.user.toUser())
@@ -727,12 +760,13 @@ class ApiClient {
     /**
      * PATCH `/api/user/preferences` on click-web.
      */
-    suspend fun patchNotificationPreferences(body: NotificationPreferencesPatchBody): Result<NotificationPreferencesPatchResponse> {
-        return try {
-            val response = clickWebClient.patch("$clickWebAuthOrigin/api/user/preferences") {
-                contentType(ContentType.Application.Json)
-                setBody(body)
-            }
+    suspend fun patchNotificationPreferences(body: NotificationPreferencesPatchBody): Result<NotificationPreferencesPatchResponse> =
+        try {
+            val response =
+                clickWebClient.patch("$clickWebAuthOrigin/api/user/preferences") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
             if (response.status.value in 200..299) {
                 Result.success(response.body<NotificationPreferencesPatchResponse>())
             } else {
@@ -741,17 +775,17 @@ class ApiClient {
         } catch (e: Exception) {
             Result.failure(e)
         }
-    }
 
     /** POST `/api/connections/archive` — per-user archive junction (`connection_archives`). */
     suspend fun postConnectionArchive(connectionId: String): Result<Unit> {
         val id = connectionId.trim()
         if (id.isEmpty()) return Result.failure(IllegalArgumentException("Missing connection id"))
         return try {
-            val response = clickWebClient.post("$clickWebAuthOrigin/api/connections/archive") {
-                contentType(ContentType.Application.Json)
-                setBody(ConnectionLifecyclePostBody(connectionId = id))
-            }
+            val response =
+                clickWebClient.post("$clickWebAuthOrigin/api/connections/archive") {
+                    contentType(ContentType.Application.Json)
+                    setBody(ConnectionLifecyclePostBody(connectionId = id))
+                }
             if (response.status.value in 200..299) {
                 Result.success(Unit)
             } else {
@@ -767,10 +801,11 @@ class ApiClient {
         val id = connectionId.trim()
         if (id.isEmpty()) return Result.failure(IllegalArgumentException("Missing connection id"))
         return try {
-            val response = clickWebClient.post("$clickWebAuthOrigin/api/connections/unarchive") {
-                contentType(ContentType.Application.Json)
-                setBody(ConnectionLifecyclePostBody(connectionId = id))
-            }
+            val response =
+                clickWebClient.post("$clickWebAuthOrigin/api/connections/unarchive") {
+                    contentType(ContentType.Application.Json)
+                    setBody(ConnectionLifecyclePostBody(connectionId = id))
+                }
             if (response.status.value in 200..299) {
                 Result.success(Unit)
             } else {
@@ -786,10 +821,11 @@ class ApiClient {
         val id = connectionId.trim()
         if (id.isEmpty()) return Result.failure(IllegalArgumentException("Missing connection id"))
         return try {
-            val response = clickWebClient.post("$clickWebAuthOrigin/api/connections/core") {
-                contentType(ContentType.Application.Json)
-                setBody(ConnectionLifecyclePostBody(connectionId = id))
-            }
+            val response =
+                clickWebClient.post("$clickWebAuthOrigin/api/connections/core") {
+                    contentType(ContentType.Application.Json)
+                    setBody(ConnectionLifecyclePostBody(connectionId = id))
+                }
             if (response.status.value in 200..299) {
                 Result.success(Unit)
             } else {
@@ -801,8 +837,8 @@ class ApiClient {
     }
 
     /** GET `/api/connections/core` — core connection IDs for the signed-in user. */
-    suspend fun fetchConnectionCoreIds(): Result<Set<String>> {
-        return try {
+    suspend fun fetchConnectionCoreIds(): Result<Set<String>> =
+        try {
             val response = clickWebClient.get("$clickWebAuthOrigin/api/connections/core")
             if (response.status.value in 200..299) {
                 val body = response.body<ConnectionCoreListResponse>()
@@ -818,16 +854,16 @@ class ApiClient {
         } catch (e: Exception) {
             Result.failure(e)
         }
-    }
 
     /** DELETE `/api/connections/core?connection_id=` — remove from core list. */
     suspend fun deleteConnectionCore(connectionId: String): Result<Unit> {
         val id = connectionId.trim()
         if (id.isEmpty()) return Result.failure(IllegalArgumentException("Missing connection id"))
         return try {
-            val response = clickWebClient.delete(
-                "$clickWebAuthOrigin/api/connections/core?connection_id=$id",
-            )
+            val response =
+                clickWebClient.delete(
+                    "$clickWebAuthOrigin/api/connections/core?connection_id=$id",
+                )
             if (response.status.value in 200..299) {
                 Result.success(Unit)
             } else {
@@ -843,10 +879,11 @@ class ApiClient {
         val id = connectionId.trim()
         if (id.isEmpty()) return Result.failure(IllegalArgumentException("Missing connection id"))
         return try {
-            val response = clickWebClient.post("$clickWebAuthOrigin/api/connections/hide") {
-                contentType(ContentType.Application.Json)
-                setBody(ConnectionLifecyclePostBody(connectionId = id))
-            }
+            val response =
+                clickWebClient.post("$clickWebAuthOrigin/api/connections/hide") {
+                    contentType(ContentType.Application.Json)
+                    setBody(ConnectionLifecyclePostBody(connectionId = id))
+                }
             if (response.status.value in 200..299) {
                 Result.success(Unit)
             } else {
@@ -864,10 +901,11 @@ class ApiClient {
     suspend fun postLiveKitToken(body: LiveKitTokenPostBody): Result<LiveKitTokenResponse> {
         repeat(3) { attempt ->
             try {
-                val response = clickWebClient.post("$clickWebAuthOrigin/api/livekit/token") {
-                    contentType(ContentType.Application.Json)
-                    setBody(body)
-                }
+                val response =
+                    clickWebClient.post("$clickWebAuthOrigin/api/livekit/token") {
+                        contentType(ContentType.Application.Json)
+                        setBody(body)
+                    }
                 when {
                     response.status.value in 200..299 -> {
                         return Result.success(response.body<LiveKitTokenResponse>())
@@ -894,12 +932,13 @@ class ApiClient {
     }
 
     /** POST `/api/user/push-tokens` — upserts the device token for the signed-in user. */
-    suspend fun postPushToken(body: PushTokenRegisterBody): Result<PushTokenRegisterResponse> {
-        return try {
-            val response = clickWebClient.post("$clickWebAuthOrigin/api/user/push-tokens") {
-                contentType(ContentType.Application.Json)
-                setBody(body)
-            }
+    suspend fun postPushToken(body: PushTokenRegisterBody): Result<PushTokenRegisterResponse> =
+        try {
+            val response =
+                clickWebClient.post("$clickWebAuthOrigin/api/user/push-tokens") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
             if (response.status.value in 200..299) {
                 Result.success(response.body<PushTokenRegisterResponse>())
             } else {
@@ -908,20 +947,23 @@ class ApiClient {
         } catch (e: Exception) {
             Result.failure(e)
         }
-    }
 
     /** POST `/api/safety/report` — insert `connection_reports` for the JWT user. */
-    suspend fun postSafetyReport(connectionId: String, reason: String): Result<Unit> {
+    suspend fun postSafetyReport(
+        connectionId: String,
+        reason: String,
+    ): Result<Unit> {
         val id = connectionId.trim()
         val trimmedReason = reason.trim()
         if (id.isEmpty() || trimmedReason.isEmpty()) {
             return Result.failure(IllegalArgumentException("connection_id and reason are required"))
         }
         return try {
-            val response = clickWebClient.post("$clickWebAuthOrigin/api/safety/report") {
-                contentType(ContentType.Application.Json)
-                setBody(SafetyReportPostBody(connectionId = id, reason = trimmedReason))
-            }
+            val response =
+                clickWebClient.post("$clickWebAuthOrigin/api/safety/report") {
+                    contentType(ContentType.Application.Json)
+                    setBody(SafetyReportPostBody(connectionId = id, reason = trimmedReason))
+                }
             if (response.status.value in 200..299) {
                 Result.success(Unit)
             } else {
@@ -945,15 +987,16 @@ class ApiClient {
             return Result.failure(IllegalArgumentException("lat, lon, and radiusMeters must be finite"))
         }
         return try {
-            val response: HttpResponse = clickWebClient.get("$clickWebAuthOrigin/api/beacons") {
-                parameter("lat", lat)
-                parameter("lon", lon)
-                parameter("radius_meters", radiusMeters)
-                val f = filters?.trim().orEmpty()
-                if (f.isNotEmpty()) {
-                    parameter("filters", f)
+            val response: HttpResponse =
+                clickWebClient.get("$clickWebAuthOrigin/api/beacons") {
+                    parameter("lat", lat)
+                    parameter("lon", lon)
+                    parameter("radius_meters", radiusMeters)
+                    val f = filters?.trim().orEmpty()
+                    if (f.isNotEmpty()) {
+                        parameter("filters", f)
+                    }
                 }
-            }
             if (response.status.value in 200..299) {
                 Result.success(response.bodyAsText())
             } else {
@@ -972,10 +1015,12 @@ class ApiClient {
             val response: HttpResponse = clickWebClient.get("$clickWebAuthOrigin/api/beacons/$id")
             if (response.status.value in 200..299) {
                 val payload = response.body<MapBeaconPostResponseDto>()
-                val beaconObj = payload.beacon
-                    ?: return Result.failure(Exception("Beacon payload was missing"))
-                val beacon = parseMapBeaconRows(beaconObj).firstOrNull()
-                    ?: return Result.failure(Exception("Beacon payload was malformed"))
+                val beaconObj =
+                    payload.beacon
+                        ?: return Result.failure(Exception("Beacon payload was missing"))
+                val beacon =
+                    parseMapBeaconRows(beaconObj).firstOrNull()
+                        ?: return Result.failure(Exception("Beacon payload was malformed"))
                 Result.success(beacon)
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
@@ -990,16 +1035,19 @@ class ApiClient {
     /** `POST /api/beacons` — insert a map beacon (soundtrack rows enriched server-side). */
     suspend fun postMapBeacon(insert: MapBeaconInsert): Result<MapBeacon> {
         return try {
-            val response = clickWebClient.post("$clickWebAuthOrigin/api/beacons") {
-                contentType(ContentType.Application.Json)
-                setBody(insert)
-            }
+            val response =
+                clickWebClient.post("$clickWebAuthOrigin/api/beacons") {
+                    contentType(ContentType.Application.Json)
+                    setBody(insert)
+                }
             if (response.status.value in 200..299) {
                 val payload = response.body<MapBeaconPostResponseDto>()
-                val beaconObj = payload.beacon
-                    ?: return Result.failure(Exception("Insert succeeded but beacon payload was missing"))
-                val beacon = parseMapBeaconRows(beaconObj).firstOrNull()
-                    ?: return Result.failure(Exception("Insert succeeded but beacon payload was malformed"))
+                val beaconObj =
+                    payload.beacon
+                        ?: return Result.failure(Exception("Insert succeeded but beacon payload was missing"))
+                val beacon =
+                    parseMapBeaconRows(beaconObj).firstOrNull()
+                        ?: return Result.failure(Exception("Insert succeeded but beacon payload was malformed"))
                 Result.success(beacon)
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
@@ -1012,20 +1060,26 @@ class ApiClient {
     }
 
     /** PATCH `/api/beacons/{beaconId}` — update a creator-owned beacon. */
-    suspend fun patchMapBeacon(beaconId: String, patch: MapBeaconPatchBody): Result<MapBeacon> {
+    suspend fun patchMapBeacon(
+        beaconId: String,
+        patch: MapBeaconPatchBody,
+    ): Result<MapBeacon> {
         val id = beaconId.trim()
         if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
         return try {
-            val response = clickWebClient.patch("$clickWebAuthOrigin/api/beacons/$id") {
-                contentType(ContentType.Application.Json)
-                setBody(patch)
-            }
+            val response =
+                clickWebClient.patch("$clickWebAuthOrigin/api/beacons/$id") {
+                    contentType(ContentType.Application.Json)
+                    setBody(patch)
+                }
             if (response.status.value in 200..299) {
                 val payload = response.body<MapBeaconPatchResponseDto>()
-                val beaconObj = payload.beacon
-                    ?: return Result.failure(Exception("Patch succeeded but beacon payload was missing"))
-                val beacon = parseMapBeaconRows(beaconObj).firstOrNull()
-                    ?: return Result.failure(Exception("Patch succeeded but beacon payload was malformed"))
+                val beaconObj =
+                    payload.beacon
+                        ?: return Result.failure(Exception("Patch succeeded but beacon payload was missing"))
+                val beacon =
+                    parseMapBeaconRows(beaconObj).firstOrNull()
+                        ?: return Result.failure(Exception("Patch succeeded but beacon payload was malformed"))
                 Result.success(beacon)
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
@@ -1060,10 +1114,11 @@ class ApiClient {
         val p = path.trim()
         if (p.isEmpty()) return Result.failure(IllegalArgumentException("path required"))
         return try {
-            val response = clickWebClient.post("$clickWebAuthOrigin/api/chat/attachments/sign") {
-                contentType(ContentType.Application.Json)
-                setBody(SignAttachmentPostBody(path = p))
-            }
+            val response =
+                clickWebClient.post("$clickWebAuthOrigin/api/chat/attachments/sign") {
+                    contentType(ContentType.Application.Json)
+                    setBody(SignAttachmentPostBody(path = p))
+                }
             if (response.status.value in 200..299) {
                 val payload = response.body<SignAttachmentResponse>()
                 val url = payload.url.trim()
@@ -1085,9 +1140,10 @@ class ApiClient {
         val id = userId.trim()
         if (id.isEmpty()) return Result.failure(IllegalArgumentException("userId required"))
         return try {
-            val response: HttpResponse = clickWebPlainClient.get(
-                "$clickWebAuthOrigin/api/users/$id/public-profile",
-            )
+            val response: HttpResponse =
+                clickWebPlainClient.get(
+                    "$clickWebAuthOrigin/api/users/$id/public-profile",
+                )
             if (response.status.value in 200..299) {
                 Result.success(response.body<PublicProfileUnauthenticatedResponse>())
             } else {
@@ -1101,12 +1157,13 @@ class ApiClient {
     }
 
     /** POST `/api/hub/create` — JWT bearer. */
-    suspend fun postHubCreate(body: HubCreatePostBody): Result<HubCreateResponseDto> {
-        return try {
-            val response = clickWebClient.post("$clickWebAuthOrigin/api/hub/create") {
-                contentType(ContentType.Application.Json)
-                setBody(body)
-            }
+    suspend fun postHubCreate(body: HubCreatePostBody): Result<HubCreateResponseDto> =
+        try {
+            val response =
+                clickWebClient.post("$clickWebAuthOrigin/api/hub/create") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
             if (response.status.value in 200..299) {
                 Result.success(response.body<HubCreateResponseDto>())
             } else {
@@ -1117,7 +1174,6 @@ class ApiClient {
         } catch (e: Exception) {
             Result.failure(e)
         }
-    }
 
     /**
      * POST `/api/connections/proximity` — tri-factor proximity bind (JWT bearer).
@@ -1130,15 +1186,16 @@ class ApiClient {
         bearerJwt: String? = null,
     ): Result<ProximityHandshakePostResult> {
         return try {
-            val response: HttpResponse = clickWebClient.post(
-                "$clickWebAuthOrigin/api/connections/proximity",
-            ) {
-                contentType(ContentType.Application.Json)
-                bearerJwt?.trim()?.takeIf { it.isNotEmpty() }?.let { token ->
-                    header("Authorization", "Bearer $token")
+            val response: HttpResponse =
+                clickWebClient.post(
+                    "$clickWebAuthOrigin/api/connections/proximity",
+                ) {
+                    contentType(ContentType.Application.Json)
+                    bearerJwt?.trim()?.takeIf { it.isNotEmpty() }?.let { token ->
+                        header("Authorization", "Bearer $token")
+                    }
+                    setBody(body)
                 }
-                setBody(body)
-            }
             when (response.status.value) {
                 200 -> {
                     val raw = response.bodyAsText()
@@ -1159,9 +1216,10 @@ class ApiClient {
                 }
                 503 -> {
                     val raw = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
-                    val unavailable = runCatching {
-                        json.decodeFromString(ProximityBindUnavailableResponseDto.serializer(), raw)
-                    }.getOrNull()
+                    val unavailable =
+                        runCatching {
+                            json.decodeFromString(ProximityBindUnavailableResponseDto.serializer(), raw)
+                        }.getOrNull()
                     val pendingId = unavailable?.pendingHandshakeId?.trim().orEmpty()
                     if (pendingId.isNotEmpty()) {
                         Result.success(
@@ -1184,9 +1242,10 @@ class ApiClient {
             val status = e.response.status.value
             if (status == 503) {
                 val raw = runCatching { e.response.bodyAsText() }.getOrNull().orEmpty()
-                val unavailable = runCatching {
-                    json.decodeFromString(ProximityBindUnavailableResponseDto.serializer(), raw)
-                }.getOrNull()
+                val unavailable =
+                    runCatching {
+                        json.decodeFromString(ProximityBindUnavailableResponseDto.serializer(), raw)
+                    }.getOrNull()
                 val pendingId = unavailable?.pendingHandshakeId?.trim().orEmpty()
                 if (pendingId.isNotEmpty()) {
                     return Result.success(
@@ -1221,33 +1280,39 @@ class ApiClient {
         if (pendingId.isEmpty()) {
             return Result.failure(IllegalArgumentException("pendingHandshakeId required"))
         }
-        val members = selectedMemberIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
-            // Server adds host; max member set is PROXIMITY_HOST_SELECTION_MAX_MEMBERS (12).
-            .take(11)
+        val members =
+            selectedMemberIds
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .distinct()
+                // Server adds host; max member set is PROXIMITY_HOST_SELECTION_MAX_MEMBERS (12).
+                .take(11)
         if (members.isEmpty()) {
             return Result.failure(IllegalArgumentException("selectedMemberIds required"))
         }
-        val tags = contextTags
-            ?.map { it.trim() }
-            ?.filter { it.isNotEmpty() }
-            ?.distinct()
-            ?.takeIf { it.isNotEmpty() }
+        val tags =
+            contextTags
+                ?.map { it.trim() }
+                ?.filter { it.isNotEmpty() }
+                ?.distinct()
+                ?.takeIf { it.isNotEmpty() }
         return try {
-            val response: HttpResponse = clickWebClient.post(
-                "$clickWebAuthOrigin/api/connections/proximity/confirm",
-            ) {
-                contentType(ContentType.Application.Json)
-                bearerJwt.trim().takeIf { it.isNotEmpty() }?.let { token ->
-                    header("Authorization", "Bearer $token")
+            val response: HttpResponse =
+                clickWebClient.post(
+                    "$clickWebAuthOrigin/api/connections/proximity/confirm",
+                ) {
+                    contentType(ContentType.Application.Json)
+                    bearerJwt.trim().takeIf { it.isNotEmpty() }?.let { token ->
+                        header("Authorization", "Bearer $token")
+                    }
+                    setBody(
+                        ProximityConfirmSelectionPostBody(
+                            pendingHandshakeId = pendingId,
+                            selectedMemberIds = members,
+                            contextTags = tags,
+                        ),
+                    )
                 }
-                setBody(
-                    ProximityConfirmSelectionPostBody(
-                        pendingHandshakeId = pendingId,
-                        selectedMemberIds = members,
-                        contextTags = tags,
-                    ),
-                )
-            }
             when (response.status.value) {
                 in 200..299 -> {
                     val dto = response.body<ProximityBindOkResponseDto>()
@@ -1276,14 +1341,15 @@ class ApiClient {
             return Result.failure(IllegalArgumentException("pendingHandshakeId required"))
         }
         return try {
-            val response: HttpResponse = clickWebClient.get(
-                "$clickWebAuthOrigin/api/connections/proximity",
-            ) {
-                bearerJwt?.trim()?.takeIf { it.isNotEmpty() }?.let { token ->
-                    header("Authorization", "Bearer $token")
+            val response: HttpResponse =
+                clickWebClient.get(
+                    "$clickWebAuthOrigin/api/connections/proximity",
+                ) {
+                    bearerJwt?.trim()?.takeIf { it.isNotEmpty() }?.let { token ->
+                        header("Authorization", "Bearer $token")
+                    }
+                    parameter("pending_handshake_id", pendingId)
                 }
-                parameter("pending_handshake_id", pendingId)
-            }
             when (response.status.value) {
                 200 -> {
                     val dto = response.body<ProximityBindOkResponseDto>()
@@ -1323,12 +1389,13 @@ class ApiClient {
     }
 
     /** POST `/api/connections/encounter` — JWT bearer; inserts encounter row only. */
-    suspend fun postConnectionEncounter(body: ConnectionEncounterPostBody): Result<Unit> {
-        return try {
-            val response = clickWebClient.post("$clickWebAuthOrigin/api/connections/encounter") {
-                contentType(ContentType.Application.Json)
-                setBody(body)
-            }
+    suspend fun postConnectionEncounter(body: ConnectionEncounterPostBody): Result<Unit> =
+        try {
+            val response =
+                clickWebClient.post("$clickWebAuthOrigin/api/connections/encounter") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
             when {
                 response.status.value in 200..299 -> Result.success(Unit)
                 response.status.value == 429 -> Result.failure(Exception("Encounter rate limit — try again later."))
@@ -1339,19 +1406,19 @@ class ApiClient {
         } catch (e: Exception) {
             Result.failure(e)
         }
-    }
 
     /** POST `/api/connections/{id}/collaboration-session` — opens Disposable Roll window. */
     suspend fun postOpenCollaborationSession(connectionId: String): Result<CollaborationSessionPostResponse> {
         val cid = connectionId.trim()
         if (cid.isEmpty()) return Result.failure(IllegalArgumentException("connectionId required"))
         return try {
-            val response = clickWebClient.post(
-                "$clickWebAuthOrigin/api/connections/$cid/collaboration-session",
-            ) {
-                contentType(ContentType.Application.Json)
-                setBody(buildJsonObject {})
-            }
+            val response =
+                clickWebClient.post(
+                    "$clickWebAuthOrigin/api/connections/$cid/collaboration-session",
+                ) {
+                    contentType(ContentType.Application.Json)
+                    setBody(buildJsonObject {})
+                }
             if (response.status.value in 200..299) {
                 Result.success(response.body<CollaborationSessionPostResponse>())
             } else {
@@ -1369,12 +1436,13 @@ class ApiClient {
         val cid = chatId.trim()
         if (cid.isEmpty()) return Result.failure(IllegalArgumentException("chatId required"))
         return try {
-            val response = clickWebClient.post(
-                "$clickWebAuthOrigin/api/chats/$cid/collaboration-session",
-            ) {
-                contentType(ContentType.Application.Json)
-                setBody(buildJsonObject {})
-            }
+            val response =
+                clickWebClient.post(
+                    "$clickWebAuthOrigin/api/chats/$cid/collaboration-session",
+                ) {
+                    contentType(ContentType.Application.Json)
+                    setBody(buildJsonObject {})
+                }
             if (response.status.value in 200..299) {
                 Result.success(response.body<CollaborationSessionPostResponse>())
             } else {
@@ -1395,17 +1463,18 @@ class ApiClient {
         val cid = connectionId.trim()
         if (cid.isEmpty()) return Result.failure(IllegalArgumentException("connectionId required"))
         return try {
-            val response = clickWebClient.post("$clickWebAuthOrigin/api/connections/encounter") {
-                contentType(ContentType.Application.Json)
-                // encodeDefaults is off — must emit open_disposable_roll explicitly or the
-                // server falls through to the legacy user_id/peer_id encounter validator.
-                setBody(
-                    buildJsonObject {
-                        put("connection_id", cid)
-                        put("open_disposable_roll", true)
-                    },
-                )
-            }
+            val response =
+                clickWebClient.post("$clickWebAuthOrigin/api/connections/encounter") {
+                    contentType(ContentType.Application.Json)
+                    // encodeDefaults is off — must emit open_disposable_roll explicitly or the
+                    // server falls through to the legacy user_id/peer_id encounter validator.
+                    setBody(
+                        buildJsonObject {
+                            put("connection_id", cid)
+                            put("open_disposable_roll", true)
+                        },
+                    )
+                }
             if (response.status.value in 200..299) {
                 Result.success(response.body<CollaborationSessionPostResponse>())
             } else {
@@ -1419,8 +1488,8 @@ class ApiClient {
     }
 
     /** GET `/api/insights/widget-vibe` — JWT bearer. */
-    suspend fun getWidgetVibePayload(): Result<WidgetVibePayloadDto> {
-        return try {
+    suspend fun getWidgetVibePayload(): Result<WidgetVibePayloadDto> =
+        try {
             val response: HttpResponse = clickWebClient.get("$clickWebAuthOrigin/api/insights/widget-vibe")
             if (response.status.value in 200..299) {
                 Result.success(response.body<WidgetVibePayloadDto>())
@@ -1432,7 +1501,6 @@ class ApiClient {
         } catch (e: Exception) {
             Result.failure(e)
         }
-    }
 
     /** GET `/api/hub/nearby` — JWT bearer; active hubs near lat/lon. */
     suspend fun getNearbyCommunityHubs(
@@ -1444,11 +1512,12 @@ class ApiClient {
             return Result.failure(IllegalArgumentException("lat/lon required"))
         }
         return try {
-            val response: HttpResponse = clickWebClient.get("$clickWebAuthOrigin/api/hub/nearby") {
-                parameter("lat", lat)
-                parameter("lon", lon)
-                parameter("radius_meters", radiusMeters)
-            }
+            val response: HttpResponse =
+                clickWebClient.get("$clickWebAuthOrigin/api/hub/nearby") {
+                    parameter("lat", lat)
+                    parameter("lon", lon)
+                    parameter("radius_meters", radiusMeters)
+                }
             if (response.status.value in 200..299) {
                 val env = response.body<CommunityHubNearbyEnvelope>()
                 Result.success(env.hubs)
@@ -1541,22 +1610,24 @@ class ApiClient {
         val id = beaconId.trim()
         if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
         return try {
-            val response: HttpResponse = clickWebClient.post("$clickWebAuthOrigin/api/beacons/$id/rsvp") {
-                contentType(ContentType.Application.Json)
-                setBody(
-                    BeaconRsvpPostBody(
-                        latitude = latitude,
-                        longitude = longitude,
-                        accuracyMeters = accuracyMeters,
-                        source = "mobile",
-                        platform = platform,
-                    ),
-                )
-            }
+            val response: HttpResponse =
+                clickWebClient.post("$clickWebAuthOrigin/api/beacons/$id/rsvp") {
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        BeaconRsvpPostBody(
+                            latitude = latitude,
+                            longitude = longitude,
+                            accuracyMeters = accuracyMeters,
+                            source = "mobile",
+                            platform = platform,
+                        ),
+                    )
+                }
             if (response.status.value in 200..299) {
                 val payload = response.body<BeaconRsvpPostResponseDto>()
-                val attendee = payload.attendee
-                    ?: return Result.failure(Exception("RSVP succeeded but attendee payload was missing"))
+                val attendee =
+                    payload.attendee
+                        ?: return Result.failure(Exception("RSVP succeeded but attendee payload was missing"))
                 Result.success(attendee)
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
@@ -1617,8 +1688,11 @@ class ApiClient {
                     contentType(ContentType.Application.Json)
                     setBody(telemetry.copy(bookmarked = bookmarked))
                 }
-            if (response.status.value in 200..299) Result.success(Unit)
-            else Result.failure(Exception(readClickWebErrorMessage(response)))
+            if (response.status.value in 200..299) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
         } catch (e: ClientRequestException) {
             Result.failure(Exception(readClickWebErrorMessage(e.response)))
         } catch (e: Exception) {
@@ -1666,8 +1740,11 @@ class ApiClient {
         return try {
             val response: HttpResponse =
                 clickWebClient.delete("$clickWebAuthOrigin/api/beacons/$id/check-in")
-            if (response.status.value in 200..299) Result.success(Unit)
-            else Result.failure(Exception(readClickWebErrorMessage(response)))
+            if (response.status.value in 200..299) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
         } catch (e: ClientRequestException) {
             Result.failure(Exception(readClickWebErrorMessage(e.response)))
         } catch (e: Exception) {
@@ -1687,8 +1764,11 @@ class ApiClient {
                     contentType(ContentType.Application.Json)
                     setBody(telemetry)
                 }
-            if (response.status.value in 200..299) Result.success(Unit)
-            else Result.failure(Exception(readClickWebErrorMessage(response)))
+            if (response.status.value in 200..299) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
         } catch (e: Exception) {
             // Fire-and-forget: soft-fail
             Result.failure(e)
@@ -1720,8 +1800,11 @@ class ApiClient {
                         ),
                     )
                 }
-            if (response.status.value in 200..299) Result.success(Unit)
-            else Result.failure(Exception(readClickWebErrorMessage(response)))
+            if (response.status.value in 200..299) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -1730,8 +1813,8 @@ class ApiClient {
     suspend fun getMyEventBookmarks(
         limit: Int = 50,
         cursor: String? = null,
-    ): Result<EventBookmarksResponseDto> {
-        return try {
+    ): Result<EventBookmarksResponseDto> =
+        try {
             val response: HttpResponse =
                 clickWebClient.get("$clickWebAuthOrigin/api/me/event-bookmarks") {
                     parameter("limit", limit.coerceIn(1, 100))
@@ -1747,7 +1830,6 @@ class ApiClient {
         } catch (e: Exception) {
             Result.failure(e)
         }
-    }
 
     fun close() {
         if (clickWebClientLazy.isInitialized()) clickWebClientLazy.value.close()

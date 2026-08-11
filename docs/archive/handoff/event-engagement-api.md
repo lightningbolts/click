@@ -1,3 +1,5 @@
+**Status:** archived (as of 2026-08-11) — not authoritative; see `docs/archive/README.md`.
+
 # Handoff — Event engagement API (bookmarks, shares, check-ins, connection integration)
 
 **Date:** 2026-07-18  

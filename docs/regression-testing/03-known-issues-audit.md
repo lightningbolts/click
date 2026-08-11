@@ -14,7 +14,7 @@
 | **Open** | Broad category; use checklist to discover specifics |
 
 Regression annotations: checklist rows tagged `[KNOWN-N]` link here.  
-Continuation status: [`../handoff/functional-clarity-continuation.md`](../handoff/functional-clarity-continuation.md).
+Continuation status (archived): [`../archive/handoff/functional-clarity-continuation.md`](../archive/handoff/functional-clarity-continuation.md).
 
 ---
 
@@ -898,4 +898,4 @@ Tri-Factor is not classic NFC-only; BLE is one of three factors. Group registrat
 8. ~~**P1** Event list/map parity (#4)~~ — code landed; device verify; finish 1:1 UX (#3) on device
 9. ~~**P1** Client 503 recover / confirm dedup / Keychain -50 / Message CTA / hazard pins~~ — code hardened 2026-07-17; device verify
 10. **P2** Map color intent (#5); hazard visual confirm (#9); visual sweep (#10); theme PARTIAL (#13/#20)
-11. **Track C** Design-asset layout redesigns — see [`../handoff/functional-clarity-continuation.md`](../handoff/functional-clarity-continuation.md) §3
+11. **Track C** Design-asset layout redesigns — see [`../archive/handoff/functional-clarity-continuation.md`](../archive/handoff/functional-clarity-continuation.md) §3
