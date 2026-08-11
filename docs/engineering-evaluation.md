@@ -2,7 +2,7 @@
 
 **Status:** durable  
 **Date:** 2026-08-10  
-**Updated:** 2026-08-11 (§3.1, §3.3–§3.6, §3.8)  
+**Updated:** 2026-08-11 (§3.1, §3.3–§3.6, §3.8; §3.4 Zod rollout)  
 **Scope:** `/home/zhihongcheng/code/click` and `/home/zhihongcheng/code/click-web`  
 **Lens:** software engineering best practice, with emphasis on how well the codebase supports an **agentic (AI-assisted) development workflow**.
 
@@ -154,17 +154,16 @@ Tests are the primary mechanism by which an agent verifies its own work. Without
 2. In `click-web`, set Jest `coverageThreshold` at today's measured baseline and ratchet upward; add one Playwright smoke (signup → connect → chat) before expanding component tests broadly.
 3. Prefer contract tests for every new `/api/*` route; treat untested god components (§3.2) as refactor prerequisites, not unit-test targets as-is.
 
-### 3.4 No input-validation schema layer in `click-web`
-**Zero** imports of `zod` (or any schema library) across **85** API routes — `zod` is not a dependency at all. Validation is ad-hoc (e.g. `app/api/waitlist/route.ts:9` does `if (!email || !email.includes('@'))`). There's also no shared error-envelope helper — `{ error: string }` is a convention, not enforced by code.
+### 3.4 Input-validation schema layer in `click-web` (Zod) — largely done
+**Status (2026-08-11):** `zod` is a dependency; shared helpers live in `lib/api/parseBody.ts`, `lib/api/parseParams.ts`, and `lib/api/errors.ts` (`apiError` → `{ error, code? }`). Domain schemas live under `lib/api/schemas/` (`common`, `connections`, `chat`, `beacons`, `user`). **JSON mutation bodies** across the API routes now go through `parseBody` + Zod (waitlist was the pilot; remaining JSON `request.json()` call sites were migrated). A contract test (`__tests__/app/api/parseBody.contract.test.ts`) fails if a route reintroduces direct `request.json()`/`req.json()` without importing `parseBody`.
 
-Worse: admin-client construction is forked. The canonical `createAdminClient()` in `lib/server/connectionWriteAuth.ts` documents "**Never fall back to the anon key**", but **four** route files redefine a local `createAdminClient()` (`connections/route.ts`, `qr/route.ts`, `connections/[connectionId]/tags/route.ts`, `connections/[connectionId]/venue-vibe/route.ts`), and `waitlist/route.ts` explicitly does `SUPABASE_SERVICE_ROLE_KEY ?? NEXT_PUBLIC_SUPABASE_ANON_KEY` — the exact fallback the shared helper forbids. A future hardening of the canonical helper will silently miss these copies; agents copying the waitlist pattern will reintroduce the anon-key fallback.
+Local `function createAdminClient()` copies under `app/api` are gone (enforced by `routeAuth.contract.test.ts`). Waitlist no longer falls back to the anon key.
 
-Schema validation would be doubly valuable here: it defends the API *and* gives agents a machine-readable contract to code against, instead of inferring shapes from handler bodies.
-
-**Action:**
-1. Add `zod` (or equivalent); define request schemas next to each route (or in `lib/api/schemas/`) and parse with a shared `parseBody(schema, request)` helper that returns a standard `{ error, code }` envelope.
-2. Delete local `createAdminClient()` copies; import only from `connectionWriteAuth.ts`. Fix waitlist to refuse to run without the service-role key (or use a dedicated anon-safe insert path with RLS, never a silent key fallback).
-3. Add a contract test (or ESLint custom rule) that fails if a new `app/api/**/route.ts` introduces another `function createAdminClient`.
+**Remaining gaps (do not treat as “zod unfinished”):**
+1. Three parallel service-role factories remain (`createAdminClient` in `connectionWriteAuth.ts`, `createAdminSupabaseClient` in `admin/supabaseAdmin.ts`, `createSupabaseServiceRoleClient` in `supabaseServer.ts`) — consolidate when touching those call sites.
+2. Multipart/FormData uploads (`hub/media`, avatar FormData branch) are not Zod-validated.
+3. Response-body schemas and broad `requireUser()` adoption are still incomplete (auth markers vary by route).
+4. Query-string parsing is still mostly ad hoc (only path params gained `parseParams`).
 
 ### 3.5 Middleware rate limiting won't survive the deployment target
 `middleware.ts` implements sliding-window rate limits in process-local `Map`s (`connectionsRequestTimestampsByIp`, `readHeavyTimestampsByIp`: 10/60s on `/api/connections` mutations; 60/60s read-heavy via `shouldApplyReadHeavyRateLimit`). The deployment target is **OpenNext on Cloudflare Workers**, where each isolate has its own memory — so limits are per-isolate, not global. Under multi-isolate load they are effectively advisory. Needs Durable Objects, KV, or Upstash (Redis) keyed by client IP.
@@ -243,7 +242,7 @@ These read as machine-generated summaries of diffs rather than explanations of i
 | Automated verification (CI) | ❌ Weak | click-web: none. click: builds but skips 82 tests |
 | Test suite an agent can trust | ⚠️ Partial | Exists but unenforced/unmeasured; no e2e |
 | Context-sized modules | ❌ Weak | 5155-line ViewModel, 3682-line component |
-| Machine-readable contracts | ❌ Weak | No zod; no shared API error/auth wrapper |
+| Machine-readable contracts | ✅ Good | Zod + `parseBody`/`apiError` on JSON mutations; response schemas / `requireUser` still partial |
 | Single source of truth | ❌ Weak | Forked migrations + Edge Function, already drifted |
 | Durable vs ephemeral doc separation | ✅ Strong | Ephemeral handoffs/planning moved to `docs/archive/` (§3.6) |
 
@@ -262,7 +261,7 @@ These read as machine-generated summaries of diffs rather than explanations of i
 
 ### P1 — this month
 6. Add **ESLint** (`next/core-web-vitals` + `@typescript-eslint`) to `click-web`, and **ktlint or detekt** to `click`. Rename `lint` → `typecheck` and make `lint` mean lint.
-7. Introduce **zod** for API request/response schemas plus a shared `withAuth()` route wrapper and a standard error envelope. (§3.4)
+7. Finish remaining API contract work: adopt `requireUser()` on authenticated routes, optionally Zod response schemas / FormData validation, consolidate the three service-role client factories. (§3.4 — JSON request Zod done)
 8. Move rate limiting off in-memory `Map` to Durable Objects / KV. (§3.5)
 9. Fix the doc inaccuracies in §3.7; add the missing `lint` documentation.
 10. Untrack `output.zip`, `pepk.jar`, `composeApp/release/*.aab`, `decode-ico-0.4.1.tgz`, `.idea/`, `composeApp/.idea/`, `.vscode/`, and `**/xcuserdata/`; tighten `.gitignore` accordingly. (§3.8)
