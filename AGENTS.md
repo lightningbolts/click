@@ -39,6 +39,7 @@ Requires `local.properties` with `sdk.dir=/opt/android-sdk` and `MAPS_API_KEY=<k
 
 - The `google-secrets` Gradle plugin reads `MAPS_API_KEY` from `local.properties`, with `local.defaults.properties` as a checked-in fallback for CI/Xcode when the gitignored file is absent. A placeholder value is sufficient for compilation but Google Maps features won't work at runtime without a real key.
 - iOS builds require Xcode (macOS only) and are not runnable in Cloud Agent VMs.
-- The `click-web` Next.js companion app (LiveKit token endpoint, QR flows) is a **separate repository** and not present in this workspace.
+- Android builds/tests need the SDK. In Cloud Agent VMs it lives at `/opt/android-sdk`; if `local.properties` is absent, export `ANDROID_HOME=/opt/android-sdk` so Gradle can locate it. The bundled `sdkmanager` fails to unzip packages under this JDK (`Archive is not a ZIP archive`), so SDK packages were installed by extracting the official zips manually — prefer manual extraction over `sdkmanager`/Gradle auto-download if new SDK components are needed.
+- The `click-web` Next.js companion app (LiveKit token endpoint, QR flows) is a **separate repository**, but in this workspace it is checked out as a sibling at `../click-web`. Run it there (`npm run dev`, port 3000) when developing QR/LiveKit/waitlist flows.
 - Supabase Edge Functions require the Supabase CLI to deploy/serve locally; they are not needed for basic server or mobile build testing.
 - `server/.env` and `local.properties` are both gitignored. They must be recreated on each fresh checkout (or rely on `local.defaults.properties` for Gradle configure-only steps such as iOS framework embedding).
