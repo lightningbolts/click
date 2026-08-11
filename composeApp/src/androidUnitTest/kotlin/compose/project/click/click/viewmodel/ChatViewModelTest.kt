@@ -136,7 +136,7 @@ class ChatViewModelTest {
         val selfId = "user-self"
         val otherId = "user-other"
         val connectionId = "conn-1"
-        val apiChatId = "chat-api-1"
+        val apiChatId = "11111111-1111-4111-8111-111111111111"
         val now = 1_700_000_000_000L
 
         val connection = Connection(
@@ -225,7 +225,7 @@ class ChatViewModelTest {
         val selfId = "user-self"
         val otherId = "user-other"
         val connectionId = "conn-1"
-        val apiChatId = "chat-api-1"
+        val apiChatId = "11111111-1111-4111-8111-111111111111"
         val now = 1_700_000_000_000L
 
         val connection = Connection(
@@ -292,7 +292,7 @@ class ChatViewModelTest {
         val selfId = "user-self"
         val otherId = "user-other"
         val connectionId = "conn-1"
-        val apiChatId = "chat-api-1"
+        val apiChatId = "11111111-1111-4111-8111-111111111111"
         val now = 1_700_000_000_000L
 
         val connection = Connection(
@@ -364,7 +364,7 @@ class ChatViewModelTest {
         val selfId = "user-self"
         val otherId = "user-other"
         val connectionId = "conn-1"
-        val apiChatId = "chat-api-1"
+        val apiChatId = "11111111-1111-4111-8111-111111111111"
         val now = 1_700_000_000_000L
 
         val connection = Connection(
@@ -443,7 +443,7 @@ class ChatViewModelTest {
     fun setCurrentUser_retriesPendingChatLoad() = runVmTest {
         val selfId = "user-self"
         val connectionId = "conn-1"
-        val apiChatId = "chat-api-1"
+        val apiChatId = "11111111-1111-4111-8111-111111111111"
         val now = 1_700_000_000_000L
         val connection = Connection(
             id = connectionId,
@@ -487,7 +487,7 @@ class ChatViewModelTest {
             expiry = Long.MAX_VALUE,
             geo_location = GeoLocation(0.0, 0.0),
             user_ids = listOf(selfId, "other"),
-            chat = Chat(id = "chat-api-1", connectionId = connectionId),
+            chat = Chat(id = "11111111-1111-4111-8111-111111111111", connectionId = connectionId),
             has_begun = true,
             expiry_state = "active",
         )
@@ -510,7 +510,7 @@ class ChatViewModelTest {
         advanceUntilIdle()
 
         compose.project.click.click.notifications.ChatPushInboxBridge.applyChatMessagePush(
-            chatId = "chat-api-1",
+            chatId = "11111111-1111-4111-8111-111111111111",
             connectionId = connectionId,
             senderUserId = "other",
             previewText = "Ping from push",
@@ -534,7 +534,7 @@ class ChatViewModelTest {
             expiry = Long.MAX_VALUE,
             geo_location = GeoLocation(0.0, 0.0),
             user_ids = listOf(selfId, "other"),
-            chat = Chat(id = "chat-api-1", connectionId = connectionId),
+            chat = Chat(id = "11111111-1111-4111-8111-111111111111", connectionId = connectionId),
             has_begun = true,
             expiry_state = "active",
         )
@@ -563,7 +563,7 @@ class ChatViewModelTest {
         advanceUntilIdle()
 
         compose.project.click.click.notifications.ChatPushInboxBridge.applyChatMessagePush(
-            chatId = "chat-api-1",
+            chatId = "11111111-1111-4111-8111-111111111111",
             connectionId = connectionId,
             senderUserId = "other",
             previewText = "Fresh realtime preview",
@@ -591,7 +591,7 @@ class ChatViewModelTest {
             expiry = Long.MAX_VALUE,
             geo_location = GeoLocation(0.0, 0.0),
             user_ids = listOf(selfId, "other"),
-            chat = Chat(id = "chat-api-1", connectionId = connectionId),
+            chat = Chat(id = "11111111-1111-4111-8111-111111111111", connectionId = connectionId),
             has_begun = true,
             expiry_state = "active",
         )
@@ -614,7 +614,7 @@ class ChatViewModelTest {
         advanceUntilIdle()
 
         compose.project.click.click.notifications.ChatPushInboxBridge.applyChatMessagePush(
-            chatId = "chat-api-1",
+            chatId = "11111111-1111-4111-8111-111111111111",
             connectionId = connectionId,
             senderUserId = "other",
             previewText = "New inbound",
@@ -637,7 +637,7 @@ class ChatViewModelTest {
             expiry = Long.MAX_VALUE,
             geo_location = GeoLocation(0.0, 0.0),
             user_ids = listOf(selfId, "other"),
-            chat = Chat(id = "chat-api-1", connectionId = connectionId),
+            chat = Chat(id = "11111111-1111-4111-8111-111111111111", connectionId = connectionId),
             has_begun = true,
             expiry_state = "active",
             last_message_at = now,
@@ -686,7 +686,7 @@ class ChatViewModelTest {
             expiry = Long.MAX_VALUE,
             geo_location = GeoLocation(0.0, 0.0),
             user_ids = listOf(selfId, "other"),
-            chat = Chat(id = "chat-api-1", connectionId = connectionId),
+            chat = Chat(id = "11111111-1111-4111-8111-111111111111", connectionId = connectionId),
             has_begun = true,
             expiry_state = "active",
         )
@@ -709,7 +709,7 @@ class ChatViewModelTest {
         advanceUntilIdle()
 
         compose.project.click.click.notifications.ChatPushInboxBridge.applyChatMessagePush(
-            chatId = "chat-api-1",
+            chatId = "11111111-1111-4111-8111-111111111111",
             connectionId = connectionId,
             senderUserId = "other",
             previewText = "Live preview text",
@@ -729,9 +729,9 @@ class ChatViewModelTest {
     fun sendMessage_groupChatWithBlankChatId_ensuresGroupChatThenSends() = runVmTest {
         val selfId = "user-self"
         val otherId = "user-other"
-        val groupId = "group-1"
+        val groupId = "22222222-2222-4222-8222-222222222222"
         val connectionId = groupId
-        val ensuredChatId = "chat-group-1"
+        val ensuredChatId = "33333333-3333-4333-8333-333333333333"
         val now = 1_700_000_000_000L
 
         val connection = Connection(

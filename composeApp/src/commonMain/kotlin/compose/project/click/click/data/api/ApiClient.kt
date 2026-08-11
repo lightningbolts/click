@@ -375,20 +375,28 @@ class ApiClient {
 
     private val tokenStorage by lazy { createTokenStorage() }
 
-    /** HTTP client for click-web (Next.js) calls — attaches Supabase JWT automatically. */
-    private val clickWebClient = HttpClient {
-        install(ContentNegotiation) {
-            json(json)
+    /**
+     * Lazy so constructing [ApiClient] (e.g. via [MapBeaconRepository] in Robolectric unit tests)
+     * does not touch AndroidKeyStore until an HTTP call actually runs.
+     */
+    private val clickWebClientLazy = lazy {
+        HttpClient {
+            install(ContentNegotiation) {
+                json(json)
+            }
+            installClickWebBearerAuth(tokenStorage)
         }
-        installClickWebBearerAuth(tokenStorage)
     }
+    private val clickWebClient: HttpClient get() = clickWebClientLazy.value
 
-    /** click-web calls without bearer (only public routes). */
-    private val clickWebPlainClient = HttpClient {
-        install(ContentNegotiation) {
-            json(json)
+    private val clickWebPlainClientLazy = lazy {
+        HttpClient {
+            install(ContentNegotiation) {
+                json(json)
+            }
         }
     }
+    private val clickWebPlainClient: HttpClient get() = clickWebPlainClientLazy.value
 
     /**
      * Temporary helper: calls Next.js `GET /api/ping` with a Supabase JWT (see Ktor [Auth] bearer config).
@@ -1742,8 +1750,8 @@ class ApiClient {
     }
 
     fun close() {
-        clickWebClient.close()
-        clickWebPlainClient.close()
+        if (clickWebClientLazy.isInitialized()) clickWebClientLazy.value.close()
+        if (clickWebPlainClientLazy.isInitialized()) clickWebPlainClientLazy.value.close()
     }
 }
 
