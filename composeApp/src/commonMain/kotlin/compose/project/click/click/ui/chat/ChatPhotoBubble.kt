@@ -31,6 +31,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import coil3.compose.LocalPlatformContext
+import coil3.request.ImageRequest
+import coil3.size.Size
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.disposableRollCollaborationTtlIso
 import compose.project.click.click.data.models.isDisposableRollLocked
@@ -43,6 +46,7 @@ import compose.project.click.click.utils.softBlurredForLockedDrop
 import compose.project.click.click.utils.toChatDisplayImageBitmap
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 
 private val chatPhotoAttachmentShape = RoundedCornerShape(16.dp)
@@ -52,8 +56,11 @@ private val chatPhotoAttachmentShape = RoundedCornerShape(16.dp)
  * Long-press / message actions are handled on the parent bubble surface.
  */
 
-private const val SECURE_CHAT_IMAGE_BITMAP_CACHE_MAX_ENTRIES = 220
-private const val LOCKED_DROP_BLUR_CACHE_MAX_ENTRIES = 80
+private const val SECURE_CHAT_IMAGE_BITMAP_CACHE_MAX_ENTRIES = 120
+private const val LOCKED_DROP_BLUR_CACHE_MAX_ENTRIES = 48
+
+/** At most two heavy secure-image decodes at once — keeps fling/backswipe on the main thread. */
+private val chatImageDecodeGate = kotlinx.coroutines.sync.Semaphore(permits = 2)
 
 /**
  * Process-wide cache of decoded secure-chat image bitmaps keyed by
@@ -208,13 +215,15 @@ internal fun ChatBubblePhotoContent(
             val bytes = localPreviewBytes ?: return@LaunchedEffect
             // Decode + optional pixelation off the main thread so fling/back stay at 120Hz.
             val decoded = withContext(Dispatchers.Default) {
-                runCatching { bytes.toChatDisplayImageBitmap() }
-                    .onFailure { e ->
-                        println(
-                            "ChatBubblePhotoContent: failed to decode local preview for message=${message.id}: ${e.redactedRestMessage()}",
-                        )
-                    }
-                    .getOrNull()
+                chatImageDecodeGate.withPermit {
+                    runCatching { bytes.toChatDisplayImageBitmap() }
+                        .onFailure { e ->
+                            println(
+                                "ChatBubblePhotoContent: failed to decode local preview for message=${message.id}: ${e.redactedRestMessage()}",
+                            )
+                        }
+                        .getOrNull()
+                }
             } ?: return@LaunchedEffect
             secureChatImageBitmapCache.put(message.id, decoded)
             displayBitmap = decoded
@@ -260,6 +269,13 @@ internal fun ChatBubblePhotoContent(
             }
             isEncrypted -> SecurePhotoLoadingPlaceholder()
             !mediaUrl.isNullOrBlank() -> {
+                val platformContext = LocalPlatformContext.current
+                val request = remember(mediaUrl) {
+                    ImageRequest.Builder(platformContext)
+                        .data(mediaUrl)
+                        .size(Size(720, 540))
+                        .build()
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -267,7 +283,7 @@ internal fun ChatBubblePhotoContent(
                         .heightIn(max = chatBubbleScaledDp(330f)),
                 ) {
                     AsyncImage(
-                        model = mediaUrl,
+                        model = request,
                         contentDescription = "Photo",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier

@@ -35,9 +35,15 @@ expect fun MapBeaconSheetRoot(
     /** When true, sheet can expand to full height (iOS medium+large / Android partial allowed). */
     expandable: Boolean = true,
     /**
-     * iOS only: host body in UIScrollView for system dismiss-at-top. Disable for LazyColumn sheets.
-     * Ignored on Android.
+     * iOS only: host body in UIScrollView for system dismiss-at-top. Disable for sticky-IME
+     * short forms (availability / drop beacon). Ignored on Android.
      */
     useUiKitScrollHost: Boolean = true,
+    /**
+     * iOS only (requires [useUiKitScrollHost]): size Compose to the sheet viewport instead of
+     * wrap-content. Use for LazyColumn / HorizontalPager sheets so lists fill the sheet
+     * (no fixed-height empty band) without unbounded Metal textures. Ignored on Android.
+     */
+    uiKitFillViewport: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 )

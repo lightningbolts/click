@@ -33,11 +33,12 @@ actual fun MapBeaconSheetRoot(
     modifier: Modifier,
     expandable: Boolean,
     useUiKitScrollHost: Boolean,
+    uiKitFillViewport: Boolean,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     if (!visible) return
 
-    // Android ignores useUiKitScrollHost — Material/Calf owns nested scroll.
+    // Android ignores useUiKitScrollHost / uiKitFillViewport — Material/Calf owns nested scroll.
     @Suppress("UNUSED_VARIABLE")
     val ignoredScrollHost = useUiKitScrollHost
 

@@ -27,8 +27,10 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.uikit.LocalUIViewController
 import androidx.compose.ui.window.ComposeUIViewController
+import compose.project.click.click.ui.components.LocalSheetHostRubberBandPx
 import compose.project.click.click.ui.components.LocalSheetOnDismissRequest
 import compose.project.click.click.ui.components.LocalSheetScrollOwnedByHost
+import compose.project.click.click.ui.components.LocalSheetUiKitFillViewport
 import compose.project.click.click.ui.components.LocalSheetUsesPlatformGrabber
 import compose.project.click.click.ui.components.ProvideSheetSurfaceDrag
 import compose.project.click.click.ui.components.SheetFingerDismissHost
@@ -99,6 +101,7 @@ private class MapIosNativeSheetManager(
     private var sheetColor: Color,
     private val expandable: Boolean,
     private val useUiKitScrollHost: Boolean,
+    private val uiKitFillViewport: Boolean,
     private val onDismissFromSwipe: () -> Unit,
     private val schemeState: MutableState<ColorScheme>,
     private val typographyState: MutableState<Typography>,
@@ -124,10 +127,12 @@ private class MapIosNativeSheetManager(
     private var contentHeightConstraint: NSLayoutConstraint? = null
     private var lastContentHeightPt = 0.0
     private var retainedComposeVc: UIViewController? = null
+    /** Keeps fill-viewport compose height tied to the live sheet detent. */
+    private var viewportHeightConstraint: NSLayoutConstraint? = null
     private var keyboardExpandObserver: Any? = null
     private var keyboardCollapseObserver: Any? = null
-    private var keyboardExpanded = false
     private var lastAppliedKeyboardOverlapPt = Float.NaN
+    private var didExpandToLargeForKeyboard = false
 
     private companion object {
         /** Bottom of stack = root sheet; top = currently interactive sheet. */
@@ -172,18 +177,9 @@ private class MapIosNativeSheetManager(
         if (useUiKitScrollHost) buildScrollHostedSheet() else buildFillSheet()
     }
 
-    fun setSurfaceDragOffsetPx(offsetPx: Float) {
-        if (!isInitialized) return
-        // Keyboard + sheet transform fight: translating while IME is up leaves a map band.
-        if (compose.project.click.click.platform.currentNativeKeyboardHeightPoints() > 0.5f) {
-            resetSurfaceDrag()
-            return
-        }
-        val y = if (offsetPx <= 0.5f) 0.0 else offsetPx.toDouble()
-        // Transform the *inner* content host only — never the presented page-sheet VC.
-        // Translating sheetViewController.view fights UISheetPresentationController and
-        // blank/flickers (event directory + drop beacon regression).
-        surfaceDragContentView()?.setTransform(CGAffineTransformMakeTranslation(0.0, y))
+    fun setSurfaceDragOffsetPx(@Suppress("UNUSED_PARAMETER") offsetPx: Float) {
+        // Intentionally no-op: live transforms fight UISheetPresentationController and flicker.
+        // Compose tracks pull distance and dismisses on release past threshold.
     }
 
     private fun resetSurfaceDrag() {
@@ -249,18 +245,12 @@ private class MapIosNativeSheetManager(
     }
 
     /**
-     * Seat the focused field just above the keyboard without rebuilding the detent *list*
-     * (list swaps stutter). Expand to large via selectedDetentIdentifier, then apply
-     * UIScrollView contentInset in sync with the keyboard animation and scroll the
-     * first-responder (or content bottom) into the visible band above the keyboard.
+     * Wrap-content UIKit sheets only. One-shot: expand to large if needed, then bottom-align
+     * short content above the keyboard via contentInset (no Compose pad, no per-frame thrash).
+     * Fill-viewport sheets use Compose [sheetImePadding] instead.
      */
-    private fun applyKeyboardBottomInset(
-        overlapPoints: Float,
-        durationSeconds: Double,
-        animationCurve: Long,
-    ) {
-        if (!useUiKitScrollHost || !isInitialized) return
-        val overlap = overlapPoints.toDouble().coerceAtLeast(0.0)
+    private fun applyKeyboardBottomInset(overlapPoints: Float, durationSeconds: Double) {
+        if (!useUiKitScrollHost || uiKitFillViewport || !isInitialized) return
         if (
             !lastAppliedKeyboardOverlapPt.isNaN() &&
             abs(overlapPoints - lastAppliedKeyboardOverlapPt) < 1.5f
@@ -268,98 +258,76 @@ private class MapIosNativeSheetManager(
             return
         }
         lastAppliedKeyboardOverlapPt = overlapPoints
-        if (overlap > 0.5) {
-            ensureLargeDetentForKeyboard()
-        }
-        val inset = UIEdgeInsetsMake(0.0, 0.0, overlap, 0.0)
-        val animations = {
-            scrollView.contentInset = inset
-            scrollView.scrollIndicatorInsets = inset
+        val overlap = overlapPoints.toDouble().coerceAtLeast(0.0)
+        val apply = {
             if (overlap > 0.5) {
-                scrollFocusedContentAboveKeyboard(overlap, animated = false)
+                ensureLargeDetentForKeyboardOnce()
+                val boundsH = scrollView.bounds.useContents { size.height }
+                val contentH = scrollView.contentSize.useContents { height }
+                val visibleH = (boundsH - overlap).coerceAtLeast(0.0)
+                val topPad = if (contentH + 1.0 < visibleH) (visibleH - contentH) else 0.0
+                scrollView.contentInset = UIEdgeInsetsMake(topPad, 0.0, overlap, 0.0)
+                scrollView.scrollIndicatorInsets = UIEdgeInsetsMake(0.0, 0.0, overlap, 0.0)
+                if (topPad > 0.5) {
+                    scrollView.setContentOffset(CGPointMake(0.0, -topPad), animated = false)
+                } else {
+                    scrollFocusedContentAboveKeyboard(overlap)
+                }
+            } else {
+                scrollView.contentInset = UIEdgeInsetsMake(0.0, 0.0, 0.0, 0.0)
+                scrollView.scrollIndicatorInsets = UIEdgeInsetsMake(0.0, 0.0, 0.0, 0.0)
             }
         }
         if (durationSeconds > 0.001) {
-            UIView.animateWithDuration(
-                duration = durationSeconds,
-                delay = 0.0,
-                options = (animationCurve shl 16).toULong(),
-                animations = animations,
-                completion = { _ ->
-                    if (overlap > 0.5) {
-                        scrollFocusedContentAboveKeyboard(overlap, animated = true)
-                    }
-                },
-            )
+            UIView.animateWithDuration(durationSeconds, animations = apply)
         } else {
-            animations()
+            apply()
         }
-        keyboardExpanded = overlap > 0.5
     }
 
-    /** Prefer selecting large over replacing detents — avoids sheet rebuild flicker. */
-    private fun ensureLargeDetentForKeyboard() {
-        if (!expandable) return
+    private fun ensureLargeDetentForKeyboardOnce() {
+        if (!expandable || didExpandToLargeForKeyboard) return
         val sheet = sheetViewController.sheetPresentationController ?: return
         if (sheet.selectedDetentIdentifier == UISheetPresentationControllerDetentIdentifierLarge) {
+            didExpandToLargeForKeyboard = true
             return
         }
+        didExpandToLargeForKeyboard = true
         sheet.animateChanges {
             sheet.selectedDetentIdentifier = UISheetPresentationControllerDetentIdentifierLarge
         }
     }
 
-    private fun scrollFocusedContentAboveKeyboard(keyboardOverlapPt: Double, animated: Boolean) {
+    private fun scrollFocusedContentAboveKeyboard(keyboardOverlapPt: Double) {
         val padding = 16.0
         val visibleH = scrollView.bounds.useContents { size.height } - keyboardOverlapPt
         if (visibleH <= padding) return
         val currentY = scrollView.contentOffset.useContents { y }
-        val responder = findFirstResponder(sheetViewController.view)
-        val targetY = if (responder != null) {
-            val frame = responder.convertRect(responder.bounds, toView = scrollView)
-            val responderBottom = frame.useContents { origin.y + size.height }
-            val responderTop = frame.useContents { origin.y }
-            when {
-                responderBottom > currentY + visibleH - padding ->
-                    (responderBottom - visibleH + padding).coerceAtLeast(0.0)
-                responderTop < currentY + padding ->
-                    (responderTop - padding).coerceAtLeast(0.0)
-                else -> return
-            }
-        } else {
-            // Compose may not expose a UIKit first responder — nudge so bottom fields clear IME.
-            val contentH = scrollView.contentSize.useContents { height }
-            val maxOffset = (contentH + keyboardOverlapPt - scrollView.bounds.useContents { size.height })
-                .coerceAtLeast(0.0)
-            (currentY + keyboardOverlapPt * 0.35).coerceIn(0.0, maxOffset)
-        }
-        if (abs(targetY - currentY) < 1.0) return
-        scrollView.setContentOffset(CGPointMake(0.0, targetY), animated = animated)
+        val contentH = scrollView.contentSize.useContents { height }
+        val maxOffset = (contentH + keyboardOverlapPt - scrollView.bounds.useContents { size.height })
+            .coerceAtLeast(0.0)
+        // Prefer seating the bottom of the form just above the keyboard.
+        val target = maxOffset
+        if (abs(target - currentY) < 1.0) return
+        scrollView.setContentOffset(CGPointMake(0.0, target), animated = false)
     }
 
-    private fun findFirstResponder(view: UIView): UIView? {
-        if (view.isFirstResponder) return view
-        val subviews = view.subviews
-        for (i in 0 until subviews.size.toInt()) {
-            val child = subviews[i] as? UIView ?: continue
-            findFirstResponder(child)?.let { return it }
-        }
-        return null
+    private fun applyHostRubberBand(@Suppress("UNUSED_PARAMETER") offsetPx: Float) {
+        // Intentionally no-op: live contentOffset rubber-band flickered against the page sheet.
+        // Fill-viewport sheets dismiss via threshold commit in sheetSwipeDismissWhenAtTop.
     }
 
     private fun installKeyboardDetentObservers() {
-        if (!useUiKitScrollHost || keyboardExpandObserver != null) return
+        if (!useUiKitScrollHost || uiKitFillViewport || keyboardExpandObserver != null) return
         val center = NSNotificationCenter.defaultCenter
         keyboardExpandObserver = center.addObserverForName(
             name = UIKeyboardWillChangeFrameNotification,
             `object` = null,
             queue = NSOperationQueue.mainQueue,
         ) { notification: NSNotification? ->
-            val overlap = notification.sheetKeyboardOverlapPoints()
             applyKeyboardBottomInset(
-                overlapPoints = overlap,
+                overlapPoints = notification.sheetKeyboardOverlapPoints(),
                 durationSeconds = notification.sheetKeyboardDurationSeconds(),
-                animationCurve = notification.sheetKeyboardAnimationCurve(),
             )
         }
         keyboardCollapseObserver = center.addObserverForName(
@@ -370,8 +338,8 @@ private class MapIosNativeSheetManager(
             applyKeyboardBottomInset(
                 overlapPoints = 0f,
                 durationSeconds = notification.sheetKeyboardDurationSeconds(),
-                animationCurve = notification.sheetKeyboardAnimationCurve(),
             )
+            didExpandToLargeForKeyboard = false
         }
     }
 
@@ -382,10 +350,11 @@ private class MapIosNativeSheetManager(
         keyboardExpandObserver = null
         keyboardCollapseObserver = null
         lastAppliedKeyboardOverlapPt = Float.NaN
-        if (isInitialized && useUiKitScrollHost) {
-            applyKeyboardBottomInset(0f, durationSeconds = 0.0, animationCurve = 0L)
+        didExpandToLargeForKeyboard = false
+        if (isInitialized && useUiKitScrollHost && !uiKitFillViewport) {
+            scrollView.contentInset = UIEdgeInsetsMake(0.0, 0.0, 0.0, 0.0)
+            scrollView.scrollIndicatorInsets = UIEdgeInsetsMake(0.0, 0.0, 0.0, 0.0)
         }
-        keyboardExpanded = false
     }
 
     private fun configurePageSheet(host: UIViewController) {
@@ -501,6 +470,11 @@ private class MapIosNativeSheetManager(
                     ),
                 )
             }
+
+            override fun viewDidLayoutSubviews() {
+                super.viewDidLayoutSubviews()
+                syncFillViewportHeight()
+            }
         }
         scrollView.backgroundColor = initialBackground
         scrollView.setOpaque(true)
@@ -516,20 +490,37 @@ private class MapIosNativeSheetManager(
                         LocalSheetOnDismissRequest provides onDismissFromSwipe,
                         LocalSheetUsesPlatformGrabber provides true,
                         LocalSheetScrollOwnedByHost provides true,
+                        LocalSheetUiKitFillViewport provides uiKitFillViewport,
+                        LocalSheetHostRubberBandPx provides if (uiKitFillViewport) {
+                            // Sentinel only — enables threshold pull-dismiss; visual is a no-op.
+                            { offsetPx: Float -> applyHostRubberBand(offsetPx) }
+                        } else {
+                            null
+                        },
                     ) {
-                        Column(
-                            modifier = modifierState.value
+                        val bodyModifier = if (uiKitFillViewport) {
+                            modifierState.value.fillMaxWidth().fillMaxHeight()
+                        } else {
+                            modifierState.value
                                 .fillMaxWidth()
-                                // Parent UIView is initially screen-sized. Without unbounded
-                                // wrap, Compose clamps to that height and UIScrollView never
-                                // learns the true content size — Join Event Route / footers
-                                // clip with nowhere to scroll.
                                 .wrapContentHeight(align = Alignment.Top, unbounded = true)
                                 .onSizeChanged { size ->
                                     updateComposeContentHeightPx(size.height.toDouble())
-                                },
-                        ) {
-                            contentState.value(this)
+                                }
+                        }
+                        if (uiKitFillViewport) {
+                            SheetFingerDismissHost(
+                                onDismissRequest = onDismissFromSwipe,
+                                modifier = Modifier.fillMaxWidth().fillMaxHeight(),
+                            ) {
+                                Column(modifier = bodyModifier) {
+                                    contentState.value(this)
+                                }
+                            }
+                        } else {
+                            Column(modifier = bodyModifier) {
+                                contentState.value(this)
+                            }
                         }
                     }
                 }
@@ -565,6 +556,15 @@ private class MapIosNativeSheetManager(
                 composeContainer.widthAnchor.constraintEqualToAnchor(scrollView.widthAnchor),
             ),
         )
+        if (uiKitFillViewport) {
+            // Match compose container to the scroll view's live bounds (medium/large detent).
+            viewportHeightConstraint =
+                composeContainer.heightAnchor.constraintEqualToAnchor(scrollView.heightAnchor)
+            viewportHeightConstraint?.setActive(true)
+            // Content height follows viewport; disable wrap-driven constant updates.
+            heightConstraint.setActive(false)
+            contentHeightConstraint = null
+        }
 
         configurePageSheet(host)
         isInitialized = true
@@ -572,7 +572,21 @@ private class MapIosNativeSheetManager(
         return host
     }
 
+    private fun syncFillViewportHeight() {
+        if (!uiKitFillViewport || !isInitialized) return
+        val h = scrollView.bounds.useContents { size.height }
+        if (h <= 1.0) return
+        // Bounce-dismiss still works when content height == frame (alwaysBounceVertical).
+        val existing = viewportHeightConstraint
+        if (existing == null || !existing.isActive()) {
+            viewportHeightConstraint =
+                composeContainer.heightAnchor.constraintEqualToAnchor(scrollView.heightAnchor)
+            viewportHeightConstraint?.setActive(true)
+        }
+    }
+
     private fun updateComposeContentHeightPx(heightPx: Double) {
+        if (uiKitFillViewport) return
         if (heightPx <= 1.0) return
         val scale = UIScreen.mainScreen.scale
         val heightPt = (heightPx / scale).coerceAtLeast(1.0)
@@ -700,6 +714,7 @@ private class MapIosNativeSheetManager(
     }
 }
 
+
 @OptIn(ExperimentalForeignApi::class)
 private fun NSNotification?.sheetKeyboardOverlapPoints(): Float {
     val frame = this?.userInfo?.get(UIKeyboardFrameEndUserInfoKey) as? NSValue ?: return 0f
@@ -723,14 +738,6 @@ private fun NSNotification?.sheetKeyboardDurationSeconds(): Double {
         ?: 0.0
 }
 
-private fun NSNotification?.sheetKeyboardAnimationCurve(): Long {
-    return this?.userInfo
-        ?.get(UIKeyboardAnimationCurveUserInfoKey)
-        .let { it as? NSNumber }
-        ?.longValue
-        ?: 0L
-}
-
 @Suppress("UNUSED_PARAMETER")
 @Composable
 actual fun MapBeaconSheetRoot(
@@ -745,6 +752,7 @@ actual fun MapBeaconSheetRoot(
     modifier: Modifier,
     expandable: Boolean,
     useUiKitScrollHost: Boolean,
+    uiKitFillViewport: Boolean,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     if (!visible) return
@@ -758,13 +766,14 @@ actual fun MapBeaconSheetRoot(
 
     // Key only on sheet mode — keyboard focus can change LocalUIViewController and must
     // not tear down / re-present the native sheet (create-group search → Home).
-    val manager = remember(expandable, useUiKitScrollHost) {
+    val manager = remember(expandable, useUiKitScrollHost, uiKitFillViewport) {
         val m = MapIosNativeSheetManager(
             parentUIViewController = parent,
             isChromeDark = appColorScheme.background.luminance() < 0.5f,
             sheetColor = containerColor,
             expandable = expandable,
             useUiKitScrollHost = useUiKitScrollHost,
+            uiKitFillViewport = uiKitFillViewport,
             onDismissFromSwipe = { onDismissState.value.invoke() },
             schemeState = schemeState,
             typographyState = typographyState,

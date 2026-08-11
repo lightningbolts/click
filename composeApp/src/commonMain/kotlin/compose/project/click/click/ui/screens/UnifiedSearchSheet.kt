@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -54,6 +55,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.ui.components.ClickLogoPulse
 import compose.project.click.click.ui.components.ClickSheetDefaults
 import compose.project.click.click.ui.components.GlassSheetTokens
+import compose.project.click.click.ui.components.LocalSheetOnDismissRequest
+import compose.project.click.click.ui.components.ProvideSheetSwipeDismiss
+import compose.project.click.click.ui.components.rememberSheetScrollAtTop
 import compose.project.click.click.ui.components.sheetImePadding
 import compose.project.click.click.ui.components.sheetPageBackground
 import compose.project.click.click.ui.sheet.MapBeaconSheetRoot
@@ -65,9 +69,6 @@ import compose.project.click.click.viewmodel.GlobalSearchViewModel
 import compose.project.click.click.viewmodel.SearchResult
 import compose.project.click.click.viewmodel.SearchResultCategory
 import kotlinx.coroutines.delay
-
-/** Caps LazyColumn under UIKit scroll-host so Compose never allocates a >16384px Metal texture. */
-private val SearchResultsMaxHeight = 520.dp
 
 /**
  * In-context global search presented as a platform bottom sheet (replaces [GlobalSearchScreen] routing).
@@ -95,8 +96,9 @@ fun UnifiedSearchSheet(
         appColorScheme = MaterialTheme.colorScheme,
         appTypography = MaterialTheme.typography,
         expandable = true,
-        // UIKit dismiss path; results use a height-capped LazyColumn (Metal 16384px limit).
+        // UIKit dismiss + fill viewport so results occupy the sheet (no fixed empty band).
         useUiKitScrollHost = true,
+        uiKitFillViewport = true,
     ) {
         UnifiedSearchSheetContent(
             userId = userId,
@@ -130,6 +132,8 @@ private fun UnifiedSearchSheetContent(
 
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
+    val listState = rememberLazyListState()
+    val scrollAtTop = rememberSheetScrollAtTop(listState)
     val listBottomPad = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 12.dp
     val allFiltersSelected = visibleCategories.size == SearchResultCategory.entries.size
 
@@ -142,11 +146,15 @@ private fun UnifiedSearchSheetContent(
         onDispose { viewModel.clear() }
     }
 
+    ProvideSheetSwipeDismiss(
+        onDismissRequest = LocalSheetOnDismissRequest.current,
+        scrollAtTop = scrollAtTop,
+    ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .fillMaxHeight()
             .background(sheetPageBackground())
-            // Host-owned IME inset when UIKit scroll-host is on (avoids Metal-tall padding).
             .sheetImePadding()
             .padding(
                 start = 16.dp,
@@ -234,13 +242,11 @@ private fun UnifiedSearchSheetContent(
             }
         }
 
-        // Fixed height (not only heightIn) so LazyColumn never sees unbounded maxHeight under
-        // UIKit wrapContentHeight(unbounded=true) — that path measures every row into one
-        // Metal texture and crashes past 16384px.
+        // Fill remaining viewport — no fixed 520dp empty band under short result lists.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(SearchResultsMaxHeight),
+                .weight(1f),
         ) {
             when {
                 isSearching -> {
@@ -278,6 +284,7 @@ private fun UnifiedSearchSheetContent(
 
                 else -> {
                     LazyColumn(
+                        state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = listBottomPad),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -307,6 +314,7 @@ private fun UnifiedSearchSheetContent(
                 }
             }
         }
+    }
     }
 }
 

@@ -2,7 +2,6 @@ package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -14,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -33,19 +33,12 @@ import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AvailabilityIntentDuration // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AvailabilityViewModel // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickSheetDefaults
-import compose.project.click.click.ui.components.sheetImePadding
-import compose.project.click.click.ui.components.sheetBodyScroll
-import compose.project.click.click.ui.components.ProvideSheetSwipeDismiss
-import compose.project.click.click.ui.components.rememberSheetScrollAtTop
-import compose.project.click.click.ui.components.sheetPageBackground
-import compose.project.click.click.ui.components.GlassSheetTokens
-import compose.project.click.click.ui.components.ClickFormBottomSheet
-import compose.project.click.click.ui.components.ClickOutlinedTextField
 
 /**
- * Availability intent editor — same shell as Memory Map’s connection sheet ([MapScreen] + [AdaptiveBottomSheet]):
- * slide up/down, drag handle, [surfaceContainerHigh], and matching insets/padding.
+ * Availability intent editor.
+ *
+ * Same host path as search: UIKit fill-viewport + [sheetImePadding] (IME flush, no black gap)
+ * + rubber-band pull dismiss (no surface-drag flicker).
  */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -75,94 +68,96 @@ fun AvailabilitySheet(
 
     ClickFormBottomSheet(
         onDismissRequest = onDismiss,
-        // Short Column form — UIKit scroll-host for native body-swipe dismiss (no surface-drag flicker).
+        // Same path as search: fill viewport + sheetImePadding (IME flush) + rubber-band dismiss.
         useUiKitScrollHost = true,
+        uiKitFillViewport = true,
     ) {
         ProvideSheetSwipeDismiss(onDismissRequest = onDismiss, scrollAtTop = scrollAtTop) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(sheetPageBackground())
-                .sheetImePadding(),
-        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .sheetBodyScroll(scroll)
+                    .fillMaxHeight()
+                    .background(sheetPageBackground())
+                    .sheetImePadding()
                     .padding(
                         start = 24.dp,
                         end = 24.dp,
                         top = ClickSheetDefaults.ContentTopPaddingUnderGrabber,
                         bottom = 16.dp,
                     ),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Text(
-                    text = if (isEditing) "Edit availability" else "Share availability",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = GlassSheetTokens.OnOled(),
-                )
-                Text(
-                    text = if (isEditing) {
-                        "Time window starts again from now with the length you pick. Update your tag or timeframe below."
-                    } else {
-                        "Pick how long you're open, and a short tag so connections know what you're up for."
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = GlassSheetTokens.OnOledMuted(),
-                )
-
-                Text(
-                    text = "Timeframe",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(scroll),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    AvailabilityIntentDuration.entries.forEach { option ->
-                        FilterChip(
-                            selected = duration == option,
-                            onClick = { viewModel.setIntentDuration(option) },
+                    Text(
+                        text = if (isEditing) "Edit availability" else "Share availability",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = GlassSheetTokens.OnOled(),
+                    )
+                    Text(
+                        text = if (isEditing) {
+                            "Time window starts again from now with the length you pick. Update your tag or timeframe below."
+                        } else {
+                            "Pick how long you're open, and a short tag so connections know what you're up for."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = GlassSheetTokens.OnOledMuted(),
+                    )
+
+                    Text(
+                        text = "Timeframe",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        AvailabilityIntentDuration.entries.forEach { option ->
+                            FilterChip(
+                                selected = duration == option,
+                                onClick = { viewModel.setIntentDuration(option) },
+                                enabled = !submitting,
+                                label = { Text(option.label) },
+                            )
+                        }
+                    }
+
+                    key(editingIntentId ?: "new-intent") {
+                        ClickOutlinedTextField(
+                            value = tag,
+                            onValueChange = viewModel::updateIntentTagInput,
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Intent tag") },
+                            placeholder = { Text("Coffee, study, walk…") },
+                            supportingText = {
+                                Text("${tag.length}/${AvailabilityViewModel.AVAILABILITY_INTENT_TAG_MAX_LENGTH}")
+                            },
+                            singleLine = true,
                             enabled = !submitting,
-                            label = { Text(option.label) },
+                            maxLines = 1,
+                            keyboardOptions = KeyboardOptions(
+                                capitalization = KeyboardCapitalization.Words,
+                                imeAction = ImeAction.Done,
+                            ),
                         )
                     }
-                }
 
-                // Remount when switching create ↔ edit so the field never sticks on a blank value.
-                key(editingIntentId ?: "new-intent") {
-                    ClickOutlinedTextField(
-                        value = tag,
-                        onValueChange = viewModel::updateIntentTagInput,
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Intent tag") },
-                        placeholder = { Text("Coffee, study, walk…") },
-                        supportingText = {
-                            Text("${tag.length}/${AvailabilityViewModel.AVAILABILITY_INTENT_TAG_MAX_LENGTH}")
-                        },
-                        singleLine = true,
-                        enabled = !submitting,
-                        maxLines = 1,
-                        keyboardOptions = KeyboardOptions(
-                            capitalization = KeyboardCapitalization.Words,
-                            imeAction = ImeAction.Done,
-                        ),
-                    )
+                    submitError?.let { err ->
+                        Text(
+                            text = err,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
                 }
-
-                submitError?.let { err ->
-                    Text(
-                        text = err,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -194,10 +189,7 @@ fun AvailabilitySheet(
                         )
                     }
                 }
-
-                Spacer(modifier = Modifier.height(12.dp))
             }
-        }
         }
     }
 }

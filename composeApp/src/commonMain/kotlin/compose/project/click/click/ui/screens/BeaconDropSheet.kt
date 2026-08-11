@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,7 +21,6 @@ import compose.project.click.click.ui.components.LocalSheetOnDismissRequest
 import compose.project.click.click.ui.components.ProvideSheetSwipeDismiss
 import compose.project.click.click.ui.components.ClickSheetDefaults
 import compose.project.click.click.ui.components.rememberSheetScrollAtTop
-import compose.project.click.click.ui.components.sheetBodyScroll
 import compose.project.click.click.ui.components.sheetImePadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentPaste
@@ -55,6 +55,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.verticalScroll
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.BeaconVisibilityAudience
 import compose.project.click.click.data.models.MapBeaconKind
@@ -210,13 +211,14 @@ fun BeaconDropSheetContent(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            // No-ops under UIKit scroll-host (host contentInset seats the field).
+            .fillMaxHeight()
             .sheetImePadding(),
     ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .sheetBodyScroll(scroll)
+            .fillMaxHeight()
+            .verticalScroll(scroll)
             .padding(
                 start = 20.dp,
                 end = 20.dp,

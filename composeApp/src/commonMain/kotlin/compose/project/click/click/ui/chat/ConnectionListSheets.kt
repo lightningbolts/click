@@ -335,23 +335,24 @@ internal fun ConnectionMemberPickerSheet(
 
     val listState = rememberLazyListState()
     val scrollAtTop = rememberSheetScrollAtTop(listState)
-    // UIKit scroll-host for native body-swipe dismiss. Candidate list is height-capped so
-    // Compose never allocates a Metal texture taller than 16384px.
+    // UIKit dismiss + fill viewport so the candidate list occupies the sheet (no empty band).
     ClickFormBottomSheet(
         onDismissRequest = onDismissRequest,
         expandable = true,
         useUiKitScrollHost = true,
+        uiKitFillViewport = true,
     ) {
         ProvideSheetSwipeDismiss(onDismissRequest = onDismissRequest, scrollAtTop = scrollAtTop) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .fillMaxHeight()
                 .sheetImePadding()
                 .background(sheetPageBackground())
                 .padding(horizontal = 20.dp)
                 .padding(
                     top = ClickSheetDefaults.ContentTopPaddingUnderGrabber,
-                    bottom = 28.dp,
+                    bottom = 16.dp,
                 ),
         ) {
             Text(
@@ -412,43 +413,47 @@ internal fun ConnectionMemberPickerSheet(
                 modifier = Modifier.padding(vertical = 4.dp),
                 color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f),
             )
-            when {
-                candidates.isEmpty() -> {
-                    Text(
-                        text = "No eligible connections yet.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = onVariant,
-                        modifier = Modifier.padding(vertical = 8.dp),
-                    )
-                }
-                filteredCandidates.isEmpty() -> {
-                    Text(
-                        text = "No matches for \"$searchQuery\".",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = onVariant,
-                        modifier = Modifier.padding(vertical = 8.dp),
-                    )
-                }
-                else -> {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(420.dp),
-                    ) {
-                        items(
-                            items = filteredCandidates,
-                            key = { it.id },
-                        ) { user ->
-                            val selected = user.id in selectedIds
-                            val enabled = selected ||
-                                (eligibilityReady && (eligibilityMask.isEmpty() || eligibilityMask[user.id] == true))
-                            ConnectionPickerUserRow(
-                                user = user,
-                                selected = selected,
-                                enabled = enabled,
-                                onToggle = { toggleUser(user.id) },
-                            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            ) {
+                when {
+                    candidates.isEmpty() -> {
+                        Text(
+                            text = "No eligible connections yet.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = onVariant,
+                            modifier = Modifier.padding(vertical = 8.dp),
+                        )
+                    }
+                    filteredCandidates.isEmpty() -> {
+                        Text(
+                            text = "No matches for \"$searchQuery\".",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = onVariant,
+                            modifier = Modifier.padding(vertical = 8.dp),
+                        )
+                    }
+                    else -> {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            items(
+                                items = filteredCandidates,
+                                key = { it.id },
+                            ) { user ->
+                                val selected = user.id in selectedIds
+                                val enabled = selected ||
+                                    (eligibilityReady && (eligibilityMask.isEmpty() || eligibilityMask[user.id] == true))
+                                ConnectionPickerUserRow(
+                                    user = user,
+                                    selected = selected,
+                                    enabled = enabled,
+                                    onToggle = { toggleUser(user.id) },
+                                )
+                            }
                         }
                     }
                 }

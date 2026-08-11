@@ -638,6 +638,9 @@ fun MapScreen(
             onDismissRequest = { showBeaconDropSheet = false },
             contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
             expandable = true,
+            // Same as search: fill viewport + sheetImePadding + rubber-band dismiss.
+            useUiKitScrollHost = true,
+            uiKitFillViewport = true,
         ) {
             BeaconDropSheetContent(
                 modifier = Modifier

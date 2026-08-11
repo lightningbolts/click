@@ -153,7 +153,7 @@ import compose.project.click.click.ui.components.sheetBodyScroll
  * [ProfileSheetState.localMessages] because chat message content is E2EE on the wire.
  */
 /** Bounded pager height under UIKit scroll-host (Metal texture max 16384px @3x). */
-private val ProfileSheetPagerHeight = 560.dp
+private val ProfileSheetPagerHeight = 560.dp // fallback when not fill-viewport
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -771,11 +771,11 @@ fun ProfileBottomSheet(
         scrollAtTop = profileScrollAtTop,
     ) {
     val scrollOwnedByHost = LocalSheetScrollOwnedByHost.current
-    Box(modifier = Modifier.fillMaxWidth().then(if (scrollOwnedByHost) Modifier else Modifier.fillMaxSize())) {
+    Box(modifier = Modifier.fillMaxWidth().fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (scrollOwnedByHost) Modifier else Modifier.fillMaxHeight())
+            .fillMaxHeight()
             .background(sheetPageBackground())
             .padding(horizontal = 20.dp)
             .padding(top = 12.dp, bottom = 12.dp),
@@ -860,14 +860,10 @@ fun ProfileBottomSheet(
 
         HorizontalPager(
             state = pagerState,
-            // Fixed page height under UIKit host keeps the Compose Metal texture under the
-            // 16384px GPU limit and lets each tab scroll internally + swipe horizontally.
+            // Fill remaining sheet height so each tab can scroll to its last row.
             modifier = Modifier
                 .fillMaxWidth()
-                .then(
-                    if (scrollOwnedByHost) Modifier.height(ProfileSheetPagerHeight)
-                    else Modifier.fillMaxSize(),
-                ),
+                .weight(1f),
             verticalAlignment = Alignment.Top,
             pageSpacing = 14.dp,
             userScrollEnabled = true,
@@ -1517,7 +1513,7 @@ private fun TimelinePanel(
             // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
             // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
             .verticalScroll(scrollState)
-            .padding(top = 12.dp, bottom = 24.dp),
+            .padding(top = 12.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         JournalComposerCard(
@@ -1981,7 +1977,7 @@ private fun MediaPanel(
             // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
             // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
             .verticalScroll(scrollState)
-            .padding(top = 12.dp, bottom = 24.dp),
+            .padding(top = 12.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         imageRows.forEach { row ->
@@ -2247,7 +2243,7 @@ private fun BeaconsPanel(
             // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
             // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
             .verticalScroll(scrollState)
-            .padding(top = 12.dp, bottom = 24.dp),
+            .padding(top = 12.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (!isGroup) {
@@ -2312,7 +2308,7 @@ private fun LinksPanel(
             // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
             // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
             .verticalScroll(scrollState)
-            .padding(top = 12.dp, bottom = 24.dp),
+            .padding(top = 12.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items.forEach { link ->
@@ -2376,7 +2372,7 @@ private fun MembersPanel(
             // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
             // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
             .verticalScroll(scrollState)
-            .padding(top = 12.dp, bottom = 24.dp),
+            .padding(top = 12.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (onAddMember != null) {
@@ -2465,7 +2461,7 @@ private fun FilesPanel(
             // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
             // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
             .verticalScroll(scrollState)
-            .padding(top = 12.dp, bottom = 24.dp),
+            .padding(top = 12.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items.forEach { file ->
@@ -3135,8 +3131,9 @@ fun TabbedUserProfileSheet(
 
     ClickFormBottomSheet(
         onDismissRequest = onDismiss,
-        // Profile tabs use Column bodies under UIKit scroll-host (which-pin dismiss path).
+        // Fill viewport so pager weight(1f) reaches the sheet bottom (scroll last rows).
         useUiKitScrollHost = true,
+        uiKitFillViewport = true,
     ) {
         ProfileBottomSheet(
             state = state,
@@ -3267,6 +3264,7 @@ fun TabbedGroupProfileSheet(
     ClickFormBottomSheet(
         onDismissRequest = onDismiss,
         useUiKitScrollHost = true,
+        uiKitFillViewport = true,
     ) {
         ProfileBottomSheet(
             state = state,

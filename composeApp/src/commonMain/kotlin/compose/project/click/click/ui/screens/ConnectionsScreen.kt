@@ -200,15 +200,8 @@ fun ConnectionsScreen(
         onChatOpenStateChanged(true)
         onChatSuppressesTabBarChanged(true)
         ChatNotificationDismisser.dismissForThread(chatId, chatId)
-        // Start the enter slide first; binding a heavy attachment timeline on the same frame
-        // skips animation and hitchs interactive back for image-dense threads.
         selectedChatId = chatId
-        screenScope.launch {
-            delay(48)
-            if (selectedChatId == chatId) {
-                viewModel.loadChatMessages(chatId)
-            }
-        }
+        viewModel.loadChatMessages(chatId)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {

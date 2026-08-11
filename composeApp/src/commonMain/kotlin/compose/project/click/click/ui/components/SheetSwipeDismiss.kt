@@ -61,7 +61,21 @@ val LocalSheetUsesPlatformGrabber = compositionLocalOf { false }
  */
 val LocalSheetScrollOwnedByHost = compositionLocalOf { false }
 
-/** Translates the entire page-sheet UIView (iOS). Never translate Compose content alone. */
+/**
+ * When true, UIKit host fills the sheet viewport (LazyColumn / pager). Nested lists steal
+ * UIScrollView pans — Compose tracks pull distance and dismisses on release past threshold
+ * (no live rubber-band / transform — those flicker against UISheetPresentationController).
+ * Also allows Compose [sheetImePadding] (host keyboard contentInset is not applied).
+ */
+val LocalSheetUiKitFillViewport = compositionLocalOf { false }
+
+/**
+ * Non-null sentinel for fill-viewport sheets: enables threshold pull-dismiss tracking.
+ * Live offset application is intentionally a no-op (see [SheetDismissGestureRefs.applyPullVisual]).
+ */
+val LocalSheetHostRubberBandPx = compositionLocalOf<((Float) -> Unit)?> { null }
+
+/** Legacy surface-drag hook for Compose-fill sheets. Live offset is not applied on iOS. */
 val LocalSheetSurfaceDragOffsetPx = compositionLocalOf<(Float) -> Unit> { {} }
 
 val LocalSheetSurfaceDragActive = compositionLocalOf { false }
@@ -118,12 +132,13 @@ fun Modifier.sheetBodyScroll(
  * IME inset for form sheets. `imePadding()` is unreliable inside iOS UIKit page sheets
  * (WindowInsets.ime stays 0) — use the native keyboard overlap there instead.
  *
- * When [LocalSheetScrollOwnedByHost] is true, the UIKit `UIScrollView` applies
- * `contentInset` + scroll-to-focused-field — Compose padding here would double-inset
- * and leave a large gap under the caret (drop beacon / search).
+ * Wrap-content UIKit hosts apply keyboard via UIScrollView contentInset (no Compose pad).
+ * Fill-viewport UIKit hosts and Compose fill sheets use this padding so content clears IME.
  */
 fun Modifier.sheetImePadding(): Modifier = composed {
-    if (LocalSheetScrollOwnedByHost.current) return@composed this
+    val hostOwned = LocalSheetScrollOwnedByHost.current
+    val fillViewport = LocalSheetUiKitFillViewport.current
+    if (hostOwned && !fillViewport) return@composed this
 
     val isIos = LocalPlatformStyle.current.isIOS
     if (!isIos) return@composed this.imePadding()
@@ -148,12 +163,26 @@ private class SheetDismissGestureRefs {
     var localScrollAtTop: () -> Boolean = { true }
     var surfaceDrag: (Float) -> Unit = {}
     var surfaceDragActive: Boolean = false
+    var hostRubberBand: ((Float) -> Unit)? = null
     var blockSurfaceDrag: Boolean = false
+
+    fun interactiveDismissActive(): Boolean =
+        surfaceDragActive || hostRubberBand != null
+
+    /**
+     * Live pull visuals fight UISheetPresentationController (flicker/stutter).
+     * Keep architecture (fillViewport + sheetImePadding); dismiss only on release/fling.
+     */
+    fun applyPullVisual(@Suppress("UNUSED_PARAMETER") offsetPx: Float) {
+        // no-op
+    }
 }
 
 /**
  * - Android / Material: same-gesture gate only (leave leftovers for sheet).
- * - iOS fill sheets: pull-down at scroll top translates the whole page-sheet UIView.
+ * - iOS wrap UIKit host: UIScrollView owns dismiss (no Compose pull).
+ * - iOS fill-viewport / Compose-fill: track pull distance; commit [onDismissRequest] past
+ *   threshold (no live rubber-band / surface transform — those flicker).
  *
  * Important: never write Compose snapshot state from nested-scroll callbacks — that races
  * scroll/layout applies and crashes with Snapshot.valid (seen on profile sheet scroll).
@@ -171,13 +200,22 @@ fun Modifier.sheetSwipeDismissWhenAtTop(
     val localScrollAtTop = LocalSheetScrollAtTop.current
     val surfaceDrag = LocalSheetSurfaceDragOffsetPx.current
     val surfaceDragActive = LocalSheetSurfaceDragActive.current
+    val hostRubberBand = LocalSheetHostRubberBandPx.current
+    val scrollOwnedByHost = LocalSheetScrollOwnedByHost.current
+    val fillViewport = LocalSheetUiKitFillViewport.current
     val isIos = LocalPlatformStyle.current.isIOS
     val keyboardProvider = rememberKeyboardHeightProvider()
-    LaunchedEffect(isIos, surfaceDragActive, keyboardProvider) {
-        if (isIos && surfaceDragActive) keyboardProvider.syncFromSystem()
+    val interactivePull = surfaceDragActive || hostRubberBand != null
+    LaunchedEffect(isIos, interactivePull, keyboardProvider) {
+        if (isIos && interactivePull) keyboardProvider.syncFromSystem()
     }
     val keyboardHeightPoints by keyboardProvider.keyboardHeight.collectAsState()
-    val blockSurfaceDrag = isIos && surfaceDragActive && keyboardHeightPoints > 0.5f
+    // Keyboard open: do not steal nested scroll for dismiss (IME stays usable).
+    val blockSurfaceDrag = isIos && interactivePull && keyboardHeightPoints > 0.5f
+    // Wrap-content UIKit host: system UIScrollView dismiss — do not attach Compose pull.
+    if (isIos && scrollOwnedByHost && !fillViewport) {
+        return this
+    }
     val refs = remember { SheetDismissGestureRefs() }
     SideEffect {
         refs.onDismiss = onDismissRequest
@@ -186,20 +224,14 @@ fun Modifier.sheetSwipeDismissWhenAtTop(
         refs.localScrollAtTop = localScrollAtTop
         refs.surfaceDrag = surfaceDrag
         refs.surfaceDragActive = surfaceDragActive
+        refs.hostRubberBand = hostRubberBand
         refs.blockSurfaceDrag = blockSurfaceDrag
-        if (blockSurfaceDrag) {
-            // Clear any leftover transform so the map does not show through a gap.
-            surfaceDrag(0f)
-        }
     }
 
     val connection = remember(thresholdPx) {
         object : NestedScrollConnection {
-            // Plain fields — NOT mutableState. Snapshot writes here crash during scroll apply.
             private var dragOffsetPx = 0f
-            /** True after this gesture scrolled content (block dismiss until a new gesture). */
             private var contentScrolledThisGesture = false
-            /** Ignore tiny rubber-band pulls so timeline overscroll does not flicker the sheet. */
             private val surfaceDragDeadzonePx = thresholdPx * 0.18f
 
             private fun isAtTop(): Boolean {
@@ -208,18 +240,18 @@ fun Modifier.sheetSwipeDismissWhenAtTop(
                 return refs.localScrollAtTop()
             }
 
-            private fun setSurfaceDrag(offset: Float) {
+            private fun setPull(offset: Float) {
                 dragOffsetPx = offset
                 val visual = if (offset <= surfaceDragDeadzonePx) {
                     0f
                 } else {
                     offset - surfaceDragDeadzonePx
                 }
-                refs.surfaceDrag(visual)
+                refs.applyPullVisual(visual)
             }
 
             private fun clearDragIfNeeded() {
-                if (dragOffsetPx > 0f) setSurfaceDrag(0f)
+                if (dragOffsetPx > 0f) setPull(0f)
             }
 
             private fun resetGesture() {
@@ -234,14 +266,11 @@ fun Modifier.sheetSwipeDismissWhenAtTop(
             ): Offset {
                 if (source != NestedScrollSource.UserInput) return Offset.Zero
 
-                // Content moved this gesture — do not start dismiss until finger lifts.
                 if (consumed.y != 0f && dragOffsetPx <= 0f) {
                     contentScrolledThisGesture = true
                 }
 
-                if (!refs.surfaceDragActive) {
-                    // Material/Calf host: leave leftovers for the sheet, but after content
-                    // scrolled in this gesture do not let overscroll dismiss mid-list.
+                if (!refs.interactiveDismissActive()) {
                     if (contentScrolledThisGesture) {
                         return available
                     }
@@ -266,7 +295,7 @@ fun Modifier.sheetSwipeDismissWhenAtTop(
                     val next = (dragOffsetPx + available.y).coerceAtLeast(0f)
                     val delta = next - dragOffsetPx
                     if (delta == 0f && available.y == 0f) return Offset.Zero
-                    setSurfaceDrag(next)
+                    setPull(next)
                     return Offset(0f, available.y)
                 }
                 return Offset.Zero
@@ -274,7 +303,7 @@ fun Modifier.sheetSwipeDismissWhenAtTop(
 
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
                 try {
-                    if (!refs.surfaceDragActive || refs.blockSurfaceDrag || contentScrolledThisGesture) {
+                    if (!refs.interactiveDismissActive() || refs.blockSurfaceDrag || contentScrolledThisGesture) {
                         clearDragIfNeeded()
                         return Velocity.Zero
                     }
@@ -282,7 +311,7 @@ fun Modifier.sheetSwipeDismissWhenAtTop(
                     if (offset <= 0f) return Velocity.Zero
                     val commit = offset >= thresholdPx ||
                         available.y > GlassGestureFlickVelocityPxPerSec
-                    setSurfaceDrag(0f)
+                    setPull(0f)
                     if (commit) refs.onDismiss()
                     return if (commit) available else Velocity.Zero
                 } finally {

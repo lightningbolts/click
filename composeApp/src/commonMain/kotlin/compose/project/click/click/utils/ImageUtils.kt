@@ -8,7 +8,7 @@ expect fun ByteArray.toImageBitmap(): ImageBitmap
  * Decode for chat bubble display — downsamples so a full-res camera JPEG does not
  * allocate a multi‑megapixel bitmap on the UI path (scroll / interactive-back hitch).
  */
-expect fun ByteArray.toChatDisplayImageBitmap(maxEdgePx: Int = 960): ImageBitmap
+expect fun ByteArray.toChatDisplayImageBitmap(maxEdgePx: Int = 720): ImageBitmap
 
 /**
  * One-shot soft blur for locked Click Drops.

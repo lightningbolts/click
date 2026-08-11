@@ -48,13 +48,16 @@ fun ClickPlatformSheet(
     modifier: Modifier = Modifier,
     /** When true, sheet can expand to full height (medium+large / Android partial). */
     expandable: Boolean = true,
-    /** iOS: host in UIScrollView for dismiss-at-top. Prefer false for text-entry / LazyColumn forms. */
+    /** iOS: host in UIScrollView for dismiss-at-top. Prefer false for sticky-IME short forms. */
     useUiKitScrollHost: Boolean = true,
+    /** iOS: fill sheet viewport (LazyColumn / pager). Requires [useUiKitScrollHost]. */
+    uiKitFillViewport: Boolean = false,
     contentWindowInsets: @Composable () -> WindowInsets = { WindowInsets(0, 0, 0, 0) },
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val sheetColor = MaterialTheme.colorScheme.surface
     val onSheet = MaterialTheme.colorScheme.onSurface
+    val fillBody = !useUiKitScrollHost || uiKitFillViewport
     MapBeaconSheetRoot(
         visible = true,
         onDismissRequest = onDismissRequest,
@@ -67,6 +70,7 @@ fun ClickPlatformSheet(
         modifier = modifier,
         expandable = expandable,
         useUiKitScrollHost = useUiKitScrollHost,
+        uiKitFillViewport = uiKitFillViewport,
     ) {
         // Nested ProvideSheetSwipeDismiss reports scroll-at-top into SheetFingerDismissHost's
         // holder (iOS fill sheets / Android adaptive). Do not nest a second holder here.
@@ -76,19 +80,17 @@ fun ClickPlatformSheet(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .then(if (useUiKitScrollHost) Modifier else Modifier.fillMaxSize()),
+                    .then(if (fillBody) Modifier.fillMaxSize() else Modifier),
             ) {
                 ClickSheetDialogChrome(
                     sheetColor = sheetColor,
                     onSurface = onSheet,
                     alignSemanticColorsToSheet = true,
                 ) {
-                    // Scroll-hosted sheets must wrap content height (not fillMaxHeight) so the
-                    // UIKit UIScrollView receives the full intrinsic size.
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .then(if (useUiKitScrollHost) Modifier else Modifier.fillMaxHeight()),
+                            .then(if (fillBody) Modifier.fillMaxHeight() else Modifier),
                         content = content,
                     )
                 }
@@ -164,10 +166,12 @@ fun ClickFormBottomSheet(
     @Suppress("UNUSED_PARAMETER") dragHandle: @Composable () -> Unit = {},
     /**
      * iOS: true (default) for Column/`sheetBodyScroll` wrap-content sheets (which-pin /
-     * view-event). Set **false** for LazyColumn / HorizontalPager / `weight(1f)` /
-     * sticky-IME sheets — UIKit unbounded wrap measures those with infinity max height.
+     * view-event). Set **false** for sticky-IME short forms (availability / drop).
+     * Pair with [uiKitFillViewport] for LazyColumn / HorizontalPager sheets.
      */
     useUiKitScrollHost: Boolean = true,
+    /** iOS: fill sheet viewport for lists/pagers. Requires [useUiKitScrollHost]=true. */
+    uiKitFillViewport: Boolean = false,
     expandable: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -176,6 +180,7 @@ fun ClickFormBottomSheet(
         modifier = modifier,
         expandable = expandable,
         useUiKitScrollHost = useUiKitScrollHost,
+        uiKitFillViewport = uiKitFillViewport,
         contentWindowInsets = contentWindowInsets,
         content = content,
     )

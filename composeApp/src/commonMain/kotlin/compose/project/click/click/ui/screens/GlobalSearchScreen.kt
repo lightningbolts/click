@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.ChatWithDetails
+import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
 import compose.project.click.click.ui.components.GlassSheetTokens
 import compose.project.click.click.ui.components.ClickTextFieldMinHeight
 import compose.project.click.click.ui.theme.PrimaryBlue
@@ -531,25 +532,13 @@ internal fun TitleAndSubtitle(result: SearchResult) {
 
 @Composable
 internal fun PersonLeadingAvatar(details: ChatWithDetails) {
-    val initials = details.otherUser.name
-        ?.split(" ")
-        ?.take(2)
-        ?.mapNotNull { it.firstOrNull()?.uppercase() }
-        ?.joinToString("") ?: "?"
-    Box(
-        modifier = Modifier
-            .size(42.dp)
-            .clip(CircleShape)
-            .background(PrimaryBlue),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = initials,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.Bold,
-        )
-    }
+    ConnectionListUserAvatarFace(
+        displayName = details.otherUser.name,
+        email = details.otherUser.email,
+        avatarUrl = details.otherUser.image,
+        userId = details.otherUser.id,
+        modifier = Modifier.size(42.dp),
+    )
 }
 
 @Composable

@@ -18,6 +18,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -90,6 +91,7 @@ import compose.project.click.click.ui.components.ConnectionContextSheet
 import compose.project.click.click.calendar.AvailabilityOverlapGap
 import compose.project.click.click.calendar.lockAvailabilityIntentForGap
 import compose.project.click.click.PlatformHapticsPolicy
+import compose.project.click.click.ui.components.AppScreenDefaults
 import compose.project.click.click.ui.components.AppShimmerScreen
 import compose.project.click.click.ui.components.OfflineStatusBanner
 import compose.project.click.click.ui.components.UnifiedToastHost
@@ -469,6 +471,8 @@ fun App() {
     var connectionRollConnectionId by remember { mutableStateOf<String?>(null) }
     var pendingRollSession by remember { mutableStateOf<CollaborationSession?>(null) }
     var disposableRollOpening by remember { mutableStateOf(false) }
+    /** Scale exit matches open; fade-only after send so the underlying chat does not flash. */
+    var disposableRollExitWithScale by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         launch {
@@ -2277,9 +2281,19 @@ fun App() {
                                         stiffness = Spring.StiffnessMediumLow,
                                     ),
                                 ),
-                            // No scaleOut — shrinking the camera over the open thread made the
-                            // entire chat flash when sending a Click Drop.
-                            exit = fadeOut(animationSpec = tween(90, easing = FastOutSlowInEasing)),
+                            exit = if (disposableRollExitWithScale) {
+                                fadeOut(animationSpec = tween(120, easing = FastOutSlowInEasing)) +
+                                    scaleOut(
+                                        targetScale = 0.08f,
+                                        animationSpec = spring(
+                                            dampingRatio = Spring.DampingRatioNoBouncy,
+                                            stiffness = Spring.StiffnessMediumLow,
+                                        ),
+                                    )
+                            } else {
+                                // After send: fade only — scale-out over an open thread flashed the chat.
+                                fadeOut(animationSpec = tween(90, easing = FastOutSlowInEasing))
+                            },
                             modifier = Modifier
                                 .fillMaxSize()
                                 .zIndex(10_500f),
@@ -2300,12 +2314,20 @@ fun App() {
                                             )
                                         }
                                     }
+                                    disposableRollExitWithScale = false
                                     showConnectionDisposableRoll = false
                                     pendingRollSession = null
                                 },
                                 onDismiss = {
+                                    disposableRollExitWithScale = true
                                     showConnectionDisposableRoll = false
                                     pendingRollSession = null
+                                },
+                                extraBottomPadding = if (isIOS) {
+                                    // Native UITabBar stays visible under this overlay on iOS.
+                                    AppScreenDefaults.IosTabBarContentHeight
+                                } else {
+                                    0.dp
                                 },
                                 modifier = Modifier
                                     .fillMaxSize(),

@@ -417,9 +417,6 @@ fun ChatView(
 
     LaunchedEffect(chatId, currentUserId) {
         if (currentUserId.isNullOrBlank()) return@LaunchedEffect
-        // Yield a couple frames so ConnectionsScreen enter slide can paint before a
-        // prefetch-warm Success with dozens of image bubbles lands on the main thread.
-        delay(48)
         viewModel.loadChatMessages(chatId)
     }
 
