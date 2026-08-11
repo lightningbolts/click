@@ -70,8 +70,9 @@ kotlin {
             export("com.mohamedrejeb.calf:calf-ui:0.12.0")
         }
 
-        // CI (Xcode 16.2) fails linkDebugTestIosSimulatorArm64 with
-        // `ld: framework '_LocationEssentials' not found` unless CoreLocation is explicit.
+        // Explicit CoreLocation link for Gradle-built ios*Test binaries.
+        // Kotlin 2.3.x also autolinks `_LocationEssentials` (Xcode 26+ SDK only);
+        // CI must use that toolchain — linkerOpts alone cannot invent the framework.
         iosTarget.binaries.all {
             linkerOpts("-framework", "CoreLocation")
         }
