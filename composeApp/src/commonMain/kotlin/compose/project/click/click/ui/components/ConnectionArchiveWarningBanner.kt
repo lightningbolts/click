@@ -50,7 +50,7 @@ fun ConnectionArchiveWarningBanner(
     icebreakerCooldownSec: Int = 0,
 ) {
     val summary =
-        "${notice.headline}. ${notice.body}. Open chat. Send icebreaker."
+        "${notice.headline}. ${notice.body}. Open chat. Send question of the day."
     val outerShape = RoundedCornerShape(16.dp)
 
     Column(
@@ -154,7 +154,7 @@ fun ConnectionArchiveWarningBanner(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    if (icebreakerCooldownSec > 0) "Icebreaker (${icebreakerCooldownSec}s)" else "Icebreaker",
+                    if (icebreakerCooldownSec > 0) "Question (${icebreakerCooldownSec}s)" else "Question of the Day",
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                 )
