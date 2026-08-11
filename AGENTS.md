@@ -29,9 +29,12 @@ Requires `local.properties` with `sdk.dir=/opt/android-sdk` and `MAPS_API_KEY=<k
 
 ### Testing
 
-- **Kotlin unit tests:** `./gradlew :composeApp:testDebugUnitTest`
+- **Kotlin unit tests (Android JVM):** `./gradlew :composeApp:testDebugUnitTest`
+- **Kotlin / Compose UI tests (iOS Simulator):** `./gradlew :composeApp:iosSimulatorArm64Test` (macOS + Xcode required)
 - **All Kotlin tests:** `./gradlew :composeApp:allTests`
 - **Supabase drift (when `../click-web` is present):** `bash scripts/check-supabase-drift.sh`
+
+CI: Android job runs on Linux (`testDebugUnitTest` + `assembleDebug`); iOS job runs on `macos-14` (`iosSimulatorArm64Test`).
 
 ### Non-obvious caveats
 
