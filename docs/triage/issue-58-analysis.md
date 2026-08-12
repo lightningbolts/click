@@ -151,37 +151,22 @@ anything on top:
 SELECT jobid, jobname, schedule, active FROM cron.job WHERE jobname = 'click-hourly-maintenance';
 ```
 
-### 1.4 The root-route SEO bug is worse than described — confirmed empirically **[LIVE]**
+### 1.4 The root-route SEO bug — **fixed**
 
-The issue says the root shows a loading state. I rendered the route server-side and extracted what a
-crawler actually receives. **The entire visible body is 199 characters:**
+**Was:** SSR always rendered `LoadingScreen` ("Loading your connections...") because
+`app/page.tsx` gated on `useAuth().loading`, which stays `true` until a client `useEffect`
+runs. Crawlers got ~199 characters of chrome and **zero** marketing copy (no H1, waitlist, or
+feature text). Title/meta still rendered.
 
-```
-Click - From Handshake to Friendship  C lick  Mission Enterprise About Login
-C lick  Loading your connections...  C lick  Privacy • Terms • About • Enterprise
-Made at UW  © 2025 Click. All rights reserved.
-```
+**Fix:** `app/page.tsx` is now a Server Component that resolves the cookie session via
+`createSupabaseServerClient().auth.getUser()`. Anonymous requests render
+`components/landing/LandingPage.tsx` (no auth-`loading` gate), so SSR includes the marketing
+hero. Authenticated sessions render `components/HomeAuthenticated.tsx` (`DashboardView` with
+`ssr: false`, same Cloudflare Worker bundle constraint as before). After client login on the
+landing page, `LandingPage` swaps to the dashboard and calls `router.refresh()`.
 
-Zero marketing copy. Occurrences of "waitlist", "Get the app", "App Store" in the server HTML: **0**.
-
-Cause is exact and small — `click-web/app/page.tsx:34-37`:
-
-```tsx
-const { user, loading } = useAuth();
-if (loading) { return <LoadingScreen />; }   // ← SSR always takes this branch
-```
-
-`AuthContext` initialises `loading: true` (`lib/AuthContext.tsx:36`, default `:22`) and only clears it
-inside a `useEffect` calling `supabase.auth.getSession()` (`:70-78`). Effects don't run during SSR, so the
-server **always** renders `LoadingScreen`, whose copy is "Loading your connections..."
-(`components/LoadingScreen.tsx:48`).
-
-Mitigating: `<title>` and `<meta name="description">` are static and *do* render, so the page is not
-invisible to search — but it has no indexable body, no H1, and no crawlable links to marketing content.
-
-*Reproduction note: needs `NEXT_PUBLIC_SUPABASE_URL`/`ANON_KEY` set to any non-empty value, otherwise
-`middleware.ts:87` throws and the route 500s before rendering.*
-
+**Verify:** crawler HTML should contain marketing copy and **0** occurrences of
+`Loading your connections` (see §6).
 ### 1.5 The "unify textboxes" complaint is largely already solved — buttons are the real gap **[CODE]**
 
 The issue singles out textboxes. Measured, text inputs are in decent shape:
@@ -230,7 +215,7 @@ Severity: **S1** user-visible breakage / data loss · **S2** significant defect 
 | 16 | Unify UI components (textboxes) | Largely done; buttons are the gap (§1.5) | S3 | **[CODE]** |
 | 17 | Restructure home page (recap) | Data mostly available; needs aggregation | F | **[CODE]** |
 | 18 | Saved events in settings; revamp settings | Saved events on Home only; settings = 1114 lines | F | **[CODE]** |
-| 19 | Root route shows app loading state | Confirmed, worse than described (§1.4) | S2 | **[LIVE]** |
+| 19 | Root route shows app loading state | **Fixed** — RSC + LandingPage SSR (§1.4) | S2 | **[LIVE]** → fixed |
 
 ### Items in the issue that are already satisfied
 
@@ -384,7 +369,7 @@ Note the ordering constraint: **per-type preferences (§15) should land before o
 **Phase C — correctness (S2)**
 8. Map pin single source of truth (§3.3), after confirming the product rule.
 9. Avatar gate tri-state (§3.1).
-10. Root-route server-rendered marketing hero (§1.4).
+10. ~~Root-route server-rendered marketing hero (§1.4).~~ **Done.**
 11. Permission coordinator + priming prompts.
 
 **Phase D — features & polish**
@@ -421,10 +406,12 @@ grep -n "updateRenderData(" composeApp/src/commonMain/kotlin/compose/project/cli
 cd composeApp/src/commonMain/kotlin/compose/project/click/click
 grep -rn "ClickOutlinedTextField(" --include=*.kt ui | grep -v "fun ClickOutlinedTextField" | wc -l
 
-# §1.4 crawler-visible body (expect the loading string, no marketing copy)
+# §1.4 crawler-visible body (expect 0 loading string; marketing copy present)
 #   requires NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY set to any non-empty value
 cd ../click-web && npm run dev &
-curl -s http://localhost:3000/ -H "User-Agent: Googlebot/2.1" | grep -c "Loading your connections"
+curl -s http://localhost:3000/ -H "User-Agent: Googlebot/2.1" | tee /tmp/root.html \
+  | grep -c "Loading your connections"   # expect 0
+grep -ciE "waitlist|From Handshake|Why Click" /tmp/root.html   # expect >0
 ```
 
 ---
@@ -442,7 +429,7 @@ curl -s http://localhost:3000/ -H "User-Agent: Googlebot/2.1" | grep -c "Loading
 | Map pin visibility | §3.3 — needs a product decision first | S1 |
 | Notification preferences & new senders | Per-type prefs, then availability + hub notifications (§4) | F |
 | Onboarding & permissions | Avatar race, permission coordinator, priming, transitions | S2 |
-| Marketing root route SSR | §1.4 | S2 |
+| ~~Marketing root route SSR~~ | §1.4 — **fixed** in `click-web` | S2 |
 | Home recap + settings reorganisation | §4 | F |
 | *(fold into #54)* | Component unification (§1.5) | S3 |
 
