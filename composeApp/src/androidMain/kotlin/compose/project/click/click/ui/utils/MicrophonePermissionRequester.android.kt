@@ -13,25 +13,26 @@ import androidx.compose.runtime.setValue
 import androidx.core.app.ActivityCompat
 
 @Composable
-actual fun rememberMicrophonePermissionRequester(): ((onComplete: () -> Unit) -> Unit) {
+actual fun rememberPlatformMicrophonePermissionRequester(): ((onComplete: () -> Unit) -> Unit) {
     var pendingOnComplete by remember { mutableStateOf<(() -> Unit)?>(null) }
     val activity = LocalActivity.current as? ComponentActivity
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        val complete = pendingOnComplete
-        pendingOnComplete = null
-        if (!granted &&
-            activity != null &&
-            !ActivityCompat.shouldShowRequestPermissionRationale(
-                activity,
-                Manifest.permission.RECORD_AUDIO,
-            )
-        ) {
-            openApplicationSystemSettings()
+    val launcher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission(),
+        ) { granted ->
+            val complete = pendingOnComplete
+            pendingOnComplete = null
+            if (!granted &&
+                activity != null &&
+                !ActivityCompat.shouldShowRequestPermissionRationale(
+                    activity,
+                    Manifest.permission.RECORD_AUDIO,
+                )
+            ) {
+                openApplicationSystemSettings()
+            }
+            complete?.invoke()
         }
-        complete?.invoke()
-    }
 
     return { onComplete ->
         pendingOnComplete = onComplete

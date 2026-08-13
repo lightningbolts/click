@@ -1,9 +1,9 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.camera
 
 import android.Manifest
 import android.content.pm.PackageManager
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
@@ -16,7 +16,6 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -34,9 +33,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.Executors
+import compose.project.click.click.ui.utils.rememberCameraPermissionRequester
 import kotlinx.coroutines.launch
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 @Composable
 actual fun DisposableCameraView(
@@ -55,20 +55,21 @@ actual fun DisposableCameraView(
                 PackageManager.PERMISSION_GRANTED,
         )
     }
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-    ) { granted -> hasCameraPermission = granted }
-
-    LaunchedEffect(Unit) {
-        if (!hasCameraPermission) permissionLauncher.launch(Manifest.permission.CAMERA)
-    }
+    val requestCameraPermission = rememberCameraPermissionRequester()
 
     if (!hasCameraPermission) {
         DisposableCameraFallback(
             title = "Camera permission needed",
             message = "Disposable Roll uses the camera only for this shared drop.",
             primaryActionLabel = "Enable camera",
-            onPrimaryAction = { permissionLauncher.launch(Manifest.permission.CAMERA) },
+            onPrimaryAction = {
+                requestCameraPermission {
+                    hasCameraPermission = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.CAMERA,
+                    ) == PackageManager.PERMISSION_GRANTED
+                }
+            },
             onDismiss = onDismiss,
             modifier = modifier,
         )
@@ -104,26 +105,31 @@ actual fun DisposableCameraView(
         if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
 
         runCatching {
-            val preview = Preview.Builder().build().also {
-                it.setSurfaceProvider(view.surfaceProvider)
-            }
-            val capture = ImageCapture.Builder()
-                .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                .build()
-            val selector = if (useFrontCamera) {
-                CameraSelector.DEFAULT_FRONT_CAMERA
-            } else {
-                CameraSelector.DEFAULT_BACK_CAMERA
-            }
+            val preview =
+                Preview.Builder().build().also {
+                    it.setSurfaceProvider(view.surfaceProvider)
+                }
+            val capture =
+                ImageCapture
+                    .Builder()
+                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                    .build()
+            val selector =
+                if (useFrontCamera) {
+                    CameraSelector.DEFAULT_FRONT_CAMERA
+                } else {
+                    CameraSelector.DEFAULT_BACK_CAMERA
+                }
 
             provider.unbindAll()
             imageCapture = capture
-            camera = provider.bindToLifecycle(
-                lifecycleOwner,
-                selector,
-                preview,
-                capture,
-            )
+            camera =
+                provider.bindToLifecycle(
+                    lifecycleOwner,
+                    selector,
+                    preview,
+                    capture,
+                )
             view.scaleX = if (useFrontCamera) -1f else 1f
             setupError = null
             isFlippingCamera = false
@@ -146,14 +152,16 @@ actual fun DisposableCameraView(
     }
 
     DisposableEffect(lifecycleOwner, cameraProvider, previewView, useFrontCamera) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_START -> bindCameraIfReady()
-                Lifecycle.Event.ON_STOP,
-                Lifecycle.Event.ON_DESTROY -> unbindCamera()
-                else -> Unit
+        val observer =
+            LifecycleEventObserver { _, event ->
+                when (event) {
+                    Lifecycle.Event.ON_START -> bindCameraIfReady()
+                    Lifecycle.Event.ON_STOP,
+                    Lifecycle.Event.ON_DESTROY,
+                    -> unbindCamera()
+                    else -> Unit
+                }
             }
-        }
         lifecycleOwner.lifecycle.addObserver(observer)
         bindCameraIfReady()
         onDispose {
@@ -195,17 +203,18 @@ actual fun DisposableCameraView(
                 captureExecutor,
                 object : ImageCapture.OnImageCapturedCallback() {
                     override fun onCaptureSuccess(image: ImageProxy) {
-                        val bytes = try {
-                            val buffer = image.planes.firstOrNull()?.buffer
-                            if (buffer == null) {
-                                ByteArray(0)
-                            } else {
-                                buffer.rewind()
-                                ByteArray(buffer.remaining()).also { buffer.get(it) }
+                        val bytes =
+                            try {
+                                val buffer = image.planes.firstOrNull()?.buffer
+                                if (buffer == null) {
+                                    ByteArray(0)
+                                } else {
+                                    buffer.rewind()
+                                    ByteArray(buffer.remaining()).also { buffer.get(it) }
+                                }
+                            } finally {
+                                image.close()
                             }
-                        } finally {
-                            image.close()
-                        }
 
                         mainExecutor.execute {
                             if (isDisposed.get()) return@execute
@@ -247,18 +256,19 @@ actual fun DisposableCameraView(
         },
         previewContent = {
             AndroidView(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectTransformGestures { _, _, zoom, _ ->
-                            val cam = camera ?: return@detectTransformGestures
-                            val info = cam.cameraInfo.zoomState.value
-                            val minZ = info?.minZoomRatio ?: 1f
-                            val maxZ = info?.maxZoomRatio ?: 5f
-                            zoomRatio = (zoomRatio * zoom).coerceIn(minZ, maxZ)
-                            cam.cameraControl.setZoomRatio(zoomRatio)
-                        }
-                    },
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            detectTransformGestures { _, _, zoom, _ ->
+                                val cam = camera ?: return@detectTransformGestures
+                                val info = cam.cameraInfo.zoomState.value
+                                val minZ = info?.minZoomRatio ?: 1f
+                                val maxZ = info?.maxZoomRatio ?: 5f
+                                zoomRatio = (zoomRatio * zoom).coerceIn(minZ, maxZ)
+                                cam.cameraControl.setZoomRatio(zoomRatio)
+                            }
+                        },
                 factory = { ctx ->
                     PreviewView(ctx).apply {
                         scaleType = PreviewView.ScaleType.FILL_CENTER

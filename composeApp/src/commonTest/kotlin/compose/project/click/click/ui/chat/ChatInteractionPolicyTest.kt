@@ -5,7 +5,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ChatInteractionPolicyTest {
-
     @Test
     fun inboundOnlyFollowsWhenInitialPositioningFinishedAndReaderIsNearBottom() {
         assertFalse(chatTimelineShouldFollowInbound(firstVisibleItemIndex = 0, initialTimelineScrollDone = false))
@@ -13,6 +12,8 @@ class ChatInteractionPolicyTest {
         assertTrue(chatTimelineShouldFollowInbound(firstVisibleItemIndex = 2, initialTimelineScrollDone = true))
         assertFalse(chatTimelineShouldFollowInbound(firstVisibleItemIndex = 3, initialTimelineScrollDone = true))
         assertFalse(chatTimelineShouldFollowInbound(firstVisibleItemIndex = 50, initialTimelineScrollDone = true))
+        assertFalse(chatTimelineFollowUsesAnimation(initialTimelineScrollDone = false))
+        assertTrue(chatTimelineFollowUsesAnimation(initialTimelineScrollDone = true))
     }
 
     @Test

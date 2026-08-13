@@ -10,7 +10,7 @@ import platform.AVFAudio.AVAudioSessionRecordPermissionDenied
 import platform.AVFAudio.AVAudioSessionRecordPermissionGranted
 
 @Composable
-actual fun rememberMicrophonePermissionRequester(): ((onComplete: () -> Unit) -> Unit) {
+actual fun rememberPlatformMicrophonePermissionRequester(): ((onComplete: () -> Unit) -> Unit) {
     val session = remember { AVAudioSession.sharedInstance() }
 
     return { onComplete ->

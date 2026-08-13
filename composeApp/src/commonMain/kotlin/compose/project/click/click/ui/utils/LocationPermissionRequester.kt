@@ -1,6 +1,7 @@
 package compose.project.click.click.ui.utils
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 
 /**
  * Platform-specific way to request location permission and run a block when done.
@@ -8,4 +9,12 @@ import androidx.compose.runtime.Composable
  * the caller shows the explainer, then calls the returned function with the "continue" block.
  */
 @Composable
-expect fun rememberLocationPermissionRequester(): ((onComplete: () -> Unit) -> Unit)
+expect fun rememberPlatformLocationPermissionRequester(): ((onComplete: () -> Unit) -> Unit)
+
+@Composable
+fun rememberLocationPermissionRequester(): ((onComplete: () -> Unit) -> Unit) =
+    remember {
+        { onComplete ->
+            PermissionRequestQueue.enqueue(PermissionKind.Location, onComplete = onComplete)
+        }
+    }

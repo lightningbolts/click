@@ -1,10 +1,10 @@
-appId: ${APP_ID}
+appId: compose.project.click.click
 name: Launch shows sign-in
 tags:
   - smoke
 ---
 - launchApp:
-    appId: ${APP_ID}
+    appId: compose.project.click.click
     clearState: true
     permissions:
       all: allow

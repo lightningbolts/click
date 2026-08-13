@@ -1,291 +1,151 @@
+@file:Suppress(
+    "ktlint:standard:no-wildcard-imports",
+    "ktlint:standard:function-naming",
+    "ktlint:standard:max-line-length",
+)
+
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animate
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.offset // pragma: allowlist secret
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.outlined.Edit // pragma: allowlist secret
 import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.PhotoCamera
-import androidx.compose.material.icons.outlined.Save
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ripple
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.zIndex
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.LineHeightStyle
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.zIndex
+import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.calls.CallSessionManager // pragma: allowlist secret
+import compose.project.click.click.collaboration.CollaborationSessionManager // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
-import compose.project.click.click.notifications.NotificationRuntimeState // pragma: allowlist secret
-import compose.project.click.click.ui.theme.* // pragma: allowlist secret
-import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
-import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
-import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
-import compose.project.click.click.ui.components.AdaptiveSurface // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
-import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
-import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
-import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatComposerStripReserve // pragma: allowlist secret
-import compose.project.click.click.ui.chat.rememberChatNativeKeyboardInsets // pragma: allowlist secret
-import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
-import compose.project.click.click.ui.components.rememberEdgeToEdgeBottomPadding // pragma: allowlist secret
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.material.icons.automirrored.filled.Reply
-import androidx.compose.material3.ripple
-import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
-import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
-import compose.project.click.click.ui.components.CoreConnectionAvatarFrame // pragma: allowlist secret
-import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
-import compose.project.click.click.ui.components.groupAvatarClusterWidth // pragma: allowlist secret
-import com.mohamedrejeb.calf.ui.sheet.AdaptiveBottomSheet
-import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
-import compose.project.click.click.ui.components.EmojiCatalog // pragma: allowlist secret
-import compose.project.click.click.ui.components.PageHeader // pragma: allowlist secret
-import compose.project.click.click.ui.components.UserProfileBottomSheet // pragma: allowlist secret
-import compose.project.click.click.data.models.replyRef // pragma: allowlist secret
-import compose.project.click.click.data.models.replySnippetForMetadata // pragma: allowlist secret
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.lifecycle.viewmodel.compose.viewModel
-import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
-import compose.project.click.click.data.models.Connection // pragma: allowlist secret
-import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
-import compose.project.click.click.data.models.isArchivedChannelForUser // pragma: allowlist secret
-import compose.project.click.click.data.models.IcebreakerPrompt // pragma: allowlist secret
-import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
-import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
-import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
-import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
-import compose.project.click.click.ui.chat.AnimatedVisibilityChatBubble // pragma: allowlist secret
-import compose.project.click.click.ui.chat.chatBubbleStableRowKey // pragma: allowlist secret
-import compose.project.click.click.ui.chat.CallLogSystemRow // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatBeaconDetailSheet // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatExpandedPhotoPreview // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatWarmLoadingView // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ConnectionItem // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ForwardDialog // pragma: allowlist secret
-import compose.project.click.click.ui.chat.IcebreakerPanel // pragma: allowlist secret
-import compose.project.click.click.ui.chat.VibeCheckBanner // pragma: allowlist secret
-import compose.project.click.click.ui.chat.GroupMembersPickerSheet // pragma: allowlist secret
-import compose.project.click.click.ui.chat.MessageActionSheet // pragma: allowlist secret
-import compose.project.click.click.ui.chat.GroupMembersPickerContext // pragma: allowlist secret
-import compose.project.click.click.ui.chat.groupMembersPickerContextFrom // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassToastHost // pragma: allowlist secret
-import compose.project.click.click.ui.components.rememberGlassToastState // pragma: allowlist secret
-import compose.project.click.click.ui.components.TetherCompassToast // pragma: allowlist secret
-import compose.project.click.click.encounter.tetherCompassMessage // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.encounter.EncounterTetherManager // pragma: allowlist secret
 import compose.project.click.click.encounter.EncounterTetherWidgetBridge // pragma: allowlist secret
-import compose.project.click.click.collaboration.CollaborationSessionManager // pragma: allowlist secret
 import compose.project.click.click.encounter.recentEncounterId // pragma: allowlist secret
-import compose.project.click.click.utils.LocationService // pragma: allowlist secret
-import compose.project.click.click.ui.chat.connectionListActivityTs // pragma: allowlist secret
+import compose.project.click.click.encounter.tetherCompassMessage // pragma: allowlist secret
+import compose.project.click.click.notifications.NotificationRuntimeState // pragma: allowlist secret
+import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
+import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatBeaconDetailSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatCallOptionsIosSurface // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatChromeHorizontalPadding // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatChromeMotion // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatComposerStripReserve // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatExpandedPhotoPreview // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatHeaderIconButton // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatTypingDots // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatWarmLoadingView // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionActionSheet // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ConnectionChatMessageComposer // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionMenuAction // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionSheetDialog // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionSheetDialogs // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatDeliveryReceiptIcon // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatMessageRowWithTimestampGutter // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ForwardDialog // pragma: allowlist secret
+import compose.project.click.click.ui.chat.GroupMembersPickerContext // pragma: allowlist secret
+import compose.project.click.click.ui.chat.IcebreakerPanel // pragma: allowlist secret
+import compose.project.click.click.ui.chat.MessageActionSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.applyTimestampPeekDragStep // pragma: allowlist secret
-import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft // pragma: allowlist secret
-import compose.project.click.click.ui.chat.launchTimestampPeekReplyStyleSettle // pragma: allowlist secret
-import compose.project.click.click.ui.chat.rememberTimestampPeekRevealPx // pragma: allowlist secret
-import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx // pragma: allowlist secret
-import compose.project.click.click.ui.chat.isTimestampPeekRevealed // pragma: allowlist secret
-import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ConnectionChatMessageComposer // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatTimelineEntry // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatChromeMotion // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatTypingDots // pragma: allowlist secret
+import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatBubbleReplySnippetStyle // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatBubbleScaledDp // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatInterMessageListBaseCompact // pragma: allowlist secret
-import compose.project.click.click.ui.chat.chatDeliveryReceiptGapBeforeTimeline // pragma: allowlist secret
-import compose.project.click.click.ui.chat.chatTimelineRowTopPadding // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ConversationDaySeparator // pragma: allowlist secret
-import compose.project.click.click.ui.chat.LoadingSubtitlePlaceholder // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ReplySwipeSideIcon // pragma: allowlist secret
-import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowlist secret
-import compose.project.click.click.ui.chat.chatTimelineShouldFollowInbound // pragma: allowlist secret
-import compose.project.click.click.ui.chat.scrollChatTimelineToLatest // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatDismissKeyboardAfterScrollConnection // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatComposerChromeFadeUnderlay // pragma: allowlist secret
-import compose.project.click.click.ui.chat.callLogLabel // pragma: allowlist secret
-import compose.project.click.click.ui.chat.formatCallDurationForLog // pragma: allowlist secret
-import compose.project.click.click.ui.chat.formatConnectionListTimestamp // pragma: allowlist secret
-import compose.project.click.click.ui.chat.formatConversationDayLabel // pragma: allowlist secret
-import compose.project.click.click.ui.chat.formatMessageTime // pragma: allowlist secret
-import compose.project.click.click.ui.chat.formatVibeCheckTime // pragma: allowlist secret
-import compose.project.click.click.ui.chat.messageDayKey // pragma: allowlist secret
-import compose.project.click.click.ui.chat.replyDragHintProgress // pragma: allowlist secret
-import compose.project.click.click.ui.chat.swipeRawTravelFromVisual // pragma: allowlist secret
-import compose.project.click.click.ui.chat.swipeVisualFromRawTravel // pragma: allowlist secret
-import compose.project.click.click.data.models.copyableText // pragma: allowlist secret
-import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
-import compose.project.click.click.data.models.previewLabel // pragma: allowlist secret
-import compose.project.click.click.data.models.parsedMediaMetadata // pragma: allowlist secret
-import compose.project.click.click.data.models.User // pragma: allowlist secret
-import compose.project.click.click.data.models.toUserProfile // pragma: allowlist secret
-import compose.project.click.click.data.models.mostUrgentArchiveNotice // pragma: allowlist secret
-import coil3.compose.AsyncImage // pragma: allowlist secret
-import androidx.compose.foundation.layout.offset // pragma: allowlist secret
-import androidx.compose.material.icons.outlined.Edit // pragma: allowlist secret
-import compose.project.click.click.ui.components.ConnectionArchiveWarningBanner // pragma: allowlist secret
-import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
-import compose.project.click.click.viewmodel.VerifiedCliqueProximityIntent // pragma: allowlist secret
-import compose.project.click.click.viewmodel.SecureChatMediaHost // pragma: allowlist secret
-import compose.project.click.click.viewmodel.SecureChatMediaLoadState // pragma: allowlist secret
-import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatTimelineFollowUsesAnimation // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatTimelineShouldFollowInbound // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft // pragma: allowlist secret
+import compose.project.click.click.ui.chat.groupMembersPickerContextFrom // pragma: allowlist secret
+import compose.project.click.click.ui.chat.isTimestampPeekRevealed // pragma: allowlist secret
+import compose.project.click.click.ui.chat.launchTimestampPeekReplyStyleSettle // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatNativeKeyboardInsets // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberTimestampPeekRevealPx // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx // pragma: allowlist secret
+import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay // pragma: allowlist secret
+import compose.project.click.click.ui.chat.scrollChatTimelineToLatest // pragma: allowlist secret
+import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickOutlinedTextField
+import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
+import compose.project.click.click.ui.components.CoreConnectionAvatarFrame // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassToastHost // pragma: allowlist secret
+import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
+import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
+import compose.project.click.click.ui.components.TetherCompassToast // pragma: allowlist secret
+import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
+import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
+import compose.project.click.click.ui.components.groupAvatarClusterWidth // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberEdgeToEdgeBottomPadding // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberGlassToastState // pragma: allowlist secret
+import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.util.AvailabilityOverlapCache // pragma: allowlist secret
 import compose.project.click.click.util.ViewerAvailabilityBubblesCache // pragma: allowlist secret
-import compose.project.click.click.util.collectAsStateLifecycleAware // pragma: allowlist secret
 import compose.project.click.click.util.hasActiveAvailabilityIntentOverlap // pragma: allowlist secret
-import kotlinx.coroutines.Dispatchers // pragma: allowlist secret
-import kotlinx.coroutines.withContext // pragma: allowlist secret
+import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatListState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatMessagesState // pragma: allowlist secret
-import compose.project.click.click.ui.chat.saveChatImageToGallery // pragma: allowlist secret
-import compose.project.click.click.utils.toImageBitmap // pragma: allowlist secret
+import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
+import kotlinx.coroutines.Dispatchers // pragma: allowlist secret
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
+import kotlinx.coroutines.withContext // pragma: allowlist secret
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlin.math.absoluteValue
-import kotlin.math.abs
-import kotlin.math.roundToInt
-import kotlin.math.sqrt
-import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
-import compose.project.click.click.ui.chat.ChatLinkifyText // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatMessageBubble // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatMediaPickerHandles // pragma: allowlist secret
-import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
-import compose.project.click.click.util.LruMemoryCache // pragma: allowlist secret
-import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickOutlinedTextField
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -299,11 +159,13 @@ fun ChatView(
     onOpenDisposableRollForChat: ((chatId: String) -> Unit)? = null,
     shareableBeacons: List<compose.project.click.click.data.models.MapBeacon> = emptyList(),
     mapViewModel: compose.project.click.click.viewmodel.MapViewModel? = null,
-    onShareBeaconToChats: ((
-        beacon: compose.project.click.click.data.models.MapBeacon,
-        chatIds: List<String>,
-        openConnectionId: String?,
-    ) -> Unit)? = null,
+    onShareBeaconToChats: (
+        (
+            beacon: compose.project.click.click.data.models.MapBeacon,
+            chatIds: List<String>,
+            openConnectionId: String?,
+        ) -> Unit
+    )? = null,
     /**
      * When true, timestamp peek is driven by the parent `InteractiveSwipeBackContainer` horizontal
      * drag (register callbacks with [onRegisterSwipeBackRightToLeftPeek]). When false, the chat
@@ -347,29 +209,33 @@ fun ChatView(
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
     val platformStyle = LocalPlatformStyle.current
-    val nativeKeyboardInsets = rememberChatNativeKeyboardInsets(
-        keyboardHeightProvider = keyboardHeightProvider,
-        subtractTabBarOverlay = true,
-    )
+    val nativeKeyboardInsets =
+        rememberChatNativeKeyboardInsets(
+            keyboardHeightProvider = keyboardHeightProvider,
+            subtractTabBarOverlay = true,
+        )
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val focusManager = LocalFocusManager.current
     val focusManagerState = rememberUpdatedState(focusManager)
     val keyboardController = LocalSoftwareKeyboardController.current
     val keyboardControllerState = rememberUpdatedState(keyboardController)
+
     /** Skips IME dismiss while [listState.scrollToItem] snaps the newest-first timeline (not user-driven). */
     val suppressKeyboardDismissWhileProgrammaticTimelineScroll = remember { mutableStateOf(false) }
+
     /**
      * Dismisses the IME after the user finishes a scroll gesture — never mid-drag / mid-fling.
      * Clearing focus while coasting resizes keyboard insets and kills LazyColumn fling physics.
      */
     val keyboardDismissScrollThresholdPx = remember(density) { with(density) { 16.dp.toPx() } }
-    val dismissKeyboardOnUserMessageScroll = remember(keyboardDismissScrollThresholdPx) {
-        chatDismissKeyboardAfterScrollConnection(
-            thresholdPx = keyboardDismissScrollThresholdPx,
-            isSuppressed = { suppressKeyboardDismissWhileProgrammaticTimelineScroll.value },
-            onDismiss = { focusManagerState.value.clearFocus() },
-        )
-    }
+    val dismissKeyboardOnUserMessageScroll =
+        remember(keyboardDismissScrollThresholdPx) {
+            chatDismissKeyboardAfterScrollConnection(
+                thresholdPx = keyboardDismissScrollThresholdPx,
+                isSuppressed = { suppressKeyboardDismissWhileProgrammaticTimelineScroll.value },
+                onDismiss = { focusManagerState.value.clearFocus() },
+            )
+        }
 
     var imeClearedForInteractiveBackSwipe = false
     LaunchedEffect(parentInteractiveBackSwipePx) {
@@ -432,7 +298,12 @@ fun ChatView(
     // Snap only on open and when a peer message arrives while already near the bottom —
     // never on every size change (load-older / prefetch merge), which caused lag + teleports.
     val successMessages = (chatMessagesState as? ChatMessagesState.Success)?.messages.orEmpty()
-    val peerNewestMessageId = successMessages.lastOrNull()?.takeIf { !it.isSent }?.message?.id
+    val peerNewestMessageId =
+        successMessages
+            .lastOrNull()
+            ?.takeIf { !it.isSent }
+            ?.message
+            ?.id
     var initialTimelineScrollDone by remember(chatId) { mutableStateOf(false) }
 
     LaunchedEffect(listState) {
@@ -467,14 +338,16 @@ fun ChatView(
             scrollChatTimelineToLatest(
                 listState = listState,
                 suppressKeyboardDismiss = suppressKeyboardDismissWhileProgrammaticTimelineScroll,
+                animated = chatTimelineFollowUsesAnimation(initialTimelineScrollDone),
             )
         }
     }
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
     ) {
         val successForMesh = chatMessagesState as? ChatMessagesState.Success
         if (successForMesh != null) {
@@ -487,13 +360,15 @@ fun ChatView(
         Column(modifier = Modifier.fillMaxSize()) {
             when (val state = chatMessagesState) {
                 is ChatMessagesState.Loading -> {
-                    val hintedRow = (chatListState as? ChatListState.Success)
-                        ?.chats
-                        ?.firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
-                    if (hintedRow != null && (
+                    val hintedRow =
+                        (chatListState as? ChatListState.Success)
+                            ?.chats
+                            ?.firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
+                    if (hintedRow != null &&
+                        (
                             hintedRow.lastMessage != null ||
                                 hintedRow.chat.messages.isNotEmpty()
-                            )
+                        )
                     ) {
                         ChatWarmLoadingView(
                             topInset = topInset,
@@ -510,16 +385,17 @@ fun ChatView(
                 is ChatMessagesState.Error -> {
                     Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             IconButton(onClick = onBackPressed) {
                                 Icon(
                                     Icons.AutoMirrored.Filled.ArrowBack,
                                     contentDescription = "Back",
-                                    tint = MaterialTheme.colorScheme.onSurface
+                                    tint = MaterialTheme.colorScheme.onSurface,
                                 )
                             }
                             Spacer(modifier = Modifier.width(10.dp))
@@ -527,25 +403,25 @@ fun ChatView(
                                 text = "Chat",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
                         }
                     }
                     Box(
                         modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
+                        contentAlignment = Alignment.Center,
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 "Error loading chat",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error
+                                color = MaterialTheme.colorScheme.error,
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 state.message,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -553,11 +429,16 @@ fun ChatView(
                 is ChatMessagesState.Success -> {
                     val stateMatchesThread =
                         state.chatDetails.connection.id == chatId ||
-                            (!state.chatDetails.chat.id.isNullOrBlank() && state.chatDetails.chat.id == chatId)
+                            (
+                                !state.chatDetails.chat.id
+                                    .isNullOrBlank() &&
+                                    state.chatDetails.chat.id == chatId
+                            )
                     if (!stateMatchesThread) {
-                        val hintedRow = (chatListState as? ChatListState.Success)
-                            ?.chats
-                            ?.firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
+                        val hintedRow =
+                            (chatListState as? ChatListState.Success)
+                                ?.chats
+                                ?.firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
                         if (hintedRow != null) {
                             ChatWarmLoadingView(
                                 topInset = topInset,
@@ -580,21 +461,23 @@ fun ChatView(
                     val isGroupChat = chatDetails.groupClique != null
                     val overlapRepo = remember { SupabaseRepository() }
                     val chatPeerId = chatDetails.otherUser.id
-                    val tetherChannelId = remember(
-                        chatDetails.connection.id,
-                        collaborationSessions,
-                    ) {
-                        collaborationSessions[chatDetails.connection.id]?.encounterId?.takeIf { it.isNotBlank() }
-                            ?: chatDetails.connection.recentEncounterId()?.takeIf { it.isNotBlank() }
-                            ?: chatDetails.connection.id
-                    }
-                    val tetherMemberNamesById = remember(chatDetails.groupMemberUsers, currentUser, chatDetails.otherUser) {
-                        (chatDetails.groupMemberUsers + listOfNotNull(currentUser, chatDetails.otherUser))
-                            .distinctBy { it.id }
-                            .associate { user ->
-                                user.id to (user.name?.trim()?.takeIf { it.isNotEmpty() } ?: "Friend")
-                            }
-                    }
+                    val tetherChannelId =
+                        remember(
+                            chatDetails.connection.id,
+                            collaborationSessions,
+                        ) {
+                            collaborationSessions[chatDetails.connection.id]?.encounterId?.takeIf { it.isNotBlank() }
+                                ?: chatDetails.connection.recentEncounterId()?.takeIf { it.isNotBlank() }
+                                ?: chatDetails.connection.id
+                        }
+                    val tetherMemberNamesById =
+                        remember(chatDetails.groupMemberUsers, currentUser, chatDetails.otherUser) {
+                            (chatDetails.groupMemberUsers + listOfNotNull(currentUser, chatDetails.otherUser))
+                                .distinctBy { it.id }
+                                .associate { user ->
+                                    user.id to (user.name?.trim()?.takeIf { it.isNotEmpty() } ?: "Friend")
+                                }
+                        }
                     val peerDisplayName = chatDetails.otherUser.name ?: "Friend"
                     LaunchedEffect(tetherChannelId, peerDisplayName) {
                         EncounterTetherWidgetBridge.updateRecentEncounter(tetherChannelId, peerDisplayName)
@@ -614,32 +497,35 @@ fun ChatView(
                         EncounterTetherManager.subscribe(tetherChannelId, self, resolver)
                     }
                     LaunchedEffect(tetherPayload, chatPeerId, currentUserId, isGroupChat) {
-                        val ping = tetherPayload ?: run {
-                            tetherToastMessage = null
-                            return@LaunchedEffect
-                        }
+                        val ping =
+                            tetherPayload ?: run {
+                                tetherToastMessage = null
+                                return@LaunchedEffect
+                            }
                         if (ping.senderId == currentUserId) return@LaunchedEffect
                         if (!isGroupChat && ping.senderId != chatPeerId) return@LaunchedEffect
                         val receiver = LocationService().getCurrentLocation()
-                        tetherToastMessage = if (receiver != null) {
-                            tetherCompassMessage(
-                                senderName = ping.senderName,
-                                receiverLat = receiver.latitude,
-                                receiverLng = receiver.longitude,
-                                senderLat = ping.latitude,
-                                senderLng = ping.longitude,
-                            )
-                        } else {
-                            "${ping.senderName} pinged their tether"
-                        }
+                        tetherToastMessage =
+                            if (receiver != null) {
+                                tetherCompassMessage(
+                                    senderName = ping.senderName,
+                                    receiverLat = receiver.latitude,
+                                    receiverLng = receiver.longitude,
+                                    senderLat = ping.latitude,
+                                    senderLng = ping.longitude,
+                                )
+                            } else {
+                                "${ping.senderName} pinged their tether"
+                            }
                     }
                     var chatHasIntentOverlap by remember(chatDetails.otherUser.id, currentUserId, isGroupChat) {
                         val v = currentUserId
-                        val cached = if (!isGroupChat && !v.isNullOrBlank()) {
-                            AvailabilityOverlapCache.get(v, chatPeerId)
-                        } else {
-                            null
-                        }
+                        val cached =
+                            if (!isGroupChat && !v.isNullOrBlank()) {
+                                AvailabilityOverlapCache.get(v, chatPeerId)
+                            } else {
+                                null
+                            }
                         mutableStateOf(cached == true)
                     }
                     LaunchedEffect(chatDetails.otherUser.id, currentUserId, isGroupChat) {
@@ -647,59 +533,81 @@ fun ChatView(
                             chatHasIntentOverlap = false
                             return@LaunchedEffect
                         }
-                        val v = currentUserId ?: run {
-                            chatHasIntentOverlap = false
-                            return@LaunchedEffect
-                        }
+                        val v =
+                            currentUserId ?: run {
+                                chatHasIntentOverlap = false
+                                return@LaunchedEffect
+                            }
                         val peer = chatDetails.otherUser.id
                         AvailabilityOverlapCache.get(v, peer)?.let { cached ->
                             chatHasIntentOverlap = cached
                             return@LaunchedEffect
                         }
-                        val mine = ViewerAvailabilityBubblesCache.get(v)
-                            ?: overlapRepo.fetchPeerProfileAvailabilityBubbles(v, v).also {
-                                ViewerAvailabilityBubblesCache.put(v, it)
+                        val mine =
+                            ViewerAvailabilityBubblesCache.get(v)
+                                ?: overlapRepo.fetchPeerProfileAvailabilityBubbles(v, v).also {
+                                    ViewerAvailabilityBubblesCache.put(v, it)
+                                }
+                        val result =
+                            withContext(Dispatchers.Default) {
+                                val theirs = overlapRepo.fetchPeerProfileAvailabilityBubbles(v, peer)
+                                hasActiveAvailabilityIntentOverlap(mine, theirs)
                             }
-                        val result = withContext(Dispatchers.Default) {
-                            val theirs = overlapRepo.fetchPeerProfileAvailabilityBubbles(v, peer)
-                            hasActiveAvailabilityIntentOverlap(mine, theirs)
-                        }
                         AvailabilityOverlapCache.put(v, peer, result)
                         chatHasIntentOverlap = result
                     }
-                    val typingPeerLabel = remember(chatDetails.otherUser.name, isGroupChat) {
-                        if (isGroupChat) "Someone is typing"
-                        else "${chatDetails.otherUser.name ?: "Someone"} is typing"
-                    }
-                    val groupTitle = chatDetails.groupClique?.name?.trim()?.ifBlank { null }
-                        ?: "Verified click"
-                    val memberSummaryLine = remember(chatDetails.groupClique, chatDetails.groupMemberUsers, currentUser) {
-                        val gc = chatDetails.groupClique ?: return@remember null
-                        val self = currentUser
-                        val nameParts = buildList {
-                            val byId = (chatDetails.groupMemberUsers + listOfNotNull(self))
-                                .distinctBy { it.id }
-                                .associateBy { it.id }
-                            gc.memberUserIds.sorted().forEach { id ->
-                                val u = byId[id]
-                                val part = u?.firstName?.trim()?.takeIf { it.isNotEmpty() }
-                                    ?: u?.name?.trim()?.split(Regex("\\s+"))?.firstOrNull()?.takeIf { it.isNotEmpty() }
-                                    ?: "Member"
-                                add(part)
+                    val typingPeerLabel =
+                        remember(chatDetails.otherUser.name, isGroupChat) {
+                            if (isGroupChat) {
+                                "Someone is typing"
+                            } else {
+                                "${chatDetails.otherUser.name ?: "Someone"} is typing"
                             }
                         }
-                        "${gc.memberUserIds.size} members: ${nameParts.joinToString(", ")}"
-                    }
-                    val mediaPickers = rememberChatMediaPickers(
-                        onImagePicked = { bytes, mime -> viewModel.stageMediaForUpload(bytes, mime) },
-                        onAudioPicked = { bytes, mime, dur -> viewModel.sendChatAudio(bytes, mime, dur?.toInt()) },
-                        onFilePicked = { picked ->
-                            viewModel.sendChatFile(picked.bytes, picked.mimeType, picked.fileName)
-                        },
-                        onMediaAccessBlocked = { msg ->
-                            toastState.show(coroutineScope, msg)
-                        },
-                    )
+                    val groupTitle =
+                        chatDetails.groupClique
+                            ?.name
+                            ?.trim()
+                            ?.ifBlank { null }
+                            ?: "Verified click"
+                    val memberSummaryLine =
+                        remember(chatDetails.groupClique, chatDetails.groupMemberUsers, currentUser) {
+                            val gc = chatDetails.groupClique ?: return@remember null
+                            val self = currentUser
+                            val nameParts =
+                                buildList {
+                                    val byId =
+                                        (chatDetails.groupMemberUsers + listOfNotNull(self))
+                                            .distinctBy { it.id }
+                                            .associateBy { it.id }
+                                    gc.memberUserIds.sorted().forEach { id ->
+                                        val u = byId[id]
+                                        val part =
+                                            u?.firstName?.trim()?.takeIf { it.isNotEmpty() }
+                                                ?: u
+                                                    ?.name
+                                                    ?.trim()
+                                                    ?.split(Regex("\\s+"))
+                                                    ?.firstOrNull()
+                                                    ?.takeIf { it.isNotEmpty() }
+                                                ?: "Member"
+                                        add(part)
+                                    }
+                                }
+                            "${gc.memberUserIds.size} members: ${nameParts.joinToString(", ")}"
+                        }
+                    val mediaPickers =
+                        rememberChatMediaPickers(
+                            onImagePicked = { bytes, mime -> viewModel.stageMediaForUpload(bytes, mime) },
+                            onAudioPicked = { bytes, mime, dur -> viewModel.sendChatAudio(bytes, mime, dur?.toInt()) },
+                            onFilePicked = { picked ->
+                                viewModel.sendChatFile(picked.bytes, picked.mimeType, picked.fileName)
+                            },
+                            onMediaAccessBlocked = { msg ->
+                                toastState.show(coroutineScope, msg)
+                            },
+                        )
+
                     /**
                      * Full-screen ambient mesh behind header + thread. Top padding uses
                      * [WindowInsets.statusBars] only so opening the IME does not push the header past the
@@ -711,953 +619,1002 @@ fun ChatView(
                     val reverseListNewestEdgePad = 6.dp
                     val showIcebreaker = showIcebreakerPanel && icebreakerPrompts.isNotEmpty() && messages.size < 5
                     var icebreakerPanelHeightPx by remember { mutableIntStateOf(0) }
-                    val icebreakerTimelineTopReserve = if (showIcebreaker) {
-                        val measured = with(density) { icebreakerPanelHeightPx.toDp() }
-                        if (measured > 0.dp) measured + 8.dp else 228.dp
-                    } else {
-                        0.dp
-                    }
-                    val messageContentModifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
+                    val icebreakerTimelineTopReserve =
+                        if (showIcebreaker) {
+                            val measured = with(density) { icebreakerPanelHeightPx.toDp() }
+                            if (measured > 0.dp) measured + 8.dp else 228.dp
+                        } else {
+                            0.dp
+                        }
+                    val messageContentModifier =
+                        Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
 
                     Box(
                         modifier = Modifier.fillMaxSize(),
                     ) {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = topInset)
-                                .height(56.dp)
-                                .padding(horizontal = ChatChromeHorizontalPadding)
-                                .testTag(ChatGlassHeaderPlateTestTag),
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            Column(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = topInset)
+                                        .height(56.dp)
+                                        .padding(horizontal = ChatChromeHorizontalPadding)
+                                        .testTag(ChatGlassHeaderPlateTestTag),
                             ) {
-                                ChatHeaderIconButton(
-                                    icon = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                    onClick = onBackPressed,
-                                    showBorder = true,
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxSize(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    ChatHeaderIconButton(
+                                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = "Back",
+                                        onClick = onBackPressed,
+                                        showBorder = true,
+                                    )
 
-                                if (isGroupChat) {
-                                    val chatHeaderGroupAvatarSize = 34.dp
-                                    val groupAvatarUrl = chatDetails.groupClique?.avatarUrl?.trim()?.takeIf { it.isNotEmpty() }
-                                    val groupClusterWidth = if (groupAvatarUrl != null) {
-                                        chatHeaderGroupAvatarSize
-                                    } else {
-                                        groupAvatarClusterWidth(
-                                            chatDetails.groupMemberUsers.size,
-                                            chatHeaderGroupAvatarSize,
-                                        )
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .width(groupClusterWidth)
-                                            .heightIn(min = 40.dp)
-                                            .clickable(
-                                                interactionSource = remember { MutableInteractionSource() },
-                                                indication = ripple(bounded = false, radius = 22.dp),
-                                                onClick = {
-                                                    groupMembersPickerContextFrom(chatDetails)
-                                                        ?.let(onOpenGroupMembersPicker)
-                                                },
-                                            ),
-                                        contentAlignment = Alignment.CenterStart,
-                                    ) {
-                                        GroupAvatar(
-                                            members = chatDetails.groupMemberUsers,
-                                            avatarSize = chatHeaderGroupAvatarSize,
-                                            avatarUrl = groupAvatarUrl,
-                                        )
-                                    }
-                                } else {
-                                    val isPeerCore = chatDetails.connection.id in coreConnectionIds
-                                    val peerOnline =
-                                        chatDetails.otherUser.id in onlineUsers || isPeerOnline
-                                    AvatarWithOnlineIndicator(
-                                        isOnline = peerOnline,
-                                        indicatorSize = 9.dp,
-                                        indicatorBorder = 1.25.dp,
-                                    ) {
-                                        CoreConnectionAvatarFrame(
-                                            isCore = isPeerCore,
-                                            avatarSize = 36.dp,
-                                            onClick = { onOpenUserProfile(chatDetails.otherUser.id) },
+                                    if (isGroupChat) {
+                                        val chatHeaderGroupAvatarSize = 34.dp
+                                        val groupAvatarUrl =
+                                            chatDetails.groupClique
+                                                ?.avatarUrl
+                                                ?.trim()
+                                                ?.takeIf { it.isNotEmpty() }
+                                        val groupClusterWidth =
+                                            if (groupAvatarUrl != null) {
+                                                chatHeaderGroupAvatarSize
+                                            } else {
+                                                groupAvatarClusterWidth(
+                                                    chatDetails.groupMemberUsers.size,
+                                                    chatHeaderGroupAvatarSize,
+                                                )
+                                            }
+                                        Box(
+                                            modifier =
+                                                Modifier
+                                                    .width(groupClusterWidth)
+                                                    .heightIn(min = 40.dp)
+                                                    .clickable(
+                                                        interactionSource = remember { MutableInteractionSource() },
+                                                        indication = ripple(bounded = false, radius = 22.dp),
+                                                        onClick = {
+                                                            groupMembersPickerContextFrom(chatDetails)
+                                                                ?.let(onOpenGroupMembersPicker)
+                                                        },
+                                                    ),
+                                            contentAlignment = Alignment.CenterStart,
                                         ) {
-                                            ConnectionListUserAvatarFace(
-                                                displayName = chatDetails.otherUser.name,
-                                                email = chatDetails.otherUser.email,
-                                                avatarUrl = chatDetails.otherUser.image,
-                                                userId = chatDetails.otherUser.id,
-                                                modifier = Modifier.fillMaxSize(),
-                                                useCompactTypography = true,
+                                            GroupAvatar(
+                                                members = chatDetails.groupMemberUsers,
+                                                avatarSize = chatHeaderGroupAvatarSize,
+                                                avatarUrl = groupAvatarUrl,
                                             )
                                         }
+                                    } else {
+                                        val isPeerCore = chatDetails.connection.id in coreConnectionIds
+                                        val peerOnline =
+                                            chatDetails.otherUser.id in onlineUsers || isPeerOnline
+                                        AvatarWithOnlineIndicator(
+                                            isOnline = peerOnline,
+                                            indicatorSize = 9.dp,
+                                            indicatorBorder = 1.25.dp,
+                                        ) {
+                                            CoreConnectionAvatarFrame(
+                                                isCore = isPeerCore,
+                                                avatarSize = 36.dp,
+                                                onClick = { onOpenUserProfile(chatDetails.otherUser.id) },
+                                            ) {
+                                                ConnectionListUserAvatarFace(
+                                                    displayName = chatDetails.otherUser.name,
+                                                    email = chatDetails.otherUser.email,
+                                                    avatarUrl = chatDetails.otherUser.image,
+                                                    userId = chatDetails.otherUser.id,
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    useCompactTypography = true,
+                                                )
+                                            }
+                                        }
                                     }
-                                }
 
-                                Spacer(modifier = Modifier.width(12.dp))
+                                    Spacer(modifier = Modifier.width(12.dp))
 
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = if (isGroupChat) groupTitle else (chatDetails.otherUser.name ?: "Unknown"),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    if (isGroupChat && memberSummaryLine != null) {
+                                    Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = memberSummaryLine,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                                            maxLines = 2,
+                                            text = if (isGroupChat) groupTitle else (chatDetails.otherUser.name ?: "Unknown"),
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                         )
-                                    } else if (!isGroupChat) {
-                                        val subtitleOnline =
-                                            chatDetails.otherUser.id in onlineUsers || isPeerOnline
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            AnimatedVisibility(
-                                                visible = subtitleOnline,
-                                                enter = fadeIn() + expandVertically(),
-                                                exit = fadeOut() + shrinkVertically()
+                                        if (isGroupChat && memberSummaryLine != null) {
+                                            Text(
+                                                text = memberSummaryLine,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        } else if (!isGroupChat) {
+                                            val subtitleOnline =
+                                                chatDetails.otherUser.id in onlineUsers || isPeerOnline
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
                                             ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(8.dp)
-                                                        .clip(CircleShape)
-                                                        .background(Color(0xFF22C55E))
-                                                )
-                                            }
-                                            AnimatedContent(
-                                                targetState = subtitleOnline,
-                                                transitionSpec = {
-                                                    fadeIn(
-                                                        animationSpec = spring(
-                                                            dampingRatio = Spring.DampingRatioNoBouncy,
-                                                            stiffness = Spring.StiffnessMedium,
-                                                        ),
-                                                    ) togetherWith fadeOut(
-                                                        animationSpec = spring(
-                                                            dampingRatio = Spring.DampingRatioNoBouncy,
-                                                            stiffness = Spring.StiffnessMedium,
-                                                        ),
+                                                AnimatedVisibility(
+                                                    visible = subtitleOnline,
+                                                    enter = fadeIn() + expandVertically(),
+                                                    exit = fadeOut() + shrinkVertically(),
+                                                ) {
+                                                    Box(
+                                                        modifier =
+                                                            Modifier
+                                                                .size(8.dp)
+                                                                .clip(CircleShape)
+                                                                .background(Color(0xFF22C55E)),
                                                     )
-                                                },
-                                                label = "peer_presence_subtitle"
-                                            ) { online ->
-                                                Text(
-                                                    text = if (online) "Online" else "Offline",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = if (online) {
-                                                        Color(0xFF16A34A)
-                                                    } else {
-                                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                                                    }
-                                                )
+                                                }
+                                                AnimatedContent(
+                                                    targetState = subtitleOnline,
+                                                    transitionSpec = {
+                                                        fadeIn(
+                                                            animationSpec =
+                                                                spring(
+                                                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                                                    stiffness = Spring.StiffnessMedium,
+                                                                ),
+                                                        ) togetherWith
+                                                            fadeOut(
+                                                                animationSpec =
+                                                                    spring(
+                                                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                                                        stiffness = Spring.StiffnessMedium,
+                                                                    ),
+                                                            )
+                                                    },
+                                                    label = "peer_presence_subtitle",
+                                                ) { online ->
+                                                    Text(
+                                                        text = if (online) "Online" else "Offline",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color =
+                                                            if (online) {
+                                                                Color(0xFF16A34A)
+                                                            } else {
+                                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                                                            },
+                                                    )
+                                                }
                                             }
                                         }
                                     }
-                                }
 
-                                if (!isGroupChat && chatHasIntentOverlap) {
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(
-                                        Icons.Filled.Bolt,
-                                        contentDescription = "Shared availability",
-                                        tint = Color(0xFFFBBF24),
-                                        modifier = Modifier.size(22.dp),
-                                    )
-                                }
+                                    if (!isGroupChat && chatHasIntentOverlap) {
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Icon(
+                                            Icons.Filled.Bolt,
+                                            contentDescription = "Shared availability",
+                                            tint = Color(0xFFFBBF24),
+                                            modifier = Modifier.size(22.dp),
+                                        )
+                                    }
 
-                                if (isGroupChat) {
-                                    ChatHeaderIconButton(
-                                        icon = Icons.Outlined.Edit,
-                                        contentDescription = "Rename group",
-                                        onClick = {
-                                            renameGroupDraft = groupTitle
-                                            showRenameGroupDialog = true
-                                        },
-                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                                    )
-                                }
+                                    if (isGroupChat) {
+                                        ChatHeaderIconButton(
+                                            icon = Icons.Outlined.Edit,
+                                            contentDescription = "Rename group",
+                                            onClick = {
+                                                renameGroupDraft = groupTitle
+                                                showRenameGroupDialog = true
+                                            },
+                                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                                        )
+                                    }
 
-                                Box {
-                                    ChatHeaderIconButton(
-                                        icon = Icons.Filled.Call,
-                                        contentDescription = "Call options",
-                                        onClick = { showCallMenu = true },
-                                        tint = PrimaryBlue.copy(alpha = 0.85f),
-                                    )
-                                    val menuStyle = LocalPlatformStyle.current
-                                    val density = LocalDensity.current
-                                    val callMenuSpring = spring<Float>(
-                                        dampingRatio = Spring.DampingRatioNoBouncy,
-                                        stiffness = Spring.StiffnessMedium,
-                                    )
-                                    val callMenuEnter =
-                                        fadeIn(animationSpec = callMenuSpring) +
-                                            scaleIn(
-                                                initialScale = 0.92f,
-                                                animationSpec = callMenuSpring,
+                                    Box {
+                                        ChatHeaderIconButton(
+                                            icon = Icons.Filled.Call,
+                                            contentDescription = "Call options",
+                                            onClick = { showCallMenu = true },
+                                            tint = PrimaryBlue.copy(alpha = 0.85f),
+                                        )
+                                        val menuStyle = LocalPlatformStyle.current
+                                        val density = LocalDensity.current
+                                        val callMenuSpring =
+                                            spring<Float>(
+                                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                                stiffness = Spring.StiffnessMedium,
                                             )
-                                    val callMenuExit =
-                                        fadeOut(animationSpec = callMenuSpring) +
-                                            scaleOut(
-                                                targetScale = 0.96f,
-                                                animationSpec = callMenuSpring,
-                                            )
-                                    var keepIosCallMenuMounted by remember { mutableStateOf(false) }
-                                    var iosCallMenuContentVisible by remember { mutableStateOf(false) }
-                                    LaunchedEffect(showCallMenu) {
-                                        if (showCallMenu) {
-                                            keepIosCallMenuMounted = true
-                                            iosCallMenuContentVisible = false
-                                            withFrameNanos { }
-                                            iosCallMenuContentVisible = true
-                                        } else {
-                                            iosCallMenuContentVisible = false
-                                            delay(150)
-                                            keepIosCallMenuMounted = false
+                                        val callMenuEnter =
+                                            fadeIn(animationSpec = callMenuSpring) +
+                                                scaleIn(
+                                                    initialScale = 0.92f,
+                                                    animationSpec = callMenuSpring,
+                                                )
+                                        val callMenuExit =
+                                            fadeOut(animationSpec = callMenuSpring) +
+                                                scaleOut(
+                                                    targetScale = 0.96f,
+                                                    animationSpec = callMenuSpring,
+                                                )
+                                        var keepIosCallMenuMounted by remember { mutableStateOf(false) }
+                                        var iosCallMenuContentVisible by remember { mutableStateOf(false) }
+                                        LaunchedEffect(showCallMenu) {
+                                            if (showCallMenu) {
+                                                keepIosCallMenuMounted = true
+                                                iosCallMenuContentVisible = false
+                                                withFrameNanos { }
+                                                iosCallMenuContentVisible = true
+                                            } else {
+                                                iosCallMenuContentVisible = false
+                                                delay(150)
+                                                keepIosCallMenuMounted = false
+                                            }
                                         }
-                                    }
-                                    val groupCallMemberIds = remember(chatDetails.groupClique) {
-                                        chatDetails.groupClique?.memberUserIds.orEmpty()
-                                    }
-                                    val startVoiceCall = {
-                                        showCallMenu = false
-                                        if (isGroupChat) {
-                                            val groupId = chatDetails.groupClique?.groupId
-                                            val chatId = chatDetails.chat.id
-                                            if (!groupId.isNullOrBlank() && !chatId.isNullOrBlank()) {
-                                                CallSessionManager.startOutgoingGroupCall(
-                                                    groupId = groupId,
-                                                    chatId = chatId,
-                                                    memberIds = groupCallMemberIds,
+                                        val groupCallMemberIds =
+                                            remember(chatDetails.groupClique) {
+                                                chatDetails.groupClique?.memberUserIds.orEmpty()
+                                            }
+                                        val startVoiceCall = {
+                                            showCallMenu = false
+                                            if (isGroupChat) {
+                                                val groupId = chatDetails.groupClique?.groupId
+                                                val chatId = chatDetails.chat.id
+                                                if (!groupId.isNullOrBlank() && !chatId.isNullOrBlank()) {
+                                                    CallSessionManager.startOutgoingGroupCall(
+                                                        groupId = groupId,
+                                                        chatId = chatId,
+                                                        memberIds = groupCallMemberIds,
+                                                        videoEnabled = false,
+                                                    )
+                                                }
+                                            } else {
+                                                CallSessionManager.startOutgoingCall(
+                                                    connectionId = chatDetails.connection.id,
+                                                    otherUserId = chatDetails.otherUser.id,
+                                                    otherUserName = chatDetails.otherUser.name ?: "Connection",
                                                     videoEnabled = false,
                                                 )
                                             }
-                                        } else {
-                                            CallSessionManager.startOutgoingCall(
-                                                connectionId = chatDetails.connection.id,
-                                                otherUserId = chatDetails.otherUser.id,
-                                                otherUserName = chatDetails.otherUser.name ?: "Connection",
-                                                videoEnabled = false,
-                                            )
                                         }
-                                    }
-                                    val startVideoCall = {
-                                        showCallMenu = false
-                                        if (isGroupChat) {
-                                            val groupId = chatDetails.groupClique?.groupId
-                                            val chatId = chatDetails.chat.id
-                                            if (!groupId.isNullOrBlank() && !chatId.isNullOrBlank()) {
-                                                CallSessionManager.startOutgoingGroupCall(
-                                                    groupId = groupId,
-                                                    chatId = chatId,
-                                                    memberIds = groupCallMemberIds,
+                                        val startVideoCall = {
+                                            showCallMenu = false
+                                            if (isGroupChat) {
+                                                val groupId = chatDetails.groupClique?.groupId
+                                                val chatId = chatDetails.chat.id
+                                                if (!groupId.isNullOrBlank() && !chatId.isNullOrBlank()) {
+                                                    CallSessionManager.startOutgoingGroupCall(
+                                                        groupId = groupId,
+                                                        chatId = chatId,
+                                                        memberIds = groupCallMemberIds,
+                                                        videoEnabled = true,
+                                                    )
+                                                }
+                                            } else {
+                                                CallSessionManager.startOutgoingCall(
+                                                    connectionId = chatDetails.connection.id,
+                                                    otherUserId = chatDetails.otherUser.id,
+                                                    otherUserName = chatDetails.otherUser.name ?: "Connection",
                                                     videoEnabled = true,
                                                 )
                                             }
+                                        }
+                                        if (menuStyle.isIOS) {
+                                            if (keepIosCallMenuMounted) {
+                                                Popup(
+                                                    alignment = Alignment.TopStart,
+                                                    offset = IntOffset(0, with(density) { 48.dp.roundToPx() }),
+                                                    onDismissRequest = { showCallMenu = false },
+                                                    properties =
+                                                        PopupProperties(
+                                                            focusable = true,
+                                                            dismissOnBackPress = true,
+                                                            dismissOnClickOutside = true,
+                                                        ),
+                                                ) {
+                                                    androidx.compose.animation.AnimatedVisibility(
+                                                        visible = iosCallMenuContentVisible,
+                                                        enter = callMenuEnter,
+                                                        exit = callMenuExit,
+                                                    ) {
+                                                        ChatCallOptionsIosSurface(
+                                                            onVoice = startVoiceCall,
+                                                            onVideo = startVideoCall,
+                                                        )
+                                                    }
+                                                }
+                                            }
                                         } else {
-                                            CallSessionManager.startOutgoingCall(
-                                                connectionId = chatDetails.connection.id,
-                                                otherUserId = chatDetails.otherUser.id,
-                                                otherUserName = chatDetails.otherUser.name ?: "Connection",
-                                                videoEnabled = true,
-                                            )
+                                            DropdownMenu(
+                                                expanded = showCallMenu,
+                                                onDismissRequest = { showCallMenu = false },
+                                                shape = RoundedCornerShape(22.dp),
+                                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                                tonalElevation = 8.dp,
+                                                shadowElevation = 16.dp,
+                                            ) {
+                                                DropdownMenuItem(
+                                                    text = { Text(if (isGroupChat) "Group voice call" else "Voice call") },
+                                                    leadingIcon = {
+                                                        Icon(Icons.Filled.Call, contentDescription = null)
+                                                    },
+                                                    onClick = {
+                                                        PlatformHapticsPolicy.lightImpact()
+                                                        startVoiceCall()
+                                                    },
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text(if (isGroupChat) "Group video call" else "Video call") },
+                                                    leadingIcon = {
+                                                        Icon(Icons.Filled.Videocam, contentDescription = null)
+                                                    },
+                                                    onClick = {
+                                                        PlatformHapticsPolicy.lightImpact()
+                                                        startVideoCall()
+                                                    },
+                                                )
+                                            }
                                         }
                                     }
-                                    if (menuStyle.isIOS) {
-                                        if (keepIosCallMenuMounted) {
-                                            Popup(
-                                                alignment = Alignment.TopStart,
-                                                offset = IntOffset(0, with(density) { 48.dp.roundToPx() }),
-                                                onDismissRequest = { showCallMenu = false },
-                                                properties = PopupProperties(
-                                                    focusable = true,
-                                                    dismissOnBackPress = true,
-                                                    dismissOnClickOutside = true,
-                                                ),
-                                            ) {
-                                                androidx.compose.animation.AnimatedVisibility(
-                                                    visible = iosCallMenuContentVisible,
-                                                    enter = callMenuEnter,
-                                                    exit = callMenuExit,
+                                    // Overflow / connection options
+                                    ChatHeaderIconButton(
+                                        icon = Icons.Filled.MoreVert,
+                                        contentDescription = "More options",
+                                        onClick = { showConnectionSheet = true },
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                    )
+                                }
+                            }
+
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth()
+                                        .clipToBounds(),
+                            ) {
+                                Column(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxSize()
+                                            .chatThreadKeyboardDock(
+                                                nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
+                                                clearNativeTabBar = true,
+                                            ),
+                                ) {
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .weight(1f)
+                                                .fillMaxWidth(),
+                                    ) {
+                                        Box(modifier = Modifier.fillMaxSize()) {
+                                            if (showIcebreaker) {
+                                                Box(
+                                                    modifier =
+                                                        Modifier
+                                                            .align(Alignment.TopCenter)
+                                                            .fillMaxWidth()
+                                                            .onSizeChanged { icebreakerPanelHeightPx = it.height }
+                                                            .zIndex(2f),
                                                 ) {
-                                                    ChatCallOptionsIosSurface(
-                                                        onVoice = startVoiceCall,
-                                                        onVideo = startVideoCall,
+                                                    IcebreakerPanel(
+                                                        prompts = icebreakerPrompts,
+                                                        onPromptClick = { prompt -> viewModel.useIcebreakerPrompt(prompt) },
+                                                        onRefresh = { viewModel.refreshIcebreakerPrompts() },
+                                                        onDismiss = { viewModel.dismissIcebreakerPanel() },
+                                                        cooldownRemainingSec = icebreakerCooldownRemainingSec,
+                                                    )
+                                                }
+                                            }
+
+                                            // Messages
+                                            Box(
+                                                modifier =
+                                                    Modifier
+                                                        .fillMaxSize()
+                                                        .padding(top = icebreakerTimelineTopReserve)
+                                                        .clipToBounds()
+                                                        .zIndex(1f),
+                                            ) {
+                                                if (state.isLoadingMessages && messages.isEmpty()) {
+                                                    Box(
+                                                        modifier =
+                                                            messageContentModifier
+                                                                .fillMaxWidth()
+                                                                .padding(horizontal = 8.dp, vertical = 24.dp),
+                                                        contentAlignment = Alignment.Center,
+                                                    ) {
+                                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                            CircularProgressIndicator(
+                                                                modifier = Modifier.size(36.dp),
+                                                                color = PrimaryBlue,
+                                                                strokeWidth = 3.dp,
+                                                            )
+                                                            Spacer(modifier = Modifier.height(12.dp))
+                                                            Text(
+                                                                "Loading messages…",
+                                                                style = MaterialTheme.typography.bodyMedium,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            )
+                                                        }
+                                                    }
+                                                } else if (messages.isEmpty()) {
+                                                    Box(
+                                                        modifier =
+                                                            messageContentModifier
+                                                                .fillMaxWidth()
+                                                                .padding(horizontal = 8.dp),
+                                                        contentAlignment = Alignment.Center,
+                                                    ) {
+                                                        GlassCard(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            usePrimaryBorder = true,
+                                                            contentPadding = 28.dp,
+                                                        ) {
+                                                            Column(
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                            ) {
+                                                                Icon(
+                                                                    Icons.Filled.ChatBubbleOutline,
+                                                                    contentDescription = null,
+                                                                    modifier = Modifier.size(48.dp),
+                                                                    tint = PrimaryBlue.copy(alpha = 0.85f),
+                                                                )
+                                                                Spacer(modifier = Modifier.height(16.dp))
+                                                                Text(
+                                                                    "No messages yet",
+                                                                    modifier = Modifier.fillMaxWidth(),
+                                                                    style = MaterialTheme.typography.titleMedium,
+                                                                    fontWeight = FontWeight.SemiBold,
+                                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                                    textAlign = TextAlign.Center,
+                                                                )
+                                                                Spacer(modifier = Modifier.height(8.dp))
+                                                                Text(
+                                                                    if (isGroupChat) {
+                                                                        "Everyone here is in a verified click — say hello to the group."
+                                                                    } else {
+                                                                        "Say hi to ${chatDetails.otherUser.name}!"
+                                                                    },
+                                                                    modifier = Modifier.fillMaxWidth(),
+                                                                    style = MaterialTheme.typography.bodyMedium,
+                                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                    textAlign = TextAlign.Center,
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                } else {
+                                                    val timelineEntries =
+                                                        remember(messages) {
+                                                            buildChatTimelineEntriesNewestFirst(messages)
+                                                        }
+                                                    val rawTimestampPeekTravelPx = remember { mutableFloatStateOf(0f) }
+                                                    val displayTimestampPeekVisualPx = remember { mutableFloatStateOf(0f) }
+                                                    val timestampPeekSettleJob = remember { mutableStateOf<Job?>(null) }
+                                                    val peekRevealPx = rememberTimestampPeekRevealPx()
+                                                    val timestampPeekSoftKneePx = rememberTimestampPeekSoftKneePx()
+                                                    DisposableEffect(
+                                                        integrateTimestampPeekWithSwipeBackContainer,
+                                                        peekRevealPx,
+                                                        timestampPeekSoftKneePx,
+                                                        coroutineScope,
+                                                    ) {
+                                                        val integrate = integrateTimestampPeekWithSwipeBackContainer
+                                                        if (integrate) {
+                                                            val integration =
+                                                                InteractiveSwipeBackRightToLeftPeek(
+                                                                    onGestureStart = {
+                                                                        timestampPeekSettleJob.value?.cancel()
+                                                                        timestampPeekSettleJob.value = null
+                                                                        restoreTimestampPeekRawFromDisplay(
+                                                                            rawLeftPx = rawTimestampPeekTravelPx,
+                                                                            displayVisualPx = displayTimestampPeekVisualPx,
+                                                                            maxRevealPx = peekRevealPx,
+                                                                            softKneePx = timestampPeekSoftKneePx,
+                                                                        )
+                                                                    },
+                                                                    onLeftDragDelta = { dLeft ->
+                                                                        applyTimestampPeekDragStep(
+                                                                            rawLeftPx = rawTimestampPeekTravelPx,
+                                                                            displayVisualPx = displayTimestampPeekVisualPx,
+                                                                            maxRevealPx = peekRevealPx,
+                                                                            softKneePx = timestampPeekSoftKneePx,
+                                                                            dLeftPx = dLeft,
+                                                                        )
+                                                                    },
+                                                                    onLeftDragEnd = {
+                                                                        coroutineScope.launchTimestampPeekReplyStyleSettle(
+                                                                            rawLeftPx = rawTimestampPeekTravelPx,
+                                                                            displayVisualPx = displayTimestampPeekVisualPx,
+                                                                            settleJobHolder = timestampPeekSettleJob,
+                                                                        )
+                                                                    },
+                                                                    isPeekRevealed = {
+                                                                        isTimestampPeekRevealed(displayTimestampPeekVisualPx.floatValue)
+                                                                    },
+                                                                    onRightDragDelta = { dRight ->
+                                                                        applyTimestampPeekDragStep(
+                                                                            rawLeftPx = rawTimestampPeekTravelPx,
+                                                                            displayVisualPx = displayTimestampPeekVisualPx,
+                                                                            maxRevealPx = peekRevealPx,
+                                                                            softKneePx = timestampPeekSoftKneePx,
+                                                                            dLeftPx = -dRight,
+                                                                        )
+                                                                    },
+                                                                    onRightDragFromRest = {
+                                                                        timestampPeekSettleJob.value?.cancel()
+                                                                        timestampPeekSettleJob.value = null
+                                                                        rawTimestampPeekTravelPx.floatValue = 0f
+                                                                        displayTimestampPeekVisualPx.floatValue = 0f
+                                                                    },
+                                                                )
+                                                            onRegisterSwipeBackRightToLeftPeek(integration)
+                                                        }
+                                                        onDispose {
+                                                            timestampPeekSettleJob.value?.cancel()
+                                                            timestampPeekSettleJob.value = null
+                                                            if (integrate) {
+                                                                onRegisterSwipeBackRightToLeftPeek(null)
+                                                            }
+                                                        }
+                                                    }
+                                                    val newestSentMessage =
+                                                        remember(messages) {
+                                                            messages
+                                                                .asSequence()
+                                                                .filter {
+                                                                    it.isSent
+                                                                }.maxByOrNull { it.message.timeCreated }
+                                                        }
+                                                    ChatMessageTimeline(
+                                                        timelineEntries = timelineEntries,
+                                                        listState = listState,
+                                                        newestSentMessage = newestSentMessage,
+                                                        listBottomPadding =
+                                                            PaddingValues(
+                                                                start = 12.dp,
+                                                                end = 12.dp,
+                                                                top = 24.dp + reverseListNewestEdgePad,
+                                                                bottom = 8.dp + ChatComposerStripReserve,
+                                                            ),
+                                                        dismissKeyboardOnUserMessageScroll = dismissKeyboardOnUserMessageScroll,
+                                                        displayTimestampPeekVisualPx = displayTimestampPeekVisualPx,
+                                                        peekRevealPx = peekRevealPx,
+                                                        meshConnection = chatDetails.connection,
+                                                        useHubNeutralMesh = isGroupChat,
+                                                        isGroupChat = isGroupChat,
+                                                        currentUserId = currentUserId,
+                                                        reactionsMap = reactionsMap,
+                                                        secureMediaHost = viewModel,
+                                                        activeChatId = activeApiChatId ?: chatDetails.chat.id,
+                                                        onToggleReaction = { messageId, reaction ->
+                                                            viewModel.toggleReaction(messageId, reaction)
+                                                        },
+                                                        onForward = { msgId -> forwardMessageId = msgId },
+                                                        onLongPress = { contextMenuMessage = it },
+                                                        onSwipeReply = { viewModel.startReplyTo(it) },
+                                                        onDownloadAttachment = { mwu, env ->
+                                                            viewModel.downloadChatAttachment(mwu.message.id, env)
+                                                        },
+                                                        onExpandPhoto = { expandedPhotoTarget = it },
+                                                        onOpenBeacon = { msg ->
+                                                            val beaconId =
+                                                                compose.project.click.click.data.models
+                                                                    .beaconIdFromMetadata(msg.metadata)
+                                                                    ?.trim()
+                                                                    .orEmpty()
+                                                            if (beaconId.isNotEmpty()) {
+                                                                openBeaconDetailId = beaconId
+                                                                val meta = msg.metadata as? kotlinx.serialization.json.JsonObject
+                                                                openBeaconDetailMetadata = meta
+                                                                openBeaconDetailContent = msg.content
+                                                                openBeaconDetailFallback =
+                                                                    compose.project.click.click.data.models.mapBeaconFromChatMetadata(
+                                                                        beaconId = beaconId,
+                                                                        metadata = meta,
+                                                                        contentFallback = msg.content,
+                                                                    )
+                                                            }
+                                                        },
+                                                        isLoadingOlderMessages = isLoadingOlderMessages,
+                                                        modifier =
+                                                            messageContentModifier
+                                                                .padding(horizontal = 4.dp)
+                                                                .then(
+                                                                    if (!integrateTimestampPeekWithSwipeBackContainer) {
+                                                                        Modifier.chatTimestampPeekOnSwipeLeft(
+                                                                            maxRevealPx = peekRevealPx,
+                                                                            softKneePx = timestampPeekSoftKneePx,
+                                                                            rawLeftPx = rawTimestampPeekTravelPx,
+                                                                            displayVisualPx = displayTimestampPeekVisualPx,
+                                                                            scope = coroutineScope,
+                                                                            settleJobHolder = timestampPeekSettleJob,
+                                                                        )
+                                                                    } else {
+                                                                        Modifier
+                                                                    },
+                                                                ),
                                                     )
                                                 }
                                             }
                                         }
-                                    } else {
-                                        DropdownMenu(
-                                            expanded = showCallMenu,
-                                            onDismissRequest = { showCallMenu = false },
-                                            shape = RoundedCornerShape(22.dp),
-                                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                            tonalElevation = 8.dp,
-                                            shadowElevation = 16.dp
+                                    }
+
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) {
+                                        // Typing indicator — label + bouncing dots (Realtime Broadcast)
+                                        AnimatedVisibility(
+                                            visible = isPeerTyping,
+                                            enter =
+                                                fadeIn(ChatChromeMotion.ShortFade) +
+                                                    slideInVertically(
+                                                        animationSpec = ChatChromeMotion.ShortSlide,
+                                                        initialOffsetY = { it / 4 },
+                                                    ),
+                                            exit =
+                                                fadeOut(animationSpec = tween(160, easing = FastOutSlowInEasing)) +
+                                                    slideOutVertically(
+                                                        animationSpec = ChatChromeMotion.ShortSlide,
+                                                        targetOffsetY = { it / 4 },
+                                                    ),
                                         ) {
-                                            DropdownMenuItem(
-                                                text = { Text(if (isGroupChat) "Group voice call" else "Voice call") },
-                                                leadingIcon = {
-                                                    Icon(Icons.Filled.Call, contentDescription = null)
-                                                },
-                                                onClick = {
-                                                    PlatformHapticsPolicy.lightImpact()
-                                                    startVoiceCall()
+                                            Row(
+                                                modifier =
+                                                    Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(start = 16.dp, end = 80.dp, bottom = 4.dp),
+                                                horizontalArrangement = Arrangement.Start,
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                Box(
+                                                    modifier =
+                                                        Modifier
+                                                            .border(
+                                                                width = 1.dp,
+                                                                color = PrimaryBlue.copy(alpha = 0.15f),
+                                                                shape =
+                                                                    RoundedCornerShape(
+                                                                        topStart = chatBubbleScaledDp(6f),
+                                                                        topEnd = chatBubbleScaledDp(21f),
+                                                                        bottomStart = chatBubbleScaledDp(21f),
+                                                                        bottomEnd = chatBubbleScaledDp(21f),
+                                                                    ),
+                                                            ).clip(
+                                                                RoundedCornerShape(
+                                                                    topStart = chatBubbleScaledDp(6f),
+                                                                    topEnd = chatBubbleScaledDp(21f),
+                                                                    bottomStart = chatBubbleScaledDp(21f),
+                                                                    bottomEnd = chatBubbleScaledDp(21f),
+                                                                ),
+                                                            ).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f))
+                                                            .padding(
+                                                                horizontal = chatBubbleScaledDp(18f),
+                                                                vertical = chatBubbleScaledDp(12f),
+                                                            ),
+                                                ) {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(chatBubbleScaledDp(9f)),
+                                                    ) {
+                                                        Text(
+                                                            text = typingPeerLabel,
+                                                            style = chatBubbleReplySnippetStyle(),
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            fontStyle = FontStyle.Italic,
+                                                        )
+                                                        ChatTypingDots()
+                                                    }
                                                 }
-                                            )
-                                            DropdownMenuItem(
-                                                text = { Text(if (isGroupChat) "Group video call" else "Video call") },
-                                                leadingIcon = {
-                                                    Icon(Icons.Filled.Videocam, contentDescription = null)
-                                                },
-                                                onClick = {
-                                                    PlatformHapticsPolicy.lightImpact()
-                                                    startVideoCall()
+                                            }
+                                        }
+
+                                        // Edit mode indicator strip
+                                        if (editingMessageId != null) {
+                                            Surface(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                color = PrimaryBlue.copy(alpha = 0.12f),
+                                            ) {
+                                                Row(
+                                                    modifier =
+                                                        Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                ) {
+                                                    Icon(
+                                                        Icons.Filled.Edit,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(16.dp),
+                                                        tint = PrimaryBlue,
+                                                    )
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    Text(
+                                                        "Editing message",
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        color = PrimaryBlue,
+                                                    )
+                                                    Spacer(modifier = Modifier.weight(1f))
+                                                    IconButton(
+                                                        onClick = { viewModel.cancelEditMessage() },
+                                                        modifier = Modifier.size(28.dp),
+                                                    ) {
+                                                        Icon(
+                                                            Icons.Filled.Close,
+                                                            contentDescription = "Cancel edit",
+                                                            modifier = Modifier.size(16.dp),
+                                                            tint = PrimaryBlue,
+                                                        )
+                                                    }
                                                 }
+                                            }
+                                        }
+
+                                        Box(
+                                            modifier = Modifier.fillMaxWidth(),
+                                        ) {
+                                            ConnectionChatMessageComposer(
+                                                viewModel = viewModel,
+                                                chatDetails = chatDetails,
+                                                isGroupChat = isGroupChat,
+                                                editingMessageId = editingMessageId,
+                                                replyingTo = replyingTo,
+                                                mediaPickers = mediaPickers,
+                                                onOpenDisposableRoll = {
+                                                    if (isGroupChat) {
+                                                        chatDetails.chat.id
+                                                            ?.trim()
+                                                            ?.takeIf { it.isNotEmpty() }
+                                                            ?.let { onOpenDisposableRollForChat?.invoke(it) }
+                                                    } else {
+                                                        onOpenDisposableRoll?.invoke(chatDetails.connection.id)
+                                                    }
+                                                },
+                                                tetherPingEnabled = tetherChannelId.isNotBlank() && !currentUserId.isNullOrBlank(),
+                                                pingTetherLoading = tetherSenderAck != null,
+                                                onPingTether = {
+                                                    tetherSenderAck = "Ping tether sent"
+                                                    EncounterTetherManager.pingTether(
+                                                        encounterId = tetherChannelId,
+                                                        senderId = currentUserId!!,
+                                                    )
+                                                },
+                                                shareableBeacons = shareableBeacons,
+                                                onRefreshShareableBeacons = {
+                                                    mapViewModel?.refreshDiscoveryFeed()
+                                                },
                                             )
                                         }
                                     }
                                 }
-                                // Overflow / connection options
-                                ChatHeaderIconButton(
-                                    icon = Icons.Filled.MoreVert,
-                                    contentDescription = "More options",
-                                    onClick = { showConnectionSheet = true },
-                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            }
+
+                            if (forwardMessageId != null) {
+                                ForwardDialog(
+                                    chatListState = chatListState,
+                                    currentChatId = chatId,
+                                    archivedConnectionIds = archivedConnectionIds,
+                                    hiddenConnectionIds = hiddenConnectionIds,
+                                    onSelect = { targetChatId ->
+                                        val msgId = forwardMessageId
+                                        if (msgId != null) {
+                                            viewModel.forwardMessage(msgId, targetChatId)
+                                        }
+                                        forwardMessageId = null
+                                    },
+                                    onDismiss = { forwardMessageId = null },
                                 )
                             }
                         }
-
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .clipToBounds(),
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .chatThreadKeyboardDock(
-                                        nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
-                                        clearNativeTabBar = true,
-                                    ),
-                            ) {
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth(),
-                            ) {
-                            Box(modifier = Modifier.fillMaxSize()) {
-                                if (showIcebreaker) {
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.TopCenter)
-                                            .fillMaxWidth()
-                                            .onSizeChanged { icebreakerPanelHeightPx = it.height }
-                                            .zIndex(2f),
-                                    ) {
-                                        IcebreakerPanel(
-                                            prompts = icebreakerPrompts,
-                                            onPromptClick = { prompt -> viewModel.useIcebreakerPrompt(prompt) },
-                                            onRefresh = { viewModel.refreshIcebreakerPrompts() },
-                                            onDismiss = { viewModel.dismissIcebreakerPanel() },
-                                            cooldownRemainingSec = icebreakerCooldownRemainingSec,
-                                        )
-                                    }
-                                }
-
-                    // Messages
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(top = icebreakerTimelineTopReserve)
-                            .clipToBounds()
-                            .zIndex(1f),
-                    ) {
-                    if (state.isLoadingMessages && messages.isEmpty()) {
-                        Box(
-                            modifier = messageContentModifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 24.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(36.dp),
-                                    color = PrimaryBlue,
-                                    strokeWidth = 3.dp
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text(
-                                    "Loading messages…",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    } else if (messages.isEmpty()) {
-                        Box(
-                            modifier = messageContentModifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            GlassCard(
-                                modifier = Modifier.fillMaxWidth(),
-                                usePrimaryBorder = true,
-                                contentPadding = 28.dp
-                            ) {
-                                Column(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Icon(
-                                        Icons.Filled.ChatBubbleOutline,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(48.dp),
-                                        tint = PrimaryBlue.copy(alpha = 0.85f)
-                                    )
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    Text(
-                                        "No messages yet",
-                                        modifier = Modifier.fillMaxWidth(),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        textAlign = TextAlign.Center
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text(
-                                        if (isGroupChat) {
-                                            "Everyone here is in a verified click — say hello to the group."
-                                        } else {
-                                            "Say hi to ${chatDetails.otherUser.name}!"
-                                        },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-                            }
-                        }
-                    } else {
-                        val timelineEntries = remember(messages) {
-                            buildChatTimelineEntriesNewestFirst(messages)
-                        }
-                        val rawTimestampPeekTravelPx = remember { mutableFloatStateOf(0f) }
-                        val displayTimestampPeekVisualPx = remember { mutableFloatStateOf(0f) }
-                        val timestampPeekSettleJob = remember { mutableStateOf<Job?>(null) }
-                        val peekRevealPx = rememberTimestampPeekRevealPx()
-                        val timestampPeekSoftKneePx = rememberTimestampPeekSoftKneePx()
-                        DisposableEffect(
-                            integrateTimestampPeekWithSwipeBackContainer,
-                            peekRevealPx,
-                            timestampPeekSoftKneePx,
-                            coroutineScope,
-                        ) {
-                            val integrate = integrateTimestampPeekWithSwipeBackContainer
-                            if (integrate) {
-                                val integration = InteractiveSwipeBackRightToLeftPeek(
-                                    onGestureStart = {
-                                        timestampPeekSettleJob.value?.cancel()
-                                        timestampPeekSettleJob.value = null
-                                        restoreTimestampPeekRawFromDisplay(
-                                            rawLeftPx = rawTimestampPeekTravelPx,
-                                            displayVisualPx = displayTimestampPeekVisualPx,
-                                            maxRevealPx = peekRevealPx,
-                                            softKneePx = timestampPeekSoftKneePx,
-                                        )
-                                    },
-                                    onLeftDragDelta = { dLeft ->
-                                        applyTimestampPeekDragStep(
-                                            rawLeftPx = rawTimestampPeekTravelPx,
-                                            displayVisualPx = displayTimestampPeekVisualPx,
-                                            maxRevealPx = peekRevealPx,
-                                            softKneePx = timestampPeekSoftKneePx,
-                                            dLeftPx = dLeft,
-                                        )
-                                    },
-                                    onLeftDragEnd = {
-                                        coroutineScope.launchTimestampPeekReplyStyleSettle(
-                                            rawLeftPx = rawTimestampPeekTravelPx,
-                                            displayVisualPx = displayTimestampPeekVisualPx,
-                                            settleJobHolder = timestampPeekSettleJob,
-                                        )
-                                    },
-                                    isPeekRevealed = {
-                                        isTimestampPeekRevealed(displayTimestampPeekVisualPx.floatValue)
-                                    },
-                                    onRightDragDelta = { dRight ->
-                                        applyTimestampPeekDragStep(
-                                            rawLeftPx = rawTimestampPeekTravelPx,
-                                            displayVisualPx = displayTimestampPeekVisualPx,
-                                            maxRevealPx = peekRevealPx,
-                                            softKneePx = timestampPeekSoftKneePx,
-                                            dLeftPx = -dRight,
-                                        )
-                                    },
-                                    onRightDragFromRest = {
-                                        timestampPeekSettleJob.value?.cancel()
-                                        timestampPeekSettleJob.value = null
-                                        rawTimestampPeekTravelPx.floatValue = 0f
-                                        displayTimestampPeekVisualPx.floatValue = 0f
-                                    },
-                                )
-                                onRegisterSwipeBackRightToLeftPeek(integration)
-                            }
-                            onDispose {
-                                timestampPeekSettleJob.value?.cancel()
-                                timestampPeekSettleJob.value = null
-                                if (integrate) {
-                                    onRegisterSwipeBackRightToLeftPeek(null)
-                                }
-                            }
-                        }
-                        val newestSentMessage = remember(messages) {
-                            messages.asSequence().filter { it.isSent }.maxByOrNull { it.message.timeCreated }
-                        }
-                        ChatMessageTimeline(
-                            timelineEntries = timelineEntries,
-                            listState = listState,
-                            newestSentMessage = newestSentMessage,
-                            listBottomPadding = PaddingValues(
-                                start = 12.dp,
-                                end = 12.dp,
-                                top = 24.dp + reverseListNewestEdgePad,
-                                bottom = 8.dp + ChatComposerStripReserve,
-                            ),
-                            dismissKeyboardOnUserMessageScroll = dismissKeyboardOnUserMessageScroll,
-                            displayTimestampPeekVisualPx = displayTimestampPeekVisualPx,
-                            peekRevealPx = peekRevealPx,
-                            meshConnection = chatDetails.connection,
-                            useHubNeutralMesh = isGroupChat,
-                            isGroupChat = isGroupChat,
-                            currentUserId = currentUserId,
-                            reactionsMap = reactionsMap,
-                            secureMediaHost = viewModel,
-                            activeChatId = activeApiChatId ?: chatDetails.chat.id,
-                            onToggleReaction = { messageId, reaction ->
-                                viewModel.toggleReaction(messageId, reaction)
-                            },
-                            onForward = { msgId -> forwardMessageId = msgId },
-                            onLongPress = { contextMenuMessage = it },
-                            onSwipeReply = { viewModel.startReplyTo(it) },
-                            onDownloadAttachment = { mwu, env ->
-                                viewModel.downloadChatAttachment(mwu.message.id, env)
-                            },
-                            onExpandPhoto = { expandedPhotoTarget = it },
-                            onOpenBeacon = { msg ->
-                                val beaconId = compose.project.click.click.data.models
-                                    .beaconIdFromMetadata(msg.metadata)
-                                    ?.trim()
-                                    .orEmpty()
-                                if (beaconId.isNotEmpty()) {
-                                    openBeaconDetailId = beaconId
-                                    val meta = msg.metadata as? kotlinx.serialization.json.JsonObject
-                                    openBeaconDetailMetadata = meta
-                                    openBeaconDetailContent = msg.content
-                                    openBeaconDetailFallback = compose.project.click.click.data.models.mapBeaconFromChatMetadata(
-                                        beaconId = beaconId,
-                                        metadata = meta,
-                                        contentFallback = msg.content,
-                                    )
-                                }
-                            },
-                            isLoadingOlderMessages = isLoadingOlderMessages,
-                            modifier = messageContentModifier
-                                .padding(horizontal = 4.dp)
-                                .then(
-                                    if (!integrateTimestampPeekWithSwipeBackContainer) {
-                                        Modifier.chatTimestampPeekOnSwipeLeft(
-                                            maxRevealPx = peekRevealPx,
-                                            softKneePx = timestampPeekSoftKneePx,
-                                            rawLeftPx = rawTimestampPeekTravelPx,
-                                            displayVisualPx = displayTimestampPeekVisualPx,
-                                            scope = coroutineScope,
-                                            settleJobHolder = timestampPeekSettleJob,
-                                        )
-                                    } else {
-                                        Modifier
-                                    },
-                                ),
-                        )
-                    }
-                    }
-                            }
-                            }
-
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        // Typing indicator — label + bouncing dots (Realtime Broadcast)
-                        AnimatedVisibility(
-                            visible = isPeerTyping,
-                            enter = fadeIn(ChatChromeMotion.ShortFade) +
-                                slideInVertically(
-                                    animationSpec = ChatChromeMotion.ShortSlide,
-                                    initialOffsetY = { it / 4 },
-                                ),
-                            exit = fadeOut(animationSpec = tween(160, easing = FastOutSlowInEasing)) +
-                                slideOutVertically(
-                                    animationSpec = ChatChromeMotion.ShortSlide,
-                                    targetOffsetY = { it / 4 },
-                                ),
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(start = 16.dp, end = 80.dp, bottom = 4.dp),
-                                horizontalArrangement = Arrangement.Start,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .border(
-                                            width = 1.dp,
-                                            color = PrimaryBlue.copy(alpha = 0.15f),
-                                            shape = RoundedCornerShape(
-                                                topStart = chatBubbleScaledDp(6f),
-                                                topEnd = chatBubbleScaledDp(21f),
-                                                bottomStart = chatBubbleScaledDp(21f),
-                                                bottomEnd = chatBubbleScaledDp(21f),
-                                            )
-                                        )
-                                        .clip(
-                                            RoundedCornerShape(
-                                                topStart = chatBubbleScaledDp(6f),
-                                                topEnd = chatBubbleScaledDp(21f),
-                                                bottomStart = chatBubbleScaledDp(21f),
-                                                bottomEnd = chatBubbleScaledDp(21f),
-                                            )
-                                        )
-                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f))
-                                        .padding(horizontal = chatBubbleScaledDp(18f), vertical = chatBubbleScaledDp(12f))
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(chatBubbleScaledDp(9f))
-                                    ) {
-                                        Text(
-                                            text = typingPeerLabel,
-                                            style = chatBubbleReplySnippetStyle(),
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            fontStyle = FontStyle.Italic
-                                        )
-                                        ChatTypingDots()
-                                    }
-                                }
-                            }
-                        }
-
-                        // Edit mode indicator strip
-                        if (editingMessageId != null) {
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                color = PrimaryBlue.copy(alpha = 0.12f)
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        Icons.Filled.Edit,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
-                                        tint = PrimaryBlue
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        "Editing message",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = PrimaryBlue
-                                    )
-                                    Spacer(modifier = Modifier.weight(1f))
-                                    IconButton(
-                                        onClick = { viewModel.cancelEditMessage() },
-                                        modifier = Modifier.size(28.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Filled.Close,
-                                            contentDescription = "Cancel edit",
-                                            modifier = Modifier.size(16.dp),
-                                            tint = PrimaryBlue
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        Box(
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            ConnectionChatMessageComposer(
-                                viewModel = viewModel,
-                                chatDetails = chatDetails,
-                                isGroupChat = isGroupChat,
-                                editingMessageId = editingMessageId,
-                                replyingTo = replyingTo,
-                                mediaPickers = mediaPickers,
-                                onOpenDisposableRoll = {
-                                    if (isGroupChat) {
-                                        chatDetails.chat.id?.trim()?.takeIf { it.isNotEmpty() }
-                                            ?.let { onOpenDisposableRollForChat?.invoke(it) }
-                                    } else {
-                                        onOpenDisposableRoll?.invoke(chatDetails.connection.id)
-                                    }
-                                },
-                                tetherPingEnabled = tetherChannelId.isNotBlank() && !currentUserId.isNullOrBlank(),
-                                pingTetherLoading = tetherSenderAck != null,
-                                onPingTether = {
-                                    tetherSenderAck = "Ping tether sent"
-                                    EncounterTetherManager.pingTether(
-                                        encounterId = tetherChannelId,
-                                        senderId = currentUserId!!,
-                                    )
-                                },
-                                shareableBeacons = shareableBeacons,
-                                onRefreshShareableBeacons = {
-                                    mapViewModel?.refreshDiscoveryFeed()
-                                },
-                            )
-                        }
-                    }
-                            }
-                    }
-
-                    if (forwardMessageId != null) {
-                        ForwardDialog(
-                            chatListState = chatListState,
-                            currentChatId = chatId,
-                            archivedConnectionIds = archivedConnectionIds,
-                            hiddenConnectionIds = hiddenConnectionIds,
-                            onSelect = { targetChatId ->
-                                val msgId = forwardMessageId
-                                if (msgId != null) {
-                                    viewModel.forwardMessage(msgId, targetChatId)
-                                }
-                                forwardMessageId = null
-                            },
-                            onDismiss = { forwardMessageId = null },
-                        )
-                    }
-                }
                     }
                 }
             }
         }
 
-    TetherCompassToast(
-        message = tetherToastMessage,
-        modifier = Modifier
-            .align(Alignment.TopCenter)
-            .zIndex(60f)
-            .padding(top = topInset + 64.dp),
-        onDismissed = { tetherToastMessage = null },
-    )
-
-    TetherCompassToast(
-        message = tetherSenderAck,
-        visibleDurationMs = 2_400L,
-        modifier = Modifier
-            .align(Alignment.TopCenter)
-            .zIndex(61f)
-            .padding(top = topInset + 64.dp),
-        onDismissed = { tetherSenderAck = null },
-    )
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        ChatExpandedPhotoPreview(
-            target = expandedPhotoTarget,
-            secureMediaHost = viewModel,
-            onDismiss = { expandedPhotoTarget = null },
+        TetherCompassToast(
+            message = tetherToastMessage,
+            modifier =
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .zIndex(60f)
+                    .padding(top = topInset + 64.dp),
+            onDismissed = { tetherToastMessage = null },
         )
-    }
 
-    val beaconDetailId = openBeaconDetailId
-    val mapVm = mapViewModel
-    if (beaconDetailId != null) {
-        if (mapVm != null) {
-            ChatBeaconDetailSheet(
-                beaconId = beaconDetailId,
-                mapViewModel = mapVm,
-                knownBeacons = shareableBeacons,
-                onDismissRequest = {
-                    openBeaconDetailId = null
-                    openBeaconDetailFallback = null
-                    openBeaconDetailMetadata = null
-                    openBeaconDetailContent = null
-                },
-                onShareBeaconToChats = onShareBeaconToChats,
-                messageFallback = openBeaconDetailFallback,
-                messageMetadata = openBeaconDetailMetadata,
-                messageContent = openBeaconDetailContent,
+        TetherCompassToast(
+            message = tetherSenderAck,
+            visibleDurationMs = 2_400L,
+            modifier =
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .zIndex(61f)
+                    .padding(top = topInset + 64.dp),
+            onDismissed = { tetherSenderAck = null },
+        )
+
+        Box(modifier = Modifier.fillMaxSize()) {
+            ChatExpandedPhotoPreview(
+                target = expandedPhotoTarget,
+                secureMediaHost = viewModel,
+                onDismiss = { expandedPhotoTarget = null },
             )
-        } else {
-            LaunchedEffect(beaconDetailId) {
-                compose.project.click.click.deeplink.EventDeepLinkRouter.setPendingBeaconId(beaconDetailId)
-                openBeaconDetailId = null
+        }
+
+        val beaconDetailId = openBeaconDetailId
+        val mapVm = mapViewModel
+        if (beaconDetailId != null) {
+            if (mapVm != null) {
+                ChatBeaconDetailSheet(
+                    beaconId = beaconDetailId,
+                    mapViewModel = mapVm,
+                    knownBeacons = shareableBeacons,
+                    onDismissRequest = {
+                        openBeaconDetailId = null
+                        openBeaconDetailFallback = null
+                        openBeaconDetailMetadata = null
+                        openBeaconDetailContent = null
+                    },
+                    onShareBeaconToChats = onShareBeaconToChats,
+                    messageFallback = openBeaconDetailFallback,
+                    messageMetadata = openBeaconDetailMetadata,
+                    messageContent = openBeaconDetailContent,
+                )
+            } else {
+                LaunchedEffect(beaconDetailId) {
+                    compose.project.click.click.deeplink.EventDeepLinkRouter
+                        .setPendingBeaconId(beaconDetailId)
+                    openBeaconDetailId = null
+                }
             }
         }
-    }
 
-    GlassToastHost(
-        state = toastState,
-        opaque = true,
-        modifier = Modifier
-            .align(Alignment.BottomEnd)
-            .zIndex(50f)
-            .padding(end = 20.dp, bottom = edgeBottomInset + 16.dp),
-    )
-
-    // Message long-press context sheet
-    if (contextMenuMessage != null) {
-        MessageActionSheet(
-            messageWithUser = contextMenuMessage!!,
-            viewModel = viewModel,
-            onDismiss = { contextMenuMessage = null }
+        GlassToastHost(
+            state = toastState,
+            opaque = true,
+            modifier =
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .zIndex(50f)
+                    .padding(end = 20.dp, bottom = edgeBottomInset + 16.dp),
         )
-    }
 
-    var pendingConnectionDialog by remember { mutableStateOf<ConnectionSheetDialog?>(null) }
-    var dialogGroupId by remember { mutableStateOf<String?>(null) }
+        // Message long-press context sheet
+        if (contextMenuMessage != null) {
+            MessageActionSheet(
+                messageWithUser = contextMenuMessage!!,
+                viewModel = viewModel,
+                onDismiss = { contextMenuMessage = null },
+            )
+        }
 
-    // Connection action sheet
-    if (showConnectionSheet) {
-        val successState = chatMessagesState as? ChatMessagesState.Success
-        val sheetConn = successState?.chatDetails?.connection
-        ConnectionActionSheet(
-            chatDetails = successState?.chatDetails,
-            currentUserId = currentUserId,
-            isArchived = sheetConn != null && sheetConn.id in archivedConnectionIds,
-            isServerLifecycleArchived = sheetConn?.isServerLifecycleArchived() == true,
-            isCore = sheetConn != null && sheetConn.id in coreConnectionIds,
-            onDismiss = { showConnectionSheet = false },
-            onMenuAction = { action ->
-                val details = successState?.chatDetails
-                val connId = sheetConn?.id
-                when (action) {
-                    ConnectionMenuAction.Nudge -> viewModel.sendNudge()
-                    ConnectionMenuAction.Archive -> {
-                        viewModel.archiveConnection { success ->
-                            if (success) onBackPressed()
+        var pendingConnectionDialog by remember { mutableStateOf<ConnectionSheetDialog?>(null) }
+        var dialogGroupId by remember { mutableStateOf<String?>(null) }
+
+        // Connection action sheet
+        if (showConnectionSheet) {
+            val successState = chatMessagesState as? ChatMessagesState.Success
+            val sheetConn = successState?.chatDetails?.connection
+            ConnectionActionSheet(
+                chatDetails = successState?.chatDetails,
+                currentUserId = currentUserId,
+                isArchived = sheetConn != null && sheetConn.id in archivedConnectionIds,
+                isServerLifecycleArchived = sheetConn?.isServerLifecycleArchived() == true,
+                isCore = sheetConn != null && sheetConn.id in coreConnectionIds,
+                onDismiss = { showConnectionSheet = false },
+                onMenuAction = { action ->
+                    val details = successState?.chatDetails
+                    val connId = sheetConn?.id
+                    when (action) {
+                        ConnectionMenuAction.Nudge -> viewModel.sendNudge()
+                        ConnectionMenuAction.Archive -> {
+                            viewModel.archiveConnection { success ->
+                                if (success) onBackPressed()
+                            }
+                        }
+                        ConnectionMenuAction.Unarchive -> {
+                            if (connId != null) viewModel.unarchiveConnection(connId)
+                        }
+                        ConnectionMenuAction.AddToCore -> {
+                            if (connId != null) viewModel.addConnectionToCore(connId)
+                        }
+                        ConnectionMenuAction.RemoveFromCore -> {
+                            if (connId != null) viewModel.removeConnectionFromCore(connId)
+                        }
+                        ConnectionMenuAction.MarkUnread -> {
+                            if (connId != null) viewModel.markConversationUnread(connId)
+                        }
+                        ConnectionMenuAction.RequestRemove -> {
+                            pendingConnectionDialog = ConnectionSheetDialog.Remove
+                        }
+                        ConnectionMenuAction.RequestReport -> {
+                            pendingConnectionDialog = ConnectionSheetDialog.Report()
+                        }
+                        ConnectionMenuAction.RequestBlock -> {
+                            pendingConnectionDialog = ConnectionSheetDialog.Block
+                        }
+                        ConnectionMenuAction.RequestLeaveGroup -> {
+                            dialogGroupId = details?.groupClique?.groupId
+                            pendingConnectionDialog = ConnectionSheetDialog.LeaveGroup
+                        }
+                        ConnectionMenuAction.RequestDeleteGroup -> {
+                            dialogGroupId = details?.groupClique?.groupId
+                            pendingConnectionDialog = ConnectionSheetDialog.DeleteGroup
                         }
                     }
-                    ConnectionMenuAction.Unarchive -> {
-                        if (connId != null) viewModel.unarchiveConnection(connId)
-                    }
-                    ConnectionMenuAction.AddToCore -> {
-                        if (connId != null) viewModel.addConnectionToCore(connId)
-                    }
-                    ConnectionMenuAction.RemoveFromCore -> {
-                        if (connId != null) viewModel.removeConnectionFromCore(connId)
-                    }
-                    ConnectionMenuAction.MarkUnread -> {
-                        if (connId != null) viewModel.markConversationUnread(connId)
-                    }
-                    ConnectionMenuAction.RequestRemove -> {
-                        pendingConnectionDialog = ConnectionSheetDialog.Remove
-                    }
-                    ConnectionMenuAction.RequestReport -> {
-                        pendingConnectionDialog = ConnectionSheetDialog.Report()
-                    }
-                    ConnectionMenuAction.RequestBlock -> {
-                        pendingConnectionDialog = ConnectionSheetDialog.Block
-                    }
-                    ConnectionMenuAction.RequestLeaveGroup -> {
-                        dialogGroupId = details?.groupClique?.groupId
-                        pendingConnectionDialog = ConnectionSheetDialog.LeaveGroup
-                    }
-                    ConnectionMenuAction.RequestDeleteGroup -> {
-                        dialogGroupId = details?.groupClique?.groupId
-                        pendingConnectionDialog = ConnectionSheetDialog.DeleteGroup
-                    }
+                },
+            )
+        }
+
+        ConnectionSheetDialogs(
+            dialog = pendingConnectionDialog,
+            onDismiss = {
+                pendingConnectionDialog = null
+                dialogGroupId = null
+            },
+            onConfirmRemove = {
+                viewModel.deleteConnectionPermanently { success ->
+                    if (success) onBackPressed()
+                }
+            },
+            onConfirmBlock = {
+                viewModel.blockUser { success ->
+                    if (success) onBackPressed()
+                }
+            },
+            onConfirmReport = { reason ->
+                viewModel.reportConnection(reason) { }
+            },
+            onConfirmLeaveGroup = {
+                dialogGroupId?.let { gid ->
+                    viewModel.leaveVerifiedClique(gid) { ok -> if (ok) onBackPressed() }
+                }
+            },
+            onConfirmDeleteGroup = {
+                dialogGroupId?.let { gid ->
+                    viewModel.deleteVerifiedClique(gid) { ok -> if (ok) onBackPressed() }
                 }
             },
         )
-    }
 
-    ConnectionSheetDialogs(
-        dialog = pendingConnectionDialog,
-        onDismiss = {
-            pendingConnectionDialog = null
-            dialogGroupId = null
-        },
-        onConfirmRemove = {
-            viewModel.deleteConnectionPermanently { success ->
-                if (success) onBackPressed()
-            }
-        },
-        onConfirmBlock = {
-            viewModel.blockUser { success ->
-                if (success) onBackPressed()
-            }
-        },
-        onConfirmReport = { reason ->
-            viewModel.reportConnection(reason) { }
-        },
-        onConfirmLeaveGroup = {
-            dialogGroupId?.let { gid ->
-                viewModel.leaveVerifiedClique(gid) { ok -> if (ok) onBackPressed() }
-            }
-        },
-        onConfirmDeleteGroup = {
-            dialogGroupId?.let { gid ->
-                viewModel.deleteVerifiedClique(gid) { ok -> if (ok) onBackPressed() }
-            }
-        },
-    )
-
-    val renameGroupId = (chatMessagesState as? ChatMessagesState.Success)?.chatDetails?.groupClique?.groupId
-    UnifiedPopupFormDialog(
-        visible = showRenameGroupDialog,
-        onDismissRequest = { showRenameGroupDialog = false },
-        title = "Rename group",
-        confirmLabel = "Save",
-        onConfirm = {
-            if (renameGroupDraft.isBlank()) return@UnifiedPopupFormDialog
-            renameGroupId?.let { gid ->
-                viewModel.renameVerifiedClique(gid, renameGroupDraft) { }
-            }
-            showRenameGroupDialog = false
-        },
-        body = {
-            ClickOutlinedTextField(
-                value = renameGroupDraft,
-                onValueChange = { renameGroupDraft = it },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Group name", color = GlassSheetTokens.OnOledMuted()) },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = GlassSheetTokens.OnOled(),
-                    unfocusedTextColor = GlassSheetTokens.OnOled(),
-                    focusedBorderColor = PrimaryBlue,
-                    unfocusedBorderColor = GlassSheetTokens.GlassBorder(),
-                    cursorColor = PrimaryBlue,
-                    focusedLabelColor = GlassSheetTokens.OnOledMuted(),
-                    unfocusedLabelColor = GlassSheetTokens.OnOledMuted(),
-                ),
-            )
-        },
-    )
+        val renameGroupId = (chatMessagesState as? ChatMessagesState.Success)?.chatDetails?.groupClique?.groupId
+        UnifiedPopupFormDialog(
+            visible = showRenameGroupDialog,
+            onDismissRequest = { showRenameGroupDialog = false },
+            title = "Rename group",
+            confirmLabel = "Save",
+            onConfirm = {
+                if (renameGroupDraft.isBlank()) return@UnifiedPopupFormDialog
+                renameGroupId?.let { gid ->
+                    viewModel.renameVerifiedClique(gid, renameGroupDraft) { }
+                }
+                showRenameGroupDialog = false
+            },
+            body = {
+                ClickOutlinedTextField(
+                    value = renameGroupDraft,
+                    onValueChange = { renameGroupDraft = it },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Group name", color = GlassSheetTokens.OnOledMuted()) },
+                    colors =
+                        OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = GlassSheetTokens.OnOled(),
+                            unfocusedTextColor = GlassSheetTokens.OnOled(),
+                            focusedBorderColor = PrimaryBlue,
+                            unfocusedBorderColor = GlassSheetTokens.GlassBorder(),
+                            cursorColor = PrimaryBlue,
+                            focusedLabelColor = GlassSheetTokens.OnOledMuted(),
+                            unfocusedLabelColor = GlassSheetTokens.OnOledMuted(),
+                        ),
+                )
+            },
+        )
     } // End outer Box
 }

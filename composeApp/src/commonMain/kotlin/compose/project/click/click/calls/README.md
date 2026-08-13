@@ -98,6 +98,11 @@ class CallCoordinator(private val apiClient: ApiClient = ApiClient()) {
 - POST body: `LiveKitTokenPostBody` → companion **`/api/livekit/token`**
 - Returns JWT + `wsUrl` for LiveKit room join
 - Called from `CallSessionManager` after accept/outgoing answer path
+- 5xx `"LiveKit environment is not configured"` → `failCall(...)` overlay; do not rewrite Android/iOS connect without an authenticated probe result
+
+### Web Room options (click-web)
+
+`DashboardView` constructs `new Room({ adaptiveStream: false, dynacast: false })` to match Android/iOS. Enabling those flags on web is a plausible iOS↔Android↔web video stall.
 
 ### Timeout: 30 seconds
 

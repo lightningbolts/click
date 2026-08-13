@@ -1,10 +1,10 @@
-appId: ${APP_ID}
+appId: compose.project.click.click
 name: Authenticated tab smoke
 tags:
   - auth
 ---
 - launchApp:
-    appId: ${APP_ID}
+    appId: compose.project.click.click
     clearState: true
     permissions:
       all: allow
@@ -23,4 +23,13 @@ tags:
 - tapOn:
     id: "nav-home"
 - assertVisible:
+    id: "nav-home"
+- assertNotVisible:
+    id: "onboarding-avatar"
+- assertNotVisible: "Let's get started"
+- tapOn:
+    id: "nav-map"
+- assertVisible:
+    id: "map-screen"
+- tapOn:
     id: "nav-home"

@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:no-wildcard-imports", "ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.camera
 
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +19,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.viewinterop.UIKitInteropProperties
 import androidx.compose.ui.viewinterop.UIKitView
 import compose.project.click.click.ui.utils.openApplicationSystemSettings
+import compose.project.click.click.ui.utils.rememberCameraPermissionRequester
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.ObjCAction
@@ -102,7 +105,8 @@ private class PhotoPreviewView(
 private class PhotoCaptureDelegate(
     private val onJpeg: (ByteArray) -> Unit,
     private val onComplete: () -> Unit,
-) : NSObject(), AVCapturePhotoCaptureDelegateProtocol {
+) : NSObject(),
+    AVCapturePhotoCaptureDelegateProtocol {
     override fun captureOutput(
         output: AVCapturePhotoOutput,
         didFinishProcessingPhoto: AVCapturePhoto,
@@ -112,10 +116,11 @@ private class PhotoCaptureDelegate(
             onComplete()
             return
         }
-        val data: NSData = didFinishProcessingPhoto.fileDataRepresentation() ?: run {
-            onComplete()
-            return
-        }
+        val data: NSData =
+            didFinishProcessingPhoto.fileDataRepresentation() ?: run {
+                onComplete()
+                return
+            }
         val bytes = data.toByteArray()
         if (bytes.isNotEmpty()) {
             onJpeg(bytes)
@@ -143,8 +148,11 @@ private fun ByteArray.toNSData(): NSData =
 
 private sealed class DisposableCameraPermissionState {
     object Checking : DisposableCameraPermissionState()
+
     object Granted : DisposableCameraPermissionState()
+
     object Denied : DisposableCameraPermissionState()
+
     object NotDetermined : DisposableCameraPermissionState()
 }
 
@@ -201,39 +209,54 @@ actual fun DisposableCameraView(
 
     val captureSession = remember { AVCaptureSession() }
     val photoOutput = remember { AVCapturePhotoOutput() }
-    val sessionPreviewLayer = remember {
-        AVCaptureVideoPreviewLayer(session = captureSession).apply {
-            videoGravity = AVLayerVideoGravityResizeAspectFill
+    val sessionPreviewLayer =
+        remember {
+            AVCaptureVideoPreviewLayer(session = captureSession).apply {
+                videoGravity = AVLayerVideoGravityResizeAspectFill
+            }
         }
-    }
+
+    val requestCameraPermission = rememberCameraPermissionRequester()
 
     LaunchedEffect(Unit) {
-        permissionState = when (AVCaptureDevice.authorizationStatusForMediaType(AVMediaTypeVideo)) {
-            AVAuthorizationStatusAuthorized -> DisposableCameraPermissionState.Granted
-            AVAuthorizationStatusDenied,
-            AVAuthorizationStatusRestricted -> DisposableCameraPermissionState.Denied
-            AVAuthorizationStatusNotDetermined -> {
-                AVCaptureDevice.requestAccessForMediaType(AVMediaTypeVideo) { granted ->
-                    runOnMainQueue {
-                        permissionState = if (granted) {
-                            DisposableCameraPermissionState.Granted
-                        } else {
-                            DisposableCameraPermissionState.Denied
-                        }
-                    }
-                }
-                DisposableCameraPermissionState.NotDetermined
+        permissionState =
+            when (AVCaptureDevice.authorizationStatusForMediaType(AVMediaTypeVideo)) {
+                AVAuthorizationStatusAuthorized -> DisposableCameraPermissionState.Granted
+                AVAuthorizationStatusDenied,
+                AVAuthorizationStatusRestricted,
+                -> DisposableCameraPermissionState.Denied
+                AVAuthorizationStatusNotDetermined -> DisposableCameraPermissionState.NotDetermined
+                else -> DisposableCameraPermissionState.Denied
             }
-            else -> DisposableCameraPermissionState.Denied
-        }
     }
 
     when (permissionState) {
-        DisposableCameraPermissionState.Checking,
+        DisposableCameraPermissionState.Checking -> {
+            DisposableCameraFallback(
+                title = "Checking camera access",
+                message = "Disposable Roll needs the camera to capture a private drop.",
+                onDismiss = onDismiss,
+                modifier = modifier,
+            )
+            return
+        }
         DisposableCameraPermissionState.NotDetermined -> {
             DisposableCameraFallback(
-                title = "Requesting camera access",
-                message = "Disposable Roll needs the camera to capture a private drop.",
+                title = "Camera permission needed",
+                message = "Disposable Roll uses the camera only for this shared drop.",
+                primaryActionLabel = "Enable camera",
+                onPrimaryAction = {
+                    requestCameraPermission {
+                        permissionState =
+                            if (AVCaptureDevice.authorizationStatusForMediaType(AVMediaTypeVideo) ==
+                                AVAuthorizationStatusAuthorized
+                            ) {
+                                DisposableCameraPermissionState.Granted
+                            } else {
+                                DisposableCameraPermissionState.Denied
+                            }
+                    }
+                },
                 onDismiss = onDismiss,
                 modifier = modifier,
             )
@@ -275,8 +298,9 @@ actual fun DisposableCameraView(
                     }
                     captureSession.sessionPreset = AVCaptureSessionPresetPhoto
 
-                    val input = AVCaptureDeviceInput.deviceInputWithDevice(device, error = null)
-                        ?: throw IllegalStateException("Could not add camera input")
+                    val input =
+                        AVCaptureDeviceInput.deviceInputWithDevice(device, error = null)
+                            ?: throw IllegalStateException("Could not add camera input")
                     if (!captureSession.canAddInput(input)) {
                         throw IllegalStateException("Could not add camera input")
                     }
@@ -377,26 +401,28 @@ actual fun DisposableCameraView(
         onShutter = {
             if (!setupComplete || isCapturing) return@DisposableCameraChrome
             isCapturing = true
-            val settings = AVCapturePhotoSettings.photoSettingsWithFormat(
-                mapOf(AVVideoCodecKey to AVVideoCodecTypeJPEG),
-            )
-            val delegate = PhotoCaptureDelegate(
-                onJpeg = { bytes ->
-                    runOnMainQueue {
-                        if (isDisposed) return@runOnMainQueue
-                        isCapturing = false
-                        retainedPhotoDelegate = null
-                        capturedImage = bytes
-                    }
-                },
-                onComplete = {
-                    runOnMainQueue {
-                        if (isDisposed) return@runOnMainQueue
-                        isCapturing = false
-                        retainedPhotoDelegate = null
-                    }
-                },
-            )
+            val settings =
+                AVCapturePhotoSettings.photoSettingsWithFormat(
+                    mapOf(AVVideoCodecKey to AVVideoCodecTypeJPEG),
+                )
+            val delegate =
+                PhotoCaptureDelegate(
+                    onJpeg = { bytes ->
+                        runOnMainQueue {
+                            if (isDisposed) return@runOnMainQueue
+                            isCapturing = false
+                            retainedPhotoDelegate = null
+                            capturedImage = bytes
+                        }
+                    },
+                    onComplete = {
+                        runOnMainQueue {
+                            if (isDisposed) return@runOnMainQueue
+                            isCapturing = false
+                            retainedPhotoDelegate = null
+                        }
+                    },
+                )
             retainedPhotoDelegate = delegate
             runCatching {
                 photoOutput.capturePhotoWithSettings(settings, delegate)
@@ -427,15 +453,16 @@ actual fun DisposableCameraView(
         },
         previewContent = {
             UIKitView(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .then(
-                        if (useFrontCamera) {
-                            Modifier.graphicsLayer { scaleX = -1f }
-                        } else {
-                            Modifier
-                        },
-                    ),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .then(
+                            if (useFrontCamera) {
+                                Modifier.graphicsLayer { scaleX = -1f }
+                            } else {
+                                Modifier
+                            },
+                        ),
                 factory = {
                     PhotoPreviewView(activeDevice).apply {
                         backgroundColor = UIColor.blackColor
@@ -449,10 +476,11 @@ actual fun DisposableCameraView(
                     host?.updateDevice(activeDevice)
                     host?.setNeedsLayout()
                 },
-                properties = UIKitInteropProperties(
-                    isInteractive = true,
-                    isNativeAccessibilityEnabled = false,
-                ),
+                properties =
+                    UIKitInteropProperties(
+                        isInteractive = true,
+                        isNativeAccessibilityEnabled = false,
+                    ),
             )
         },
     )

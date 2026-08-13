@@ -1,0 +1,27 @@
+appId: compose.project.click.click
+name: Login signup toggle
+tags:
+  - smoke
+---
+- launchApp:
+    appId: compose.project.click.click
+    clearState: true
+    permissions:
+      all: allow
+- assertVisible:
+    id: "login-email"
+- tapOn:
+    id: "login-signup"
+- extendedWaitUntil:
+    visible:
+      id: "signup-login"
+    timeout: 8000
+- assertVisible:
+    id: "signup-birthday-field"
+- tapOn:
+    id: "signup-login"
+- extendedWaitUntil:
+    visible:
+      id: "login-email"
+    timeout: 8000
+- assertVisible: "Sign In"

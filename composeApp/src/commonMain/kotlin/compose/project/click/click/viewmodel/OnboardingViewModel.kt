@@ -27,10 +27,12 @@ import kotlinx.coroutines.flow.update
  *   has an avatar URL, we fast-forward past Avatar so existing accounts do not re-onboard.
  *   Welcome is shown for accounts with `welcomeSeen = false` regardless of legacy completion —
  *   it is a short copy screen and gives us a place to announce B2.
+ *
+ * [userHasAvatar] is tri-state: `true` / `false` / `null` (unknown). Unknown must not show Avatar.
  */
 class OnboardingViewModel(
     initialState: OnboardingState = OnboardingState(),
-    private val userHasAvatar: () -> Boolean = { false },
+    private val userHasAvatar: () -> Boolean? = { false },
     private val onPersist: OnSyncPersist = OnSyncPersist { /* no-op in tests */ },
     private val clockMillis: () -> Long = { 0L },
 ) {
@@ -50,6 +52,9 @@ class OnboardingViewModel(
 
     /** Persisted onboarding state. Observers render from [step]; this is exposed for debugging. */
     val state: StateFlow<OnboardingState> = _state.asStateFlow()
+
+    /** Explicit back-navigation target; cleared on the next forward persist. */
+    private var stepOverride: Step? = null
 
     private val _step: MutableStateFlow<Step> = MutableStateFlow(computeStep(initialState))
 
@@ -73,24 +78,27 @@ class OnboardingViewModel(
     }
 
     /** User acknowledged the Welcome screen. */
-    fun onWelcomeAcknowledged() = updateAnd {
-        copy(welcomeSeen = true)
-    }
+    fun onWelcomeAcknowledged() =
+        updateAnd {
+            copy(welcomeSeen = true)
+        }
 
     /** User selected ≥ 5 interests and saved them remotely. */
-    fun onInterestsSaved() = updateAnd {
-        copy(interestsCompleted = true)
-    }
+    fun onInterestsSaved() =
+        updateAnd {
+            copy(interestsCompleted = true)
+        }
 
     /** User either picked an avatar or tapped "skip for now". */
-    fun onAvatarSetOrSkipped() = updateAnd {
-        val base = copy(avatarSetOrSkipped = true)
-        if (base.interestsCompleted && base.welcomeSeen) {
-            base.copy(completedAt = clockMillis().takeIf { it > 0L } ?: base.completedAt)
-        } else {
-            base
+    fun onAvatarSetOrSkipped() =
+        updateAnd {
+            val base = copy(avatarSetOrSkipped = true)
+            if (base.interestsCompleted && base.welcomeSeen) {
+                base.copy(completedAt = clockMillis().takeIf { it > 0L } ?: base.completedAt)
+            } else {
+                base
+            }
         }
-    }
 
     /**
      * Force an advance without carrying a side effect (useful for error-recovery paths). Walks one
@@ -105,7 +113,32 @@ class OnboardingViewModel(
         }
     }
 
+    /** Welcome has no back. Interests → Welcome; Avatar → Interests. Does not wipe saved interests. */
+    fun goBack() {
+        val target =
+            when (_step.value) {
+                Step.Avatar -> Step.Interests
+                Step.Interests -> Step.Welcome
+                else -> return
+            }
+        stepOverride = target
+        _step.value = target
+    }
+
+    fun canGoBack(): Boolean = _step.value == Step.Interests || _step.value == Step.Avatar
+
+    /** 0-based index into Welcome / Interests / Avatar for the progress indicator. */
+    fun visibleStepIndex(): Int =
+        when (_step.value) {
+            Step.Loading, Step.Welcome -> 0
+            Step.Interests -> 1
+            Step.Avatar, Step.Complete -> 2
+        }
+
+    fun visibleStepCount(): Int = 3
+
     private inline fun updateAnd(crossinline mutator: OnboardingState.() -> OnboardingState) {
+        stepOverride = null
         _state.update { it.mutator() }
         _step.value = computeStep(_state.value)
         onPersist.persist(_state.value)
@@ -116,15 +149,24 @@ class OnboardingViewModel(
      * avatar" collaborator. Exposed `internal` so tests can exercise the computation directly.
      */
     internal fun computeStep(s: OnboardingState): Step {
-        // Legacy fast-forward: an account that completed the Phase 1 flow and has an avatar is
-        // already done — no re-onboarding.
+        stepOverride?.let { return it }
+
         val avatarPresent = userHasAvatar()
-        val legacyComplete = s.interestsCompleted && (s.avatarSetOrSkipped || avatarPresent)
+        if (
+            avatarPresent == null &&
+            s.welcomeSeen &&
+            s.interestsCompleted &&
+            !s.avatarSetOrSkipped
+        ) {
+            return Step.Loading
+        }
+        val hasAvatar = avatarPresent == true
+        val legacyComplete = s.interestsCompleted && (s.avatarSetOrSkipped || hasAvatar)
 
         return when {
             !s.welcomeSeen -> Step.Welcome
             !s.interestsCompleted -> Step.Interests
-            !s.avatarSetOrSkipped && !avatarPresent -> Step.Avatar
+            !s.avatarSetOrSkipped && !hasAvatar -> Step.Avatar
             legacyComplete -> Step.Complete
             else -> Step.Complete
         }

@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:property-naming", "ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
@@ -73,21 +75,23 @@ data class UnifiedPopupMotion(
 ) {
     companion object {
         val Default = UnifiedPopupMotion()
-        val Picker = UnifiedPopupMotion(
-            fadeInMillis = 280,
-            fadeOutMillis = 320,
-            scaleInInitial = 0.95f,
-            scaleOutTarget = 0.97f,
-            slideEnterFraction = 0.06f,
-            slideExitFraction = 0.05f,
-        )
+        val Picker =
+            UnifiedPopupMotion(
+                fadeInMillis = 280,
+                fadeOutMillis = 320,
+                scaleInInitial = 0.95f,
+                scaleOutTarget = 0.97f,
+                slideEnterFraction = 0.06f,
+                slideExitFraction = 0.05f,
+            )
     }
 }
 
 /** Fade-out dismiss for buttons inside [UnifiedPopupAlert] (do not call [onDismissRequest] directly). */
-val LocalUnifiedPopupAnimatedDismiss = staticCompositionLocalOf<() -> Unit> {
-    error("LocalUnifiedPopupAnimatedDismiss used outside UnifiedPopupAlert")
-}
+val LocalUnifiedPopupAnimatedDismiss =
+    staticCompositionLocalOf<() -> Unit> {
+        error("LocalUnifiedPopupAnimatedDismiss used outside UnifiedPopupAlert")
+    }
 
 /**
  * Full-screen overlay with animated scrim via window [Popup] so [Modifier.fillMaxSize] stays
@@ -143,25 +147,31 @@ fun UnifiedPopupOverlay(
     val fadeOutSpec = tween<Float>(durationMillis = motion.fadeOutMillis, easing = FastOutSlowInEasing)
     val scaleInSpec = tween<Float>(durationMillis = motion.fadeInMillis, easing = FastOutSlowInEasing)
     val scaleOutSpec = tween<Float>(durationMillis = motion.fadeOutMillis, easing = FastOutSlowInEasing)
-    var contentEnter = fadeIn(animationSpec = fadeInSpec) + scaleIn(
-        initialScale = motion.scaleInInitial,
-        animationSpec = scaleInSpec,
-    )
-    var contentExit = fadeOut(animationSpec = fadeOutSpec) + scaleOut(
-        targetScale = motion.scaleOutTarget,
-        animationSpec = scaleOutSpec,
-    )
+    var contentEnter =
+        fadeIn(animationSpec = fadeInSpec) +
+            scaleIn(
+                initialScale = motion.scaleInInitial,
+                animationSpec = scaleInSpec,
+            )
+    var contentExit =
+        fadeOut(animationSpec = fadeOutSpec) +
+            scaleOut(
+                targetScale = motion.scaleOutTarget,
+                animationSpec = scaleOutSpec,
+            )
     if (motion.slideEnterFraction > 0f) {
-        contentEnter += slideInVertically(
-            animationSpec = tween(motion.fadeInMillis, easing = FastOutSlowInEasing),
-            initialOffsetY = { (it * motion.slideEnterFraction).toInt() },
-        )
+        contentEnter +=
+            slideInVertically(
+                animationSpec = tween(motion.fadeInMillis, easing = FastOutSlowInEasing),
+                initialOffsetY = { (it * motion.slideEnterFraction).toInt() },
+            )
     }
     if (motion.slideExitFraction > 0f) {
-        contentExit += slideOutVertically(
-            animationSpec = tween(motion.fadeOutMillis, easing = FastOutSlowInEasing),
-            targetOffsetY = { (it * motion.slideExitFraction).toInt() },
-        )
+        contentExit +=
+            slideOutVertically(
+                animationSpec = tween(motion.fadeOutMillis, easing = FastOutSlowInEasing),
+                targetOffsetY = { (it * motion.slideExitFraction).toInt() },
+            )
     }
 
     PlatformBackHandler(enabled = transitionState.targetState) {
@@ -171,16 +181,18 @@ fun UnifiedPopupOverlay(
     CompositionLocalProvider(LocalUnifiedPopupAnimatedDismiss provides ::requestDismiss) {
         Popup(
             onDismissRequest = { requestDismiss() },
-            properties = PopupProperties(
-                focusable = focusable,
-                dismissOnBackPress = true,
-                dismissOnClickOutside = true,
-            ),
+            properties =
+                PopupProperties(
+                    focusable = focusable,
+                    dismissOnBackPress = true,
+                    dismissOnClickOutside = true,
+                ),
         ) {
             Box(
-                modifier = modifier
-                    .fillMaxSize()
-                    .zIndex(UnifiedPopupTokens.OverlayZIndex),
+                modifier =
+                    modifier
+                        .fillMaxSize()
+                        .zIndex(UnifiedPopupTokens.OverlayZIndex),
             ) {
                 AnimatedVisibility(
                     visibleState = transitionState,
@@ -190,14 +202,15 @@ fun UnifiedPopupOverlay(
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = scrimAlpha))
-                            .clickable(
-                                indication = null,
-                                interactionSource = remember { MutableInteractionSource() },
-                                onClick = { requestDismiss() },
-                            ),
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = scrimAlpha))
+                                .clickable(
+                                    indication = null,
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    onClick = { requestDismiss() },
+                                ),
                     )
                 }
                 Box(
@@ -227,11 +240,12 @@ fun UnifiedPopupCard(
 ) {
     val shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner)
     Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = horizontalPadding)
-            .clip(shape)
-            .border(1.dp, GlassSheetTokens.GlassBorder(), shape),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(horizontal = horizontalPadding)
+                .clip(shape)
+                .border(1.dp, GlassSheetTokens.GlassBorder(), shape),
         shape = shape,
         color = GlassSheetTokens.OledBlack(),
         tonalElevation = 0.dp,
@@ -288,11 +302,12 @@ fun UnifiedPopupAlert(
     ) {
         Popup(
             onDismissRequest = { requestDismiss() },
-            properties = PopupProperties(
-                focusable = true,
-                dismissOnBackPress = true,
-                dismissOnClickOutside = true,
-            ),
+            properties =
+                PopupProperties(
+                    focusable = true,
+                    dismissOnBackPress = true,
+                    dismissOnClickOutside = true,
+                ),
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 AnimatedVisibility(
@@ -302,14 +317,15 @@ fun UnifiedPopupAlert(
                     label = "unified_alert_scrim",
                 ) {
                     Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = GlassSheetTokens.ScrimBaseAlpha))
-                            .clickable(
-                                indication = null,
-                                interactionSource = remember { MutableInteractionSource() },
-                                onClick = { requestDismiss() },
-                            ),
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = GlassSheetTokens.ScrimBaseAlpha))
+                                .clickable(
+                                    indication = null,
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    onClick = { requestDismiss() },
+                                ),
                     )
                 }
                 Box(
@@ -318,14 +334,18 @@ fun UnifiedPopupAlert(
                 ) {
                     AnimatedVisibility(
                         visibleState = transitionState,
-                        enter = fadeIn(animationSpec = fadeInSpec) + scaleIn(
-                            initialScale = UnifiedPopupTokens.ScaleInInitial,
-                            animationSpec = tween(UnifiedPopupTokens.FadeInMillis, easing = FastOutSlowInEasing),
-                        ),
-                        exit = fadeOut(animationSpec = fadeOutSpec) + scaleOut(
-                            targetScale = UnifiedPopupTokens.ScaleOutTarget,
-                            animationSpec = tween(UnifiedPopupTokens.FadeOutMillis, easing = FastOutSlowInEasing),
-                        ),
+                        enter =
+                            fadeIn(animationSpec = fadeInSpec) +
+                                scaleIn(
+                                    initialScale = UnifiedPopupTokens.ScaleInInitial,
+                                    animationSpec = tween(UnifiedPopupTokens.FadeInMillis, easing = FastOutSlowInEasing),
+                                ),
+                        exit =
+                            fadeOut(animationSpec = fadeOutSpec) +
+                                scaleOut(
+                                    targetScale = UnifiedPopupTokens.ScaleOutTarget,
+                                    animationSpec = tween(UnifiedPopupTokens.FadeOutMillis, easing = FastOutSlowInEasing),
+                                ),
                         label = "unified_alert_content",
                     ) {
                         UnifiedPopupCard(horizontalPadding = 28.dp) {
@@ -374,10 +394,12 @@ fun UnifiedPopupTextButton(
     onClick: () -> Unit,
     contentColor: Color = MaterialTheme.colorScheme.primary,
     enabled: Boolean = true,
+    modifier: Modifier = Modifier,
 ) {
     TextButton(
         onClick = onClick,
         enabled = enabled,
+        modifier = modifier,
     ) {
         Text(
             label,
@@ -411,6 +433,7 @@ fun UnifiedPopupFormDialog(
     confirmEnabled: Boolean = true,
     /** When false, picker overlays avoid stealing focus from form fields (no IME layout jump). */
     focusable: Boolean = true,
+    confirmModifier: Modifier = Modifier,
     body: @Composable () -> Unit,
 ) {
     UnifiedPopupOverlay(
@@ -420,16 +443,18 @@ fun UnifiedPopupFormDialog(
         focusable = focusable,
     ) {
         val requestAnimatedDismiss = LocalUnifiedPopupAnimatedDismiss.current
-        val surfaceModifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = surfaceHorizontalPadding)
-            .let { base ->
-                if (contentMaxWidth != null) base.widthIn(max = contentMaxWidth) else base
-            }
+        val surfaceModifier =
+            modifier
+                .fillMaxWidth()
+                .padding(horizontal = surfaceHorizontalPadding)
+                .let { base ->
+                    if (contentMaxWidth != null) base.widthIn(max = contentMaxWidth) else base
+                }
         Surface(
-            modifier = surfaceModifier
-                .clip(RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner))
-                .border(1.dp, GlassSheetTokens.GlassBorder(), RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner)),
+            modifier =
+                surfaceModifier
+                    .clip(RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner))
+                    .border(1.dp, GlassSheetTokens.GlassBorder(), RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner)),
             shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
             color = GlassSheetTokens.OledBlack(),
             contentColor = GlassSheetTokens.OnOled(),
@@ -450,18 +475,20 @@ fun UnifiedPopupFormDialog(
                     Spacer(Modifier.padding(top = 12.dp))
                     ProvideTextStyle(MaterialTheme.typography.bodyMedium) {
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = bodyPad),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = bodyPad),
                         ) {
                             body()
                         }
                     }
                     Spacer(Modifier.padding(top = 20.dp))
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = horizontalPad),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = horizontalPad),
                         horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -477,6 +504,7 @@ fun UnifiedPopupFormDialog(
                             label = confirmLabel,
                             contentColor = GlassSheetTokens.OnOled(),
                             enabled = confirmEnabled,
+                            modifier = confirmModifier,
                             onClick = {
                                 onConfirm()
                                 requestAnimatedDismiss()

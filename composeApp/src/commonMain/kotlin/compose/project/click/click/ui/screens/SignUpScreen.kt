@@ -1,3 +1,9 @@
+@file:Suppress(
+    "ktlint:standard:no-wildcard-imports",
+    "ktlint:standard:function-naming",
+    "ktlint:standard:property-naming",
+)
+
 package compose.project.click.click.ui.screens
 
 import androidx.compose.foundation.Image
@@ -16,14 +22,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
@@ -33,32 +38,38 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import compose.project.click.click.ui.chat.rememberChatMediaPickers
-import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
-import compose.project.click.click.ui.theme.*
-import compose.project.click.click.ui.theme.LocalPlatformStyle
-import compose.project.click.click.utils.toImageBitmap
 import androidx.compose.ui.zIndex
-import kotlinx.datetime.Clock
-import kotlinx.datetime.DateTimeUnit
-import kotlinx.datetime.Instant
-import kotlinx.datetime.LocalDate
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
-import kotlinx.datetime.until
+import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
+import compose.project.click.click.ui.chat.rememberChatMediaPickers
 import compose.project.click.click.ui.components.ClickOutlinedTextField
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.birthdayIsoToUtcMidnightMillis
 import compose.project.click.click.ui.components.formatBirthdayDigitsInput
 import compose.project.click.click.ui.components.parseBirthdayIsoLocalDate
 import compose.project.click.click.ui.components.utcMidnightMillisToBirthdayIso
+import compose.project.click.click.ui.theme.*
+import compose.project.click.click.ui.theme.LocalPlatformStyle
+import compose.project.click.click.utils.toImageBitmap
+import kotlinx.datetime.Clock
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.until
 
 private const val MinSignupAgeYears = 13
 
-private fun isAtLeastAge(birthDate: LocalDate, years: Int): Boolean {
-    val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+private fun isAtLeastAge(
+    birthDate: LocalDate,
+    years: Int,
+): Boolean {
+    val today =
+        Clock.System
+            .now()
+            .toLocalDateTime(TimeZone.currentSystemDefault())
+            .date
     val ageYears = birthDate.until(today, DateTimeUnit.YEAR)
     return ageYears >= years
 }
@@ -78,7 +89,7 @@ fun SignUpScreen(
         avatarMime: String?,
     ) -> Unit,
     isLoading: Boolean = false,
-    errorMessage: String? = null
+    errorMessage: String? = null,
 ) {
     var firstName by remember { mutableStateOf("") }
     var lastName by remember { mutableStateOf("") }
@@ -92,82 +103,88 @@ fun SignUpScreen(
     var pendingAvatarBytes by remember { mutableStateOf<ByteArray?>(null) }
     var pendingAvatarMime by remember { mutableStateOf<String?>(null) }
     var localAvatarError by remember { mutableStateOf<String?>(null) }
-    val mediaPickers = rememberChatMediaPickers(
-        onImagePicked = { bytes, mime ->
-            localAvatarError = null
-            pendingAvatarBytes = bytes
-            pendingAvatarMime = mime
-        },
-        onAudioPicked = { _, _, _ -> },
-        onMediaAccessBlocked = { msg -> localAvatarError = msg },
-    )
+    val mediaPickers =
+        rememberChatMediaPickers(
+            onImagePicked = { bytes, mime ->
+                localAvatarError = null
+                pendingAvatarBytes = bytes
+                pendingAvatarMime = mime
+            },
+            onAudioPicked = { _, _, _ -> },
+            onMediaAccessBlocked = { msg -> localAvatarError = msg },
+        )
     val focusManager = LocalFocusManager.current
     val scrollState = rememberScrollState()
 
     val parsedBirth = remember(birthdayIso) { parseBirthdayIsoLocalDate(birthdayIso) }
     val birthdayValid = parsedBirth != null && isAtLeastAge(parsedBirth, MinSignupAgeYears)
-    val birthdayHelper = when {
-        birthdayIso.isBlank() -> "Required — type YYYY-MM-DD or use calendar"
-        parsedBirth == null -> "Enter a valid date (YYYY-MM-DD)"
-        !isAtLeastAge(parsedBirth, MinSignupAgeYears) -> "You must be at least $MinSignupAgeYears years old"
-        else -> null
-    }
+    val birthdayHelper =
+        when {
+            birthdayIso.isBlank() -> "Required — type YYYY-MM-DD or use calendar"
+            parsedBirth == null -> "Enter a valid date (YYYY-MM-DD)"
+            !isAtLeastAge(parsedBirth, MinSignupAgeYears) -> "You must be at least $MinSignupAgeYears years old"
+            else -> null
+        }
 
     val passwordsMatch = password == confirmPassword
-    val canSignUp = firstName.isNotBlank() &&
-                    lastName.isNotBlank() &&
-                    birthdayValid &&
-                    email.isNotBlank() &&
-                    password.isNotBlank() &&
-                    confirmPassword.isNotBlank() &&
-                    passwordsMatch &&
-                    password.length >= 6
+    val canSignUp =
+        firstName.isNotBlank() &&
+            lastName.isNotBlank() &&
+            birthdayValid &&
+            email.isNotBlank() &&
+            password.isNotBlank() &&
+            confirmPassword.isNotBlank() &&
+            passwordsMatch &&
+            password.length >= 6
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .pointerInput(Unit) {
-                detectTapGestures(onTap = { focusManager.clearFocus() })
-            }
-            .background(MaterialTheme.colorScheme.background)
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = { focusManager.clearFocus() })
+                }.background(MaterialTheme.colorScheme.background),
     ) {
         // Back Button - Positioned absolutely at top left with proper clickable surface
         IconButton(
             onClick = onLoginClick,
-            modifier = Modifier
-                .statusBarsPadding()
-                .padding(start = 16.dp, top = 8.dp)
-                .align(Alignment.TopStart)
-                .size(48.dp)
-                .shadow(2.dp, CircleShape)
-                .background(MaterialTheme.colorScheme.surface, CircleShape)
-                .zIndex(2f)
+            modifier =
+                Modifier
+                    .statusBarsPadding()
+                    .padding(start = 16.dp, top = 8.dp)
+                    .align(Alignment.TopStart)
+                    .size(48.dp)
+                    .shadow(2.dp, CircleShape)
+                    .background(MaterialTheme.colorScheme.surface, CircleShape)
+                    .zIndex(2f)
+                    .testTag("signup-login"),
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "Back to Login",
-                tint = MaterialTheme.colorScheme.primary
+                tint = MaterialTheme.colorScheme.primary,
             )
         }
 
         // Main Content
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
-                .imePadding()
-                .navigationBarsPadding()
-                .verticalScroll(scrollState)
-                .padding(horizontal = 24.dp)
-                .padding(top = 60.dp, bottom = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+                    .imePadding()
+                    .navigationBarsPadding()
+                    .verticalScroll(scrollState)
+                    .padding(horizontal = 24.dp)
+                    .padding(top = 60.dp, bottom = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             // App Logo/Icon
             Icon(
                 imageVector = Icons.Filled.TouchApp,
                 contentDescription = "Click Logo",
                 modifier = Modifier.size(80.dp),
-                tint = MaterialTheme.colorScheme.primary
+                tint = MaterialTheme.colorScheme.primary,
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -179,7 +196,7 @@ fun SignUpScreen(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
             )
 
             Text(
@@ -187,7 +204,7 @@ fun SignUpScreen(
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp),
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -201,12 +218,13 @@ fun SignUpScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Box(
-                modifier = Modifier
-                    .size(112.dp)
-                    .clip(CircleShape)
-                    .border(2.dp, clickBorderColor(), CircleShape)
-                    .background(MaterialTheme.colorScheme.surface)
-                    .clickable(enabled = !isLoading) { mediaPickers.openPhotoLibrary() },
+                modifier =
+                    Modifier
+                        .size(112.dp)
+                        .clip(CircleShape)
+                        .border(2.dp, clickBorderColor(), CircleShape)
+                        .background(MaterialTheme.colorScheme.surface)
+                        .clickable(enabled = !isLoading) { mediaPickers.openPhotoLibrary() },
                 contentAlignment = Alignment.Center,
             ) {
                 val bytes = pendingAvatarBytes
@@ -252,7 +270,7 @@ fun SignUpScreen(
             Spacer(modifier = Modifier.height(24.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 ClickOutlinedTextField(
                     value = firstName,
@@ -263,19 +281,22 @@ fun SignUpScreen(
                     },
                     modifier = Modifier.weight(1f),
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Text,
-                        imeAction = ImeAction.Next
-                    ),
-                    keyboardActions = KeyboardActions(
-                        onNext = { focusManager.moveFocus(FocusDirection.Next) }
-                    ),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = clickBorderColor()
-                    ),
+                    keyboardOptions =
+                        KeyboardOptions(
+                            keyboardType = KeyboardType.Text,
+                            imeAction = ImeAction.Next,
+                        ),
+                    keyboardActions =
+                        KeyboardActions(
+                            onNext = { focusManager.moveFocus(FocusDirection.Next) },
+                        ),
+                    colors =
+                        OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = clickBorderColor(),
+                        ),
                     shape = RoundedCornerShape(12.dp),
-                    enabled = !isLoading
+                    enabled = !isLoading,
                 )
                 ClickOutlinedTextField(
                     value = lastName,
@@ -283,19 +304,22 @@ fun SignUpScreen(
                     label = { Text("Last name") },
                     modifier = Modifier.weight(1f),
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Text,
-                        imeAction = ImeAction.Next
-                    ),
-                    keyboardActions = KeyboardActions(
-                        onNext = { focusManager.moveFocus(FocusDirection.Down) }
-                    ),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = clickBorderColor()
-                    ),
+                    keyboardOptions =
+                        KeyboardOptions(
+                            keyboardType = KeyboardType.Text,
+                            imeAction = ImeAction.Next,
+                        ),
+                    keyboardActions =
+                        KeyboardActions(
+                            onNext = { focusManager.moveFocus(FocusDirection.Down) },
+                        ),
+                    colors =
+                        OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = clickBorderColor(),
+                        ),
                     shape = RoundedCornerShape(12.dp),
-                    enabled = !isLoading
+                    enabled = !isLoading,
                 )
             }
 
@@ -321,30 +345,35 @@ fun SignUpScreen(
                     }
                 },
                 isError = birthdayIso.isNotBlank() && !birthdayValid,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("signup-birthday-field"),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .testTag("signup-birthday-field"),
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Number,
-                    imeAction = ImeAction.Next,
-                ),
-                keyboardActions = KeyboardActions(
-                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
-                ),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = clickBorderColor()
-                ),
+                keyboardOptions =
+                    KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Next,
+                    ),
+                keyboardActions =
+                    KeyboardActions(
+                        onNext = { focusManager.moveFocus(FocusDirection.Down) },
+                    ),
+                colors =
+                    OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = clickBorderColor(),
+                    ),
                 shape = RoundedCornerShape(12.dp),
-                enabled = !isLoading
+                enabled = !isLoading,
             )
 
             if (showBirthdayPicker) {
                 val initialMillis = remember(birthdayIso) { birthdayIsoToUtcMidnightMillis(birthdayIso) }
-                val birthdayPickerState = rememberDatePickerState(
-                    initialSelectedDateMillis = initialMillis,
-                )
+                val birthdayPickerState =
+                    rememberDatePickerState(
+                        initialSelectedDateMillis = initialMillis,
+                    )
                 LaunchedEffect(showBirthdayPicker, birthdayIso) {
                     if (showBirthdayPicker) {
                         birthdayIsoToUtcMidnightMillis(birthdayIso)?.let { ms ->
@@ -354,24 +383,25 @@ fun SignUpScreen(
                 }
                 DatePickerDialog(
                     onDismissRequest = { showBirthdayPicker = false },
-                    colors = DatePickerDefaults.colors(
-                        containerColor = GlassSheetTokens.OledBlack(),
-                        titleContentColor = GlassSheetTokens.OnOled(),
-                        headlineContentColor = GlassSheetTokens.OnOled(),
-                        weekdayContentColor = GlassSheetTokens.OnOledMuted(),
-                        subheadContentColor = GlassSheetTokens.OnOledMuted(),
-                        navigationContentColor = GlassSheetTokens.OnOled(),
-                        yearContentColor = GlassSheetTokens.OnOled(),
-                        currentYearContentColor = GlassSheetTokens.OnOled(),
-                        selectedYearContentColor = GlassSheetTokens.OnOled(),
-                        selectedYearContainerColor = PrimaryBlue,
-                        dayContentColor = GlassSheetTokens.OnOled(),
-                        selectedDayContainerColor = PrimaryBlue,
-                        selectedDayContentColor = GlassSheetTokens.OnOled(),
-                        todayDateBorderColor = PrimaryBlue,
-                        todayContentColor = PrimaryBlue,
-                        dayInSelectionRangeContainerColor = GlassSheetTokens.GlassSurface(),
-                    ),
+                    colors =
+                        DatePickerDefaults.colors(
+                            containerColor = GlassSheetTokens.OledBlack(),
+                            titleContentColor = GlassSheetTokens.OnOled(),
+                            headlineContentColor = GlassSheetTokens.OnOled(),
+                            weekdayContentColor = GlassSheetTokens.OnOledMuted(),
+                            subheadContentColor = GlassSheetTokens.OnOledMuted(),
+                            navigationContentColor = GlassSheetTokens.OnOled(),
+                            yearContentColor = GlassSheetTokens.OnOled(),
+                            currentYearContentColor = GlassSheetTokens.OnOled(),
+                            selectedYearContentColor = GlassSheetTokens.OnOled(),
+                            selectedYearContainerColor = PrimaryBlue,
+                            dayContentColor = GlassSheetTokens.OnOled(),
+                            selectedDayContainerColor = PrimaryBlue,
+                            selectedDayContentColor = GlassSheetTokens.OnOled(),
+                            todayDateBorderColor = PrimaryBlue,
+                            todayContentColor = PrimaryBlue,
+                            dayInSelectionRangeContainerColor = GlassSheetTokens.GlassSurface(),
+                        ),
                     confirmButton = {
                         TextButton(
                             onClick = {
@@ -408,19 +438,22 @@ fun SignUpScreen(
                 },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Email,
-                    imeAction = ImeAction.Next
-                ),
-                keyboardActions = KeyboardActions(
-                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
-                ),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = clickBorderColor()
-                ),
+                keyboardOptions =
+                    KeyboardOptions(
+                        keyboardType = KeyboardType.Email,
+                        imeAction = ImeAction.Next,
+                    ),
+                keyboardActions =
+                    KeyboardActions(
+                        onNext = { focusManager.moveFocus(FocusDirection.Down) },
+                    ),
+                colors =
+                    OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = clickBorderColor(),
+                    ),
                 shape = RoundedCornerShape(12.dp),
-                enabled = !isLoading
+                enabled = !isLoading,
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -437,26 +470,29 @@ fun SignUpScreen(
                     IconButton(onClick = { passwordVisible = !passwordVisible }) {
                         Icon(
                             imageVector = if (passwordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-                            contentDescription = if (passwordVisible) "Hide password" else "Show password"
+                            contentDescription = if (passwordVisible) "Hide password" else "Show password",
                         )
                     }
                 },
                 visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Password,
-                    imeAction = ImeAction.Next
-                ),
-                keyboardActions = KeyboardActions(
-                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
-                ),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = clickBorderColor()
-                ),
+                keyboardOptions =
+                    KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Next,
+                    ),
+                keyboardActions =
+                    KeyboardActions(
+                        onNext = { focusManager.moveFocus(FocusDirection.Down) },
+                    ),
+                colors =
+                    OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = clickBorderColor(),
+                    ),
                 shape = RoundedCornerShape(12.dp),
-                enabled = !isLoading
+                enabled = !isLoading,
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -473,40 +509,43 @@ fun SignUpScreen(
                     IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
                         Icon(
                             imageVector = if (confirmPasswordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-                            contentDescription = if (confirmPasswordVisible) "Hide password" else "Show password"
+                            contentDescription = if (confirmPasswordVisible) "Hide password" else "Show password",
                         )
                     }
                 },
                 visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Password,
-                    imeAction = ImeAction.Done
-                ),
-                keyboardActions = KeyboardActions(
-                    onDone = {
-                        focusManager.clearFocus()
-                        if (canSignUp) {
-                            onEmailSignUp(
-                                firstName.trim(),
-                                lastName.trim(),
-                                birthdayIso.trim(),
-                                email,
-                                password,
-                                pendingAvatarBytes,
-                                pendingAvatarMime,
-                            )
-                        }
-                    }
-                ),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = clickBorderColor()
-                ),
+                keyboardOptions =
+                    KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Done,
+                    ),
+                keyboardActions =
+                    KeyboardActions(
+                        onDone = {
+                            focusManager.clearFocus()
+                            if (canSignUp) {
+                                onEmailSignUp(
+                                    firstName.trim(),
+                                    lastName.trim(),
+                                    birthdayIso.trim(),
+                                    email,
+                                    password,
+                                    pendingAvatarBytes,
+                                    pendingAvatarMime,
+                                )
+                            }
+                        },
+                    ),
+                colors =
+                    OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = clickBorderColor(),
+                    ),
                 shape = RoundedCornerShape(12.dp),
                 enabled = !isLoading,
-                isError = confirmPassword.isNotEmpty() && !passwordsMatch
+                isError = confirmPassword.isNotEmpty() && !passwordsMatch,
             )
             // Error Message
             if (errorMessage != null) {
@@ -516,7 +555,7 @@ fun SignUpScreen(
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Start
+                    textAlign = TextAlign.Start,
                 )
             }
 
@@ -538,27 +577,38 @@ fun SignUpScreen(
                         )
                     }
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
                 shape = RoundedCornerShape(if (signupStyle.isIOS) 14.dp else 12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
-                ),
-                elevation = if (signupStyle.isIOS) ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp) else ButtonDefaults.buttonElevation(),
-                enabled = !isLoading && canSignUp
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                    ),
+                elevation =
+                    if (signupStyle.isIOS) {
+                        ButtonDefaults.buttonElevation(
+                            0.dp,
+                            0.dp,
+                            0.dp,
+                        )
+                    } else {
+                        ButtonDefaults.buttonElevation()
+                    },
+                enabled = !isLoading && canSignUp,
             ) {
                 if (isLoading) {
                     AdaptiveCircularProgressIndicator(
                         modifier = Modifier.size(24.dp),
                         color = MaterialTheme.colorScheme.onPrimary,
-                        strokeWidth = 2.dp
+                        strokeWidth = 2.dp,
                     )
                 } else {
                     Text(
                         text = "Create Account",
                         fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
                     )
                 }
             }
@@ -569,23 +619,24 @@ fun SignUpScreen(
             Row(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
                     text = "Already have an account?",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 TextButton(
                     onClick = onLoginClick,
-                    enabled = !isLoading
+                    enabled = !isLoading,
+                    modifier = Modifier.testTag("signup-login"),
                 ) {
                     Text(
                         text = "Sign In",
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp
+                        fontSize = 15.sp,
                     )
                 }
             }

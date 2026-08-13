@@ -10,7 +10,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
-actual fun rememberLocationPermissionRequester(): ((onComplete: () -> Unit) -> Unit) {
+actual fun rememberPlatformLocationPermissionRequester(): ((onComplete: () -> Unit) -> Unit) {
     val locationService = remember { LocationService() }
     return { onComplete ->
         IosLocationAuthorizationTracker.refreshFromSystem()

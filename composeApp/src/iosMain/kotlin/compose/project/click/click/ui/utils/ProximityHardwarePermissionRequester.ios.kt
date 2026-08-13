@@ -20,7 +20,8 @@ import platform.darwin.NSObject
 
 private class IosBluetoothPermissionProbe(
     private val onResult: (Boolean) -> Unit,
-) : NSObject(), CBCentralManagerDelegateProtocol {
+) : NSObject(),
+    CBCentralManagerDelegateProtocol {
     private var finished = false
     private var manager: CBCentralManager? = null
 
@@ -43,16 +44,17 @@ private class IosBluetoothPermissionProbe(
 }
 
 @Composable
-actual fun rememberProximityHardwarePermissionRequester(): ((onResult: (Boolean) -> Unit) -> Unit) {
+actual fun rememberPlatformProximityHardwarePermissionRequester(): ((onResult: (Boolean) -> Unit) -> Unit) {
     val session = remember { AVAudioSession.sharedInstance() }
     var bluetoothProbe by remember { mutableStateOf<IosBluetoothPermissionProbe?>(null) }
 
     fun requestBluetooth(onResult: (Boolean) -> Unit) {
-        val probe = IosBluetoothPermissionProbe {
-            bluetoothProbe = null
-            // Bluetooth denial/restriction should not block the ultrasonic + GPS fallback path.
-            onResult(true)
-        }
+        val probe =
+            IosBluetoothPermissionProbe {
+                bluetoothProbe = null
+                // Bluetooth denial/restriction should not block the ultrasonic + GPS fallback path.
+                onResult(true)
+            }
         bluetoothProbe = probe
         probe.start()
     }

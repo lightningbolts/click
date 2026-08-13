@@ -1,6 +1,7 @@
 package compose.project.click.click.ui.utils
 
 import android.Manifest
+import android.content.pm.PackageManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -11,9 +12,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 
 @Composable
-actual fun rememberPlatformCalendarPermissionRequester(): ((onComplete: () -> Unit) -> Unit) {
+actual fun rememberPlatformCameraPermissionRequester(): ((onComplete: () -> Unit) -> Unit) {
     var pendingOnComplete by remember { mutableStateOf<(() -> Unit)?>(null) }
     val activity = LocalActivity.current as? ComponentActivity
     val launcher =
@@ -26,7 +28,7 @@ actual fun rememberPlatformCalendarPermissionRequester(): ((onComplete: () -> Un
                 activity != null &&
                 !ActivityCompat.shouldShowRequestPermissionRationale(
                     activity,
-                    Manifest.permission.READ_CALENDAR,
+                    Manifest.permission.CAMERA,
                 )
             ) {
                 openApplicationSystemSettings()
@@ -34,7 +36,15 @@ actual fun rememberPlatformCalendarPermissionRequester(): ((onComplete: () -> Un
             complete?.invoke()
         }
     return { onComplete ->
-        pendingOnComplete = onComplete
-        launcher.launch(Manifest.permission.READ_CALENDAR)
+        val granted =
+            activity != null &&
+                ContextCompat.checkSelfPermission(activity, Manifest.permission.CAMERA) ==
+                PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            onComplete()
+        } else {
+            pendingOnComplete = onComplete
+            launcher.launch(Manifest.permission.CAMERA)
+        }
     }
 }

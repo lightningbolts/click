@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.components
 
 import androidx.compose.runtime.Composable
@@ -15,6 +17,7 @@ fun AnimatedClickDialog(
     onConfirm: () -> Unit,
     modifier: Modifier = Modifier,
     dismissLabel: String? = "Cancel",
+    confirmModifier: Modifier = Modifier,
     body: @Composable () -> Unit,
 ) {
     UnifiedPopupFormDialog(
@@ -25,6 +28,7 @@ fun AnimatedClickDialog(
         onConfirm = onConfirm,
         modifier = modifier,
         dismissLabel = dismissLabel,
+        confirmModifier = confirmModifier,
         body = body,
     )
 }

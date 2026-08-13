@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.screens
 
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -46,6 +48,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -83,33 +86,36 @@ fun WelcomeScreen(
     )
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .testTag("onboarding-welcome"),
         contentAlignment = Alignment.Center,
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(
-                    top = topInset + 40.dp,
-                    bottom = 40.dp,
-                    start = 24.dp,
-                    end = 24.dp,
-                )
-                .graphicsLayer {
-                    alpha = appearAlpha
-                    translationY = appearOffset
-                },
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(
+                        top = topInset + 40.dp,
+                        bottom = 40.dp,
+                        start = 24.dp,
+                        end = 24.dp,
+                    ).graphicsLayer {
+                        alpha = appearAlpha
+                        translationY = appearOffset
+                    },
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Box(
-                modifier = Modifier
-                    .size(92.dp)
-                    .clip(CircleShape)
-                    .background(PrimaryBlue)
-                    .border(2.dp, clickBorderColor(), CircleShape),
+                modifier =
+                    Modifier
+                        .size(92.dp)
+                        .clip(CircleShape)
+                        .background(PrimaryBlue)
+                        .border(2.dp, clickBorderColor(), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -164,15 +170,17 @@ fun WelcomeScreen(
 
             Button(
                 onClick = onContinue,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
                 shape = RoundedCornerShape(16.dp),
                 contentPadding = PaddingValues(horizontal = 24.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = PrimaryBlue,
-                    contentColor = Color.White,
-                ),
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = PrimaryBlue,
+                        contentColor = Color.White,
+                    ),
             ) {
                 Text(
                     text = "Let's get started",
@@ -202,20 +210,22 @@ private fun WelcomePill(
     body: String,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .border(2.dp, clickBorderColor(), RoundedCornerShape(16.dp))
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .border(2.dp, clickBorderColor(), RoundedCornerShape(16.dp))
+                .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                .border(2.dp, clickBorderColor(), CircleShape),
+            modifier =
+                Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .border(2.dp, clickBorderColor(), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Icon(

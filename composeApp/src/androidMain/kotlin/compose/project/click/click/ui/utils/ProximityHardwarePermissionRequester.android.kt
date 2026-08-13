@@ -16,18 +16,19 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
 @Composable
-actual fun rememberProximityHardwarePermissionRequester(): ((onResult: (Boolean) -> Unit) -> Unit) {
+actual fun rememberPlatformProximityHardwarePermissionRequester(): ((onResult: (Boolean) -> Unit) -> Unit) {
     val activity = LocalActivity.current as? ComponentActivity
-    val requiredPermissions = remember {
-        buildList {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                add(Manifest.permission.BLUETOOTH_SCAN)
-                add(Manifest.permission.BLUETOOTH_ADVERTISE)
-                add(Manifest.permission.BLUETOOTH_CONNECT)
+    val requiredPermissions =
+        remember {
+            buildList {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    add(Manifest.permission.BLUETOOTH_SCAN)
+                    add(Manifest.permission.BLUETOOTH_ADVERTISE)
+                    add(Manifest.permission.BLUETOOTH_CONNECT)
+                }
+                add(Manifest.permission.RECORD_AUDIO)
             }
-            add(Manifest.permission.RECORD_AUDIO)
         }
-    }
     val requiredAudioPermission = Manifest.permission.RECORD_AUDIO
     var pendingOnResult by remember { mutableStateOf<((Boolean) -> Unit)?>(null) }
 
@@ -41,24 +42,28 @@ actual fun rememberProximityHardwarePermissionRequester(): ((onResult: (Boolean)
         }
     }
 
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions(),
-    ) { results ->
-        val complete = pendingOnResult
-        pendingOnResult = null
-        val granted = results[requiredAudioPermission] == true ||
-            (activity != null &&
-                ContextCompat.checkSelfPermission(activity, requiredAudioPermission) == PackageManager.PERMISSION_GRANTED)
-        if (!granted && activity != null) {
-            val permanentlyDenied =
-                ContextCompat.checkSelfPermission(activity, requiredAudioPermission) != PackageManager.PERMISSION_GRANTED &&
-                    !ActivityCompat.shouldShowRequestPermissionRationale(activity, requiredAudioPermission)
-            if (permanentlyDenied) {
-                openApplicationSystemSettings()
+    val launcher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestMultiplePermissions(),
+        ) { results ->
+            val complete = pendingOnResult
+            pendingOnResult = null
+            val granted =
+                results[requiredAudioPermission] == true ||
+                    (
+                        activity != null &&
+                            ContextCompat.checkSelfPermission(activity, requiredAudioPermission) == PackageManager.PERMISSION_GRANTED
+                    )
+            if (!granted && activity != null) {
+                val permanentlyDenied =
+                    ContextCompat.checkSelfPermission(activity, requiredAudioPermission) != PackageManager.PERMISSION_GRANTED &&
+                        !ActivityCompat.shouldShowRequestPermissionRationale(activity, requiredAudioPermission)
+                if (permanentlyDenied) {
+                    openApplicationSystemSettings()
+                }
             }
+            complete?.invoke(granted)
         }
-        complete?.invoke(granted)
-    }
 
     return { onResult ->
         if (hasAllPermissions()) {

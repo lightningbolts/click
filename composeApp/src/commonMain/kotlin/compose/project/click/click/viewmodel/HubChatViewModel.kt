@@ -413,7 +413,7 @@ class HubChatViewModel(
                 content = row.body,
                 timeCreated = hubCreatedAtToEpoch(row.createdAt),
                 timeEdited = null,
-                isRead = true,
+                isRead = false,
                 messageType = row.messageType,
                 metadata = row.metadata,
             )
@@ -629,7 +629,7 @@ class HubChatViewModel(
                         content = text,
                         timeCreated = localMs,
                         timeEdited = null,
-                        isRead = true,
+                        isRead = false,
                         messageType = ChatMessageType.TEXT,
                         metadata = null,
                         localSentAt = localMs,

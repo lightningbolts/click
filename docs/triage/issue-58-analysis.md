@@ -1,6 +1,6 @@
 # Issue #58 ("Bugs") — Triage & Root-Cause Analysis
 
-**Status:** durable (S1 subset landed 2026-08; keep this file as the original diagnosis)
+**Status:** durable (S1–S3 bugs/polish landed 2026-08; keep this file as the original diagnosis)
 **Issue:** https://github.com/lightningbolts/click/issues/58
 **Analysed at:** `click` @ `6977c67a` (main), `click-web` @ `fce5fb9` (main)
 **Scope:** 20 reported items spanning `click` (KMP app), `click-web` (Next.js), Supabase edge functions and SQL.
@@ -16,7 +16,20 @@ Tracker [#58](https://github.com/lightningbolts/click/issues/58) stays open. Chi
 | [#64](https://github.com/lightningbolts/click/issues/64) realtime | Landed — hub `HubRealtimeState`; `chats` + `group_members` inserts; subscribe-first on open thread |
 | [#65](https://github.com/lightningbolts/click/issues/65) map pins | Landed — all connection pins; Memory Map does not filter; single `updateRenderData` writer |
 | [#68](https://github.com/lightningbolts/click/issues/68) root SSR | Already fixed on main; SSR regression test added |
-| [#61](https://github.com/lightningbolts/click/issues/61) LiveKit calls | **Not claimed fixed.** Client now surfaces 5xx token errors (`LiveKit environment is not configured`). Authenticated probe of `POST /api/livekit/token` still required before rewriting connect. |
+| [#61](https://github.com/lightningbolts/click/issues/61) LiveKit calls | **Not claimed fixed.** Client surfaces 5xx token errors; web Room options match mobile (`adaptiveStream`/`dynacast` false); token route contract tests. Authenticated probe of `POST /api/livekit/token` still required before rewriting connect. Env is operator-owned. |
+
+## Landed S2–S3 remainder (2026-08-12)
+
+Tracker [#58](https://github.com/lightningbolts/click/issues/58) stays open until child comments exist. **Out of scope** still: [#66](https://github.com/lightningbolts/click/issues/66) prefs/senders, [#69](https://github.com/lightningbolts/click/issues/69) recap/settings, personality picker, [#54](https://github.com/lightningbolts/click/issues/54) `ClickButton`.
+
+| Item | Status |
+|---|---|
+| [#67](https://github.com/lightningbolts/click/issues/67) avatar re-prompt | Landed — tri-state `userHasAvatar: () -> Boolean?`; unknown holds shimmer, never flashes Avatar |
+| [#67](https://github.com/lightningbolts/click/issues/67) permission stacking | Landed — FIFO `PermissionRequestQueue` + prime sheet; camera no longer auto-launches |
+| [#67](https://github.com/lightningbolts/click/issues/67) onboarding + login↔signup | Landed — back, 3-step progress, Welcome unblocked from interests fetch, `AnimatedContent` login↔signup |
+| Hub fake Read receipts | Landed — honest UI only (`newestSentMessage = null`; do not force `isRead`). No hub receipt schema |
+| Chat inbound scroll snap | Landed — initial paint still `scrollToItem(0)`; near-bottom inbound follow uses `animateScrollToItem(0)` |
+| Maestro E2E | Landed — mobile smoke `login_signup_toggle`; auth tabs assert no Avatar gate + map chrome; web landing asserts not `LoadingScreen` |
 
 Historical sections below are the original diagnosis and may describe pre-fix code.
 

@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.chat
 
 import androidx.compose.foundation.layout.Arrangement
@@ -7,10 +9,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -40,13 +42,17 @@ internal fun chatTimelineShouldFollowInbound(
     initialTimelineScrollDone: Boolean,
 ): Boolean = initialTimelineScrollDone && firstVisibleItemIndex <= 2
 
+internal fun chatTimelineFollowUsesAnimation(initialTimelineScrollDone: Boolean): Boolean = initialTimelineScrollDone
+
 /**
  * Shared reverse-layout snap used only for initial paint and near-bottom inbound messages.
- * Deliberately uses [scrollToItem], not placement animation, to preserve the anti-teleport policy.
+ * Initial paint uses [scrollToItem]; inbound follow uses [animateScrollToItem] to stay smooth
+ * without placement animation on history rows.
  */
 internal suspend fun scrollChatTimelineToLatest(
     listState: LazyListState,
     suppressKeyboardDismiss: MutableState<Boolean>,
+    animated: Boolean = false,
 ) {
     // Never interrupt an in-flight user fling — that is what feels like stutter/jump
     // when heavy attachment rows are still measuring.
@@ -56,7 +62,11 @@ internal suspend fun scrollChatTimelineToLatest(
         if (listState.layoutInfo.totalItemsCount > 0) {
             suppressKeyboardDismiss.value = true
             try {
-                listState.scrollToItem(0)
+                if (animated) {
+                    listState.animateScrollToItem(0)
+                } else {
+                    listState.scrollToItem(0)
+                }
                 delay(48)
             } finally {
                 suppressKeyboardDismiss.value = false
@@ -78,31 +88,35 @@ internal fun chatDismissKeyboardAfterScrollConnection(
     thresholdPx: Float,
     isSuppressed: () -> Boolean,
     onDismiss: () -> Unit,
-): NestedScrollConnection = object : NestedScrollConnection {
-    private var dismissAfterFling = false
+): NestedScrollConnection =
+    object : NestedScrollConnection {
+        private var dismissAfterFling = false
 
-    override fun onPostScroll(
-        consumed: Offset,
-        available: Offset,
-        source: NestedScrollSource,
-    ): Offset {
-        if (isSuppressed()) return Offset.Zero
-        if (source == NestedScrollSource.UserInput && abs(consumed.y) > thresholdPx) {
-            dismissAfterFling = true
+        override fun onPostScroll(
+            consumed: Offset,
+            available: Offset,
+            source: NestedScrollSource,
+        ): Offset {
+            if (isSuppressed()) return Offset.Zero
+            if (source == NestedScrollSource.UserInput && abs(consumed.y) > thresholdPx) {
+                dismissAfterFling = true
+            }
+            return Offset.Zero
         }
-        return Offset.Zero
-    }
 
-    override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-        if (dismissAfterFling && !isSuppressed()) {
-            dismissAfterFling = false
-            onDismiss()
-        } else {
-            dismissAfterFling = false
+        override suspend fun onPostFling(
+            consumed: Velocity,
+            available: Velocity,
+        ): Velocity {
+            if (dismissAfterFling && !isSuppressed()) {
+                dismissAfterFling = false
+                onDismiss()
+            } else {
+                dismissAfterFling = false
+            }
+            return Velocity.Zero
         }
-        return Velocity.Zero
     }
-}
 
 /**
  * Isolated message list for chat screens. Kept separate from [compose.project.click.click.ui.screens.ChatView]
@@ -128,7 +142,10 @@ internal fun ChatMessageTimeline(
     onForward: (messageId: String) -> Unit,
     onLongPress: (MessageWithUser) -> Unit,
     onSwipeReply: (MessageWithUser) -> Unit,
-    onDownloadAttachment: suspend (MessageWithUser, compose.project.click.click.chat.attachments.AttachmentCrypto.Envelope) -> ChatAttachmentDownloadOutcome,
+    onDownloadAttachment: suspend (
+        MessageWithUser,
+        compose.project.click.click.chat.attachments.AttachmentCrypto.Envelope,
+    ) -> ChatAttachmentDownloadOutcome,
     onExpandPhoto: (MessageWithUser) -> Unit = {},
     onOpenBeacon: (Message) -> Unit = {},
     isLoadingOlderMessages: Boolean = false,
@@ -149,9 +166,10 @@ internal fun ChatMessageTimeline(
     ) {
         LazyColumn(
             state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .nestedScroll(dismissKeyboardOnUserMessageScroll),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .nestedScroll(dismissKeyboardOnUserMessageScroll),
             reverseLayout = true,
             contentPadding = listBottomPadding,
             verticalArrangement = Arrangement.spacedBy(0.dp, Alignment.Bottom),
@@ -186,11 +204,12 @@ internal fun ChatMessageTimeline(
                 contentType = { timelineEntries[it].timelineContentType() },
             ) { index ->
                 val entry = timelineEntries[index]
-                val listGapTop = chatTimelineRowTopPadding(
-                    index = index,
-                    timelineEntries = timelineEntries,
-                    baseCompact = interMessageBaseCompact,
-                )
+                val listGapTop =
+                    chatTimelineRowTopPadding(
+                        index = index,
+                        timelineEntries = timelineEntries,
+                        baseCompact = interMessageBaseCompact,
+                    )
                 when (entry) {
                     is ChatTimelineEntry.DaySeparator -> {
                         Column(Modifier.padding(top = listGapTop)) {
@@ -245,8 +264,9 @@ internal fun ChatMessageTimeline(
                                     val stabilityKey = chatBubbleStableRowKey(messageWithUser)
                                     // Optimistic outbound only — layout-stable pop-in. Never animate
                                     // recycled history rows (that kills LazyColumn fling coast).
-                                    val isOptimisticOutbound = messageWithUser.isSent &&
-                                        messageWithUser.message.id.startsWith("temp-")
+                                    val isOptimisticOutbound =
+                                        messageWithUser.isSent &&
+                                            messageWithUser.message.id.startsWith("temp-")
                                     AnimatedVisibilityChatBubble(
                                         bubbleStabilityKey = stabilityKey,
                                         isSent = messageWithUser.isSent,
@@ -262,9 +282,10 @@ internal fun ChatMessageTimeline(
             if (isLoadingOlderMessages) {
                 item(key = "load_older_indicator") {
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         CircularProgressIndicator(

@@ -15,6 +15,8 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] `./gradlew :composeApp:compileKotlinIosSimulatorArm64`
 - [ ] `./gradlew :composeApp:testDebugUnitTest`
 - [ ] `./gradlew :composeApp:iosSimulatorArm64Test` (or `iosSimulatorArm64Test` target)
+- [ ] `bash scripts/maestro-smoke-android.sh` (`click/`; rebuilds and reinstalls debug APK, then smoke)
+- [ ] `click-web`: `npm run test:e2e` with the app on `:3000`
 - [ ] `ChatSwipeMathTest` — swipe-to-reply inverse math
 - [ ] `ChatViewModelTest` — send/receive/session
 - [ ] `GlassCardUiTest` — bordered card rendering (iOS sim; Functional Clarity)
@@ -85,9 +87,14 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 
 - [ ] `ProfileBasicsGateScreen` blocks main shell until display name / basics complete
 - [ ] Onboarding flow: Welcome → Interests (`InterestTaggingScreen`) → Avatar (`AvatarScreen`)
+- [ ] Onboarding back: Avatar → Interests → Welcome; Welcome has no back; saved interests are not wiped
+- [ ] 3-step onboarding progress visible on Welcome / Interests / Avatar
+- [ ] Login ↔ Sign Up uses the same slide+fade as onboarding (Maestro smoke `login_signup_toggle`)
+- [ ] Returning user with an avatar: cold start never flashes Avatar (`onboarding-avatar` not visible)
 - [ ] Skip avatar advances onboarding
 - [ ] Onboarding state persists in `TokenStorage` across kill
 - [ ] Onboarding handoff shimmer → Home without flash of wrong tab
+- [ ] Runtime permissions serialize through `PermissionRequestQueue` + prime sheet (Continue / Not now); camera does not auto-prompt on mount
 - [ ] `PermissionsOnboardingScreen` — location, notifications, microphone prompts as applicable
 - [ ] `LocationOnboardingScreen` — location permission flow
 
@@ -247,8 +254,10 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] Send text message → appears in thread → delivers to peer
 - [ ] Offline send queues locally; sends on reconnect
 - [ ] Typing indicator shows / clears
-- [ ] Read receipts update
+- [ ] Read receipts update (DM / group)
 - [ ] Delivery receipt states (sending, sent, failed)
+- [ ] Hub chat does **not** show a fake blue Read receipt
+- [ ] Near-bottom inbound messages animate to latest; initial thread paint still snaps (no history-row `animateItem`)
 - [ ] No plaintext or key material in logs
 
 ### 7.2 Composer (`ConnectionChatMessageComposer`, `ChatKeyboardDock`)
@@ -545,6 +554,7 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] Notifications — push registration `[KNOWN-11]`
 - [ ] Photo library — save image, pick media
 - [ ] Denied permission shows rationale / settings redirect (no crash)
+- [ ] Overlapping permission requests do not stack OS dialogs (prime sheet FIFO)
 
 ---
 

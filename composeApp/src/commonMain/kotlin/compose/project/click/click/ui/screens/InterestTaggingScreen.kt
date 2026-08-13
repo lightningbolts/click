@@ -1,6 +1,11 @@
+@file:Suppress("ktlint:standard:no-wildcard-imports", "ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -8,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -16,9 +22,6 @@ import compose.project.click.click.ui.components.INTEREST_ONBOARDING_MIN_TAGS
 import compose.project.click.click.ui.components.InterestEditor
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.theme.LocalPlatformStyle
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.statusBars
 
 /**
  * Interest tagging onboarding screen.
@@ -35,15 +38,16 @@ fun InterestTaggingScreen(
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     Surface(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().testTag("onboarding-interests"),
         color = MaterialTheme.colorScheme.background,
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = topInset)
-                .padding(horizontal = 20.dp)
-                .verticalScroll(scrollState),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(top = topInset)
+                    .padding(horizontal = 20.dp)
+                    .verticalScroll(scrollState),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Spacer(modifier = Modifier.height(28.dp))
@@ -79,16 +83,18 @@ fun InterestTaggingScreen(
             val tagStyle = LocalPlatformStyle.current
             Button(
                 onClick = { onTagsSelected(selectedTags) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
                 shape = RoundedCornerShape(if (tagStyle.isIOS) 14.dp else 28.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
-                elevation = if (tagStyle.isIOS) {
-                    ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp)
-                } else {
-                    ButtonDefaults.buttonElevation()
-                },
+                elevation =
+                    if (tagStyle.isIOS) {
+                        ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp)
+                    } else {
+                        ButtonDefaults.buttonElevation()
+                    },
                 enabled = selectedTags.size >= INTEREST_ONBOARDING_MIN_TAGS,
             ) {
                 Text("Continue", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)

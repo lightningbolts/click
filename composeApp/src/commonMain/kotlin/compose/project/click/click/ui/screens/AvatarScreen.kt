@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.screens
 
 import androidx.compose.foundation.background
@@ -24,8 +26,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -78,15 +81,16 @@ fun AvatarScreen(
     var uploading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    val mediaPickers = rememberChatMediaPickers(
-        onImagePicked = { bytes, mime ->
-            errorMessage = null
-            selectedBytes = bytes
-            selectedMime = mime
-        },
-        onAudioPicked = { _, _, _ -> },
-        onMediaAccessBlocked = { msg -> errorMessage = msg },
-    )
+    val mediaPickers =
+        rememberChatMediaPickers(
+            onImagePicked = { bytes, mime ->
+                errorMessage = null
+                selectedBytes = bytes
+                selectedMime = mime
+            },
+            onAudioPicked = { _, _, _ -> },
+            onMediaAccessBlocked = { msg -> errorMessage = msg },
+        )
 
     fun performUpload() {
         val bytes = selectedBytes ?: return
@@ -100,7 +104,10 @@ fun AvatarScreen(
                         onUploaded(url)
                     },
                     onFailure = { err ->
-                        errorMessage = err.message?.lines()?.firstOrNull()?.take(180)
+                        errorMessage = err.message
+                            ?.lines()
+                            ?.firstOrNull()
+                            ?.take(180)
                             ?: "Could not upload photo. Try again."
                     },
                 )
@@ -111,20 +118,23 @@ fun AvatarScreen(
     }
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .testTag("onboarding-avatar"),
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(
-                    top = topInset + 28.dp,
-                    bottom = 32.dp,
-                    start = 24.dp,
-                    end = 24.dp,
-                ),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(
+                        top = topInset + 28.dp,
+                        bottom = 32.dp,
+                        start = 24.dp,
+                        end = 24.dp,
+                    ),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
@@ -186,18 +196,20 @@ fun AvatarScreen(
 
             Button(
                 onClick = ::performUpload,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
                 shape = RoundedCornerShape(16.dp),
                 contentPadding = PaddingValues(horizontal = 24.dp),
                 enabled = selectedBytes != null && !uploading,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = PrimaryBlue,
-                    contentColor = Color.White,
-                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                ),
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = PrimaryBlue,
+                        contentColor = Color.White,
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
             ) {
                 if (uploading) {
                     CircularProgressIndicator(
@@ -234,13 +246,17 @@ fun AvatarScreen(
 }
 
 @Composable
-private fun AvatarPreview(bytes: ByteArray?, existingUrl: String?) {
+private fun AvatarPreview(
+    bytes: ByteArray?,
+    existingUrl: String?,
+) {
     Box(
-        modifier = Modifier
-            .size(168.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surface)
-            .border(width = 2.dp, color = clickBorderColor(), shape = CircleShape),
+        modifier =
+            Modifier
+                .size(168.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surface)
+                .border(width = 2.dp, color = clickBorderColor(), shape = CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         when {
@@ -249,9 +265,10 @@ private fun AvatarPreview(bytes: ByteArray?, existingUrl: String?) {
                     model = bytes,
                     contentDescription = "Selected avatar",
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(168.dp)
-                        .clip(CircleShape),
+                    modifier =
+                        Modifier
+                            .size(168.dp)
+                            .clip(CircleShape),
                 )
             }
             !existingUrl.isNullOrBlank() -> {
@@ -259,9 +276,10 @@ private fun AvatarPreview(bytes: ByteArray?, existingUrl: String?) {
                     model = existingUrl,
                     contentDescription = "Current avatar",
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(168.dp)
-                        .clip(CircleShape),
+                    modifier =
+                        Modifier
+                            .size(168.dp)
+                            .clip(CircleShape),
                 )
             }
             else -> {
@@ -285,12 +303,13 @@ private fun AvatarSourceButton(
     enabled: Boolean,
 ) {
     Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .border(2.dp, clickBorderColor(), RoundedCornerShape(16.dp))
-            .clickable(enabled = enabled) { onClick() }
-            .padding(vertical = 16.dp),
+        modifier =
+            modifier
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .border(2.dp, clickBorderColor(), RoundedCornerShape(16.dp))
+                .clickable(enabled = enabled) { onClick() }
+                .padding(vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {

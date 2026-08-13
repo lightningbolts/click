@@ -88,6 +88,7 @@ import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowl
 import compose.project.click.click.ui.chat.applyTimestampPeekDragStep // pragma: allowlist secret
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatDismissKeyboardAfterScrollConnection // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatTimelineFollowUsesAnimation // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimelineShouldFollowInbound // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft // pragma: allowlist secret
 import compose.project.click.click.ui.chat.isTimestampPeekRevealed // pragma: allowlist secret
@@ -224,6 +225,7 @@ fun HubChatScreen(
             scrollChatTimelineToLatest(
                 listState = hubListState,
                 suppressKeyboardDismiss = suppressKeyboardDismissWhileProgrammaticTimelineScroll,
+                animated = chatTimelineFollowUsesAnimation(initialTimelineScrollDone.value),
             )
         }
     }
@@ -448,10 +450,6 @@ fun HubChatScreen(
                         }
                     }
 
-                    val newestSentMessage =
-                        remember(messages) {
-                            messages.asSequence().filter { it.isSent }.maxByOrNull { it.message.timeCreated }
-                        }
                     val timelineEntries =
                         remember(messages) {
                             buildChatTimelineEntriesNewestFirst(messages)
@@ -483,7 +481,7 @@ fun HubChatScreen(
                                 ChatMessageTimeline(
                                     timelineEntries = timelineEntries,
                                     listState = hubListState,
-                                    newestSentMessage = newestSentMessage,
+                                    newestSentMessage = null,
                                     listBottomPadding =
                                         PaddingValues(
                                             start = 6.dp,

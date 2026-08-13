@@ -7,9 +7,9 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class OnboardingViewModelTest {
-
     private class PersistRecorder : OnboardingViewModel.OnSyncPersist {
         val snapshots: MutableList<OnboardingState> = mutableListOf()
+
         override fun persist(next: OnboardingState) {
             snapshots.add(next)
         }
@@ -60,14 +60,16 @@ class OnboardingViewModelTest {
     @Test
     fun advance_isIdempotentAtComplete() {
         val recorder = PersistRecorder()
-        val vm = OnboardingViewModel(
-            initialState = OnboardingState(
-                welcomeSeen = true,
-                interestsCompleted = true,
-                avatarSetOrSkipped = true,
-            ),
-            onPersist = recorder,
-        )
+        val vm =
+            OnboardingViewModel(
+                initialState =
+                    OnboardingState(
+                        welcomeSeen = true,
+                        interestsCompleted = true,
+                        avatarSetOrSkipped = true,
+                    ),
+                onPersist = recorder,
+            )
         assertEquals(OnboardingViewModel.Step.Complete, vm.step.value)
         vm.advance()
         vm.advance()
@@ -78,29 +80,33 @@ class OnboardingViewModelTest {
 
     @Test
     fun legacyAccount_withInterestsAndAvatar_skipsToComplete() {
-        val vm = OnboardingViewModel(
-            initialState = OnboardingState(
-                permissionsCompleted = true,
-                interestsCompleted = true,
-                welcomeSeen = true,
-                avatarSetOrSkipped = false, // flag not yet written for legacy users
-            ),
-            userHasAvatar = { true },
-        )
+        val vm =
+            OnboardingViewModel(
+                initialState =
+                    OnboardingState(
+                        permissionsCompleted = true,
+                        interestsCompleted = true,
+                        welcomeSeen = true,
+                        avatarSetOrSkipped = false, // flag not yet written for legacy users
+                    ),
+                userHasAvatar = { true },
+            )
         assertEquals(OnboardingViewModel.Step.Complete, vm.step.value)
         assertFalse(vm.needsPhase2Onboarding())
     }
 
     @Test
     fun legacyAccount_withoutWelcomeFlag_stillSeesWelcome() {
-        val vm = OnboardingViewModel(
-            initialState = OnboardingState(
-                permissionsCompleted = true,
-                interestsCompleted = true,
-                welcomeSeen = false,
-            ),
-            userHasAvatar = { true },
-        )
+        val vm =
+            OnboardingViewModel(
+                initialState =
+                    OnboardingState(
+                        permissionsCompleted = true,
+                        interestsCompleted = true,
+                        welcomeSeen = false,
+                    ),
+                userHasAvatar = { true },
+            )
         assertEquals(OnboardingViewModel.Step.Welcome, vm.step.value)
     }
 
@@ -133,19 +139,21 @@ class OnboardingViewModelTest {
 
     @Test
     fun avatarSkippedWithAvatarAlreadyPresent_isIdempotent() {
-        val vm = OnboardingViewModel(
-            initialState = OnboardingState(welcomeSeen = true, interestsCompleted = true),
-            userHasAvatar = { true },
-        )
+        val vm =
+            OnboardingViewModel(
+                initialState = OnboardingState(welcomeSeen = true, interestsCompleted = true),
+                userHasAvatar = { true },
+            )
         // Avatar is fast-forwarded to Complete because the user already has an avatar.
         assertEquals(OnboardingViewModel.Step.Complete, vm.step.value)
     }
 
     @Test
     fun interestsNotYetSaved_keepsUserOnInterestsStep() {
-        val vm = OnboardingViewModel(
-            initialState = OnboardingState(welcomeSeen = true),
-        )
+        val vm =
+            OnboardingViewModel(
+                initialState = OnboardingState(welcomeSeen = true),
+            )
         assertEquals(OnboardingViewModel.Step.Interests, vm.step.value)
     }
 
@@ -166,5 +174,73 @@ class OnboardingViewModelTest {
         assertEquals(false, recorder.snapshots[1].avatarSetOrSkipped)
 
         assertEquals(true, recorder.snapshots[2].avatarSetOrSkipped)
+    }
+
+    @Test
+    fun unknownAvatar_holdsLoadingInsteadOfAvatar() {
+        val vm =
+            OnboardingViewModel(
+                initialState = OnboardingState(welcomeSeen = true, interestsCompleted = true),
+                userHasAvatar = { null },
+            )
+        assertEquals(OnboardingViewModel.Step.Loading, vm.step.value)
+        assertTrue(vm.needsPhase2Onboarding())
+    }
+
+    @Test
+    fun unknownAvatar_stillShowsWelcome() {
+        val vm =
+            OnboardingViewModel(
+                initialState = OnboardingState(),
+                userHasAvatar = { null },
+            )
+        assertEquals(OnboardingViewModel.Step.Welcome, vm.step.value)
+    }
+
+    @Test
+    fun absentAvatar_showsAvatarStep() {
+        val vm =
+            OnboardingViewModel(
+                initialState = OnboardingState(welcomeSeen = true, interestsCompleted = true),
+                userHasAvatar = { false },
+            )
+        assertEquals(OnboardingViewModel.Step.Avatar, vm.step.value)
+    }
+
+    @Test
+    fun goBack_fromAvatarToInterestsWithoutClearingInterests() {
+        val vm =
+            OnboardingViewModel(
+                initialState = OnboardingState(welcomeSeen = true, interestsCompleted = true),
+                userHasAvatar = { false },
+            )
+        assertEquals(OnboardingViewModel.Step.Avatar, vm.step.value)
+        vm.goBack()
+        assertEquals(OnboardingViewModel.Step.Interests, vm.step.value)
+        assertTrue(vm.state.value.interestsCompleted)
+        assertTrue(vm.canGoBack())
+        assertEquals(1, vm.visibleStepIndex())
+    }
+
+    @Test
+    fun goBack_fromInterestsToWelcome() {
+        val vm =
+            OnboardingViewModel(
+                initialState = OnboardingState(welcomeSeen = true),
+            )
+        vm.goBack()
+        assertEquals(OnboardingViewModel.Step.Welcome, vm.step.value)
+        assertFalse(vm.canGoBack())
+        assertEquals(0, vm.visibleStepIndex())
+        assertEquals(3, vm.visibleStepCount())
+    }
+
+    @Test
+    fun goBack_fromWelcome_isNoOp() {
+        val recorder = PersistRecorder()
+        val vm = OnboardingViewModel(onPersist = recorder)
+        vm.goBack()
+        assertEquals(OnboardingViewModel.Step.Welcome, vm.step.value)
+        assertEquals(0, recorder.snapshots.size)
     }
 }

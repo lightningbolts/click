@@ -1,106 +1,57 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+    "ktlint:standard:max-line-length",
+)
+
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.*
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.ui.platform.LocalUriHandler
-import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickSheetDialogChrome // pragma: allowlist secret
-import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
-import compose.project.click.click.ui.components.AnimatedClickDialog // pragma: allowlist secret
-import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
-import compose.project.click.click.ui.components.InteractiveSwipeBackParallaxPeekRatio // pragma: allowlist secret
 import androidx.compose.runtime.*
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.* // pragma: allowlist secret
-import compose.project.click.click.ui.components.AdaptiveButton // pragma: allowlist secret
-import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
-import compose.project.click.click.ui.components.LiquidGlassPill // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickCircularGlassIconButton // pragma: allowlist secret
-import compose.project.click.click.ui.components.PlatformMap // pragma: allowlist secret
-import compose.project.click.click.ui.components.MapPin // pragma: allowlist secret
-import compose.project.click.click.ui.components.MapClusterPin // pragma: allowlist secret
-import compose.project.click.click.ui.components.MapPinKind // pragma: allowlist secret
-import compose.project.click.click.ui.components.toClusterPin // pragma: allowlist secret
-import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
-import compose.project.click.click.ui.components.ProfileBottomSheet // pragma: allowlist secret
-import compose.project.click.click.ui.components.EventPeopleDirectorySection
-import compose.project.click.click.ui.components.EventPeopleDirectorySheetContent
-import compose.project.click.click.ui.components.BeaconShareToChatDialog
-import compose.project.click.click.ui.components.ClickFormBottomSheet
-import compose.project.click.click.ui.components.EventDirectoryUserProfileSheet
-import compose.project.click.click.ui.components.ProfileSheetBadge // pragma: allowlist secret
-import compose.project.click.click.ui.components.ProfileSheetState // pragma: allowlist secret
-import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
-import compose.project.click.click.ui.utils.* // pragma: allowlist secret
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.data.repository.MapBeaconRepository
-import compose.project.click.click.events.EventReminderCoordinator
-import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
-import compose.project.click.click.viewmodel.MapState // pragma: allowlist secret
-import compose.project.click.click.viewmodel.MapSelection // pragma: allowlist secret
-import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
-import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
-import compose.project.click.click.data.models.withPreservedEventScheduleFrom
-import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
-import compose.project.click.click.data.models.User // pragma: allowlist secret
-import compose.project.click.click.media.rememberChatAudioPlayer // pragma: allowlist secret
-import compose.project.click.click.openBeaconOriginalMediaUrl // pragma: allowlist secret
 import coil3.compose.AsyncImage // pragma: allowlist secret
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
-import androidx.compose.foundation.clickable
-import androidx.compose.ui.unit.DpOffset
-import androidx.compose.ui.zIndex
-import compose.project.click.click.getPlatform
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import androidx.compose.runtime.rememberCoroutineScope
-import compose.project.click.click.ui.components.CreateHubModal
-import compose.project.click.click.util.oneToOnePeerPairKey
-import compose.project.click.click.utils.LocationService
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import kotlinx.datetime.Instant
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
+import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.withPreservedEventScheduleFrom
+import compose.project.click.click.data.repository.MapBeaconRepository
+import compose.project.click.click.events.EventReminderCoordinator
 import compose.project.click.click.events.EventSchedule
 import compose.project.click.click.events.buildEventShareText
 import compose.project.click.click.events.buildEventShareUrl
@@ -108,27 +59,70 @@ import compose.project.click.click.events.eventCheckInCtaLabel
 import compose.project.click.click.events.eventSchedule
 import compose.project.click.click.events.formatEventEndDateLabel
 import compose.project.click.click.events.formatEventEndTimeLabel
+import compose.project.click.click.events.formatEventPostedAtLabel
 import compose.project.click.click.events.formatEventScheduleRange
 import compose.project.click.click.events.formatEventStartDateLabel
-import compose.project.click.click.events.formatEventPostedAtLabel
 import compose.project.click.click.events.formatEventStartTimeLabel
 import compose.project.click.click.events.isLive
 import compose.project.click.click.events.openEventMapsRoute
+import compose.project.click.click.getPlatform
+import compose.project.click.click.media.rememberChatAudioPlayer // pragma: allowlist secret
+import compose.project.click.click.openBeaconOriginalMediaUrl // pragma: allowlist secret
 import compose.project.click.click.platform.shareText
-import compose.project.click.click.ui.utils.displayTypeTitle
-import compose.project.click.click.ui.utils.displayDynamicTitle
-import compose.project.click.click.ui.components.AdaptiveBackground
-import compose.project.click.click.ui.components.PlatformBackHandler
-import compose.project.click.click.ui.components.rememberFabAboveNavPadding
-import compose.project.click.click.ui.components.rememberBottomChromePadding
-import compose.project.click.click.ui.sheet.MapBeaconSheetRoot
 import compose.project.click.click.telemetry.TelemetryBatcher
+import compose.project.click.click.ui.components.AdaptiveBackground
+import compose.project.click.click.ui.components.AnimatedClickDialog // pragma: allowlist secret
+import compose.project.click.click.ui.components.BeaconShareToChatDialog
+import compose.project.click.click.ui.components.ClickCircularGlassIconButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickFormBottomSheet
+import compose.project.click.click.ui.components.ClickOutlinedTextField
+import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickSheetDialogChrome // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
+import compose.project.click.click.ui.components.CreateHubModal
+import compose.project.click.click.ui.components.EventDirectoryUserProfileSheet
+import compose.project.click.click.ui.components.EventPeopleDirectorySection
+import compose.project.click.click.ui.components.EventPeopleDirectorySheetContent
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassmorphicOverlay
+import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
+import compose.project.click.click.ui.components.InteractiveSwipeBackParallaxPeekRatio // pragma: allowlist secret
+import compose.project.click.click.ui.components.LiquidGlassPill // pragma: allowlist secret
+import compose.project.click.click.ui.components.MapClusterPin // pragma: allowlist secret
+import compose.project.click.click.ui.components.MapPin // pragma: allowlist secret
+import compose.project.click.click.ui.components.MapPinKind // pragma: allowlist secret
+import compose.project.click.click.ui.components.PlatformBackHandler
+import compose.project.click.click.ui.components.PlatformMap // pragma: allowlist secret
+import compose.project.click.click.ui.components.ProfileBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ProfileSheetBadge // pragma: allowlist secret
+import compose.project.click.click.ui.components.ProfileSheetState // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastHost
 import compose.project.click.click.ui.components.UnifiedToastTokens
+import compose.project.click.click.ui.components.rememberBottomChromePadding
+import compose.project.click.click.ui.components.rememberFabAboveNavPadding
 import compose.project.click.click.ui.components.rememberUnifiedToastState
+import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
+import compose.project.click.click.ui.components.toClusterPin // pragma: allowlist secret
+import compose.project.click.click.ui.sheet.MapBeaconSheetRoot
+import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalPlatformStyle
-import compose.project.click.click.ui.components.ClickOutlinedTextField
+import compose.project.click.click.ui.utils.* // pragma: allowlist secret
+import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
+import compose.project.click.click.ui.utils.displayDynamicTitle
+import compose.project.click.click.util.oneToOnePeerPairKey
+import compose.project.click.click.utils.LocationService
+import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
+import compose.project.click.click.viewmodel.MapSelection // pragma: allowlist secret
+import compose.project.click.click.viewmodel.MapState // pragma: allowlist secret
+import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 /**
  * Map screen — Phase 2 refactor (B1, C10, C11):
@@ -151,11 +145,13 @@ fun MapScreen(
      * Called after the in-sheet share picker confirms destinations.
      * [openConnectionId] is the connection/chat id to navigate to when non-null.
      */
-    onShareBeaconToChats: ((
-        beacon: MapBeacon,
-        chatIds: List<String>,
-        openConnectionId: String?,
-    ) -> Unit)? = null,
+    onShareBeaconToChats: (
+        (
+            beacon: MapBeacon,
+            chatIds: List<String>,
+            openConnectionId: String?,
+        ) -> Unit
+    )? = null,
     /** When set, focuses the matching beacon pin once map beacons have loaded. */
     initialBeaconId: String? = null,
     onBeaconFocusConsumed: () -> Unit = {},
@@ -272,23 +268,26 @@ fun MapScreen(
         eventsListTransitionMode = mode
         if (mode == EventsListTransitionMode.Tap) {
             onEventsSheetExpandedChanged(false)
-            eventsCloseJob = eventsScope.launch {
-                eventsVerticalReveal.animateTo(
-                    0f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioNoBouncy,
-                        stiffness = Spring.StiffnessMediumLow,
-                    ),
-                )
-                if (!eventsSheetExpanded) finalizeEventsClose()
-            }
+            eventsCloseJob =
+                eventsScope.launch {
+                    eventsVerticalReveal.animateTo(
+                        0f,
+                        animationSpec =
+                            spring(
+                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                stiffness = Spring.StiffnessMediumLow,
+                            ),
+                    )
+                    if (!eventsSheetExpanded) finalizeEventsClose()
+                }
         } else {
             onEventsSheetExpandedChanged(false)
-            eventsCloseJob = eventsScope.launch {
-                delay(64L)
-                eventsVerticalReveal.snapTo(0f)
-                if (!eventsSheetExpanded) finalizeEventsClose()
-            }
+            eventsCloseJob =
+                eventsScope.launch {
+                    delay(64L)
+                    eventsVerticalReveal.snapTo(0f)
+                    if (!eventsSheetExpanded) finalizeEventsClose()
+                }
         }
     }
 
@@ -303,10 +302,11 @@ fun MapScreen(
                 eventsVerticalReveal.snapTo(0f)
                 eventsVerticalReveal.animateTo(
                     1f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioNoBouncy,
-                        stiffness = Spring.StiffnessMediumLow,
-                    ),
+                    animationSpec =
+                        spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMediumLow,
+                        ),
                 )
             } else {
                 eventsVerticalReveal.snapTo(1f)
@@ -318,8 +318,9 @@ fun MapScreen(
     val rawMapBeacons by viewModel.mapBeacons.collectAsState()
     LaunchedEffect(initialBeaconId, rawMapBeacons) {
         val beaconId = initialBeaconId?.trim()?.takeIf { it.isNotEmpty() } ?: return@LaunchedEffect
-        val known = rawMapBeacons.any { it.id == beaconId } ||
-            EventReminderCoordinator.beaconById(beaconId) != null
+        val known =
+            rawMapBeacons.any { it.id == beaconId } ||
+                EventReminderCoordinator.beaconById(beaconId) != null
         if (!known) return@LaunchedEffect
         viewModel.focusBeaconOnMap(beaconId)
         onBeaconFocusConsumed()
@@ -400,11 +401,12 @@ fun MapScreen(
 
     LaunchedEffect(selection) {
         val sel = selection
-        selectedProfileId = if (sel is MapSelection.ConnectionSelected) {
-            sel.point.connection.id
-        } else {
-            null
-        }
+        selectedProfileId =
+            if (sel is MapSelection.ConnectionSelected) {
+                sel.point.connection.id
+            } else {
+                null
+            }
     }
 
     // Parallax removed — the upward shift was perceived as a layout bug when sheets opened.
@@ -416,218 +418,233 @@ fun MapScreen(
         val grayscaleModifier = if (ghostModeEnabled) Modifier.alpha(0.7f) else Modifier
 
         AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(grayscaleModifier)
-                .background(
-                    if (ghostModeEnabled) Color.DarkGray.copy(alpha = 0.3f)
-                    else GlassSheetTokens.OledBlack(),
-                ),
-        ) {
-            when (val state = mapState) {
-                is MapState.Loading -> LoadingState()
-                is MapState.Error -> ErrorState(message = state.message, onRetry = { viewModel.refresh() })
-                is MapState.Success -> {
-                    val feedItems = remember(
-                        communityHubs,
-                        mapBeacons,
-                        renderData,
-                        effectiveUserLat,
-                        effectiveUserLon,
-                    ) {
-                        buildDiscoveryFeedItems(
-                            hubs = communityHubs,
-                            beacons = mapBeacons,
-                            renderData = renderData,
-                            userLat = effectiveUserLat,
-                            userLon = effectiveUserLon,
-                        )
-                    }
-                    val eventNearbyCount = remember(feedItems) {
-                        feedItems.count { it is DiscoveryFeedItem.Beacon || it is DiscoveryFeedItem.Hub }
-                    }
-                    val fabBottomPadding = mapFabAboveNav + EventsReopenChipClearance
-
-                    // Map layer is isolated from eventsSheetExpanded so open/close cannot
-                    // invalidate PlatformMap (gestures stay on; overlay eats touches).
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        MapContent(
-                            modifier = Modifier.fillMaxSize(),
-                            renderData = renderData,
-                            communityHubs = communityHubs,
-                            zoom = cameraTarget?.zoom ?: mapBindingZoom,
-                            ghostMode = ghostModeEnabled,
-                            mapGesturesEnabled = true,
-                            showCompass = true,
-                            cameraTarget = cameraTarget,
-                            userLat = effectiveUserLat,
-                            userLon = effectiveUserLon,
-                            currentUserId = currentUser?.id,
-                            onPinTapped = rememberMapPinTapHandler(
-                                onConnection = { pinId -> selectedProfileId = pinId },
-                                onClearConnection = { selectedProfileId = null },
-                                onPin = { viewModel.onMapPinTapped(it) },
-                            ),
-                            onClusterTapped = rememberMapClusterTapHandler {
-                                viewModel.onClusterTappedFromMap(it)
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .then(grayscaleModifier)
+                        .background(
+                            if (ghostModeEnabled) {
+                                Color.DarkGray.copy(alpha = 0.3f)
+                            } else {
+                                GlassSheetTokens.OledBlack()
                             },
-                            onZoomChanged = rememberStableZoomHandler { viewModel.setZoomLevel(it) },
-                            onVisibleBoundsChanged = rememberStableBoundsHandler { minLat, maxLat, minLon, maxLon ->
-                                viewModel.updateVisibleBounds(minLat, maxLat, minLon, maxLon)
-                            },
-                            onCameraAnimationComplete = rememberStableUnitHandler {
-                                viewModel.onCameraAnimationComplete()
-                            },
-                            onMapGesture = rememberStableUnitHandler {
-                                TelemetryBatcher.recordMapPan()
-                            },
-                        )
-
-                        MapAlwaysOnChrome(
-                            dockBottomPadding = fabBottomPadding,
-                            layerFilters = layerFilters,
-                            onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
-                            onDropBeacon = {
-                                TelemetryBatcher.recordActionTaken()
-                                showBeaconDropSheet = true
-                            },
-                            onZoomIn = { viewModel.zoomIn() },
-                            onZoomOut = { viewModel.zoomOut() },
-                            // Stay composed under the events overlay (covered, not alpha-hidden) so
-                            // swipe-back reveals controls that never remounted.
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .zIndex(10f)
-                                .graphicsLayer {
-                                    if (!eventsSwipeBehindLayers) {
-                                        translationX = 0f
-                                        return@graphicsLayer
-                                    }
-                                    val w = size.width.coerceAtLeast(1f)
-                                    val o = eventsSwipeDragPx.floatValue.coerceIn(0f, w)
-                                    val progress = (o / w).coerceIn(0f, 1f)
-                                    translationX =
-                                        -(size.width * InteractiveSwipeBackParallaxPeekRatio) * (1f - progress)
-                                },
-                        )
-
-                        EventsReopenChip(
-                            count = eventNearbyCount,
-                            onClick = {
-                                eventsCloseJob?.cancel()
-                                eventsCloseJob = null
-                                eventsSwipeDragPx.floatValue = 0f
-                                eventsSwipeBehindLayers = false
-                                eventsListTransitionMode = EventsListTransitionMode.Tap
-                                eventsOverlayMounted = true
-                                onEventsSheetExpandedChanged(true)
-                            },
-                            enabled = !eventsSheetExpanded,
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .zIndex(15f)
-                                .graphicsLayer {
-                                    if (!eventsSwipeBehindLayers) {
-                                        translationX = 0f
-                                        return@graphicsLayer
-                                    }
-                                    val w = size.width.coerceAtLeast(1f)
-                                    val o = eventsSwipeDragPx.floatValue.coerceIn(0f, w)
-                                    val progress = (o / w).coerceIn(0f, 1f)
-                                    translationX =
-                                        -(size.width * InteractiveSwipeBackParallaxPeekRatio) * (1f - progress)
-                                }
-                                .padding(
-                                    start = 16.dp,
-                                    end = 16.dp,
-                                    bottom = mapFabAboveNav,
-                                ),
-                        )
-
-                        GlassmorphicOverlay(
-                            visible = frictionUi.showGrassNudge && !eventsSheetExpanded,
-                            message = "Looking for the right vibe? Try dropping a 'Looking for Coffee' intent and let the map come to you. Put your phone in your pocket and we'll vibrate when a match is nearby.",
-                            onDismiss = { TelemetryBatcher.dismissGrassNudge() },
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .zIndex(20f),
-                        )
-
-                        // Persist after first open; vertical reveal restores slide-up without remounting.
-                        if (eventsOverlayMounted) {
-                            val eventsClosed =
-                                !eventsSheetExpanded &&
-                                    !eventsSwipeBehindLayers &&
-                                    eventsVerticalReveal.value < 0.01f
-                            BoxWithConstraints(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .zIndex(40f),
+                        ).testTag("map-screen"),
+            ) {
+                when (val state = mapState) {
+                    is MapState.Loading -> LoadingState()
+                    is MapState.Error -> ErrorState(message = state.message, onRetry = { viewModel.refresh() })
+                    is MapState.Success -> {
+                        val feedItems =
+                            remember(
+                                communityHubs,
+                                mapBeacons,
+                                renderData,
+                                effectiveUserLat,
+                                effectiveUserLon,
                             ) {
-                                val heightPx = constraints.maxHeight
-                                Box(
-                                    modifier = Modifier
+                                buildDiscoveryFeedItems(
+                                    hubs = communityHubs,
+                                    beacons = mapBeacons,
+                                    renderData = renderData,
+                                    userLat = effectiveUserLat,
+                                    userLon = effectiveUserLon,
+                                )
+                            }
+                        val eventNearbyCount =
+                            remember(feedItems) {
+                                feedItems.count { it is DiscoveryFeedItem.Beacon || it is DiscoveryFeedItem.Hub }
+                            }
+                        val fabBottomPadding = mapFabAboveNav + EventsReopenChipClearance
+
+                        // Map layer is isolated from eventsSheetExpanded so open/close cannot
+                        // invalidate PlatformMap (gestures stay on; overlay eats touches).
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            MapContent(
+                                modifier = Modifier.fillMaxSize(),
+                                renderData = renderData,
+                                communityHubs = communityHubs,
+                                zoom = cameraTarget?.zoom ?: mapBindingZoom,
+                                ghostMode = ghostModeEnabled,
+                                mapGesturesEnabled = true,
+                                showCompass = true,
+                                cameraTarget = cameraTarget,
+                                userLat = effectiveUserLat,
+                                userLon = effectiveUserLon,
+                                currentUserId = currentUser?.id,
+                                onPinTapped =
+                                    rememberMapPinTapHandler(
+                                        onConnection = { pinId -> selectedProfileId = pinId },
+                                        onClearConnection = { selectedProfileId = null },
+                                        onPin = { viewModel.onMapPinTapped(it) },
+                                    ),
+                                onClusterTapped =
+                                    rememberMapClusterTapHandler {
+                                        viewModel.onClusterTappedFromMap(it)
+                                    },
+                                onZoomChanged = rememberStableZoomHandler { viewModel.setZoomLevel(it) },
+                                onVisibleBoundsChanged =
+                                    rememberStableBoundsHandler { minLat, maxLat, minLon, maxLon ->
+                                        viewModel.updateVisibleBounds(minLat, maxLat, minLon, maxLon)
+                                    },
+                                onCameraAnimationComplete =
+                                    rememberStableUnitHandler {
+                                        viewModel.onCameraAnimationComplete()
+                                    },
+                                onMapGesture =
+                                    rememberStableUnitHandler {
+                                        TelemetryBatcher.recordMapPan()
+                                    },
+                            )
+
+                            MapAlwaysOnChrome(
+                                dockBottomPadding = fabBottomPadding,
+                                layerFilters = layerFilters,
+                                onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
+                                onDropBeacon = {
+                                    TelemetryBatcher.recordActionTaken()
+                                    showBeaconDropSheet = true
+                                },
+                                onZoomIn = { viewModel.zoomIn() },
+                                onZoomOut = { viewModel.zoomOut() },
+                                // Stay composed under the events overlay (covered, not alpha-hidden) so
+                                // swipe-back reveals controls that never remounted.
+                                modifier =
+                                    Modifier
                                         .fillMaxSize()
+                                        .zIndex(10f)
                                         .graphicsLayer {
-                                            // During interactive back, Y stays put — container owns X.
-                                            val swiping = eventsSwipeBehindLayers ||
-                                                eventsSwipeDragPx.floatValue > 0.5f
-                                            translationY = if (swiping) {
-                                                0f
-                                            } else {
-                                                (1f - eventsVerticalReveal.value) * heightPx
+                                            if (!eventsSwipeBehindLayers) {
+                                                translationX = 0f
+                                                return@graphicsLayer
                                             }
-                                            alpha = if (eventsClosed) 0f else 1f
-                                        }
-                                        .then(
-                                            if (eventsClosed) {
-                                                Modifier.offset { IntOffset(constraints.maxWidth, 0) }
-                                            } else {
-                                                Modifier
-                                            },
+                                            val w = size.width.coerceAtLeast(1f)
+                                            val o = eventsSwipeDragPx.floatValue.coerceIn(0f, w)
+                                            val progress = (o / w).coerceIn(0f, 1f)
+                                            translationX =
+                                                -(size.width * InteractiveSwipeBackParallaxPeekRatio) * (1f - progress)
+                                        },
+                            )
+
+                            EventsReopenChip(
+                                count = eventNearbyCount,
+                                onClick = {
+                                    eventsCloseJob?.cancel()
+                                    eventsCloseJob = null
+                                    eventsSwipeDragPx.floatValue = 0f
+                                    eventsSwipeBehindLayers = false
+                                    eventsListTransitionMode = EventsListTransitionMode.Tap
+                                    eventsOverlayMounted = true
+                                    onEventsSheetExpandedChanged(true)
+                                },
+                                enabled = !eventsSheetExpanded,
+                                modifier =
+                                    Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .zIndex(15f)
+                                        .graphicsLayer {
+                                            if (!eventsSwipeBehindLayers) {
+                                                translationX = 0f
+                                                return@graphicsLayer
+                                            }
+                                            val w = size.width.coerceAtLeast(1f)
+                                            val o = eventsSwipeDragPx.floatValue.coerceIn(0f, w)
+                                            val progress = (o / w).coerceIn(0f, 1f)
+                                            translationX =
+                                                -(size.width * InteractiveSwipeBackParallaxPeekRatio) * (1f - progress)
+                                        }.padding(
+                                            start = 16.dp,
+                                            end = 16.dp,
+                                            bottom = mapFabAboveNav,
                                         ),
+                            )
+
+                            GlassmorphicOverlay(
+                                visible = frictionUi.showGrassNudge && !eventsSheetExpanded,
+                                message = "Looking for the right vibe? Try dropping a 'Looking for Coffee' intent and let the map come to you. Put your phone in your pocket and we'll vibrate when a match is nearby.",
+                                onDismiss = { TelemetryBatcher.dismissGrassNudge() },
+                                modifier =
+                                    Modifier
+                                        .fillMaxSize()
+                                        .zIndex(20f),
+                            )
+
+                            // Persist after first open; vertical reveal restores slide-up without remounting.
+                            if (eventsOverlayMounted) {
+                                val eventsClosed =
+                                    !eventsSheetExpanded &&
+                                        !eventsSwipeBehindLayers &&
+                                        eventsVerticalReveal.value < 0.01f
+                                BoxWithConstraints(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxSize()
+                                            .zIndex(40f),
                                 ) {
-                                    InteractiveSwipeBackContainer(
-                                        enabled = eventsSheetExpanded,
-                                        opaquePreviousBackground = false,
-                                        externalDragOffsetPx = eventsSwipeDragPx,
-                                        onBehindLayersVisibleChanged = { eventsSwipeBehindLayers = it },
-                                        onBack = {
-                                            closeEventsList(EventsListTransitionMode.Gesture)
-                                        },
-                                        previousContent = {},
-                                        currentContent = {
-                                            EventsDiscoveryFullScreen(
-                                                feedItems = feedItems,
-                                                discoveryFeedPending = discoveryFeedPending,
-                                                discoveryFeedRefreshing = discoveryFeedLoading,
-                                                onRefreshDiscovery = { viewModel.refreshDiscoveryFeed() },
-                                                layerFilters = layerFilters,
-                                                onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
-                                                viewModel = viewModel,
-                                                onBack = {
-                                                    closeEventsList(EventsListTransitionMode.Tap)
-                                                },
-                                                onBeaconClick = { beacon, distanceM ->
-                                                    TelemetryBatcher.recordActionTaken()
-                                                    viewModel.onBeaconPinTapped(
-                                                        beacon.id,
-                                                        seedDistanceMeters = distanceM,
-                                                    )
-                                                },
-                                                interactiveBackSwipeOffsetPx = eventsSwipeDragPx,
-                                            )
-                                        },
-                                    )
+                                    val heightPx = constraints.maxHeight
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .fillMaxSize()
+                                                .graphicsLayer {
+                                                    // During interactive back, Y stays put — container owns X.
+                                                    val swiping =
+                                                        eventsSwipeBehindLayers ||
+                                                            eventsSwipeDragPx.floatValue > 0.5f
+                                                    translationY =
+                                                        if (swiping) {
+                                                            0f
+                                                        } else {
+                                                            (1f - eventsVerticalReveal.value) * heightPx
+                                                        }
+                                                    alpha = if (eventsClosed) 0f else 1f
+                                                }.then(
+                                                    if (eventsClosed) {
+                                                        Modifier.offset { IntOffset(constraints.maxWidth, 0) }
+                                                    } else {
+                                                        Modifier
+                                                    },
+                                                ),
+                                    ) {
+                                        InteractiveSwipeBackContainer(
+                                            enabled = eventsSheetExpanded,
+                                            opaquePreviousBackground = false,
+                                            externalDragOffsetPx = eventsSwipeDragPx,
+                                            onBehindLayersVisibleChanged = { eventsSwipeBehindLayers = it },
+                                            onBack = {
+                                                closeEventsList(EventsListTransitionMode.Gesture)
+                                            },
+                                            previousContent = {},
+                                            currentContent = {
+                                                EventsDiscoveryFullScreen(
+                                                    feedItems = feedItems,
+                                                    discoveryFeedPending = discoveryFeedPending,
+                                                    discoveryFeedRefreshing = discoveryFeedLoading,
+                                                    onRefreshDiscovery = { viewModel.refreshDiscoveryFeed() },
+                                                    layerFilters = layerFilters,
+                                                    onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
+                                                    viewModel = viewModel,
+                                                    onBack = {
+                                                        closeEventsList(EventsListTransitionMode.Tap)
+                                                    },
+                                                    onBeaconClick = { beacon, distanceM ->
+                                                        TelemetryBatcher.recordActionTaken()
+                                                        viewModel.onBeaconPinTapped(
+                                                            beacon.id,
+                                                            seedDistanceMeters = distanceM,
+                                                        )
+                                                    },
+                                                    interactiveBackSwipeOffsetPx = eventsSwipeDragPx,
+                                                )
+                                            },
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-
-        }
         }
     }
 
@@ -643,10 +660,11 @@ fun MapScreen(
             uiKitFillViewport = true,
         ) {
             BeaconDropSheetContent(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight()
-                    .padding(bottom = 12.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight()
+                        .padding(bottom = 12.dp),
                 errorMessage = beaconInsertError,
                 onDismissError = { viewModel.clearBeaconInsertError() },
                 submitLocked = beaconSubmitInFlight,
@@ -658,10 +676,11 @@ fun MapScreen(
                         if (loc == null) {
                             null
                         } else {
-                            val reverse = compose.project.click.click.utils.GeocodingService.reverseGeocode(
-                                loc.latitude,
-                                loc.longitude,
-                            )
+                            val reverse =
+                                compose.project.click.click.utils.GeocodingService.reverseGeocode(
+                                    loc.latitude,
+                                    loc.longitude,
+                                )
                             reverse ?: run {
                                 // Never persist the literal "Current location" label.
                                 // Avoid String.format — not available on Kotlin/Native.
@@ -678,7 +697,20 @@ fun MapScreen(
                         }
                     }
                 },
-                onSubmit = { kind, title, description, soundtrackUrl, ttlMs, showCreatorName, visibilityAudience, eventSchedule, eventCategories, venueScale, eventLocation, onRejectedEarly ->
+                onSubmit = {
+                    kind,
+                    title,
+                    description,
+                    soundtrackUrl,
+                    ttlMs,
+                    showCreatorName,
+                    visibilityAudience,
+                    eventSchedule,
+                    eventCategories,
+                    venueScale,
+                    eventLocation,
+                    onRejectedEarly,
+                    ->
                     viewModel.submitBeaconDrop(
                         kind = kind,
                         title = title,
@@ -722,9 +754,10 @@ fun MapScreen(
             modifier = Modifier,
         ) {
             ClickSheetDialogChrome(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(),
                 sheetColor = sheetBg,
                 onSurface = onSheet,
                 alignSemanticColorsToSheet = true,
@@ -733,10 +766,11 @@ fun MapScreen(
                     pins = stack.pins,
                     onChoose = { viewModel.onOverlappingPinChosen(it) },
                     onDismiss = { viewModel.clearSelection() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .sheetBodyScroll()
-                        .padding(horizontal = 24.dp, vertical = 12.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .sheetBodyScroll()
+                            .padding(horizontal = 24.dp, vertical = 12.dp),
                 )
             }
         }
@@ -758,9 +792,10 @@ fun MapScreen(
             modifier = Modifier,
         ) {
             ClickSheetDialogChrome(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(),
                 sheetColor = hubSheetBg,
                 onSurface = onHubSheet,
                 alignSemanticColorsToSheet = true,
@@ -774,10 +809,11 @@ fun MapScreen(
                         viewModel.clearSelection()
                     },
                     onDismiss = { viewModel.clearSelection() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .sheetBodyScroll()
-                        .padding(horizontal = 24.dp, vertical = 12.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .sheetBodyScroll()
+                            .padding(horizontal = 24.dp, vertical = 12.dp),
                 )
             }
         }
@@ -790,7 +826,8 @@ fun MapScreen(
         var shareBeaconToChat by remember(beaconSel.beacon.id) {
             mutableStateOf<MapBeacon?>(null)
         }
-        val inboxChats by compose.project.click.click.data.AppDataManager.inboxFeedChats.collectAsState()
+        val inboxChats by compose.project.click.click.data.AppDataManager.inboxFeedChats
+            .collectAsState()
         MapBeaconSheetRoot(
             visible = true,
             onDismissRequest = {
@@ -821,21 +858,23 @@ fun MapScreen(
                             shareBeaconToChat = beacon
                         },
                         onNavigateToChat = onNavigateToChat,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .sheetBodyScroll()
-                            .padding(horizontal = 24.dp, vertical = 12.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .sheetBodyScroll()
+                                .padding(horizontal = 24.dp, vertical = 12.dp),
                     )
                 }
                 UnifiedToastHost(
                     state = toastState,
                     opaque = true,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 24.dp)
-                        .zIndex(100f),
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .padding(bottom = 24.dp)
+                            .zIndex(100f),
                 )
                 // Hosted inside the sheet window so it stacks above the sheet on iOS/Android.
                 shareBeaconToChat?.let { beaconToShare ->
@@ -859,14 +898,19 @@ fun MapScreen(
 
     if (showBottomSheet && selection is MapSelection.ConnectionSelected) {
         val connectionSelection = selection as MapSelection.ConnectionSelected
-        val viewerUserId = compose.project.click.click.data.AppDataManager
-            .currentUser.collectAsState().value?.id
-        val sheetData = remember(connectionSelection, viewerUserId) {
-            buildProfileSheetState(connectionSelection, viewerUserId)
-        }
+        val viewerUserId =
+            compose.project.click.click.data.AppDataManager
+                .currentUser
+                .collectAsState()
+                .value
+                ?.id
+        val sheetData =
+            remember(connectionSelection, viewerUserId) {
+                buildProfileSheetState(connectionSelection, viewerUserId)
+            }
         val profileSheetColor = MaterialTheme.colorScheme.surface
         val onProfileSheet = MaterialTheme.colorScheme.onSurface
-            MapBeaconSheetRoot(
+        MapBeaconSheetRoot(
             visible = true,
             onDismissRequest = {
                 selectedProfileId = null
@@ -882,9 +926,10 @@ fun MapScreen(
             useUiKitScrollHost = true,
         ) {
             ClickSheetDialogChrome(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(),
                 sheetColor = profileSheetColor,
                 onSurface = onProfileSheet,
                 alignSemanticColorsToSheet = true,
@@ -904,14 +949,15 @@ fun MapScreen(
                         selectedProfileId = null
                         viewModel.clearSelection()
                     },
-                    onOpenDisposableRoll = onOpenDisposableRoll?.let { open ->
-                        {
-                            val connectionId = connectionSelection.point.connection.id
-                            selectedProfileId = null
-                            viewModel.clearSelection()
-                            open(connectionId)
-                        }
-                    },
+                    onOpenDisposableRoll =
+                        onOpenDisposableRoll?.let { open ->
+                            {
+                                val connectionId = connectionSelection.point.connection.id
+                                selectedProfileId = null
+                                viewModel.clearSelection()
+                                open(connectionId)
+                            }
+                        },
                 )
             }
         }
@@ -935,12 +981,13 @@ fun MapScreen(
         UnifiedToastHost(
             state = toastState,
             opaque = true,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = rememberBottomChromePadding() + 8.dp)
-                .zIndex(100f),
+            modifier =
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = rememberBottomChromePadding() + 8.dp)
+                    .zIndex(100f),
         )
     }
 }
@@ -957,24 +1004,28 @@ private fun buildProfileSheetState(
 ): ProfileSheetState {
     val otherUser = sel.otherUser
     val point = sel.point
-    val displayName = otherUser?.name?.takeIf { it.isNotBlank() }
-        ?: "Connection"
-    val status = when (point.timeState) {
-        TimeState.LIVE -> ProfileSheetBadge("Live now", PrimaryBlue)
-        TimeState.RECENT -> ProfileSheetBadge("Recent", LightBlue)
-        TimeState.ARCHIVE -> ProfileSheetBadge("Memory", Color.Gray)
-    }
+    val displayName =
+        otherUser?.name?.takeIf { it.isNotBlank() }
+            ?: "Connection"
+    val status =
+        when (point.timeState) {
+            TimeState.LIVE -> ProfileSheetBadge("Live now", PrimaryBlue)
+            TimeState.RECENT -> ProfileSheetBadge("Recent", LightBlue)
+            TimeState.ARCHIVE -> ProfileSheetBadge("Memory", Color.Gray)
+        }
     return ProfileSheetState(
         displayName = displayName,
         subtitle = otherUser?.email?.takeIf { it.isNotBlank() },
         avatarUrl = otherUser?.image,
         statusBadge = status,
-        canNudge = point.connection.id.isNotBlank() && (
-            point.connection.has_begun ||
-                point.connection.normalizedConnectionStatus() in setOf("active", "kept", "pending") ||
-                point.timeState == TimeState.LIVE ||
-                point.timeState == TimeState.RECENT
-            ),
+        canNudge =
+            point.connection.id.isNotBlank() &&
+                (
+                    point.connection.has_begun ||
+                        point.connection.normalizedConnectionStatus() in setOf("active", "kept", "pending") ||
+                        point.timeState == TimeState.LIVE ||
+                        point.timeState == TimeState.RECENT
+                ),
         timeline = emptyList(),
         media = emptyList(),
         links = emptyList(),
@@ -1000,17 +1051,19 @@ private fun MapAlwaysOnChrome(
 ) {
     val style = LocalPlatformStyle.current
     val glassStrength = if (style.isIOS) 0.64f else 0.4f
-    val topSafe = WindowInsets.safeDrawing.only(
-        WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
-    )
+    val topSafe =
+        WindowInsets.safeDrawing.only(
+            WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
+        )
 
     Box(modifier = modifier.fillMaxSize()) {
         Row(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .zIndex(40f)
-                .windowInsetsPadding(topSafe)
-                .padding(top = 8.dp, end = 16.dp),
+            modifier =
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .zIndex(40f)
+                    .windowInsetsPadding(topSafe)
+                    .padding(top = 8.dp, end = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -1023,12 +1076,13 @@ private fun MapAlwaysOnChrome(
         }
 
         Row(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .fillMaxWidth()
-                .zIndex(10f)
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
-                .padding(start = 16.dp, end = 16.dp, bottom = dockBottomPadding),
+            modifier =
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .zIndex(10f)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                    .padding(start = 16.dp, end = 16.dp, bottom = dockBottomPadding),
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -1114,27 +1168,30 @@ private fun MapLayerFilterDropdown(
     val onMenuSurface = MaterialTheme.colorScheme.onSurface
     val menuOutline = clickBorderColor()
     val itemCount = MapLayerFilter.entries.size
-    val menuUpOffset = if (opensDownward) {
-        8.dp
-    } else {
-        -(itemCount * 48 + 24).dp
-    }
+    val menuUpOffset =
+        if (opensDownward) {
+            8.dp
+        } else {
+            -(itemCount * 48 + 24).dp
+        }
     val menuWidth = 240.dp
     val triggerWidth = 132.dp
     val glassStrength = if (style.isIOS) 0.64f else 0.4f
 
     val triggerShape = RoundedCornerShape(20.dp)
     Box(
-        modifier = modifier
-            .widthIn(max = triggerWidth)
-            .wrapContentWidth(Alignment.End),
+        modifier =
+            modifier
+                .widthIn(max = triggerWidth)
+                .wrapContentWidth(Alignment.End),
     ) {
         LiquidGlassPill(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 40.dp, max = 48.dp)
-                .clip(triggerShape)
-                .clickable { expanded = true },
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 40.dp, max = 48.dp)
+                    .clip(triggerShape)
+                    .clickable { expanded = true },
             cornerRadiusDp = 20,
             backgroundStrength = glassStrength,
         ) {
@@ -1164,10 +1221,11 @@ private fun MapLayerFilterDropdown(
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier = Modifier
-                .width(menuWidth)
-                .wrapContentWidth(Alignment.Start)
-                .zIndex(20f),
+            modifier =
+                Modifier
+                    .width(menuWidth)
+                    .wrapContentWidth(Alignment.Start)
+                    .zIndex(20f),
             offset = DpOffset(0.dp, -menuUpOffset),
             shape = RoundedCornerShape(if (isIOS) 14.dp else 12.dp),
             containerColor = menuSurface,
@@ -1176,10 +1234,11 @@ private fun MapLayerFilterDropdown(
             border = BorderStroke(2.dp, menuOutline),
         ) {
             MapLayerFilter.entries.forEach { filter ->
-                val isSelected = when (filter) {
-                    MapLayerFilter.ALL -> MapLayerFilter.ALL in selected
-                    else -> filter in selected
-                }
+                val isSelected =
+                    when (filter) {
+                        MapLayerFilter.ALL -> MapLayerFilter.ALL in selected
+                        else -> filter in selected
+                    }
                 DropdownMenuItem(
                     text = {
                         Text(
@@ -1225,37 +1284,46 @@ internal fun BeaconDetailSheetContent(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
     var editDraft by remember(beacon.id) {
-        mutableStateOf(beacon.metadata.description?.trim().orEmpty())
+        mutableStateOf(
+            beacon.metadata.description
+                ?.trim()
+                .orEmpty(),
+        )
     }
     val openEdit: () -> Unit = {
-        editDraft = beacon.metadata.description?.trim().orEmpty()
+        editDraft =
+            beacon.metadata.description
+                ?.trim()
+                .orEmpty()
         showEditDialog = true
     }
     val openDelete: () -> Unit = { showDeleteConfirm = true }
 
     Column(modifier = modifier) {
         when (beacon.kind) {
-            MapBeaconKind.SOUNDTRACK -> SoundtrackBeaconDetail(
-                beacon = beacon,
-                distanceMeters = distanceMeters,
-                viewModel = viewModel,
-                isCreator = isCreator,
-                onEdit = openEdit,
-                onDelete = openDelete,
-                onShareToChat = onShareBeaconToChat?.let { cb -> { cb(beacon) } },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            MapBeaconKind.EVENT -> EventBeaconDetail(
-                beacon = beacon,
-                distanceMeters = distanceMeters,
-                viewModel = viewModel,
-                isCreator = isCreator,
-                onEdit = openEdit,
-                onDelete = openDelete,
-                onShareToChat = onShareBeaconToChat?.let { cb -> { cb(beacon) } },
-                onNavigateToChat = onNavigateToChat,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            MapBeaconKind.SOUNDTRACK ->
+                SoundtrackBeaconDetail(
+                    beacon = beacon,
+                    distanceMeters = distanceMeters,
+                    viewModel = viewModel,
+                    isCreator = isCreator,
+                    onEdit = openEdit,
+                    onDelete = openDelete,
+                    onShareToChat = onShareBeaconToChat?.let { cb -> { cb(beacon) } },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            MapBeaconKind.EVENT ->
+                EventBeaconDetail(
+                    beacon = beacon,
+                    distanceMeters = distanceMeters,
+                    viewModel = viewModel,
+                    isCreator = isCreator,
+                    onEdit = openEdit,
+                    onDelete = openDelete,
+                    onShareToChat = onShareBeaconToChat?.let { cb -> { cb(beacon) } },
+                    onNavigateToChat = onNavigateToChat,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             else -> {
                 CommunityBeaconDetail(
                     beacon = beacon,
@@ -1304,15 +1372,16 @@ internal fun BeaconDetailSheetContent(
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Description") },
             maxLines = 4,
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = GlassSheetTokens.OnOled(),
-                unfocusedTextColor = GlassSheetTokens.OnOled(),
-                focusedBorderColor = PrimaryBlue,
-                unfocusedBorderColor = GlassSheetTokens.GlassBorder(),
-                cursorColor = PrimaryBlue,
-                focusedLabelColor = GlassSheetTokens.OnOledMuted(),
-                unfocusedLabelColor = GlassSheetTokens.OnOledMuted(),
-            ),
+            colors =
+                OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = GlassSheetTokens.OnOled(),
+                    unfocusedTextColor = GlassSheetTokens.OnOled(),
+                    focusedBorderColor = PrimaryBlue,
+                    unfocusedBorderColor = GlassSheetTokens.GlassBorder(),
+                    cursorColor = PrimaryBlue,
+                    focusedLabelColor = GlassSheetTokens.OnOledMuted(),
+                    unfocusedLabelColor = GlassSheetTokens.OnOledMuted(),
+                ),
         )
     }
 }
@@ -1383,10 +1452,11 @@ private fun BeaconOwnerDropdownMenu(
                     tint = onMenu,
                 )
             },
-            colors = MenuDefaults.itemColors(
-                textColor = onMenu,
-                leadingIconColor = onMenu,
-            ),
+            colors =
+                MenuDefaults.itemColors(
+                    textColor = onMenu,
+                    leadingIconColor = onMenu,
+                ),
         )
         HorizontalDivider(
             modifier = Modifier.padding(horizontal = 12.dp),
@@ -1413,10 +1483,11 @@ private fun BeaconOwnerDropdownMenu(
                     tint = MaterialTheme.colorScheme.error,
                 )
             },
-            colors = MenuDefaults.itemColors(
-                textColor = MaterialTheme.colorScheme.error,
-                leadingIconColor = MaterialTheme.colorScheme.error,
-            ),
+            colors =
+                MenuDefaults.itemColors(
+                    textColor = MaterialTheme.colorScheme.error,
+                    leadingIconColor = MaterialTheme.colorScheme.error,
+                ),
         )
     }
 }
@@ -1461,13 +1532,14 @@ internal fun EventBeaconDetail(
     // Key on the matching row (not the whole list) so host/posted patches invalidate remember.
     val fromMap = mapBeacons.firstOrNull { it.id == beacon.id }
     val fromPrefetch = prefetchedBeacons.firstOrNull { it.id == beacon.id }
-    val displayBeacon = remember(beacon, fromMap, fromPrefetch, networkDetail) {
-        val live = networkDetail ?: fromMap ?: fromPrefetch
-        when {
-            live == null -> beacon
-            else -> live.withPreservedEventScheduleFrom(beacon)
+    val displayBeacon =
+        remember(beacon, fromMap, fromPrefetch, networkDetail) {
+            val live = networkDetail ?: fromMap ?: fromPrefetch
+            when {
+                live == null -> beacon
+                else -> live.withPreservedEventScheduleFrom(beacon)
+            }
         }
-    }
     val schedule = displayBeacon.eventSchedule()
     val live = schedule?.isLive() == true
     val distanceLabel = distanceMeters?.let { formatBeaconDistance(it) }
@@ -1476,11 +1548,13 @@ internal fun EventBeaconDetail(
     val border = clickBorderColor()
     val cardSurface = clickCardSurface()
     val hostUserId = displayBeacon.createdByUserId?.takeIf { it.isNotBlank() }
-    val hostUser = hostUserId?.let { id ->
-        if (id == currentUser?.id) currentUser else connectedUsers[id]
-    }
-    val hostDisplayName = displayBeacon.creatorDisplayName?.trim()?.takeIf { it.isNotEmpty() }
-        ?: hostUser?.name?.trim()?.takeIf { it.isNotEmpty() }
+    val hostUser =
+        hostUserId?.let { id ->
+            if (id == currentUser?.id) currentUser else connectedUsers[id]
+        }
+    val hostDisplayName =
+        displayBeacon.creatorDisplayName?.trim()?.takeIf { it.isNotEmpty() }
+            ?: hostUser?.name?.trim()?.takeIf { it.isNotEmpty() }
     val hostAvatarUrl = hostUser?.image?.trim()?.takeIf { it.isNotEmpty() }
 
     val directoryCache by viewModel.beaconDirectoryById.collectAsState()
@@ -1509,12 +1583,14 @@ internal fun EventBeaconDetail(
         // Always hydrate missing Posted / Host / creator / schedule — bookmark & proximity rows
         // often already have schedule, so the old schedule-only gate skipped host+posted forever.
         viewModel.ensureEventBeaconDetail(displayBeacon.id, seed = displayBeacon)
-        val hostIncomplete = displayBeacon.creatorDisplayName.isNullOrBlank() ||
-            (displayBeacon.showCreatorName && displayBeacon.createdByUserId.isNullOrBlank())
+        val hostIncomplete =
+            displayBeacon.creatorDisplayName.isNullOrBlank() ||
+                (displayBeacon.showCreatorName && displayBeacon.createdByUserId.isNullOrBlank())
         if (hostIncomplete) {
-            val fetched = withContext(Dispatchers.Default) {
-                MapBeaconRepository().fetchBeacon(displayBeacon.id).getOrNull()
-            }
+            val fetched =
+                withContext(Dispatchers.Default) {
+                    MapBeaconRepository().fetchBeacon(displayBeacon.id).getOrNull()
+                }
             if (fetched != null) {
                 networkDetail = fetched
                 viewModel.ensureEventBeaconDetail(displayBeacon.id, seed = fetched)
@@ -1578,8 +1654,9 @@ internal fun EventBeaconDetail(
             EventHeroActions(
                 bookmarked = bookmarked,
                 bookmarkPending = bookmarkPending,
-                isCreator = isCreator ||
-                    (!currentUser?.id.isNullOrBlank() && displayBeacon.createdByUserId == currentUser?.id),
+                isCreator =
+                    isCreator ||
+                        (!currentUser?.id.isNullOrBlank() && displayBeacon.createdByUserId == currentUser?.id),
                 onShare = {
                     val shareUrl = buildEventShareUrl(displayBeacon.id)
                     viewModel.recordEventShare(displayBeacon.id, shareUrl = shareUrl)
@@ -1603,8 +1680,13 @@ internal fun EventBeaconDetail(
             EventCategoryChips(categories = categories, border = border, cardSurface = cardSurface)
         }
 
-        val rawLocationLabel = displayBeacon.metadata.formattedAddress?.trim()?.takeIf { it.isNotEmpty() }
-            ?: displayBeacon.metadata.locationName?.trim()?.takeIf { it.isNotEmpty() }
+        val rawLocationLabel =
+            displayBeacon.metadata.formattedAddress
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?: displayBeacon.metadata.locationName
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
         // Legacy drops stored the literal "Current location" — never show that to viewers.
         var resolvedLocationLabel by remember(displayBeacon.id, rawLocationLabel) {
             mutableStateOf(
@@ -1617,23 +1699,25 @@ internal fun EventBeaconDetail(
                 rawLocationLabel == null ||
                 rawLocationLabel.equals("Current location", ignoreCase = true)
             ) {
-                val reverse = withContext(Dispatchers.Default) {
-                    compose.project.click.click.utils.GeocodingService.reverseGeocode(
-                        displayBeacon.latitude,
-                        displayBeacon.longitude,
-                    )
-                }
+                val reverse =
+                    withContext(Dispatchers.Default) {
+                        compose.project.click.click.utils.GeocodingService.reverseGeocode(
+                            displayBeacon.latitude,
+                            displayBeacon.longitude,
+                        )
+                    }
                 resolvedLocationLabel = reverse?.shortLabel?.takeIf { it.isNotBlank() }
                     ?: reverse?.displayName?.takeIf { it.isNotBlank() }
             }
         }
         resolvedLocationLabel?.let { locationLabel ->
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(2.dp, border, RoundedCornerShape(12.dp))
-                    .background(cardSurface, RoundedCornerShape(12.dp))
-                    .padding(16.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .border(2.dp, border, RoundedCornerShape(12.dp))
+                        .background(cardSurface, RoundedCornerShape(12.dp))
+                        .padding(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.Top,
             ) {
@@ -1663,7 +1747,11 @@ internal fun EventBeaconDetail(
         }
 
         Text(
-            text = displayBeacon.metadata.description?.trim().orEmpty().ifBlank { "No description" },
+            text =
+                displayBeacon.metadata.description
+                    ?.trim()
+                    .orEmpty()
+                    .ifBlank { "No description" },
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface,
         )
@@ -1677,15 +1765,16 @@ internal fun EventBeaconDetail(
         }
 
         EventPeopleDirectorySection(
-            attendees = directoryAttendees.ifEmpty {
-                attendees.map {
-                    compose.project.click.click.events.DirectoryAttendee(
-                        userId = it.userId,
-                        name = it.name,
-                        avatarUrl = it.avatarUrl,
-                    )
-                }
-            },
+            attendees =
+                directoryAttendees.ifEmpty {
+                    attendees.map {
+                        compose.project.click.click.events.DirectoryAttendee(
+                            userId = it.userId,
+                            name = it.name,
+                            avatarUrl = it.avatarUrl,
+                        )
+                    }
+                },
             loading = directoryLoading || rsvpLoading,
             mutualsSectionUnlocked = mutualsUnlocked,
             directoryEnriched = directoryEntry != null,
@@ -1700,15 +1789,16 @@ internal fun EventBeaconDetail(
                 useUiKitScrollHost = true,
             ) {
                 EventPeopleDirectorySheetContent(
-                    attendees = directoryAttendees.ifEmpty {
-                        attendees.map {
-                            compose.project.click.click.events.DirectoryAttendee(
-                                userId = it.userId,
-                                name = it.name,
-                                avatarUrl = it.avatarUrl,
-                            )
-                        }
-                    },
+                    attendees =
+                        directoryAttendees.ifEmpty {
+                            attendees.map {
+                                compose.project.click.click.events.DirectoryAttendee(
+                                    userId = it.userId,
+                                    name = it.name,
+                                    avatarUrl = it.avatarUrl,
+                                )
+                            }
+                        },
                     loading = directoryLoading,
                     mutualsSectionUnlocked = mutualsUnlocked,
                     directoryEnriched = directoryEntry != null,
@@ -1721,35 +1811,40 @@ internal fun EventBeaconDetail(
         }
 
         directoryProfileUserId?.let { profileId ->
-            val attendee = directoryAttendees.firstOrNull { it.userId == profileId }
-                ?: attendees.map {
-                    compose.project.click.click.events.DirectoryAttendee(
-                        userId = it.userId,
-                        name = it.name,
-                        avatarUrl = it.avatarUrl,
-                    )
-                }.firstOrNull { it.userId == profileId }
+            val attendee =
+                directoryAttendees.firstOrNull { it.userId == profileId }
+                    ?: attendees
+                        .map {
+                            compose.project.click.click.events.DirectoryAttendee(
+                                userId = it.userId,
+                                name = it.name,
+                                avatarUrl = it.avatarUrl,
+                            )
+                        }.firstOrNull { it.userId == profileId }
             if (attendee != null) {
                 val viewerId = currentUser?.id
-                val canMessage = compose.project.click.click.events.allowsDirectoryConnectActions(
-                    attendee.relationship,
-                )
+                val canMessage =
+                    compose.project.click.click.events.allowsDirectoryConnectActions(
+                        attendee.relationship,
+                    )
                 EventDirectoryUserProfileSheet(
                     attendee = attendee,
                     viewerUserId = viewerId,
                     onDismiss = { directoryProfileUserId = null },
-                    onMessage = if (canMessage) {
-                        {
-                            val conn = compose.project.click.click.data.AppDataManager.connections.value
-                                .firstOrNull { c ->
-                                    attendee.userId in c.user_ids &&
-                                        (viewerId.isNullOrBlank() || viewerId in c.user_ids)
-                                }
-                            conn?.id?.let { onNavigateToChat?.invoke(it) }
-                        }
-                    } else {
-                        null
-                    },
+                    onMessage =
+                        if (canMessage) {
+                            {
+                                val conn =
+                                    compose.project.click.click.data.AppDataManager.connections.value
+                                        .firstOrNull { c ->
+                                            attendee.userId in c.user_ids &&
+                                                (viewerId.isNullOrBlank() || viewerId in c.user_ids)
+                                        }
+                                conn?.id?.let { onNavigateToChat?.invoke(it) }
+                            }
+                        } else {
+                            null
+                        },
                 )
             }
         }
@@ -1765,20 +1860,23 @@ internal fun EventBeaconDetail(
             modifier = Modifier.fillMaxWidth(),
             shape = actionShape,
             border = BorderStroke(2.dp, border),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (checkedIn) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.surface
-                },
-                contentColor = if (checkedIn) {
-                    MaterialTheme.colorScheme.onPrimary
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
-                disabledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-                disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-            ),
+            colors =
+                ButtonDefaults.buttonColors(
+                    containerColor =
+                        if (checkedIn) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.surface
+                        },
+                    contentColor =
+                        if (checkedIn) {
+                            MaterialTheme.colorScheme.onPrimary
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                    disabledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+                    disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                ),
             contentPadding = PaddingValues(vertical = 14.dp),
         ) {
             if (checkInPending) {
@@ -1811,10 +1909,11 @@ internal fun EventBeaconDetail(
             modifier = Modifier.fillMaxWidth(),
             shape = actionShape,
             border = BorderStroke(2.dp, border),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ),
+            colors =
+                ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
             contentPadding = PaddingValues(vertical = 14.dp),
         ) {
             Icon(
@@ -1842,12 +1941,13 @@ internal fun EventBeaconDetail(
                 modifier = Modifier.fillMaxWidth(),
                 shape = actionShape,
                 border = BorderStroke(2.dp, MaterialTheme.colorScheme.error),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error,
-                    contentColor = Color.White,
-                    disabledContainerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.45f),
-                    disabledContentColor = Color.White.copy(alpha = 0.7f),
-                ),
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = Color.White,
+                        disabledContainerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.45f),
+                        disabledContentColor = Color.White.copy(alpha = 0.7f),
+                    ),
                 contentPadding = PaddingValues(vertical = 14.dp),
             ) {
                 Text(
@@ -1871,9 +1971,10 @@ internal fun EventBeaconDetail(
                 modifier = Modifier.fillMaxWidth(),
                 shape = actionShape,
                 border = BorderStroke(2.dp, border),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                ),
+                colors =
+                    ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    ),
                 contentPadding = PaddingValues(vertical = 14.dp),
             ) {
                 Text(
@@ -1903,18 +2004,20 @@ internal fun EventBeaconDetail(
 @Composable
 private fun EventLiveBadge() {
     Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(Color(0xFFDC2626))
-            .padding(horizontal = 10.dp, vertical = 4.dp),
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(Color(0xFFDC2626))
+                .padding(horizontal = 10.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Box(
-            modifier = Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(Color.White),
+            modifier =
+                Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(Color.White),
         )
         Text(
             text = "LIVE",
@@ -2031,15 +2134,18 @@ private fun EventHeroIconButton(
     IconButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier
-            .size(48.dp)
-            .border(2.dp, border, CircleShape)
-            .clip(CircleShape)
-            .background(
-                if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
-                else Color.Transparent,
-            )
-            .graphicsLayer { alpha = if (enabled) 1f else 0.55f },
+        modifier =
+            Modifier
+                .size(48.dp)
+                .border(2.dp, border, CircleShape)
+                .clip(CircleShape)
+                .background(
+                    if (selected) {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                    } else {
+                        Color.Transparent
+                    },
+                ).graphicsLayer { alpha = if (enabled) 1f else 0.55f },
     ) {
         Icon(
             imageVector = icon,
@@ -2091,10 +2197,11 @@ private fun EventBentoCell(
     cardSurface: Color,
 ) {
     Column(
-        modifier = modifier
-            .border(2.dp, border, RoundedCornerShape(12.dp))
-            .background(cardSurface, RoundedCornerShape(12.dp))
-            .padding(16.dp),
+        modifier =
+            modifier
+                .border(2.dp, border, RoundedCornerShape(12.dp))
+                .background(cardSurface, RoundedCornerShape(12.dp))
+                .padding(16.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -2152,10 +2259,11 @@ private fun EventCategoryChips(
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier
-                        .border(2.dp, border, RoundedCornerShape(999.dp))
-                        .background(cardSurface, RoundedCornerShape(999.dp))
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    modifier =
+                        Modifier
+                            .border(2.dp, border, RoundedCornerShape(999.dp))
+                            .background(cardSurface, RoundedCornerShape(999.dp))
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
                 )
             }
         }
@@ -2171,11 +2279,12 @@ private fun EventHostCard(
     cardSurface: Color,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(2.dp, border, RoundedCornerShape(12.dp))
-            .background(cardSurface, RoundedCornerShape(12.dp))
-            .padding(16.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .border(2.dp, border, RoundedCornerShape(12.dp))
+                .background(cardSurface, RoundedCornerShape(12.dp))
+                .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -2184,10 +2293,11 @@ private fun EventHostCard(
             email = null,
             avatarUrl = avatarUrl,
             userId = userId,
-            modifier = Modifier
-                .size(56.dp)
-                .border(2.dp, border, CircleShape)
-                .clip(CircleShape),
+            modifier =
+                Modifier
+                    .size(56.dp)
+                    .border(2.dp, border, CircleShape)
+                    .clip(CircleShape),
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -2223,11 +2333,12 @@ private fun EventAttendeeStack(
         )
         when {
             loading -> CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(28.dp))
-            attendees.isEmpty() -> Text(
-                text = "Be the first to RSVP.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            attendees.isEmpty() ->
+                Text(
+                    text = "Be the first to RSVP.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             else -> {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     visible.forEachIndexed { index, attendee ->
@@ -2236,24 +2347,26 @@ private fun EventAttendeeStack(
                             email = null,
                             avatarUrl = attendee.avatarUrl,
                             userId = attendee.userId,
-                            modifier = Modifier
-                                .offset(x = (-10 * index).dp)
-                                .zIndex((visible.size - index).toFloat())
-                                .size(48.dp)
-                                .border(2.dp, border, CircleShape)
-                                .clip(CircleShape)
-                                .background(cardSurface),
+                            modifier =
+                                Modifier
+                                    .offset(x = (-10 * index).dp)
+                                    .zIndex((visible.size - index).toFloat())
+                                    .size(48.dp)
+                                    .border(2.dp, border, CircleShape)
+                                    .clip(CircleShape)
+                                    .background(cardSurface),
                         )
                     }
                     if (overflow > 0) {
                         Box(
-                            modifier = Modifier
-                                .offset(x = (-10 * visible.size).dp)
-                                .zIndex(0f)
-                                .size(48.dp)
-                                .border(2.dp, border, CircleShape)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.secondaryContainer),
+                            modifier =
+                                Modifier
+                                    .offset(x = (-10 * visible.size).dp)
+                                    .zIndex(0f)
+                                    .size(48.dp)
+                                    .border(2.dp, border, CircleShape)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.secondaryContainer),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
@@ -2285,41 +2398,53 @@ internal fun CommunityBeaconDetail(
     val cardSurface = clickCardSurface()
     val currentUser by AppDataManager.currentUser.collectAsState()
     val connectedUsers by AppDataManager.connectedUsers.collectAsState()
-    val kindLabel = when (beacon.kind) {
-        MapBeaconKind.HAZARD -> "Hazard"
-        MapBeaconKind.SOS -> "SOS"
-        MapBeaconKind.UTILITY -> "Utility"
-        MapBeaconKind.STUDY -> "Study"
-        MapBeaconKind.SOCIAL_VIBE -> "Social"
-        MapBeaconKind.OTHER -> "Beacon"
-        else -> "Beacon"
-    }
-    val kindIcon = when (beacon.kind) {
-        MapBeaconKind.HAZARD -> Icons.Filled.Warning
-        MapBeaconKind.SOS -> Icons.Filled.NotificationsActive
-        MapBeaconKind.UTILITY -> Icons.Filled.Build
-        MapBeaconKind.STUDY -> Icons.Filled.MenuBook
-        MapBeaconKind.SOCIAL_VIBE -> Icons.Filled.Groups
-        else -> Icons.Filled.Place
-    }
+    val kindLabel =
+        when (beacon.kind) {
+            MapBeaconKind.HAZARD -> "Hazard"
+            MapBeaconKind.SOS -> "SOS"
+            MapBeaconKind.UTILITY -> "Utility"
+            MapBeaconKind.STUDY -> "Study"
+            MapBeaconKind.SOCIAL_VIBE -> "Social"
+            MapBeaconKind.OTHER -> "Beacon"
+            else -> "Beacon"
+        }
+    val kindIcon =
+        when (beacon.kind) {
+            MapBeaconKind.HAZARD -> Icons.Filled.Warning
+            MapBeaconKind.SOS -> Icons.Filled.NotificationsActive
+            MapBeaconKind.UTILITY -> Icons.Filled.Build
+            MapBeaconKind.STUDY -> Icons.Filled.MenuBook
+            MapBeaconKind.SOCIAL_VIBE -> Icons.Filled.Groups
+            else -> Icons.Filled.Place
+        }
     val hostUserId = beacon.createdByUserId?.takeIf { it.isNotBlank() }
-    val hostUser = hostUserId?.let { id ->
-        if (id == currentUser?.id) currentUser else connectedUsers[id]
-    }
-    val hostDisplayName = beacon.creatorDisplayName?.trim()?.takeIf { it.isNotEmpty() }
-        ?: hostUser?.name?.trim()?.takeIf { it.isNotEmpty() }
+    val hostUser =
+        hostUserId?.let { id ->
+            if (id == currentUser?.id) currentUser else connectedUsers[id]
+        }
+    val hostDisplayName =
+        beacon.creatorDisplayName?.trim()?.takeIf { it.isNotEmpty() }
+            ?: hostUser?.name?.trim()?.takeIf { it.isNotEmpty() }
     val hostAvatarUrl = hostUser?.image?.trim()?.takeIf { it.isNotEmpty() }
     val distanceLabel = distanceMeters?.let { formatBeaconDistance(it) }
     val createdLabel = formatBeaconInstant(beacon.createdAtEpochMs)
     val expiresLabel = formatBeaconInstant(beacon.expiresAtEpochMs)
-    val createdParts = createdLabel.split(" · ").let { parts ->
-        if (parts.size >= 2) parts[0] to parts.drop(1).joinToString(" · ")
-        else createdLabel to ""
-    }
-    val expiresParts = expiresLabel.split(" · ").let { parts ->
-        if (parts.size >= 2) parts[0] to parts.drop(1).joinToString(" · ")
-        else expiresLabel to ""
-    }
+    val createdParts =
+        createdLabel.split(" · ").let { parts ->
+            if (parts.size >= 2) {
+                parts[0] to parts.drop(1).joinToString(" · ")
+            } else {
+                createdLabel to ""
+            }
+        }
+    val expiresParts =
+        expiresLabel.split(" · ").let { parts ->
+            if (parts.size >= 2) {
+                parts[0] to parts.drop(1).joinToString(" · ")
+            } else {
+                expiresLabel to ""
+            }
+        }
 
     Column(
         modifier = modifier,
@@ -2336,11 +2461,12 @@ internal fun CommunityBeaconDetail(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
-                            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        modifier =
+                            Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
+                                .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -2437,11 +2563,12 @@ internal fun CommunityBeaconDetail(
         }
 
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(2.dp, border, RoundedCornerShape(12.dp))
-                .background(cardSurface, RoundedCornerShape(12.dp))
-                .padding(16.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .border(2.dp, border, RoundedCornerShape(12.dp))
+                    .background(cardSurface, RoundedCornerShape(12.dp))
+                    .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
@@ -2450,7 +2577,11 @@ internal fun CommunityBeaconDetail(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = beacon.metadata.description?.trim().orEmpty().ifBlank { "No description" },
+                text =
+                    beacon.metadata.description
+                        ?.trim()
+                        .orEmpty()
+                        .ifBlank { "No description" },
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -2470,29 +2601,35 @@ internal fun SoundtrackBeaconDetail(
     modifier: Modifier = Modifier,
 ) {
     val mapBeacons by viewModel.mapBeacons.collectAsState()
-    val displayBeacon = remember(beacon, mapBeacons) {
-        mapBeacons.firstOrNull { it.id == beacon.id } ?: beacon
-    }
-    val trackTitle = displayBeacon.metadata.trackName?.takeIf { it.isNotBlank() }
-        ?: displayBeacon.metadata.title?.takeIf { it.isNotBlank() }
-        ?: displayBeacon.displayDynamicTitle()
-    val artistLine = displayBeacon.metadata.artistName?.takeIf { it.isNotBlank() }
-        ?: displayBeacon.metadata.artist?.takeIf { it.isNotBlank() }
+    val displayBeacon =
+        remember(beacon, mapBeacons) {
+            mapBeacons.firstOrNull { it.id == beacon.id } ?: beacon
+        }
+    val trackTitle =
+        displayBeacon.metadata.trackName?.takeIf { it.isNotBlank() }
+            ?: displayBeacon.metadata.title?.takeIf { it.isNotBlank() }
+            ?: displayBeacon.displayDynamicTitle()
+    val artistLine =
+        displayBeacon.metadata.artistName?.takeIf { it.isNotBlank() }
+            ?: displayBeacon.metadata.artist?.takeIf { it.isNotBlank() }
     val art = displayBeacon.metadata.albumArtUrl?.takeIf { it.isNotBlank() }
     val preview = displayBeacon.metadata.previewUrl?.takeIf { it.isNotBlank() }
-    val original = (displayBeacon.metadata.originalUrl ?: displayBeacon.metadata.musicUrl)
-        ?.takeIf { it.isNotBlank() }
+    val original =
+        (displayBeacon.metadata.originalUrl ?: displayBeacon.metadata.musicUrl)
+            ?.takeIf { it.isNotBlank() }
     val distanceLabel = distanceMeters?.let { formatBeaconDistance(it) }
     val border = clickBorderColor()
     val cardSurface = clickCardSurface()
     val currentUser by AppDataManager.currentUser.collectAsState()
     val connectedUsers by AppDataManager.connectedUsers.collectAsState()
     val hostUserId = displayBeacon.createdByUserId?.takeIf { it.isNotBlank() }
-    val hostUser = hostUserId?.let { id ->
-        if (id == currentUser?.id) currentUser else connectedUsers[id]
-    }
-    val hostDisplayName = displayBeacon.creatorDisplayName?.trim()?.takeIf { it.isNotEmpty() }
-        ?: hostUser?.name?.trim()?.takeIf { it.isNotEmpty() }
+    val hostUser =
+        hostUserId?.let { id ->
+            if (id == currentUser?.id) currentUser else connectedUsers[id]
+        }
+    val hostDisplayName =
+        displayBeacon.creatorDisplayName?.trim()?.takeIf { it.isNotEmpty() }
+            ?: hostUser?.name?.trim()?.takeIf { it.isNotEmpty() }
     val hostAvatarUrl = hostUser?.image?.trim()?.takeIf { it.isNotEmpty() }
 
     LaunchedEffect(displayBeacon.id) {
@@ -2560,12 +2697,13 @@ internal fun SoundtrackBeaconDetail(
         }
 
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(20.dp))
-                .background(cardSurface)
-                .border(2.dp, border, RoundedCornerShape(20.dp))
-                .padding(16.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(cardSurface)
+                    .border(2.dp, border, RoundedCornerShape(20.dp))
+                    .padding(16.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -2577,18 +2715,20 @@ internal fun SoundtrackBeaconDetail(
                         model = art,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .size(112.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .border(2.dp, border, RoundedCornerShape(16.dp)),
+                        modifier =
+                            Modifier
+                                .size(112.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .border(2.dp, border, RoundedCornerShape(16.dp)),
                     )
                 } else {
                     Box(
-                        modifier = Modifier
-                            .size(112.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                            .border(2.dp, border, RoundedCornerShape(16.dp)),
+                        modifier =
+                            Modifier
+                                .size(112.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                                .border(2.dp, border, RoundedCornerShape(16.dp)),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
@@ -2644,18 +2784,20 @@ internal fun SoundtrackBeaconDetail(
             }
             val pos = player.positionMs
             val dur = player.durationMs.takeIf { it > 0 } ?: 30_000L
-            val progressed = remember(tick, pos, dur, isDragging) {
-                (pos.toFloat() / dur.toFloat().coerceAtLeast(1f)).coerceIn(0f, 1f)
-            }
+            val progressed =
+                remember(tick, pos, dur, isDragging) {
+                    (pos.toFloat() / dur.toFloat().coerceAtLeast(1f)).coerceIn(0f, 1f)
+                }
             val sliderValue = if (isDragging) sliderPosition else progressed
 
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(cardSurface)
-                    .border(2.dp, border, RoundedCornerShape(20.dp))
-                    .padding(16.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(cardSurface)
+                        .border(2.dp, border, RoundedCornerShape(20.dp))
+                        .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
@@ -2709,9 +2851,10 @@ internal fun SoundtrackBeaconDetail(
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
                             Text(
-                                text = formatBeaconPreviewClock(
-                                    if (isDragging) (sliderPosition * dur).toLong() else pos,
-                                ),
+                                text =
+                                    formatBeaconPreviewClock(
+                                        if (isDragging) (sliderPosition * dur).toLong() else pos,
+                                    ),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -2735,11 +2878,12 @@ internal fun SoundtrackBeaconDetail(
                 }
             }
             Text(
-                text = if (!waitedForPreview) {
-                    "Loading preview…"
-                } else {
-                    "No audio preview available for this track."
-                },
+                text =
+                    if (!waitedForPreview) {
+                        "Loading preview…"
+                    } else {
+                        "No audio preview available for this track."
+                    },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -2800,7 +2944,11 @@ private fun formatBeaconInstant(epochMs: Long?): String {
         val hour24 = dt.hour
         val h12 = ((hour24 + 11) % 12) + 1
         val amPm = if (hour24 < 12) "AM" else "PM"
-        val mon = dt.month.name.lowercase().replaceFirstChar { it.uppercase() }.take(3)
+        val mon =
+            dt.month.name
+                .lowercase()
+                .replaceFirstChar { it.uppercase() }
+                .take(3)
         "$mon ${dt.dayOfMonth}, ${dt.year} · $h12:${dt.minute.toString().padStart(2, '0')} $amPm"
     }.getOrElse { "Unknown" }
 }
@@ -2862,18 +3010,20 @@ private fun LiveIndicator(count: Int) {
     val alpha by infiniteTransition.animateFloat(
         initialValue = 0.5f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000),
-            repeatMode = RepeatMode.Reverse,
-        ),
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(1000),
+                repeatMode = RepeatMode.Reverse,
+            ),
     )
 
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
-            modifier = Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(PrimaryBlue.copy(alpha = alpha)),
+            modifier =
+                Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(PrimaryBlue.copy(alpha = alpha)),
         )
         Spacer(modifier = Modifier.width(6.dp))
         Text(
@@ -2906,14 +3056,15 @@ private fun CommunityHubBottomSheet(
             style = MaterialTheme.typography.bodyMedium,
             color = GlassSheetTokens.OnOledMuted(),
         )
-        val distLabel = distanceMeters?.let { d ->
-            if (d >= 1000) {
-                val kmTenths = (d / 100.0).toInt()
-                "${kmTenths / 10.0} km away"
-            } else {
-                "${d.toInt()} m away"
-            }
-        } ?: if (canJoinGeofence == null) "Checking location…" else "Distance unavailable"
+        val distLabel =
+            distanceMeters?.let { d ->
+                if (d >= 1000) {
+                    val kmTenths = (d / 100.0).toInt()
+                    "${kmTenths / 10.0} km away"
+                } else {
+                    "${d.toInt()} m away"
+                }
+            } ?: if (canJoinGeofence == null) "Checking location…" else "Distance unavailable"
         Text(
             text = distLabel,
             style = MaterialTheme.typography.bodySmall,
@@ -2982,39 +3133,43 @@ private fun MapContent(
     onMapGesture: () -> Unit = {},
 ) {
     val connectedUsers by AppDataManager.connectedUsers.collectAsState()
-    val hubPins = remember(communityHubs) {
-        communityHubs.map { MapPin.fromCommunityHub(it) }
-    }
-    val pins = remember(renderData, connectedUsers, currentUserId, hubPins) {
-        when (renderData) {
-            is MapRenderData.IndividualPins -> {
-                val conn = renderData.points
-                    .distinctBy { oneToOnePeerPairKey(it.connection.user_ids) ?: it.connection.id }
-                    .map { point ->
-                    val peerId = point.connection.user_ids.firstOrNull { it != currentUserId }
-                    val peer = peerId?.let { connectedUsers[it] }
-                    MapPin.fromConnectionPoint(
-                        point,
-                        imageUrl = peer?.image,
-                        avatarSeed = peerId ?: point.connection.id,
-                    )
+    val hubPins =
+        remember(communityHubs) {
+            communityHubs.map { MapPin.fromCommunityHub(it) }
+        }
+    val pins =
+        remember(renderData, connectedUsers, currentUserId, hubPins) {
+            when (renderData) {
+                is MapRenderData.IndividualPins -> {
+                    val conn =
+                        renderData.points
+                            .distinctBy { oneToOnePeerPairKey(it.connection.user_ids) ?: it.connection.id }
+                            .map { point ->
+                                val peerId = point.connection.user_ids.firstOrNull { it != currentUserId }
+                                val peer = peerId?.let { connectedUsers[it] }
+                                MapPin.fromConnectionPoint(
+                                    point,
+                                    imageUrl = peer?.image,
+                                    avatarSeed = peerId ?: point.connection.id,
+                                )
+                            }
+                    val bc = renderData.beacons.map { MapPin.fromBeacon(it) }
+                    (conn + bc + hubPins).sortedByDescending { it.zIndex }
                 }
-                val bc = renderData.beacons.map { MapPin.fromBeacon(it) }
-                (conn + bc + hubPins).sortedByDescending { it.zIndex }
-            }
-            is MapRenderData.Clusters -> {
-                val standalone = renderData.standaloneBeacons.map { MapPin.fromBeacon(it) }
-                (standalone + hubPins).sortedByDescending { it.zIndex }
+                is MapRenderData.Clusters -> {
+                    val standalone = renderData.standaloneBeacons.map { MapPin.fromBeacon(it) }
+                    (standalone + hubPins).sortedByDescending { it.zIndex }
+                }
             }
         }
-    }
 
-    val clusters = remember(renderData) {
-        when (renderData) {
-            is MapRenderData.Clusters -> renderData.clusters.map { it.toClusterPin() }
-            is MapRenderData.IndividualPins -> emptyList()
+    val clusters =
+        remember(renderData) {
+            when (renderData) {
+                is MapRenderData.Clusters -> renderData.clusters.map { it.toClusterPin() }
+                is MapRenderData.IndividualPins -> emptyList()
+            }
         }
-    }
 
     // Drive the native map only while a programmatic CameraTarget is active.
     // After onCameraAnimationComplete clears it, pass null centers so PlatformMap
@@ -3066,9 +3221,7 @@ private fun rememberMapPinTapHandler(
 }
 
 @Composable
-private fun rememberMapClusterTapHandler(
-    onCluster: (clusterId: String) -> Unit,
-): (MapClusterPin) -> Unit {
+private fun rememberMapClusterTapHandler(onCluster: (clusterId: String) -> Unit): (MapClusterPin) -> Unit {
     val onClusterState = rememberUpdatedState(onCluster)
     return remember {
         { clusterPin: MapClusterPin ->
@@ -3125,25 +3278,27 @@ private fun OverlappingMapPinsChooser(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         pins.forEach { pin ->
-            val kindLabel = when (pin.kind) {
-                MapPinKind.CONNECTION -> "Connection"
-                MapPinKind.COMMUNITY_HUB -> "Hub"
-                MapPinKind.BEACON_SOUNDTRACK -> "Soundtrack"
-                MapPinKind.BEACON_ALERT -> "Alert"
-                MapPinKind.BEACON_SOCIAL -> "Event"
-                MapPinKind.BEACON_OTHER -> "Beacon"
-            }
+            val kindLabel =
+                when (pin.kind) {
+                    MapPinKind.CONNECTION -> "Connection"
+                    MapPinKind.COMMUNITY_HUB -> "Hub"
+                    MapPinKind.BEACON_SOUNDTRACK -> "Soundtrack"
+                    MapPinKind.BEACON_ALERT -> "Alert"
+                    MapPinKind.BEACON_SOCIAL -> "Event"
+                    MapPinKind.BEACON_OTHER -> "Beacon"
+                }
             val shape = RoundedCornerShape(16.dp)
             val rowSurface = clickCardSurface()
             val rowBorder = clickBorderColor()
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(shape)
-                    .background(rowSurface)
-                    .border(2.dp, rowBorder, shape)
-                    .clickable { onChoose(pin) }
-                    .padding(12.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(shape)
+                        .background(rowSurface)
+                        .border(2.dp, rowBorder, shape)
+                        .clickable { onChoose(pin) }
+                        .padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -3152,10 +3307,11 @@ private fun OverlappingMapPinsChooser(
                     email = null,
                     avatarUrl = pin.imageUrl,
                     userId = pin.avatarUserId ?: pin.id,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .border(2.dp, rowBorder, CircleShape)
-                        .clip(CircleShape),
+                    modifier =
+                        Modifier
+                            .size(48.dp)
+                            .border(2.dp, rowBorder, CircleShape)
+                            .clip(CircleShape),
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -3202,7 +3358,10 @@ private fun LoadingState() {
 }
 
 @Composable
-private fun ErrorState(message: String, onRetry: () -> Unit) {
+private fun ErrorState(
+    message: String,
+    onRetry: () -> Unit,
+) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -3246,25 +3405,26 @@ fun ConnectionMarkerSheet(
 ) {
     val sheetBg = MaterialTheme.colorScheme.surfaceContainerHigh
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .fillMaxHeight()
-            .background(sheetBg)
-            .padding(horizontal = 24.dp, vertical = 16.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .background(sheetBg)
+                .padding(horizontal = 24.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
-            modifier = Modifier
-                .size(100.dp)
-                .clip(CircleShape)
-                .background(
-                    when (point.timeState) {
-                        TimeState.LIVE -> PrimaryBlue
-                        TimeState.RECENT -> MaterialTheme.colorScheme.primaryContainer
-                        TimeState.ARCHIVE -> MaterialTheme.colorScheme.surfaceVariant
-                    },
-                )
-                .border(2.dp, clickBorderColor(), CircleShape),
+            modifier =
+                Modifier
+                    .size(100.dp)
+                    .clip(CircleShape)
+                    .background(
+                        when (point.timeState) {
+                            TimeState.LIVE -> PrimaryBlue
+                            TimeState.RECENT -> MaterialTheme.colorScheme.primaryContainer
+                            TimeState.ARCHIVE -> MaterialTheme.colorScheme.surfaceVariant
+                        },
+                    ).border(2.dp, clickBorderColor(), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             if (point.shouldPulse) {
@@ -3274,11 +3434,12 @@ fun ConnectionMarkerSheet(
                 otherUser?.name?.firstOrNull()?.uppercase() ?: "?",
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
-                color = when (point.timeState) {
-                    TimeState.LIVE -> Color.White
-                    TimeState.RECENT -> MaterialTheme.colorScheme.onPrimaryContainer
-                    TimeState.ARCHIVE -> MaterialTheme.colorScheme.onSurfaceVariant
-                },
+                color =
+                    when (point.timeState) {
+                        TimeState.LIVE -> Color.White
+                        TimeState.RECENT -> MaterialTheme.colorScheme.onPrimaryContainer
+                        TimeState.ARCHIVE -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
             )
         }
 
@@ -3340,20 +3501,22 @@ fun ConnectionMarkerSheet(
 
         Spacer(modifier = Modifier.height(32.dp))
         Spacer(
-            modifier = Modifier
-                .weight(1f, fill = true)
-                .fillMaxWidth(),
+            modifier =
+                Modifier
+                    .weight(1f, fill = true)
+                    .fillMaxWidth(),
         )
     }
 }
 
 @Composable
 private fun MarkerSheetTimeStateBadge(timeState: TimeState) {
-    val (color, label, icon) = when (timeState) {
-        TimeState.LIVE -> Triple(PrimaryBlue, "Live Now", Icons.Filled.Bolt)
-        TimeState.RECENT -> Triple(LightBlue, "Recent", Icons.Filled.AccessTime)
-        TimeState.ARCHIVE -> Triple(Color.Gray, "Memory", Icons.Filled.History)
-    }
+    val (color, label, icon) =
+        when (timeState) {
+            TimeState.LIVE -> Triple(PrimaryBlue, "Live Now", Icons.Filled.Bolt)
+            TimeState.RECENT -> Triple(LightBlue, "Recent", Icons.Filled.AccessTime)
+            TimeState.ARCHIVE -> Triple(Color.Gray, "Memory", Icons.Filled.History)
+        }
 
     Surface(
         shape = RoundedCornerShape(12.dp),
@@ -3387,25 +3550,28 @@ private fun PulsingRing() {
     val scale by infiniteTransition.animateFloat(
         initialValue = 1f,
         targetValue = 1.3f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(1500, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
     )
     val alpha by infiniteTransition.animateFloat(
         initialValue = 0.5f,
         targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(1500, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
     )
 
     Box(
-        modifier = Modifier
-            .size(100.dp)
-            .scale(scale)
-            .border(3.dp, PrimaryBlue.copy(alpha = alpha), CircleShape),
+        modifier =
+            Modifier
+                .size(100.dp)
+                .scale(scale)
+                .border(3.dp, PrimaryBlue.copy(alpha = alpha), CircleShape),
     )
 }
 

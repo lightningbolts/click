@@ -129,7 +129,7 @@ Soundtrack / community kinds (hazard, SOS, utility, study): same bordered hero; 
 | Solid header | 56dp + status bar; bordered back (`ChatHeaderIconButton(showBorder = true)`), title, occupant subtitle, borderless ⋮; 2dp bottom `#000` border |
 | Tap-to-connect banner | Primary blue surface, centered copy |
 | Lobby banner (when `inLobby`) | `primaryContainer` tint — currently disabled (`inLobby = false`) |
-| Timeline | `ChatMessageTimeline`, hub-neutral mesh |
+| Timeline | `ChatMessageTimeline`, hub-neutral mesh; **no** delivery receipts (`newestSentMessage = null`) |
 | Composer | `HubChatInputBar` — attach + field + solid primary send button |
 
 ---

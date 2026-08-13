@@ -241,6 +241,12 @@ First character of `otherUserName` uppercase, or `"?"`.
 
 `CallSessionManager` rejects new outgoing/incoming when overlay ≠ `Idle` or `CallState` ≠ `Idle`.
 
+### LiveKit Room options (web parity)
+
+Android `CallManager` and iOS `ClickLiveKitBridge` set `adaptiveStream = false` and `dynacast = false` so remote video does not stall. Web `DashboardView` must use the same `Room({ adaptiveStream: false, dynacast: false })`. Do not re-enable those flags without a two-peer probe.
+
+Token mint: `POST /api/livekit/token`. Unauthenticated probes return 401 and do **not** prove env is set. A 5xx `"LiveKit environment is not configured"` is surfaced via `failCall(...)` on mobile and a thrown `payload.error` on web. Env-only outages are operator config, not more client code.
+
 ---
 
 ## 4. Micro-copy index

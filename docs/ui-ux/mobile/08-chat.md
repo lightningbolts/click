@@ -288,7 +288,9 @@ Shown when: `showIcebreakerPanel && prompts.nonEmpty() && messages.size < 5`.
 
 ### Message bubbles — delivery receipt (`ChatDeliveryReceiptIcon`)
 
-Shown once under the **newest sent** message.
+Shown once under the **newest sent** message in **DM and group** threads.
+
+Hub chats omit receipts: `hub_messages` has no `delivered_at` / `read_at`. `HubChatScreen` passes `newestSentMessage = null` and does **not** force `isRead = true`. Do not add a hub receipt schema for this polish.
 
 | `MessageDeliveryState` / read | Icon semantics (`contentDescription`) |
 |-------------------------------|---------------------------------------|
@@ -507,7 +509,7 @@ sequenceDiagram
         CV->>CV: ChatChannelLoadingView
     end
     VM-->>CV: ChatMessagesState.Success
-    CV->>CV: scrollToItem(0) newest
+    CV->>CV: initial paint scrollToItem(0) newest (instant; anti-teleport)
 ```
 
 ### Open thread (iOS overlay)
@@ -531,8 +533,8 @@ sequenceDiagram
 ```
 Type in composer → tap Send (light haptic)
   → viewModel.sendMessage()
-  → timeline scrollToItem(0)
-  → delivery receipt updates on newest sent row
+  → timeline follow: initial paint `scrollToItem(0)`; near-bottom inbound `animateScrollToItem(0)` when not flinging (`chatTimelineFollowUsesAnimation`)
+  → delivery receipt updates on newest sent row (DM/group only; hubs omit)
 ```
 
 ### Reply via swipe

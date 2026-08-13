@@ -216,7 +216,7 @@ npm run dev
 Validation:
 
 1. Authenticate in the web app or call the route with a valid Supabase bearer token.
-2. Test the route:
+2. Test the route (body fields are snake_case; `room_name` must match `click-{connection_id}-…` or `click-group-{group_id}-…`):
 
 ```bash
 curl -i http://localhost:3000/api/livekit/token \
@@ -224,13 +224,26 @@ curl -i http://localhost:3000/api/livekit/token \
    -H "Authorization: Bearer SUPABASE_JWT" \
    -H "Content-Type: application/json" \
    -d '{
-      "roomName": "chat-123",
-      "participantName": "alice",
-      "userId": "USER_UUID"
+      "connection_id": "CONNECTION_UUID",
+      "room_name": "click-CONNECTION_UUID-probe",
+      "participant_name": "alice"
    }'
 ```
 
-Expected result: JSON with `token` and `wsUrl`.
+Expected result: JSON with `token` and `ws_url`.
+
+Unauthenticated probes return **401** and do **not** prove LiveKit env is set (auth runs before the env check). To distinguish config vs client faults against production:
+
+```bash
+curl -i -X POST https://joinclick.co/api/livekit/token \
+  -H "Authorization: Bearer <SUPABASE_ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"connection_id":"<id>","room_name":"click-<id>-x","participant_name":"probe"}'
+```
+
+- `401 Unauthorized` — token missing/expired; try again with a real session.
+- `500 {"error":"LiveKit environment is not configured"}` — set `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, and `LIVEKIT_WS_URL` (or `LIVEKIT_URL`) on the web deployment. No client code change.
+- `200` + JWT — server mint works; remaining call failures are client connect/publish (Android `CallManager`, iOS `ClickLiveKitBridge`, web `DashboardView` Room).
 
 ## 8. Android Voice And Video Calls
 

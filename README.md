@@ -132,18 +132,22 @@ curl -fsSL "https://get.maestro.mobile.dev" | bash
 ```
 
 ```shell
-./gradlew :composeApp:assembleDebug
-maestro start-device --platform android   # or boot an iOS Simulator
-maestro test .maestro --include-tags smoke
+# Rebuild, uninstall any snapshot APK, install this tree, then smoke.
+# assembleDebug alone is not enough — AVDs keep the last installed Click app.
+bash scripts/maestro-smoke-android.sh
 ```
 
-Email/password journeys (dedicated test user that has finished onboarding):
+Smoke flows (no secrets): `smoke/launch_login.yaml`, `smoke/login_signup_toggle.yaml`.
+
+Email/password journeys (dedicated test user that has finished onboarding **and has an avatar**):
 
 ```shell
 maestro test .maestro/auth --include-tags auth \
   -e TEST_EMAIL=you@example.com \
   -e TEST_PASSWORD=secret
 ```
+
+`auth/tabs.yaml` also asserts `onboarding-avatar` is not visible and map chrome (`map-screen`) after `nav-map`.
 
 Package id is `compose.project.click.click` on Android and iOS. Grant runtime permissions in flows via `launchApp.permissions`. Cloud uploads (optional) use [`.github/workflows/maestro-cloud.yml`](./.github/workflows/maestro-cloud.yml) (`workflow_dispatch`, secrets `MAESTRO_API_KEY` + `MAESTRO_PROJECT_ID`).
 

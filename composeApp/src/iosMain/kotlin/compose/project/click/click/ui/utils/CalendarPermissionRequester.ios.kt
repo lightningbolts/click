@@ -9,7 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Composable
-actual fun rememberCalendarPermissionRequester(): ((onComplete: () -> Unit) -> Unit) {
+actual fun rememberPlatformCalendarPermissionRequester(): ((onComplete: () -> Unit) -> Unit) {
     val provider = remember { CalendarProvider() }
     return { onComplete ->
         when (provider.getAccessStatus()) {

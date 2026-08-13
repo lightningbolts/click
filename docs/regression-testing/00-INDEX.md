@@ -39,7 +39,7 @@
 
 ## Recommended order
 
-1. **Automated gates** — checklist §0 (compile + unit tests)
+1. **Automated gates** — checklist §0 (compile + unit tests + Maestro smoke)
 2. **Smoke** — [02-smoke-10min.md](02-smoke-10min.md) on device/simulator
 3. **Full checklist** — [01-full-checklist.md](01-full-checklist.md) for the areas you touched (or all 25 for release)
 4. **Known issues** — re-verify items in [03-known-issues-audit.md](03-known-issues-audit.md); do not mark `[KNOWN-N]` rows as pass unless the bug is fixed
@@ -68,13 +68,15 @@ From the `click/` directory:
 ./gradlew :composeApp:compileKotlinIosSimulatorArm64
 ./gradlew :composeApp:testDebugUnitTest
 ./gradlew :composeApp:iosSimulatorArm64Test
+bash scripts/maestro-smoke-android.sh
 ```
 
-From `click-web/` (API / proximity server contracts):
+From `click-web/` (API / proximity server contracts + web E2E):
 
 ```bash
 npm test
 npm run build
+npm run test:e2e   # app must already be on :3000
 ```
 
 High-signal unit tests to keep green: `ChatSwipeMathTest`, `ChatViewModelTest`, `ChatTimestampPeekTest`, `ChatInteractionPolicyTest`, `HomeContinuityPolicyTest`, `BeaconCheckInOptimismTest`, `EventAttendeeDirectoryTest`, `ConnectionEncounterMergeTest`, `NominatimSearchParseTest`, `ProximityConnectionChangeTargetsTest`, `DiscoveryFeedSectionsTest`, `OfflineBootTest`, proximity codec/matching tests under `composeApp` and `click-web/__tests__/` (incl. `attendeeDirectory.test.ts`, `eventEngagement.test.ts`, `event-engagement.route.contract.test.ts`).

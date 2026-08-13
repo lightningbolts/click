@@ -1,10 +1,10 @@
+@file:Suppress("ktlint:standard:no-wildcard-imports", "ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.components
 
 import android.Manifest
 import android.content.pm.PackageManager
 import android.util.Size
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -23,6 +23,7 @@ import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
+import compose.project.click.click.ui.utils.rememberCameraPermissionRequester
 import java.util.concurrent.Executors
 import kotlin.math.max
 import kotlin.math.min
@@ -33,7 +34,7 @@ actual fun QRScanner(
     modifier: Modifier,
     isActive: Boolean,
     onDetectionChanged: (QrScannerDetection?) -> Unit,
-    onResult: (String) -> Unit
+    onResult: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -43,21 +44,21 @@ actual fun QRScanner(
         mutableStateOf(
             ContextCompat.checkSelfPermission(
                 context,
-                Manifest.permission.CAMERA
-            ) == PackageManager.PERMISSION_GRANTED
+                Manifest.permission.CAMERA,
+            ) == PackageManager.PERMISSION_GRANTED,
         )
     }
 
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-        onResult = { granted ->
-            hasCameraPermission = granted
-        }
-    )
+    val requestCamera = rememberCameraPermissionRequester()
 
     LaunchedEffect(Unit) {
         if (!hasCameraPermission) {
-            launcher.launch(Manifest.permission.CAMERA)
+            requestCamera {
+                hasCameraPermission = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.CAMERA,
+                ) == PackageManager.PERMISSION_GRANTED
+            }
         }
     }
 
@@ -74,17 +75,20 @@ actual fun QRScanner(
                 val previewView = PreviewView(ctx)
                 val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
                 val executor = ContextCompat.getMainExecutor(ctx)
-                
+
                 cameraProviderFuture.addListener({
                     val cameraProvider = cameraProviderFuture.get()
-                    val preview = Preview.Builder().build().also {
-                        it.setSurfaceProvider(previewView.surfaceProvider)
-                    }
+                    val preview =
+                        Preview.Builder().build().also {
+                            it.setSurfaceProvider(previewView.surfaceProvider)
+                        }
 
-                    val imageAnalysis = ImageAnalysis.Builder()
-                        .setTargetResolution(Size(1280, 720))
-                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                        .build()
+                    val imageAnalysis =
+                        ImageAnalysis
+                            .Builder()
+                            .setTargetResolution(Size(1280, 720))
+                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                            .build()
 
                     imageAnalysis.setAnalyzer(Executors.newSingleThreadExecutor()) { imageProxy ->
                         if (!isActive) {
@@ -96,26 +100,29 @@ actual fun QRScanner(
                         val mediaImage = imageProxy.image
                         if (mediaImage != null) {
                             val image = InputImage.fromMediaImage(mediaImage, rotationDegrees)
-                            scanner.process(image)
+                            scanner
+                                .process(image)
                                 .addOnSuccessListener { barcodes ->
-                                    val qrBarcode = barcodes.firstOrNull { barcode ->
-                                        barcode.format == Barcode.FORMAT_QR_CODE
-                                    } ?: barcodes.firstOrNull()
+                                    val qrBarcode =
+                                        barcodes.firstOrNull { barcode ->
+                                            barcode.format == Barcode.FORMAT_QR_CODE
+                                        } ?: barcodes.firstOrNull()
 
                                     onDetectionChanged(
                                         qrBarcode?.boundingBox?.let { bounds ->
                                             val centerX = bounds.exactCenterX() / image.width.toFloat()
                                             val centerY = bounds.exactCenterY() / image.height.toFloat()
-                                            val normalizedSize = max(
-                                                bounds.width().toFloat() / image.width.toFloat(),
-                                                bounds.height().toFloat() / image.height.toFloat()
-                                            )
+                                            val normalizedSize =
+                                                max(
+                                                    bounds.width().toFloat() / image.width.toFloat(),
+                                                    bounds.height().toFloat() / image.height.toFloat(),
+                                                )
                                             QrScannerDetection(
                                                 normalizedCenterX = min(1f, max(0f, centerX)),
                                                 normalizedCenterY = min(1f, max(0f, centerY)),
-                                                normalizedSize = min(1f, max(0f, normalizedSize))
+                                                normalizedSize = min(1f, max(0f, normalizedSize)),
                                             )
-                                        }
+                                        },
                                     )
 
                                     qrBarcode?.rawValue?.let { value ->
@@ -124,8 +131,7 @@ actual fun QRScanner(
                                             onResult(value)
                                         }
                                     }
-                                }
-                                .addOnCompleteListener {
+                                }.addOnCompleteListener {
                                     imageProxy.close()
                                 }
                         } else {
@@ -139,7 +145,7 @@ actual fun QRScanner(
                             lifecycleOwner,
                             CameraSelector.DEFAULT_BACK_CAMERA,
                             preview,
-                            imageAnalysis
+                            imageAnalysis,
                         )
                     } catch (e: Exception) {
                         e.printStackTrace()
@@ -147,7 +153,7 @@ actual fun QRScanner(
                 }, executor)
                 previewView
             },
-            modifier = modifier.fillMaxSize()
+            modifier = modifier.fillMaxSize(),
         )
     } else {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

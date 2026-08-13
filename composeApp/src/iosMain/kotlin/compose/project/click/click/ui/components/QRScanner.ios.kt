@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:no-wildcard-imports", "ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.components
 
 import androidx.compose.foundation.background
@@ -18,17 +20,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.UIKitInteropProperties
 import androidx.compose.ui.viewinterop.UIKitView
+import compose.project.click.click.ui.utils.openIosUrlMain
+import compose.project.click.click.ui.utils.rememberCameraPermissionRequester
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.ObjCAction
 import platform.AVFoundation.*
 import platform.CoreGraphics.CGRectMake
-import platform.Foundation.NSNumber
-import platform.Foundation.numberWithFloat
 import platform.QuartzCore.CATransaction
 import platform.QuartzCore.kCATransactionDisableActions
 import platform.UIKit.*
-import compose.project.click.click.ui.utils.openIosUrlMain
 import platform.darwin.NSObject
 import platform.darwin.dispatch_get_main_queue
 import platform.objc.sel_registerName
@@ -40,9 +41,8 @@ import platform.objc.sel_registerName
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 private class CameraPreviewView(
     private val device: AVCaptureDevice?,
-    private val onQRCodeDetected: (String) -> Unit
+    private val onQRCodeDetected: (String) -> Unit,
 ) : UIView(frame = CGRectMake(0.0, 0.0, 300.0, 400.0)) {
-    
     var previewLayer: AVCaptureVideoPreviewLayer? = null
         set(value) {
             field?.removeFromSuperlayer()
@@ -50,25 +50,26 @@ private class CameraPreviewView(
             value?.let { layer.addSublayer(it) }
             updatePreviewLayerFrame()
         }
-    
+
     private var lastZoomFactor: Double = 1.0
-    
+
     init {
         // Add pinch gesture recognizer for zoom
-        val pinchGesture = UIPinchGestureRecognizer(
-            target = this,
-            action = sel_registerName("handlePinch:")
-        )
+        val pinchGesture =
+            UIPinchGestureRecognizer(
+                target = this,
+                action = sel_registerName("handlePinch:"),
+            )
         addGestureRecognizer(pinchGesture)
-        
+
         // Enable user interaction
         userInteractionEnabled = true
     }
-    
+
     @ObjCAction
     fun handlePinch(gesture: UIPinchGestureRecognizer) {
         val dev = device ?: return
-        
+
         when (gesture.state) {
             UIGestureRecognizerStateBegan -> {
                 lastZoomFactor = dev.videoZoomFactor
@@ -76,12 +77,12 @@ private class CameraPreviewView(
             UIGestureRecognizerStateChanged -> {
                 val scale = gesture.scale
                 var newZoomFactor = lastZoomFactor * scale
-                
+
                 // Clamp zoom factor to device limits
                 val minZoom = 1.0
                 val maxZoom = minOf(dev.activeFormat?.videoMaxZoomFactor ?: 10.0, 10.0)
                 newZoomFactor = maxOf(minZoom, minOf(newZoomFactor, maxZoom))
-                
+
                 try {
                     dev.lockForConfiguration(null)
                     dev.videoZoomFactor = newZoomFactor
@@ -93,19 +94,19 @@ private class CameraPreviewView(
             else -> {}
         }
     }
-    
+
     override fun layoutSubviews() {
         super.layoutSubviews()
         updatePreviewLayerFrame()
     }
-    
+
     private fun updatePreviewLayerFrame() {
         CATransaction.begin()
         CATransaction.setValue(true, kCATransactionDisableActions)
         previewLayer?.frame = bounds
         CATransaction.commit()
     }
-    
+
     // Method to trigger callback from delegate
     fun notifyQRCodeDetected(value: String) {
         onQRCodeDetected(value)
@@ -114,8 +115,11 @@ private class CameraPreviewView(
 
 private sealed class CameraPermissionState {
     object Checking : CameraPermissionState()
+
     object Granted : CameraPermissionState()
+
     object Denied : CameraPermissionState()
+
     object NotDetermined : CameraPermissionState()
 }
 
@@ -125,13 +129,14 @@ actual fun QRScanner(
     modifier: Modifier,
     isActive: Boolean,
     onDetectionChanged: (QrScannerDetection?) -> Unit,
-    onResult: (String) -> Unit
+    onResult: (String) -> Unit,
 ) {
     var permissionState by remember { mutableStateOf<CameraPermissionState>(CameraPermissionState.Checking) }
-    
+    val requestCamera = rememberCameraPermissionRequester()
+
     // Track scanned state and the actual scanned value
     var scannedValue by remember { mutableStateOf<String?>(null) }
-    
+
     // Process scanned value when it changes
     LaunchedEffect(scannedValue) {
         scannedValue?.let { value ->
@@ -145,30 +150,31 @@ actual fun QRScanner(
             onDetectionChanged(null)
         }
     }
-    
+
     // Check and request camera permission
     LaunchedEffect(Unit) {
         val status = AVCaptureDevice.authorizationStatusForMediaType(AVMediaTypeVideo)
-        permissionState = when (status) {
-            AVAuthorizationStatusAuthorized -> CameraPermissionState.Granted
-            AVAuthorizationStatusDenied, AVAuthorizationStatusRestricted -> CameraPermissionState.Denied
-            AVAuthorizationStatusNotDetermined -> {
-                // Request permission
-                AVCaptureDevice.requestAccessForMediaType(AVMediaTypeVideo) { granted ->
-                    platform.darwin.dispatch_async(dispatch_get_main_queue()) {
-                        permissionState = if (granted) {
-                            CameraPermissionState.Granted
-                        } else {
-                            CameraPermissionState.Denied
-                        }
+        permissionState =
+            when (status) {
+                AVAuthorizationStatusAuthorized -> CameraPermissionState.Granted
+                AVAuthorizationStatusDenied, AVAuthorizationStatusRestricted -> CameraPermissionState.Denied
+                AVAuthorizationStatusNotDetermined -> {
+                    requestCamera {
+                        permissionState =
+                            if (AVCaptureDevice.authorizationStatusForMediaType(AVMediaTypeVideo) ==
+                                AVAuthorizationStatusAuthorized
+                            ) {
+                                CameraPermissionState.Granted
+                            } else {
+                                CameraPermissionState.Denied
+                            }
                     }
+                    CameraPermissionState.NotDetermined
                 }
-                CameraPermissionState.NotDetermined
+                else -> CameraPermissionState.Denied
             }
-            else -> CameraPermissionState.Denied
-        }
     }
-    
+
     when (permissionState) {
         is CameraPermissionState.Checking, is CameraPermissionState.NotDetermined -> {
             LaunchedEffect(Unit) {
@@ -178,18 +184,18 @@ actual fun QRScanner(
             Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
                 Column(
                     modifier = Modifier.align(Alignment.Center),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     CircularProgressIndicator(color = Color.White)
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         "Requesting camera access...",
-                        color = Color.White
+                        color = Color.White,
                     )
                 }
             }
         }
-        
+
         is CameraPermissionState.Denied -> {
             LaunchedEffect(Unit) {
                 onDetectionChanged(null)
@@ -198,18 +204,18 @@ actual fun QRScanner(
             Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
                 Column(
                     modifier = Modifier.align(Alignment.Center).padding(32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
                         "Camera Access Required",
                         color = Color.White,
-                        style = MaterialTheme.typography.titleLarge
+                        style = MaterialTheme.typography.titleLarge,
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         "Please enable camera access in Settings to scan QR codes.",
                         color = Color.White.copy(alpha = 0.7f),
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                     Spacer(modifier = Modifier.height(24.dp))
                     Button(onClick = {
@@ -220,7 +226,7 @@ actual fun QRScanner(
                 }
             }
         }
-        
+
         is CameraPermissionState.Granted -> {
             CameraPreviewContent(
                 modifier = modifier,
@@ -231,7 +237,7 @@ actual fun QRScanner(
                     if (isActive && scannedValue == null) {
                         scannedValue = value
                     }
-                }
+                },
             )
         }
     }
@@ -243,14 +249,14 @@ private fun CameraPreviewContent(
     modifier: Modifier,
     isActive: Boolean,
     onDetectionChanged: (QrScannerDetection?) -> Unit,
-    onResult: (String) -> Unit
+    onResult: (String) -> Unit,
 ) {
     val device = remember { AVCaptureDevice.defaultDeviceWithMediaType(AVMediaTypeVideo) }
-    
+
     // Use state to track if a value has been detected
     var detectedValue by remember { mutableStateOf<String?>(null) }
     var hasProcessed by remember { mutableStateOf(false) }
-    
+
     // Process detected value
     LaunchedEffect(detectedValue) {
         if (detectedValue != null && !hasProcessed) {
@@ -266,23 +272,25 @@ private fun CameraPreviewContent(
             onDetectionChanged(null)
         }
     }
-    
+
     // Create capture session and related objects
     val captureSession = remember { AVCaptureSession() }
-    val previewLayer = remember { 
-        AVCaptureVideoPreviewLayer(session = captureSession).apply {
-            videoGravity = AVLayerVideoGravityResizeAspectFill
+    val previewLayer =
+        remember {
+            AVCaptureVideoPreviewLayer(session = captureSession).apply {
+                videoGravity = AVLayerVideoGravityResizeAspectFill
+            }
         }
-    }
-    
+
     // Callback holder that can be updated
-    val callbackHolder = remember { 
-        object {
-            var onDetected: ((String) -> Unit)? = null
-            var onDetectionChanged: ((QrScannerDetection?) -> Unit)? = null
+    val callbackHolder =
+        remember {
+            object {
+                var onDetected: ((String) -> Unit)? = null
+                var onDetectionChanged: ((QrScannerDetection?) -> Unit)? = null
+            }
         }
-    }
-    
+
     // Update the callback when it changes
     callbackHolder.onDetected = { value: String ->
         if (isActive && detectedValue == null) {
@@ -290,46 +298,47 @@ private fun CameraPreviewContent(
         }
     }
     callbackHolder.onDetectionChanged = onDetectionChanged
-    
+
     // Remember the delegate to prevent garbage collection
-    val metadataDelegate = remember {
-        object : NSObject(), AVCaptureMetadataOutputObjectsDelegateProtocol {
-            override fun captureOutput(
-                output: AVCaptureOutput,
-                didOutputMetadataObjects: List<*>,
-                fromConnection: AVCaptureConnection
-            ) {
-                didOutputMetadataObjects.firstOrNull()?.let { metadataObject ->
-                    val readableObject = metadataObject as? AVMetadataMachineReadableCodeObject
-                    readableObject?.stringValue?.let { value ->
-                        callbackHolder.onDetectionChanged?.invoke(
-                            QrScannerDetection(
-                                normalizedCenterX = 0.5f,
-                                normalizedCenterY = 0.5f,
-                                normalizedSize = 0.5f
+    val metadataDelegate =
+        remember {
+            object : NSObject(), AVCaptureMetadataOutputObjectsDelegateProtocol {
+                override fun captureOutput(
+                    output: AVCaptureOutput,
+                    didOutputMetadataObjects: List<*>,
+                    fromConnection: AVCaptureConnection,
+                ) {
+                    didOutputMetadataObjects.firstOrNull()?.let { metadataObject ->
+                        val readableObject = metadataObject as? AVMetadataMachineReadableCodeObject
+                        readableObject?.stringValue?.let { value ->
+                            callbackHolder.onDetectionChanged?.invoke(
+                                QrScannerDetection(
+                                    normalizedCenterX = 0.5f,
+                                    normalizedCenterY = 0.5f,
+                                    normalizedSize = 0.5f,
+                                ),
                             )
-                        )
-                        callbackHolder.onDetected?.invoke(value)
+                            callbackHolder.onDetected?.invoke(value)
+                        } ?: callbackHolder.onDetectionChanged?.invoke(null)
                     } ?: callbackHolder.onDetectionChanged?.invoke(null)
-                } ?: callbackHolder.onDetectionChanged?.invoke(null)
+                }
             }
         }
-    }
-    
+
     // Setup capture session
     var setupComplete by remember { mutableStateOf(false) }
     var setupError by remember { mutableStateOf<String?>(null) }
-    
+
     LaunchedEffect(device) {
         if (device == null) {
             setupError = "Camera not available"
             return@LaunchedEffect
         }
-        
+
         try {
             captureSession.beginConfiguration()
             captureSession.sessionPreset = AVCaptureSessionPresetHigh
-            
+
             // Add input
             val input = AVCaptureDeviceInput.deviceInputWithDevice(device, null)
             if (input != null && captureSession.canAddInput(input)) {
@@ -339,13 +348,13 @@ private fun CameraPreviewContent(
                 captureSession.commitConfiguration()
                 return@LaunchedEffect
             }
-            
+
             // Add output
             val metadataOutput = AVCaptureMetadataOutput()
             if (captureSession.canAddOutput(metadataOutput)) {
                 captureSession.addOutput(metadataOutput)
                 metadataOutput.setMetadataObjectsDelegate(metadataDelegate, dispatch_get_main_queue())
-                
+
                 // Must set metadata types AFTER adding output
                 if (metadataOutput.availableMetadataObjectTypes.contains(AVMetadataObjectTypeQRCode)) {
                     metadataOutput.metadataObjectTypes = listOf(AVMetadataObjectTypeQRCode)
@@ -355,22 +364,22 @@ private fun CameraPreviewContent(
                 captureSession.commitConfiguration()
                 return@LaunchedEffect
             }
-            
+
             captureSession.commitConfiguration()
             setupComplete = true
         } catch (e: Exception) {
             setupError = "Camera setup failed: ${e.message}"
         }
     }
-    
+
     // Start/stop capture session
     DisposableEffect(setupComplete) {
         if (setupComplete) {
             platform.darwin.dispatch_async(
                 platform.darwin.dispatch_get_global_queue(
-                    platform.darwin.DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(), 
-                    0u
-                )
+                    platform.darwin.DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(),
+                    0u,
+                ),
             ) {
                 captureSession.startRunning()
             }
@@ -378,9 +387,9 @@ private fun CameraPreviewContent(
         onDispose {
             platform.darwin.dispatch_async(
                 platform.darwin.dispatch_get_global_queue(
-                    platform.darwin.DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(), 
-                    0u
-                )
+                    platform.darwin.DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(),
+                    0u,
+                ),
             ) {
                 if (captureSession.isRunning()) {
                     captureSession.stopRunning()
@@ -393,18 +402,18 @@ private fun CameraPreviewContent(
         Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
             Column(
                 modifier = Modifier.align(Alignment.Center).padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
                     "Camera Setup Failed",
                     color = Color.White,
-                    style = MaterialTheme.typography.titleLarge
+                    style = MaterialTheme.typography.titleLarge,
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     setupError ?: "Unknown error",
                     color = Color.White.copy(alpha = 0.7f),
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
         }
@@ -414,7 +423,7 @@ private fun CameraPreviewContent(
             factory = {
                 CameraPreviewView(
                     device = device,
-                    onQRCodeDetected = { /* Not used in this implementation */ }
+                    onQRCodeDetected = { /* Not used in this implementation */ },
                 ).apply {
                     backgroundColor = UIColor.blackColor
                     clipsToBounds = true
@@ -426,10 +435,11 @@ private fun CameraPreviewContent(
                 // Force layout update
                 (view as? CameraPreviewView)?.setNeedsLayout()
             },
-            properties = UIKitInteropProperties(
-                isInteractive = true,
-                isNativeAccessibilityEnabled = false
-            )
+            properties =
+                UIKitInteropProperties(
+                    isInteractive = true,
+                    isNativeAccessibilityEnabled = false,
+                ),
         )
     }
 }

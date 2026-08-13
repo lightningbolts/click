@@ -110,7 +110,19 @@ Permissions (`PermissionsOnboardingScreen`, `LocationOnboardingScreen`) are **le
   └ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘
 ```
 
-**Animated transitions:** `AnimatedContent` slide/fade (280ms slide, 180ms fade) between Welcome, Interests, Avatar.
+**Animated transitions:** `AnimatedContent` slide/fade (280ms slide, 180ms fade) between Welcome, Interests, Avatar. Login ↔ Sign Up uses the same spec.
+
+**Onboarding chrome** (`OnboardingShellChrome` in `App.kt`, not duplicated per screen): 3-step indicator Welcome / Interests / Avatar. Back via `OnboardingViewModel.goBack()` — Welcome has no back; Interests ← Avatar and Welcome ← Interests do **not** wipe remotely saved interests. Android `BackHandler` uses the same path.
+
+**Avatar tri-state:** `userHasAvatar: () -> Boolean?`. `null` (unknown) keeps `computeStep` on Loading — **never** show Avatar. Local non-blank `image` → `true` immediately. Blank local cache → hold `profileGatePending` / shimmer until `getUserProfile` returns, then `true`/`false`. Fetch failure stays unknown until ~2.5s timeout, then `false` so first-time users are not stuck.
+
+**Welcome vs interests fetch:** `isDataReady` does **not** wait on `interestsRemoteResolved`. Welcome can render while interests load; only the Interests step waits.
+
+**Interests remain required** (`canSkip = false`). Avatar remains skippable.
+
+**Runtime permissions (not a full-screen onboarding gate):** FIFO `PermissionRequestQueue` + `PermissionCoordinatorHost` prime sheet (title, why, Continue / Not now). Copy reused from legacy `LocationOnboardingScreen`. Camera (`DisposableCameraView`) requests only from the fallback CTA. Do not resurrect the full-screen location gate into Phase 2.
+
+**Maestro `testTag`s:** `login-signup`, `signup-login`, `onboarding-welcome`, `onboarding-interests`, `onboarding-avatar`, `onboarding-progress`, `onboarding-back`, `permission-prime`, `permission-prime-continue`.
 
 ---
 
@@ -218,7 +230,8 @@ Entry animation: 420ms fade + 24dp upward translate (`FastOutSlowInEasing`).
 |---------|--------|--------|
 | Let's get started | Tap | `onContinue()` → `onWelcomeAcknowledged()` |
 
-No back navigation. No skip.
+No back on Welcome itself (`canGoBack()` is false). Chrome back appears on Interests and Avatar. No skip.  
+**testTag:** `onboarding-welcome`.
 
 ### States
 
@@ -265,7 +278,8 @@ No back navigation. No skip.
 
 **Source:** `ui/screens/InterestTaggingScreen.kt`, `ui/components/InterestEditor.kt`  
 **When shown:** `OnboardingViewModel.Step.Interests` (`interestsCompleted == false`).  
-**App wiring:** `canSkip = false` — Skip UI not rendered.
+**App wiring:** `canSkip = false` — Skip UI not rendered.  
+**testTag:** `onboarding-interests`. Step waits on `interestsRemoteResolved` (Welcome does not).
 
 ### Layout / Container
 
@@ -340,8 +354,9 @@ Minimum tags: `INTEREST_ONBOARDING_MIN_TAGS = 5`.
 ## AvatarScreen
 
 **Source:** `ui/screens/AvatarScreen.kt`  
-**When shown:** `OnboardingViewModel.Step.Avatar` — `avatarSetOrSkipped == false` and no remote avatar URL.  
-**Skippable:** Yes — `"Skip for now"` calls `onAvatarSetOrSkipped()` without upload.
+**When shown:** `OnboardingViewModel.Step.Avatar` — `avatarSetOrSkipped == false` and `userHasAvatar()` is **`false`** (not `null`). Unknown avatar holds Loading/shimmer.  
+**Skippable:** Yes — `"Skip for now"` calls `onAvatarSetOrSkipped()` without upload.  
+**testTag:** `onboarding-avatar` (Maestro `assertNotVisible` after login for onboarded users).
 
 ### Layout / Container
 
