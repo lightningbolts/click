@@ -2,7 +2,6 @@
 
 package compose.project.click.click.data.repository // pragma: allowlist secret
 
-import UserAvailability // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentInsert // pragma: allowlist secret
@@ -13,6 +12,7 @@ import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble /
 import compose.project.click.click.data.models.ProfileTimelineCacheEntry // pragma: allowlist secret
 import compose.project.click.click.data.models.ProfileTimelinePayload // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.UserAvailability // pragma: allowlist secret
 import compose.project.click.click.data.models.UserCore // pragma: allowlist secret
 import compose.project.click.click.data.models.UserInterests // pragma: allowlist secret
 import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
