@@ -77,7 +77,8 @@ ViewModels are the **orchestration layer** between `ui/` and `data/`.
 
 **Chat open / inbox preview (2026-07):**
 
-- `loadChatMessages` bridges `Loading → Success` before ephemeral Realtime subscribe; duplicate opens for the same connection are deduped via `inFlightLoadConnectionId`.
+- `loadChatMessages` calls `subscribeToNewMessages` as soon as `persistedApiChatId` is known (before payload fetch), then bridges `Loading → Success`. Duplicate opens for the same connection are deduped via `inFlightLoadConnectionId`.
+- `HubChatViewModel` uses `HubRealtimeState` (`Loading` / `Ready` / `Error`). `Ready` is set only after `channel.subscribe(blockUntilSubscribed = true)` succeeds; failures show Retry (`retryRealtime()`), never a fake-ready empty hub.
 - `pendingChatLoadId` retries automatically when `setCurrentUser` runs after a null-user early return.
 - `startGlobalMessageListRealtime` restarts with backoff on collector failure.
 - Global inbox previews depend on `RealtimeCoordinator.messageInserts` (`subscribeToMessageInserts`); `postgresChangeFlow` must be registered before channel subscribe.

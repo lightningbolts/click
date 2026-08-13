@@ -42,12 +42,15 @@ Full matrix: [01-full-checklist.md](01-full-checklist.md) · Known issues: [03-k
 ## Groups (≤ 1 min)
 
 - [ ] `[KNOWN-8]` Clicks FAB → pick ≥2 eligible members → create group → chat opens without crash
+- [ ] New group chat appears on the **other** member's device without a manual refresh
+- [ ] Incoming call: **one** alert per device (iOS CallKit, not CallKit + banner when VoIP succeeds)
 
 ---
 
 ## Map & beacons (≤ 2 min)
 
 - [ ] Map tab loads location + pins
+- [ ] Memory Map toggle **off** still shows **all** connection pins (hidden IDs excluded; core is list-sort only)
 - [ ] `[KNOWN-5]` Basemap not stuck full grayscale unless Ghost Mode is on
 - [ ] `[KNOWN-4]` Create or find an event beacon → appears on map **and** in discovery list
 - [ ] Events list from map: map controls stay under overlay (revealed on back, no pop-in)

@@ -108,12 +108,12 @@ Expected result: JSON with `success`, `sent`, and optional `errors`.
 4. Confirm a row appears in `push_tokens`:
 
 ```sql
-select user_id, platform, token, updated_at
+select user_id, platform, token, token_type, device_id, updated_at
 from push_tokens
 order by created_at desc;
 ```
 
-Expected result: one row with `platform = 'android'`.
+Expected result: one row with `platform = 'android'`, a stable `device_id`, and `token_type = 'standard'`. Uniqueness is `(user_id, device_id, token_type)` — re-registering replaces the row instead of accumulating. Formal migration: `supabase/migrations/20260813120000_push_tokens_device_id.sql`.
 
 ## 4. Apple Push Notifications For iOS
 
@@ -146,7 +146,7 @@ Open `click/iosApp/iosApp.xcodeproj` and verify the `iosApp` target has:
 1. Build to a real iPhone. APNs device tokens do not fully validate on the simulator.
 2. Sign in.
 3. Accept notification permission.
-4. Confirm a row appears in `push_tokens` with `platform = 'ios'`.
+4. Confirm rows appear in `push_tokens` with `platform = 'ios'` — typically **two** per device (`token_type` `voip` and `standard`) sharing one `device_id`.
 
 ## 5. Triggering Pushes On New Messages
 

@@ -45,7 +45,7 @@ initializeData()
 
 ### RealtimeCoordinator
 
-[`data/realtime/RealtimeCoordinator.kt`](realtime/RealtimeCoordinator.kt) owns one app-scoped `messages` insert flow and one `connections` junction flow. ViewModels subscribe to shared `SharedFlow`s instead of opening duplicate Supabase channels.
+[`data/realtime/RealtimeCoordinator.kt`](realtime/RealtimeCoordinator.kt) owns one app-scoped `messages` insert flow and one `connections` junction flow. The junction channel also listens for `chats` INSERT and `group_members` INSERT (current user) so new DM/group threads bump the inbox without waiting for the first message. ViewModels subscribe to shared `SharedFlow`s instead of opening duplicate Supabase channels. Register every `postgresChangeFlow` **before** `channel.subscribe()`.
 
 `subscribeToMessageInserts()` registers `postgresChangeFlow` synchronously (before `attach()`); deferring registration into flow `collect` breaks the global inbox listener with `You cannot call postgresChangeFlow after joining the channel`.
 
@@ -122,7 +122,7 @@ Wire serializers handle Supabase JSON quirks (`SemanticLocationWireSerializer`, 
 - Cached data remains visible but goes stale
 - Ghost mode **resets on app restart** for safer privacy defaults
 
-Core connections remain map-visible when ghosted off-map (server-side `connection_core` rows).
+Core connections remain map-visible when ghosted off-map (server-side `connection_core` rows). **Memory Map** (`LocationPreferences.showOnMapEnabled`) does **not** hide non-core pins — it is list-sort / Remember Me only. Hidden IDs still apply.
 
 ### Sync epochs
 
@@ -204,7 +204,7 @@ Pending connection / proximity handshake queues sync on a `PENDING_SYNC_RETRY_MS
 | `data/SupabaseForegroundRecovery.kt` | Background → foreground socket recovery |
 | `data/repository/ConnectionRepository.kt` | Connection operations |
 | `data/repository/SupabaseRepository.kt` | Profiles, hubs, beacons |
-| `data/realtime/RealtimeCoordinator.kt` | App-scoped message + connection Realtime fan-in |
+| `data/realtime/RealtimeCoordinator.kt` | App-scoped message + connection Realtime fan-in (`chats` / `group_members` inserts too) |
 | `data/repository/SupabaseChatRepository.kt` | Chat + Realtime |
 | `data/storage/TokenStorage.kt` | Snapshot + queue persistence |
 | `data/api/ApiClient.kt` | REST Edge Function client |

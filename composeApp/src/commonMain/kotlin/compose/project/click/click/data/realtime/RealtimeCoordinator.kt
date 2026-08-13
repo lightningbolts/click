@@ -9,6 +9,7 @@ import compose.project.click.click.util.redactedRestMessage
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
+import io.github.jan.supabase.realtime.decodeRecordOrNull
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import io.github.jan.supabase.realtime.realtime
 import kotlinx.coroutines.CancellationException
@@ -17,20 +18,32 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 /** App-scoped Realtime fan-in: one messages listener + one connections listener. */
+@Serializable
+private data class GroupMemberRealtimeRow(
+    @SerialName("user_id") val userId: String? = null,
+)
+
+private fun groupMemberUserId(action: PostgresAction): String? {
+    val insert = action as? PostgresAction.Insert ?: return null
+    return insert.decodeRecordOrNull<GroupMemberRealtimeRow>()?.userId
+}
+
 object RealtimeCoordinator {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val chatRepository by lazy { SupabaseChatRepository(tokenStorage = createTokenStorage()) }
@@ -103,77 +116,93 @@ object RealtimeCoordinator {
     }
 
     private fun startMessageListenerLocked() {
-        messageCollectJob = scope.launch {
-            var attempt = 0
-            while (isActive) {
-                var sub: ChatMessageSubscription? = null
-                try {
-                    // Ensure fresh JWT before subscribe — expired Realtime auth causes 8s timeouts.
-                    compose.project.click.click.data.auth.EnsureFreshAccessToken.get()
-                    runCatching { SupabaseConfig.client.realtime.connect() }
-                    // subscribeToMessageInserts() registers postgresChangeFlow synchronously;
-                    // attach() must run before collect() but after listener registration.
-                    val (subscription, flow) = chatRepository.subscribeToMessageInserts()
-                    sub = subscription
-                    messageSub = subscription
-                    subscription.attach()
-                    attempt = 0
-                    flow.collect { event ->
-                        bumpInboxVersionLocked()
-                        _messageInserts.emit(event)
+        messageCollectJob =
+            scope.launch {
+                var attempt = 0
+                while (isActive) {
+                    var sub: ChatMessageSubscription? = null
+                    try {
+                        // Ensure fresh JWT before subscribe — expired Realtime auth causes 8s timeouts.
+                        compose.project.click.click.data.auth.EnsureFreshAccessToken
+                            .get()
+                        runCatching { SupabaseConfig.client.realtime.connect() }
+                        // subscribeToMessageInserts() registers postgresChangeFlow synchronously;
+                        // attach() must run before collect() but after listener registration.
+                        val (subscription, flow) = chatRepository.subscribeToMessageInserts()
+                        sub = subscription
+                        messageSub = subscription
+                        subscription.attach()
+                        attempt = 0
+                        flow.collect { event ->
+                            bumpInboxVersionLocked()
+                            _messageInserts.emit(event)
+                        }
+                        return@launch
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        attempt++
+                        println(
+                            "RealtimeCoordinator: message listener failed (attempt $attempt): " +
+                                e.redactedRestMessage(),
+                        )
+                        delay(minOf(30_000L, 500L * attempt))
+                    } finally {
+                        runCatching { sub?.detach() }
+                        if (messageSub === sub) messageSub = null
                     }
-                    return@launch
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    attempt++
-                    println(
-                        "RealtimeCoordinator: message listener failed (attempt $attempt): " +
-                            e.redactedRestMessage(),
-                    )
-                    delay(minOf(30_000L, 500L * attempt))
-                } finally {
-                    runCatching { sub?.detach() }
-                    if (messageSub === sub) messageSub = null
                 }
             }
-        }
     }
 
     private fun startConnectionsListenerLocked(userId: String) {
-        connectionsCollectJob = scope.launch {
-            var debounceJob: Job? = null
-            try {
-                compose.project.click.click.data.auth.EnsureFreshAccessToken.get()
-                runCatching { SupabaseConfig.client.realtime.connect() }
-                val channel = SupabaseConfig.client.channel("app:connections:$userId")
-                connectionsChannel = channel
-                merge(
-                    channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connections" }
-                        .filter { it is PostgresAction.Insert }
-                        .map { },
-                    channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_archives" }.map { },
-                    channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_hidden" }.map { },
-                    channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_core" }.map { },
-                ).onEach {
-                    debounceJob?.cancel()
-                    debounceJob = scope.launch {
-                        delay(CONNECTIONS_DEBOUNCE_MS)
-                        bumpInboxVersionLocked()
-                        _connectionJunctionChanged.emit(Unit)
-                    }
-                }.launchIn(this)
-                channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connections" }
-                    .filter { it is PostgresAction.Update }
-                    .onEach {
-                        bumpInboxVersionLocked()
-                    }
-                    .launchIn(this)
-                channel.subscribe()
-            } catch (e: Exception) {
-                println("RealtimeCoordinator: connections listener failed: ${e.redactedRestMessage()}")
+        connectionsCollectJob =
+            scope.launch {
+                var debounceJob: Job? = null
+                try {
+                    compose.project.click.click.data.auth.EnsureFreshAccessToken
+                        .get()
+                    runCatching { SupabaseConfig.client.realtime.connect() }
+                    val channel = SupabaseConfig.client.channel("app:connections:$userId")
+                    connectionsChannel = channel
+                    merge(
+                        channel
+                            .postgresChangeFlow<PostgresAction>(schema = "public") { table = "connections" }
+                            .filter { it is PostgresAction.Insert }
+                            .map { },
+                        channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_archives" }.map { },
+                        channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_hidden" }.map { },
+                        channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_core" }.map { },
+                        channel
+                            .postgresChangeFlow<PostgresAction>(schema = "public") { table = "chats" }
+                            .filter { it is PostgresAction.Insert }
+                            .map { },
+                        channel
+                            .postgresChangeFlow<PostgresAction>(schema = "public") { table = "group_members" }
+                            .filter { action ->
+                                action is PostgresAction.Insert &&
+                                    groupMemberUserId(action) == userId
+                            }.map { },
+                    ).onEach {
+                        debounceJob?.cancel()
+                        debounceJob =
+                            scope.launch {
+                                delay(CONNECTIONS_DEBOUNCE_MS)
+                                bumpInboxVersionLocked()
+                                _connectionJunctionChanged.emit(Unit)
+                            }
+                    }.launchIn(this)
+                    channel
+                        .postgresChangeFlow<PostgresAction>(schema = "public") { table = "connections" }
+                        .filter { it is PostgresAction.Update }
+                        .onEach {
+                            bumpInboxVersionLocked()
+                        }.launchIn(this)
+                    channel.subscribe()
+                } catch (e: Exception) {
+                    println("RealtimeCoordinator: connections listener failed: ${e.redactedRestMessage()}")
+                }
             }
-        }
     }
 
     private const val CONNECTIONS_DEBOUNCE_MS = 400L

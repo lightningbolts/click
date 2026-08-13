@@ -54,16 +54,7 @@ Ordered by user impact.
 
 **26 of 81 `catch` blocks** in `ui/` + `viewmodel/` log and set no user-visible state.
 
-The worst is a **fake success**, `viewmodel/HubChatViewModel.kt:287-291`:
-
-```kotlin
-} catch (e: Exception) {
-    _channelReady.value = true          // ← reports success on failure
-    println("HubChatViewModel: session error: ${e.redactedRestMessage()}")
-}
-```
-
-`HubChatScreen.kt:257-260` hides its loading view when `channelReady` is true, so a hub whose channel failed to join renders as a **normal, empty, idle chat**. The user has no way to know it is broken and no way to retry.
+Hub join used to **fake success** (`_channelReady = true` in `catch`). That is **fixed**: `HubChatViewModel` uses `HubRealtimeState` (`Loading` / `Ready` / `Error`). `Ready` is set only after subscribe succeeds; `HubChatScreen` shows Retry on `Error` when the thread is empty.
 
 Same class, elsewhere:
 
@@ -204,7 +195,7 @@ done   # every count must be 0 BEFORE deleting
 **Risk:** low — additive error state only. **This is the only WP permitted to change ViewModel logic.**
 
 **Steps:**
-1. **Fix the fake success first.** `viewmodel/HubChatViewModel.kt:287-291`: do **not** set `_channelReady.value = true` in the `catch`. Add a `_channelError: MutableStateFlow<String?>` and set it. Render it in `ui/screens/HubChatScreen.kt` (near the loading view at `:257-260`) with a Retry action.
+1. **Hub fake success — landed.** `HubRealtimeState.Error` + Retry; do not regress by setting ready in `catch`. Remaining WP2 items below are still open.
 2. `viewmodel/GlobalSearchViewModel.kt:369-372`: add an error field; `GlobalSearchScreen.kt:225` must distinguish "search failed / Retry" from "no results".
 3. `ui/screens/ConnectionsListView.kt:401-407` and `ui/components/UserProfileBottomSheet.kt:161` *(note: the latter dies in WP1 — skip if already deleted)*: surface a non-blocking toast.
 4. Audit the remaining silent catches (11 in `ChatViewModel`, 7 in `HomeViewModel`, 4 in `HubChatViewModel`). For each, choose deliberately and leave a one-line comment stating the choice:
@@ -215,7 +206,7 @@ done   # every count must be 0 BEFORE deleting
 **Acceptance criteria:**
 - No `catch` block sets a readiness/success flag to `true`. This is a hard rule.
 - Every silent catch is either fixed or carries an explicit justification comment.
-- Hub chat join failure shows an error + Retry.
+- Hub chat join failure shows an error + Retry. **Landed** (`HubRealtimeState` + `HubRealtimeErrorView`).
 - Search failure is visually distinct from zero results.
 
 **Verification:**
@@ -226,7 +217,7 @@ grep -rn -A4 "catch (e: Exception)" --include=*.kt \
   | grep -c "Ready.value = true"
 ./gradlew :composeApp:testDebugUnitTest
 ```
-Add a regression test asserting `channelReady == false` and `channelError != null` when the hub session throws.
+Regression: `HubChatViewModelTest` asserts subscribe failure → `HubRealtimeState.Error` and `channelReady == false`.
 
 ---
 

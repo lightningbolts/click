@@ -42,7 +42,7 @@ This file is **authoritative guidance** for future developers and AI assistants 
 
 ## 4. Database and Supabase Auth metadata
 
-- Assume a **normalized PostgreSQL schema** with dedicated tables—patterns in `click/database/` include (among others) users-related data, **`user_interests`**, **connections**, **messages**, **chats**, **push_tokens** (with `token_type` for `standard` vs `voip`), notification preferences, and location/environment-related columns where used.
+- Assume a **normalized PostgreSQL schema** with dedicated tables—patterns in `click/database/` include (among others) users-related data, **`user_interests`**, **connections**, **messages**, **chats**, **push_tokens** (unique on `(user_id, device_id, token_type)` for `standard` vs `voip` on the same device), notification preferences, and location/environment-related columns where used.
 - **Do not** store **core application state** in `auth.users.raw_user_meta_data` as the primary source of truth. Use **first-class tables** and RPCs/views as the app does for profiles, interests, and connection graph data. Metadata may still be used for **display fallbacks** where the codebase already does—do not expand reliance on raw metadata for new features.
 
 ---

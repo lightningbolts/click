@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
@@ -9,33 +11,35 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.PhotoCamera
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -54,76 +58,64 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.LineHeightStyle
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.PlatformHapticsPolicy
-import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatAttachmentMenuAnchorHost // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatAttachmentMenuRow // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatChromeHorizontalPadding // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatHeaderIconButton // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatMediaPickerHandles // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatComposerStrip // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatLiquidGlassPlate // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowlist secret
-import compose.project.click.click.ui.chat.chatTimelineShouldFollowInbound // pragma: allowlist secret
-import compose.project.click.click.ui.chat.scrollChatTimelineToLatest // pragma: allowlist secret
-import compose.project.click.click.ui.chat.chatDismissKeyboardAfterScrollConnection // pragma: allowlist secret
-import compose.project.click.click.ui.chat.chatSpringPressScale // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatInterMessageHubBaseCompact // pragma: allowlist secret
-import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
-import compose.project.click.click.ui.chat.applyTimestampPeekDragStep // pragma: allowlist secret
-import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft // pragma: allowlist secret
-import compose.project.click.click.ui.chat.launchTimestampPeekReplyStyleSettle // pragma: allowlist secret
-import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
-import compose.project.click.click.ui.chat.rememberTimestampPeekRevealPx // pragma: allowlist secret
-import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx // pragma: allowlist secret
-import compose.project.click.click.ui.chat.isTimestampPeekRevealed // pragma: allowlist secret
-import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay // pragma: allowlist secret
-import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
 import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatAttachmentMenuRow // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatChromeHorizontalPadding // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatComposerStrip // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatComposerStripReserve // pragma: allowlist secret
-import compose.project.click.click.ui.chat.rememberChatComposerFieldColors // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatHeaderIconButton // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatInterMessageHubBaseCompact // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatLiquidGlassPlate // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatMediaPickerHandles // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowlist secret
+import compose.project.click.click.ui.chat.applyTimestampPeekDragStep // pragma: allowlist secret
+import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatDismissKeyboardAfterScrollConnection // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatTimelineShouldFollowInbound // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft // pragma: allowlist secret
+import compose.project.click.click.ui.chat.isTimestampPeekRevealed // pragma: allowlist secret
+import compose.project.click.click.ui.chat.launchTimestampPeekReplyStyleSettle // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatNativeKeyboardInsets // pragma: allowlist secret
-import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
-import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
-import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberTimestampPeekRevealPx // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx // pragma: allowlist secret
+import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay // pragma: allowlist secret
+import compose.project.click.click.ui.chat.scrollChatTimelineToLatest // pragma: allowlist secret
 import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickOutlinedTextField
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
 import compose.project.click.click.ui.components.LocalGlassAlertAnimatedDismiss // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
+import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
+import compose.project.click.click.ui.components.sheetPageBackground
+import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
 import compose.project.click.click.viewmodel.HubChatNavigationEvent // pragma: allowlist secret
 import compose.project.click.click.viewmodel.HubChatViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.HubRealtimeState // pragma: allowlist secret
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import compose.project.click.click.ui.components.ClickOutlinedTextField
-import compose.project.click.click.ui.components.sheetPageBackground
 
 data class HubChatNavArgs(
     val hubId: String,
@@ -149,17 +141,18 @@ fun HubChatScreen(
     parentInteractiveBackSwipePx: androidx.compose.runtime.MutableFloatState? = null,
     keyboardHeightProvider: KeyboardHeightProvider = rememberKeyboardHeightProvider(),
 ) {
-    val viewModel: HubChatViewModel = viewModel(key = args.realtimeChannel) {
-        HubChatViewModel(
-            hubId = args.hubId,
-            realtimeChannelName = args.realtimeChannel,
-            hubTitle = args.hubTitle,
-            currentUserId = currentUserId,
-            hubCategory = args.hubCategory,
-            creatorId = args.creatorId,
-            hubLocationResolver = resolveHubGatekeeperLocation,
-        )
-    }
+    val viewModel: HubChatViewModel =
+        viewModel(key = args.realtimeChannel) {
+            HubChatViewModel(
+                hubId = args.hubId,
+                realtimeChannelName = args.realtimeChannel,
+                hubTitle = args.hubTitle,
+                currentUserId = currentUserId,
+                hubCategory = args.hubCategory,
+                creatorId = args.creatorId,
+                hubLocationResolver = resolveHubGatekeeperLocation,
+            )
+        }
 
     val messages by viewModel.messages.collectAsState()
     val occupantCount by viewModel.occupantCount.collectAsState()
@@ -175,34 +168,42 @@ fun HubChatScreen(
     var editNameDraft by remember { mutableStateOf(hubDetails.name) }
     var editCategoryDraft by remember { mutableStateOf(hubDetails.category) }
 
-    val mediaPickers = rememberChatMediaPickers(
-        onImagePicked = { bytes, mime -> viewModel.sendHubImageFromPicker(bytes, mime) },
-        onAudioPicked = { _, _, _ -> },
-        onMediaAccessBlocked = { },
-    )
+    val mediaPickers =
+        rememberChatMediaPickers(
+            onImagePicked = { bytes, mime -> viewModel.sendHubImageFromPicker(bytes, mime) },
+            onAudioPicked = { _, _, _ -> },
+            onMediaAccessBlocked = { },
+        )
 
     val hubIdForSecureMedia = remember(args.hubId) { args.hubId }
     val hubPeekScope = rememberCoroutineScope()
     val hubListState = remember(args.realtimeChannel) { LazyListState() }
     val density = LocalDensity.current
-    val nativeKeyboardInsets = rememberChatNativeKeyboardInsets(
-        keyboardHeightProvider = keyboardHeightProvider,
-        subtractTabBarOverlay = false,
-    )
+    val nativeKeyboardInsets =
+        rememberChatNativeKeyboardInsets(
+            keyboardHeightProvider = keyboardHeightProvider,
+            subtractTabBarOverlay = false,
+        )
     val focusManager = LocalFocusManager.current
     val focusManagerState = rememberUpdatedState(focusManager)
     val suppressKeyboardDismissWhileProgrammaticTimelineScroll = remember { mutableStateOf(false) }
     val keyboardDismissScrollThresholdPx = remember(density) { with(density) { 16.dp.toPx() } }
-    val dismissKeyboardOnUserMessageScroll = remember(keyboardDismissScrollThresholdPx) {
-        chatDismissKeyboardAfterScrollConnection(
-            thresholdPx = keyboardDismissScrollThresholdPx,
-            isSuppressed = { suppressKeyboardDismissWhileProgrammaticTimelineScroll.value },
-            onDismiss = { focusManagerState.value.clearFocus() },
-        )
-    }
+    val dismissKeyboardOnUserMessageScroll =
+        remember(keyboardDismissScrollThresholdPx) {
+            chatDismissKeyboardAfterScrollConnection(
+                thresholdPx = keyboardDismissScrollThresholdPx,
+                isSuppressed = { suppressKeyboardDismissWhileProgrammaticTimelineScroll.value },
+                onDismiss = { focusManagerState.value.clearFocus() },
+            )
+        }
 
     val initialTimelineScrollDone = remember(args.realtimeChannel) { mutableStateOf(false) }
-    val peerNewestMessageId = messages.lastOrNull()?.takeIf { !it.isSent }?.message?.id
+    val peerNewestMessageId =
+        messages
+            .lastOrNull()
+            ?.takeIf { !it.isSent }
+            ?.message
+            ?.id
 
     LaunchedEffect(args.realtimeChannel, messages.isNotEmpty()) {
         if (messages.isEmpty() || initialTimelineScrollDone.value) return@LaunchedEffect
@@ -244,7 +245,9 @@ fun HubChatScreen(
 
     val inLobby = false // TODO: restore `occupantCount < 3` after testing
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val channelReady by viewModel.channelReady.collectAsState()
+    val realtimeState by viewModel.realtimeState.collectAsState()
+    val channelReady = realtimeState is HubRealtimeState.Ready
+    val channelError = (realtimeState as? HubRealtimeState.Error)?.message
 
     Box(
         modifier = Modifier.fillMaxSize(),
@@ -255,7 +258,14 @@ fun HubChatScreen(
             modifier = Modifier.fillMaxSize(),
         )
 
-        if (!channelReady && messages.isEmpty()) {
+        if (channelError != null && messages.isEmpty()) {
+            HubRealtimeErrorView(
+                topInset = topInset,
+                message = channelError,
+                onBackPressed = onNavigateBack,
+                onRetry = { viewModel.retryRealtime() },
+            )
+        } else if (!channelReady && messages.isEmpty()) {
             ChatChannelLoadingView(
                 topInset = topInset,
                 onBackPressed = onNavigateBack,
@@ -269,284 +279,299 @@ fun HubChatScreen(
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = topInset)
-                        .height(56.dp)
-                        .testTag(ChatGlassHeaderPlateTestTag),
-                ) {
-                    ChatLiquidGlassPlate(
-                        modifier = Modifier.matchParentSize(),
-                        testTag = ChatGlassHeaderPlateTestTag,
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = ChatChromeHorizontalPadding),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(top = topInset)
+                                .height(56.dp)
+                                .testTag(ChatGlassHeaderPlateTestTag),
                     ) {
-                        ChatHeaderIconButton(
-                            icon = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            onClick = onNavigateBack,
-                            showBorder = true,
+                        ChatLiquidGlassPlate(
+                            modifier = Modifier.matchParentSize(),
+                            testTag = ChatGlassHeaderPlateTestTag,
                         )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = hubDetails.name,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface,
+                        Row(
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = ChatChromeHorizontalPadding),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            ChatHeaderIconButton(
+                                icon = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                onClick = onNavigateBack,
+                                showBorder = true,
                             )
-                            Text(
-                                text = if (inLobby) {
-                                    "$occupantCount ${if (occupantCount == 1) "person" else "people"} here"
-                                } else {
-                                    "$occupantCount people in this hub"
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = hubDetails.name,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Text(
+                                    text =
+                                        if (inLobby) {
+                                            "$occupantCount ${if (occupantCount == 1) "person" else "people"} here"
+                                        } else {
+                                            "$occupantCount people in this hub"
+                                        },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            ChatHeaderIconButton(
+                                icon = Icons.Filled.MoreVert,
+                                contentDescription = "Hub settings",
+                                onClick = { settingsMenuExpanded = true },
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                modifier = Modifier.testTag("hub_settings_menu"),
                             )
                         }
-                        ChatHeaderIconButton(
-                            icon = Icons.Filled.MoreVert,
-                            contentDescription = "Hub settings",
-                            onClick = { settingsMenuExpanded = true },
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                            modifier = Modifier.testTag("hub_settings_menu"),
-                        )
                     }
-                }
 
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp)
-                        .border(2.dp, clickBorderColor(), RoundedCornerShape(14.dp)),
-                    color = PrimaryBlue,
-                    shape = RoundedCornerShape(14.dp),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp,
-                ) {
-                    Text(
-                        text = "See someone interesting? Go tap phones to make a permanent connection.",
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = Color.White,
-                        textAlign = TextAlign.Center,
-                    )
-                }
-
-                if (inLobby) {
                     Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                            .border(2.dp, clickBorderColor(), RoundedCornerShape(16.dp)),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        shape = RoundedCornerShape(16.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 4.dp)
+                                .border(2.dp, clickBorderColor(), RoundedCornerShape(14.dp)),
+                        color = PrimaryBlue,
+                        shape = RoundedCornerShape(14.dp),
                         tonalElevation = 0.dp,
                         shadowElevation = 0.dp,
                     ) {
                         Text(
-                            text = "You're the first one here! We'll ping you when others join.",
-                            modifier = Modifier.padding(20.dp),
-                            style = MaterialTheme.typography.bodyLarge,
+                            text = "See someone interesting? Go tap phones to make a permanent connection.",
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White,
                             textAlign = TextAlign.Center,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
                         )
                     }
-                }
 
-                // ── Timestamp peek ──────────────────────────────────────────
-                val rawTimestampPeekTravelPx = remember { mutableFloatStateOf(0f) }
-                val displayTimestampPeekVisualPx = remember { mutableFloatStateOf(0f) }
-                val timestampPeekSettleJob = remember { mutableStateOf<Job?>(null) }
-                val peekRevealPx = rememberTimestampPeekRevealPx()
-                val timestampPeekSoftKneePx = rememberTimestampPeekSoftKneePx()
-                DisposableEffect(
-                    integrateTimestampPeekWithSwipeBackContainer,
-                    peekRevealPx,
-                    timestampPeekSoftKneePx,
-                    hubPeekScope,
-                ) {
-                    val integrate = integrateTimestampPeekWithSwipeBackContainer
-                    if (integrate) {
-                        val integration = InteractiveSwipeBackRightToLeftPeek(
-                            onGestureStart = {
-                                timestampPeekSettleJob.value?.cancel()
-                                timestampPeekSettleJob.value = null
-                                restoreTimestampPeekRawFromDisplay(
-                                    rawLeftPx = rawTimestampPeekTravelPx,
-                                    displayVisualPx = displayTimestampPeekVisualPx,
-                                    maxRevealPx = peekRevealPx,
-                                    softKneePx = timestampPeekSoftKneePx,
-                                )
-                            },
-                            onLeftDragDelta = { dLeft ->
-                                applyTimestampPeekDragStep(
-                                    rawLeftPx = rawTimestampPeekTravelPx,
-                                    displayVisualPx = displayTimestampPeekVisualPx,
-                                    maxRevealPx = peekRevealPx,
-                                    softKneePx = timestampPeekSoftKneePx,
-                                    dLeftPx = dLeft,
-                                )
-                            },
-                            onLeftDragEnd = {
-                                hubPeekScope.launchTimestampPeekReplyStyleSettle(
-                                    rawLeftPx = rawTimestampPeekTravelPx,
-                                    displayVisualPx = displayTimestampPeekVisualPx,
-                                    settleJobHolder = timestampPeekSettleJob,
-                                )
-                            },
-                            isPeekRevealed = {
-                                isTimestampPeekRevealed(displayTimestampPeekVisualPx.floatValue)
-                            },
-                            onRightDragDelta = { dRight ->
-                                applyTimestampPeekDragStep(
-                                    rawLeftPx = rawTimestampPeekTravelPx,
-                                    displayVisualPx = displayTimestampPeekVisualPx,
-                                    maxRevealPx = peekRevealPx,
-                                    softKneePx = timestampPeekSoftKneePx,
-                                    dLeftPx = -dRight,
-                                )
-                            },
-                            onRightDragFromRest = {
-                                timestampPeekSettleJob.value?.cancel()
-                                timestampPeekSettleJob.value = null
-                                rawTimestampPeekTravelPx.floatValue = 0f
-                                displayTimestampPeekVisualPx.floatValue = 0f
-                            },
-                        )
-                        onRegisterSwipeBackRightToLeftPeek(integration)
+                    if (inLobby) {
+                        Surface(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                                    .border(2.dp, clickBorderColor(), RoundedCornerShape(16.dp)),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = RoundedCornerShape(16.dp),
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp,
+                        ) {
+                            Text(
+                                text = "You're the first one here! We'll ping you when others join.",
+                                modifier = Modifier.padding(20.dp),
+                                style = MaterialTheme.typography.bodyLarge,
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
                     }
-                    onDispose {
-                        timestampPeekSettleJob.value?.cancel()
-                        timestampPeekSettleJob.value = null
+
+                    // ── Timestamp peek ──────────────────────────────────────────
+                    val rawTimestampPeekTravelPx = remember { mutableFloatStateOf(0f) }
+                    val displayTimestampPeekVisualPx = remember { mutableFloatStateOf(0f) }
+                    val timestampPeekSettleJob = remember { mutableStateOf<Job?>(null) }
+                    val peekRevealPx = rememberTimestampPeekRevealPx()
+                    val timestampPeekSoftKneePx = rememberTimestampPeekSoftKneePx()
+                    DisposableEffect(
+                        integrateTimestampPeekWithSwipeBackContainer,
+                        peekRevealPx,
+                        timestampPeekSoftKneePx,
+                        hubPeekScope,
+                    ) {
+                        val integrate = integrateTimestampPeekWithSwipeBackContainer
                         if (integrate) {
-                            onRegisterSwipeBackRightToLeftPeek(null)
+                            val integration =
+                                InteractiveSwipeBackRightToLeftPeek(
+                                    onGestureStart = {
+                                        timestampPeekSettleJob.value?.cancel()
+                                        timestampPeekSettleJob.value = null
+                                        restoreTimestampPeekRawFromDisplay(
+                                            rawLeftPx = rawTimestampPeekTravelPx,
+                                            displayVisualPx = displayTimestampPeekVisualPx,
+                                            maxRevealPx = peekRevealPx,
+                                            softKneePx = timestampPeekSoftKneePx,
+                                        )
+                                    },
+                                    onLeftDragDelta = { dLeft ->
+                                        applyTimestampPeekDragStep(
+                                            rawLeftPx = rawTimestampPeekTravelPx,
+                                            displayVisualPx = displayTimestampPeekVisualPx,
+                                            maxRevealPx = peekRevealPx,
+                                            softKneePx = timestampPeekSoftKneePx,
+                                            dLeftPx = dLeft,
+                                        )
+                                    },
+                                    onLeftDragEnd = {
+                                        hubPeekScope.launchTimestampPeekReplyStyleSettle(
+                                            rawLeftPx = rawTimestampPeekTravelPx,
+                                            displayVisualPx = displayTimestampPeekVisualPx,
+                                            settleJobHolder = timestampPeekSettleJob,
+                                        )
+                                    },
+                                    isPeekRevealed = {
+                                        isTimestampPeekRevealed(displayTimestampPeekVisualPx.floatValue)
+                                    },
+                                    onRightDragDelta = { dRight ->
+                                        applyTimestampPeekDragStep(
+                                            rawLeftPx = rawTimestampPeekTravelPx,
+                                            displayVisualPx = displayTimestampPeekVisualPx,
+                                            maxRevealPx = peekRevealPx,
+                                            softKneePx = timestampPeekSoftKneePx,
+                                            dLeftPx = -dRight,
+                                        )
+                                    },
+                                    onRightDragFromRest = {
+                                        timestampPeekSettleJob.value?.cancel()
+                                        timestampPeekSettleJob.value = null
+                                        rawTimestampPeekTravelPx.floatValue = 0f
+                                        displayTimestampPeekVisualPx.floatValue = 0f
+                                    },
+                                )
+                            onRegisterSwipeBackRightToLeftPeek(integration)
+                        }
+                        onDispose {
+                            timestampPeekSettleJob.value?.cancel()
+                            timestampPeekSettleJob.value = null
+                            if (integrate) {
+                                onRegisterSwipeBackRightToLeftPeek(null)
+                            }
+                        }
+                    }
+
+                    val newestSentMessage =
+                        remember(messages) {
+                            messages.asSequence().filter { it.isSent }.maxByOrNull { it.message.timeCreated }
+                        }
+                    val timelineEntries =
+                        remember(messages) {
+                            buildChatTimelineEntriesNewestFirst(messages)
+                        }
+                    val reverseListNewestEdgePad = 6.dp
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .clipToBounds(),
+                    ) {
+                        Column(
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    .chatThreadKeyboardDock(
+                                        nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
+                                        clearNativeTabBar = false,
+                                    ),
+                        ) {
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth(),
+                            ) {
+                                ChatMessageTimeline(
+                                    timelineEntries = timelineEntries,
+                                    listState = hubListState,
+                                    newestSentMessage = newestSentMessage,
+                                    listBottomPadding =
+                                        PaddingValues(
+                                            start = 6.dp,
+                                            end = 6.dp,
+                                            top = 24.dp + reverseListNewestEdgePad,
+                                            bottom = 8.dp + ChatComposerStripReserve,
+                                        ),
+                                    dismissKeyboardOnUserMessageScroll = dismissKeyboardOnUserMessageScroll,
+                                    displayTimestampPeekVisualPx = displayTimestampPeekVisualPx,
+                                    peekRevealPx = peekRevealPx,
+                                    meshConnection = null,
+                                    useHubNeutralMesh = true,
+                                    isGroupChat = true,
+                                    currentUserId = currentUserId,
+                                    reactionsMap = emptyMap(),
+                                    secureMediaHost = viewModel,
+                                    activeChatId = hubIdForSecureMedia,
+                                    onToggleReaction = { _, _ -> },
+                                    onForward = {},
+                                    onLongPress = {},
+                                    onSwipeReply = {},
+                                    onDownloadAttachment = { _, _ ->
+                                        ChatAttachmentDownloadOutcome.Failure("Download not available in hub chat.")
+                                    },
+                                    interMessageBaseCompact = ChatInterMessageHubBaseCompact,
+                                    enableMessageContextMenu = false,
+                                    modifier =
+                                        Modifier
+                                            .fillMaxSize()
+                                            .then(
+                                                if (!integrateTimestampPeekWithSwipeBackContainer) {
+                                                    Modifier.chatTimestampPeekOnSwipeLeft(
+                                                        maxRevealPx = peekRevealPx,
+                                                        softKneePx = timestampPeekSoftKneePx,
+                                                        rawLeftPx = rawTimestampPeekTravelPx,
+                                                        displayVisualPx = displayTimestampPeekVisualPx,
+                                                        scope = hubPeekScope,
+                                                        settleJobHolder = timestampPeekSettleJob,
+                                                    )
+                                                } else {
+                                                    Modifier
+                                                },
+                                            ),
+                                )
+                            }
+
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                HubChatInputBar(
+                                    viewModel = viewModel,
+                                    inLobby = inLobby,
+                                    isOutOfBounds = outOfBounds,
+                                    mediaPickers = mediaPickers,
+                                )
+                            }
                         }
                     }
                 }
-
-                val newestSentMessage = remember(messages) {
-                    messages.asSequence().filter { it.isSent }.maxByOrNull { it.message.timeCreated }
-                }
-                val timelineEntries = remember(messages) {
-                    buildChatTimelineEntriesNewestFirst(messages)
-                }
-                val reverseListNewestEdgePad = 6.dp
-
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .clipToBounds(),
-                ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .chatThreadKeyboardDock(
-                            nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
-                            clearNativeTabBar = false,
-                        ),
-                ) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                ) {
-                ChatMessageTimeline(
-                    timelineEntries = timelineEntries,
-                    listState = hubListState,
-                    newestSentMessage = newestSentMessage,
-                    listBottomPadding = PaddingValues(
-                        start = 6.dp,
-                        end = 6.dp,
-                        top = 24.dp + reverseListNewestEdgePad,
-                        bottom = 8.dp + ChatComposerStripReserve,
-                    ),
-                    dismissKeyboardOnUserMessageScroll = dismissKeyboardOnUserMessageScroll,
-                    displayTimestampPeekVisualPx = displayTimestampPeekVisualPx,
-                    peekRevealPx = peekRevealPx,
-                    meshConnection = null,
-                    useHubNeutralMesh = true,
-                    isGroupChat = true,
-                    currentUserId = currentUserId,
-                    reactionsMap = emptyMap(),
-                    secureMediaHost = viewModel,
-                    activeChatId = hubIdForSecureMedia,
-                    onToggleReaction = { _, _ -> },
-                    onForward = {},
-                    onLongPress = {},
-                    onSwipeReply = {},
-                    onDownloadAttachment = { _, _ ->
-                        ChatAttachmentDownloadOutcome.Failure("Download not available in hub chat.")
-                    },
-                    interMessageBaseCompact = ChatInterMessageHubBaseCompact,
-                    enableMessageContextMenu = false,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .then(
-                            if (!integrateTimestampPeekWithSwipeBackContainer) {
-                                Modifier.chatTimestampPeekOnSwipeLeft(
-                                    maxRevealPx = peekRevealPx,
-                                    softKneePx = timestampPeekSoftKneePx,
-                                    rawLeftPx = rawTimestampPeekTravelPx,
-                                    displayVisualPx = displayTimestampPeekVisualPx,
-                                    scope = hubPeekScope,
-                                    settleJobHolder = timestampPeekSettleJob,
-                                )
-                            } else {
-                                Modifier
-                            },
-                        ),
-                )
-                }
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    HubChatInputBar(
-                        viewModel = viewModel,
-                        inLobby = inLobby,
-                        isOutOfBounds = outOfBounds,
-                        mediaPickers = mediaPickers,
-                    )
-                }
-                }
-                }
             }
         }
-        }
-
     }
 
     if (settingsMenuExpanded) {
-        val menuItems = visibleHubSettingsMenuItems(
-            currentUserId = currentUserId,
-            creatorId = resolvedCreatorId,
-        )
+        val menuItems =
+            visibleHubSettingsMenuItems(
+                currentUserId = currentUserId,
+                creatorId = resolvedCreatorId,
+            )
         ClickActionBottomSheet(
             onDismissRequest = { settingsMenuExpanded = false },
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight()
-                    .background(sheetPageBackground())
-                    .padding(bottom = 32.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight()
+                        .background(sheetPageBackground())
+                        .padding(bottom = 32.dp),
             ) {
                 Text(
                     text = hubDetails.name,
                     style = MaterialTheme.typography.titleMedium,
                     color = GlassSheetTokens.OnOled(),
-                    modifier = Modifier
-                        .padding(horizontal = 20.dp, vertical = 12.dp)
-                        .align(Alignment.CenterHorizontally),
+                    modifier =
+                        Modifier
+                            .padding(horizontal = 20.dp, vertical = 12.dp)
+                            .align(Alignment.CenterHorizontally),
                 )
                 HorizontalDivider(color = GlassSheetTokens.GlassBorder())
 
@@ -634,30 +659,32 @@ fun HubChatScreen(
                         onValueChange = { editNameDraft = it.take(80) },
                         singleLine = true,
                         label = { Text("Hub name", color = GlassSheetTokens.OnOledMuted()) },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = GlassSheetTokens.OnOled(),
-                            unfocusedTextColor = GlassSheetTokens.OnOled(),
-                            focusedBorderColor = PrimaryBlue,
-                            unfocusedBorderColor = GlassSheetTokens.GlassBorder(),
-                            cursorColor = PrimaryBlue,
-                            focusedLabelColor = GlassSheetTokens.OnOledMuted(),
-                            unfocusedLabelColor = GlassSheetTokens.OnOledMuted(),
-                        ),
+                        colors =
+                            OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = GlassSheetTokens.OnOled(),
+                                unfocusedTextColor = GlassSheetTokens.OnOled(),
+                                focusedBorderColor = PrimaryBlue,
+                                unfocusedBorderColor = GlassSheetTokens.GlassBorder(),
+                                cursorColor = PrimaryBlue,
+                                focusedLabelColor = GlassSheetTokens.OnOledMuted(),
+                                unfocusedLabelColor = GlassSheetTokens.OnOledMuted(),
+                            ),
                     )
                     ClickOutlinedTextField(
                         value = editCategoryDraft,
                         onValueChange = { editCategoryDraft = it.take(40) },
                         singleLine = true,
                         label = { Text("Category", color = GlassSheetTokens.OnOledMuted()) },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = GlassSheetTokens.OnOled(),
-                            unfocusedTextColor = GlassSheetTokens.OnOled(),
-                            focusedBorderColor = PrimaryBlue,
-                            unfocusedBorderColor = GlassSheetTokens.GlassBorder(),
-                            cursorColor = PrimaryBlue,
-                            focusedLabelColor = GlassSheetTokens.OnOledMuted(),
-                            unfocusedLabelColor = GlassSheetTokens.OnOledMuted(),
-                        ),
+                        colors =
+                            OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = GlassSheetTokens.OnOled(),
+                                unfocusedTextColor = GlassSheetTokens.OnOled(),
+                                focusedBorderColor = PrimaryBlue,
+                                unfocusedBorderColor = GlassSheetTokens.GlassBorder(),
+                                cursorColor = PrimaryBlue,
+                                focusedLabelColor = GlassSheetTokens.OnOledMuted(),
+                                unfocusedLabelColor = GlassSheetTokens.OnOledMuted(),
+                            ),
                     )
                 }
             },
@@ -748,41 +775,45 @@ private fun HubChatInputBar(
 
     Box(modifier = Modifier.fillMaxWidth().graphicsLayer { clip = true }) {
         Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(Color.Transparent)
-                .clickable(
-                    indication = null,
-                    interactionSource = composerStripInteraction,
-                ) {},
+            modifier =
+                Modifier
+                    .matchParentSize()
+                    .background(Color.Transparent)
+                    .clickable(
+                        indication = null,
+                        interactionSource = composerStripInteraction,
+                    ) {},
         )
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = composerRowHPad, vertical = composerRowVPad),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = composerRowHPad, vertical = composerRowVPad),
         ) {
             sendError?.let { err ->
                 Text(
                     text = "$err · Review and tap send to retry",
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 4.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 4.dp),
                 )
             }
             ChatComposerStrip(
                 value = draft,
                 onValueChange = viewModel::updateDraft,
-                placeholder = if (inLobby) {
-                    "Chat unlocks when 3+ join"
-                } else if (isOutOfBounds) {
-                    "You are no longer at this location"
-                } else if (onCooldown) {
-                    "Wait ${cooldownSec}s…"
-                } else {
-                    "Message the hub…"
-                },
+                placeholder =
+                    if (inLobby) {
+                        "Chat unlocks when 3+ join"
+                    } else if (isOutOfBounds) {
+                        "You are no longer at this location"
+                    } else if (onCooldown) {
+                        "Wait ${cooldownSec}s…"
+                    } else {
+                        "Message the hub…"
+                    },
                 enabled = enabled,
                 externallySending = isSending,
                 sendIcon = Icons.AutoMirrored.Filled.Send,
@@ -792,31 +823,87 @@ private fun HubChatInputBar(
                 onAttachmentMenuExpandedChange = { attachmentMenuExpanded = it },
                 attachmentMenuContent = {
                     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                            ChatAttachmentMenuRow(
-                                label = "Photo library",
-                                icon = Icons.Outlined.Image,
-                                enabled = enabled,
-                                onClick = {
-                                    PlatformHapticsPolicy.lightImpact()
-                                    attachmentMenuExpanded = false
-                                    mediaPickers.openPhotoLibrary()
-                                },
-                            )
-                            ChatAttachmentMenuRow(
-                                label = "Take photo",
-                                icon = Icons.Outlined.PhotoCamera,
-                                enabled = enabled,
-                                onClick = {
-                                    PlatformHapticsPolicy.lightImpact()
-                                    attachmentMenuExpanded = false
-                                    keyboardController?.hide()
-                                    focusManager.clearFocus()
-                                    mediaPickers.openCamera()
-                                },
-                            )
+                        ChatAttachmentMenuRow(
+                            label = "Photo library",
+                            icon = Icons.Outlined.Image,
+                            enabled = enabled,
+                            onClick = {
+                                PlatformHapticsPolicy.lightImpact()
+                                attachmentMenuExpanded = false
+                                mediaPickers.openPhotoLibrary()
+                            },
+                        )
+                        ChatAttachmentMenuRow(
+                            label = "Take photo",
+                            icon = Icons.Outlined.PhotoCamera,
+                            enabled = enabled,
+                            onClick = {
+                                PlatformHapticsPolicy.lightImpact()
+                                attachmentMenuExpanded = false
+                                keyboardController?.hide()
+                                focusManager.clearFocus()
+                                mediaPickers.openCamera()
+                            },
+                        )
                     }
                 },
             )
+        }
+    }
+}
+
+@Composable
+@Suppress("ktlint:standard:function-naming")
+private fun HubRealtimeErrorView(
+    topInset: androidx.compose.ui.unit.Dp,
+    message: String,
+    onBackPressed: () -> Unit,
+    onRetry: () -> Unit,
+) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ChatHeaderIconButton(
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    onClick = onBackPressed,
+                    showBorder = true,
+                )
+            }
+        }
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 32.dp)
+                    .padding(top = topInset + 56.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                text = "Couldn't join this hub",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            TextButton(onClick = onRetry) {
+                Text("Retry")
+            }
         }
     }
 }

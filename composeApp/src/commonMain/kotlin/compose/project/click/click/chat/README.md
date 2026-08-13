@@ -113,7 +113,7 @@ Bulk inbox hydration uses `Semaphore(12)` (`limitParallel`) to cap parallel conn
 |--------------|---------|--------|-------|
 | Per-chat thread | `messages:$chatId` | `messages`, `message_reactions` | `ChatViewModel` via `subscribeToMessages` |
 | Inbox list preview | `clicks:msg-list:*` | `messages` (INSERT/UPDATE) | `RealtimeCoordinator` via `subscribeToMessageInserts` |
-| Connection junction | `app:connections:$userId` | `connections`, archives, hidden, core | `RealtimeCoordinator` |
+| Connection junction | `app:connections:$userId` | `connections`, archives, hidden, core, `chats` INSERT, `group_members` INSERT | `RealtimeCoordinator` |
 
 `subscribeToMessages` registers **one** Realtime channel per `chatId` with merged Postgres change streams:
 

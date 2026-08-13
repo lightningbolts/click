@@ -187,6 +187,7 @@ data class PushTokenRegisterBody(
     val token: String,
     val platform: String,
     @SerialName("token_type") val tokenType: String,
+    @SerialName("device_id") val deviceId: String? = null,
 )
 
 @Serializable
@@ -911,9 +912,14 @@ class ApiClient {
                         return Result.success(response.body<LiveKitTokenResponse>())
                     }
                     response.status.value in 500..599 -> {
+                        val detail = readClickWebErrorMessage(response)
                         if (attempt == 2) {
                             return Result.failure(
-                                Exception("Failed to create call token (${response.status.value})"),
+                                Exception(
+                                    detail.ifBlank {
+                                        "Failed to create call token (${response.status.value})"
+                                    },
+                                ),
                             )
                         }
                     }

@@ -1,9 +1,24 @@
 # Issue #58 ("Bugs") — Triage & Root-Cause Analysis
 
-**Status:** durable
+**Status:** durable (S1 subset landed 2026-08; keep this file as the original diagnosis)
 **Issue:** https://github.com/lightningbolts/click/issues/58
 **Analysed at:** `click` @ `6977c67a` (main), `click-web` @ `fce5fb9` (main)
 **Scope:** 20 reported items spanning `click` (KMP app), `click-web` (Next.js), Supabase edge functions and SQL.
+
+## Landed S1 (2026-08)
+
+Tracker [#58](https://github.com/lightningbolts/click/issues/58) stays open. Child issues:
+
+| Issue | Status |
+|---|---|
+| [#62](https://github.com/lightningbolts/click/issues/62) push uniqueness | Landed — unique `(user_id, device_id, token_type)`; prune dead tokens; VoIP-then-standard fallback per device |
+| [#63](https://github.com/lightningbolts/click/issues/63) event reminders | Landed — 30 min + full local day; due-by-timestamp; Edge Function HTTP-calls Next.js |
+| [#64](https://github.com/lightningbolts/click/issues/64) realtime | Landed — hub `HubRealtimeState`; `chats` + `group_members` inserts; subscribe-first on open thread |
+| [#65](https://github.com/lightningbolts/click/issues/65) map pins | Landed — all connection pins; Memory Map does not filter; single `updateRenderData` writer |
+| [#68](https://github.com/lightningbolts/click/issues/68) root SSR | Already fixed on main; SSR regression test added |
+| [#61](https://github.com/lightningbolts/click/issues/61) LiveKit calls | **Not claimed fixed.** Client now surfaces 5xx token errors (`LiveKit environment is not configured`). Authenticated probe of `POST /api/livekit/token` still required before rewriting connect. |
+
+Historical sections below are the original diagnosis and may describe pre-fix code.
 
 ---
 
@@ -271,9 +286,12 @@ Two independent changes; do both:
    device succeeded, rather than sending both unconditionally (`index.ts:285-287`). Requires knowing which
    rows belong to the same device — which needs (2).
 2. **Give tokens a device identity and prune them.** Add a `device_id` to `push_tokens`, make the
-   uniqueness `(user_id, device_id)` so re-registration *replaces* rather than accumulates, and delete rows
-   on APNs `410 Unregistered` / FCM `UNREGISTERED` responses. Without this, duplicates persist for every
-   user who has ever reinstalled.
+   uniqueness `(user_id, device_id, token_type)` so iOS can keep both VoIP and standard on one device,
+   re-registration *replaces* rather than accumulates, and delete rows on APNs `410 Unregistered` /
+   FCM `UNREGISTERED` responses. Without this, duplicates persist for every user who has ever reinstalled.
+
+   **Landed 2026-08:** uniqueness is `(user_id, device_id, token_type)`; sender prunes dead tokens and
+   sends VoIP then standard fallback per device.
 
 ### 3.3 Map pins reducing to a subset **[CODE]**
 

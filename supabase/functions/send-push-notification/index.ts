@@ -35,6 +35,7 @@ interface PushTokenRow {
   token: string;
   platform: "android" | "ios";
   token_type?: "standard" | "voip";
+  device_id?: string | null;
   updated_at: number;
 }
 
@@ -60,7 +61,7 @@ type PushError = {
   error: string;
 };
 
-type PushCategory = "chat_message" | "incoming_call" | "archive_warning" | "disposable_reveal";
+type PushCategory = "chat_message" | "incoming_call" | "archive_warning" | "disposable_reveal" | "event_reminder";
 
 function normalizePrivateKey(value: string): string {
   return value.replace(/\\n/g, "\n");
@@ -264,6 +265,7 @@ function getPushCategory(requestBody: PushRequestBody): PushCategory {
   if (t === "incoming_call") return "incoming_call";
   if (t === "archive_warning") return "archive_warning";
   if (t === "disposable_reveal") return "disposable_reveal";
+  if (t === "event_reminder") return "event_reminder";
   return "chat_message";
 }
 
@@ -278,16 +280,43 @@ function shouldSendToToken(
   }
 
   const tokenType = pushToken.token_type ?? "standard";
-  if (category === "chat_message" || category === "archive_warning" || category === "disposable_reveal") {
+  if (
+    category === "chat_message" ||
+    category === "archive_warning" ||
+    category === "disposable_reveal" ||
+    category === "event_reminder"
+  ) {
     return tokenType != "voip";
   }
 
-  // incoming_call: send to every iOS token. VoIP wakes CallKit; standard APNs adds banner + sound if VoIP fails or is delayed.
+  // incoming_call: VoIP + standard are ordered in the send loop (VoIP first, standard fallback).
   if (category === "incoming_call") {
     return true;
   }
 
   return tokenType != "voip";
+}
+
+function isDeadPushTokenError(error: unknown): boolean {
+  const text = String(error).toLowerCase();
+  return (
+    text.includes(" 410") ||
+    text.includes("unregistered") ||
+    text.includes("baddevicetoken") ||
+    text.includes("notfound") ||
+    text.includes("not_found") ||
+    text.includes("invalidregistration")
+  );
+}
+
+async function pruneDeadToken(
+  supabase: ReturnType<typeof createClient>,
+  token: string,
+): Promise<void> {
+  const { error } = await supabase.from("push_tokens").delete().eq("token", token);
+  if (error) {
+    console.error("Failed to prune push token", error.message);
+  }
 }
 
 function asNonEmptyString(value: unknown): string | null {
@@ -667,7 +696,7 @@ async function recipientAllowsPush(
   if (cat === "incoming_call") {
     return data.call_push_enabled !== false;
   }
-  if (cat === "disposable_reveal" || cat === "chat_message" || cat === "archive_warning") {
+  if (cat === "disposable_reveal" || cat === "chat_message" || cat === "archive_warning" || cat === "event_reminder") {
     return data.message_push_enabled !== false;
   }
   return data.message_push_enabled !== false;
@@ -734,51 +763,53 @@ Deno.serve(async (req: Request) => {
     let sent = 0;
 
     const pushTokens = (tokens ?? []) as PushTokenRow[];
+    const category = getPushCategory(resolvedRequestBody);
 
-    for (const token of pushTokens) {
-      try {
-        if (!shouldSendToToken(resolvedRequestBody, token)) {
-          continue;
+    const ensureFcm = async () => {
+      if (!fcmAccessToken || !fcmProjectId) {
+        const serviceAccountJson = Deno.env.get("FCM_SERVICE_ACCOUNT_JSON");
+        if (!serviceAccountJson) {
+          throw new Error("Missing FCM_SERVICE_ACCOUNT_JSON secret");
         }
+        const fcmAuth = await getFcmAccessToken(serviceAccountJson);
+        fcmAccessToken = fcmAuth.accessToken;
+        fcmProjectId = fcmAuth.projectId;
+      }
+    };
 
+    const ensureApns = async () => {
+      if (!apnsJwt) {
+        apnsJwt = await getApnsJwt();
+      }
+    };
+
+    const deliverOne = async (token: PushTokenRow): Promise<boolean> => {
+      if (!shouldSendToToken(resolvedRequestBody, token)) return false;
+      try {
         if (token.platform === "android") {
-          if (!fcmAccessToken || !fcmProjectId) {
-            const serviceAccountJson = Deno.env.get("FCM_SERVICE_ACCOUNT_JSON");
-            if (!serviceAccountJson) {
-              throw new Error("Missing FCM_SERVICE_ACCOUNT_JSON secret");
-            }
-            const fcmAuth = await getFcmAccessToken(serviceAccountJson);
-            fcmAccessToken = fcmAuth.accessToken;
-            fcmProjectId = fcmAuth.projectId;
-          }
-
-          await sendAndroidPush(token, resolvedRequestBody, fcmAccessToken, fcmProjectId);
+          await ensureFcm();
+          await sendAndroidPush(token, resolvedRequestBody, fcmAccessToken!, fcmProjectId!);
         } else {
           const isVoipCallPush =
-            (token.token_type ?? "standard") === "voip" &&
-            getPushCategory(resolvedRequestBody) === "incoming_call";
+            (token.token_type ?? "standard") === "voip" && category === "incoming_call";
           if (isVoipCallPush) {
             console.log(
               "[APNs VoIP] VoIP token loaded from database for recipient",
               resolvedRequestBody.recipient_user_id,
             );
           }
-
-          if (!apnsJwt) {
-            try {
-              apnsJwt = await getApnsJwt();
-            } catch (jwtError) {
-              if (isVoipCallPush) {
-                console.error("[APNs VoIP] JWT signing error:", jwtError);
-              }
-              throw jwtError;
+          try {
+            await ensureApns();
+          } catch (jwtError) {
+            if (isVoipCallPush) {
+              console.error("[APNs VoIP] JWT signing error:", jwtError);
             }
+            throw jwtError;
           }
-
-          await sendIosPush(token, resolvedRequestBody, apnsJwt);
+          await sendIosPush(token, resolvedRequestBody, apnsJwt!);
         }
-
         sent += 1;
+        return true;
       } catch (tokenError) {
         console.error("Push send failed", token.platform, token.token, tokenError);
         errors.push({
@@ -786,6 +817,44 @@ Deno.serve(async (req: Request) => {
           platform: token.platform,
           error: String(tokenError),
         });
+        if (isDeadPushTokenError(tokenError)) {
+          await pruneDeadToken(supabase, token.token);
+        }
+        return false;
+      }
+    };
+
+    if (category === "incoming_call") {
+      const byDevice = new Map<string, PushTokenRow[]>();
+      for (const token of pushTokens) {
+        const key = token.device_id?.trim()
+          ? `device:${token.device_id.trim()}`
+          : `token:${token.token}`;
+        const list = byDevice.get(key) ?? [];
+        list.push(token);
+        byDevice.set(key, list);
+      }
+      for (const group of byDevice.values()) {
+        const android = group.filter((t) => t.platform === "android");
+        const ios = group.filter((t) => t.platform === "ios");
+        for (const token of android) {
+          await deliverOne(token);
+        }
+        if (ios.length > 0) {
+          const voip = ios.find((t) => (t.token_type ?? "standard") === "voip");
+          const standard = ios.find((t) => (t.token_type ?? "standard") !== "voip");
+          let voipOk = false;
+          if (voip) {
+            voipOk = await deliverOne(voip);
+          }
+          if (!voipOk && standard) {
+            await deliverOne(standard);
+          }
+        }
+      }
+    } else {
+      for (const token of pushTokens) {
+        await deliverOne(token);
       }
     }
 

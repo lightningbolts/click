@@ -2,6 +2,7 @@ package compose.project.click.click.data.repository
 
 import compose.project.click.click.data.api.ApiClient
 import compose.project.click.click.data.api.PushTokenRegisterBody
+import compose.project.click.click.platform.persistentPushDeviceId
 
 /**
  * Persists FCM / APNs tokens via click-web `POST /api/user/push-tokens` (JWT + server upsert).
@@ -20,24 +21,26 @@ class PushTokenRepository(
         tokenType: String = "standard",
     ): Boolean {
         if (userId.isBlank()) return false
-        val normalizedPlatform = when (platform.lowercase()) {
-            "android" -> "android"
-            "ios" -> "ios"
-            else -> return false
-        }
-        val normalizedType = when (tokenType.lowercase()) {
-            "voip" -> "voip"
-            else -> "standard"
-        }
+        val normalizedPlatform =
+            when (platform.lowercase()) {
+                "android" -> "android"
+                "ios" -> "ios"
+                else -> return false
+            }
+        val normalizedType =
+            when (tokenType.lowercase()) {
+                "voip" -> "voip"
+                else -> "standard"
+            }
         return apiClient
             .postPushToken(
                 PushTokenRegisterBody(
                     token = token,
                     platform = normalizedPlatform,
                     tokenType = normalizedType,
+                    deviceId = persistentPushDeviceId(),
                 ),
-            )
-            .fold(
+            ).fold(
                 onSuccess = { it.ok },
                 onFailure = {
                     println("Error saving push token: ${it.message}")

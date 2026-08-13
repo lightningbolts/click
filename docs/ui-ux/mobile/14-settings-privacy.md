@@ -202,7 +202,7 @@ Bottom button: `"System Settings"`.
 | **Ambient sound enrichment** toggle | Saves opt-in; requests mic permission if enabling | Default loads from token storage (`true`) |
 | **Ghost Mode** toggle | `AppDataManager.toggleGhostMode()` | Session-scoped; halts sync/presence |
 | **Location snap** toggle | `AppDataManager.setConnectionSnapEnabled`; requests location if enabling | Shows permission hints when ON |
-| **Memory Map** toggle | `AppDataManager.setShowOnMapEnabled` | — |
+| **Memory Map** toggle | `AppDataManager.setShowOnMapEnabled` | Does **not** hide non-core pins; list-sort / Remember Me only |
 | **Business insights** toggle | `AppDataManager.setIncludeInInsightsEnabled` | — |
 | **Permissions Hub** row | Expand/collapse inline panel | Chevron toggles `"Collapse"` / `"Expand"` |
 | **Allow microphone** / **Allow location** | OS permission dialogs | — |

@@ -216,6 +216,7 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 
 - [ ] FAB on Active tab → `ConnectionMemberPickerSheet`
 - [ ] `[KNOWN-8]` Create clique with eligible members → group chat opens **without crash**
+- [ ] New group chat appears on the other member's inbox without pull-to-refresh
 - [ ] Proximity autofill (`verifiedCliqueFromProximity`) pre-selects friends
 - [ ] Add members from group profile → eligibility mask respected
 - [ ] Remove member from group
@@ -372,6 +373,7 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] Map loads user location (permission granted)
 - [ ] `[KNOWN-5]` Map basemap renders with intended color styling (not stuck grayscale unless ghost mode)
 - [ ] Connection pins render; tap opens connection marker sheet
+- [ ] Memory Map toggle off still shows all connection pins (not core-only)
 - [ ] `[KNOWN-2]` Bluetooth reconnect → **single pin per peer** (no duplicate connection pins)
 - [ ] Community hub pins; tap → hub detail sheet → join geofence flow
 - [ ] Beacon pins; tap → beacon detail
@@ -498,6 +500,7 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 
 - [ ] Message push tap → opens correct chat (`pendingChatId`)
 - [ ] Call push → incoming call UI
+- [ ] Incoming call: one alert per physical device (VoIP first; standard only if VoIP failed)
 - [ ] Hub notification → opens hub
 - [ ] `[P] iOS` Standard APNs + VoIP PushKit separate paths
 - [ ] `[P] Android` FCM message and call channels — `[KNOWN-11]`

@@ -1,3 +1,6 @@
+-- Bootstrap schema. Formal uniqueness is (user_id, device_id, token_type) in
+-- supabase/migrations/20260813120000_push_tokens_device_id.sql (mirrored in click-web).
+
 CREATE TABLE IF NOT EXISTS push_tokens (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,

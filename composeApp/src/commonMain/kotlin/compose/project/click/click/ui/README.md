@@ -228,7 +228,7 @@ Home and connections surfaces show pending match / proximity-sync states; push n
 `GlobalSearchScreen` + `UnifiedSearchSheet` — search connections, messages, beacons, intents, and archived threads with category chips.
 
 ### Core connections
-`ConnectionsTabControls` — pin core connections to the top of the list; cores stay map-visible when not ghosted.
+`ConnectionsTabControls` — pin core connections to the top of the list. Memory Map off does **not** hide non-core pins; hidden IDs still apply. Cores stay map-visible when ghosted off-map.
 
 ### Collaboration sessions & disposable rolls
 `DisposableCameraView` + camera filters — after re-encounter bumps, a time-boxed **Disposable Roll** window opens for collaborative photo capture.

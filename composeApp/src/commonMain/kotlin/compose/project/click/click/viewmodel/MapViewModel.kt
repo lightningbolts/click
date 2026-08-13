@@ -1,104 +1,115 @@
+@file:Suppress(
+    "ktlint:standard:backing-property-naming",
+    "ktlint:standard:property-naming",
+)
+
 package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.PlatformHapticsPolicy
+import compose.project.click.click.collaboration.CollaborationSessionManager // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.ClickWebAuthCoordinator
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
-import compose.project.click.click.data.models.Connection // pragma: allowlist secret
-import compose.project.click.click.data.models.collapseOneToOneConnectionsByPeer // pragma: allowlist secret
-import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
-import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
+import compose.project.click.click.data.api.BeaconAttendeeDto
+import compose.project.click.click.data.api.BeaconEngagementHttpException
+import compose.project.click.click.data.api.EngagementTelemetryBody
+import compose.project.click.click.data.api.MapBeaconPatchBody
 import compose.project.click.click.data.models.BeaconVisibilityAudience // pragma: allowlist secret
+import compose.project.click.click.data.models.Connection // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconInsert // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
-import compose.project.click.click.data.api.BeaconAttendeeDto
-import compose.project.click.click.data.api.MapBeaconPatchBody
-import compose.project.click.click.data.models.parseMapBeaconMetadata // pragma: allowlist secret
-import compose.project.click.click.data.models.parseEpochMs
 import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.parseEpochMs
+import compose.project.click.click.data.models.parseMapBeaconMetadata // pragma: allowlist secret
+import compose.project.click.click.data.models.visibleMapConnections // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.MapBeaconRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
-import compose.project.click.click.data.storage.BeaconRsvpPersistence // pragma: allowlist secret
 import compose.project.click.click.data.storage.BeaconEngagementPersistence
-import compose.project.click.click.data.api.BeaconEngagementHttpException
-import compose.project.click.click.data.api.EngagementTelemetryBody
-import compose.project.click.click.getPlatform
-import compose.project.click.click.events.beaconCheckInFailureMessage
-import compose.project.click.click.events.EventVenueScale
-import compose.project.click.click.events.EVENT_VENUE_SCALE_METADATA_KEY
-import compose.project.click.click.events.EVENT_CHECK_IN_RADIUS_METADATA_KEY
-import compose.project.click.click.events.resolveEventCheckInRadiusMeters
-import compose.project.click.click.events.EventReminderCoordinator
-import compose.project.click.click.events.EventSchedule
-import compose.project.click.click.events.eventSchedule
-import compose.project.click.click.events.eventScheduleMetadata
-import compose.project.click.click.events.mergeEventScheduleIntoRaw
-import compose.project.click.click.events.isVisibleEventBeacon
-import compose.project.click.click.events.validateEventSchedule
-import compose.project.click.click.ui.components.mapBeaconKindToLayerFilter
-import compose.project.click.click.ui.utils.mergeMapBeaconLists
+import compose.project.click.click.data.storage.BeaconRsvpPersistence // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
-import io.github.jan.supabase.auth.auth
-import compose.project.click.click.collaboration.CollaborationSessionManager // pragma: allowlist secret
+import compose.project.click.click.events.EVENT_CATEGORIES_METADATA_KEY // pragma: allowlist secret
+import compose.project.click.click.events.EVENT_CATEGORY_OPTIONS // pragma: allowlist secret
+import compose.project.click.click.events.EVENT_CHECK_IN_RADIUS_METADATA_KEY
+import compose.project.click.click.events.EVENT_VENUE_SCALE_METADATA_KEY
+import compose.project.click.click.events.EventReminderCoordinator
+import compose.project.click.click.events.EventSchedule
+import compose.project.click.click.events.EventVenueScale
+import compose.project.click.click.events.beaconCheckInFailureMessage
+import compose.project.click.click.events.eventSchedule
+import compose.project.click.click.events.eventScheduleMetadata
+import compose.project.click.click.events.isVisibleEventBeacon
+import compose.project.click.click.events.mergeEventScheduleIntoRaw
+import compose.project.click.click.events.resolveEventCheckInRadiusMeters
+import compose.project.click.click.events.validateEventSchedule
+import compose.project.click.click.getPlatform
 import compose.project.click.click.ui.components.MapPin // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPinKind // pragma: allowlist secret
+import compose.project.click.click.ui.components.mapBeaconKindToLayerFilter
+import compose.project.click.click.ui.utils.BoundingBox
 import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
-import compose.project.click.click.ui.utils.* // pragma: allowlist secret
+import compose.project.click.click.ui.utils.ConnectionMapPoint
+import compose.project.click.click.ui.utils.MapCluster
+import compose.project.click.click.ui.utils.MapRenderData
+import compose.project.click.click.ui.utils.TimeState
+import compose.project.click.click.ui.utils.calculateZoomForBounds
+import compose.project.click.click.ui.utils.determineMapRenderData
+import compose.project.click.click.ui.utils.displayDynamicTitle
+import compose.project.click.click.ui.utils.hasUsableMapCoordinates
+import compose.project.click.click.ui.utils.haversineDistance
+import compose.project.click.click.ui.utils.mapPeerDisplayNameForPin
+import compose.project.click.click.ui.utils.mergeCommunityHubLists
+import compose.project.click.click.ui.utils.mergeMapBeaconLists
+import compose.project.click.click.ui.utils.overlappingMapPins
+import compose.project.click.click.ui.utils.resolveBeaconQuickDistanceMeters
+import compose.project.click.click.ui.utils.toMapPoint
 import compose.project.click.click.util.isValidStreamingUrl // pragma: allowlist secret
-import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import compose.project.click.click.util.teardownBlocking // pragma: allowlist secret
+import compose.project.click.click.utils.EVENT_FORMATTED_ADDRESS_METADATA_KEY
+import compose.project.click.click.utils.EVENT_LOCATION_NAME_METADATA_KEY
+import compose.project.click.click.utils.GeocodedPlace
 import compose.project.click.click.utils.HUB_GATEKEEPER_HIGH_ACCURACY_TIMEOUT_MS
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import compose.project.click.click.utils.resolveHubGatekeeperLocation
-import kotlinx.serialization.json.JsonObject // pragma: allowlist secret
-import kotlinx.serialization.json.JsonPrimitive // pragma: allowlist secret
-import kotlinx.serialization.json.buildJsonObject // pragma: allowlist secret
-import kotlinx.serialization.json.put // pragma: allowlist secret
-import kotlinx.serialization.json.putJsonArray // pragma: allowlist secret
-import kotlinx.serialization.json.add // pragma: allowlist secret
-import compose.project.click.click.events.EVENT_CATEGORY_OPTIONS // pragma: allowlist secret
-import compose.project.click.click.events.EVENT_CATEGORIES_METADATA_KEY // pragma: allowlist secret
-import compose.project.click.click.utils.EVENT_FORMATTED_ADDRESS_METADATA_KEY
-import compose.project.click.click.utils.EVENT_LOCATION_NAME_METADATA_KEY
-import compose.project.click.click.utils.GeocodedPlace
 import io.github.jan.supabase.auth.auth
-import io.github.jan.supabase.realtime.PostgresAction
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
-import io.github.jan.supabase.realtime.postgresChangeFlow
-import kotlinx.datetime.Clock
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.merge
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.datetime.Clock
+import kotlinx.serialization.json.JsonObject // pragma: allowlist secret
+import kotlinx.serialization.json.JsonPrimitive // pragma: allowlist secret
+import kotlinx.serialization.json.add // pragma: allowlist secret
+import kotlinx.serialization.json.buildJsonObject // pragma: allowlist secret
+import kotlinx.serialization.json.put // pragma: allowlist secret
+import kotlinx.serialization.json.putJsonArray // pragma: allowlist secret
 import kotlin.math.abs
-import kotlin.math.pow
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.random.Random
 
 /**
@@ -106,8 +117,14 @@ import kotlin.random.Random
  */
 sealed class MapState {
     object Loading : MapState()
-    data class Success(val connections: List<Connection>) : MapState()
-    data class Error(val message: String) : MapState()
+
+    data class Success(
+        val connections: List<Connection>,
+    ) : MapState()
+
+    data class Error(
+        val message: String,
+    ) : MapState()
 }
 
 /**
@@ -115,19 +132,34 @@ sealed class MapState {
  */
 sealed class MapSelection {
     object None : MapSelection()
-    data class ClusterSelected(val cluster: MapCluster) : MapSelection()
-    data class ConnectionSelected(val point: ConnectionMapPoint, val otherUser: User?) : MapSelection()
-    data class BeaconSelected(val beacon: MapBeacon, val distanceMeters: Double?) : MapSelection()
+
+    data class ClusterSelected(
+        val cluster: MapCluster,
+    ) : MapSelection()
+
+    data class ConnectionSelected(
+        val point: ConnectionMapPoint,
+        val otherUser: User?,
+    ) : MapSelection()
+
+    data class BeaconSelected(
+        val beacon: MapBeacon,
+        val distanceMeters: Double?,
+    ) : MapSelection()
+
     data class HubSelected(
         val hub: CommunityHubPin,
         val distanceMeters: Double?,
         /** `null` while proximity is still being resolved. */
         val canJoinGeofence: Boolean?,
     ) : MapSelection()
+
     /**
      * Two or more pins share nearly the same on-screen hit target. User picks which one to open.
      */
-    data class OverlappingPinsSelected(val pins: List<MapPin>) : MapSelection()
+    data class OverlappingPinsSelected(
+        val pins: List<MapPin>,
+    ) : MapSelection()
 }
 
 data class BeaconRsvpCacheEntry(
@@ -156,7 +188,7 @@ data class BeaconEngagementCacheEntry(
 
 /**
  * ViewModel for the Social Memory Map feature
- * 
+ *
  * Handles:
  * - Connection data loading from AppDataManager
  * - Clustering logic based on zoom level
@@ -216,25 +248,27 @@ class MapViewModel : ViewModel() {
     val communityHubs: StateFlow<List<CommunityHubPin>> = _communityHubs.asStateFlow()
 
     /** Layer-filtered beacons for the discovery feed (matches map chip filters). */
-    val discoveryFeedBeacons: StateFlow<List<MapBeacon>> = combine(_mapBeacons, _selectedLayerFilters) { beacons, layers ->
-        filterBeaconsForLayers(beacons, layers)
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = emptyList(),
-    )
+    val discoveryFeedBeacons: StateFlow<List<MapBeacon>> =
+        combine(_mapBeacons, _selectedLayerFilters) { beacons, layers ->
+            filterBeaconsForLayers(beacons, layers)
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyList(),
+        )
 
-    val discoveryFeedHubs: StateFlow<List<CommunityHubPin>> = combine(_communityHubs, _selectedLayerFilters) { hubs, layers ->
-        if (layers.contains(MapLayerFilter.ALL) || layers.contains(MapLayerFilter.COMMUNITY_HUBS)) {
-            hubs
-        } else {
-            emptyList()
-        }
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = emptyList(),
-    )
+    val discoveryFeedHubs: StateFlow<List<CommunityHubPin>> =
+        combine(_communityHubs, _selectedLayerFilters) { hubs, layers ->
+            if (layers.contains(MapLayerFilter.ALL) || layers.contains(MapLayerFilter.COMMUNITY_HUBS)) {
+                hubs
+            } else {
+                emptyList()
+            }
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyList(),
+        )
 
     private val mapBeaconRepository = MapBeaconRepository()
     private val tokenStorage: TokenStorage = createTokenStorage()
@@ -275,6 +309,7 @@ class MapViewModel : ViewModel() {
         _beaconEngagementById.asStateFlow()
 
     private val _beaconEngagementPendingIds = MutableStateFlow<Set<String>>(emptySet())
+
     /** Combined pending set (legacy); prefer [beaconBookmarkPendingIds] / [beaconCheckInPendingIds]. */
     val beaconEngagementPendingIds: StateFlow<Set<String>> =
         _beaconEngagementPendingIds.asStateFlow()
@@ -310,34 +345,36 @@ class MapViewModel : ViewModel() {
     private val _discoveryFeedLoading = MutableStateFlow(false)
     val discoveryFeedLoading: StateFlow<Boolean> = _discoveryFeedLoading.asStateFlow()
 
-    val discoveryFeedPending: StateFlow<Boolean> = combine(
+    val discoveryFeedPending: StateFlow<Boolean> =
         combine(
-            _discoveryFeedLoading,
-            _discoveryProximityFetchCompleted,
-            discoveryFeedBeacons,
-            discoveryFeedHubs,
-        ) { loading, completed, beacons, hubs ->
-            Quadruple(loading, completed, beacons, hubs)
-        },
-        combine(
-            AppDataManager.prefetchedMapBeacons,
-            AppDataManager.prefetchedCommunityHubs,
-        ) { prefetchedBeacons, prefetchedHubs ->
-            prefetchedBeacons to prefetchedHubs
-        },
-    ) { base, prefetched ->
-        val (loading, completed, beacons, hubs) = base
-        val (prefetchedBeacons, prefetchedHubs) = prefetched
-        val hasLocalFeedData = beacons.isNotEmpty() ||
-            hubs.isNotEmpty() ||
-            prefetchedBeacons.isNotEmpty() ||
-            prefetchedHubs.isNotEmpty()
-        loading || (!completed && !hasLocalFeedData)
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = true,
-    )
+            combine(
+                _discoveryFeedLoading,
+                _discoveryProximityFetchCompleted,
+                discoveryFeedBeacons,
+                discoveryFeedHubs,
+            ) { loading, completed, beacons, hubs ->
+                Quadruple(loading, completed, beacons, hubs)
+            },
+            combine(
+                AppDataManager.prefetchedMapBeacons,
+                AppDataManager.prefetchedCommunityHubs,
+            ) { prefetchedBeacons, prefetchedHubs ->
+                prefetchedBeacons to prefetchedHubs
+            },
+        ) { base, prefetched ->
+            val (loading, completed, beacons, hubs) = base
+            val (prefetchedBeacons, prefetchedHubs) = prefetched
+            val hasLocalFeedData =
+                beacons.isNotEmpty() ||
+                    hubs.isNotEmpty() ||
+                    prefetchedBeacons.isNotEmpty() ||
+                    prefetchedHubs.isNotEmpty()
+            loading || (!completed && !hasLocalFeedData)
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = true,
+        )
 
     private var beaconPollJob: Job? = null
     private var discoveryProximityJob: Job? = null
@@ -397,13 +434,14 @@ class MapViewModel : ViewModel() {
      * [_pinRenderZoomFloor] keeps pin mode so the map is not left at world scale with many
      * markers stacked on one pixel.
      */
-    val mapBindingZoom: StateFlow<Double> = combine(_zoomLevel, _pinRenderZoomFloor) { z, floor ->
-        floor?.let { maxOf(z, it) } ?: z
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = _zoomLevel.value,
-    )
+    val mapBindingZoom: StateFlow<Double> =
+        combine(_zoomLevel, _pinRenderZoomFloor) { z, floor ->
+            floor?.let { maxOf(z, it) } ?: z
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = _zoomLevel.value,
+        )
 
     // Realtime channel for connections changes
     private var connectionsChannel: RealtimeChannel? = null
@@ -420,8 +458,10 @@ class MapViewModel : ViewModel() {
     private var pendingProgrammaticZoomSetAtMs: Long = 0L
 
     private var renderDataJob: Job? = null
+
     // Job for incremental population of markers when initial cap is applied
     private var incrementalPopulationJob: Job? = null
+
     // Initial number of pins to render immediately. The rest will be added incrementally.
     private val INITIAL_PIN_CAP = 200
 
@@ -484,12 +524,13 @@ class MapViewModel : ViewModel() {
         discoveryPrefetchRetryJob?.cancel()
         discoveryPrefetchAttempts++
         val backoffMs = delayMs * discoveryPrefetchAttempts
-        discoveryPrefetchRetryJob = viewModelScope.launch {
-            delay(backoffMs)
-            if (!_discoveryProximityFetchCompleted.value) {
-                warmDiscoveryFeed()
+        discoveryPrefetchRetryJob =
+            viewModelScope.launch {
+                delay(backoffMs)
+                if (!_discoveryProximityFetchCompleted.value) {
+                    warmDiscoveryFeed()
+                }
             }
-        }
     }
 
     private fun canEverResolveProximityCenters(): Boolean {
@@ -507,28 +548,30 @@ class MapViewModel : ViewModel() {
      * hydrates when the simulator (or permission) has no live fix.
      */
     private fun cachedDiscoveryAnchor(): Pair<Double, Double>? {
-        val coords = buildList {
-            AppDataManager.prefetchedMapBeacons.value.forEach { b ->
-                if (b.hasUsableMapCoordinates()) add(b.latitude to b.longitude)
-            }
-            _mapBeacons.value.forEach { b ->
-                if (b.hasUsableMapCoordinates()) add(b.latitude to b.longitude)
-            }
-            AppDataManager.prefetchedCommunityHubs.value.forEach { h ->
-                if (h.latitude.isFinite() && h.longitude.isFinite() &&
-                    !(h.latitude == 0.0 && h.longitude == 0.0)
-                ) {
-                    add(h.latitude to h.longitude)
+        val coords =
+            buildList {
+                AppDataManager.prefetchedMapBeacons.value.forEach { b ->
+                    if (b.hasUsableMapCoordinates()) add(b.latitude to b.longitude)
+                }
+                _mapBeacons.value.forEach { b ->
+                    if (b.hasUsableMapCoordinates()) add(b.latitude to b.longitude)
+                }
+                AppDataManager.prefetchedCommunityHubs.value.forEach { h ->
+                    if (h.latitude.isFinite() &&
+                        h.longitude.isFinite() &&
+                        !(h.latitude == 0.0 && h.longitude == 0.0)
+                    ) {
+                        add(h.latitude to h.longitude)
+                    }
+                }
+                AppDataManager.cachedEventBookmarks.value.forEach { bm ->
+                    val lat = bm.latitude ?: return@forEach
+                    val lon = bm.longitude ?: return@forEach
+                    if (lat.isFinite() && lon.isFinite() && !(lat == 0.0 && lon == 0.0)) {
+                        add(lat to lon)
+                    }
                 }
             }
-            AppDataManager.cachedEventBookmarks.value.forEach { bm ->
-                val lat = bm.latitude ?: return@forEach
-                val lon = bm.longitude ?: return@forEach
-                if (lat.isFinite() && lon.isFinite() && !(lat == 0.0 && lon == 0.0)) {
-                    add(lat to lon)
-                }
-            }
-        }
         if (coords.isEmpty()) return null
         return coords.map { it.first }.average() to coords.map { it.second }.average()
     }
@@ -546,10 +589,18 @@ class MapViewModel : ViewModel() {
     }
 
     private suspend fun hydrateBeaconRsvpFromDisk(userId: String? = null) {
-        val uid = userId?.trim()?.takeIf { it.isNotEmpty() }
-            ?: SupabaseConfig.client.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
-            ?: AppDataManager.currentUser.value?.id?.trim()?.takeIf { it.isNotEmpty() }
-            ?: return
+        val uid =
+            userId?.trim()?.takeIf { it.isNotEmpty() }
+                ?: SupabaseConfig.client.auth
+                    .currentUserOrNull()
+                    ?.id
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                ?: AppDataManager.currentUser.value
+                    ?.id
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                ?: return
         val restored = BeaconRsvpPersistence.load(tokenStorage, uid)
         if (restored.isEmpty()) return
         _beaconRsvpById.update { current -> current + restored }
@@ -557,9 +608,17 @@ class MapViewModel : ViewModel() {
 
     private fun persistBeaconRsvpCache() {
         viewModelScope.launch {
-            val uid = SupabaseConfig.client.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
-                ?: AppDataManager.currentUser.value?.id?.trim()?.takeIf { it.isNotEmpty() }
-                ?: return@launch
+            val uid =
+                SupabaseConfig.client.auth
+                    .currentUserOrNull()
+                    ?.id
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?: AppDataManager.currentUser.value
+                        ?.id
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() }
+                    ?: return@launch
             BeaconRsvpPersistence.save(tokenStorage, uid, _beaconRsvpById.value)
         }
     }
@@ -571,10 +630,18 @@ class MapViewModel : ViewModel() {
     }
 
     private suspend fun hydrateBeaconEngagementFromDisk(userId: String? = null) {
-        val uid = userId?.trim()?.takeIf { it.isNotEmpty() }
-            ?: SupabaseConfig.client.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
-            ?: AppDataManager.currentUser.value?.id?.trim()?.takeIf { it.isNotEmpty() }
-            ?: return
+        val uid =
+            userId?.trim()?.takeIf { it.isNotEmpty() }
+                ?: SupabaseConfig.client.auth
+                    .currentUserOrNull()
+                    ?.id
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                ?: AppDataManager.currentUser.value
+                    ?.id
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                ?: return
         val restored = BeaconEngagementPersistence.load(tokenStorage, uid)
         if (restored.isEmpty()) return
         restored.forEach { (id, entry) ->
@@ -584,19 +651,20 @@ class MapViewModel : ViewModel() {
         }
         _beaconEngagementById.update { current ->
             // Prefer disk early/checked-in over a stale in-memory "not checked in" from a racing fetch.
-            current + restored.mapValues { (id, disk) ->
-                val mem = current[id]
-                if (disk.localEarlyCheckIn || disk.checkedIn) {
-                    disk
-                } else if (mem?.localEarlyCheckIn == true || id in earlyCheckInBeaconIds) {
-                    mem?.copy(checkedIn = true, localEarlyCheckIn = true) ?: disk.copy(
-                        checkedIn = true,
-                        localEarlyCheckIn = true,
-                    )
-                } else {
-                    disk
+            current +
+                restored.mapValues { (id, disk) ->
+                    val mem = current[id]
+                    if (disk.localEarlyCheckIn || disk.checkedIn) {
+                        disk
+                    } else if (mem?.localEarlyCheckIn == true || id in earlyCheckInBeaconIds) {
+                        mem?.copy(checkedIn = true, localEarlyCheckIn = true) ?: disk.copy(
+                            checkedIn = true,
+                            localEarlyCheckIn = true,
+                        )
+                    } else {
+                        disk
+                    }
                 }
-            }
         }
     }
 
@@ -605,9 +673,17 @@ class MapViewModel : ViewModel() {
         viewModelScope.launch {
             engagementPersistMutex.withLock {
                 if (generation != engagementPersistGeneration) return@withLock
-                val uid = SupabaseConfig.client.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
-                    ?: AppDataManager.currentUser.value?.id?.trim()?.takeIf { it.isNotEmpty() }
-                    ?: return@withLock
+                val uid =
+                    SupabaseConfig.client.auth
+                        .currentUserOrNull()
+                        ?.id
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() }
+                        ?: AppDataManager.currentUser.value
+                            ?.id
+                            ?.trim()
+                            ?.takeIf { it.isNotEmpty() }
+                        ?: return@withLock
                 BeaconEngagementPersistence.save(tokenStorage, uid, _beaconEngagementById.value)
             }
         }
@@ -635,10 +711,13 @@ class MapViewModel : ViewModel() {
     ): BeaconEngagementCacheEntry {
         // On force refresh, trust the server so a device-local early check-in (or poisoned
         // far-away optimistic state) cannot override a real server row across kills/devices.
-        val keepEarly = !preferServer && !checkedIn && (
-            existing?.localEarlyCheckIn == true ||
-                beaconId in earlyCheckInBeaconIds
-            )
+        val keepEarly =
+            !preferServer &&
+                !checkedIn &&
+                (
+                    existing?.localEarlyCheckIn == true ||
+                        beaconId in earlyCheckInBeaconIds
+                )
         if (preferServer && !checkedIn) {
             earlyCheckInBeaconIds -= beaconId
         }
@@ -657,13 +736,14 @@ class MapViewModel : ViewModel() {
         surface: String? = null,
         bookmarked: Boolean? = null,
     ): EngagementTelemetryBody {
-        val platform = getPlatform().name.lowercase().let { name ->
-            when {
-                name.contains("android") -> "android"
-                name.contains("ios") || name.contains("iphone") -> "ios"
-                else -> name.take(32)
+        val platform =
+            getPlatform().name.lowercase().let { name ->
+                when {
+                    name.contains("android") -> "android"
+                    name.contains("ios") || name.contains("iphone") -> "ios"
+                    else -> name.take(32)
+                }
             }
-        }
         return EngagementTelemetryBody(
             latitude = latitude,
             longitude = longitude,
@@ -698,38 +778,38 @@ class MapViewModel : ViewModel() {
      * so event pins still paint until proximity returns the same rows.
      * Only fills **missing** ids / rescues null-island — never replaces a richer proximity row.
      */
-    private fun seedEventPinsFromCachedBookmarks(
-        bookmarks: List<compose.project.click.click.data.api.EventBookmarkItemDto>,
-    ) {
+    private fun seedEventPinsFromCachedBookmarks(bookmarks: List<compose.project.click.click.data.api.EventBookmarkItemDto>) {
         if (bookmarks.isEmpty()) return
         _mapBeacons.update { current ->
             val byId = current.associateBy { it.id }
-            val seeds = bookmarks.mapNotNull { bookmark ->
-                val lat = bookmark.latitude ?: return@mapNotNull null
-                val lng = bookmark.longitude ?: return@mapNotNull null
-                if (!lat.isFinite() || !lng.isFinite() || (lat == 0.0 && lng == 0.0)) {
-                    return@mapNotNull null
+            val seeds =
+                bookmarks.mapNotNull { bookmark ->
+                    val lat = bookmark.latitude ?: return@mapNotNull null
+                    val lng = bookmark.longitude ?: return@mapNotNull null
+                    if (!lat.isFinite() || !lng.isFinite() || (lat == 0.0 && lng == 0.0)) {
+                        return@mapNotNull null
+                    }
+                    val existing = byId[bookmark.beaconId]
+                    if (existing != null && existing.hasUsableMapCoordinates()) {
+                        // Already have a real pin — do not overwrite host/posted/creator fields.
+                        return@mapNotNull null
+                    }
+                    val scheduleRaw =
+                        buildJsonObject {
+                            bookmark.title?.takeIf { it.isNotBlank() }?.let { put("title", it) }
+                            bookmark.eventStartAt?.takeIf { it.isNotBlank() }?.let { put("event_start_at", it) }
+                            bookmark.eventEndAt?.takeIf { it.isNotBlank() }?.let { put("event_end_at", it) }
+                        }
+                    MapBeacon(
+                        id = bookmark.beaconId,
+                        kind = MapBeaconKind.EVENT,
+                        latitude = lat,
+                        longitude = lng,
+                        metadata = parseMapBeaconMetadata(scheduleRaw),
+                        expiresAtEpochMs = bookmark.expiresAt?.let { parseEpochMs(it) },
+                        sourceBeaconType = "event",
+                    )
                 }
-                val existing = byId[bookmark.beaconId]
-                if (existing != null && existing.hasUsableMapCoordinates()) {
-                    // Already have a real pin — do not overwrite host/posted/creator fields.
-                    return@mapNotNull null
-                }
-                val scheduleRaw = buildJsonObject {
-                    bookmark.title?.takeIf { it.isNotBlank() }?.let { put("title", it) }
-                    bookmark.eventStartAt?.takeIf { it.isNotBlank() }?.let { put("event_start_at", it) }
-                    bookmark.eventEndAt?.takeIf { it.isNotBlank() }?.let { put("event_end_at", it) }
-                }
-                MapBeacon(
-                    id = bookmark.beaconId,
-                    kind = MapBeaconKind.EVENT,
-                    latitude = lat,
-                    longitude = lng,
-                    metadata = parseMapBeaconMetadata(scheduleRaw),
-                    expiresAtEpochMs = bookmark.expiresAt?.let { parseEpochMs(it) },
-                    sourceBeaconType = "event",
-                )
-            }
             if (seeds.isEmpty()) current else mergeMapBeaconLists(current, seeds)
         }
     }
@@ -750,17 +830,18 @@ class MapViewModel : ViewModel() {
 
     private fun applyPrefetchedHubs(rows: List<compose.project.click.click.data.api.CommunityHubNearbyDto>) {
         if (rows.isEmpty()) return
-        val incoming = rows.map { dto ->
-            CommunityHubPin(
-                hubId = dto.hubId,
-                name = dto.name,
-                latitude = dto.latitude,
-                longitude = dto.longitude,
-                radiusMeters = dto.radiusMeters,
-                activeUserCount = dto.activeUserCount,
-                reportedDistanceMeters = dto.distanceMeters,
-            )
-        }
+        val incoming =
+            rows.map { dto ->
+                CommunityHubPin(
+                    hubId = dto.hubId,
+                    name = dto.name,
+                    latitude = dto.latitude,
+                    longitude = dto.longitude,
+                    radiusMeters = dto.radiusMeters,
+                    activeUserCount = dto.activeUserCount,
+                    reportedDistanceMeters = dto.distanceMeters,
+                )
+            }
         _communityHubs.update { current -> mergeCommunityHubLists(current, filterDismissedCommunityHubs(incoming)) }
         AppDataManager.mergeCachedCommunityHubsFromDto(rows)
         markDiscoveryProximityFetchCompleted()
@@ -779,52 +860,41 @@ class MapViewModel : ViewModel() {
                 AppDataManager.connectedUsers,
                 AppDataManager.archivedConnectionIds,
                 AppDataManager.hiddenConnectionIds,
-                AppDataManager.coreConnectionIds,
                 AppDataManager.isDataLoaded,
                 AppDataManager.isLoading,
-                AppDataManager.locationPreferences,
                 _zoomLevel,
+                _mapBeacons,
+                _selectedLayerFilters,
             ) { values ->
                 @Suppress("UNCHECKED_CAST")
                 val connections = values[0] as List<Connection>
                 val connectedUsers = values[1] as Map<String, User>
                 val archivedIds = values[2] as Set<String>
                 val hiddenIds = values[3] as Set<String>
-                val coreIds = values[4] as Set<String>
-                val isDataLoaded = values[5] as Boolean
-                val isLoading = values[6] as Boolean
-                val locationPrefs = values[7] as LocationPreferences
-                val zoom = values[8] as Double
+                val isDataLoaded = values[4] as Boolean
+                val isLoading = values[5] as Boolean
+                val zoom = values[6] as Double
                 Nonuple(
                     connections,
                     connectedUsers,
                     archivedIds,
                     hiddenIds,
-                    coreIds,
                     isDataLoaded,
                     isLoading,
-                    locationPrefs,
                     zoom,
+                    values[7],
+                    values[8],
                 )
-            }.collectLatest { (connections, connectedUsers, archivedIds, hiddenIds, coreIds, isDataLoaded, isLoading, locationPrefs, zoom) ->
+            }.collectLatest { (connections, connectedUsers, archivedIds, hiddenIds, isDataLoaded, isLoading, zoom, _, _) ->
                 when {
                     // `archivedIds` is read so archive/unarchive recomputes the map when the connections list is unchanged.
+                    // `_mapBeacons` / `_selectedLayerFilters` are combined so pin render refreshes when layers change.
                     isDataLoaded && (archivedIds.isNotEmpty() || archivedIds.isEmpty()) -> {
-                        // Memory map: show full history (incl. per-user archived) but never removed/hidden rows.
-                        // Collapse duplicate 1:1 edges so the same peer is not drawn twice.
                         val viewerId = AppDataManager.currentUser.value?.id
-                        val mapConnections = collapseOneToOneConnectionsByPeer(
-                            connections.filter { it.id !in hiddenIds },
-                            viewerId,
-                        )
+                        val mapConnections = visibleMapConnections(connections, hiddenIds, viewerId)
                         _mapState.value = MapState.Success(mapConnections)
-                        val mapVisibleConnections = if (locationPrefs.showOnMapEnabled) {
-                            mapConnections
-                        } else {
-                            mapConnections.filter { it.id in coreIds }
-                        }
-                        ensureDefaultCameraTarget(mapVisibleConnections)
-                        updateRenderData(mapVisibleConnections, zoomForClusteringRender(zoom))
+                        ensureDefaultCameraTarget(mapConnections)
+                        updateRenderData(mapConnections, zoomForClusteringRender(zoom))
                         refreshSelectedConnectionUser(connectedUsers)
                     }
                     isLoading -> {
@@ -832,10 +902,7 @@ class MapViewModel : ViewModel() {
                     }
                     connections.isNotEmpty() -> {
                         val viewerId = AppDataManager.currentUser.value?.id
-                        val mapConnections = collapseOneToOneConnectionsByPeer(
-                            connections.filter { it.id !in hiddenIds },
-                            viewerId,
-                        )
+                        val mapConnections = visibleMapConnections(connections, hiddenIds, viewerId)
                         _mapState.value = MapState.Success(mapConnections)
                     }
                     else -> {
@@ -843,32 +910,6 @@ class MapViewModel : ViewModel() {
                         _renderData.value = MapRenderData.Clusters(emptyList())
                     }
                 }
-            }
-        }
-        viewModelScope.launch {
-            combine(
-                combine(
-                    _mapState,
-                    AppDataManager.locationPreferences,
-                    AppDataManager.hiddenConnectionIds,
-                    AppDataManager.coreConnectionIds,
-                    _zoomLevel,
-                ) { state, prefs, hidden, coreIds, zoom ->
-                    Quintuple(state, prefs, hidden, coreIds, zoom)
-                },
-                _mapBeacons,
-                _selectedLayerFilters,
-            ) { base, _, _ ->
-                base
-            }.collectLatest { (state, prefs, hidden, coreIds, zoom) ->
-                if (state !is MapState.Success) return@collectLatest
-                val mapVisible = state.connections.filter { it.id !in hidden }
-                val visible = if (prefs.showOnMapEnabled) {
-                    mapVisible
-                } else {
-                    mapVisible.filter { it.id in coreIds }
-                }
-                updateRenderData(visible, zoomForClusteringRender(zoom))
             }
         }
     }
@@ -882,76 +923,86 @@ class MapViewModel : ViewModel() {
      * thread. The resulting [MapRenderData] is immutable and safe to publish to a
      * [MutableStateFlow] from any dispatcher.
      */
-    private fun updateRenderData(connections: List<Connection>, zoom: Double) {
+    private fun updateRenderData(
+        connections: List<Connection>,
+        zoom: Double,
+    ) {
         renderDataJob?.cancel()
         incrementalPopulationJob?.cancel()
         val layers = _selectedLayerFilters.value
         val beaconsRaw = _mapBeacons.value
-        renderDataJob = viewModelScope.launch {
-            val rendered = withContext(Dispatchers.Default) {
-                val connectedUsersSnapshot = AppDataManager.connectedUsers.value
-                val currentUserId = AppDataManager.currentUser.value?.id
-                val showConnections = layers.contains(MapLayerFilter.ALL) ||
-                    layers.contains(MapLayerFilter.MY_CONNECTIONS)
-                val filteredConnections = if (showConnections) connections else emptyList()
-                val filteredBeacons = filterBeaconsForLayers(beaconsRaw, layers)
-                determineMapRenderData(
-                    connections = filteredConnections,
-                    beacons = filteredBeacons,
-                    zoomLevel = zoom,
-                    clusterThreshold = clusterThreshold,
-                    connectionPeerDisplayName = { conn ->
-                        mapPeerDisplayNameForPin(conn, currentUserId, connectedUsersSnapshot)
-                    },
-                    viewerUserId = currentUserId,
-                )
-            }
-
-            // If we're in IndividualPins mode and there are many points, publish only the nearest
-            // INITIAL_PIN_CAP immediately and incrementally add the rest in batches. This reduces
-            // initial marker creation work and improves perceived map performance.
-            if (rendered is MapRenderData.IndividualPins && rendered.points.size > INITIAL_PIN_CAP) {
-                val allPoints = rendered.points
-
-                // Choose an anchor (camera center) to sort by proximity.
-                val anchor = _cameraTarget.value ?: _defaultCameraTarget.value
-                val (anchorLat, anchorLon) = when {
-                    anchor != null -> anchor.latitude to anchor.longitude
-                    allPoints.isNotEmpty() -> allPoints.first().latitude to allPoints.first().longitude
-                    else -> null to null
-                }
-
-                val initialPoints = if (anchorLat != null && anchorLon != null) {
-                    allPoints.sortedBy { haversineDistance(anchorLat, anchorLon, it.latitude, it.longitude) }
-                        .take(INITIAL_PIN_CAP)
-                } else {
-                    allPoints.take(INITIAL_PIN_CAP)
-                }
-
-                _renderData.value = MapRenderData.IndividualPins(points = initialPoints, beacons = rendered.beacons)
-
-                // Incrementally add remaining points in batches to avoid CPU/GC spikes
-                incrementalPopulationJob = viewModelScope.launch {
+        renderDataJob =
+            viewModelScope.launch {
+                val rendered =
                     withContext(Dispatchers.Default) {
-                        val remaining = allPoints - initialPoints
-                        val batchSize = 100
-                        var current = initialPoints.toMutableList()
-                        var i = 0
-                        while (i < remaining.size) {
-                            val end = min(i + batchSize, remaining.size)
-                            val batch = remaining.subList(i, end)
-                            // Small delay yields frame time back to the UI thread
-                            delay(50)
-                            current.addAll(batch)
-                            _renderData.value = MapRenderData.IndividualPins(points = current.toList(), beacons = rendered.beacons)
-                            i = end
-                        }
+                        val connectedUsersSnapshot = AppDataManager.connectedUsers.value
+                        val currentUserId = AppDataManager.currentUser.value?.id
+                        val showConnections =
+                            layers.contains(MapLayerFilter.ALL) ||
+                                layers.contains(MapLayerFilter.MY_CONNECTIONS)
+                        val filteredConnections = if (showConnections) connections else emptyList()
+                        val filteredBeacons = filterBeaconsForLayers(beaconsRaw, layers)
+                        determineMapRenderData(
+                            connections = filteredConnections,
+                            beacons = filteredBeacons,
+                            zoomLevel = zoom,
+                            clusterThreshold = clusterThreshold,
+                            connectionPeerDisplayName = { conn ->
+                                mapPeerDisplayNameForPin(conn, currentUserId, connectedUsersSnapshot)
+                            },
+                            viewerUserId = currentUserId,
+                        )
                     }
+
+                // If we're in IndividualPins mode and there are many points, publish only the nearest
+                // INITIAL_PIN_CAP immediately and incrementally add the rest in batches. This reduces
+                // initial marker creation work and improves perceived map performance.
+                if (rendered is MapRenderData.IndividualPins && rendered.points.size > INITIAL_PIN_CAP) {
+                    val allPoints = rendered.points
+
+                    // Choose an anchor (camera center) to sort by proximity.
+                    val anchor = _cameraTarget.value ?: _defaultCameraTarget.value
+                    val (anchorLat, anchorLon) =
+                        when {
+                            anchor != null -> anchor.latitude to anchor.longitude
+                            allPoints.isNotEmpty() -> allPoints.first().latitude to allPoints.first().longitude
+                            else -> null to null
+                        }
+
+                    val initialPoints =
+                        if (anchorLat != null && anchorLon != null) {
+                            allPoints
+                                .sortedBy { haversineDistance(anchorLat, anchorLon, it.latitude, it.longitude) }
+                                .take(INITIAL_PIN_CAP)
+                        } else {
+                            allPoints.take(INITIAL_PIN_CAP)
+                        }
+
+                    _renderData.value = MapRenderData.IndividualPins(points = initialPoints, beacons = rendered.beacons)
+
+                    // Incrementally add remaining points in batches to avoid CPU/GC spikes
+                    incrementalPopulationJob =
+                        viewModelScope.launch {
+                            withContext(Dispatchers.Default) {
+                                val remaining = allPoints - initialPoints
+                                val batchSize = 100
+                                var current = initialPoints.toMutableList()
+                                var i = 0
+                                while (i < remaining.size) {
+                                    val end = min(i + batchSize, remaining.size)
+                                    val batch = remaining.subList(i, end)
+                                    // Small delay yields frame time back to the UI thread
+                                    delay(50)
+                                    current.addAll(batch)
+                                    _renderData.value = MapRenderData.IndividualPins(points = current.toList(), beacons = rendered.beacons)
+                                    i = end
+                                }
+                            }
+                        }
+                } else {
+                    _renderData.value = rendered
                 }
-            } else {
-                _renderData.value = rendered
             }
-        }
     }
 
     /**
@@ -962,9 +1013,9 @@ class MapViewModel : ViewModel() {
      * preset (or partial chip set) drove the fetch — toggling Soundtracks back on could not
      * recover pins already outside the last RPC result set.
      */
-    private fun beaconTypesQueryForLayers(@Suppress("UNUSED_PARAMETER") layers: Set<MapLayerFilter>): String? {
-        return null
-    }
+    private fun beaconTypesQueryForLayers(
+        @Suppress("UNUSED_PARAMETER") layers: Set<MapLayerFilter>,
+    ): String? = null
 
     private fun filterBeaconsForLayers(
         beacons: List<MapBeacon>,
@@ -977,14 +1028,15 @@ class MapViewModel : ViewModel() {
         }
         val out = mutableListOf<MapBeacon>()
         for (b in beacons) {
-            val include = when (b.kind) {
-                MapBeaconKind.SOUNDTRACK -> layers.contains(MapLayerFilter.SOUNDTRACKS)
-                MapBeaconKind.SOS, MapBeaconKind.HAZARD, MapBeaconKind.UTILITY, MapBeaconKind.STUDY ->
-                    layers.contains(MapLayerFilter.ALERTS_UTILITIES)
-                MapBeaconKind.EVENT -> layers.contains(MapLayerFilter.EVENTS)
-                MapBeaconKind.SOCIAL_VIBE, MapBeaconKind.OTHER ->
-                    layers.contains(MapLayerFilter.SOCIAL_VIBES)
-            }
+            val include =
+                when (b.kind) {
+                    MapBeaconKind.SOUNDTRACK -> layers.contains(MapLayerFilter.SOUNDTRACKS)
+                    MapBeaconKind.SOS, MapBeaconKind.HAZARD, MapBeaconKind.UTILITY, MapBeaconKind.STUDY ->
+                        layers.contains(MapLayerFilter.ALERTS_UTILITIES)
+                    MapBeaconKind.EVENT -> layers.contains(MapLayerFilter.EVENTS)
+                    MapBeaconKind.SOCIAL_VIBE, MapBeaconKind.OTHER ->
+                        layers.contains(MapLayerFilter.SOCIAL_VIBES)
+                }
             if (include && b.isVisibleEventBeacon()) out.add(b)
         }
         return out
@@ -1030,11 +1082,12 @@ class MapViewModel : ViewModel() {
         val bounds = BoundingBox(minLat = minLat, maxLat = maxLat, minLon = minLon, maxLon = maxLon)
         val targetZoom = calculateZoomForBounds(bounds).coerceIn(4.0, 16.0)
 
-        val computedTarget = CameraTarget(
-            latitude = bounds.centerLat,
-            longitude = bounds.centerLon,
-            zoom = targetZoom
-        )
+        val computedTarget =
+            CameraTarget(
+                latitude = bounds.centerLat,
+                longitude = bounds.centerLon,
+                zoom = targetZoom,
+            )
         _defaultCameraTarget.value = computedTarget
 
         // If we don't already have an active camera move, apply this default as a one-shot initial camera.
@@ -1056,18 +1109,22 @@ class MapViewModel : ViewModel() {
     /**
      * Applies the first GPS fix of a map session so PiP preview and the expanded map frame the user.
      */
-    fun updateMapDeviceLocation(latitude: Double, longitude: Double) {
+    fun updateMapDeviceLocation(
+        latitude: Double,
+        longitude: Double,
+    ) {
         if (!latitude.isFinite() || !longitude.isFinite()) return
         if (latitude == 0.0 && longitude == 0.0) return
         AppDataManager.noteDeviceLocation(latitude, longitude)
         if (AppDataManager.ghostModeEnabled.value) return
         if (!locationService.hasLocationPermission()) return
 
-        val target = CameraTarget(
-            latitude = latitude,
-            longitude = longitude,
-            zoom = DEFAULT_USER_MAP_ZOOM,
-        )
+        val target =
+            CameraTarget(
+                latitude = latitude,
+                longitude = longitude,
+                zoom = DEFAULT_USER_MAP_ZOOM,
+            )
 
         if (_defaultCameraTarget.value == null) {
             _defaultCameraTarget.value = target
@@ -1121,10 +1178,11 @@ class MapViewModel : ViewModel() {
     /** Home explore tile: focus map on a single layer preset (not a toggle). */
     fun applyHomeLayerPreset(filter: MapLayerFilter) {
         _pinRenderZoomFloor.value = null
-        _selectedLayerFilters.value = when (filter) {
-            MapLayerFilter.ALL -> defaultMapLayerFilters()
-            else -> setOf(filter)
-        }
+        _selectedLayerFilters.value =
+            when (filter) {
+                MapLayerFilter.ALL -> defaultMapLayerFilters()
+                else -> setOf(filter)
+            }
         _visibleBounds.value?.let { scheduleBeaconFetchForBounds(it, debounceMs = 0L) }
         prefetchDiscoveryProximityData(showPulse = false, markInitialComplete = false)
     }
@@ -1137,15 +1195,20 @@ class MapViewModel : ViewModel() {
         _beaconDropFailureToast.value = null
     }
 
-    fun onBeaconPinTapped(beaconId: String, seedDistanceMeters: Double? = null) {
-        val beacon = _mapBeacons.value.firstOrNull { it.id == beaconId }
-            ?: return
-        val quickDistance = resolveBeaconQuickDistanceMeters(
-            seedDistanceMeters = seedDistanceMeters,
-            beaconLat = beacon.latitude,
-            beaconLon = beacon.longitude,
-            cachedUserLatLon = AppDataManager.lastKnownDeviceLocation.value,
-        )
+    fun onBeaconPinTapped(
+        beaconId: String,
+        seedDistanceMeters: Double? = null,
+    ) {
+        val beacon =
+            _mapBeacons.value.firstOrNull { it.id == beaconId }
+                ?: return
+        val quickDistance =
+            resolveBeaconQuickDistanceMeters(
+                seedDistanceMeters = seedDistanceMeters,
+                beaconLat = beacon.latitude,
+                beaconLon = beacon.longitude,
+                cachedUserLatLon = AppDataManager.lastKnownDeviceLocation.value,
+            )
         _selection.value = MapSelection.BeaconSelected(beacon, distanceMeters = quickDistance)
 
         viewModelScope.launch(Dispatchers.Default) {
@@ -1170,13 +1233,17 @@ class MapViewModel : ViewModel() {
      * [seed] is required when opening from Home with a synthetic/bookmark beacon that is not yet
      * in [_mapBeacons] or [MapSelection].
      */
-    fun ensureEventBeaconDetail(beaconId: String, seed: MapBeacon? = null) {
+    fun ensureEventBeaconDetail(
+        beaconId: String,
+        seed: MapBeacon? = null,
+    ) {
         val id = beaconId.trim()
         if (id.isEmpty()) return
-        val current = _mapBeacons.value.firstOrNull { it.id == id }
-            ?: (_selection.value as? MapSelection.BeaconSelected)?.beacon?.takeIf { it.id == id }
-            ?: seed?.takeIf { it.id == id && it.kind == MapBeaconKind.EVENT }
-            ?: return
+        val current =
+            _mapBeacons.value.firstOrNull { it.id == id }
+                ?: (_selection.value as? MapSelection.BeaconSelected)?.beacon?.takeIf { it.id == id }
+                ?: seed?.takeIf { it.id == id && it.kind == MapBeaconKind.EVENT }
+                ?: return
         if (current.kind != MapBeaconKind.EVENT) return
         val needsSchedule = current.eventSchedule() == null
         val needsPosted = current.createdAtEpochMs == null
@@ -1207,13 +1274,17 @@ class MapViewModel : ViewModel() {
      * Hydrates soundtrack preview/art/URLs for the detail sheet. Disk cache historically stripped
      * these fields, which left play controls missing until a fresh proximity fetch.
      */
-    fun ensureSoundtrackBeaconDetail(beaconId: String, seed: MapBeacon? = null) {
+    fun ensureSoundtrackBeaconDetail(
+        beaconId: String,
+        seed: MapBeacon? = null,
+    ) {
         val id = beaconId.trim()
         if (id.isEmpty()) return
-        val current = _mapBeacons.value.firstOrNull { it.id == id }
-            ?: (_selection.value as? MapSelection.BeaconSelected)?.beacon?.takeIf { it.id == id }
-            ?: seed?.takeIf { it.id == id && it.kind == MapBeaconKind.SOUNDTRACK }
-            ?: return
+        val current =
+            _mapBeacons.value.firstOrNull { it.id == id }
+                ?: (_selection.value as? MapSelection.BeaconSelected)?.beacon?.takeIf { it.id == id }
+                ?: seed?.takeIf { it.id == id && it.kind == MapBeaconKind.SOUNDTRACK }
+                ?: return
         if (current.kind != MapBeaconKind.SOUNDTRACK) return
         val needsPreview = current.metadata.previewUrl.isNullOrBlank()
         val needsArt = current.metadata.albumArtUrl.isNullOrBlank()
@@ -1225,48 +1296,55 @@ class MapViewModel : ViewModel() {
         }
     }
 
-    private suspend fun hydrateBeaconDetailFromNetwork(id: String, current: MapBeacon) {
+    private suspend fun hydrateBeaconDetailFromNetwork(
+        id: String,
+        current: MapBeacon,
+    ) {
         mapBeaconRepository.fetchBeacon(id).fold(
             onSuccess = { full ->
                 fun MapBeacon.withHydratedDetail(): MapBeacon {
                     val schedule = eventSchedule() ?: full.eventSchedule()
                     val keepCoords = hasUsableMapCoordinates()
-                    fun String?.orHydrated(other: String?): String? =
-                        this?.takeIf { it.isNotBlank() } ?: other?.takeIf { it.isNotBlank() }
+
+                    fun String?.orHydrated(other: String?): String? = this?.takeIf { it.isNotBlank() } ?: other?.takeIf { it.isNotBlank() }
                     val locationName = metadata.locationName.orHydrated(full.metadata.locationName)
                     val formattedAddress =
                         metadata.formattedAddress.orHydrated(full.metadata.formattedAddress)
-                    val mergedRawBase = buildJsonObject {
-                        // Prefer server raw (venue keys) then local overlay keys.
-                        full.metadata.raw?.forEach { (k, v) -> put(k, v) }
-                        metadata.raw?.forEach { (k, v) -> put(k, v) }
-                        locationName?.let { put("location_name", JsonPrimitive(it)) }
-                        formattedAddress?.let { put("formatted_address", JsonPrimitive(it)) }
-                    }
+                    val mergedRawBase =
+                        buildJsonObject {
+                            // Prefer server raw (venue keys) then local overlay keys.
+                            full.metadata.raw?.forEach { (k, v) -> put(k, v) }
+                            metadata.raw?.forEach { (k, v) -> put(k, v) }
+                            locationName?.let { put("location_name", JsonPrimitive(it)) }
+                            formattedAddress?.let { put("formatted_address", JsonPrimitive(it)) }
+                        }
                     return copy(
                         latitude = if (keepCoords) latitude else full.latitude,
                         longitude = if (keepCoords) longitude else full.longitude,
-                        metadata = metadata.copy(
-                            title = metadata.title.orHydrated(full.metadata.title),
-                            description = metadata.description.orHydrated(full.metadata.description),
-                            trackName = metadata.trackName.orHydrated(full.metadata.trackName),
-                            artistName = metadata.artistName.orHydrated(full.metadata.artistName),
-                            artist = metadata.artist.orHydrated(full.metadata.artist),
-                            previewUrl = metadata.previewUrl.orHydrated(full.metadata.previewUrl),
-                            albumArtUrl = metadata.albumArtUrl.orHydrated(full.metadata.albumArtUrl),
-                            musicUrl = metadata.musicUrl.orHydrated(full.metadata.musicUrl),
-                            originalUrl = metadata.originalUrl.orHydrated(full.metadata.originalUrl),
-                            locationName = locationName,
-                            formattedAddress = formattedAddress,
-                            eventCategories = metadata.eventCategories.ifEmpty {
-                                full.metadata.eventCategories
-                            },
-                            raw = if (schedule != null) {
-                                mergeEventScheduleIntoRaw(mergedRawBase, schedule)
-                            } else {
-                                mergedRawBase
-                            },
-                        ),
+                        metadata =
+                            metadata.copy(
+                                title = metadata.title.orHydrated(full.metadata.title),
+                                description = metadata.description.orHydrated(full.metadata.description),
+                                trackName = metadata.trackName.orHydrated(full.metadata.trackName),
+                                artistName = metadata.artistName.orHydrated(full.metadata.artistName),
+                                artist = metadata.artist.orHydrated(full.metadata.artist),
+                                previewUrl = metadata.previewUrl.orHydrated(full.metadata.previewUrl),
+                                albumArtUrl = metadata.albumArtUrl.orHydrated(full.metadata.albumArtUrl),
+                                musicUrl = metadata.musicUrl.orHydrated(full.metadata.musicUrl),
+                                originalUrl = metadata.originalUrl.orHydrated(full.metadata.originalUrl),
+                                locationName = locationName,
+                                formattedAddress = formattedAddress,
+                                eventCategories =
+                                    metadata.eventCategories.ifEmpty {
+                                        full.metadata.eventCategories
+                                    },
+                                raw =
+                                    if (schedule != null) {
+                                        mergeEventScheduleIntoRaw(mergedRawBase, schedule)
+                                    } else {
+                                        mergedRawBase
+                                    },
+                            ),
                         createdByUserId = createdByUserId ?: full.createdByUserId,
                         createdAtEpochMs = createdAtEpochMs ?: full.createdAtEpochMs,
                         expiresAtEpochMs = expiresAtEpochMs ?: full.expiresAtEpochMs,
@@ -1277,22 +1355,24 @@ class MapViewModel : ViewModel() {
                 }
                 _mapBeacons.update { list ->
                     var found = false
-                    val mapped = list.map { b ->
-                        if (b.id == id) {
-                            found = true
-                            b.withHydratedDetail()
-                        } else {
-                            b
+                    val mapped =
+                        list.map { b ->
+                            if (b.id == id) {
+                                found = true
+                                b.withHydratedDetail()
+                            } else {
+                                b
+                            }
                         }
-                    }
                     if (found) {
                         mapped
                     } else {
                         mergeMapBeaconLists(list, listOf(current.withHydratedDetail()))
                     }
                 }
-                val patched = _mapBeacons.value.firstOrNull { it.id == id }
-                    ?: current.withHydratedDetail()
+                val patched =
+                    _mapBeacons.value.firstOrNull { it.id == id }
+                        ?: current.withHydratedDetail()
                 when (patched.kind) {
                     MapBeaconKind.EVENT -> eventDetailHydratedIds += id
                     MapBeaconKind.SOUNDTRACK -> soundtrackDetailHydratedIds += id
@@ -1315,12 +1395,16 @@ class MapViewModel : ViewModel() {
      * Pan the camera to [beaconId] and open its detail sheet (Home Featured Event / deep link).
      * Ensures the matching layer for this beacon kind is visible so the pin isn't filtered out.
      */
-    fun focusBeaconOnMap(beaconId: String, seedDistanceMeters: Double? = null) {
+    fun focusBeaconOnMap(
+        beaconId: String,
+        seedDistanceMeters: Double? = null,
+    ) {
         val id = beaconId.trim()
         if (id.isEmpty()) return
-        val beacon = _mapBeacons.value.firstOrNull { it.id == id }
-            ?: EventReminderCoordinator.beaconById(id)
-            ?: return
+        val beacon =
+            _mapBeacons.value.firstOrNull { it.id == id }
+                ?: EventReminderCoordinator.beaconById(id)
+                ?: return
         if (_mapBeacons.value.none { it.id == id }) {
             _mapBeacons.update { current ->
                 if (current.any { it.id == id }) current else current + beacon
@@ -1335,11 +1419,12 @@ class MapViewModel : ViewModel() {
             }
         }
         val zoom = 15.0
-        val target = CameraTarget(
-            latitude = beacon.latitude,
-            longitude = beacon.longitude,
-            zoom = zoom,
-        )
+        val target =
+            CameraTarget(
+                latitude = beacon.latitude,
+                longitude = beacon.longitude,
+                zoom = zoom,
+            )
         // Mark device-seed done so a late GPS fix cannot overwrite this focus.
         seededDeviceCameraThisSession = true
         _cameraTarget.value = target
@@ -1356,7 +1441,10 @@ class MapViewModel : ViewModel() {
      * cold starts (app switcher kill) do not hit the API before JWT restore and cache a false
      * "not signed up" sentinel.
      */
-    fun loadBeaconRsvp(beaconId: String, forceRefresh: Boolean = false) {
+    fun loadBeaconRsvp(
+        beaconId: String,
+        forceRefresh: Boolean = false,
+    ) {
         val id = beaconId.trim()
         if (id.isEmpty()) return
         viewModelScope.launch(Dispatchers.Default) {
@@ -1370,10 +1458,13 @@ class MapViewModel : ViewModel() {
                     onSuccess = { payload ->
                         if (id in _beaconRsvpPendingIds.value) return@fold
                         updateBeaconRsvpCache { current ->
-                            current + (id to BeaconRsvpCacheEntry(
-                                attendees = payload.attendees,
-                                currentUserSignedUp = payload.currentUserSignedUp,
-                            ))
+                            current + (
+                                id to
+                                    BeaconRsvpCacheEntry(
+                                        attendees = payload.attendees,
+                                        currentUserSignedUp = payload.currentUserSignedUp,
+                                    )
+                            )
                         }
                     },
                     onFailure = {
@@ -1390,7 +1481,10 @@ class MapViewModel : ViewModel() {
      * Loads enriched people directory (interests, FoF mutuals, RSVP distance).
      * Requires viewer RSVP or check-in (403 otherwise — treated as empty/locked).
      */
-    fun loadBeaconAttendeeDirectory(beaconId: String, forceRefresh: Boolean = false) {
+    fun loadBeaconAttendeeDirectory(
+        beaconId: String,
+        forceRefresh: Boolean = false,
+    ) {
         val id = beaconId.trim()
         if (id.isEmpty()) return
         viewModelScope.launch(Dispatchers.Default) {
@@ -1402,29 +1496,37 @@ class MapViewModel : ViewModel() {
             try {
                 mapBeaconRepository.fetchBeaconAttendeeDirectory(id).fold(
                     onSuccess = { payload ->
-                        val mapped = payload.attendees.map { dto ->
-                            compose.project.click.click.events.DirectoryAttendee(
-                                userId = dto.userId,
-                                name = dto.name,
-                                avatarUrl = dto.avatarUrl,
-                                signedUpAt = dto.signedUpAt,
-                                distanceMeters = dto.distanceMeters,
-                                sharedInterests = dto.sharedInterests,
-                                sharedInterestCount = dto.sharedInterestCount.coerceAtLeast(0),
-                                relationship = compose.project.click.click.events.AttendeeRelationship.fromApi(dto.relationship),
-                                mutualVia = dto.mutualVia.map {
-                                    compose.project.click.click.events.MutualViaPeer(it.userId, it.name)
-                                },
-                                mutualConnectionCount = dto.mutualConnectionCount.coerceAtLeast(0),
-                            )
-                        }
+                        val mapped =
+                            payload.attendees.map { dto ->
+                                compose.project.click.click.events.DirectoryAttendee(
+                                    userId = dto.userId,
+                                    name = dto.name,
+                                    avatarUrl = dto.avatarUrl,
+                                    signedUpAt = dto.signedUpAt,
+                                    distanceMeters = dto.distanceMeters,
+                                    sharedInterests = dto.sharedInterests,
+                                    sharedInterestCount = dto.sharedInterestCount.coerceAtLeast(0),
+                                    relationship =
+                                        compose.project.click.click.events.AttendeeRelationship
+                                            .fromApi(dto.relationship),
+                                    mutualVia =
+                                        dto.mutualVia.map {
+                                            compose.project.click.click.events
+                                                .MutualViaPeer(it.userId, it.name)
+                                        },
+                                    mutualConnectionCount = dto.mutualConnectionCount.coerceAtLeast(0),
+                                )
+                            }
                         _beaconDirectoryById.update { current ->
-                            current + (id to BeaconDirectoryCacheEntry(
-                                attendees = mapped,
-                                currentUserSignedUp = payload.currentUserSignedUp,
-                                currentUserCheckedIn = payload.currentUserCheckedIn,
-                                mutualsSectionUnlocked = payload.mutualsSectionUnlocked,
-                            ))
+                            current + (
+                                id to
+                                    BeaconDirectoryCacheEntry(
+                                        attendees = mapped,
+                                        currentUserSignedUp = payload.currentUserSignedUp,
+                                        currentUserCheckedIn = payload.currentUserCheckedIn,
+                                        mutualsSectionUnlocked = payload.mutualsSectionUnlocked,
+                                    )
+                            )
                         }
                     },
                     onFailure = {
@@ -1442,8 +1544,7 @@ class MapViewModel : ViewModel() {
     }
 
     /** Restores/refreshes Supabase session before click-web bearer calls (cold start). */
-    private suspend fun ensureClickWebAuthReady(): Boolean =
-        ClickWebAuthCoordinator.ensureReady(authRepository)
+    private suspend fun ensureClickWebAuthReady(): Boolean = ClickWebAuthCoordinator.ensureReady(authRepository)
 
     private fun currentUserAsAttendee(): BeaconAttendeeDto? {
         val user = AppDataManager.currentUser.value ?: return null
@@ -1454,30 +1555,46 @@ class MapViewModel : ViewModel() {
         )
     }
 
-    private fun applyOptimisticRsvp(beaconId: String, signedUp: Boolean) {
+    private fun applyOptimisticRsvp(
+        beaconId: String,
+        signedUp: Boolean,
+    ) {
         val userId = AppDataManager.currentUser.value?.id ?: return
         updateBeaconRsvpCache { current ->
             val prev = current[beaconId]
             if (signedUp) {
                 val attendee = currentUserAsAttendee() ?: return@updateBeaconRsvpCache current
-                val mergedAttendees = (prev?.attendees.orEmpty()
-                    .filterNot { it.userId == attendee.userId } + attendee)
-                    .distinctBy { it.userId }
-                current + (beaconId to BeaconRsvpCacheEntry(
-                    attendees = mergedAttendees,
-                    currentUserSignedUp = true,
-                ))
+                val mergedAttendees =
+                    (
+                        prev
+                            ?.attendees
+                            .orEmpty()
+                            .filterNot { it.userId == attendee.userId } + attendee
+                    ).distinctBy { it.userId }
+                current + (
+                    beaconId to
+                        BeaconRsvpCacheEntry(
+                            attendees = mergedAttendees,
+                            currentUserSignedUp = true,
+                        )
+                )
             } else {
                 val remaining = prev?.attendees.orEmpty().filterNot { it.userId == userId }
-                current + (beaconId to BeaconRsvpCacheEntry(
-                    attendees = remaining,
-                    currentUserSignedUp = false,
-                ))
+                current + (
+                    beaconId to
+                        BeaconRsvpCacheEntry(
+                            attendees = remaining,
+                            currentUserSignedUp = false,
+                        )
+                )
             }
         }
     }
 
-    private fun restoreRsvpSnapshot(beaconId: String, previous: BeaconRsvpCacheEntry?) {
+    private fun restoreRsvpSnapshot(
+        beaconId: String,
+        previous: BeaconRsvpCacheEntry?,
+    ) {
         updateBeaconRsvpCache { current ->
             when (previous) {
                 null -> current - beaconId
@@ -1486,20 +1603,22 @@ class MapViewModel : ViewModel() {
         }
     }
 
-    private suspend fun resolveBeaconDropLocation(): LocationResult? {
-        return locationService.getHighAccuracyLocation(4_500L)
+    private suspend fun resolveBeaconDropLocation(): LocationResult? =
+        locationService.getHighAccuracyLocation(4_500L)
             ?: locationService.getCurrentLocation()
             ?: AppDataManager.lastKnownDeviceLocation.value?.let { (lat, lon) ->
                 LocationResult(latitude = lat, longitude = lon)
             }
-    }
 
     fun hasLocationPermission(): Boolean = locationService.hasLocationPermission()
 
     /** Exposed for BeaconDropSheet “Use my location”. */
     suspend fun resolveDropLocationForUi(): LocationResult? = resolveBeaconDropLocation()
 
-    fun rsvpToBeacon(beaconId: String, onFinished: (Boolean) -> Unit = {}) {
+    fun rsvpToBeacon(
+        beaconId: String,
+        onFinished: (Boolean) -> Unit = {},
+    ) {
         val id = beaconId.trim()
         if (id.isEmpty() || id in _beaconRsvpPendingIds.value) return
         val previous = _beaconRsvpById.value[id]
@@ -1515,44 +1634,54 @@ class MapViewModel : ViewModel() {
                 return@launch
             }
             val cachedLoc = AppDataManager.lastKnownDeviceLocation.value
-            mapBeaconRepository.rsvpBeacon(
-                beaconId = id,
-                latitude = cachedLoc?.first,
-                longitude = cachedLoc?.second,
-            ).fold(
-                onSuccess = { attendee ->
-                    updateBeaconRsvpCache { current ->
-                        val prev = current[id]
-                        val localAttendee = currentUserAsAttendee()
-                        val confirmedAttendee = attendee.copy(
-                            name = attendee.name.takeIf { it.isNotBlank() } ?: localAttendee?.name ?: "You",
-                            avatarUrl = localAttendee?.avatarUrl ?: attendee.avatarUrl,
-                        )
-                        val mergedAttendees = ((prev?.attendees.orEmpty())
-                            .filterNot { it.userId == confirmedAttendee.userId } + confirmedAttendee)
-                            .distinctBy { it.userId }
-                        current + (id to BeaconRsvpCacheEntry(
-                            attendees = mergedAttendees,
-                            currentUserSignedUp = true,
-                        ))
-                    }
-                    _beaconRsvpPendingIds.update { it - id }
-                    loadBeaconAttendeeDirectory(id, forceRefresh = true)
-                    onFinished(true)
-                },
-                onFailure = { e ->
-                    restoreRsvpSnapshot(id, previous)
-                    _beaconRsvpPendingIds.update { it - id }
-                    _engagementSnackbar.value =
-                        e.message?.takeIf { it.isNotBlank() } ?: "Could not update RSVP. Please try again."
-                    onFinished(false)
-                },
-            )
+            mapBeaconRepository
+                .rsvpBeacon(
+                    beaconId = id,
+                    latitude = cachedLoc?.first,
+                    longitude = cachedLoc?.second,
+                ).fold(
+                    onSuccess = { attendee ->
+                        updateBeaconRsvpCache { current ->
+                            val prev = current[id]
+                            val localAttendee = currentUserAsAttendee()
+                            val confirmedAttendee =
+                                attendee.copy(
+                                    name = attendee.name.takeIf { it.isNotBlank() } ?: localAttendee?.name ?: "You",
+                                    avatarUrl = localAttendee?.avatarUrl ?: attendee.avatarUrl,
+                                )
+                            val mergedAttendees =
+                                (
+                                    (prev?.attendees.orEmpty())
+                                        .filterNot { it.userId == confirmedAttendee.userId } + confirmedAttendee
+                                ).distinctBy { it.userId }
+                            current + (
+                                id to
+                                    BeaconRsvpCacheEntry(
+                                        attendees = mergedAttendees,
+                                        currentUserSignedUp = true,
+                                    )
+                            )
+                        }
+                        _beaconRsvpPendingIds.update { it - id }
+                        loadBeaconAttendeeDirectory(id, forceRefresh = true)
+                        onFinished(true)
+                    },
+                    onFailure = { e ->
+                        restoreRsvpSnapshot(id, previous)
+                        _beaconRsvpPendingIds.update { it - id }
+                        _engagementSnackbar.value =
+                            e.message?.takeIf { it.isNotBlank() } ?: "Could not update RSVP. Please try again."
+                        onFinished(false)
+                    },
+                )
         }
     }
 
     /** Cancels the current user's RSVP and removes them from the cached attendee list. */
-    fun cancelRsvpToBeacon(beaconId: String, onFinished: (Boolean) -> Unit = {}) {
+    fun cancelRsvpToBeacon(
+        beaconId: String,
+        onFinished: (Boolean) -> Unit = {},
+    ) {
         val id = beaconId.trim()
         if (id.isEmpty() || id in _beaconRsvpPendingIds.value) return
         val previous = _beaconRsvpById.value[id]
@@ -1572,12 +1701,18 @@ class MapViewModel : ViewModel() {
                 onSuccess = {
                     updateBeaconRsvpCache { current ->
                         val prev = current[id]
-                        val remaining = prev?.attendees.orEmpty()
-                            .filterNot { it.userId == currentUserId }
-                        current + (id to BeaconRsvpCacheEntry(
-                            attendees = remaining,
-                            currentUserSignedUp = false,
-                        ))
+                        val remaining =
+                            prev
+                                ?.attendees
+                                .orEmpty()
+                                .filterNot { it.userId == currentUserId }
+                        current + (
+                            id to
+                                BeaconRsvpCacheEntry(
+                                    attendees = remaining,
+                                    currentUserSignedUp = false,
+                                )
+                        )
                     }
                     _beaconRsvpPendingIds.update { it - id }
                     invalidateBeaconAttendeeDirectory(id)
@@ -1597,7 +1732,10 @@ class MapViewModel : ViewModel() {
         }
     }
 
-    fun loadBeaconEngagement(beaconId: String, forceRefresh: Boolean = false) {
+    fun loadBeaconEngagement(
+        beaconId: String,
+        forceRefresh: Boolean = false,
+    ) {
         val id = beaconId.trim()
         if (id.isEmpty()) return
         viewModelScope.launch(Dispatchers.Default) {
@@ -1609,15 +1747,18 @@ class MapViewModel : ViewModel() {
                     if (id in _beaconEngagementPendingIds.value) return@fold
                     updateBeaconEngagementCache { current ->
                         val existing = current[id]
-                        current + (id to mergeEngagementFromServer(
-                            existing = existing,
-                            beaconId = id,
-                            bookmarked = payload.bookmarked,
-                            checkedIn = payload.checkedIn,
-                            checkedInAt = payload.checkedInAt,
-                            checkInCount = payload.checkInCount,
-                            preferServer = forceRefresh,
-                        ))
+                        current + (
+                            id to
+                                mergeEngagementFromServer(
+                                    existing = existing,
+                                    beaconId = id,
+                                    bookmarked = payload.bookmarked,
+                                    checkedIn = payload.checkedIn,
+                                    checkedInAt = payload.checkedInAt,
+                                    checkInCount = payload.checkInCount,
+                                    preferServer = forceRefresh,
+                                )
+                        )
                     }
                 },
                 onFailure = { /* keep disk cache */ },
@@ -1629,28 +1770,32 @@ class MapViewModel : ViewModel() {
     fun hydrateEventEngagementFromServer() {
         viewModelScope.launch(Dispatchers.Default) {
             if (!ensureClickWebAuthReady()) return@launch
-            val eventIds = _mapBeacons.value
-                .asSequence()
-                .filter { it.kind == MapBeaconKind.EVENT }
-                .map { it.id }
-                .distinct()
-                .take(40)
-                .toList()
+            val eventIds =
+                _mapBeacons.value
+                    .asSequence()
+                    .filter { it.kind == MapBeaconKind.EVENT }
+                    .map { it.id }
+                    .distinct()
+                    .take(40)
+                    .toList()
             for (id in eventIds) {
                 if (id in _beaconEngagementPendingIds.value) continue
                 mapBeaconRepository.fetchBeaconEngagement(id).fold(
                     onSuccess = { payload ->
                         if (id in _beaconEngagementPendingIds.value) return@fold
                         updateBeaconEngagementCache { current ->
-                            current + (id to mergeEngagementFromServer(
-                                existing = current[id],
-                                beaconId = id,
-                                bookmarked = payload.bookmarked,
-                                checkedIn = payload.checkedIn,
-                                checkedInAt = payload.checkedInAt,
-                                checkInCount = payload.checkInCount,
-                                preferServer = true,
-                            ))
+                            current + (
+                                id to
+                                    mergeEngagementFromServer(
+                                        existing = current[id],
+                                        beaconId = id,
+                                        bookmarked = payload.bookmarked,
+                                        checkedIn = payload.checkedIn,
+                                        checkedInAt = payload.checkedInAt,
+                                        checkInCount = payload.checkInCount,
+                                        preferServer = true,
+                                    )
+                            )
                         }
                     },
                     onFailure = { /* ignore per-beacon */ },
@@ -1671,7 +1816,10 @@ class MapViewModel : ViewModel() {
         }
     }
 
-    fun recordEventShare(beaconId: String, shareUrl: String? = null) {
+    fun recordEventShare(
+        beaconId: String,
+        shareUrl: String? = null,
+    ) {
         val id = beaconId.trim()
         if (id.isEmpty()) return
         viewModelScope.launch {
@@ -1705,52 +1853,67 @@ class MapViewModel : ViewModel() {
                 _engagementSnackbar.value = "Sign-in still loading — try bookmark again"
                 return@launch
             }
-            mapBeaconRepository.setBeaconBookmark(
-                id,
-                nextBookmarked,
-                engagementTelemetry(bookmarked = nextBookmarked),
-            ).fold(
-                onSuccess = {
-                    _beaconBookmarkPendingIds.update { it - id }
-                    // Reconcile after PUT lands so Home list isn't wiped by a premature GET.
-                    reconcileCachedEventBookmarksFromServer()
-                },
-                onFailure = { e ->
-                    restoreEngagementSnapshot(id, previous)
-                    applyOptimisticCachedBookmark(id, previous?.bookmarked == true)
-                    _beaconBookmarkPendingIds.update { it - id }
-                    _engagementSnackbar.value =
-                        e.message?.takeIf { it.isNotBlank() } ?: "Couldn't update bookmark"
-                },
-            )
+            mapBeaconRepository
+                .setBeaconBookmark(
+                    id,
+                    nextBookmarked,
+                    engagementTelemetry(bookmarked = nextBookmarked),
+                ).fold(
+                    onSuccess = {
+                        _beaconBookmarkPendingIds.update { it - id }
+                        // Reconcile after PUT lands so Home list isn't wiped by a premature GET.
+                        reconcileCachedEventBookmarksFromServer()
+                    },
+                    onFailure = { e ->
+                        restoreEngagementSnapshot(id, previous)
+                        applyOptimisticCachedBookmark(id, previous?.bookmarked == true)
+                        _beaconBookmarkPendingIds.update { it - id }
+                        _engagementSnackbar.value =
+                            e.message?.takeIf { it.isNotBlank() } ?: "Couldn't update bookmark"
+                    },
+                )
         }
     }
 
-    private fun applyOptimisticCachedBookmark(beaconId: String, bookmarked: Boolean) {
+    private fun applyOptimisticCachedBookmark(
+        beaconId: String,
+        bookmarked: Boolean,
+    ) {
         if (bookmarked) {
             val beacon = _mapBeacons.value.firstOrNull { it.id == beaconId }
             val schedule = beacon?.eventSchedule()
-            val item = compose.project.click.click.data.api.EventBookmarkItemDto(
-                beaconId = beaconId,
-                bookmarkedAt = Clock.System.now().toString(),
-                title = beacon?.displayDynamicTitle(),
-                eventStartAt = schedule?.let {
-                    kotlinx.datetime.Instant.fromEpochMilliseconds(it.startEpochMs).toString()
-                },
-                eventEndAt = schedule?.let {
-                    kotlinx.datetime.Instant.fromEpochMilliseconds(it.endEpochMs).toString()
-                },
-                locationName = beacon?.metadata?.locationName,
-                formattedAddress = beacon?.metadata?.formattedAddress,
-                eventCategories = beacon?.metadata?.eventCategories.orEmpty(),
-                latitude = beacon?.latitude,
-                longitude = beacon?.longitude,
-                expiresAt = beacon?.expiresAtEpochMs?.let {
-                    kotlinx.datetime.Instant.fromEpochMilliseconds(it).toString()
-                },
-            )
-            val merged = (listOf(item) + AppDataManager.cachedEventBookmarks.value.filterNot { it.beaconId == beaconId })
-                .distinctBy { it.beaconId }
+            val item =
+                compose.project.click.click.data.api.EventBookmarkItemDto(
+                    beaconId = beaconId,
+                    bookmarkedAt = Clock.System.now().toString(),
+                    title = beacon?.displayDynamicTitle(),
+                    eventStartAt =
+                        schedule?.let {
+                            kotlinx.datetime.Instant
+                                .fromEpochMilliseconds(it.startEpochMs)
+                                .toString()
+                        },
+                    eventEndAt =
+                        schedule?.let {
+                            kotlinx.datetime.Instant
+                                .fromEpochMilliseconds(it.endEpochMs)
+                                .toString()
+                        },
+                    locationName = beacon?.metadata?.locationName,
+                    formattedAddress = beacon?.metadata?.formattedAddress,
+                    eventCategories = beacon?.metadata?.eventCategories.orEmpty(),
+                    latitude = beacon?.latitude,
+                    longitude = beacon?.longitude,
+                    expiresAt =
+                        beacon?.expiresAtEpochMs?.let {
+                            kotlinx.datetime.Instant
+                                .fromEpochMilliseconds(it)
+                                .toString()
+                        },
+                )
+            val merged =
+                (listOf(item) + AppDataManager.cachedEventBookmarks.value.filterNot { it.beaconId == beaconId })
+                    .distinctBy { it.beaconId }
             AppDataManager.updateCachedEventBookmarks(merged)
         } else {
             AppDataManager.updateCachedEventBookmarks(
@@ -1836,16 +1999,18 @@ class MapViewModel : ViewModel() {
                 _engagementSnackbar.value = "Location required to check in"
                 return@launch
             }
-            val beacon = _mapBeacons.value.firstOrNull { it.id == id }
-                ?: (_selection.value as? MapSelection.BeaconSelected)?.beacon?.takeIf { it.id == id }
+            val beacon =
+                _mapBeacons.value.firstOrNull { it.id == id }
+                    ?: (_selection.value as? MapSelection.BeaconSelected)?.beacon?.takeIf { it.id == id }
             if (beacon != null) {
                 val radiusM = beacon.resolveEventCheckInRadiusMeters()
-                val distanceM = haversineDistance(
-                    loc.latitude,
-                    loc.longitude,
-                    beacon.latitude,
-                    beacon.longitude,
-                )
+                val distanceM =
+                    haversineDistance(
+                        loc.latitude,
+                        loc.longitude,
+                        beacon.latitude,
+                        beacon.longitude,
+                    )
                 if (distanceM > radiusM) {
                     restoreEngagementSnapshot(id, previous)
                     _beaconCheckInPendingIds.update { it - id }
@@ -1859,80 +2024,99 @@ class MapViewModel : ViewModel() {
                 _engagementSnackbar.value = "Couldn't check in — try again"
                 return@launch
             }
-            mapBeaconRepository.checkInBeacon(
-                id,
-                engagementTelemetry(latitude = loc.latitude, longitude = loc.longitude),
-            ).fold(
-                onSuccess = { payload ->
-                    if (payload.checkedIn) {
-                        earlyCheckInBeaconIds -= id
-                    }
-                    updateBeaconEngagementCache { current ->
-                        current + (id to BeaconEngagementCacheEntry(
-                            bookmarked = current[id]?.bookmarked ?: false,
-                            checkedIn = payload.checkedIn,
-                            checkedInAt = payload.checkedInAt,
-                            checkInCount = payload.checkInCount,
-                            localEarlyCheckIn = false,
-                        ))
-                    }
-                    _beaconCheckInPendingIds.update { it - id }
-                    invalidateBeaconAttendeeDirectory(id)
-                    if (payload.checkedIn || _beaconRsvpById.value[id]?.currentUserSignedUp == true) {
-                        loadBeaconAttendeeDirectory(id, forceRefresh = true)
-                    }
-                    _engagementSnackbar.value = if (payload.checkedIn) {
-                        "Checked in"
-                    } else {
-                        "Checked out"
-                    }
-                },
-                onFailure = { err ->
-                    val http = err as? BeaconEngagementHttpException
-                    // Early check-in (409) is only valid when already inside the geofence —
-                    // server now enforces this; still refuse to persist remote false positives.
-                    if (http?.status == 409 && beacon != null) {
-                        val radiusM = beacon.resolveEventCheckInRadiusMeters()
-                        val distanceM = haversineDistance(
-                            loc.latitude,
-                            loc.longitude,
-                            beacon.latitude,
-                            beacon.longitude,
-                        )
-                        if (distanceM <= radiusM) {
-                            earlyCheckInBeaconIds += id
-                            updateBeaconEngagementCache { current ->
-                                val base = current[id] ?: BeaconEngagementCacheEntry()
-                                current + (id to base.copy(
-                                    checkedIn = true,
-                                    localEarlyCheckIn = true,
-                                ))
-                            }
-                            _beaconCheckInPendingIds.update { it - id }
-                            invalidateBeaconAttendeeDirectory(id)
-                            _engagementSnackbar.value = "Checked in early — see you at the event"
-                            return@fold
+            mapBeaconRepository
+                .checkInBeacon(
+                    id,
+                    engagementTelemetry(latitude = loc.latitude, longitude = loc.longitude),
+                ).fold(
+                    onSuccess = { payload ->
+                        if (payload.checkedIn) {
+                            earlyCheckInBeaconIds -= id
                         }
-                    }
-                    restoreEngagementSnapshot(id, previous)
-                    _beaconCheckInPendingIds.update { it - id }
-                    _engagementSnackbar.value = beaconCheckInFailureMessage(
-                        httpStatus = http?.status,
-                        fallback = http?.message,
-                    )
-                },
-            )
+                        updateBeaconEngagementCache { current ->
+                            current + (
+                                id to
+                                    BeaconEngagementCacheEntry(
+                                        bookmarked = current[id]?.bookmarked ?: false,
+                                        checkedIn = payload.checkedIn,
+                                        checkedInAt = payload.checkedInAt,
+                                        checkInCount = payload.checkInCount,
+                                        localEarlyCheckIn = false,
+                                    )
+                            )
+                        }
+                        _beaconCheckInPendingIds.update { it - id }
+                        invalidateBeaconAttendeeDirectory(id)
+                        if (payload.checkedIn || _beaconRsvpById.value[id]?.currentUserSignedUp == true) {
+                            loadBeaconAttendeeDirectory(id, forceRefresh = true)
+                        }
+                        _engagementSnackbar.value =
+                            if (payload.checkedIn) {
+                                "Checked in"
+                            } else {
+                                "Checked out"
+                            }
+                    },
+                    onFailure = { err ->
+                        val http = err as? BeaconEngagementHttpException
+                        // Early check-in (409) is only valid when already inside the geofence —
+                        // server now enforces this; still refuse to persist remote false positives.
+                        if (http?.status == 409 && beacon != null) {
+                            val radiusM = beacon.resolveEventCheckInRadiusMeters()
+                            val distanceM =
+                                haversineDistance(
+                                    loc.latitude,
+                                    loc.longitude,
+                                    beacon.latitude,
+                                    beacon.longitude,
+                                )
+                            if (distanceM <= radiusM) {
+                                earlyCheckInBeaconIds += id
+                                updateBeaconEngagementCache { current ->
+                                    val base = current[id] ?: BeaconEngagementCacheEntry()
+                                    current + (
+                                        id to
+                                            base.copy(
+                                                checkedIn = true,
+                                                localEarlyCheckIn = true,
+                                            )
+                                    )
+                                }
+                                _beaconCheckInPendingIds.update { it - id }
+                                invalidateBeaconAttendeeDirectory(id)
+                                _engagementSnackbar.value = "Checked in early — see you at the event"
+                                return@fold
+                            }
+                        }
+                        restoreEngagementSnapshot(id, previous)
+                        _beaconCheckInPendingIds.update { it - id }
+                        _engagementSnackbar.value =
+                            beaconCheckInFailureMessage(
+                                httpStatus = http?.status,
+                                fallback = http?.message,
+                            )
+                    },
+                )
         }
     }
 
-    private fun restoreEngagementSnapshot(beaconId: String, previous: BeaconEngagementCacheEntry?) {
+    private fun restoreEngagementSnapshot(
+        beaconId: String,
+        previous: BeaconEngagementCacheEntry?,
+    ) {
         updateBeaconEngagementCache { current ->
-            if (previous == null) current - beaconId
-            else current + (beaconId to previous)
+            if (previous == null) {
+                current - beaconId
+            } else {
+                current + (beaconId to previous)
+            }
         }
     }
 
-    fun deleteOwnedBeacon(beaconId: String, onFinished: (Boolean) -> Unit = {}) {
+    fun deleteOwnedBeacon(
+        beaconId: String,
+        onFinished: (Boolean) -> Unit = {},
+    ) {
         viewModelScope.launch {
             mapBeaconRepository.deleteBeacon(beaconId).fold(
                 onSuccess = {
@@ -1961,9 +2145,10 @@ class MapViewModel : ViewModel() {
         onFinished: (Boolean) -> Unit = {},
     ) {
         viewModelScope.launch {
-            val patch = MapBeaconPatchBody(
-                metadata = buildJsonObject { put("description", description.trim()) },
-            )
+            val patch =
+                MapBeaconPatchBody(
+                    metadata = buildJsonObject { put("description", description.trim()) },
+                )
             mapBeaconRepository.updateBeacon(beaconId, patch).fold(
                 onSuccess = { updated ->
                     _mapBeacons.update { list -> mergeMapBeaconLists(list, listOf(updated)) }
@@ -2003,258 +2188,272 @@ class MapViewModel : ViewModel() {
             beaconSubmitMutex.lock()
             _beaconSubmitInFlight.value = true
             try {
-            _beaconInsertError.value = null
-            _beaconDropFailureToast.value = null
-            val useProvidedEventLocation =
-                kind == MapBeaconKind.EVENT &&
-                    eventLocation != null &&
-                    eventLocation.latitude.isFinite() &&
-                    eventLocation.longitude.isFinite()
-            if (!useProvidedEventLocation && !locationService.hasLocationPermission()) {
-                _beaconInsertError.value =
-                    "Location is required to drop a community beacon. Enable location in Settings and try again."
-                onRejectedEarly()
-                onRemoteFinished(false)
-                return@launch
-            }
-            val locationDeferred = if (useProvidedEventLocation) {
-                null
-            } else {
-                async(Dispatchers.Default) { resolveBeaconDropLocation() }
-            }
-            val trimmedTitle = title.trim()
-            val trimmedDescription = description?.trim()?.takeIf { it.isNotEmpty() }
-            val metadata: JsonObject? = when (kind) {
-                MapBeaconKind.SOUNDTRACK -> {
-                    val url = soundtrackUrl?.trim().orEmpty()
-                    if (!isValidStreamingUrl(url)) {
-                        _beaconInsertError.value = "Enter a valid Spotify, Apple Music, or YouTube link."
-                        onRejectedEarly()
-                        onRemoteFinished(false)
-                        return@launch
-                    }
-                    buildJsonObject {
-                        put("music_url", url)
-                    }
+                _beaconInsertError.value = null
+                _beaconDropFailureToast.value = null
+                val useProvidedEventLocation =
+                    kind == MapBeaconKind.EVENT &&
+                        eventLocation != null &&
+                        eventLocation.latitude.isFinite() &&
+                        eventLocation.longitude.isFinite()
+                if (!useProvidedEventLocation && !locationService.hasLocationPermission()) {
+                    _beaconInsertError.value =
+                        "Location is required to drop a community beacon. Enable location in Settings and try again."
+                    onRejectedEarly()
+                    onRemoteFinished(false)
+                    return@launch
                 }
-                MapBeaconKind.EVENT -> {
-                    if (trimmedTitle.isEmpty()) {
-                        _beaconInsertError.value = "Please add a title."
-                        onRejectedEarly()
-                        onRemoteFinished(false)
-                        return@launch
+                val locationDeferred =
+                    if (useProvidedEventLocation) {
+                        null
+                    } else {
+                        async(Dispatchers.Default) { resolveBeaconDropLocation() }
                     }
-                    if (trimmedTitle.length > 80) {
-                        _beaconInsertError.value = "Title must be 80 characters or less."
-                        onRejectedEarly()
-                        onRemoteFinished(false)
-                        return@launch
-                    }
-                    if (trimmedDescription != null && trimmedDescription.length > 500) {
-                        _beaconInsertError.value = "Description must be 500 characters or less."
-                        onRejectedEarly()
-                        onRemoteFinished(false)
-                        return@launch
-                    }
-                    val schedule = eventSchedule ?: run {
-                        _beaconInsertError.value = "Pick event start and end times."
-                        onRejectedEarly()
-                        onRemoteFinished(false)
-                        return@launch
-                    }
-                    validateEventSchedule(schedule.startEpochMs, schedule.endEpochMs)?.let { err ->
-                        _beaconInsertError.value = when (err) {
-                            compose.project.click.click.events.EventScheduleValidationError.EndBeforeStart ->
-                                "Event end must be after start."
-                            compose.project.click.click.events.EventScheduleValidationError.StartInPast ->
-                                "Event start must be in the future."
-                            compose.project.click.click.events.EventScheduleValidationError.DurationExceedsOneMonth ->
-                                "Events can last at most 1 month."
-                        }
-                        onRejectedEarly()
-                        onRemoteFinished(false)
-                        return@launch
-                    }
-                    if (!useProvidedEventLocation) {
-                        _beaconInsertError.value =
-                            "Set an event location (search an address or use my location)."
-                        onRejectedEarly()
-                        onRemoteFinished(false)
-                        return@launch
-                    }
-                    buildJsonObject {
-                        put("title", trimmedTitle)
-                        trimmedDescription?.let { put("description", it) }
-                        eventScheduleMetadata(schedule).forEach { (k, v) -> put(k, v) }
-                        val categories = eventCategories
-                            .map { it.trim() }
-                            .filter { it.isNotEmpty() && it in EVENT_CATEGORY_OPTIONS }
-                            .distinct()
-                        if (categories.isNotEmpty()) {
-                            putJsonArray(EVENT_CATEGORIES_METADATA_KEY) {
-                                categories.forEach { add(it) }
+                val trimmedTitle = title.trim()
+                val trimmedDescription = description?.trim()?.takeIf { it.isNotEmpty() }
+                val metadata: JsonObject? =
+                    when (kind) {
+                        MapBeaconKind.SOUNDTRACK -> {
+                            val url = soundtrackUrl?.trim().orEmpty()
+                            if (!isValidStreamingUrl(url)) {
+                                _beaconInsertError.value = "Enter a valid Spotify, Apple Music, or YouTube link."
+                                onRejectedEarly()
+                                onRemoteFinished(false)
+                                return@launch
+                            }
+                            buildJsonObject {
+                                put("music_url", url)
                             }
                         }
-                        put(EVENT_VENUE_SCALE_METADATA_KEY, venueScale.apiValue)
-                        put(EVENT_CHECK_IN_RADIUS_METADATA_KEY, venueScale.radiusMeters)
-                        val locationName = eventLocation!!.shortLabel.trim().ifEmpty {
-                            eventLocation.displayName.trim()
+                        MapBeaconKind.EVENT -> {
+                            if (trimmedTitle.isEmpty()) {
+                                _beaconInsertError.value = "Please add a title."
+                                onRejectedEarly()
+                                onRemoteFinished(false)
+                                return@launch
+                            }
+                            if (trimmedTitle.length > 80) {
+                                _beaconInsertError.value = "Title must be 80 characters or less."
+                                onRejectedEarly()
+                                onRemoteFinished(false)
+                                return@launch
+                            }
+                            if (trimmedDescription != null && trimmedDescription.length > 500) {
+                                _beaconInsertError.value = "Description must be 500 characters or less."
+                                onRejectedEarly()
+                                onRemoteFinished(false)
+                                return@launch
+                            }
+                            val schedule =
+                                eventSchedule ?: run {
+                                    _beaconInsertError.value = "Pick event start and end times."
+                                    onRejectedEarly()
+                                    onRemoteFinished(false)
+                                    return@launch
+                                }
+                            validateEventSchedule(schedule.startEpochMs, schedule.endEpochMs)?.let { err ->
+                                _beaconInsertError.value =
+                                    when (err) {
+                                        compose.project.click.click.events.EventScheduleValidationError.EndBeforeStart ->
+                                            "Event end must be after start."
+                                        compose.project.click.click.events.EventScheduleValidationError.StartInPast ->
+                                            "Event start must be in the future."
+                                        compose.project.click.click.events.EventScheduleValidationError.DurationExceedsOneMonth ->
+                                            "Events can last at most 1 month."
+                                    }
+                                onRejectedEarly()
+                                onRemoteFinished(false)
+                                return@launch
+                            }
+                            if (!useProvidedEventLocation) {
+                                _beaconInsertError.value =
+                                    "Set an event location (search an address or use my location)."
+                                onRejectedEarly()
+                                onRemoteFinished(false)
+                                return@launch
+                            }
+                            buildJsonObject {
+                                put("title", trimmedTitle)
+                                trimmedDescription?.let { put("description", it) }
+                                eventScheduleMetadata(schedule).forEach { (k, v) -> put(k, v) }
+                                val categories =
+                                    eventCategories
+                                        .map { it.trim() }
+                                        .filter { it.isNotEmpty() && it in EVENT_CATEGORY_OPTIONS }
+                                        .distinct()
+                                if (categories.isNotEmpty()) {
+                                    putJsonArray(EVENT_CATEGORIES_METADATA_KEY) {
+                                        categories.forEach { add(it) }
+                                    }
+                                }
+                                put(EVENT_VENUE_SCALE_METADATA_KEY, venueScale.apiValue)
+                                put(EVENT_CHECK_IN_RADIUS_METADATA_KEY, venueScale.radiusMeters)
+                                val locationName =
+                                    eventLocation!!.shortLabel.trim().ifEmpty {
+                                        eventLocation.displayName.trim()
+                                    }
+                                if (locationName.isNotEmpty()) {
+                                    put(EVENT_LOCATION_NAME_METADATA_KEY, locationName)
+                                }
+                                val formatted = eventLocation.displayName.trim()
+                                if (formatted.isNotEmpty()) {
+                                    put(EVENT_FORMATTED_ADDRESS_METADATA_KEY, formatted)
+                                }
+                            }
                         }
-                        if (locationName.isNotEmpty()) {
-                            put(EVENT_LOCATION_NAME_METADATA_KEY, locationName)
+                        MapBeaconKind.SOS, MapBeaconKind.HAZARD, MapBeaconKind.UTILITY, MapBeaconKind.STUDY -> {
+                            if (trimmedTitle.isEmpty()) {
+                                _beaconInsertError.value = "Please add a title."
+                                onRejectedEarly()
+                                onRemoteFinished(false)
+                                return@launch
+                            }
+                            if (trimmedTitle.length > 80) {
+                                _beaconInsertError.value = "Title must be 80 characters or less."
+                                onRejectedEarly()
+                                onRemoteFinished(false)
+                                return@launch
+                            }
+                            if (trimmedDescription != null && trimmedDescription.length > 500) {
+                                _beaconInsertError.value = "Description must be 500 characters or less."
+                                onRejectedEarly()
+                                onRemoteFinished(false)
+                                return@launch
+                            }
+                            buildJsonObject {
+                                put("title", trimmedTitle)
+                                trimmedDescription?.let { put("description", it) }
+                            }
                         }
-                        val formatted = eventLocation.displayName.trim()
-                        if (formatted.isNotEmpty()) {
-                            put(EVENT_FORMATTED_ADDRESS_METADATA_KEY, formatted)
+                        else -> {
+                            if (trimmedTitle.isEmpty()) {
+                                _beaconInsertError.value = "Please add a title."
+                                onRejectedEarly()
+                                onRemoteFinished(false)
+                                return@launch
+                            }
+                            if (trimmedTitle.length > 80) {
+                                _beaconInsertError.value = "Title must be 80 characters or less."
+                                onRejectedEarly()
+                                onRemoteFinished(false)
+                                return@launch
+                            }
+                            if (trimmedDescription != null && trimmedDescription.length > 500) {
+                                _beaconInsertError.value = "Description must be 500 characters or less."
+                                onRejectedEarly()
+                                onRemoteFinished(false)
+                                return@launch
+                            }
+                            buildJsonObject {
+                                put("title", trimmedTitle)
+                                trimmedDescription?.let { put("description", it) }
+                            }
                         }
                     }
+                val locLat: Double
+                val locLon: Double
+                if (useProvidedEventLocation) {
+                    locLat = eventLocation!!.latitude
+                    locLon = eventLocation.longitude
+                } else {
+                    val loc =
+                        locationDeferred!!.await()
+                            ?: run {
+                                _beaconInsertError.value =
+                                    "Could not read GPS. Enable location and try again."
+                                onRejectedEarly()
+                                onRemoteFinished(false)
+                                return@launch
+                            }
+                    locLat = loc.latitude
+                    locLon = loc.longitude
                 }
-                MapBeaconKind.SOS, MapBeaconKind.HAZARD, MapBeaconKind.UTILITY, MapBeaconKind.STUDY -> {
-                    if (trimmedTitle.isEmpty()) {
-                        _beaconInsertError.value = "Please add a title."
-                        onRejectedEarly()
-                        onRemoteFinished(false)
-                        return@launch
+                val squadSession = CollaborationSessionManager.activeMapDropSession()
+                val eventExpiresIso =
+                    eventSchedule?.endEpochMs?.let {
+                        kotlinx.datetime.Instant
+                            .fromEpochMilliseconds(it)
+                            .toString()
                     }
-                    if (trimmedTitle.length > 80) {
-                        _beaconInsertError.value = "Title must be 80 characters or less."
-                        onRejectedEarly()
-                        onRemoteFinished(false)
-                        return@launch
-                    }
-                    if (trimmedDescription != null && trimmedDescription.length > 500) {
-                        _beaconInsertError.value = "Description must be 500 characters or less."
-                        onRejectedEarly()
-                        onRemoteFinished(false)
-                        return@launch
-                    }
-                    buildJsonObject {
-                        put("title", trimmedTitle)
-                        trimmedDescription?.let { put("description", it) }
-                    }
-                }
-                else -> {
-                    if (trimmedTitle.isEmpty()) {
-                        _beaconInsertError.value = "Please add a title."
-                        onRejectedEarly()
-                        onRemoteFinished(false)
-                        return@launch
-                    }
-                    if (trimmedTitle.length > 80) {
-                        _beaconInsertError.value = "Title must be 80 characters or less."
-                        onRejectedEarly()
-                        onRemoteFinished(false)
-                        return@launch
-                    }
-                    if (trimmedDescription != null && trimmedDescription.length > 500) {
-                        _beaconInsertError.value = "Description must be 500 characters or less."
-                        onRejectedEarly()
-                        onRemoteFinished(false)
-                        return@launch
-                    }
-                    buildJsonObject {
-                        put("title", trimmedTitle)
-                        trimmedDescription?.let { put("description", it) }
-                    }
-                }
-            }
-            val locLat: Double
-            val locLon: Double
-            if (useProvidedEventLocation) {
-                locLat = eventLocation!!.latitude
-                locLon = eventLocation.longitude
-            } else {
-                val loc = locationDeferred!!.await()
-                    ?: run {
-                        _beaconInsertError.value =
-                            "Could not read GPS. Enable location and try again."
-                        onRejectedEarly()
-                        onRemoteFinished(false)
-                        return@launch
-                    }
-                locLat = loc.latitude
-                locLon = loc.longitude
-            }
-            val squadSession = CollaborationSessionManager.activeMapDropSession()
-            val eventExpiresIso = eventSchedule?.endEpochMs?.let {
-                kotlinx.datetime.Instant.fromEpochMilliseconds(it).toString()
-            }
-            val insert = MapBeaconInsert(
-                kind = kind.apiValue,
-                lat = locLat,
-                lon = locLon,
-                metadata = metadata,
-                ttlMs = when {
-                    kind == MapBeaconKind.SOUNDTRACK -> null
-                    kind == MapBeaconKind.EVENT -> null
-                    else -> ttlMs ?: (6L * 60L * 60_000L)
-                },
-                expiresAtIso = eventExpiresIso,
-                showCreatorName = showCreatorName,
-                visibilityAudience = visibilityAudience.apiValue,
-                encounterId = squadSession?.encounterId,
-            )
-            val optimisticId = "optimistic:${Clock.System.now().toEpochMilliseconds()}:${Random.Default.nextInt()}"
-            val optimisticBeacon = MapBeacon(
-                id = optimisticId,
-                kind = kind,
-                latitude = locLat,
-                longitude = locLon,
-                metadata = parseMapBeaconMetadata(metadata),
-                createdByUserId = AppDataManager.currentUser.value?.id,
-                createdAtEpochMs = Clock.System.now().toEpochMilliseconds(),
-                expiresAtEpochMs = eventSchedule?.endEpochMs,
-                sourceBeaconType = insert.kind,
-                showCreatorName = showCreatorName,
-            )
-            if (!ensureClickWebAuthReady()) {
-                _beaconInsertError.value = "Sign in again to drop beacons"
-                onRejectedEarly()
-                onRemoteFinished(false)
-                return@launch
-            }
-
-            _mapBeacons.value = _mapBeacons.value + optimisticBeacon
-            EventReminderCoordinator.rememberBeacon(optimisticBeacon)
-            PlatformHapticsPolicy.heavyImpact()
-            PlatformHapticsPolicy.successNotification()
-            onAcceptedLocally()
-
-            val insertResult = mapBeaconRepository.insertBeacon(insert)
-            insertResult.fold(
-                onSuccess = { serverBeacon ->
-                    val confirmed = if (
-                        serverBeacon.latitude.isFinite() &&
-                        serverBeacon.longitude.isFinite() &&
-                        !(serverBeacon.latitude == 0.0 && serverBeacon.longitude == 0.0)
-                    ) {
-                        serverBeacon
-                    } else {
-                        // Insert response can lack parseable PostGIS location — keep drop coords.
-                        serverBeacon.copy(latitude = locLat, longitude = locLon)
-                    }
-                    _mapBeacons.update { current ->
-                        mergeMapBeaconLists(
-                            current.filter { it.id != optimisticId },
-                            listOf(confirmed),
-                        )
-                    }
-                    EventReminderCoordinator.rememberBeacon(confirmed)
-                    refreshBeaconsAfterDrop(
+                val insert =
+                    MapBeaconInsert(
+                        kind = kind.apiValue,
+                        lat = locLat,
+                        lon = locLon,
+                        metadata = metadata,
+                        ttlMs =
+                            when {
+                                kind == MapBeaconKind.SOUNDTRACK -> null
+                                kind == MapBeaconKind.EVENT -> null
+                                else -> ttlMs ?: (6L * 60L * 60_000L)
+                            },
+                        expiresAtIso = eventExpiresIso,
+                        showCreatorName = showCreatorName,
+                        visibilityAudience = visibilityAudience.apiValue,
+                        encounterId = squadSession?.encounterId,
+                    )
+                val optimisticId = "optimistic:${Clock.System.now().toEpochMilliseconds()}:${Random.Default.nextInt()}"
+                val optimisticBeacon =
+                    MapBeacon(
+                        id = optimisticId,
+                        kind = kind,
                         latitude = locLat,
                         longitude = locLon,
-                        confirmedBeacon = confirmed,
+                        metadata = parseMapBeaconMetadata(metadata),
+                        createdByUserId = AppDataManager.currentUser.value?.id,
+                        createdAtEpochMs = Clock.System.now().toEpochMilliseconds(),
+                        expiresAtEpochMs = eventSchedule?.endEpochMs,
+                        sourceBeaconType = insert.kind,
+                        showCreatorName = showCreatorName,
                     )
-                    onRemoteFinished(true)
-                    PlatformHapticsPolicy.heavyImpact()
-                    PlatformHapticsPolicy.successNotification()
-                },
-                onFailure = { e ->
-                    _mapBeacons.value = _mapBeacons.value.filter { it.id != optimisticId }
-                    _beaconDropFailureToast.value = e.message ?: "Could not drop beacon"
+                if (!ensureClickWebAuthReady()) {
+                    _beaconInsertError.value = "Sign in again to drop beacons"
+                    onRejectedEarly()
                     onRemoteFinished(false)
-                },
-            )
+                    return@launch
+                }
+
+                _mapBeacons.value = _mapBeacons.value + optimisticBeacon
+                EventReminderCoordinator.rememberBeacon(optimisticBeacon)
+                PlatformHapticsPolicy.heavyImpact()
+                PlatformHapticsPolicy.successNotification()
+                onAcceptedLocally()
+
+                val insertResult = mapBeaconRepository.insertBeacon(insert)
+                insertResult.fold(
+                    onSuccess = { serverBeacon ->
+                        val confirmed =
+                            if (
+                                serverBeacon.latitude.isFinite() &&
+                                serverBeacon.longitude.isFinite() &&
+                                !(serverBeacon.latitude == 0.0 && serverBeacon.longitude == 0.0)
+                            ) {
+                                serverBeacon
+                            } else {
+                                // Insert response can lack parseable PostGIS location — keep drop coords.
+                                serverBeacon.copy(latitude = locLat, longitude = locLon)
+                            }
+                        _mapBeacons.update { current ->
+                            mergeMapBeaconLists(
+                                current.filter { it.id != optimisticId },
+                                listOf(confirmed),
+                            )
+                        }
+                        EventReminderCoordinator.rememberBeacon(confirmed)
+                        refreshBeaconsAfterDrop(
+                            latitude = locLat,
+                            longitude = locLon,
+                            confirmedBeacon = confirmed,
+                        )
+                        onRemoteFinished(true)
+                        PlatformHapticsPolicy.heavyImpact()
+                        PlatformHapticsPolicy.successNotification()
+                    },
+                    onFailure = { e ->
+                        _mapBeacons.value = _mapBeacons.value.filter { it.id != optimisticId }
+                        _beaconDropFailureToast.value = e.message ?: "Could not drop beacon"
+                        onRemoteFinished(false)
+                    },
+                )
             } finally {
                 _beaconSubmitInFlight.value = false
                 beaconSubmitMutex.unlock()
@@ -2303,7 +2502,7 @@ class MapViewModel : ViewModel() {
             persistCameraTarget(
                 latitude = bounds.centerLat,
                 longitude = bounds.centerLon,
-                zoom = coerced
+                zoom = coerced,
             )
         }
     }
@@ -2311,7 +2510,12 @@ class MapViewModel : ViewModel() {
     /**
      * Update visible bounds from outside (e.g., the platform map callback)
      */
-    fun updateVisibleBounds(minLat: Double, maxLat: Double, minLon: Double, maxLon: Double) {
+    fun updateVisibleBounds(
+        minLat: Double,
+        maxLat: Double,
+        minLon: Double,
+        maxLon: Double,
+    ) {
         if (!minLat.isFinite() || !maxLat.isFinite() || !minLon.isFinite() || !maxLon.isFinite()) return
         val latSpan = abs(maxLat - minLat)
         val lonSpan = abs(maxLon - minLon)
@@ -2322,32 +2526,41 @@ class MapViewModel : ViewModel() {
         persistCameraTarget(
             latitude = bounds.centerLat,
             longitude = bounds.centerLon,
-            zoom = _zoomLevel.value
+            zoom = _zoomLevel.value,
         )
         scheduleBeaconFetchForBounds(bounds)
     }
 
-    private fun scheduleBeaconFetchForBounds(bounds: BoundingBox, debounceMs: Long = 400L) {
+    private fun scheduleBeaconFetchForBounds(
+        bounds: BoundingBox,
+        debounceMs: Long = 400L,
+    ) {
         fetchProximityLayersForBounds(bounds, debounceMs, DiscoveryFetchSlot.MapViewport)
     }
 
-    private fun persistCameraTarget(latitude: Double, longitude: Double, zoom: Double) {
+    private fun persistCameraTarget(
+        latitude: Double,
+        longitude: Double,
+        zoom: Double,
+    ) {
         if (!latitude.isFinite() || !longitude.isFinite() || !zoom.isFinite()) return
         val z = zoom.coerceIn(2.0, 20.0)
         // Never persist continent/world scale; it becomes the next session's "restore camera".
         if (z < 4.0) return
 
-        val candidate = CameraTarget(
-            latitude = latitude,
-            longitude = longitude,
-            zoom = z
-        )
+        val candidate =
+            CameraTarget(
+                latitude = latitude,
+                longitude = longitude,
+                zoom = z,
+            )
 
         val previous = lastKnownCameraTarget
-        val changed = previous == null ||
-            abs(previous.latitude - candidate.latitude) > 0.000001 ||
-            abs(previous.longitude - candidate.longitude) > 0.000001 ||
-            abs(previous.zoom - candidate.zoom) > 0.01
+        val changed =
+            previous == null ||
+                abs(previous.latitude - candidate.latitude) > 0.000001 ||
+                abs(previous.longitude - candidate.longitude) > 0.000001 ||
+                abs(previous.zoom - candidate.zoom) > 0.01
 
         if (changed) {
             lastKnownCameraTarget = candidate
@@ -2369,30 +2582,37 @@ class MapViewModel : ViewModel() {
         }
 
         val center = _cameraTarget.value
-        val centerLat = center?.latitude ?: run {
-            val connections = validConnections()
-            if (connections.isNotEmpty()) {
-                connections.mapNotNull { it.connectionMapGeo()?.lat }.average()
-            } else return
-        }
-        val centerLon = center?.longitude ?: run {
-            val connections = validConnections()
-            if (connections.isNotEmpty()) {
-                connections.mapNotNull { it.connectionMapGeo()?.lon }.average()
-            } else return
-        }
+        val centerLat =
+            center?.latitude ?: run {
+                val connections = validConnections()
+                if (connections.isNotEmpty()) {
+                    connections.mapNotNull { it.connectionMapGeo()?.lat }.average()
+                } else {
+                    return
+                }
+            }
+        val centerLon =
+            center?.longitude ?: run {
+                val connections = validConnections()
+                if (connections.isNotEmpty()) {
+                    connections.mapNotNull { it.connectionMapGeo()?.lon }.average()
+                } else {
+                    return
+                }
+            }
 
         // Estimate viewport span based on zoom level
         // At zoom 10, ~30 miles visible; at zoom 16, ~0.5 miles
         val latSpan = 180.0 / 2.0.pow(_zoomLevel.value - 1)
         val lonSpan = 360.0 / 2.0.pow(_zoomLevel.value - 1)
 
-        _visibleBounds.value = BoundingBox(
-            minLat = centerLat - latSpan / 2,
-            maxLat = centerLat + latSpan / 2,
-            minLon = centerLon - lonSpan / 2,
-            maxLon = centerLon + lonSpan / 2
-        )
+        _visibleBounds.value =
+            BoundingBox(
+                minLat = centerLat - latSpan / 2,
+                maxLat = centerLat + latSpan / 2,
+                minLon = centerLon - lonSpan / 2,
+                maxLon = centerLon + lonSpan / 2,
+            )
     }
 
     private fun anchorLatLonForProgrammaticCamera(): Pair<Double, Double>? {
@@ -2440,8 +2660,7 @@ class MapViewModel : ViewModel() {
      * inside the ViewModel (avoids races with Compose where [renderData] already flipped to pins).
      */
     fun onClusterTappedFromMap(clusterId: String) {
-        fun findCluster(): MapCluster? =
-            (_renderData.value as? MapRenderData.Clusters)?.clusters?.find { it.id == clusterId }
+        fun findCluster(): MapCluster? = (_renderData.value as? MapRenderData.Clusters)?.clusters?.find { it.id == clusterId }
 
         findCluster()?.let {
             onClusterTapped(it)
@@ -2460,20 +2679,21 @@ class MapViewModel : ViewModel() {
      */
     fun onClusterTapped(cluster: MapCluster) {
         _selection.value = MapSelection.ClusterSelected(cluster)
-        
+
         // Calculate zoom level to fit the cluster bounds
         val bounds = cluster.boundingBox
         val targetZoom = maxOf(clusterThreshold + 1, calculateZoomForBounds(bounds))
         _pinRenderZoomFloor.value = maxOf(clusterThreshold + 0.25, targetZoom)
         _stickyPinMode.value = true
-        
+
         // Animate camera to cluster center with appropriate zoom
-        _cameraTarget.value = CameraTarget(
-            latitude = bounds.centerLat,
-            longitude = bounds.centerLon,
-            zoom = targetZoom
-        )
-        
+        _cameraTarget.value =
+            CameraTarget(
+                latitude = bounds.centerLat,
+                longitude = bounds.centerLon,
+                zoom = targetZoom,
+            )
+
         // Update zoom level to trigger rendering change
         pendingProgrammaticZoomTarget = targetZoom
         pendingProgrammaticZoomSetAtMs = Clock.System.now().toEpochMilliseconds()
@@ -2490,22 +2710,27 @@ class MapViewModel : ViewModel() {
             val currentUserId = AppDataManager.currentUser.value?.id
             val otherUserId = point.connection.user_ids.find { it != currentUserId }
             val otherUser = otherUserId?.let { AppDataManager.getConnectedUser(it) }
-            
+
             _selection.value = MapSelection.ConnectionSelected(point, otherUser)
         }
     }
 
-    fun onCommunityHubTapped(hub: CommunityHubPin, seedDistanceMeters: Double? = null) {
-        val quickDistance = seedDistanceMeters?.takeIf { it.isFinite() && it < Double.MAX_VALUE }
-            ?: hub.reportedDistanceMeters?.takeIf { it.isFinite() }
-            ?: distanceToHubFromCachedLocation(hub)
+    fun onCommunityHubTapped(
+        hub: CommunityHubPin,
+        seedDistanceMeters: Double? = null,
+    ) {
+        val quickDistance =
+            seedDistanceMeters?.takeIf { it.isFinite() && it < Double.MAX_VALUE }
+                ?: hub.reportedDistanceMeters?.takeIf { it.isFinite() }
+                ?: distanceToHubFromCachedLocation(hub)
         val quickCanJoin = quickDistance?.let { it <= hubJoinRadiusMeters(hub) }
 
-        _selection.value = MapSelection.HubSelected(
-            hub = hub,
-            distanceMeters = quickDistance,
-            canJoinGeofence = quickCanJoin,
-        )
+        _selection.value =
+            MapSelection.HubSelected(
+                hub = hub,
+                distanceMeters = quickDistance,
+                canJoinGeofence = quickCanJoin,
+            )
 
         viewModelScope.launch(Dispatchers.Default) {
             val loc = resolveFastMapLocation() ?: return@launch
@@ -2513,15 +2738,15 @@ class MapViewModel : ViewModel() {
             val canJoin = distance <= hubJoinRadiusMeters(hub)
             val current = _selection.value as? MapSelection.HubSelected ?: return@launch
             if (current.hub.hubId != hub.hubId) return@launch
-            _selection.value = current.copy(
-                distanceMeters = distance,
-                canJoinGeofence = canJoin,
-            )
+            _selection.value =
+                current.copy(
+                    distanceMeters = distance,
+                    canJoinGeofence = canJoin,
+                )
         }
     }
 
-    private fun hubJoinRadiusMeters(hub: CommunityHubPin): Double =
-        hub.radiusMeters.coerceAtLeast(1).toDouble()
+    private fun hubJoinRadiusMeters(hub: CommunityHubPin): Double = hub.radiusMeters.coerceAtLeast(1).toDouble()
 
     private fun distanceToHubFromCachedLocation(hub: CommunityHubPin): Double? {
         val cached = AppDataManager.lastKnownDeviceLocation.value ?: return null
@@ -2536,11 +2761,12 @@ class MapViewModel : ViewModel() {
         )
 
     fun onMapPinTapped(pin: MapPin) {
-        val overlaps = overlappingMapPins(
-            tapped = pin,
-            visiblePins = currentVisibleMapPins(),
-            zoomLevel = _zoomLevel.value,
-        )
+        val overlaps =
+            overlappingMapPins(
+                tapped = pin,
+                visiblePins = currentVisibleMapPins(),
+                zoomLevel = _zoomLevel.value,
+            )
         if (overlaps.size > 1) {
             _selection.value = MapSelection.OverlappingPinsSelected(overlaps)
             return
@@ -2559,15 +2785,16 @@ class MapViewModel : ViewModel() {
         val connectedUsers = AppDataManager.connectedUsers.value
         return when (val state = _renderData.value) {
             is MapRenderData.IndividualPins -> {
-                val connections = state.points.map { point ->
-                    val peerId = point.connection.user_ids.firstOrNull { it != currentUserId }
-                    val peer = peerId?.let { connectedUsers[it] }
-                    MapPin.fromConnectionPoint(
-                        point,
-                        imageUrl = peer?.image,
-                        avatarSeed = peerId ?: point.connection.id,
-                    )
-                }
+                val connections =
+                    state.points.map { point ->
+                        val peerId = point.connection.user_ids.firstOrNull { it != currentUserId }
+                        val peer = peerId?.let { connectedUsers[it] }
+                        MapPin.fromConnectionPoint(
+                            point,
+                            imageUrl = peer?.image,
+                            avatarSeed = peerId ?: point.connection.id,
+                        )
+                    }
                 val beacons = state.beacons.map { MapPin.fromBeacon(it) }
                 connections + beacons + hubs
             }
@@ -2589,12 +2816,13 @@ class MapViewModel : ViewModel() {
             onBeaconPinTapped(raw)
         } else {
             val state = _renderData.value
-            val point = when (state) {
-                is MapRenderData.IndividualPins ->
-                    state.points.firstOrNull { it.connection.id == pin.id }
-                is MapRenderData.Clusters ->
-                    state.clusters.flatMap { it.points }.firstOrNull { it.connection.id == pin.id }
-            }
+            val point =
+                when (state) {
+                    is MapRenderData.IndividualPins ->
+                        state.points.firstOrNull { it.connection.id == pin.id }
+                    is MapRenderData.Clusters ->
+                        state.clusters.flatMap { it.points }.firstOrNull { it.connection.id == pin.id }
+                }
             if (point != null) onConnectionTapped(point)
         }
     }
@@ -2602,7 +2830,9 @@ class MapViewModel : ViewModel() {
     private fun refreshSelectedConnectionUser(connectedUsers: Map<String, User>) {
         val selected = _selection.value as? MapSelection.ConnectionSelected ?: return
         val currentUserId = AppDataManager.currentUser.value?.id
-        val otherUserId = selected.point.connection.user_ids.find { it != currentUserId } ?: return
+        val otherUserId =
+            selected.point.connection.user_ids
+                .find { it != currentUserId } ?: return
         val refreshedUser = connectedUsers[otherUserId] ?: return
         if (refreshedUser != selected.otherUser) {
             _selection.value = selected.copy(otherUser = refreshedUser)
@@ -2646,16 +2876,18 @@ class MapViewModel : ViewModel() {
      */
     fun onMapScreenEntered() {
         if (_cameraTarget.value == null) {
-            val raw = lastKnownCameraTarget
-                ?: deviceLocationCameraTarget()
-                ?: _defaultCameraTarget.value
+            val raw =
+                lastKnownCameraTarget
+                    ?: deviceLocationCameraTarget()
+                    ?: _defaultCameraTarget.value
             if (raw != null) {
                 val safeZoom = raw.zoom.coerceIn(4.0, 20.0)
-                val target = if (abs(raw.zoom - safeZoom) > 0.01) {
-                    CameraTarget(latitude = raw.latitude, longitude = raw.longitude, zoom = safeZoom)
-                } else {
-                    raw
-                }
+                val target =
+                    if (abs(raw.zoom - safeZoom) > 0.01) {
+                        CameraTarget(latitude = raw.latitude, longitude = raw.longitude, zoom = safeZoom)
+                    } else {
+                        raw
+                    }
                 _cameraTarget.value = target
                 if (abs(_zoomLevel.value - target.zoom) > 0.01) {
                     _zoomLevel.value = target.zoom
@@ -2708,102 +2940,121 @@ class MapViewModel : ViewModel() {
         discoveryProximityJob?.cancel()
         val seq = ++discoveryFetchSeq
         if (showPulse) _discoveryFeedLoading.value = true
-        discoveryProximityJob = viewModelScope.launch {
-            var fetchRan = false
-            val pulseStartedAtMs = if (showPulse) {
-                kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
-            } else {
-                0L
-            }
-            try {
-            val centers = resolveDiscoveryProximityCenters()
-            if (centers.isEmpty()) return@launch
-            if (seq != discoveryFetchSeq) return@launch
-
-            val layers = _selectedLayerFilters.value
-            val wantHubs = layersWantHubFetch(layers)
-            val wantBeacons = layersWantBeaconFetch(layers)
-            if (!wantHubs && !wantBeacons) return@launch
-            fetchRan = true
-
-            coroutineScope {
-                if (wantHubs) {
-                    val hubRows = centers.map { (lat, lon) ->
-                        async {
-                            val bounds = boundsAroundPoint(lat, lon, discoveryProximityRadiusMeters)
-                            mapBeaconRepository.fetchNearbyCommunityHubs(
-                                minLat = bounds.minLat,
-                                maxLat = bounds.maxLat,
-                                minLon = bounds.minLon,
-                                maxLon = bounds.maxLon,
-                            ).getOrNull().orEmpty()
-                        }
-                    }.awaitAll().flatten()
-                    val incoming = hubRows.map { dto ->
-                        CommunityHubPin(
-                            hubId = dto.hubId,
-                            name = dto.name,
-                            latitude = dto.latitude,
-                            longitude = dto.longitude,
-                            radiusMeters = dto.radiusMeters,
-                            activeUserCount = dto.activeUserCount,
-                            reportedDistanceMeters = dto.distanceMeters,
-                        )
-                    }
-                    if (incoming.isNotEmpty()) {
-                        _communityHubs.update { current ->
-                            mergeCommunityHubLists(current, filterDismissedCommunityHubs(incoming))
-                        }
-                        AppDataManager.mergeCachedCommunityHubsFromDto(hubRows)
-                    }
-                }
-                if (wantBeacons) {
-                    val beaconRows = centers.map { (lat, lon) ->
-                        async {
-                            val bounds = boundsAroundPoint(lat, lon, discoveryProximityRadiusMeters)
-                            mapBeaconRepository.fetchLocalBeacons(
-                                minLat = bounds.minLat,
-                                maxLat = bounds.maxLat,
-                                minLon = bounds.minLon,
-                                maxLon = bounds.maxLon,
-                                beaconTypeFilters = beaconTypesQueryForLayers(layers),
-                            ).getOrNull().orEmpty()
-                        }
-                    }.awaitAll().flatten()
-                    if (beaconRows.isNotEmpty()) {
-                        _mapBeacons.update { current -> mergeMapBeaconLists(current, beaconRows) }
-                        AppDataManager.mergeCachedMapBeacons(beaconRows)
-                        hydrateEventEngagementFromServer()
-                    }
-                }
-            }
-            } finally {
-                if (seq == discoveryFetchSeq) {
+        discoveryProximityJob =
+            viewModelScope.launch {
+                var fetchRan = false
+                val pulseStartedAtMs =
                     if (showPulse) {
-                        // Hold the indicator long enough for Material pull-to-refresh to settle
-                        // instead of snapping shut on a fast network response.
-                        val elapsed = kotlinx.datetime.Clock.System.now().toEpochMilliseconds() -
-                            pulseStartedAtMs
-                        val remaining = 520L - elapsed
-                        if (remaining > 0L) delay(remaining)
-                        _discoveryFeedLoading.value = false
+                        kotlinx.datetime.Clock.System
+                            .now()
+                            .toEpochMilliseconds()
+                    } else {
+                        0L
                     }
-                    if (markInitialComplete) {
-                        val hasFeedData = _mapBeacons.value.isNotEmpty() ||
-                            _communityHubs.value.isNotEmpty() ||
-                            AppDataManager.prefetchedMapBeacons.value.isNotEmpty() ||
-                            AppDataManager.prefetchedCommunityHubs.value.isNotEmpty()
-                        when {
-                            fetchRan || hasFeedData -> completeDiscoveryPrefetchAfterSuccess()
-                            !canEverResolveProximityCenters() -> finishDiscoveryPrefetchAttempt()
-                            discoveryPrefetchAttempts >= maxDiscoveryPrefetchAttempts ->
-                                finishDiscoveryPrefetchAttempt()
-                            else -> scheduleDiscoveryPrefetchRetry()
+                try {
+                    val centers = resolveDiscoveryProximityCenters()
+                    if (centers.isEmpty()) return@launch
+                    if (seq != discoveryFetchSeq) return@launch
+
+                    val layers = _selectedLayerFilters.value
+                    val wantHubs = layersWantHubFetch(layers)
+                    val wantBeacons = layersWantBeaconFetch(layers)
+                    if (!wantHubs && !wantBeacons) return@launch
+                    fetchRan = true
+
+                    coroutineScope {
+                        if (wantHubs) {
+                            val hubRows =
+                                centers
+                                    .map { (lat, lon) ->
+                                        async {
+                                            val bounds = boundsAroundPoint(lat, lon, discoveryProximityRadiusMeters)
+                                            mapBeaconRepository
+                                                .fetchNearbyCommunityHubs(
+                                                    minLat = bounds.minLat,
+                                                    maxLat = bounds.maxLat,
+                                                    minLon = bounds.minLon,
+                                                    maxLon = bounds.maxLon,
+                                                ).getOrNull()
+                                                .orEmpty()
+                                        }
+                                    }.awaitAll()
+                                    .flatten()
+                            val incoming =
+                                hubRows.map { dto ->
+                                    CommunityHubPin(
+                                        hubId = dto.hubId,
+                                        name = dto.name,
+                                        latitude = dto.latitude,
+                                        longitude = dto.longitude,
+                                        radiusMeters = dto.radiusMeters,
+                                        activeUserCount = dto.activeUserCount,
+                                        reportedDistanceMeters = dto.distanceMeters,
+                                    )
+                                }
+                            if (incoming.isNotEmpty()) {
+                                _communityHubs.update { current ->
+                                    mergeCommunityHubLists(current, filterDismissedCommunityHubs(incoming))
+                                }
+                                AppDataManager.mergeCachedCommunityHubsFromDto(hubRows)
+                            }
+                        }
+                        if (wantBeacons) {
+                            val beaconRows =
+                                centers
+                                    .map { (lat, lon) ->
+                                        async {
+                                            val bounds = boundsAroundPoint(lat, lon, discoveryProximityRadiusMeters)
+                                            mapBeaconRepository
+                                                .fetchLocalBeacons(
+                                                    minLat = bounds.minLat,
+                                                    maxLat = bounds.maxLat,
+                                                    minLon = bounds.minLon,
+                                                    maxLon = bounds.maxLon,
+                                                    beaconTypeFilters = beaconTypesQueryForLayers(layers),
+                                                ).getOrNull()
+                                                .orEmpty()
+                                        }
+                                    }.awaitAll()
+                                    .flatten()
+                            if (beaconRows.isNotEmpty()) {
+                                _mapBeacons.update { current -> mergeMapBeaconLists(current, beaconRows) }
+                                AppDataManager.mergeCachedMapBeacons(beaconRows)
+                                hydrateEventEngagementFromServer()
+                            }
+                        }
+                    }
+                } finally {
+                    if (seq == discoveryFetchSeq) {
+                        if (showPulse) {
+                            // Hold the indicator long enough for Material pull-to-refresh to settle
+                            // instead of snapping shut on a fast network response.
+                            val elapsed =
+                                kotlinx.datetime.Clock.System
+                                    .now()
+                                    .toEpochMilliseconds() -
+                                    pulseStartedAtMs
+                            val remaining = 520L - elapsed
+                            if (remaining > 0L) delay(remaining)
+                            _discoveryFeedLoading.value = false
+                        }
+                        if (markInitialComplete) {
+                            val hasFeedData =
+                                _mapBeacons.value.isNotEmpty() ||
+                                    _communityHubs.value.isNotEmpty() ||
+                                    AppDataManager.prefetchedMapBeacons.value.isNotEmpty() ||
+                                    AppDataManager.prefetchedCommunityHubs.value.isNotEmpty()
+                            when {
+                                fetchRan || hasFeedData -> completeDiscoveryPrefetchAfterSuccess()
+                                !canEverResolveProximityCenters() -> finishDiscoveryPrefetchAttempt()
+                                discoveryPrefetchAttempts >= maxDiscoveryPrefetchAttempts ->
+                                    finishDiscoveryPrefetchAttempt()
+                                else -> scheduleDiscoveryPrefetchRetry()
+                            }
                         }
                     }
                 }
             }
-        }
     }
 
     /**
@@ -2821,10 +3072,11 @@ class MapViewModel : ViewModel() {
         // Prefer a live/coarse GPS fix early so Android does not wait solely on map bounds.
         // Cap wait so simulators with Location=None do not block discovery for seconds.
         if (raw.isEmpty() && locationService.hasLocationPermission()) {
-            val gps = withTimeoutOrNull(1_200L) {
-                locationService.getCurrentLocation()
-                    ?: locationService.getHighAccuracyLocation(1_000L)
-            }
+            val gps =
+                withTimeoutOrNull(1_200L) {
+                    locationService.getCurrentLocation()
+                        ?: locationService.getHighAccuracyLocation(1_000L)
+                }
             if (gps != null) {
                 AppDataManager.noteDeviceLocation(gps.latitude, gps.longitude)
                 raw += gps.latitude to gps.longitude
@@ -2865,9 +3117,10 @@ class MapViewModel : ViewModel() {
         if (centers.isEmpty()) return emptyList()
         val out = mutableListOf<Pair<Double, Double>>()
         for ((lat, lon) in centers) {
-            val duplicate = out.any { (existingLat, existingLon) ->
-                haversineDistance(existingLat, existingLon, lat, lon) < 2_000.0
-            }
+            val duplicate =
+                out.any { (existingLat, existingLon) ->
+                    haversineDistance(existingLat, existingLon, lat, lon) < 2_000.0
+                }
             if (!duplicate) out += lat to lon
         }
         return out
@@ -2878,25 +3131,31 @@ class MapViewModel : ViewModel() {
         longitude: Double,
         confirmedBeacon: MapBeacon,
     ) {
-        val bounds = _visibleBounds.value
-            ?: boundsAroundPoint(latitude, longitude, discoveryProximityRadiusMeters)
-        mapBeaconRepository.fetchLocalBeacons(
-            minLat = bounds.minLat,
-            maxLat = bounds.maxLat,
-            minLon = bounds.minLon,
-            maxLon = bounds.maxLon,
-            beaconTypeFilters = beaconTypesQueryForLayers(_selectedLayerFilters.value),
-        ).onSuccess { list ->
-            _mapBeacons.update { current ->
-                mergeMapBeaconLists(
-                    mergeMapBeaconLists(current, listOf(confirmedBeacon)),
-                    list,
-                )
+        val bounds =
+            _visibleBounds.value
+                ?: boundsAroundPoint(latitude, longitude, discoveryProximityRadiusMeters)
+        mapBeaconRepository
+            .fetchLocalBeacons(
+                minLat = bounds.minLat,
+                maxLat = bounds.maxLat,
+                minLon = bounds.minLon,
+                maxLon = bounds.maxLon,
+                beaconTypeFilters = beaconTypesQueryForLayers(_selectedLayerFilters.value),
+            ).onSuccess { list ->
+                _mapBeacons.update { current ->
+                    mergeMapBeaconLists(
+                        mergeMapBeaconLists(current, listOf(confirmedBeacon)),
+                        list,
+                    )
+                }
             }
-        }
     }
 
-    private fun boundsAroundPoint(lat: Double, lon: Double, radiusMeters: Double): BoundingBox {
+    private fun boundsAroundPoint(
+        lat: Double,
+        lon: Double,
+        radiusMeters: Double,
+    ): BoundingBox {
         val latDelta = radiusMeters / 111_320.0
         val lonScale = kotlin.math.cos(lat * kotlin.math.PI / 180.0).coerceAtLeast(0.2)
         val lonDelta = radiusMeters / (111_320.0 * lonScale)
@@ -2917,77 +3176,82 @@ class MapViewModel : ViewModel() {
     ) {
         if (AppDataManager.currentUser.value == null) return
 
-        val seq = when (jobSlot) {
-            DiscoveryFetchSlot.MapViewport -> {
-                beaconPollJob?.cancel()
-                ++beaconFetchSeq
-            }
-            DiscoveryFetchSlot.Discovery -> ++discoveryFetchSeq
-        }
-
-        val job = viewModelScope.launch {
-            if (debounceMs > 0L) delay(debounceMs)
+        val seq =
             when (jobSlot) {
-                DiscoveryFetchSlot.MapViewport -> if (seq != beaconFetchSeq) return@launch
-                DiscoveryFetchSlot.Discovery -> if (seq != discoveryFetchSeq) return@launch
+                DiscoveryFetchSlot.MapViewport -> {
+                    beaconPollJob?.cancel()
+                    ++beaconFetchSeq
+                }
+                DiscoveryFetchSlot.Discovery -> ++discoveryFetchSeq
             }
-            val layers = _selectedLayerFilters.value
-            val wantHubs = layersWantHubFetch(layers)
-            val wantBeacons = layersWantBeaconFetch(layers)
-            if (!wantHubs && !wantBeacons) return@launch
 
-            coroutineScope {
-                val hubsDeferred = if (wantHubs) {
-                    async {
-                        mapBeaconRepository.fetchNearbyCommunityHubs(
-                            minLat = bounds.minLat,
-                            maxLat = bounds.maxLat,
-                            minLon = bounds.minLon,
-                            maxLon = bounds.maxLon,
-                        )
-                    }
-                } else {
-                    null
+        val job =
+            viewModelScope.launch {
+                if (debounceMs > 0L) delay(debounceMs)
+                when (jobSlot) {
+                    DiscoveryFetchSlot.MapViewport -> if (seq != beaconFetchSeq) return@launch
+                    DiscoveryFetchSlot.Discovery -> if (seq != discoveryFetchSeq) return@launch
                 }
-                val beaconsDeferred = if (wantBeacons) {
-                    async {
-                        mapBeaconRepository.fetchLocalBeacons(
-                            minLat = bounds.minLat,
-                            maxLat = bounds.maxLat,
-                            minLon = bounds.minLon,
-                            maxLon = bounds.maxLon,
-                            beaconTypeFilters = beaconTypesQueryForLayers(layers),
-                        )
-                    }
-                } else {
-                    null
-                }
+                val layers = _selectedLayerFilters.value
+                val wantHubs = layersWantHubFetch(layers)
+                val wantBeacons = layersWantBeaconFetch(layers)
+                if (!wantHubs && !wantBeacons) return@launch
 
-                hubsDeferred?.await()?.onSuccess { rows ->
-                    val incoming = rows.map { dto ->
-                        CommunityHubPin(
-                            hubId = dto.hubId,
-                            name = dto.name,
-                            latitude = dto.latitude,
-                            longitude = dto.longitude,
-                            radiusMeters = dto.radiusMeters,
-                            activeUserCount = dto.activeUserCount,
-                            reportedDistanceMeters = dto.distanceMeters,
-                        )
+                coroutineScope {
+                    val hubsDeferred =
+                        if (wantHubs) {
+                            async {
+                                mapBeaconRepository.fetchNearbyCommunityHubs(
+                                    minLat = bounds.minLat,
+                                    maxLat = bounds.maxLat,
+                                    minLon = bounds.minLon,
+                                    maxLon = bounds.maxLon,
+                                )
+                            }
+                        } else {
+                            null
+                        }
+                    val beaconsDeferred =
+                        if (wantBeacons) {
+                            async {
+                                mapBeaconRepository.fetchLocalBeacons(
+                                    minLat = bounds.minLat,
+                                    maxLat = bounds.maxLat,
+                                    minLon = bounds.minLon,
+                                    maxLon = bounds.maxLon,
+                                    beaconTypeFilters = beaconTypesQueryForLayers(layers),
+                                )
+                            }
+                        } else {
+                            null
+                        }
+
+                    hubsDeferred?.await()?.onSuccess { rows ->
+                        val incoming =
+                            rows.map { dto ->
+                                CommunityHubPin(
+                                    hubId = dto.hubId,
+                                    name = dto.name,
+                                    latitude = dto.latitude,
+                                    longitude = dto.longitude,
+                                    radiusMeters = dto.radiusMeters,
+                                    activeUserCount = dto.activeUserCount,
+                                    reportedDistanceMeters = dto.distanceMeters,
+                                )
+                            }
+                        _communityHubs.update { current ->
+                            mergeCommunityHubLists(current, filterDismissedCommunityHubs(incoming))
+                        }
+                        AppDataManager.mergeCachedCommunityHubsFromDto(rows)
                     }
-                    _communityHubs.update { current ->
-                        mergeCommunityHubLists(current, filterDismissedCommunityHubs(incoming))
-                    }
-                    AppDataManager.mergeCachedCommunityHubsFromDto(rows)
-                }
-                beaconsDeferred?.await()?.onSuccess { list ->
-                    if (list.isNotEmpty()) {
-                        _mapBeacons.update { current -> mergeMapBeaconLists(current, list) }
-                        AppDataManager.mergeCachedMapBeacons(list)
+                    beaconsDeferred?.await()?.onSuccess { list ->
+                        if (list.isNotEmpty()) {
+                            _mapBeacons.update { current -> mergeMapBeaconLists(current, list) }
+                            AppDataManager.mergeCachedMapBeacons(list)
+                        }
                     }
                 }
             }
-        }
 
         when (jobSlot) {
             DiscoveryFetchSlot.MapViewport -> beaconPollJob = job
@@ -3020,27 +3284,32 @@ class MapViewModel : ViewModel() {
     fun getMapStats(): MapStats {
         val state = _mapState.value
         if (state !is MapState.Success) return MapStats(0, 0, 0, 0)
-        
+
         val connections = state.connections
-        val points = connections.mapNotNull { 
-            try { it.toMapPoint() } catch (e: Exception) { null }
-        }
-        
+        val points =
+            connections.mapNotNull {
+                try {
+                    it.toMapPoint()
+                } catch (e: Exception) {
+                    null
+                }
+            }
+
         return MapStats(
             totalConnections = connections.size,
             liveCount = points.count { it.timeState == TimeState.LIVE },
             recentCount = points.count { it.timeState == TimeState.RECENT },
-            archiveCount = points.count { it.timeState == TimeState.ARCHIVE }
+            archiveCount = points.count { it.timeState == TimeState.ARCHIVE },
         )
     }
-    
+
     /**
      * Connection junction updates handled by [RealtimeCoordinator] → [AppDataManager].
      */
     private fun subscribeToConnectionChanges() {
         // Intentionally empty — map reads AppDataManager.connections.
     }
-    
+
     override fun onCleared() {
         // Grab the channel ref before super.onCleared() kills viewModelScope.
         val channel = connectionsChannel
@@ -3056,24 +3325,31 @@ class MapViewModel : ViewModel() {
      * Send a nudge to a connection.
      * This sends a special emoji message ("👋") to the connection's chat.
      */
-    fun sendNudge(connectionId: String, otherUserName: String) {
+    fun sendNudge(
+        connectionId: String,
+        otherUserName: String,
+    ) {
         val currentUser = AppDataManager.currentUser.value ?: return
-        val connection = (mapState.value as? MapState.Success)
-            ?.connections?.firstOrNull { it.id == connectionId } ?: return
+        val connection =
+            (mapState.value as? MapState.Success)
+                ?.connections
+                ?.firstOrNull { it.id == connectionId } ?: return
         val chatId = connection.chat.id ?: return
 
         viewModelScope.launch {
             val currentName = currentUser.name ?: "Someone"
-            val msg = chatRepository.sendMessage(
-                chatId = chatId,
-                userId = currentUser.id,
-                content = "👋 $currentName nudged you!"
-            )
-            _nudgeResult.value = if (msg != null) {
-                "Nudge sent to $otherUserName!"
-            } else {
-                "Failed to send nudge"
-            }
+            val msg =
+                chatRepository.sendMessage(
+                    chatId = chatId,
+                    userId = currentUser.id,
+                    content = "👋 $currentName nudged you!",
+                )
+            _nudgeResult.value =
+                if (msg != null) {
+                    "Nudge sent to $otherUserName!"
+                } else {
+                    "Failed to send nudge"
+                }
         }
     }
 
@@ -3088,7 +3364,7 @@ class MapViewModel : ViewModel() {
 data class CameraTarget(
     val latitude: Double,
     val longitude: Double,
-    val zoom: Double
+    val zoom: Double,
 )
 
 /**
@@ -3098,7 +3374,7 @@ data class MapStats(
     val totalConnections: Int,
     val liveCount: Int,
     val recentCount: Int,
-    val archiveCount: Int
+    val archiveCount: Int,
 )
 
 /**
@@ -3108,18 +3384,7 @@ private data class Quadruple<A, B, C, D>(
     val first: A,
     val second: B,
     val third: C,
-    val fourth: D
-)
-
-/**
- * Helper for combining 5 flows
- */
-private data class Quintuple<A, B, C, D, E>(
-    val first: A,
-    val second: B,
-    val third: C,
     val fourth: D,
-    val fifth: E
 )
 
 private data class Sextuple<A, B, C, D, E, F>(
@@ -3128,7 +3393,7 @@ private data class Sextuple<A, B, C, D, E, F>(
     val third: C,
     val fourth: D,
     val fifth: E,
-    val sixth: F
+    val sixth: F,
 )
 
 private data class Septuple<A, B, C, D, E, F, G>(
@@ -3138,7 +3403,7 @@ private data class Septuple<A, B, C, D, E, F, G>(
     val fourth: D,
     val fifth: E,
     val sixth: F,
-    val seventh: G
+    val seventh: G,
 )
 
 private data class Octuple<A, B, C, D, E, F, G, H>(
