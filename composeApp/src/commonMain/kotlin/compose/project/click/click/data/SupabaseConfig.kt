@@ -1,20 +1,22 @@
-package compose.project.click.click.data
+@file:Suppress("ktlint:standard:max-line-length")
+
+package compose.project.click.click.data // pragma: allowlist secret
 
 import com.russhwolf.settings.Settings
+import compose.project.click.click.auth.LocalSessionCache // pragma: allowlist secret
+import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.createSupabaseClient
-import io.github.jan.supabase.serializer.KotlinXSerializer
 import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.auth.SettingsSessionManager
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.SessionStatus
-import io.github.jan.supabase.postgrest.Postgrest
-import io.github.jan.supabase.realtime.Realtime
-import io.github.jan.supabase.storage.Storage
-import compose.project.click.click.auth.LocalSessionCache
-import compose.project.click.click.data.storage.TokenStorage
 import io.github.jan.supabase.auth.user.UserInfo
 import io.github.jan.supabase.auth.user.UserSession
+import io.github.jan.supabase.createSupabaseClient
+import io.github.jan.supabase.postgrest.Postgrest
+import io.github.jan.supabase.realtime.Realtime
+import io.github.jan.supabase.serializer.KotlinXSerializer
+import io.github.jan.supabase.storage.Storage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -23,7 +25,6 @@ import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-
 
 object SupabaseConfig {
     private const val SUPABASE_URL = "https://lrgcwnmcscimkmslihxp.supabase.co"
@@ -42,15 +43,16 @@ object SupabaseConfig {
     val client: SupabaseClient by lazy {
         createSupabaseClient(
             supabaseUrl = SUPABASE_URL,
-            supabaseKey = SUPABASE_ANON_KEY
+            supabaseKey = SUPABASE_ANON_KEY,
         ) {
             httpEngine = createSupabaseHttpEngine()
-            defaultSerializer = KotlinXSerializer(
-                Json {
-                    ignoreUnknownKeys = true
-                    isLenient = true
-                },
-            )
+            defaultSerializer =
+                KotlinXSerializer(
+                    Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    },
+                )
             install(Auth) {
                 scheme = "click"
                 host = "login"
@@ -68,16 +70,11 @@ object SupabaseConfig {
     }
 
     /**
-     * Start observing session status changes from the Supabase SDK and
-     * sync every refreshed token into our dual-storage TokenStorage.
-     *
-     * This eliminates the root cause of "random logouts": the SDK refreshes
-     * tokens into SettingsSessionManager but our Keychain / EncryptedPrefs
-     * (TokenStorage) would go stale. Now they stay in sync.
-     */
-    /**
      * Imports a persisted session into the GoTrue client without triggering a network refresh.
      * Used for offline-first cold boot so UI can render before connectivity returns.
+     *
+     * Never call this when [client] already has a session — that overwrites a good
+     * SettingsSessionManager refresh token with a stale TokenStorage copy.
      */
     suspend fun importStoredSessionWithoutRefresh(tokenStorage: TokenStorage): Boolean {
         val accessToken = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() } ?: return false
@@ -86,37 +83,69 @@ object SupabaseConfig {
 
         val expiresAt = tokenStorage.getExpiresAt() ?: identity.expiresAtEpochMs
         val now = Clock.System.now().toEpochMilliseconds()
-        val expiresIn = if (expiresAt != null) {
-            val remaining = (expiresAt - now) / 1000
-            if (remaining > 0) remaining else 0L
-        } else {
-            3600L
-        }
+        val expiresIn =
+            if (expiresAt != null) {
+                val remaining = (expiresAt - now) / 1000
+                if (remaining > 0) remaining else 0L
+            } else {
+                3600L
+            }
 
         // Must populate user — importSession with user=null leaves currentUserOrNull() empty
         // even when the access token is valid (refreshSession then skips network), which broke
         // group_members listing ("requires an authenticated Supabase session").
-        val sessionUser = UserInfo(
-            id = identity.userId,
-            aud = "authenticated",
-            email = identity.email.takeIf { it.isNotBlank() },
-            userMetadata = buildJsonObject {
-                identity.name?.let { put("name", it) }
-            },
-        )
-        val session = UserSession(
-            accessToken = accessToken,
-            refreshToken = refreshToken,
-            expiresIn = expiresIn,
-            tokenType = tokenStorage.getTokenType() ?: "bearer",
-            user = sessionUser,
-        )
+        val sessionUser =
+            UserInfo(
+                id = identity.userId,
+                aud = "authenticated",
+                email = identity.email.takeIf { it.isNotBlank() },
+                userMetadata =
+                    buildJsonObject {
+                        identity.name?.let { put("name", it) }
+                    },
+            )
+        val session =
+            UserSession(
+                accessToken = accessToken,
+                refreshToken = refreshToken,
+                expiresIn = expiresIn,
+                tokenType = tokenStorage.getTokenType() ?: "bearer",
+                user = sessionUser,
+            )
         return runCatching {
             client.auth.importSession(session)
             true
         }.getOrDefault(false)
     }
 
+    /**
+     * Hydrate GoTrue from TokenStorage only when the SDK has no session. When a live session
+     * exists, copy it into TokenStorage so dual-store drift cannot poison the next refresh.
+     */
+    suspend fun importStoredSessionIfSdkEmpty(tokenStorage: TokenStorage): Boolean {
+        val existing = client.auth.currentSessionOrNull()
+        if (existing != null) {
+            runCatching {
+                tokenStorage.saveTokens(
+                    jwt = existing.accessToken,
+                    refreshToken = existing.refreshToken,
+                    expiresAt = existing.expiresAt?.toEpochMilliseconds(),
+                    tokenType = existing.tokenType,
+                )
+            }
+            return true
+        }
+        return importStoredSessionWithoutRefresh(tokenStorage)
+    }
+
+    /**
+     * Start observing session status changes from the Supabase SDK and
+     * sync every refreshed token into our dual-storage TokenStorage.
+     *
+     * This eliminates the root cause of "random logouts": the SDK refreshes
+     * tokens into SettingsSessionManager but our Keychain / EncryptedPrefs
+     * (TokenStorage) would go stale. Now they stay in sync.
+     */
     fun startSessionSync(tokenStorage: TokenStorage) {
         syncScope.launch {
             client.auth.sessionStatus.collect { status ->
@@ -127,7 +156,7 @@ object SupabaseConfig {
                             jwt = session.accessToken,
                             refreshToken = session.refreshToken,
                             expiresAt = session.expiresAt?.toEpochMilliseconds(),
-                            tokenType = session.tokenType
+                            tokenType = session.tokenType,
                         )
                     }
                     is SessionStatus.NotAuthenticated -> {
@@ -141,4 +170,3 @@ object SupabaseConfig {
         }
     }
 }
-

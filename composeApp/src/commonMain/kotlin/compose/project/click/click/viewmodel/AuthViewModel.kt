@@ -1,19 +1,21 @@
-package compose.project.click.click.viewmodel
+@file:Suppress("ktlint:standard:max-line-length")
+
+package compose.project.click.click.viewmodel // pragma: allowlist secret
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import compose.project.click.click.auth.AuthBootFastPath
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.data.SupabaseConfig
-import compose.project.click.click.data.displayNameFromMetadata
-import compose.project.click.click.data.repository.AuthRepository
-import compose.project.click.click.data.storage.TokenStorage
-import compose.project.click.click.util.isHardAuthFailure
-import compose.project.click.click.util.isOfflineNetworkFailure
-import compose.project.click.click.util.redactedRestMessage
+import compose.project.click.click.auth.AuthBootFastPath // pragma: allowlist secret
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
+import compose.project.click.click.data.displayNameFromMetadata // pragma: allowlist secret
+import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
+import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
+import compose.project.click.click.util.isHardAuthFailure // pragma: allowlist secret
+import compose.project.click.click.util.isOfflineNetworkFailure // pragma: allowlist secret
+import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.RefreshFailureCause
 import io.github.jan.supabase.auth.status.SessionStatus
@@ -22,17 +24,27 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 sealed class AuthState {
     object Idle : AuthState()
+
     object Loading : AuthState()
-    data class Success(val userId: String, val email: String, val name: String? = null) : AuthState()
-    data class Error(val message: String) : AuthState()
+
+    data class Success(
+        val userId: String,
+        val email: String,
+        val name: String? = null,
+    ) : AuthState()
+
+    data class Error(
+        val message: String,
+    ) : AuthState()
 }
 
 class AuthViewModel(
     private val tokenStorage: TokenStorage,
-    private val authRepository: AuthRepository = AuthRepository(tokenStorage)
+    private val authRepository: AuthRepository = AuthRepository(tokenStorage),
 ) : ViewModel() {
     var authState by mutableStateOf<AuthState>(AuthState.Loading)
         private set
@@ -48,8 +60,8 @@ class AuthViewModel(
     }
 
     /**
-     * OAuth profile hydration (birthday / first name) is enforced in [compose.project.click.click.App]
-     * once [AppDataManager] loads [public.users] — see [compose.project.click.click.data.models.isPublicUserProfileIncomplete].
+     * OAuth profile hydration (birthday / first name) is enforced in [App]
+     * once [AppDataManager] loads [public.users] — see [isPublicUserProfileIncomplete].
      *
      * Reflect deep-link-driven OAuth completion into the UI state machine (Phase 2 — C16).
      */
@@ -61,11 +73,12 @@ class AuthViewModel(
                         val user = status.session.user
                         if (user != null && !isAuthenticated) {
                             isAuthenticated = true
-                            authState = AuthState.Success(
-                                userId = user.id,
-                                email = user.email ?: "",
-                                name = user.displayNameFromMetadata(),
-                            )
+                            authState =
+                                AuthState.Success(
+                                    userId = user.id,
+                                    email = user.email ?: "",
+                                    name = user.displayNameFromMetadata(),
+                                )
                             AppDataManager.resetAndReload()
                         }
                     }
@@ -74,9 +87,10 @@ class AuthViewModel(
                         if (networkCause != null) {
                             restoreOfflineSessionIfPossible(networkCause.exception)
                         } else {
-                            val cause = (status.cause as? RefreshFailureCause.InternalServerError)
-                                ?.exception
-                                ?: Exception("Session refresh failed")
+                            val cause =
+                                (status.cause as? RefreshFailureCause.InternalServerError)
+                                    ?.exception
+                                    ?: Exception("Session refresh failed")
                             if (cause.isHardAuthFailure()) {
                                 viewModelScope.launch { forceSessionExpiredReLogin(cause) }
                             }
@@ -112,9 +126,8 @@ class AuthViewModel(
                 isAuthenticated = true
                 authState = cachedBoot
                 AppDataManager.primeOfflineBootCache()
-                // Import JWT into the SDK immediately so chat send/fetch/realtime aren't empty
-                // while background refresh is still running.
-                runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+                // Prefer live GoTrue session. Blind TokenStorage import overwrites a good refresh.
+                runCatching { SupabaseConfig.importStoredSessionIfSdkEmpty(tokenStorage) }
                 ensureSupabaseObserversStarted()
                 launch(Dispatchers.IO) { refreshSessionAndProfileInBackground() }
                 return@launch
@@ -123,21 +136,23 @@ class AuthViewModel(
             ensureSupabaseObserversStarted()
 
             try {
-                val userResult = if (authRepository.isAuthenticated()) {
-                    val user = authRepository.getCurrentUser()
-                    if (user != null) Result.success(user) else Result.failure(Exception("No user"))
-                } else {
-                    authRepository.restoreSession()
-                }
+                val userResult =
+                    if (authRepository.isAuthenticated()) {
+                        val user = authRepository.getCurrentUser()
+                        if (user != null) Result.success(user) else Result.failure(Exception("No user"))
+                    } else {
+                        authRepository.restoreSession()
+                    }
 
                 userResult.fold(
                     onSuccess = { user ->
                         isAuthenticated = true
-                        authState = AuthState.Success(
-                            userId = user.id,
-                            email = user.email ?: "",
-                            name = user.displayNameFromMetadata()
-                        )
+                        authState =
+                            AuthState.Success(
+                                userId = user.id,
+                                email = user.email ?: "",
+                                name = user.displayNameFromMetadata(),
+                            )
                         AppDataManager.primeOfflineBootCache()
                         launch(Dispatchers.IO) { refreshSessionAndProfileInBackground() }
                     },
@@ -150,7 +165,7 @@ class AuthViewModel(
                             AppDataManager.primeOfflineBootCache()
                             launch(Dispatchers.IO) { refreshSessionAndProfileInBackground() }
                         }
-                    }
+                    },
                 )
             } catch (e: Exception) {
                 val restoredOffline = restoreOfflineSessionIfPossible(e)
@@ -171,35 +186,33 @@ class AuthViewModel(
      */
     private suspend fun refreshSessionAndProfileInBackground() {
         withContext(Dispatchers.IO) {
-            if (SupabaseConfig.client.auth.currentSessionOrNull() == null) {
-                runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
-            }
+            runCatching { SupabaseConfig.importStoredSessionIfSdkEmpty(tokenStorage) }
             runCatching { authRepository.refreshSession() }
                 .onSuccess {
                     runCatching { SupabaseConfig.client.auth.startAutoRefreshForCurrentSession() }
-                }
-                .onFailure { error ->
+                }.onFailure { error ->
                     if (error.isHardAuthFailure()) {
                         forceSessionExpiredReLogin(error)
                         return@withContext
                     }
                     restoreOfflineSessionIfPossible(error)
                 }
-            authRepository.restoreSession()
+            authRepository
+                .restoreSession()
                 .onSuccess { user ->
                     isAuthenticated = true
-                    authState = AuthState.Success(
-                        userId = user.id,
-                        email = user.email ?: "",
-                        name = user.displayNameFromMetadata(),
-                    )
+                    authState =
+                        AuthState.Success(
+                            userId = user.id,
+                            email = user.email ?: "",
+                            name = user.displayNameFromMetadata(),
+                        )
                 }
         }
     }
 
     /** Test seam: mirrors the offline-first fast path used at cold boot. */
-    internal suspend fun probeOfflineBootState(): AuthState.Success? =
-        AuthBootFastPath.resolveLoggedInState(tokenStorage)
+    internal suspend fun probeOfflineBootState(): AuthState.Success? = AuthBootFastPath.resolveLoggedInState(tokenStorage)
 
     /**
      * Background coroutine that proactively refreshes the session every 45 minutes.
@@ -214,17 +227,15 @@ class AuthViewModel(
                 delay(45 * 60 * 1000L)
                 if (isAuthenticated) {
                     try {
-                        if (SupabaseConfig.client.auth.currentSessionOrNull() == null) {
-                            runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
-                        }
-                        authRepository.refreshSession()
+                        runCatching { SupabaseConfig.importStoredSessionIfSdkEmpty(tokenStorage) }
+                        authRepository
+                            .refreshSession()
                             .onSuccess {
                                 runCatching {
                                     SupabaseConfig.client.auth.startAutoRefreshForCurrentSession()
                                 }
                                 println("AuthViewModel: Background token refresh successful")
-                            }
-                            .onFailure { e ->
+                            }.onFailure { e ->
                                 println(
                                     "AuthViewModel: Background token refresh failed: " +
                                         e.redactedRestMessage(),
@@ -241,7 +252,10 @@ class AuthViewModel(
         }
     }
 
-    fun signInWithEmail(email: String, password: String) {
+    fun signInWithEmail(
+        email: String,
+        password: String,
+    ) {
         viewModelScope.launch {
             try {
                 ensureSupabaseObserversStarted()
@@ -252,17 +266,18 @@ class AuthViewModel(
                 result.fold(
                     onSuccess = { user ->
                         isAuthenticated = true
-                        authState = AuthState.Success(
-                            userId = user.id,
-                            email = user.email ?: email,
-                            name = user.displayNameFromMetadata()
-                        )
+                        authState =
+                            AuthState.Success(
+                                userId = user.id,
+                                email = user.email ?: email,
+                                name = user.displayNameFromMetadata(),
+                            )
                         scheduleAutoRefreshForCurrentSession()
                         AppDataManager.resetAndReload()
                     },
                     onFailure = { error ->
                         authState = AuthState.Error(error.message ?: "Failed to sign in")
-                    }
+                    },
                 )
             } catch (e: Exception) {
                 authState = AuthState.Error(e.message ?: "An error occurred during sign in")
@@ -286,11 +301,12 @@ class AuthViewModel(
                         val user = authRepository.getCurrentUser()
                         if (user != null) {
                             isAuthenticated = true
-                            authState = AuthState.Success(
-                                userId = user.id,
-                                email = user.email ?: "",
-                                name = user.displayNameFromMetadata(),
-                            )
+                            authState =
+                                AuthState.Success(
+                                    userId = user.id,
+                                    email = user.email ?: "",
+                                    name = user.displayNameFromMetadata(),
+                                )
                             scheduleAutoRefreshForCurrentSession()
                             AppDataManager.resetAndReload()
                         } else {
@@ -298,15 +314,17 @@ class AuthViewModel(
                         }
                     },
                     onFailure = { error ->
-                        authState = AuthState.Error(
-                            error.message ?: "Could not start Google sign-in right now.",
-                        )
+                        authState =
+                            AuthState.Error(
+                                error.message ?: "Could not start Google sign-in right now.",
+                            )
                     },
                 )
             } catch (e: Exception) {
-                authState = AuthState.Error(
-                    e.message ?: "Could not start Google sign-in right now.",
-                )
+                authState =
+                    AuthState.Error(
+                        e.message ?: "Could not start Google sign-in right now.",
+                    )
             } finally {
                 if (!awaitingAsyncCompletion && authState is AuthState.Loading) {
                     authState = AuthState.Idle
@@ -331,16 +349,18 @@ class AuthViewModel(
                         browserOpenedAwaitingDeepLink = true
                     },
                     onFailure = { error ->
-                        authState = AuthState.Error(
-                            error.message ?: "Could not start Apple sign-in right now.",
-                        )
+                        authState =
+                            AuthState.Error(
+                                error.message ?: "Could not start Apple sign-in right now.",
+                            )
                     },
                 )
             } catch (e: Exception) {
                 println("AuthViewModel: Apple sign-in failed: ${e.redactedRestMessage()}")
-                authState = AuthState.Error(
-                    e.message ?: "Could not start Apple sign-in right now.",
-                )
+                authState =
+                    AuthState.Error(
+                        e.message ?: "Could not start Apple sign-in right now.",
+                    )
             } finally {
                 if (!browserOpenedAwaitingDeepLink && authState is AuthState.Loading) {
                     authState = AuthState.Idle
@@ -363,23 +383,25 @@ class AuthViewModel(
                 ensureSupabaseObserversStarted()
                 authState = AuthState.Loading
 
-                val result = authRepository.signUpWithEmail(
-                    email = email,
-                    password = password,
-                    firstName = firstName,
-                    lastName = lastName,
-                    birthdayIso = birthdayIso,
-                )
+                val result =
+                    authRepository.signUpWithEmail(
+                        email = email,
+                        password = password,
+                        firstName = firstName,
+                        lastName = lastName,
+                        birthdayIso = birthdayIso,
+                    )
 
                 result.fold(
                     onSuccess = { user ->
                         fun finishSuccess() {
                             isAuthenticated = true
-                            authState = AuthState.Success(
-                                userId = user.id,
-                                email = user.email ?: email,
-                                name = user.displayNameFromMetadata()
-                            )
+                            authState =
+                                AuthState.Success(
+                                    userId = user.id,
+                                    email = user.email ?: email,
+                                    name = user.displayNameFromMetadata(),
+                                )
                             scheduleAutoRefreshForCurrentSession()
                             AppDataManager.resetAndReload()
                         }
@@ -392,7 +414,10 @@ class AuthViewModel(
                                 onFailure = { uploadErr ->
                                     finishSuccess()
                                     AppDataManager.postTransientUserMessage(
-                                        uploadErr.message?.lines()?.firstOrNull()?.take(200)
+                                        uploadErr.message
+                                            ?.lines()
+                                            ?.firstOrNull()
+                                            ?.take(200)
                                             ?: "Could not upload profile photo. You can add one later in Settings.",
                                     )
                                 },
@@ -403,7 +428,7 @@ class AuthViewModel(
                     },
                     onFailure = { error ->
                         authState = AuthState.Error(error.message ?: "Failed to create account")
-                    }
+                    },
                 )
             } catch (e: Exception) {
                 authState = AuthState.Error(e.message ?: "An error occurred during sign up")
@@ -428,7 +453,7 @@ class AuthViewModel(
                         isAuthenticated = false
                         authState = AuthState.Idle
                     }
-                }
+                },
             )
         } catch (e: Exception) {
             val keptOffline = restoreOfflineSessionIfPossible(e)
@@ -453,8 +478,51 @@ class AuthViewModel(
     /**
      * Hard auth failure (invalid/revoked refresh) — clear tokens and force re-login instead of
      * staying "logged in" with a dead JWT that makes chat/media look empty forever.
+     *
+     * Retry once from the live SDK session only (no TokenStorage re-import) in case the first
+     * failure was dual-store drift or a misclassified JWT expiry.
      */
     private suspend fun forceSessionExpiredReLogin(error: Throwable) {
+        val sdkSession = SupabaseConfig.client.auth.currentSessionOrNull()
+        if (sdkSession != null) {
+            val retry =
+                runCatching {
+                    withTimeout(12_000L) {
+                        SupabaseConfig.client.auth.refreshCurrentSession()
+                    }
+                }
+            val recovered =
+                retry.isSuccess &&
+                    SupabaseConfig.client.auth.currentSessionOrNull() != null
+            if (recovered) {
+                val session = SupabaseConfig.client.auth.currentSessionOrNull()
+                if (session != null) {
+                    runCatching {
+                        tokenStorage.saveTokens(
+                            jwt = session.accessToken,
+                            refreshToken = session.refreshToken,
+                            expiresAt = session.expiresAt?.toEpochMilliseconds(),
+                            tokenType = session.tokenType,
+                        )
+                    }
+                    runCatching { SupabaseConfig.client.auth.startAutoRefreshForCurrentSession() }
+                    println(
+                        "AuthViewModel: Recovered session after hard-failure retry " +
+                            "(original: ${error.redactedRestMessage()})",
+                    )
+                    return
+                }
+            }
+            val retryError = retry.exceptionOrNull()
+            if (retryError != null && !retryError.isHardAuthFailure()) {
+                println(
+                    "AuthViewModel: Hard-failure retry was soft; keeping session: " +
+                        retryError.redactedRestMessage(),
+                )
+                restoreOfflineSessionIfPossible(retryError)
+                return
+            }
+        }
         println(
             "AuthViewModel: Hard auth failure — forcing re-login: ${error.redactedRestMessage()}",
         )

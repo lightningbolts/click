@@ -1,10 +1,12 @@
-package compose.project.click.click.data.models
+@file:Suppress("ktlint:standard:max-line-length")
 
-import compose.project.click.click.sensors.HardwareVibeSnapshot
-import kotlinx.serialization.SerialName
+package compose.project.click.click.data.models // pragma: allowlist secret
+
+import compose.project.click.click.sensors.HardwareVibeSnapshot // pragma: allowlist secret
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 const val PENDING_SYNC_CONNECTION_PREFIX = "pending-sync:"
@@ -33,6 +35,11 @@ data class OnboardingState(
     // (see [OnboardingViewModel.needsPhase2Onboarding]).
     val welcomeSeen: Boolean = false,
     val avatarSetOrSkipped: Boolean = false,
+    /**
+     * New signups pick exactly 5 personality traits after interests.
+     * Defaults false; [OnboardingViewModel] skips the step for legacy-complete accounts.
+     */
+    val personalityCompleted: Boolean = false,
 ) {
     /**
      * Completion predicate for cold-start / restore.
@@ -40,14 +47,15 @@ data class OnboardingState(
      * Phase 2: Welcome + interests + avatar (permissions are contextual).
      */
     val isComplete: Boolean
-        get() = flowVersion >= ONBOARDING_FLOW_VERSION_COMPLETE &&
-            interestsCompleted &&
-            (permissionsCompleted || (welcomeSeen && avatarSetOrSkipped))
+        get() =
+            flowVersion >= ONBOARDING_FLOW_VERSION_COMPLETE &&
+                interestsCompleted &&
+                (permissionsCompleted || (welcomeSeen && avatarSetOrSkipped))
 }
 
 /**
  * Cold-start snapshot. Subjective proximity tags are not staged here; they flow from
- * [compose.project.click.click.viewmodel.ConnectionState.TaggingContext] into each `connections` row after creation.
+ * [ConnectionState.TaggingContext] into each `connections` row after creation.
  */
 @Serializable
 data class CachedAppSnapshot(
@@ -173,7 +181,10 @@ data class PendingConnectionDraft(
             id = localId,
             created = queuedAt,
             createdUtc = queuedInstant.toString(),
-            timeOfDayUtc = "${queuedTime.hour.toString().padStart(2, '0')}:${queuedTime.minute.toString().padStart(2, '0')}:${queuedTime.second.toString().padStart(2, '0')} UTC",
+            timeOfDayUtc = "${queuedTime.hour.toString().padStart(
+                2,
+                '0',
+            )}:${queuedTime.minute.toString().padStart(2, '0')}:${queuedTime.second.toString().padStart(2, '0')} UTC",
             // Placeholder for legacy `connections.expiry` serialization; not used for UI gating.
             expiry = queuedAt + (30L * 24 * 60 * 60 * 1000),
             geo_location = GeoLocation(lat = validLat, lon = validLon),

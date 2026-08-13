@@ -1,4 +1,4 @@
-package compose.project.click.click.notifications
+package compose.project.click.click.notifications // pragma: allowlist secret
 
 import android.Manifest
 import android.app.NotificationChannel
@@ -13,12 +13,12 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import compose.project.click.click.MainActivity
-import compose.project.click.click.calls.CallInvite
-import compose.project.click.click.calls.initCallManager
-import compose.project.click.click.calls.PlatformIncomingCallUi
-import compose.project.click.click.calls.parseIncomingCallPayload
-import compose.project.click.click.crypto.MessageCrypto
+import compose.project.click.click.MainActivity // pragma: allowlist secret
+import compose.project.click.click.calls.CallInvite // pragma: allowlist secret
+import compose.project.click.click.calls.PlatformIncomingCallUi // pragma: allowlist secret
+import compose.project.click.click.calls.initCallManager // pragma: allowlist secret
+import compose.project.click.click.calls.parseIncomingCallPayload // pragma: allowlist secret
+import compose.project.click.click.crypto.MessageCrypto // pragma: allowlist secret
 
 private const val CLICK_MESSAGES_CHANNEL_ID = "click_messages"
 private const val CLICK_MESSAGES_CHANNEL_NAME = "Click messages"
@@ -43,42 +43,66 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
         ensureNotificationChannel(applicationContext)
 
         val type = message.data["type"]
-        if (type == "disposable_reveal") {
-            if (!NotificationRuntimeState.getNotificationPreferences().messageNotificationsEnabled) {
+        val prefs = NotificationRuntimeState.getNotificationPreferences()
+        if (type == "incoming_call") {
+            if (!prefs.callNotificationsEnabled) {
                 return
             }
+            message.toIncomingCallInvite()?.let { invite ->
+                PlatformIncomingCallUi.showIncomingCall(invite)
+                compose.project.click.click.calls.CallSessionManager // pragma: allowlist secret
+                    .receiveIncomingPush(invite) // pragma: allowlist secret
+            }
+            return
+        }
+        val allowed =
+            when (type) {
+                "event_reminder" -> prefs.eventReminderNotificationsEnabled
+                "availability_match" -> prefs.availabilityMatchNotificationsEnabled
+                "hub_message" -> prefs.hubMessageNotificationsEnabled
+                else -> prefs.messageNotificationsEnabled
+            }
+        if (!allowed) {
+            return
+        }
+        if (type == "disposable_reveal") {
             val connectionId = message.data["connection_id"] ?: ""
             val chatId = message.data["chat_id"] ?: ""
             val deepLinkId = connectionId.ifBlank { chatId }
             val title = message.notification?.title ?: "Click Drops"
-            val body = message.notification?.body
-                ?: "📸 Your Click Drop has been revealed!"
-            val launchIntent = if (deepLinkId.isNotBlank()) {
-                MainActivity.createChatDeepLinkIntent(
-                    context = this,
-                    chatId = chatId,
-                    connectionId = connectionId,
+            val body =
+                message.notification?.body
+                    ?: "📸 Your Click Drop has been revealed!"
+            val launchIntent =
+                if (deepLinkId.isNotBlank()) {
+                    MainActivity.createChatDeepLinkIntent(
+                        context = this,
+                        chatId = chatId,
+                        connectionId = connectionId,
+                    )
+                } else {
+                    packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    } ?: return
+                }
+            val pendingIntent =
+                PendingIntent.getActivity(
+                    this,
+                    deepLinkId.hashCode(),
+                    launchIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
                 )
-            } else {
-                packageManager.getLaunchIntentForPackage(packageName)?.apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                } ?: return
-            }
-            val pendingIntent = PendingIntent.getActivity(
-                this,
-                deepLinkId.hashCode(),
-                launchIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            )
-            val notification = NotificationCompat.Builder(this, CLICK_MESSAGES_CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle(title)
-                .setContentText(body)
-                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setAutoCancel(true)
-                .setContentIntent(pendingIntent)
-                .build()
+            val notification =
+                NotificationCompat
+                    .Builder(this, CLICK_MESSAGES_CHANNEL_ID)
+                    .setSmallIcon(android.R.drawable.ic_dialog_info)
+                    .setContentTitle(title)
+                    .setContentText(body)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setAutoCancel(true)
+                    .setContentIntent(pendingIntent)
+                    .build()
             if (
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                 ActivityCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -92,23 +116,6 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
             )
             return
         }
-        if (type == "incoming_call") {
-            if (!NotificationRuntimeState.getNotificationPreferences().callNotificationsEnabled) {
-                return
-            }
-
-            message.toIncomingCallInvite()?.let { invite ->
-                PlatformIncomingCallUi.showIncomingCall(invite)
-                // Always seed session state (not only foreground). Admission policy dedupes
-                // FCM + Realtime dual delivery so this is safe when the app is backgrounded.
-                compose.project.click.click.calls.CallSessionManager.receiveIncomingPush(invite)
-            }
-            return
-        }
-
-        if (!NotificationRuntimeState.getNotificationPreferences().messageNotificationsEnabled) {
-            return
-        }
 
         val activeChatId = NotificationRuntimeState.getActiveChatId()
         if (!activeChatId.isNullOrBlank() && activeChatId == message.data["chat_id"]) {
@@ -119,13 +126,14 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
         val senderName = message.data["sender_name"] ?: "Someone"
         val connectionId = message.data["connection_id"] ?: ""
         val previewFromServer = message.data["preview_text"]?.trim()?.takeIf { it.isNotEmpty() }
-        val decrypted = decryptMessagePreview(
-            encryptedContent = message.data["encrypted_content"] ?: "",
-            connectionId = connectionId,
-            senderUserId = message.data["sender_user_id"] ?: "",
-            recipientUserId = message.data["recipient_user_id"] ?: "",
-            fallback = "Open Click to view it"
-        )
+        val decrypted =
+            decryptMessagePreview(
+                encryptedContent = message.data["encrypted_content"] ?: "",
+                connectionId = connectionId,
+                senderUserId = message.data["sender_user_id"] ?: "",
+                recipientUserId = message.data["recipient_user_id"] ?: "",
+                fallback = "Open Click to view it",
+            )
         val fallbackPreview = "Open Click to view it"
         val body = if (decrypted != fallbackPreview) decrypted else previewFromServer ?: decrypted
 
@@ -140,34 +148,38 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         val deepLinkId = chatId.ifBlank { connectionId }
-        val launchIntent = if (deepLinkId.isNotBlank()) {
-            MainActivity.createChatDeepLinkIntent(
-                context = this,
-                chatId = chatId,
-                connectionId = connectionId
+        val launchIntent =
+            if (deepLinkId.isNotBlank()) {
+                MainActivity.createChatDeepLinkIntent(
+                    context = this,
+                    chatId = chatId,
+                    connectionId = connectionId,
+                )
+            } else {
+                packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                } ?: return
+            }
+
+        val pendingIntent =
+            PendingIntent.getActivity(
+                this,
+                deepLinkId.hashCode(),
+                launchIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
-        } else {
-            packageManager.getLaunchIntentForPackage(packageName)?.apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            } ?: return
-        }
 
-        val pendingIntent = PendingIntent.getActivity(
-            this,
-            deepLinkId.hashCode(),
-            launchIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val notification = NotificationCompat.Builder(this, CLICK_MESSAGES_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle(senderName)
-            .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setAutoCancel(true)
-            .setContentIntent(pendingIntent)
-            .build()
+        val notification =
+            NotificationCompat
+                .Builder(this, CLICK_MESSAGES_CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle(senderName)
+                .setContentText(body)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .build()
 
         if (
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -176,11 +188,12 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
 
-        val notifyTag = if (deepLinkId.isNotBlank()) {
-            chatNotificationTag(deepLinkId)
-        } else {
-            message.messageId?.let { chatNotificationTag(it) }
-        }
+        val notifyTag =
+            if (deepLinkId.isNotBlank()) {
+                chatNotificationTag(deepLinkId)
+            } else {
+                message.messageId?.let { chatNotificationTag(it) }
+            }
         if (notifyTag != null) {
             NotificationManagerCompat.from(this).notify(notifyTag, 0, notification)
         } else {
@@ -215,8 +228,7 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
     }
 }
 
-private fun RemoteMessage.toIncomingCallInvite(): CallInvite? =
-    parseIncomingCallPayload(data)
+private fun RemoteMessage.toIncomingCallInvite(): CallInvite? = parseIncomingCallPayload(data)
 
 private fun ensureNotificationChannel(context: Context) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -228,7 +240,7 @@ private fun ensureNotificationChannel(context: Context) {
         NotificationChannel(
             CLICK_MESSAGES_CHANNEL_ID,
             CLICK_MESSAGES_CHANNEL_NAME,
-            NotificationManager.IMPORTANCE_HIGH
-        )
+            NotificationManager.IMPORTANCE_HIGH,
+        ),
     )
 }

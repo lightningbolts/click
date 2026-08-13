@@ -1,4 +1,10 @@
-package compose.project.click.click.ui.components
+@file:Suppress(
+    "ktlint:standard:no-wildcard-imports",
+    "ktlint:standard:function-naming",
+    "ktlint:standard:property-naming",
+)
+
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -6,6 +12,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Build
@@ -16,9 +23,9 @@ import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -35,39 +42,44 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.shape.RoundedCornerShape
-import compose.project.click.click.data.models.MapBeaconKind
-import compose.project.click.click.data.models.PollPairSuggestion
-import compose.project.click.click.events.HomeEventReminder
-import compose.project.click.click.ui.theme.*
-import compose.project.click.click.ui.utils.userFacingLabel
-import compose.project.click.click.viewmodel.MapLayerFilter
+import compose.project.click.click.data.api.ActivityRecapDto // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.data.models.PollPairSuggestion // pragma: allowlist secret
+import compose.project.click.click.events.HomeEventReminder // pragma: allowlist secret
+import compose.project.click.click.ui.theme.* // pragma: allowlist secret
+import compose.project.click.click.ui.utils.userFacingLabel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
 @Composable
-fun OnlineFriendItem(name: String, status: String) {
+fun OnlineFriendItem(
+    name: String,
+    status: String,
+) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                .border(2.dp, clickBorderColor(), CircleShape),
-            contentAlignment = Alignment.Center
+            modifier =
+                Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .border(2.dp, clickBorderColor(), CircleShape),
+            contentAlignment = Alignment.Center,
         ) {
             Text(
                 name.first().toString(),
                 color = NeonPurple,
                 fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleMedium
+                style = MaterialTheme.typography.titleMedium,
             )
         }
 
@@ -78,12 +90,12 @@ fun OnlineFriendItem(name: String, status: String) {
                 name,
                 fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 status,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
@@ -94,27 +106,33 @@ fun OnlineFriendItem(name: String, status: String) {
 }
 
 @Composable
-fun RecentClickCard(name: String, time: String, location: String) {
+fun RecentClickCard(
+    name: String,
+    time: String,
+    location: String,
+) {
     AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(MaterialTheme.colorScheme.primaryContainer)
-                    .border(2.dp, clickBorderColor(), CircleShape),
-                contentAlignment = Alignment.Center
+                modifier =
+                    Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .border(2.dp, clickBorderColor(), CircleShape),
+                contentAlignment = Alignment.Center,
             ) {
                 Text(
                     name.first().toString(),
                     color = PrimaryBlue,
                     fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleMedium
+                    style = MaterialTheme.typography.titleMedium,
                 )
             }
 
@@ -125,7 +143,7 @@ fun RecentClickCard(name: String, time: String, location: String) {
                     "Clicked with $name",
                     fontWeight = FontWeight.Medium,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -133,13 +151,13 @@ fun RecentClickCard(name: String, time: String, location: String) {
                         Icons.Filled.LocationOn,
                         contentDescription = null,
                         modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         "$location • $time",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -153,14 +171,19 @@ fun RecentClickCard(name: String, time: String, location: String) {
  */
 fun homeGreetingTitle(
     firstName: String,
-    hour: Int = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour,
+    hour: Int =
+        Clock.System
+            .now()
+            .toLocalDateTime(TimeZone.currentSystemDefault())
+            .hour,
 ): String {
-    val salutation = when (hour) {
-        in 5..11 -> "Good morning"
-        in 12..16 -> "Good afternoon"
-        in 17..21 -> "Good evening"
-        else -> "Hello"
-    }
+    val salutation =
+        when (hour) {
+            in 5..11 -> "Good morning"
+            in 12..16 -> "Good afternoon"
+            in 17..21 -> "Good evening"
+            else -> "Hello"
+        }
     return "$salutation, $firstName."
 }
 
@@ -178,13 +201,14 @@ fun HomeSearchPill(
 ) {
     val shape = RoundedCornerShape(16.dp)
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(clickCardSurface())
-            .border(2.dp, clickBorderColor(), shape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(clickCardSurface())
+                .border(2.dp, clickBorderColor(), shape)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -251,26 +275,33 @@ fun FeaturedEventCard(
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(16.dp)
-    val title = reminder.title?.takeIf { it.isNotBlank() }
-        ?: reminder.description.lineSequence().firstOrNull { it.isNotBlank() }?.trim()
-        ?: "Upcoming event"
+    val title =
+        reminder.title?.takeIf { it.isNotBlank() }
+            ?: reminder.description
+                .lineSequence()
+                .firstOrNull { it.isNotBlank() }
+                ?.trim()
+            ?: "Upcoming event"
     val timeBadge = formatFeaturedEventTimeBadge(reminder.startEpochMs)
-    val showDescription = reminder.description.isNotBlank() &&
-        reminder.title != null &&
-        reminder.description.trim() != reminder.title.trim()
+    val showDescription =
+        reminder.description.isNotBlank() &&
+            reminder.title != null &&
+            reminder.description.trim() != reminder.title.trim()
 
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(clickCardSurface())
-            .border(2.dp, clickBorderColor(), shape),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(clickCardSurface())
+                .border(2.dp, clickBorderColor(), shape),
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(160.dp)
-                .background(MaterialTheme.colorScheme.surfaceContainerLow),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(160.dp)
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -280,13 +311,14 @@ fun FeaturedEventCard(
                 tint = MaterialTheme.colorScheme.primary,
             )
             Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(12.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.primary)
-                    .border(2.dp, clickBorderColor(), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(12.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.primary)
+                        .border(2.dp, clickBorderColor(), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
             ) {
                 Text(
                     text = timeBadge,
@@ -298,9 +330,10 @@ fun FeaturedEventCard(
         }
 
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
@@ -333,10 +366,11 @@ fun FeaturedEventCard(
                 onClick = onViewMap,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                ),
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
                 contentPadding = PaddingValues(vertical = 12.dp),
             ) {
                 Text("View on Map", fontWeight = FontWeight.SemiBold)
@@ -353,16 +387,18 @@ private fun formatFeaturedEventTimeBadge(startEpochMs: Long): String {
     val hour = local.hour
     val minute = local.minute
     val amPm = if (hour < 12) "AM" else "PM"
-    val hour12 = when {
-        hour == 0 -> 12
-        hour > 12 -> hour - 12
-        else -> hour
-    }
-    val timeStr = if (minute == 0) {
-        "$hour12 $amPm"
-    } else {
-        "$hour12:${minute.toString().padStart(2, '0')} $amPm"
-    }
+    val hour12 =
+        when {
+            hour == 0 -> 12
+            hour > 12 -> hour - 12
+            else -> hour
+        }
+    val timeStr =
+        if (minute == 0) {
+            "$hour12 $amPm"
+        } else {
+            "$hour12:${minute.toString().padStart(2, '0')} $amPm"
+        }
     return when {
         local.date == nowLocal.date -> "Today $timeStr"
         else -> "${local.month.name.take(3)} ${local.dayOfMonth} · $timeStr"
@@ -402,7 +438,7 @@ fun mapBeaconKindIcon(kind: MapBeaconKind): ImageVector =
 
 fun MapBeaconKind.toHomeExploreTile(count: Int): HomeExploreTile =
     HomeExploreTile(
-        id = "kind-${apiValue}",
+        id = "kind-$apiValue",
         label = userFacingLabel(),
         count = count,
         layerFilter = mapBeaconKindToLayerFilter(this),
@@ -448,12 +484,117 @@ fun ExploreNearbyBeaconsSection(
 }
 
 /**
+ * Day/week activity rollup on Home, shown above saved events.
+ */
+@Composable
+fun ActivityRecapSection(
+    recap: ActivityRecapDto,
+    window: String,
+    onWindowChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(16.dp)
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = "Your recap",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            RecapWindowChip(
+                label = "Day",
+                selected = window == "day",
+                onClick = { onWindowChange("day") },
+            )
+            RecapWindowChip(
+                label = "Week",
+                selected = window == "week",
+                onClick = { onWindowChange("week") },
+            )
+        }
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clip(shape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                    .border(2.dp, clickBorderColor(), shape)
+                    .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            RecapStatRow("Connections formed", recap.connectionsFormed)
+            RecapStatRow("Messages sent", recap.messagesSent)
+            RecapStatRow("Messages received", recap.messagesReceived)
+            RecapStatRow("Beacons created", recap.beaconsCreated)
+            RecapStatRow("Events RSVP’d", recap.eventsRsvped)
+            RecapStatRow("Check-ins", recap.eventsCheckedIn)
+            RecapStatRow("Events saved", recap.eventsSaved)
+        }
+    }
+}
+
+@Composable
+private fun RecapWindowChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(12.dp)
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold,
+        color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        modifier =
+            Modifier
+                .clip(shape)
+                .background(
+                    if (selected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerLow
+                    },
+                ).border(2.dp, clickBorderColor(), shape)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+    )
+}
+
+@Composable
+private fun RecapStatRow(
+    label: String,
+    value: Int,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = value.toString(),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+/**
  * Bookmarked events on Home — same square category tiles as [ExploreNearbyBeaconsSection].
  */
 @Composable
 fun SavedEventsSection(
-    bookmarks: List<compose.project.click.click.data.api.EventBookmarkItemDto>,
-    onBookmarkClick: (compose.project.click.click.data.api.EventBookmarkItemDto) -> Unit,
+    bookmarks: List<compose.project.click.click.data.api.EventBookmarkItemDto>, // pragma: allowlist secret
+    onBookmarkClick: (compose.project.click.click.data.api.EventBookmarkItemDto) -> Unit, // pragma: allowlist secret
     modifier: Modifier = Modifier,
 ) {
     if (bookmarks.isEmpty()) return
@@ -490,32 +631,35 @@ fun SavedEventsSection(
 
 @Composable
 private fun SavedEventCategoryTile(
-    bookmark: compose.project.click.click.data.api.EventBookmarkItemDto,
+    bookmark: compose.project.click.click.data.api.EventBookmarkItemDto, // pragma: allowlist secret
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(16.dp)
     val title = bookmark.title?.takeIf { it.isNotBlank() } ?: "Saved event"
-    val timeBadge = bookmark.eventStartAt
-        ?.let { iso -> runCatching { Instant.parse(iso).toEpochMilliseconds() }.getOrNull() }
-        ?.let { formatHomeSavedEventTimeBadge(it) }
-        ?: "Bookmarked"
+    val timeBadge =
+        bookmark.eventStartAt
+            ?.let { iso -> runCatching { Instant.parse(iso).toEpochMilliseconds() }.getOrNull() }
+            ?.let { formatHomeSavedEventTimeBadge(it) }
+            ?: "Bookmarked"
     Column(
-        modifier = modifier
-            .aspectRatio(1f)
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceContainerLow)
-            .border(2.dp, clickBorderColor(), shape)
-            .clickable(onClick = onClick)
-            .padding(16.dp),
+        modifier =
+            modifier
+                .aspectRatio(1f)
+                .clip(shape)
+                .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                .border(2.dp, clickBorderColor(), shape)
+                .clickable(onClick = onClick)
+                .padding(16.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
         Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary)
-                .border(2.dp, clickBorderColor(), CircleShape),
+            modifier =
+                Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+                    .border(2.dp, clickBorderColor(), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -553,16 +697,18 @@ private fun formatHomeSavedEventTimeBadge(startEpochMs: Long): String {
     val hour = local.hour
     val minute = local.minute
     val amPm = if (hour < 12) "AM" else "PM"
-    val hour12 = when {
-        hour == 0 -> 12
-        hour > 12 -> hour - 12
-        else -> hour
-    }
-    val timeStr = if (minute == 0) {
-        "$hour12 $amPm"
-    } else {
-        "$hour12:${minute.toString().padStart(2, '0')} $amPm"
-    }
+    val hour12 =
+        when {
+            hour == 0 -> 12
+            hour > 12 -> hour - 12
+            else -> hour
+        }
+    val timeStr =
+        if (minute == 0) {
+            "$hour12 $amPm"
+        } else {
+            "$hour12:${minute.toString().padStart(2, '0')} $amPm"
+        }
     return when {
         local.date == nowLocal.date -> "Today · $timeStr"
         else -> "${local.month.name.take(3)} ${local.dayOfMonth} · $timeStr"
@@ -578,21 +724,23 @@ private fun ExploreBeaconCategoryTile(
     val shape = RoundedCornerShape(16.dp)
     val countLabel = if (tile.count == 1) "1 nearby" else "${tile.count} nearby"
     Column(
-        modifier = modifier
-            .aspectRatio(1f)
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceContainerLow)
-            .border(2.dp, clickBorderColor(), shape)
-            .clickable(onClick = onClick)
-            .padding(16.dp),
+        modifier =
+            modifier
+                .aspectRatio(1f)
+                .clip(shape)
+                .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                .border(2.dp, clickBorderColor(), shape)
+                .clickable(onClick = onClick)
+                .padding(16.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
         Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary)
-                .border(2.dp, clickBorderColor(), CircleShape),
+            modifier =
+                Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+                    .border(2.dp, clickBorderColor(), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -634,37 +782,40 @@ fun PollPairCard(
 ) {
     val outerShape = RoundedCornerShape(16.dp)
     val displayName = suggestion.otherUserName ?: "your click"
-    val subtitle = when {
-        suggestion.daysSinceContact <= 0 -> "No recent messages — say hi?"
-        suggestion.daysSinceContact == 1 -> "1 day since you last chatted"
-        else -> "${suggestion.daysSinceContact} days since you last chatted"
-    }
+    val subtitle =
+        when {
+            suggestion.daysSinceContact <= 0 -> "No recent messages — say hi?"
+            suggestion.daysSinceContact == 1 -> "1 day since you last chatted"
+            else -> "${suggestion.daysSinceContact} days since you last chatted"
+        }
 
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(outerShape)
-            .background(clickCardSurface())
-            .border(2.dp, clickBorderColor(), outerShape)
-            .padding(16.dp)
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clip(outerShape)
+                .background(clickCardSurface())
+                .border(2.dp, clickBorderColor(), outerShape)
+                .padding(16.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.primary)
-                    .border(2.dp, clickBorderColor(), RoundedCornerShape(16.dp)),
-                contentAlignment = Alignment.Center
+                modifier =
+                    Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.primary)
+                        .border(2.dp, clickBorderColor(), RoundedCornerShape(16.dp)),
+                contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     Icons.Filled.AutoAwesome,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(26.dp)
+                    modifier = Modifier.size(26.dp),
                 )
             }
             Spacer(modifier = Modifier.width(14.dp))
@@ -673,20 +824,20 @@ fun PollPairCard(
                     text = "Poll-Pair",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "It's been a while! Say hi to $displayName",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -695,22 +846,23 @@ fun PollPairCard(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Button(
                 onClick = onOpenChat,
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                ),
-                contentPadding = PaddingValues(vertical = 12.dp)
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
+                contentPadding = PaddingValues(vertical = 12.dp),
             ) {
                 Icon(
                     Icons.Filled.Chat,
                     contentDescription = null,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(18.dp),
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Open chat", fontWeight = FontWeight.SemiBold)
@@ -721,26 +873,28 @@ fun PollPairCard(
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(8.dp),
                 border = BorderStroke(2.dp, clickBorderColor()),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                ),
-                contentPadding = PaddingValues(vertical = 12.dp)
+                colors =
+                    ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    ),
+                contentPadding = PaddingValues(vertical = 12.dp),
             ) {
                 Icon(
                     Icons.Filled.Lightbulb,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
-                    tint = if (icebreakerSendEnabled) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
+                    tint =
+                        if (icebreakerSendEnabled) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     if (icebreakerCooldownSec > 0) "Icebreaker (${icebreakerCooldownSec}s)" else "Icebreaker",
                     fontWeight = FontWeight.SemiBold,
-                    maxLines = 1
+                    maxLines = 1,
                 )
             }
         }
@@ -752,23 +906,25 @@ fun StatCard(
     modifier: Modifier = Modifier,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     value: String,
-    label: String
+    label: String,
 ) {
     AdaptiveCard(
-        modifier = modifier
+        modifier = modifier,
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.primary)
-                    .border(2.dp, clickBorderColor(), RoundedCornerShape(16.dp)),
+                modifier =
+                    Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.primary)
+                        .border(2.dp, clickBorderColor(), RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -783,12 +939,12 @@ fun StatCard(
                 value,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 label,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

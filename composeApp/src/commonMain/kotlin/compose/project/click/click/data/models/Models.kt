@@ -1,8 +1,10 @@
-package compose.project.click.click.data.models
+@file:Suppress("ktlint:standard:max-line-length")
+
+package compose.project.click.click.data.models // pragma: allowlist secret
 
 import kotlinx.datetime.Instant
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -10,13 +12,11 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 
 @Serializable
 data class GeoLocation(
     val lat: Double,
-    val lon: Double
+    val lon: Double,
 )
 
 /**
@@ -26,7 +26,7 @@ data class GeoLocation(
 @Serializable
 data class GeoLocationInsert(
     val lat: Double,
-    val lon: Double
+    val lon: Double,
 )
 
 /**
@@ -45,7 +45,7 @@ data class ConnectionInsert(
     val expiry_state: String,
     val include_in_business_insights: Boolean = true,
     val initiator_id: String? = null,
-    val responder_id: String? = null
+    val responder_id: String? = null,
 )
 
 /**
@@ -59,12 +59,13 @@ data class UserProfile(
 )
 
 fun User.toUserProfile(): UserProfile {
-    val display = name?.trim()?.takeIf { it.isNotEmpty() }
-        ?: listOfNotNull(firstName?.trim(), lastName?.trim())
-            .filter { it.isNotEmpty() }
-            .joinToString(" ")
-            .takeIf { it.isNotEmpty() }
-        ?: "User"
+    val display =
+        name?.trim()?.takeIf { it.isNotEmpty() }
+            ?: listOfNotNull(firstName?.trim(), lastName?.trim())
+                .filter { it.isNotEmpty() }
+                .joinToString(" ")
+                .takeIf { it.isNotEmpty() }
+            ?: "User"
     return UserProfile(id = id, displayName = display, avatarUrl = image)
 }
 
@@ -75,7 +76,7 @@ data class User(
     val email: String? = null,
     val image: String? = null,
     @SerialName("created_at")
-    val createdAt: Long = 0L,  // Made optional with default for schema compatibility
+    val createdAt: Long = 0L, // Made optional with default for schema compatibility
     @SerialName("last_polled")
     val lastPolled: Long? = null,
     @SerialName("first_name")
@@ -90,6 +91,9 @@ data class User(
     val last_paired: Long? = null,
     // Interest tags for Common Ground feature (e.g., "music", "coding", "hiking")
     val tags: List<String> = emptyList(),
+    /** Curated vibe traits from `users.personality_tags` (exactly 5 when set). */
+    @SerialName("personality_tags")
+    val personalityTags: List<String> = emptyList(),
     /** Present on bind-proximity-connection match rows when the edge already exists. */
     @SerialName("connection_id")
     val connectionId: String? = null,
@@ -114,12 +118,20 @@ data class User(
     /**
      * Convert to insert DTO for Supabase (minimal - only required columns)
      */
-    fun toInsertDto() = UserInsertMinimal(
-        id = id,
-        name = name ?: "User",
-        email = email ?: "",
-        created_at = if (createdAt > 0L) createdAt else kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
-    )
+    fun toInsertDto() =
+        UserInsertMinimal(
+            id = id,
+            name = name ?: "User",
+            email = email ?: "",
+            created_at =
+                if (createdAt > 0L) {
+                    createdAt
+                } else {
+                    kotlinx.datetime.Clock.System
+                        .now()
+                        .toEpochMilliseconds()
+                },
+        )
 }
 
 /**
@@ -132,13 +144,9 @@ data class UserInsertMinimal(
     val name: String,
     val email: String,
     @SerialName("created_at")
-    val created_at: Long
+    val created_at: Long,
 )
 
-/**
- * Core user data for fetching from database
- * Only includes columns guaranteed to exist in the users table
- */
 /**
  * Denormalized availability intent bubble on [public.users.availability_intents] (JSON array).
  */
@@ -151,6 +159,10 @@ data class ProfileAvailabilityIntentBubble(
     val expiresAt: String? = null,
 )
 
+/**
+ * Core user data for fetching from database.
+ * Only includes columns guaranteed to exist in the users table.
+ */
 @Serializable
 data class UserCore(
     val id: String,
@@ -165,19 +177,22 @@ data class UserCore(
     val image: String? = null,
     @SerialName("last_polled")
     val lastPolled: Long? = null,
+    @SerialName("personality_tags")
+    val personalityTags: List<String> = emptyList(),
 ) {
     /**
      * Convert to full User model with defaults for missing fields.
      * Resolves display name: first+last > full_name > name > email prefix > "Connection".
      */
     fun toUser(): User {
-        val resolvedName = resolveDisplayName(
-            firstName = firstName,
-            lastName = lastName,
-            fullName = full_name,
-            name = name,
-            email = email
-        )
+        val resolvedName =
+            resolveDisplayName(
+                firstName = firstName,
+                lastName = lastName,
+                fullName = full_name,
+                name = name,
+                email = email,
+            )
         return User(
             id = id,
             name = resolvedName,
@@ -191,7 +206,8 @@ data class UserCore(
             connections = emptyList(),
             paired_with = emptyList(),
             connection_today = -1,
-            last_paired = null
+            last_paired = null,
+            personalityTags = personalityTags,
         )
     }
 }
@@ -201,18 +217,18 @@ fun resolveDisplayName(
     lastName: String? = null,
     fullName: String?,
     name: String?,
-    email: String?
+    email: String?,
 ): String {
-    fun normalizedCandidate(value: String?): String? {
-        return value
+    fun normalizedCandidate(value: String?): String? =
+        value
             ?.trim()
             ?.takeIf { it.isNotEmpty() && !it.equals("Connection", ignoreCase = true) }
-    }
 
-    val fromParts = listOfNotNull(
-        normalizedCandidate(firstName),
-        normalizedCandidate(lastName)
-    ).joinToString(" ").trim()
+    val fromParts =
+        listOfNotNull(
+            normalizedCandidate(firstName),
+            normalizedCandidate(lastName),
+        ).joinToString(" ").trim()
     if (fromParts.isNotEmpty()) return fromParts
 
     return normalizedCandidate(fullName)
@@ -221,12 +237,11 @@ fun resolveDisplayName(
         ?: "Connection"
 }
 
-fun isResolvedDisplayName(value: String?): Boolean {
-    return value
+fun isResolvedDisplayName(value: String?): Boolean =
+    value
         ?.trim()
         ?.let { it.isNotEmpty() && !it.equals("Connection", ignoreCase = true) }
         ?: false
-}
 
 /**
  * Location privacy preferences stored on the user's Supabase profile row.
@@ -239,7 +254,7 @@ data class LocationPreferences(
     @SerialName("location_show_on_map_enabled")
     val showOnMapEnabled: Boolean = true,
     @SerialName("location_include_in_insights_enabled")
-    val includeInInsightsEnabled: Boolean = true
+    val includeInInsightsEnabled: Boolean = true,
 )
 
 /** One row per user in `public.user_interests`; canonical source for interest tags and onboarding completion. */
@@ -257,6 +272,7 @@ data class UserInterests(
 data class UserPublicProfile(
     val user: User,
     val interestTags: List<String>,
+    val personalityTags: List<String> = emptyList(),
     val availability: UserAvailability?,
     /** From [public.users.availability_intents]; may be empty when unset or expired server-side. */
     val profileAvailabilityIntents: List<ProfileAvailabilityIntentBubble> = emptyList(),
@@ -277,7 +293,7 @@ data class Message(
     val timeEdited: Long? = null,
     @SerialName("is_read")
     val isRead: Boolean = false,
-    /** See [compose.project.click.click.data.models.ChatMessageType] — e.g. `text`, `image`, `audio`, `call_log`. */
+    /** See [ChatMessageType] — e.g. `text`, `image`, `audio`, `call_log`. */
     @SerialName("message_type")
     val messageType: String = "text",
     /** JSON payload; for media messages typically includes `media_url` and optional `duration_seconds`. */
@@ -305,7 +321,7 @@ data class MessageReaction(
     @SerialName("reaction_type")
     val reactionType: String,
     @SerialName("created_at")
-    val createdAt: Long
+    val createdAt: Long,
 )
 
 @Serializable
@@ -360,7 +376,7 @@ data class Chat(
     val connectionId: String? = null,
     @SerialName("group_id")
     val groupId: String? = null,
-    val messages: List<Message> = emptyList()
+    val messages: List<Message> = emptyList(),
 )
 
 /** Metadata for a mathematically verified group clique chat (pairwise connections only). */
@@ -438,8 +454,10 @@ data class Connection(
     companion object {
         // 30 minutes in milliseconds for the Vibe Check timer
         const val VIBE_CHECK_DURATION_MS = 30L * 60 * 1000
+
         // 48 hours in milliseconds for the pending "Say Hi" window
         const val PENDING_DURATION_MS = 48L * 60 * 60 * 1000
+
         // 7-day rolling window for continued interaction (after first message)
         const val IDLE_ARCHIVE_DURATION_MS = 7L * 24 * 60 * 60 * 1000
     }
@@ -455,44 +473,52 @@ data class Connection(
         )
 
     /** Origin story (oldest crossing) for profile / first-meet copy. */
-    fun originMemoryCapsule(): MemoryCapsule? =
-        originEncounter?.toMemoryCapsule() ?: memoryCapsule
+    fun originMemoryCapsule(): MemoryCapsule? = originEncounter?.toMemoryCapsule() ?: memoryCapsule
 
     /** Newest crossing for “where we last saw each other” surfaces. */
-    fun latestMemoryCapsule(): MemoryCapsule? =
-        latestEncounter()?.toMemoryCapsule() ?: memoryCapsule
+    fun latestMemoryCapsule(): MemoryCapsule? = latestEncounter()?.toMemoryCapsule() ?: memoryCapsule
 
     val context_tag: String?
-        get() = latestEncounter()?.contextTags?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
-            ?: originMemoryCapsule()?.contextTag?.label
-            ?: contextTagId
-            ?: originEncounter?.contextTags?.firstOrNull()
+        get() =
+            latestEncounter()
+                ?.contextTags
+                ?.firstOrNull()
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?: originMemoryCapsule()?.contextTag?.label
+                ?: contextTagId
+                ?: originEncounter?.contextTags?.firstOrNull()
 
     /** Latest crossing place label (shim for removed `semantic_location` column). */
     val semanticLocation: String?
-        get() = latestEncounter()?.locationName?.trim()?.takeIf { it.isNotEmpty() }
-            ?: latestEncounter()?.displayLocation?.trim()?.takeIf { it.isNotEmpty() }
-            ?: semantic_location?.trim()?.takeIf { it.isNotEmpty() }
+        get() =
+            latestEncounter()?.locationName?.trim()?.takeIf { it.isNotEmpty() }
+                ?: latestEncounter()?.displayLocation?.trim()?.takeIf { it.isNotEmpty() }
+                ?: semantic_location?.trim()?.takeIf { it.isNotEmpty() }
 
     val resolvedNoiseLevel: String?
-        get() = latestEncounter()?.noiseLevel?.trim()?.takeIf { it.isNotEmpty() }
-            ?: originEncounter?.noiseLevel?.trim()?.takeIf { it.isNotEmpty() }
-            ?: noiseLevel ?: memoryCapsule?.noiseLevelCategory?.name
+        get() =
+            latestEncounter()?.noiseLevel?.trim()?.takeIf { it.isNotEmpty() }
+                ?: originEncounter?.noiseLevel?.trim()?.takeIf { it.isNotEmpty() }
+                ?: noiseLevel ?: memoryCapsule?.noiseLevelCategory?.name
 
     val resolvedExactNoiseLevelDb: Double?
-        get() = latestEncounter()?.exactNoiseLevelDb?.takeIf { it.isFinite() }
-            ?: exactNoiseLevelDb?.takeIf { it.isFinite() }
-            ?: memoryCapsule?.exactNoiseLevelDb?.takeIf { it.isFinite() }
+        get() =
+            latestEncounter()?.exactNoiseLevelDb?.takeIf { it.isFinite() }
+                ?: exactNoiseLevelDb?.takeIf { it.isFinite() }
+                ?: memoryCapsule?.exactNoiseLevelDb?.takeIf { it.isFinite() }
 
     val resolvedHeightCategory: String?
-        get() = latestEncounter()?.elevationCategory?.trim()?.takeIf { it.isNotEmpty() }
-            ?: originEncounter?.elevationCategory?.trim()?.takeIf { it.isNotEmpty() }
-            ?: heightCategory ?: memoryCapsule?.heightCategory?.name
+        get() =
+            latestEncounter()?.elevationCategory?.trim()?.takeIf { it.isNotEmpty() }
+                ?: originEncounter?.elevationCategory?.trim()?.takeIf { it.isNotEmpty() }
+                ?: heightCategory ?: memoryCapsule?.heightCategory?.name
 
     val resolvedExactBarometricElevationM: Double?
-        get() = latestEncounter()?.exactBarometricElevationM?.takeIf { it.isFinite() }
-            ?: exactBarometricElevationM?.takeIf { it.isFinite() }
-            ?: memoryCapsule?.exactBarometricElevationMeters?.takeIf { it.isFinite() }
+        get() =
+            latestEncounter()?.exactBarometricElevationM?.takeIf { it.isFinite() }
+                ?: exactBarometricElevationM?.takeIf { it.isFinite() }
+                ?: memoryCapsule?.exactBarometricElevationMeters?.takeIf { it.isFinite() }
 
     val resolvedLuxLevel: Double?
         get() = latestEncounter()?.luxLevel?.takeIf { it.isFinite() }
@@ -507,16 +533,30 @@ data class Connection(
         get() = latestEncounter()?.batteryLevel?.takeIf { it in 0..100 }
 
     val resolvedWeatherCondition: String?
-        get() = latestEncounter()?.weatherSnapshot?.condition?.trim()?.takeIf { it.isNotEmpty() }
-            ?: originEncounter?.weatherSnapshot?.condition?.trim()?.takeIf { it.isNotEmpty() }
-            ?: weatherCondition
-            ?: memoryCapsule?.weatherSnapshot?.condition?.trim()?.takeIf { it.isNotEmpty() }
+        get() =
+            latestEncounter()
+                ?.weatherSnapshot
+                ?.condition
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?: originEncounter
+                    ?.weatherSnapshot
+                    ?.condition
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                ?: weatherCondition
+                ?: memoryCapsule
+                    ?.weatherSnapshot
+                    ?.condition
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
 
     val displayLocationLabel: String?
-        get() = context_tag
-            ?: latestEncounter()?.locationName?.trim()?.takeIf { it.isNotEmpty() }
-            ?: latestEncounter()?.displayLocation?.trim()?.takeIf { it.isNotEmpty() }
-            ?: semanticLocation
+        get() =
+            context_tag
+                ?: latestEncounter()?.locationName?.trim()?.takeIf { it.isNotEmpty() }
+                ?: latestEncounter()?.displayLocation?.trim()?.takeIf { it.isNotEmpty() }
+                ?: semanticLocation
 
     /** Legacy [MemoryCapsule] built from the most recent encounter (UI compatibility). */
     fun toLegacyMemoryCapsule(): MemoryCapsule? = latestMemoryCapsule()
@@ -531,7 +571,7 @@ data class Connection(
             else -> "pending"
         }
     }
-    
+
     /** Connection is awaiting first message (48h window). */
     fun isPending(): Boolean = normalizedConnectionStatus() == "pending"
 
@@ -587,27 +627,21 @@ data class Connection(
         val endTime = created + VIBE_CHECK_DURATION_MS
         return maxOf(0L, endTime - currentTimeMs)
     }
-    
+
     /**
      * Check if the Vibe Check timer has expired.
      */
-    fun isVibeCheckExpired(currentTimeMs: Long): Boolean {
-        return getVibeCheckRemainingMs(currentTimeMs) == 0L
-    }
-    
+    fun isVibeCheckExpired(currentTimeMs: Long): Boolean = getVibeCheckRemainingMs(currentTimeMs) == 0L
+
     /**
      * Check if both users have opted to keep the connection.
      */
-    fun isMutuallyKept(): Boolean {
-        return should_continue.size >= 2 && should_continue[0] && should_continue[1]
-    }
-    
+    fun isMutuallyKept(): Boolean = should_continue.size >= 2 && should_continue[0] && should_continue[1]
+
     /**
      * Get the index for a user in the should_continue list based on their position in user_ids.
      */
-    fun getUserIndex(userId: String): Int? {
-        return user_ids.indexOf(userId).takeIf { it >= 0 }
-    }
+    fun getUserIndex(userId: String): Int? = user_ids.indexOf(userId).takeIf { it >= 0 }
 
     /**
      * Map pin coordinates: legacy [geo_location], then **origin** (first-meet) encounter GPS.
@@ -615,7 +649,9 @@ data class Connection(
      */
     fun connectionMapGeo(): GeoLocation? {
         val direct = geo_location
-        if (direct != null && direct.lat.isFinite() && direct.lon.isFinite() &&
+        if (direct != null &&
+            direct.lat.isFinite() &&
+            direct.lon.isFinite() &&
             !(direct.lat == 0.0 && direct.lon == 0.0)
         ) {
             return direct
@@ -623,7 +659,10 @@ data class Connection(
         val e = originEncounter ?: latestEncounter()
         val la = e?.gpsLat
         val lo = e?.gpsLon
-        if (la != null && lo != null && la.isFinite() && lo.isFinite() &&
+        if (la != null &&
+            lo != null &&
+            la.isFinite() &&
+            lo.isFinite() &&
             !(la == 0.0 && lo == 0.0)
         ) {
             return GeoLocation(lat = la, lon = lo)
@@ -640,8 +679,10 @@ data class Connection(
  * Clicks "Active" tab / home active map: exclude [connection_hidden] and [connection_archives]
  * for this user, and only pending/active/kept lifecycle rows.
  */
-fun Connection.isActiveForUser(archivedIds: Set<String>, hiddenIds: Set<String>): Boolean =
-    id !in hiddenIds && id !in archivedIds && isInActiveConnectionsChannel()
+fun Connection.isActiveForUser(
+    archivedIds: Set<String>,
+    hiddenIds: Set<String>,
+): Boolean = id !in hiddenIds && id !in archivedIds && isInActiveConnectionsChannel()
 
 /**
  * Empty server snapshot with empty junction sets while local SSOT already has connections is the
@@ -663,17 +704,18 @@ fun shouldPreserveLocalConnectionJunctions(
  * True 1:1 DM edge (not a multi-member group row). Duplicate handshake / clique pairwise
  * rows for the same peer all match this and should collapse in map + Active list UI.
  */
-fun Connection.isOneToOnePairEdge(): Boolean =
-    !isGroup && user_ids.size == 2
+fun Connection.isOneToOnePairEdge(): Boolean = !isGroup && user_ids.size == 2
 
 /** Recency rank for choosing which duplicate 1:1 edge to keep. */
-fun Connection.oneToOneCollapseRecencyMs(): Long =
-    maxOf(last_message_at ?: 0L, created)
+fun Connection.oneToOneCollapseRecencyMs(): Long = maxOf(last_message_at ?: 0L, created)
 
 /**
  * Prefer the edge with usable map coordinates, then the more recent activity timestamp.
  */
-fun preferOneToOneConnectionForPeer(a: Connection, b: Connection): Connection {
+fun preferOneToOneConnectionForPeer(
+    a: Connection,
+    b: Connection,
+): Connection {
     val aGeo = a.connectionMapGeo() != null
     val bGeo = b.connectionMapGeo() != null
     if (aGeo != bGeo) return if (aGeo) a else b
@@ -728,25 +770,27 @@ fun collapseOneToOneChatsByPeer(
     for (chat in chats) {
         if (chat.groupClique != null) continue
         if (!chat.connection.isOneToOnePairEdge()) continue
-        val peerId = chat.otherUser.id.takeIf { it.isNotBlank() }
-            ?: chat.connection.user_ids.firstOrNull { it != viewerUserId }
-            ?: continue
+        val peerId =
+            chat.otherUser.id.takeIf { it.isNotBlank() }
+                ?: chat.connection.user_ids.firstOrNull { it != viewerUserId }
+                ?: continue
         val existing = bestByPeer[peerId]
         if (existing == null) {
             bestByPeer[peerId] = chat
             continue
         }
-        val preferNew = when {
-            chat.connection.connectionMapGeo() != null &&
-                existing.connection.connectionMapGeo() == null -> true
-            chat.connection.connectionMapGeo() == null &&
-                existing.connection.connectionMapGeo() != null -> false
-            activityTs(chat) != activityTs(existing) -> activityTs(chat) > activityTs(existing)
-            (chat.unreadCount) != (existing.unreadCount) -> chat.unreadCount > existing.unreadCount
-            else ->
-                chat.connection.oneToOneCollapseRecencyMs() >=
-                    existing.connection.oneToOneCollapseRecencyMs()
-        }
+        val preferNew =
+            when {
+                chat.connection.connectionMapGeo() != null &&
+                    existing.connection.connectionMapGeo() == null -> true
+                chat.connection.connectionMapGeo() == null &&
+                    existing.connection.connectionMapGeo() != null -> false
+                activityTs(chat) != activityTs(existing) -> activityTs(chat) > activityTs(existing)
+                (chat.unreadCount) != (existing.unreadCount) -> chat.unreadCount > existing.unreadCount
+                else ->
+                    chat.connection.oneToOneCollapseRecencyMs() >=
+                        existing.connection.oneToOneCollapseRecencyMs()
+            }
         if (preferNew) bestByPeer[peerId] = chat
     }
     if (bestByPeer.isEmpty()) return chats
@@ -758,9 +802,10 @@ fun collapseOneToOneChatsByPeer(
             out.add(chat)
             continue
         }
-        val peerId = chat.otherUser.id.takeIf { it.isNotBlank() }
-            ?: chat.connection.user_ids.firstOrNull { it != viewerUserId }
-            ?: continue
+        val peerId =
+            chat.otherUser.id.takeIf { it.isNotBlank() }
+                ?: chat.connection.user_ids.firstOrNull { it != viewerUserId }
+                ?: continue
         if (chat.connection.id !in winners) continue
         if (!emittedPeers.add(peerId)) continue
         out.add(chat)
@@ -768,27 +813,29 @@ fun collapseOneToOneChatsByPeer(
     return out
 }
 
-
 /**
  * Clicks "Archived" tab: server-archived lifecycle or user junction archive, never hidden.
  */
-fun Connection.isArchivedChannelForUser(archivedIds: Set<String>, hiddenIds: Set<String>): Boolean =
-    id !in hiddenIds && (isServerLifecycleArchived() || id in archivedIds)
+fun Connection.isArchivedChannelForUser(
+    archivedIds: Set<String>,
+    hiddenIds: Set<String>,
+): Boolean = id !in hiddenIds && (isServerLifecycleArchived() || id in archivedIds)
 
 /** Placeholder [Connection] so group cliques participate in chat list / [ChatWithDetails] flows. */
 fun syntheticConnectionForGroupClique(
     groupId: String,
     memberUserIds: List<String>,
     lastMessageAt: Long? = null,
-): Connection = Connection(
-    id = groupId,
-    created = 0L,
-    expiry = Long.MAX_VALUE,
-    geo_location = GeoLocation(lat = 0.0, lon = 0.0),
-    user_ids = memberUserIds.distinct(),
-    status = "kept",
-    last_message_at = lastMessageAt,
-)
+): Connection =
+    Connection(
+        id = groupId,
+        created = 0L,
+        expiry = Long.MAX_VALUE,
+        geo_location = GeoLocation(lat = 0.0, lon = 0.0),
+        user_ids = memberUserIds.distinct(),
+        status = "kept",
+        last_message_at = lastMessageAt,
+    )
 
 // UI models for chat functionality
 @Serializable
@@ -810,7 +857,7 @@ data class ChatWithDetails(
 data class MessageWithUser(
     val message: Message,
     val user: User,
-    val isSent: Boolean
+    val isSent: Boolean,
 )
 
 // --- Map beacons (community pins: soundtracks, SOS, utilities, social vibes) ---
@@ -819,7 +866,9 @@ data class MessageWithUser(
  * Beacon category from API / DB `kind` column.
  * Values are normalized to lowercase for comparison.
  */
-enum class MapBeaconKind(val apiValue: String) {
+enum class MapBeaconKind(
+    val apiValue: String,
+) {
     SOUNDTRACK("soundtrack"),
     SOS("sos"),
     HAZARD("hazard"),
@@ -876,23 +925,26 @@ data class MapBeaconMetadata(
     val raw: JsonObject? = null,
 )
 
-private val beaconMetadataJson = Json {
-    ignoreUnknownKeys = true
-    isLenient = true
-}
+private val beaconMetadataJson =
+    Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
 
 fun parseMapBeaconMetadata(element: JsonElement?): MapBeaconMetadata {
     if (element == null) return MapBeaconMetadata()
-    val obj = when (element) {
-        is JsonObject -> element
-        is JsonPrimitive -> {
-            val text = element.contentOrNull?.trim().orEmpty()
-            if (text.isEmpty()) return MapBeaconMetadata()
-            runCatching { beaconMetadataJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
-                ?: return MapBeaconMetadata()
+    val obj =
+        when (element) {
+            is JsonObject -> element
+            is JsonPrimitive -> {
+                val text = element.contentOrNull?.trim().orEmpty()
+                if (text.isEmpty()) return MapBeaconMetadata()
+                runCatching { beaconMetadataJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    ?: return MapBeaconMetadata()
+            }
+            else -> return MapBeaconMetadata()
         }
-        else -> return MapBeaconMetadata()
-    }
+
     fun str(vararg keys: String): String? {
         for (k in keys) {
             val p = obj[k] as? JsonPrimitive ?: continue
@@ -922,33 +974,36 @@ fun parseMapBeaconMetadata(element: JsonElement?): MapBeaconMetadata {
 private fun parseEventCategories(obj: JsonObject): List<String> {
     val el = obj["event_categories"] ?: obj["eventCategories"] ?: return emptyList()
     return when (el) {
-        is JsonArray -> el.mapNotNull { item ->
-            (item as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
-        }
-        is JsonPrimitive -> el.contentOrNull
-            ?.split(',')
-            ?.map { it.trim() }
-            ?.filter { it.isNotEmpty() }
-            .orEmpty()
+        is JsonArray ->
+            el.mapNotNull { item ->
+                (item as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+            }
+        is JsonPrimitive ->
+            el.contentOrNull
+                ?.split(',')
+                ?.map { it.trim() }
+                ?.filter { it.isNotEmpty() }
+                .orEmpty()
         else -> emptyList()
     }.distinct()
 }
 
 /** Who may see a dropped beacon on the map (mirrors `beacon_visibility_audience` on click-web). */
-enum class BeaconVisibilityAudience(val apiValue: String) {
+enum class BeaconVisibilityAudience(
+    val apiValue: String,
+) {
     EVERYONE("everyone"),
     CONNECTIONS("connections"),
     CORE_CONNECTIONS("core_connections"),
     ;
 
     companion object {
-        fun fromRaw(value: String?): BeaconVisibilityAudience {
-            return when (value?.trim()?.lowercase()) {
+        fun fromRaw(value: String?): BeaconVisibilityAudience =
+            when (value?.trim()?.lowercase()) {
                 "connections", "connection" -> CONNECTIONS
                 "core_connections", "core", "core_connections_only" -> CORE_CONNECTIONS
                 else -> EVERYONE
             }
-        }
     }
 }
 
@@ -987,8 +1042,8 @@ data class MapBeacon(
     val visibilityAudience: BeaconVisibilityAudience = BeaconVisibilityAudience.EVERYONE,
 )
 
-fun parseMapBeaconRows(element: JsonElement): List<MapBeacon> {
-    return when (element) {
+fun parseMapBeaconRows(element: JsonElement): List<MapBeacon> =
+    when (element) {
         is JsonArray -> element.mapNotNull { parseMapBeaconRow(it) }
         is JsonObject -> {
             val single = parseMapBeaconRow(element)
@@ -996,28 +1051,37 @@ fun parseMapBeaconRows(element: JsonElement): List<MapBeacon> {
         }
         is JsonPrimitive -> {
             val text = element.contentOrNull?.trim().orEmpty()
-            if (text.isEmpty()) emptyList()
-            else {
+            if (text.isEmpty()) {
+                emptyList()
+            } else {
                 val parsed = beaconMetadataJson.parseToJsonElement(text)
-                if (parsed is JsonPrimitive) emptyList()
-                else parseMapBeaconRows(parsed)
+                if (parsed is JsonPrimitive) {
+                    emptyList()
+                } else {
+                    parseMapBeaconRows(parsed)
+                }
             }
         }
         else -> emptyList()
     }
-}
 
 private fun parseMapBeaconRow(element: JsonElement): MapBeacon? {
     val obj = element as? JsonObject ?: return null
+
     fun dbl(vararg keys: String): Double? {
         for (k in keys) {
             when (val v = obj[k]) {
-                is JsonPrimitive -> v.contentOrNull?.toDoubleOrNull()?.takeIf { it.isFinite() }?.let { return it }
+                is JsonPrimitive ->
+                    v.contentOrNull
+                        ?.toDoubleOrNull()
+                        ?.takeIf { it.isFinite() }
+                        ?.let { return it }
                 else -> continue
             }
         }
         return null
     }
+
     fun strKey(vararg keys: String): String? {
         for (k in keys) {
             val p = obj[k] as? JsonPrimitive
@@ -1037,16 +1101,18 @@ private fun parseMapBeaconRow(element: JsonElement): MapBeacon? {
     val metaEl = obj["metadata"] ?: obj["meta"]
     val meta = parseMapBeaconMetadata(metaEl as? JsonElement)
     val createdBy = strKey("created_by", "user_id", "author_id", "creator_id")
-    val createdAt = strKey("created_at")?.let { parseEpochMs(it) }
-        ?: (obj["created_at"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
+    val createdAt =
+        strKey("created_at")?.let { parseEpochMs(it) }
+            ?: (obj["created_at"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
     val expiresAt = strKey("expires_at", "expiresAt")?.let { parseEpochMs(it) }
-    val showCreatorName = (obj["show_creator_name"] as? JsonPrimitive)?.let { prim ->
-        prim.booleanOrNull ?: when (prim.contentOrNull?.trim()?.lowercase()) {
-            "true", "1" -> true
-            "false", "0" -> false
-            else -> null
-        }
-    } ?: false
+    val showCreatorName =
+        (obj["show_creator_name"] as? JsonPrimitive)?.let { prim ->
+            prim.booleanOrNull ?: when (prim.contentOrNull?.trim()?.lowercase()) {
+                "true", "1" -> true
+                "false", "0" -> false
+                else -> null
+            }
+        } ?: false
     val creatorDisplayName = strKey("creator_name", "creatorName")
     val visibilityAudience = BeaconVisibilityAudience.fromRaw(strKey("visibility_audience", "visibilityAudience"))
     return MapBeacon(
@@ -1077,13 +1143,15 @@ internal fun parseEpochMs(value: String): Long? {
     val withT = trimmed.replace(' ', 'T')
     runCatching { Instant.parse(withT).toEpochMilliseconds() }.getOrNull()?.let { return it }
     // `…+00` / `…-07` → `…+00:00` / `…-07:00`
-    val withColonOffset = Regex("""([+-]\d{2})$""").replace(withT) { match ->
-        "${match.groupValues[1]}:00"
-    }
+    val withColonOffset =
+        Regex("""([+-]\d{2})$""").replace(withT) { match ->
+            "${match.groupValues[1]}:00"
+        }
     runCatching { Instant.parse(withColonOffset).toEpochMilliseconds() }.getOrNull()?.let { return it }
     // `…+0000` → `…+00:00`
-    val withSplitOffset = Regex("""([+-])(\d{2})(\d{2})$""").replace(withColonOffset) { match ->
-        "${match.groupValues[1]}${match.groupValues[2]}:${match.groupValues[3]}"
-    }
+    val withSplitOffset =
+        Regex("""([+-])(\d{2})(\d{2})$""").replace(withColonOffset) { match ->
+            "${match.groupValues[1]}${match.groupValues[2]}:${match.groupValues[3]}"
+        }
     return runCatching { Instant.parse(withSplitOffset).toEpochMilliseconds() }.getOrNull()
 }

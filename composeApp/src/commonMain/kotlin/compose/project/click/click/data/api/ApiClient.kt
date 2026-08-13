@@ -1,16 +1,17 @@
-package compose.project.click.click.data.api
+package compose.project.click.click.data.api // pragma: allowlist secret
 
-import compose.project.click.click.data.SupabaseConfig
-import compose.project.click.click.data.models.ErrorResponse
-import compose.project.click.click.data.models.MapBeacon
-import compose.project.click.click.data.models.MapBeaconInsert
-import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble
-import compose.project.click.click.data.models.ProfileTimelinePayload
-import compose.project.click.click.data.models.User
-import compose.project.click.click.data.models.UserCore
-import compose.project.click.click.data.models.parseMapBeaconRows
-import compose.project.click.click.data.storage.createTokenStorage
-import compose.project.click.click.util.redactedRestMessage
+import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
+import compose.project.click.click.data.models.ErrorResponse // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeaconInsert // pragma: allowlist secret
+import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
+import compose.project.click.click.data.models.ProfileTimelinePayload // pragma: allowlist secret
+import compose.project.click.click.data.models.StoredEventBookmark // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.UserCore // pragma: allowlist secret
+import compose.project.click.click.data.models.parseMapBeaconRows // pragma: allowlist secret
+import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.github.jan.supabase.auth.auth
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -65,6 +66,7 @@ private data class UserProfilePatchResponseDto(
 data class UserProfileGetResponse(
     val user: UserCore,
     val tags: List<String> = emptyList(),
+    @SerialName("personality_tags") val personalityTags: List<String> = emptyList(),
     @SerialName("viewerInterestTags") val viewerInterestTags: List<String> = emptyList(),
     @SerialName("sharedInterestTags") val sharedInterestTags: List<String> = emptyList(),
     /** Full legacy shape (availability, sharedConnection) preserved as JSON. */
@@ -73,6 +75,24 @@ data class UserProfileGetResponse(
     @SerialName("availabilityIntents")
     val availabilityIntents: List<ProfileAvailabilityIntentBubble> = emptyList(),
     @SerialName("sharedConnection") val sharedConnection: kotlinx.serialization.json.JsonElement? = null,
+)
+
+@Serializable
+data class ActivityRecapDto(
+    val window: String,
+    val since: String,
+    @SerialName("connections_formed") val connectionsFormed: Int = 0,
+    @SerialName("messages_sent") val messagesSent: Int = 0,
+    @SerialName("messages_received") val messagesReceived: Int = 0,
+    @SerialName("beacons_created") val beaconsCreated: Int = 0,
+    @SerialName("events_rsvped") val eventsRsvped: Int = 0,
+    @SerialName("events_checked_in") val eventsCheckedIn: Int = 0,
+    @SerialName("events_saved") val eventsSaved: Int = 0,
+)
+
+@Serializable
+private data class ActivityRecapResponseDto(
+    val recap: ActivityRecapDto,
 )
 
 /**
@@ -117,6 +137,12 @@ data class NotificationPreferencesPatchBody(
     val messagePushEnabled: Boolean,
     @SerialName("call_push_enabled")
     val callPushEnabled: Boolean,
+    @SerialName("event_reminder_push_enabled")
+    val eventReminderPushEnabled: Boolean = true,
+    @SerialName("availability_match_push_enabled")
+    val availabilityMatchPushEnabled: Boolean = true,
+    @SerialName("hub_message_push_enabled")
+    val hubMessagePushEnabled: Boolean = true,
 )
 
 @Serializable
@@ -695,6 +721,26 @@ class ApiClient {
     }
 
     /**
+     * GET `/api/me/recap?window=day|week` — Home activity rollup.
+     */
+    suspend fun getActivityRecap(window: String = "week"): Result<ActivityRecapDto> {
+        val normalized = if (window == "day") "day" else "week"
+        return try {
+            val response: HttpResponse =
+                clickWebClient.get("$clickWebAuthOrigin/api/me/recap") {
+                    parameter("window", normalized)
+                }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<ActivityRecapResponseDto>().recap)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
      * GET `/api/connections/{connectionId}/tabs` on click-web — fetches Media + Files
      * listings for the profile sheet. Links remain client-side because message
      * [content] is E2EE on the wire; callers filter locally-decrypted state.
@@ -724,8 +770,16 @@ class ApiClient {
         image: String? = null,
         tags: List<String>? = null,
         birthday: String? = null,
+        personalityTags: List<String>? = null,
     ): Result<User> {
-        if (firstName == null && lastName == null && image == null && tags == null && birthday == null) {
+        if (
+            firstName == null &&
+            lastName == null &&
+            image == null &&
+            tags == null &&
+            birthday == null &&
+            personalityTags == null
+        ) {
             return Result.failure(IllegalArgumentException("No profile fields to update"))
         }
         val body =
@@ -737,6 +791,9 @@ class ApiClient {
                     put("tags", JsonArray(list.map { JsonPrimitive(it) }))
                 }
                 birthday?.let { put("birthday", it) }
+                personalityTags?.let { list ->
+                    put("personality_tags", JsonArray(list.map { JsonPrimitive(it) }))
+                }
             }
         if (body.isEmpty()) {
             return Result.failure(IllegalArgumentException("No profile fields to update"))
@@ -1989,8 +2046,8 @@ data class EventBookmarkItemDto(
     @SerialName("expires_at") val expiresAt: String? = null,
 )
 
-fun EventBookmarkItemDto.toStoredEventBookmark(): compose.project.click.click.data.models.StoredEventBookmark =
-    compose.project.click.click.data.models.StoredEventBookmark(
+fun EventBookmarkItemDto.toStoredEventBookmark(): StoredEventBookmark =
+    StoredEventBookmark(
         beaconId = beaconId,
         bookmarkedAt = bookmarkedAt,
         title = title,
@@ -2004,7 +2061,7 @@ fun EventBookmarkItemDto.toStoredEventBookmark(): compose.project.click.click.da
         expiresAt = expiresAt,
     )
 
-fun compose.project.click.click.data.models.StoredEventBookmark.toEventBookmarkItemDto(): EventBookmarkItemDto =
+fun StoredEventBookmark.toEventBookmarkItemDto(): EventBookmarkItemDto =
     EventBookmarkItemDto(
         beaconId = beaconId,
         bookmarkedAt = bookmarkedAt,

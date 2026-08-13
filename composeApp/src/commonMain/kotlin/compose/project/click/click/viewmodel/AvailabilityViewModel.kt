@@ -1,33 +1,36 @@
-package compose.project.click.click.viewmodel
+package compose.project.click.click.viewmodel // pragma: allowlist secret
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityHelper // pragma: allowlist secret
-import compose.project.click.click.data.models.AvailabilityStatus // pragma: allowlist secret
-import compose.project.click.click.data.models.DayOfWeek // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentInsert // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
+import compose.project.click.click.data.models.AvailabilityStatus // pragma: allowlist secret
+import compose.project.click.click.data.models.DayOfWeek // pragma: allowlist secret
 import compose.project.click.click.data.models.MutualAvailability // pragma: allowlist secret
 import compose.project.click.click.data.models.UserAvailability // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
-import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
+import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import io.github.jan.supabase.auth.auth
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 
 /** Preset duration for [public.availability_intents] windows (from now). */
-enum class AvailabilityIntentDuration(val durationMs: Long, val label: String) {
+enum class AvailabilityIntentDuration(
+    val durationMs: Long,
+    val label: String,
+) {
     FIFTEEN_MIN(15L * 60_000L, "15 min"),
     THIRTY_MIN(30L * 60_000L, "30 min"),
     FORTY_FIVE_MIN(45L * 60_000L, "45 min"),
@@ -40,27 +43,26 @@ enum class AvailabilityIntentDuration(val durationMs: Long, val label: String) {
 }
 
 class AvailabilityViewModel(
-    private val supabaseRepository: SupabaseRepository = SupabaseRepository()
+    private val supabaseRepository: SupabaseRepository = SupabaseRepository(),
 ) : ViewModel() {
-    
     // Current user's availability from AppDataManager
     val currentAvailability: StateFlow<UserAvailability?> = AppDataManager.userAvailability
-    
+
     // Availability status
     private val _availabilityStatus = MutableStateFlow(AvailabilityStatus.NOT_SET)
     val availabilityStatus: StateFlow<AvailabilityStatus> = _availabilityStatus.asStateFlow()
-    
+
     // Mutual availabilities with connections
     private val _mutualAvailabilities = MutableStateFlow<List<MutualAvailability>>(emptyList())
     val mutualAvailabilities: StateFlow<List<MutualAvailability>> = _mutualAvailabilities.asStateFlow()
-    
+
     // Loading state from AppDataManager
     val isLoading: StateFlow<Boolean> = AppDataManager.isLoading
-    
+
     // Error state
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
-    
+
     // Show availability settings dialog
     private val _showSettingsDialog = MutableStateFlow(false)
     val showSettingsDialog: StateFlow<Boolean> = _showSettingsDialog.asStateFlow()
@@ -99,7 +101,7 @@ class AvailabilityViewModel(
     /** Inline message under the active-intents list (e.g. delete/update failure). */
     private val _intentListFeedback = MutableStateFlow<String?>(null)
     val intentListFeedback: StateFlow<String?> = _intentListFeedback.asStateFlow()
-    
+
     init {
         // Observe availability changes to update status
         viewModelScope.launch {
@@ -113,14 +115,27 @@ class AvailabilityViewModel(
     }
 
     private suspend fun resolveSignedInUserId(): String? {
-        SupabaseConfig.client.auth.currentUserOrNull()?.id?.takeIf { it.isNotBlank() }?.let { return it }
+        SupabaseConfig.client.auth
+            .currentUserOrNull()
+            ?.id
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
         // Offline fast-boot can leave AuthState.Success while GoTrue has no session yet.
         val tokenStorage = createTokenStorage()
-        runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
-        SupabaseConfig.client.auth.currentUserOrNull()?.id?.takeIf { it.isNotBlank() }?.let { return it }
+        runCatching { SupabaseConfig.importStoredSessionIfSdkEmpty(tokenStorage) }
+        SupabaseConfig.client.auth
+            .currentUserOrNull()
+            ?.id
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
         runCatching { AuthRepository(tokenStorage).refreshSession() }
-        return SupabaseConfig.client.auth.currentUserOrNull()?.id?.takeIf { it.isNotBlank() }
-            ?: AppDataManager.currentUser.value?.id?.takeIf { it.isNotBlank() }
+        return SupabaseConfig.client.auth
+            .currentUserOrNull()
+            ?.id
+            ?.takeIf { it.isNotBlank() }
+            ?: AppDataManager.currentUser.value
+                ?.id
+                ?.takeIf { it.isNotBlank() }
     }
 
     private suspend fun refreshActiveAvailabilityIntentsInternal() {
@@ -169,9 +184,10 @@ class AvailabilityViewModel(
         val tf = raw?.trim().orEmpty()
         if (tf.isEmpty()) return AvailabilityIntentDuration.THREE_HOURS
         AvailabilityIntentDuration.entries.find { it.label.equals(tf, ignoreCase = true) }?.let { return it }
-        AvailabilityIntentDuration.entries.find { entry ->
-            tf.contains(entry.label, ignoreCase = true)
-        }?.let { return it }
+        AvailabilityIntentDuration.entries
+            .find { entry ->
+                tf.contains(entry.label, ignoreCase = true)
+            }?.let { return it }
         // Tolerate values like "3h", "180 min", or enum-ish tokens.
         val compact = tf.lowercase().replace(" ", "")
         return when {
@@ -203,14 +219,14 @@ class AvailabilityViewModel(
             }
         }
     }
-    
+
     /**
      * Toggle the "I'm free this week" status via AppDataManager
      */
     fun toggleFreeThisWeek() {
         AppDataManager.toggleFreeThisWeek()
     }
-    
+
     /**
      * Update available days
      */
@@ -219,17 +235,18 @@ class AvailabilityViewModel(
             try {
                 val currentUser = AppDataManager.currentUser.value ?: return@launch
                 val dayNames = days.map { it.name.lowercase() }
-                
+
                 val current = currentAvailability.value
-                val updated = current?.copy(
-                    availableDays = dayNames,
-                    lastUpdated = Clock.System.now().toEpochMilliseconds()
-                ) ?: UserAvailability(
-                    userId = currentUser.id,
-                    availableDays = dayNames,
-                    lastUpdated = Clock.System.now().toEpochMilliseconds()
-                )
-                
+                val updated =
+                    current?.copy(
+                        availableDays = dayNames,
+                        lastUpdated = Clock.System.now().toEpochMilliseconds(),
+                    ) ?: UserAvailability(
+                        userId = currentUser.id,
+                        availableDays = dayNames,
+                        lastUpdated = Clock.System.now().toEpochMilliseconds(),
+                    )
+
                 AppDataManager.updateUserAvailability(updated)
                 supabaseRepository.updateUserAvailability(updated)
             } catch (e: Exception) {
@@ -238,7 +255,7 @@ class AvailabilityViewModel(
             }
         }
     }
-    
+
     /**
      * Update preferred activities
      */
@@ -246,17 +263,18 @@ class AvailabilityViewModel(
         viewModelScope.launch {
             try {
                 val currentUser = AppDataManager.currentUser.value ?: return@launch
-                
+
                 val current = currentAvailability.value
-                val updated = current?.copy(
-                    preferredActivities = activities,
-                    lastUpdated = Clock.System.now().toEpochMilliseconds()
-                ) ?: UserAvailability(
-                    userId = currentUser.id,
-                    preferredActivities = activities,
-                    lastUpdated = Clock.System.now().toEpochMilliseconds()
-                )
-                
+                val updated =
+                    current?.copy(
+                        preferredActivities = activities,
+                        lastUpdated = Clock.System.now().toEpochMilliseconds(),
+                    ) ?: UserAvailability(
+                        userId = currentUser.id,
+                        preferredActivities = activities,
+                        lastUpdated = Clock.System.now().toEpochMilliseconds(),
+                    )
+
                 AppDataManager.updateUserAvailability(updated)
                 supabaseRepository.updateUserAvailability(updated)
             } catch (e: Exception) {
@@ -265,7 +283,7 @@ class AvailabilityViewModel(
             }
         }
     }
-    
+
     /**
      * Update custom status message
      */
@@ -273,17 +291,18 @@ class AvailabilityViewModel(
         viewModelScope.launch {
             try {
                 val currentUser = AppDataManager.currentUser.value ?: return@launch
-                
+
                 val current = currentAvailability.value
-                val updated = current?.copy(
-                    customStatus = status,
-                    lastUpdated = Clock.System.now().toEpochMilliseconds()
-                ) ?: UserAvailability(
-                    userId = currentUser.id,
-                    customStatus = status,
-                    lastUpdated = Clock.System.now().toEpochMilliseconds()
-                )
-                
+                val updated =
+                    current?.copy(
+                        customStatus = status,
+                        lastUpdated = Clock.System.now().toEpochMilliseconds(),
+                    ) ?: UserAvailability(
+                        userId = currentUser.id,
+                        customStatus = status,
+                        lastUpdated = Clock.System.now().toEpochMilliseconds(),
+                    )
+
                 AppDataManager.updateUserAvailability(updated)
                 supabaseRepository.updateUserAvailability(updated)
             } catch (e: Exception) {
@@ -292,7 +311,7 @@ class AvailabilityViewModel(
             }
         }
     }
-    
+
     /**
      * Load mutual availabilities with user's connections
      */
@@ -302,38 +321,41 @@ class AvailabilityViewModel(
                 val currentUser = AppDataManager.currentUser.value ?: return@launch
                 val archived = AppDataManager.archivedConnectionIds.value
                 val hidden = AppDataManager.hiddenConnectionIds.value
-                val connections = AppDataManager.connections.value.filter {
-                    it.isActiveForUser(archived, hidden)
-                }
+                val connections =
+                    AppDataManager.connections.value.filter {
+                        it.isActiveForUser(archived, hidden)
+                    }
                 val myAvailability = currentAvailability.value
-                
+
                 // Get other user IDs
                 val otherUserIds = connections.flatMap { it.user_ids }.filter { it != currentUser.id }.distinct()
-                
+
                 // Get their availabilities
                 val availabilities = supabaseRepository.fetchAvailabilityForUsers(otherUserIds)
-                
+
                 // Get user info from AppDataManager
                 val usersMap = AppDataManager.connectedUsers.value
-                
+
                 // Calculate mutual availabilities
-                val mutuals = connections.mapNotNull { connection ->
-                    val otherUserId = connection.user_ids.firstOrNull { it != currentUser.id } ?: return@mapNotNull null
-                    val otherAvailability = availabilities[otherUserId]
-                    val otherUser = usersMap[otherUserId]
-                    
-                    val mutual = AvailabilityHelper.calculateMutualAvailability(
-                        connectionId = connection.id,
-                        currentUserAvailability = myAvailability,
-                        otherUserAvailability = otherAvailability,
-                        otherUserId = otherUserId,
-                        otherUserName = otherUser?.name
-                    )
-                    
-                    // Only return if there's mutual availability
-                    if (mutual.hasMutualAvailability()) mutual else null
-                }
-                
+                val mutuals =
+                    connections.mapNotNull { connection ->
+                        val otherUserId = connection.user_ids.firstOrNull { it != currentUser.id } ?: return@mapNotNull null
+                        val otherAvailability = availabilities[otherUserId]
+                        val otherUser = usersMap[otherUserId]
+
+                        val mutual =
+                            AvailabilityHelper.calculateMutualAvailability(
+                                connectionId = connection.id,
+                                currentUserAvailability = myAvailability,
+                                otherUserAvailability = otherAvailability,
+                                otherUserId = otherUserId,
+                                otherUserName = otherUser?.name,
+                            )
+
+                        // Only return if there's mutual availability
+                        if (mutual.hasMutualAvailability()) mutual else null
+                    }
+
                 _mutualAvailabilities.value = mutuals
             } catch (e: Exception) {
                 println("Error loading mutual availabilities: ${e.redactedRestMessage()}")
@@ -341,21 +363,21 @@ class AvailabilityViewModel(
             }
         }
     }
-    
+
     /**
      * Show the availability settings dialog
      */
     fun showSettings() {
         _showSettingsDialog.value = true
     }
-    
+
     /**
      * Hide the availability settings dialog
      */
     fun hideSettings() {
         _showSettingsDialog.value = false
     }
-    
+
     /**
      * Clear error
      */
@@ -407,28 +429,29 @@ class AvailabilityViewModel(
             val editingId = _editingAvailabilityIntentId.value?.takeIf { it.isNotBlank() }
             _intentSubmitting.value = true
             _intentSubmitError.value = null
-            val result = if (editingId != null) {
-                supabaseRepository.updateAvailabilityIntent(
-                    id = editingId,
-                    userId = userId,
-                    intentTag = tag,
-                    timeframe = _intentDuration.value.label,
-                    startsAt = startsIso,
-                    endsAt = endsIso,
-                    expiresAt = endsIso,
-                )
-            } else {
-                supabaseRepository.insertAvailabilityIntent(
-                    AvailabilityIntentInsert(
+            val result =
+                if (editingId != null) {
+                    supabaseRepository.updateAvailabilityIntent(
+                        id = editingId,
                         userId = userId,
                         intentTag = tag,
                         timeframe = _intentDuration.value.label,
                         startsAt = startsIso,
                         endsAt = endsIso,
                         expiresAt = endsIso,
-                    ),
-                )
-            }
+                    )
+                } else {
+                    supabaseRepository.insertAvailabilityIntent(
+                        AvailabilityIntentInsert(
+                            userId = userId,
+                            intentTag = tag,
+                            timeframe = _intentDuration.value.label,
+                            startsAt = startsIso,
+                            endsAt = endsIso,
+                            expiresAt = endsIso,
+                        ),
+                    )
+                }
             _intentSubmitting.value = false
             if (result.success) {
                 PlatformHapticsPolicy.heavyImpact()
@@ -451,8 +474,10 @@ class AvailabilityViewModel(
             val detail = raw?.trim().orEmpty()
             return when {
                 detail.contains("availability_intents", ignoreCase = true) &&
-                    (detail.contains("does not exist", ignoreCase = true) ||
-                        detail.contains("schema cache", ignoreCase = true)) ->
+                    (
+                        detail.contains("does not exist", ignoreCase = true) ||
+                            detail.contains("schema cache", ignoreCase = true)
+                    ) ->
                     "Availability isn’t set up on the server yet. Ask your admin to run the database migration."
                 detail.contains("row-level security", ignoreCase = true) ||
                     detail.contains("violates row-level security", ignoreCase = true) ||

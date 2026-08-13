@@ -1,4 +1,6 @@
-package compose.project.click.click.ui.screens
+@file:Suppress("ktlint:standard:no-wildcard-imports", "ktlint:standard:function-naming")
+
+package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -8,102 +10,101 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.border
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.rotate
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import compose.project.click.click.events.HomeEventReminder
-import compose.project.click.click.events.eventReminderBody
-import compose.project.click.click.events.eventReminderTitle
-import compose.project.click.click.ui.theme.* // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
-import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
-import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
-import compose.project.click.click.ui.components.UnifiedToastHost
-import compose.project.click.click.ui.components.rememberUnifiedToastState
-import compose.project.click.click.ui.components.PollPairCard // pragma: allowlist secret
-import compose.project.click.click.ui.components.AvailabilitySheet // pragma: allowlist secret
-import compose.project.click.click.ui.components.AppShimmerScreen // pragma: allowlist secret
 import androidx.lifecycle.viewmodel.compose.viewModel
-import compose.project.click.click.viewmodel.AvailabilityViewModel // pragma: allowlist secret
-import compose.project.click.click.viewmodel.HomeViewModel // pragma: allowlist secret
-import compose.project.click.click.viewmodel.HomeState // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
-import compose.project.click.click.data.api.EventBookmarkItemDto
-import compose.project.click.click.data.api.CommunityHubNearbyDto
+import compose.project.click.click.data.api.CommunityHubNearbyDto // pragma: allowlist secret
+import compose.project.click.click.data.api.EventBookmarkItemDto // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
-import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.ConnectionInsights // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeaconMetadata // pragma: allowlist secret
 import compose.project.click.click.data.models.ReconnectReminder // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.mostUrgentArchiveNotice // pragma: allowlist secret
-import compose.project.click.click.ui.components.BeaconShareToChatDialog
-import compose.project.click.click.ui.components.ConnectionArchiveWarningBanner // pragma: allowlist secret
-import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
+import compose.project.click.click.data.models.withPreservedEventScheduleFrom // pragma: allowlist secret
+import compose.project.click.click.events.EventReminderCoordinator // pragma: allowlist secret
+import compose.project.click.click.events.HomeEventReminder // pragma: allowlist secret
+import compose.project.click.click.events.eventReminderBody // pragma: allowlist secret
+import compose.project.click.click.events.eventReminderTitle // pragma: allowlist secret
+import compose.project.click.click.events.isActiveForDiscoveryFeed // pragma: allowlist secret
+import compose.project.click.click.ui.components.ActivityRecapSection // pragma: allowlist secret
+import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
+import compose.project.click.click.ui.components.AppShimmerScreen // pragma: allowlist secret
+import compose.project.click.click.ui.components.AvailabilitySheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.BeaconShareToChatDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDialogChrome // pragma: allowlist secret
-import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionArchiveWarningBanner // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.ExploreNearbyBeaconsSection // pragma: allowlist secret
 import compose.project.click.click.ui.components.FeaturedEventSection // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeExploreTile // pragma: allowlist secret
-import compose.project.click.click.ui.components.SavedEventsSection // pragma: allowlist secret
-import compose.project.click.click.ui.components.homeGreetingTitle // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeGreetingSubtitle // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeSearchPill // pragma: allowlist secret
+import compose.project.click.click.ui.components.PollPairCard // pragma: allowlist secret
+import compose.project.click.click.ui.components.SavedEventsSection // pragma: allowlist secret
+import compose.project.click.click.ui.components.UnifiedToastHost // pragma: allowlist secret
+import compose.project.click.click.ui.components.homeGreetingTitle // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberUnifiedToastState // pragma: allowlist secret
+import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
 import compose.project.click.click.ui.components.toHomeExploreTile // pragma: allowlist secret
 import compose.project.click.click.ui.sheet.MapBeaconSheetRoot // pragma: allowlist secret
-import compose.project.click.click.events.isActiveForDiscoveryFeed // pragma: allowlist secret
-import compose.project.click.click.events.EventReminderCoordinator
-import compose.project.click.click.data.models.MapBeacon
-import compose.project.click.click.data.models.MapBeaconKind
-import compose.project.click.click.data.models.MapBeaconMetadata
-import compose.project.click.click.data.models.withPreservedEventScheduleFrom
-import compose.project.click.click.ui.utils.haversineDistance
-import compose.project.click.click.ui.utils.hasUsableMapCoordinates
-import compose.project.click.click.ui.utils.mergeMapBeaconLists
+import compose.project.click.click.ui.theme.* // pragma: allowlist secret
+import compose.project.click.click.ui.utils.hasUsableMapCoordinates // pragma: allowlist secret
+import compose.project.click.click.ui.utils.haversineDistance // pragma: allowlist secret
+import compose.project.click.click.ui.utils.mergeMapBeaconLists // pragma: allowlist secret
+import compose.project.click.click.viewmodel.AvailabilityViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.HomeState // pragma: allowlist secret
+import compose.project.click.click.viewmodel.HomeViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
-import compose.project.click.click.viewmodel.MapViewModel
-import androidx.compose.material.icons.filled.Groups
-import androidx.compose.foundation.verticalScroll
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
+import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlin.time.Duration.Companion.milliseconds
 
 // Spacing constants matching app's consistent 20.dp horizontal padding
 private val ScreenPaddingHorizontal = 20.dp
 private val CardSpacing = 24.dp
+
 /** Visible gap under the floating greeting before the search pill (cancels spacedBy after inset). */
 private val HeaderToSearchGap = 8.dp
 
@@ -115,11 +116,13 @@ fun HomeScreen(
     onOpenSearch: (() -> Unit)? = null,
     onNavigateToMap: (beaconId: String?) -> Unit = {},
     onNavigateToMapLayer: (MapLayerFilter) -> Unit = {},
-    onShareBeaconToChats: ((
-        MapBeacon,
-        List<String>,
-        String?,
-    ) -> Unit)? = null,
+    onShareBeaconToChats: (
+        (
+            MapBeacon,
+            List<String>,
+            String?,
+        ) -> Unit
+    )? = null,
 ) {
     val homeState by homeViewModel.homeState.collectAsState()
     var lastSuccessfulHomeState by remember { mutableStateOf<HomeState.Success?>(null) }
@@ -131,6 +134,8 @@ fun HomeScreen(
     val reconnectReminders by homeViewModel.reconnectReminders.collectAsState()
     val homeEventReminders by homeViewModel.homeEventReminders.collectAsState()
     val savedEventBookmarks by homeViewModel.savedEventBookmarks.collectAsState()
+    val activityRecap by homeViewModel.activityRecap.collectAsState()
+    val recapWindow by homeViewModel.recapWindow.collectAsState()
     val connectionInsights by homeViewModel.connectionInsights.collectAsState()
     val showInsightsPanel by homeViewModel.showInsightsPanel.collectAsState()
     val locationGroupedConnections by homeViewModel.locationGroupedConnections.collectAsState()
@@ -184,59 +189,67 @@ fun HomeScreen(
         }
     }
 
-    val archiveBannerNotice = remember(
-        homeState,
-        connectionsForArchiveBanner,
-        archiveBannerNow,
-        connectedUsers,
-        archivedForHome,
-        hiddenForHome,
-    ) {
-        val success = homeState as? HomeState.Success ?: return@remember null
-        connectionsForArchiveBanner
-            .filter { it.isActiveForUser(archivedForHome, hiddenForHome) }
-            .mostUrgentArchiveNotice(archiveBannerNow) { conn ->
-            val otherId = conn.user_ids.firstOrNull { it != success.user.id }
-            otherId?.let { connectedUsers[it]?.name?.trim() }?.takeIf { it.isNotBlank() }
-                ?: conn.displayLocationLabel?.trim()?.takeIf { it.isNotBlank() }
-                ?: "this connection"
-        }
-    }
-
-    val displayedSavedBookmarks = remember(savedEventBookmarks, cachedEventBookmarks) {
-        if (savedEventBookmarks.isNotEmpty()) savedEventBookmarks else cachedEventBookmarks
-    }
-
-    val exploreTiles = remember(prefetchedBeacons, prefetchedHubs, mapBeacons, mapCommunityHubs) {
-        val mergedBeacons = mergeMapBeaconLists(prefetchedBeacons, mapBeacons)
-        val hubDtos = buildList {
-            addAll(prefetchedHubs)
-            val seen = prefetchedHubs.map { it.hubId }.toSet()
-            mapCommunityHubs.forEach { pin ->
-                if (pin.hubId !in seen) {
-                    add(
-                        CommunityHubNearbyDto(
-                            hubId = pin.hubId,
-                            name = pin.name,
-                            latitude = pin.latitude,
-                            longitude = pin.longitude,
-                            radiusMeters = pin.radiusMeters,
-                            activeUserCount = pin.activeUserCount,
-                            distanceMeters = pin.reportedDistanceMeters ?: 0.0,
-                        ),
-                    )
+    val archiveBannerNotice =
+        remember(
+            homeState,
+            connectionsForArchiveBanner,
+            archiveBannerNow,
+            connectedUsers,
+            archivedForHome,
+            hiddenForHome,
+        ) {
+            val success = homeState as? HomeState.Success ?: return@remember null
+            connectionsForArchiveBanner
+                .filter { it.isActiveForUser(archivedForHome, hiddenForHome) }
+                .mostUrgentArchiveNotice(archiveBannerNow) { conn ->
+                    val otherId = conn.user_ids.firstOrNull { it != success.user.id }
+                    otherId?.let { connectedUsers[it]?.name?.trim() }?.takeIf { it.isNotBlank() }
+                        ?: conn.displayLocationLabel?.trim()?.takeIf { it.isNotBlank() }
+                        ?: "this connection"
                 }
-            }
         }
-        buildHomeExploreTiles(mergedBeacons, hubDtos)
-    }
+
+    val displayedSavedBookmarks =
+        remember(savedEventBookmarks, cachedEventBookmarks) {
+            if (savedEventBookmarks.isNotEmpty()) savedEventBookmarks else cachedEventBookmarks
+        }
+
+    val exploreTiles =
+        remember(prefetchedBeacons, prefetchedHubs, mapBeacons, mapCommunityHubs) {
+            val mergedBeacons = mergeMapBeaconLists(prefetchedBeacons, mapBeacons)
+            val hubDtos =
+                buildList {
+                    addAll(prefetchedHubs)
+                    val seen = prefetchedHubs.map { it.hubId }.toSet()
+                    mapCommunityHubs.forEach { pin ->
+                        if (pin.hubId !in seen) {
+                            add(
+                                CommunityHubNearbyDto(
+                                    hubId = pin.hubId,
+                                    name = pin.name,
+                                    latitude = pin.latitude,
+                                    longitude = pin.longitude,
+                                    radiusMeters = pin.radiusMeters,
+                                    activeUserCount = pin.activeUserCount,
+                                    distanceMeters = pin.reportedDistanceMeters ?: 0.0,
+                                ),
+                            )
+                        }
+                    }
+                }
+            buildHomeExploreTiles(mergedBeacons, hubDtos)
+        }
 
     val featuredEvent = homeEventReminders.firstOrNull()
-    val remainingEventReminders = remember(homeEventReminders, featuredEvent) {
-        val featuredId = featuredEvent?.beaconId
-        if (featuredId == null) homeEventReminders
-        else homeEventReminders.filterNot { it.beaconId == featuredId }
-    }
+    val remainingEventReminders =
+        remember(homeEventReminders, featuredEvent) {
+            val featuredId = featuredEvent?.beaconId
+            if (featuredId == null) {
+                homeEventReminders
+            } else {
+                homeEventReminders.filterNot { it.beaconId == featuredId }
+            }
+        }
 
     val toastState = rememberUnifiedToastState()
     val scope = rememberCoroutineScope()
@@ -265,9 +278,10 @@ fun HomeScreen(
     }
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
     ) {
         when (val state = renderedHomeState) {
             is HomeState.Loading -> {
@@ -277,47 +291,50 @@ fun HomeScreen(
             }
             is HomeState.Error -> {
                 Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(ScreenPaddingHorizontal),
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(ScreenPaddingHorizontal),
                     verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Icon(
                         Icons.Filled.ErrorOutline,
                         contentDescription = null,
                         modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.error
+                        tint = MaterialTheme.colorScheme.error,
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         "Error loading home data",
                         style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.error
+                        color = MaterialTheme.colorScheme.error,
                     )
                     Text(
                         state.message,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
                         onClick = { homeViewModel.refresh() },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        )
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                            ),
                     ) {
                         Text("Retry")
                     }
                 }
             }
             is HomeState.Success -> {
-                val firstName = state.user.name
-                    ?.trim()
-                    ?.split(Regex("\\s+"))
-                    ?.firstOrNull()
-                    ?.takeIf { it.isNotBlank() }
-                    ?: "there"
+                val firstName =
+                    state.user.name
+                        ?.trim()
+                        ?.split(Regex("\\s+"))
+                        ?.firstOrNull()
+                        ?.takeIf { it.isNotBlank() }
+                        ?: "there"
                 AppScreenScaffold(
                     title = homeGreetingTitle(firstName),
                     subtitle = HomeGreetingSubtitle,
@@ -327,239 +344,250 @@ fun HomeScreen(
                     belowHeaderSpacing = HeaderToSearchGap - CardSpacing,
                     verticalArrangement = Arrangement.spacedBy(CardSpacing),
                 ) {
-                        if (onOpenSearch != null) {
-                            item(key = "home_search_pill") {
-                                HomeSearchPill(onClick = onOpenSearch)
-                            }
+                    if (onOpenSearch != null) {
+                        item(key = "home_search_pill") {
+                            HomeSearchPill(onClick = onOpenSearch)
                         }
+                    }
 
-                        featuredEvent?.let { reminder ->
-                            item(key = "featured_event") {
-                                FeaturedEventSection(
-                                    reminder = reminder,
-                                    onViewMap = { onNavigateToMap(reminder.beaconId) },
-                                )
-                            }
+                    featuredEvent?.let { reminder ->
+                        item(key = "featured_event") {
+                            FeaturedEventSection(
+                                reminder = reminder,
+                                onViewMap = { onNavigateToMap(reminder.beaconId) },
+                            )
                         }
+                    }
 
-                        item(key = "availability_intents_strip") {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
-                            ) {
-                                HomeAvailabilityIntentsRow(
-                                    intents = homeAvailabilityIntents,
-                                    onCreateIntent = {
-                                        availabilityViewModel.resetAvailabilityIntentSheet()
-                                        seedAvailabilityIntent = null
-                                        showAvailabilityIntentSheet = true
-                                    },
-                                    onEditIntent = { row ->
-                                        availabilityViewModel.beginEditAvailabilityIntent(row)
-                                        seedAvailabilityIntent = row
-                                        showAvailabilityIntentSheet = true
-                                    },
-                                )
-                                if (homeAvailabilityOverlapMessages.isNotEmpty()) {
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                                    ) {
-                                        homeAvailabilityOverlapMessages.forEach { line ->
-                                            Text(
-                                                text = line,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.Medium,
-                                                color = MaterialTheme.colorScheme.tertiary,
-                                            )
-                                        }
+                    item(key = "availability_intents_strip") {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            HomeAvailabilityIntentsRow(
+                                intents = homeAvailabilityIntents,
+                                onCreateIntent = {
+                                    availabilityViewModel.resetAvailabilityIntentSheet()
+                                    seedAvailabilityIntent = null
+                                    showAvailabilityIntentSheet = true
+                                },
+                                onEditIntent = { row ->
+                                    availabilityViewModel.beginEditAvailabilityIntent(row)
+                                    seedAvailabilityIntent = row
+                                    showAvailabilityIntentSheet = true
+                                },
+                            )
+                            if (homeAvailabilityOverlapMessages.isNotEmpty()) {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    homeAvailabilityOverlapMessages.forEach { line ->
+                                        Text(
+                                            text = line,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.tertiary,
+                                        )
                                     }
                                 }
                             }
                         }
+                    }
 
-                        if (displayedSavedBookmarks.isNotEmpty()) {
-                            item(key = "saved_events") {
-                                SavedEventsSection(
-                                    bookmarks = displayedSavedBookmarks,
-                                    onBookmarkClick = { bookmark ->
-                                        selectedSavedEventBeacon = resolveSavedEventBeacon(
+                    activityRecap?.let { recap ->
+                        item(key = "activity_recap") {
+                            ActivityRecapSection( // pragma: allowlist secret
+                                recap = recap,
+                                window = recapWindow,
+                                onWindowChange = { homeViewModel.setRecapWindow(it) },
+                            )
+                        }
+                    }
+
+                    if (displayedSavedBookmarks.isNotEmpty()) {
+                        item(key = "saved_events") {
+                            SavedEventsSection(
+                                bookmarks = displayedSavedBookmarks,
+                                onBookmarkClick = { bookmark ->
+                                    selectedSavedEventBeacon =
+                                        resolveSavedEventBeacon(
                                             bookmark = bookmark,
                                             mapBeacons = mapBeacons,
                                             prefetchedBeacons = prefetchedBeacons,
                                         )
-                                    },
+                                },
+                            )
+                        }
+                    }
+
+                    if (exploreTiles.isNotEmpty()) {
+                        item(key = "explore_nearby") {
+                            ExploreNearbyBeaconsSection(
+                                tiles = exploreTiles,
+                                onTileClick = { tile -> onNavigateToMapLayer(tile.layerFilter) },
+                            )
+                        }
+                    }
+
+                    archiveBannerNotice?.let { notice ->
+                        item(key = "archive_banner") {
+                            ConnectionArchiveWarningBanner(
+                                notice = notice,
+                                onOpenChat = { onNavigateToChat(notice.connectionId) },
+                                onSendIcebreaker = { homeViewModel.sendArchiveBannerIcebreaker(notice) },
+                                modifier = Modifier.fillMaxWidth(),
+                                icebreakerSendEnabled = icebreakerSendCooldownSec <= 0,
+                                icebreakerCooldownSec = icebreakerSendCooldownSec,
+                            )
+                        }
+                    }
+                    pollPairSuggestion?.let { suggestion ->
+                        item(key = "poll_pair_card") {
+                            PollPairCard(
+                                suggestion = suggestion,
+                                onOpenChat = { onNavigateToChat(suggestion.connectionId) },
+                                onSendIcebreaker = { homeViewModel.sendPollPairIcebreaker(suggestion) },
+                                icebreakerSendEnabled = icebreakerSendCooldownSec <= 0,
+                                icebreakerCooldownSec = icebreakerSendCooldownSec,
+                            )
+                        }
+                    }
+
+                    if (reconnectReminders.isNotEmpty()) {
+                        item(key = "reconnect_header") {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                SectionHeader(text = "Reconnect")
+                                Text(
+                                    "Connections you haven't talked to in a while",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
 
-                        if (exploreTiles.isNotEmpty()) {
-                            item(key = "explore_nearby") {
-                                ExploreNearbyBeaconsSection(
-                                    tiles = exploreTiles,
-                                    onTileClick = { tile -> onNavigateToMapLayer(tile.layerFilter) },
-                                )
-                            }
+                        items(
+                            reconnectReminders,
+                            key = { it.connectionId },
+                            contentType = { "reconnect_reminder" },
+                        ) { reminder ->
+                            val peer = connectedUsers[reminder.userId]
+                            ReconnectReminderCard(
+                                reminder = reminder,
+                                onReconnect = { onNavigateToChat(reminder.connectionId) },
+                                onDismiss = { homeViewModel.dismissReminder(reminder.connectionId) },
+                                avatarUrl = peer?.image,
+                                email = peer?.email,
+                            )
                         }
+                    }
 
-                        archiveBannerNotice?.let { notice ->
-                            item(key = "archive_banner") {
-                                ConnectionArchiveWarningBanner(
-                                    notice = notice,
-                                    onOpenChat = { onNavigateToChat(notice.connectionId) },
-                                    onSendIcebreaker = { homeViewModel.sendArchiveBannerIcebreaker(notice) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    icebreakerSendEnabled = icebreakerSendCooldownSec <= 0,
-                                    icebreakerCooldownSec = icebreakerSendCooldownSec,
-                                )
-                            }
+                    if (remainingEventReminders.isNotEmpty()) {
+                        item(key = "event_reminders_header") {
+                            SectionHeader(text = "Event reminders")
                         }
-                        pollPairSuggestion?.let { suggestion ->
-                            item(key = "poll_pair_card") {
-                                PollPairCard(
-                                    suggestion = suggestion,
-                                    onOpenChat = { onNavigateToChat(suggestion.connectionId) },
-                                    onSendIcebreaker = { homeViewModel.sendPollPairIcebreaker(suggestion) },
-                                    icebreakerSendEnabled = icebreakerSendCooldownSec <= 0,
-                                    icebreakerCooldownSec = icebreakerSendCooldownSec,
-                                )
-                            }
+                        items(
+                            remainingEventReminders,
+                            key = { "${it.beaconId}:${it.kind.name}" },
+                            contentType = { "event_reminder" },
+                        ) { reminder ->
+                            HomeEventReminderCard(
+                                reminder = reminder,
+                                onDismiss = {
+                                    homeViewModel.dismissEventReminder(reminder.beaconId, reminder.kind)
+                                },
+                                onViewMap = { onNavigateToMap(reminder.beaconId) },
+                            )
                         }
+                    }
 
-                        if (reconnectReminders.isNotEmpty()) {
-                            item(key = "reconnect_header") {
-                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    SectionHeader(text = "Reconnect")
+                    if (locationGroupedConnections.isNotEmpty()) {
+                        item(key = "recent_connections_header") {
+                            SectionHeader(text = "Recent Connections")
+                        }
+                        items(
+                            locationGroupedConnections.entries.toList(),
+                            key = { it.key },
+                            contentType = { "location_group" },
+                        ) { (location, connections) ->
+                            val isExpanded = location in expandedLocations
+                            LocationGroupCard(
+                                location = location,
+                                connections = connections,
+                                isExpanded = isExpanded,
+                                connectedUsers = connectedUsers,
+                                currentUserId = state.user.id,
+                                onToggleExpand = { homeViewModel.toggleLocationExpanded(location) },
+                                onNavigateToChat = onNavigateToChat,
+                                onNudge = { connectionId, otherUserName ->
+                                    homeViewModel.sendNudgeByConnectionId(connectionId, otherUserName)
+                                },
+                            )
+                        }
+                    } else {
+                        item(key = "empty_connections") {
+                            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                ) {
+                                    Icon(
+                                        Icons.Filled.TouchApp,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(48.dp),
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
                                     Text(
-                                        "Connections you haven't talked to in a while",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        "No Connections Yet",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        "Start making connections by tapping Add Click",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                             }
-
-                            items(
-                                reconnectReminders,
-                                key = { it.connectionId },
-                                contentType = { "reconnect_reminder" },
-                            ) { reminder ->
-                                val peer = connectedUsers[reminder.userId]
-                                ReconnectReminderCard(
-                                    reminder = reminder,
-                                    onReconnect = { onNavigateToChat(reminder.connectionId) },
-                                    onDismiss = { homeViewModel.dismissReminder(reminder.connectionId) },
-                                    avatarUrl = peer?.image,
-                                    email = peer?.email,
-                                )
-                            }
                         }
+                    }
 
-                        if (remainingEventReminders.isNotEmpty()) {
-                            item(key = "event_reminders_header") {
-                                SectionHeader(text = "Event reminders")
-                            }
-                            items(
-                                remainingEventReminders,
-                                key = { "${it.beaconId}:${it.kind.name}" },
-                                contentType = { "event_reminder" },
-                            ) { reminder ->
-                                HomeEventReminderCard(
-                                    reminder = reminder,
-                                    onDismiss = {
-                                        homeViewModel.dismissEventReminder(reminder.beaconId, reminder.kind)
-                                    },
-                                    onViewMap = { onNavigateToMap(reminder.beaconId) },
-                                )
-                            }
+                    if (connectionInsights != null && state.stats.totalConnections > 0) {
+                        item(key = "connection_insights") {
+                            ConnectionInsightsCard(
+                                insights = connectionInsights!!,
+                                expanded = showInsightsPanel,
+                                onToggle = { homeViewModel.toggleInsightsPanel() },
+                            )
                         }
+                    }
 
-                        if (locationGroupedConnections.isNotEmpty()) {
-                            item(key = "recent_connections_header") {
-                                SectionHeader(text = "Recent Connections")
-                            }
-                            items(
-                                locationGroupedConnections.entries.toList(),
-                                key = { it.key },
-                                contentType = { "location_group" },
-                            ) { (location, connections) ->
-                                val isExpanded = location in expandedLocations
-                                LocationGroupCard(
-                                    location = location,
-                                    connections = connections,
-                                    isExpanded = isExpanded,
-                                    connectedUsers = connectedUsers,
-                                    currentUserId = state.user.id,
-                                    onToggleExpand = { homeViewModel.toggleLocationExpanded(location) },
-                                    onNavigateToChat = onNavigateToChat,
-                                    onNudge = { connectionId, otherUserName ->
-                                        homeViewModel.sendNudgeByConnectionId(connectionId, otherUserName)
-                                    }
-                                )
-                            }
-                        } else {
-                            item(key = "empty_connections") {
-                                GlassCard(modifier = Modifier.fillMaxWidth()) {
-                                    Column(
-                                        modifier = Modifier.padding(16.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        Icon(
-                                            Icons.Filled.TouchApp,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(48.dp),
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
-                                        Spacer(modifier = Modifier.height(16.dp))
-                                        Text(
-                                            "No Connections Yet",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text(
-                                            "Start making connections by tapping Add Click",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            }
-                        }
+                    item(key = "stats_header") {
+                        SectionHeader(text = "Your Stats")
+                    }
 
-                        if (connectionInsights != null && state.stats.totalConnections > 0) {
-                            item(key = "connection_insights") {
-                                ConnectionInsightsCard(
-                                    insights = connectionInsights!!,
-                                    expanded = showInsightsPanel,
-                                    onToggle = { homeViewModel.toggleInsightsPanel() }
-                                )
-                            }
+                    item(key = "stats_row") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            HomeStatCard(
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Filled.Check,
+                                value = state.stats.totalConnections.toString(),
+                                label = "Total Clicks",
+                            )
+                            HomeStatCard(
+                                modifier = Modifier.weight(1f),
+                                icon = Icons.Filled.LocationOn,
+                                value = state.stats.uniqueLocations.toString(),
+                                label = "Locations",
+                            )
                         }
-
-                        item(key = "stats_header") {
-                            SectionHeader(text = "Your Stats")
-                        }
-
-                        item(key = "stats_row") {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                HomeStatCard(
-                                    modifier = Modifier.weight(1f),
-                                    icon = Icons.Filled.Check,
-                                    value = state.stats.totalConnections.toString(),
-                                    label = "Total Clicks"
-                                )
-                                HomeStatCard(
-                                    modifier = Modifier.weight(1f),
-                                    icon = Icons.Filled.LocationOn,
-                                    value = state.stats.uniqueLocations.toString(),
-                                    label = "Locations"
-                                )
-                            }
-                        }
+                    }
                 }
             }
         }
@@ -579,21 +607,25 @@ fun HomeScreen(
         val detailBeaconSeed = selectedSavedEventBeacon
         if (detailBeaconSeed != null) {
             // Keep sheet seed in sync with map/prefetch hydration so Host/Posted update live.
-            val detailBeacon = remember(detailBeaconSeed, mapBeacons, prefetchedBeacons) {
-                val live = mapBeacons.firstOrNull { it.id == detailBeaconSeed.id }
-                    ?: prefetchedBeacons.firstOrNull { it.id == detailBeaconSeed.id }
-                live?.withPreservedEventScheduleFrom(detailBeaconSeed) ?: detailBeaconSeed
-            }
+            val detailBeacon =
+                remember(detailBeaconSeed, mapBeacons, prefetchedBeacons) {
+                    val live =
+                        mapBeacons.firstOrNull { it.id == detailBeaconSeed.id }
+                            ?: prefetchedBeacons.firstOrNull { it.id == detailBeaconSeed.id }
+                    live?.withPreservedEventScheduleFrom(detailBeaconSeed) ?: detailBeaconSeed
+                }
             LaunchedEffect(detailBeaconSeed.id) {
                 mapViewModel.ensureEventBeaconDetail(detailBeaconSeed.id, seed = detailBeaconSeed)
             }
             val detailSurface = GlassSheetTokens.OledBlack()
             val onDetailSurface = GlassSheetTokens.OnOled()
-            val distanceMeters = AppDataManager.lastKnownDeviceLocation.value?.let { (lat, lon) ->
-                haversineDistance(lat, lon, detailBeacon.latitude, detailBeacon.longitude)
-            }
-            val isCreator = !currentUser?.id.isNullOrBlank() &&
-                detailBeacon.createdByUserId == currentUser?.id
+            val distanceMeters =
+                AppDataManager.lastKnownDeviceLocation.value?.let { (lat, lon) ->
+                    haversineDistance(lat, lon, detailBeacon.latitude, detailBeacon.longitude)
+                }
+            val isCreator =
+                !currentUser?.id.isNullOrBlank() &&
+                    detailBeacon.createdByUserId == currentUser?.id
             val inboxChats by AppDataManager.inboxFeedChats.collectAsState()
             MapBeaconSheetRoot(
                 visible = true,
@@ -625,21 +657,23 @@ fun HomeScreen(
                             onShareToChat = {
                                 shareSavedBeaconToChat = detailBeacon
                             },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .sheetBodyScroll()
-                                .padding(horizontal = 24.dp, vertical = 12.dp),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .sheetBodyScroll()
+                                    .padding(horizontal = 24.dp, vertical = 12.dp),
                         )
                     }
                     UnifiedToastHost(
                         state = toastState,
                         opaque = true,
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .padding(bottom = 24.dp)
-                            .zIndex(100f),
+                        modifier =
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                                .padding(bottom = 24.dp)
+                                .zIndex(100f),
                     )
                 }
                 shareSavedBeaconToChat?.let { beaconToShare ->
@@ -663,38 +697,41 @@ fun HomeScreen(
         UnifiedToastHost(
             state = toastState,
             opaque = true,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = rememberBottomChromePadding() + 8.dp),
+            modifier =
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = rememberBottomChromePadding() + 8.dp),
         )
     }
 }
 
 private fun buildHomeExploreTiles(
-    beacons: List<compose.project.click.click.data.models.MapBeacon>,
-    hubs: List<compose.project.click.click.data.api.CommunityHubNearbyDto>,
+    beacons: List<compose.project.click.click.data.models.MapBeacon>, // pragma: allowlist secret
+    hubs: List<compose.project.click.click.data.api.CommunityHubNearbyDto>, // pragma: allowlist secret
 ): List<HomeExploreTile> {
     val nowMs = Clock.System.now().toEpochMilliseconds()
     val activeBeacons = beacons.filter { it.isActiveForDiscoveryFeed(nowMs) }
-    val kindTiles = activeBeacons
-        .groupBy { it.kind }
-        .entries
-        .sortedBy { it.key.ordinal }
-        .map { (kind, group) -> kind.toHomeExploreTile(group.size) }
+    val kindTiles =
+        activeBeacons
+            .groupBy { it.kind }
+            .entries
+            .sortedBy { it.key.ordinal }
+            .map { (kind, group) -> kind.toHomeExploreTile(group.size) }
     val hubCount = hubs.size
-    val hubTile = if (hubCount > 0) {
-        HomeExploreTile(
-            id = "hubs",
-            label = "Hub",
-            count = hubCount,
-            layerFilter = MapLayerFilter.COMMUNITY_HUBS,
-            icon = Icons.Filled.Groups,
-        )
-    } else {
-        null
-    }
+    val hubTile =
+        if (hubCount > 0) {
+            HomeExploreTile(
+                id = "hubs",
+                label = "Hub",
+                count = hubCount,
+                layerFilter = MapLayerFilter.COMMUNITY_HUBS,
+                icon = Icons.Filled.Groups,
+            )
+        } else {
+            null
+        }
     return buildList {
         addAll(kindTiles)
         hubTile?.let { add(it) }
@@ -722,33 +759,33 @@ private fun HomeStatCard(
     modifier: Modifier = Modifier,
     icon: ImageVector,
     value: String,
-    label: String
+    label: String,
 ) {
     GlassCard(
         modifier = modifier,
-        usePrimaryBorder = true
+        usePrimaryBorder = true,
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Icon(
                 icon,
                 contentDescription = null,
                 modifier = Modifier.size(24.dp),
-                tint = MaterialTheme.colorScheme.primary
+                tint = MaterialTheme.colorScheme.primary,
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 value,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 label,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -767,51 +804,52 @@ private fun LocationGroupCard(
     currentUserId: String,
     onToggleExpand: () -> Unit,
     onNavigateToChat: (String) -> Unit,
-    onNudge: (connectionId: String, otherUserName: String) -> Unit
+    onNudge: (connectionId: String, otherUserName: String) -> Unit,
 ) {
     val chevronAngle by animateFloatAsState(
         targetValue = if (isExpanded) 90f else 0f,
         animationSpec = tween(durationMillis = 250),
-        label = "chevron"
+        label = "chevron",
     )
 
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         onClick = onToggleExpand,
-        usePrimaryBorder = isExpanded
+        usePrimaryBorder = isExpanded,
     ) {
         Column {
             // Group header row
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         location,
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
                         "${connections.size} connection${if (connections.size != 1) "s" else ""}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
 
                 // Count badge
                 Box(
-                    modifier = Modifier
-                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
-                        .border(2.dp, clickBorderColor(), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                    modifier =
+                        Modifier
+                            .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
+                            .border(2.dp, clickBorderColor(), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
                 ) {
                     Text(
                         connections.size.toString(),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimary
+                        color = MaterialTheme.colorScheme.onPrimary,
                     )
                 }
 
@@ -821,7 +859,7 @@ private fun LocationGroupCard(
                     Icons.Filled.ChevronRight,
                     contentDescription = if (isExpanded) "Collapse" else "Expand",
                     modifier = Modifier.rotate(chevronAngle),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
@@ -829,15 +867,15 @@ private fun LocationGroupCard(
             AnimatedVisibility(
                 visible = isExpanded,
                 enter = expandVertically(animationSpec = tween(250)) + fadeIn(tween(200)),
-                exit = shrinkVertically(animationSpec = tween(200)) + fadeOut(tween(150))
+                exit = shrinkVertically(animationSpec = tween(200)) + fadeOut(tween(150)),
             ) {
                 Column(
                     modifier = Modifier.padding(top = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     HorizontalDivider(
                         color = clickBorderColor(),
-                        modifier = Modifier.padding(bottom = 4.dp)
+                        modifier = Modifier.padding(bottom = 4.dp),
                     )
                     connections.forEach { connection ->
                         val otherUserId = connection.user_ids.firstOrNull { it != currentUserId }
@@ -849,7 +887,7 @@ private fun LocationGroupCard(
                             onNavigate = { onNavigateToChat(connection.id) },
                             onNudge = {
                                 onNudge(connection.id, otherUser?.name ?: "them")
-                            }
+                            },
                         )
                     }
                 }
@@ -867,48 +905,58 @@ private fun ConnectionRowItem(
     otherUser: User?,
     currentUserId: String,
     onNavigate: () -> Unit,
-    onNudge: () -> Unit
+    onNudge: () -> Unit,
 ) {
-    val duration = (kotlinx.datetime.Clock.System.now().toEpochMilliseconds() - connection.created).milliseconds
-    val timeAgo = when {
-        duration.inWholeMinutes < 1 -> "Just now"
-        duration.inWholeMinutes < 60 -> "${duration.inWholeMinutes}m ago"
-        duration.inWholeHours < 24 -> "${duration.inWholeHours}h ago"
-        duration.inWholeDays < 7 -> "${duration.inWholeDays}d ago"
-        else -> {
-            val dt = Instant.fromEpochMilliseconds(connection.created)
-                .toLocalDateTime(TimeZone.currentSystemDefault())
-            "${dt.month.name.take(3)} ${dt.dayOfMonth}"
+    val duration =
+        (
+            kotlinx.datetime.Clock.System
+                .now()
+                .toEpochMilliseconds() - connection.created
+        ).milliseconds
+    val timeAgo =
+        when {
+            duration.inWholeMinutes < 1 -> "Just now"
+            duration.inWholeMinutes < 60 -> "${duration.inWholeMinutes}m ago"
+            duration.inWholeHours < 24 -> "${duration.inWholeHours}h ago"
+            duration.inWholeDays < 7 -> "${duration.inWholeDays}d ago"
+            else -> {
+                val dt =
+                    Instant
+                        .fromEpochMilliseconds(connection.created)
+                        .toLocalDateTime(TimeZone.currentSystemDefault())
+                "${dt.month.name.take(3)} ${dt.dayOfMonth}"
+            }
         }
-    }
     val displayName = otherUser?.name ?: "Connection"
 
     val rowStyle = LocalPlatformStyle.current
     val rowShape = RoundedCornerShape(if (rowStyle.isIOS) 14.dp else 12.dp)
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(rowShape)
-            .clickable { onNavigate() }
-            .background(MaterialTheme.colorScheme.surface)
-            .border(2.dp, clickBorderColor(), rowShape)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(rowShape)
+                .clickable { onNavigate() }
+                .background(MaterialTheme.colorScheme.surface)
+                .border(2.dp, clickBorderColor(), rowShape)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         // Avatar circle
         Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .background(MaterialTheme.colorScheme.primary)
-                .border(2.dp, clickBorderColor(), CircleShape),
-            contentAlignment = Alignment.Center
+            modifier =
+                Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(MaterialTheme.colorScheme.primary)
+                    .border(2.dp, clickBorderColor(), CircleShape),
+            contentAlignment = Alignment.Center,
         ) {
             Text(
                 displayName.firstOrNull()?.uppercase() ?: "?",
                 color = MaterialTheme.colorScheme.onPrimary,
                 fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.labelMedium
+                style = MaterialTheme.typography.labelMedium,
             )
         }
 
@@ -919,84 +967,91 @@ private fun ConnectionRowItem(
                 displayName,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 timeAgo,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
         // Nudge button
         IconButton(
             onClick = onNudge,
-            modifier = Modifier.size(32.dp)
+            modifier = Modifier.size(32.dp),
         ) {
             Icon(
                 Icons.Filled.Notifications,
                 contentDescription = "Nudge",
                 modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.primary
+                tint = MaterialTheme.colorScheme.primary,
             )
         }
 
         // Chat button
         IconButton(
             onClick = onNavigate,
-            modifier = Modifier.size(32.dp)
+            modifier = Modifier.size(32.dp),
         ) {
             Icon(
                 Icons.Filled.Chat,
                 contentDescription = "Open chat",
                 modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
 }
 
 @Composable
-private fun ConnectionCard(connection: Connection, currentUserId: String) {
+private fun ConnectionCard(
+    connection: Connection,
+    currentUserId: String,
+) {
     val otherUserId = connection.user_ids.firstOrNull { it != currentUserId }
 
     val instant = Instant.fromEpochMilliseconds(connection.created)
-    val now = kotlinx.datetime.Clock.System.now()
+    val now =
+        kotlinx.datetime.Clock.System
+            .now()
     val duration = (now.toEpochMilliseconds() - connection.created).milliseconds
 
-    val timeAgo = when {
-        duration.inWholeMinutes < 1 -> "Just now"
-        duration.inWholeMinutes < 60 -> "${duration.inWholeMinutes}m ago"
-        duration.inWholeHours < 24 -> "${duration.inWholeHours}h ago"
-        duration.inWholeDays < 7 -> "${duration.inWholeDays}d ago"
-        else -> {
-            val dateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
-            "${dateTime.month.name.take(3)} ${dateTime.dayOfMonth}"
+    val timeAgo =
+        when {
+            duration.inWholeMinutes < 1 -> "Just now"
+            duration.inWholeMinutes < 60 -> "${duration.inWholeMinutes}m ago"
+            duration.inWholeHours < 24 -> "${duration.inWholeHours}h ago"
+            duration.inWholeDays < 7 -> "${duration.inWholeDays}d ago"
+            else -> {
+                val dateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+                "${dateTime.month.name.take(3)} ${dateTime.dayOfMonth}"
+            }
         }
-    }
 
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        onClick = { /* Navigate to connection details */ }
+        onClick = { /* Navigate to connection details */ },
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             // Icon container
             Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer)
-                    .border(2.dp, clickBorderColor(), CircleShape),
-                contentAlignment = Alignment.Center
+                modifier =
+                    Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .border(2.dp, clickBorderColor(), CircleShape),
+                contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     Icons.Filled.Person,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(28.dp),
                 )
             }
 
@@ -1008,7 +1063,7 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
                     connection.semanticLocation ?: "Connection",
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1016,13 +1071,13 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
                         Icons.Filled.AccessTime,
                         contentDescription = null,
                         modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         timeAgo,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -1030,7 +1085,7 @@ private fun ConnectionCard(connection: Connection, currentUserId: String) {
             Icon(
                 Icons.Filled.ChevronRight,
                 contentDescription = "View details",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -1047,10 +1102,11 @@ private fun resolveSavedEventBeacon(
     prefetchedBeacons: List<MapBeacon>,
 ): MapBeacon {
     val id = bookmark.beaconId.trim()
-    val base = mapBeacons.firstOrNull { it.id == id }
-        ?: EventReminderCoordinator.beaconById(id)
-        ?: prefetchedBeacons.firstOrNull { it.id == id }
-        ?: return bookmark.toSyntheticMapBeacon()
+    val base =
+        mapBeacons.firstOrNull { it.id == id }
+            ?: EventReminderCoordinator.beaconById(id)
+            ?: prefetchedBeacons.firstOrNull { it.id == id }
+            ?: return bookmark.toSyntheticMapBeacon()
     return base.withBookmarkScheduleOverlay(bookmark)
 }
 
@@ -1059,7 +1115,11 @@ private fun MapBeacon.withBookmarkScheduleOverlay(bookmark: EventBookmarkItemDto
     val endIso = bookmark.eventEndAt?.trim()?.takeIf { it.isNotEmpty() }
     val locationName = bookmark.locationName?.trim()?.takeIf { it.isNotEmpty() }
     val formattedAddress = bookmark.formattedAddress?.trim()?.takeIf { it.isNotEmpty() }
-    val categories = bookmark.eventCategories.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+    val categories =
+        bookmark.eventCategories
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
     val bookmarkLat = bookmark.latitude
     val bookmarkLon = bookmark.longitude
     val adoptBookmarkCoords =
@@ -1071,33 +1131,35 @@ private fun MapBeacon.withBookmarkScheduleOverlay(bookmark: EventBookmarkItemDto
             !(bookmarkLat == 0.0 && bookmarkLon == 0.0)
 
     val existing = metadata.raw
-    val merged = buildJsonObject {
-        existing?.forEach { (k, v) -> put(k, v) }
-        startIso?.let { put("event_start_at", JsonPrimitive(it)) }
-        endIso?.let { put("event_end_at", JsonPrimitive(it)) }
-        bookmark.title?.trim()?.takeIf { it.isNotEmpty() }?.let { title ->
-            if (existing?.get("title") == null) put("title", JsonPrimitive(title))
+    val merged =
+        buildJsonObject {
+            existing?.forEach { (k, v) -> put(k, v) }
+            startIso?.let { put("event_start_at", JsonPrimitive(it)) }
+            endIso?.let { put("event_end_at", JsonPrimitive(it)) }
+            bookmark.title?.trim()?.takeIf { it.isNotEmpty() }?.let { title ->
+                if (existing?.get("title") == null) put("title", JsonPrimitive(title))
+            }
+            if (metadata.locationName.isNullOrBlank() && locationName != null) {
+                put("location_name", JsonPrimitive(locationName))
+            }
+            if (metadata.formattedAddress.isNullOrBlank() && formattedAddress != null) {
+                put("formatted_address", JsonPrimitive(formattedAddress))
+            }
+            if (metadata.eventCategories.isEmpty() && categories.isNotEmpty()) {
+                put("event_categories", JsonArray(categories.map { JsonPrimitive(it) }))
+            }
         }
-        if (metadata.locationName.isNullOrBlank() && locationName != null) {
-            put("location_name", JsonPrimitive(locationName))
-        }
-        if (metadata.formattedAddress.isNullOrBlank() && formattedAddress != null) {
-            put("formatted_address", JsonPrimitive(formattedAddress))
-        }
-        if (metadata.eventCategories.isEmpty() && categories.isNotEmpty()) {
-            put("event_categories", JsonArray(categories.map { JsonPrimitive(it) }))
-        }
-    }
     return copy(
         latitude = if (adoptBookmarkCoords) bookmarkLat!! else latitude,
         longitude = if (adoptBookmarkCoords) bookmarkLon!! else longitude,
-        metadata = metadata.copy(
-            title = metadata.title ?: bookmark.title?.trim()?.takeIf { it.isNotEmpty() },
-            locationName = metadata.locationName?.takeIf { it.isNotBlank() } ?: locationName,
-            formattedAddress = metadata.formattedAddress?.takeIf { it.isNotBlank() } ?: formattedAddress,
-            eventCategories = metadata.eventCategories.ifEmpty { categories },
-            raw = merged,
-        ),
+        metadata =
+            metadata.copy(
+                title = metadata.title ?: bookmark.title?.trim()?.takeIf { it.isNotEmpty() },
+                locationName = metadata.locationName?.takeIf { it.isNotBlank() } ?: locationName,
+                formattedAddress = metadata.formattedAddress?.takeIf { it.isNotBlank() } ?: formattedAddress,
+                eventCategories = metadata.eventCategories.ifEmpty { categories },
+                raw = merged,
+            ),
     )
 }
 
@@ -1108,32 +1170,38 @@ private fun EventBookmarkItemDto.toSyntheticMapBeacon(): MapBeacon {
     val locationName = this.locationName?.takeIf { it.isNotBlank() }
     val formattedAddress = this.formattedAddress?.takeIf { it.isNotBlank() }
     val categories = eventCategories.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
-    val raw = buildJsonObject {
-        title?.let { put("title", JsonPrimitive(it)) }
-        title?.let { put("description", JsonPrimitive(it)) }
-        eventStartAt?.takeIf { it.isNotBlank() }?.let { put("event_start_at", JsonPrimitive(it)) }
-        eventEndAt?.takeIf { it.isNotBlank() }?.let { put("event_end_at", JsonPrimitive(it)) }
-        locationName?.let { put("location_name", JsonPrimitive(it)) }
-        formattedAddress?.let { put("formatted_address", JsonPrimitive(it)) }
-        if (categories.isNotEmpty()) {
-            put("event_categories", JsonArray(categories.map { JsonPrimitive(it) }))
+    val raw =
+        buildJsonObject {
+            title?.let { put("title", JsonPrimitive(it)) }
+            title?.let { put("description", JsonPrimitive(it)) }
+            eventStartAt?.takeIf { it.isNotBlank() }?.let { put("event_start_at", JsonPrimitive(it)) }
+            eventEndAt?.takeIf { it.isNotBlank() }?.let { put("event_end_at", JsonPrimitive(it)) }
+            locationName?.let { put("location_name", JsonPrimitive(it)) }
+            formattedAddress?.let { put("formatted_address", JsonPrimitive(it)) }
+            if (categories.isNotEmpty()) {
+                put("event_categories", JsonArray(categories.map { JsonPrimitive(it) }))
+            }
         }
-    }
-    val expiresMs = expiresAt
-        ?.let { compose.project.click.click.data.models.parseEpochMs(it) }
+    val expiresMs =
+        expiresAt
+            ?.let {
+                compose.project.click.click.data.models // pragma: allowlist secret
+                    .parseEpochMs(it)
+            }
     return MapBeacon(
         id = beaconId,
         kind = MapBeaconKind.EVENT,
         latitude = lat,
         longitude = lon,
-        metadata = MapBeaconMetadata(
-            title = title,
-            description = title,
-            locationName = locationName,
-            formattedAddress = formattedAddress,
-            eventCategories = categories,
-            raw = raw,
-        ),
+        metadata =
+            MapBeaconMetadata(
+                title = title,
+                description = title,
+                locationName = locationName,
+                formattedAddress = formattedAddress,
+                eventCategories = categories,
+                raw = raw,
+            ),
         createdAtEpochMs = null,
         expiresAtEpochMs = expiresMs,
         sourceBeaconType = "event",
@@ -1201,24 +1269,25 @@ fun ReconnectReminderCard(
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         usePrimaryBorder = true,
-        contentPadding = 14.dp
+        contentPadding = 14.dp,
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 ConnectionListUserAvatarFace(
                     displayName = reminder.userName,
                     email = email,
                     avatarUrl = avatarUrl,
                     userId = reminder.userId,
-                    modifier = Modifier
-                        .size(44.dp)
-                        .border(2.dp, clickBorderColor(), CircleShape),
+                    modifier =
+                        Modifier
+                            .size(44.dp)
+                            .border(2.dp, clickBorderColor(), CircleShape),
                     useCompactTypography = true,
                 )
                 Spacer(modifier = Modifier.width(12.dp))
@@ -1227,66 +1296,70 @@ fun ReconnectReminderCard(
                         reminder.userName ?: "Someone",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
                         "${reminder.daysSinceContact} days since last chat",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 OutlinedButton(
                     onClick = onDismiss,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(44.dp),
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .height(44.dp),
                     shape = actionShape,
                     border = BorderStroke(2.dp, clickBorderColor()),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    ),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                    colors =
+                        ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                        ),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                 ) {
                     Icon(
                         Icons.Filled.Close,
                         contentDescription = null,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(18.dp),
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         "Dismiss",
                         style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
                     )
                 }
                 Button(
                     onClick = onReconnect,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(44.dp),
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .height(44.dp),
                     shape = actionShape,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    ),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                        ),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                 ) {
                     Icon(
                         Icons.Filled.Chat,
                         contentDescription = null,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(18.dp),
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         "Message",
                         style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
                     )
                 }
             }
@@ -1301,104 +1374,105 @@ fun ReconnectReminderCard(
 fun ConnectionInsightsCard(
     insights: ConnectionInsights,
     expanded: Boolean,
-    onToggle: () -> Unit
+    onToggle: () -> Unit,
 ) {
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         onClick = onToggle,
-        usePrimaryBorder = true
+        usePrimaryBorder = true,
     ) {
         Column {
             // Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         Icons.Filled.Analytics,
                         contentDescription = null,
                         modifier = Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = MaterialTheme.colorScheme.primary,
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         "Connection Insights",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                 }
                 Icon(
                     if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                     contentDescription = if (expanded) "Collapse" else "Expand",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            
+
             // Quick stats row (always visible)
             Spacer(modifier = Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
                 InsightStat(
                     value = "${insights.keepRate.toInt()}%",
-                    label = "Keep Rate"
+                    label = "Keep Rate",
                 )
                 InsightStat(
                     value = insights.activeConnections.toString(),
-                    label = "Active"
+                    label = "Active",
                 )
                 InsightStat(
                     value = insights.dormantConnections.toString(),
-                    label = "Need Attention"
+                    label = "Need Attention",
                 )
             }
-            
+
             // Expanded details
             if (expanded) {
                 Spacer(modifier = Modifier.height(16.dp))
                 HorizontalDivider(color = clickBorderColor())
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     InsightRow(
                         icon = Icons.Filled.Group,
                         label = "Total Connections",
-                        value = insights.totalConnections.toString()
+                        value = insights.totalConnections.toString(),
                     )
-                    
+
                     InsightRow(
                         icon = Icons.Filled.Favorite,
                         label = "Connections Kept",
-                        value = insights.keptConnections.toString()
+                        value = insights.keptConnections.toString(),
                     )
-                    
+
                     if (insights.longestConnectionDays > 0) {
                         val longestName = insights.longestConnectionName?.trim()?.takeIf { it.isNotEmpty() }
                         InsightRow(
                             icon = Icons.Filled.AccessTime,
                             label = "Longest Connection",
-                            value = if (longestName != null) {
-                                "${insights.longestConnectionDays} days\n($longestName)"
-                            } else {
-                                "${insights.longestConnectionDays} days"
-                            },
+                            value =
+                                if (longestName != null) {
+                                    "${insights.longestConnectionDays} days\n($longestName)"
+                                } else {
+                                    "${insights.longestConnectionDays} days"
+                                },
                         )
                     }
-                    
+
                     InsightRow(
                         icon = Icons.Filled.CalendarToday,
                         label = "New This Week",
-                        value = insights.connectionsThisWeek.toString()
+                        value = insights.connectionsThisWeek.toString(),
                     )
-                    
+
                     InsightRow(
                         icon = Icons.Filled.DateRange,
                         label = "New This Month",
-                        value = insights.connectionsThisMonth.toString()
+                        value = insights.connectionsThisMonth.toString(),
                     )
                 }
             }
@@ -1409,19 +1483,19 @@ fun ConnectionInsightsCard(
 @Composable
 private fun InsightStat(
     value: String,
-    label: String
+    label: String,
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             value,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
+            color = MaterialTheme.colorScheme.primary,
         )
         Text(
             label,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -1430,7 +1504,7 @@ private fun InsightStat(
 private fun InsightRow(
     icon: ImageVector,
     label: String,
-    value: String
+    value: String,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1439,10 +1513,11 @@ private fun InsightRow(
         Icon(
             icon,
             contentDescription = null,
-            modifier = Modifier
-                .padding(top = 2.dp)
-                .size(18.dp),
-            tint = MaterialTheme.colorScheme.primary
+            modifier =
+                Modifier
+                    .padding(top = 2.dp)
+                    .size(18.dp),
+            tint = MaterialTheme.colorScheme.primary,
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
@@ -1477,13 +1552,18 @@ private fun HomeAvailabilityIntentsRow(
         SectionHeader(text = "I'm down for…")
         Spacer(modifier = Modifier.height(10.dp))
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             intents.forEach { row ->
-                val label = row.intentTag?.trim().orEmpty().ifEmpty { "Intent" }
+                val label =
+                    row.intentTag
+                        ?.trim()
+                        .orEmpty()
+                        .ifEmpty { "Intent" }
                 val sub = row.activeUntilLabel()
                 AssistChip(
                     onClick = { onEditIntent(row) },
@@ -1509,10 +1589,11 @@ private fun HomeAvailabilityIntentsRow(
                     },
                     shape = RoundedCornerShape(22.dp),
                     border = BorderStroke(2.dp, clickBorderColor()),
-                    colors = AssistChipDefaults.assistChipColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        labelColor = MaterialTheme.colorScheme.onSurface,
-                    ),
+                    colors =
+                        AssistChipDefaults.assistChipColors(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            labelColor = MaterialTheme.colorScheme.onSurface,
+                        ),
                 )
             }
             AssistChip(
@@ -1529,10 +1610,11 @@ private fun HomeAvailabilityIntentsRow(
                 },
                 shape = RoundedCornerShape(22.dp),
                 border = BorderStroke(2.dp, clickBorderColor()),
-                colors = AssistChipDefaults.assistChipColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    labelColor = MaterialTheme.colorScheme.onSurface,
-                ),
+                colors =
+                    AssistChipDefaults.assistChipColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        labelColor = MaterialTheme.colorScheme.onSurface,
+                    ),
             )
         }
     }

@@ -752,8 +752,9 @@ fun App() {
 
                     // Phase 2 (C8): drive onboarding through OnboardingViewModel rather than the legacy
                     // permissions-first gate. Permissions now live in the Settings Permissions Hub (C9)
-                    // and are requested contextually; the gate is Loading → Welcome → Interests → Avatar
-                    // → Complete. We rebuild the VM whenever the persisted state changes so step() stays
+                    // and are requested contextually; the gate is Loading → Welcome → Interests → Personality
+                    // → Avatar → Complete. Existing users skip Personality via legacyComplete.
+                    // We rebuild the VM whenever the persisted state changes so step() stays
                     // in sync without having to hoist the whole thing into AppDataManager.
                     val onboardingStateSnapshot = onboardingState
                     val userHasAvatar = remoteAvatarPresent
@@ -785,9 +786,10 @@ fun App() {
                     }
                     val onboardingStep =
                         when {
-                            !isDataReady -> "loading"
+                            !isDataReady || vmStep == OnboardingViewModel.Step.Loading -> "loading"
                             vmStep == OnboardingViewModel.Step.Welcome -> "welcome"
                             vmStep == OnboardingViewModel.Step.Interests -> "interests"
+                            vmStep == OnboardingViewModel.Step.Personality -> "personality"
                             vmStep == OnboardingViewModel.Step.Avatar -> "avatar"
                             else -> "complete"
                         }
@@ -939,6 +941,44 @@ fun App() {
                                                 }
                                             },
                                             onSkip = { onboardingVm.onAvatarSetOrSkipped() },
+                                        )
+                                    }
+
+                                    "personality" -> {
+                                        PersonalityTaggingScreen(
+                                            initialTags = appDataUser?.personalityTags.orEmpty(),
+                                            onTagsSelected = { tags ->
+                                                onboardingScope.launch {
+                                                    val saveResult =
+                                                        ApiClient().patchUserProfile(
+                                                            currentUser.id,
+                                                            personalityTags = tags,
+                                                        )
+                                                    if (saveResult.isSuccess) {
+                                                        AppDataManager.applyPersonalityTags(tags)
+                                                        onboardingVm.onPersonalitySaved()
+                                                        val base = onboardingState ?: OnboardingState()
+                                                        persistOnboardingState(
+                                                            base.copy(
+                                                                welcomeSeen = true,
+                                                                interestsCompleted = true,
+                                                                personalityCompleted = true,
+                                                            ),
+                                                        )
+                                                    } else {
+                                                        val msg =
+                                                            saveResult
+                                                                .exceptionOrNull()
+                                                                ?.message
+                                                                ?.trim()
+                                                                .orEmpty()
+                                                                .ifBlank {
+                                                                    "Couldn't save personality. Check your connection and try again."
+                                                                }
+                                                        AppDataManager.postTransientUserMessage(msg)
+                                                    }
+                                                }
+                                            },
                                         )
                                     }
 

@@ -85,7 +85,7 @@ Edit [`composeApp/src/commonMain/kotlin/compose/project/click/click/data/Supabas
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`  
 - Auth redirect scheme/host (`click` / `login`) must match Supabase Auth and the iOS/Android URL handlers.
 
-`SupabaseConfig.startSessionSync(tokenStorage)` keeps the SDK session aligned with **`TokenStorage`** (Keychain / encrypted prefs) to avoid stale tokens after refresh.
+`SupabaseConfig.startSessionSync(tokenStorage)` keeps the SDK session aligned with **`TokenStorage`** (Keychain / encrypted prefs). Cold boot imports TokenStorage **only when the SDK session is empty**; JWT expiry is a soft failure so an app update does not force re-login.
 
 ### Web base URL (QR, LiveKit token, waitlist)
 

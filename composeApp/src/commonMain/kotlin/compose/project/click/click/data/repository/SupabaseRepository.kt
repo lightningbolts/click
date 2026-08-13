@@ -1,26 +1,29 @@
-package compose.project.click.click.data.repository
+@file:Suppress("ktlint:standard:max-line-length")
+
+package compose.project.click.click.data.repository // pragma: allowlist secret
 
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
-import io.github.jan.supabase.exceptions.RestException
-import compose.project.click.click.data.models.Connection // pragma: allowlist secret
-import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
-import compose.project.click.click.data.models.User // pragma: allowlist secret
-import compose.project.click.click.data.models.UserCore // pragma: allowlist secret
-import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
-import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentInsert // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
-import compose.project.click.click.data.models.UserInterests // pragma: allowlist secret
+import compose.project.click.click.data.models.Connection // pragma: allowlist secret
+import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
+import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
 import compose.project.click.click.data.models.ProfileTimelineCacheEntry // pragma: allowlist secret
 import compose.project.click.click.data.models.ProfileTimelinePayload // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.UserAvailability // pragma: allowlist secret
+import compose.project.click.click.data.models.UserCore // pragma: allowlist secret
+import compose.project.click.click.data.models.UserInterests // pragma: allowlist secret
+import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
 import compose.project.click.click.data.models.isResolvedDisplayName // pragma: allowlist secret
 import compose.project.click.click.data.models.mergeRichestEncounterEvents // pragma: allowlist secret
 import compose.project.click.click.data.models.resolveDisplayName // pragma: allowlist secret
+import compose.project.click.click.util.dedupeOneToOneConnectionsByPeer // pragma: allowlist secret
 import compose.project.click.click.util.isOfflineNetworkFailure // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
-import compose.project.click.click.util.dedupeOneToOneConnectionsByPeer // pragma: allowlist secret
 import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.exceptions.RestException
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
@@ -34,10 +37,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -52,8 +55,7 @@ private val connectionsSelectWithEncounters = Columns.raw("*, connection_encount
 private fun Connection.withEncountersSortedNewestFirst(): Connection =
     copy(connectionEncounters = connectionEncounters.mergeRichestEncounterEvents().sortedByDescending { it.encounteredAt })
 
-private fun List<Connection>.withEncountersSortedNewestFirst(): List<Connection> =
-    map { it.withEncountersSortedNewestFirst() }
+private fun List<Connection>.withEncountersSortedNewestFirst(): List<Connection> = map { it.withEncountersSortedNewestFirst() }
 
 /** Result of inserting into [public.availability_intents]. */
 data class AvailabilityIntentInsertResult(
@@ -92,6 +94,7 @@ class SupabaseRepository {
             lastStaleSweepAtMs = 0L
         }
     }
+
     /** Lazy so unit tests can construct the repository without touching Android Settings / Supabase client. */
     private val supabase by lazy { SupabaseConfig.client }
 
@@ -133,13 +136,13 @@ class SupabaseRepository {
             .distinctUntilChanged()
     }
 
-    fun snapshotCachedUserPublicProfiles(): List<UserPublicProfile> =
-        userPublicProfileCache.value.values.toList()
+    fun snapshotCachedUserPublicProfiles(): List<UserPublicProfile> = userPublicProfileCache.value.values.toList()
 
     fun seedCachedUserPublicProfiles(profiles: List<UserPublicProfile>) {
-        val seeded = profiles
-            .filter { it.user.id.isNotBlank() }
-            .associateBy { it.user.id.trim() }
+        val seeded =
+            profiles
+                .filter { it.user.id.isNotBlank() }
+                .associateBy { it.user.id.trim() }
         if (seeded.isEmpty()) return
         userPublicProfileCache.value = userPublicProfileCache.value + seeded
     }
@@ -148,18 +151,21 @@ class SupabaseRepository {
         userPublicProfileCache.value = emptyMap()
     }
 
-    fun getCachedProfileTimeline(targetType: String, targetId: String): ProfileTimelinePayload? {
+    fun getCachedProfileTimeline(
+        targetType: String,
+        targetId: String,
+    ): ProfileTimelinePayload? {
         val key = profileTimelineCacheKey(targetType, targetId) ?: return null
         return profileTimelineCache.value[key]?.payload
     }
 
-    fun snapshotCachedProfileTimelines(): List<ProfileTimelineCacheEntry> =
-        profileTimelineCache.value.values.toList()
+    fun snapshotCachedProfileTimelines(): List<ProfileTimelineCacheEntry> = profileTimelineCache.value.values.toList()
 
     fun seedCachedProfileTimelines(entries: List<ProfileTimelineCacheEntry>) {
-        val seeded = entries
-            .filter { it.key.isNotBlank() && it.targetId.isNotBlank() }
-            .associateBy { it.key }
+        val seeded =
+            entries
+                .filter { it.key.isNotBlank() && it.targetId.isNotBlank() }
+                .associateBy { it.key }
         if (seeded.isEmpty()) return
         profileTimelineCache.value = profileTimelineCache.value + seeded
     }
@@ -177,32 +183,38 @@ class SupabaseRepository {
     fun invalidateProfileTimelinesForPeers(peerUserIds: Collection<String>) {
         val peers = peerUserIds.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
         if (peers.isEmpty()) return
-        profileTimelineCache.value = profileTimelineCache.value.filterValues { entry ->
-            !(entry.targetType.equals("user", ignoreCase = true) && entry.targetId in peers)
-        }
+        profileTimelineCache.value =
+            profileTimelineCache.value.filterValues { entry ->
+                !(entry.targetType.equals("user", ignoreCase = true) && entry.targetId in peers)
+            }
     }
 
     private fun cacheProfileTimeline(payload: ProfileTimelinePayload) {
         val key = profileTimelineCacheKey(payload.targetType, payload.targetId) ?: return
-        val entry = ProfileTimelineCacheEntry(
-            key = key,
-            targetType = payload.targetType,
-            targetId = payload.targetId,
-            cachedAtMs = Clock.System.now().toEpochMilliseconds(),
-            payload = payload,
-        )
+        val entry =
+            ProfileTimelineCacheEntry(
+                key = key,
+                targetType = payload.targetType,
+                targetId = payload.targetId,
+                cachedAtMs = Clock.System.now().toEpochMilliseconds(),
+                payload = payload,
+            )
         val merged = profileTimelineCache.value + (key to entry)
-        profileTimelineCache.value = if (merged.size <= PROFILE_TIMELINE_CACHE_MAX_ENTRIES) {
-            merged
-        } else {
-            merged.entries
-                .sortedByDescending { it.value.cachedAtMs }
-                .take(PROFILE_TIMELINE_CACHE_MAX_ENTRIES)
-                .associate { it.key to it.value }
-        }
+        profileTimelineCache.value =
+            if (merged.size <= PROFILE_TIMELINE_CACHE_MAX_ENTRIES) {
+                merged
+            } else {
+                merged.entries
+                    .sortedByDescending { it.value.cachedAtMs }
+                    .take(PROFILE_TIMELINE_CACHE_MAX_ENTRIES)
+                    .associate { it.key to it.value }
+            }
     }
 
-    suspend fun refreshProfileTimeline(targetType: String, targetId: String): ProfileTimelinePayload? {
+    suspend fun refreshProfileTimeline(
+        targetType: String,
+        targetId: String,
+    ): ProfileTimelinePayload? {
         val fresh = apiClient.getProfileTimeline(targetType, targetId).getOrNull()
         if (fresh != null) cacheProfileTimeline(fresh)
         return fresh
@@ -214,12 +226,14 @@ class SupabaseRepository {
         body: String,
         visibility: String,
     ): ProfileTimelinePayload? {
-        val fresh = apiClient.postProfileTimelineJournalEntry(
-            targetType = targetType,
-            targetId = targetId,
-            body = body,
-            visibility = visibility,
-        ).getOrNull()
+        val fresh =
+            apiClient
+                .postProfileTimelineJournalEntry(
+                    targetType = targetType,
+                    targetId = targetId,
+                    body = body,
+                    visibility = visibility,
+                ).getOrNull()
         if (fresh != null) cacheProfileTimeline(fresh)
         return fresh
     }
@@ -229,11 +243,13 @@ class SupabaseRepository {
         body: String,
         visibility: String,
     ): ProfileTimelinePayload? {
-        val fresh = apiClient.putProfileTimelineJournalEntry(
-            id = id,
-            body = body,
-            visibility = visibility,
-        ).getOrNull()
+        val fresh =
+            apiClient
+                .putProfileTimelineJournalEntry(
+                    id = id,
+                    body = body,
+                    visibility = visibility,
+                ).getOrNull()
         if (fresh != null) cacheProfileTimeline(fresh)
         return fresh
     }
@@ -244,32 +260,42 @@ class SupabaseRepository {
         return fresh
     }
 
-    private fun cacheUserPublicProfile(targetUserId: String, profile: UserPublicProfile) {
+    private fun cacheUserPublicProfile(
+        targetUserId: String,
+        profile: UserPublicProfile,
+    ) {
         val key = targetUserId.trim()
         if (key.isEmpty()) return
         userPublicProfileCache.value = userPublicProfileCache.value + (key to profile)
     }
 
-    private fun profileTimelineCacheKey(targetType: String, targetId: String): String? {
+    private fun profileTimelineCacheKey(
+        targetType: String,
+        targetId: String,
+    ): String? {
         val type = targetType.trim().lowercase()
         val id = targetId.trim()
         if (type.isBlank() || id.isBlank()) return null
         return "$type:$id"
     }
 
-    suspend fun refreshUserPublicProfile(viewerUserId: String?, targetUserId: String): UserPublicProfile? {
+    suspend fun refreshUserPublicProfile(
+        viewerUserId: String?,
+        targetUserId: String,
+    ): UserPublicProfile? {
         val key = targetUserId.trim()
         if (key.isEmpty()) return null
         val fresh = fetchUserPublicProfile(viewerUserId, key) ?: return null
         // Always re-fetch shared connection from network so BLE encounter rows aren't
         // short-circuited by a stale in-memory Connection without connectionEncounters.
         val viewer = viewerUserId?.trim()?.takeIf { it.isNotEmpty() && it != key }
-        val updated = if (viewer != null) {
-            val shared = fetchSharedConnectionBetween(viewer, key, forceNetwork = true)
-            fresh.copy(sharedConnection = shared)
-        } else {
-            fresh
-        }
+        val updated =
+            if (viewer != null) {
+                val shared = fetchSharedConnectionBetween(viewer, key, forceNetwork = true)
+                fresh.copy(sharedConnection = shared)
+            } else {
+                fresh
+            }
         cacheUserPublicProfile(key, updated)
         return updated
     }
@@ -281,7 +307,7 @@ class SupabaseRepository {
                 msg.contains("schema cache", ignoreCase = true) ||
                     msg.contains("Could not find the table", ignoreCase = true) ||
                     msg.contains("does not exist", ignoreCase = true)
-                )
+            )
     }
 
     private fun isConnectionHiddenUnavailableError(e: Throwable): Boolean {
@@ -291,17 +317,20 @@ class SupabaseRepository {
                 msg.contains("schema cache", ignoreCase = true) ||
                     msg.contains("Could not find the table", ignoreCase = true) ||
                     msg.contains("does not exist", ignoreCase = true)
-                )
+            )
     }
-    private val userColumnSets = listOf(
-        listOf("id", "name", "full_name", "first_name", "last_name", "birthday", "email", "image", "last_polled"),
-        listOf("id", "name", "first_name", "last_name", "birthday", "email", "image", "last_polled"),
-        listOf("id", "name", "first_name", "last_name", "birthday", "email", "image"),
-        listOf("id", "name", "full_name", "email", "image", "last_polled"),
-        listOf("id", "name", "email", "image", "last_polled"),
-        listOf("id", "name", "full_name", "email", "image"),
-        listOf("id", "name", "email", "image")
-    )
+
+    private val userColumnSets =
+        listOf(
+            listOf("id", "name", "full_name", "first_name", "last_name", "birthday", "email", "image", "last_polled", "personality_tags"),
+            listOf("id", "name", "full_name", "first_name", "last_name", "birthday", "email", "image", "last_polled"),
+            listOf("id", "name", "first_name", "last_name", "birthday", "email", "image", "last_polled"),
+            listOf("id", "name", "first_name", "last_name", "birthday", "email", "image"),
+            listOf("id", "name", "full_name", "email", "image", "last_polled"),
+            listOf("id", "name", "email", "image", "last_polled"),
+            listOf("id", "name", "full_name", "email", "image"),
+            listOf("id", "name", "email", "image"),
+        )
 
     @Serializable
     private data class DisplayNameRpcRow(
@@ -313,39 +342,40 @@ class SupabaseRepository {
         @SerialName("last_polled")
         val lastPolled: Long? = null,
     ) {
-        fun toUser(): User = User(
-            id = id,
-            name = resolveDisplayName(
-                firstName = null,
-                lastName = null,
-                fullName = displayName,
-                name = null,
-                email = email
-            ),
-            email = email,
-            image = image,
-            createdAt = 0L,
-            lastPolled = lastPolled,
-            connections = emptyList(),
-            paired_with = emptyList(),
-            connection_today = -1,
-            last_paired = null,
-        )
+        fun toUser(): User =
+            User(
+                id = id,
+                name =
+                    resolveDisplayName(
+                        firstName = null,
+                        lastName = null,
+                        fullName = displayName,
+                        name = null,
+                        email = email,
+                    ),
+                email = email,
+                image = image,
+                createdAt = 0L,
+                lastPolled = lastPolled,
+                connections = emptyList(),
+                paired_with = emptyList(),
+                connection_today = -1,
+                last_paired = null,
+            )
     }
 
     /**
      * Fetch a user by their ID
      * Only fetches core columns that definitely exist
      */
-    suspend fun fetchUserById(userId: String): User? {
-        return try {
+    suspend fun fetchUserById(userId: String): User? =
+        try {
             val result = fetchUserCoresByIds(listOf(userId))
             result.firstOrNull()?.toUser()
         } catch (e: Exception) {
             println("Error fetching user by ID (redacted): ${e.redactedRestMessage()}")
             null
         }
-    }
 
     /**
      * Loads [User], [user_interests] tags, and [user_availability] for a profile sheet.
@@ -357,7 +387,10 @@ class SupabaseRepository {
      * failure scenarios (and for the availability-intent bubbles the BFF doesn't yet
      * expose in a SDK-friendly shape), but the canonical read path is the Next.js route.
      */
-    suspend fun fetchUserPublicProfile(viewerUserId: String?, targetUserId: String): UserPublicProfile? {
+    suspend fun fetchUserPublicProfile(
+        viewerUserId: String?,
+        targetUserId: String,
+    ): UserPublicProfile? {
         val trimmedTarget = targetUserId.trim()
         if (trimmedTarget.isEmpty()) return null
 
@@ -373,31 +406,35 @@ class SupabaseRepository {
             // Prefer BFF availabilityIntents (admin-backed). Fall back to Supabase only when
             // the BFF omitted them so offline / older BFF deploys still work.
             val now = Clock.System.now()
-            val fromBff = bffProfile.availabilityIntents.filter { bubble ->
-                val tag = bubble.intentTag?.trim().orEmpty()
-                if (tag.isEmpty()) return@filter false
-                val exp = bubble.expiresAt?.let { runCatching { Instant.parse(it) }.getOrNull() }
-                    ?: return@filter true
-                exp > now
-            }
-            val profileIntents = if (fromBff.isNotEmpty()) {
-                fromBff
-            } else {
-                val fromUsersMirror = fetchAvailabilityIntentBubblesFromUsersColumn(trimmedTarget)
-                val fromIntentsTable =
-                    if (!viewerUserId.isNullOrBlank() && viewerUserId != trimmedTarget) {
-                        val mutual = fetchSharedConnectionBetween(viewerUserId, trimmedTarget)
-                        if (mutual != null) fetchAvailabilityIntentBubblesFromIntentsTable(trimmedTarget) else emptyList()
-                    } else if (!viewerUserId.isNullOrBlank() && viewerUserId == trimmedTarget) {
-                        fetchAvailabilityIntentBubblesFromIntentsTable(trimmedTarget)
-                    } else {
-                        emptyList()
-                    }
-                if (fromIntentsTable.isNotEmpty()) fromIntentsTable else fromUsersMirror
-            }
-            val shared = viewerUserId?.takeIf { it.isNotBlank() && it != trimmedTarget }?.let { v ->
-                fetchSharedConnectionBetween(v, trimmedTarget)
-            }
+            val fromBff =
+                bffProfile.availabilityIntents.filter { bubble ->
+                    val tag = bubble.intentTag?.trim().orEmpty()
+                    if (tag.isEmpty()) return@filter false
+                    val exp =
+                        bubble.expiresAt?.let { runCatching { Instant.parse(it) }.getOrNull() }
+                            ?: return@filter true
+                    exp > now
+                }
+            val profileIntents =
+                if (fromBff.isNotEmpty()) {
+                    fromBff
+                } else {
+                    val fromUsersMirror = fetchAvailabilityIntentBubblesFromUsersColumn(trimmedTarget)
+                    val fromIntentsTable =
+                        if (!viewerUserId.isNullOrBlank() && viewerUserId != trimmedTarget) {
+                            val mutual = fetchSharedConnectionBetween(viewerUserId, trimmedTarget)
+                            if (mutual != null) fetchAvailabilityIntentBubblesFromIntentsTable(trimmedTarget) else emptyList()
+                        } else if (!viewerUserId.isNullOrBlank() && viewerUserId == trimmedTarget) {
+                            fetchAvailabilityIntentBubblesFromIntentsTable(trimmedTarget)
+                        } else {
+                            emptyList()
+                        }
+                    if (fromIntentsTable.isNotEmpty()) fromIntentsTable else fromUsersMirror
+                }
+            val shared =
+                viewerUserId?.takeIf { it.isNotBlank() && it != trimmedTarget }?.let { v ->
+                    fetchSharedConnectionBetween(v, trimmedTarget)
+                }
             // BFF can return empty tags when mutual-connection/admin path fails; backfill locally
             // when we know the users are connected (or self). Own tags always readable via RLS.
             if (tags.isEmpty() && (shared != null || viewerUserId == trimmedTarget)) {
@@ -410,14 +447,17 @@ class SupabaseRepository {
             ) {
                 viewerTagsFromBff = fetchUserInterests(viewerUserId).getOrNull()?.tags.orEmpty()
             }
-            val profile = UserPublicProfile(
-                user = user,
-                interestTags = tags,
-                availability = availability,
-                profileAvailabilityIntents = profileIntents,
-                viewerInterestTags = viewerTagsFromBff,
-                sharedConnection = shared,
-            )
+            val personalityTags = bffProfile.personalityTags.ifEmpty { bffProfile.user.personalityTags }
+            val profile =
+                UserPublicProfile(
+                    user = user.copy(personalityTags = personalityTags.ifEmpty { user.personalityTags }),
+                    interestTags = tags,
+                    personalityTags = personalityTags.ifEmpty { user.personalityTags },
+                    availability = availability,
+                    profileAvailabilityIntents = profileIntents,
+                    viewerInterestTags = viewerTagsFromBff,
+                    sharedConnection = shared,
+                )
             cacheUserPublicProfile(trimmedTarget, profile)
             return profile
         }
@@ -435,20 +475,26 @@ class SupabaseRepository {
                 emptyList()
             }
         val profileIntents = if (fromIntentsTable.isNotEmpty()) fromIntentsTable else fromUsersMirror
-        val shared = viewerUserId?.takeIf { it.isNotBlank() && it != trimmedTarget }?.let { v ->
-            fetchSharedConnectionBetween(v, trimmedTarget)
-        }
-        val viewerTags = viewerUserId?.takeIf { it.isNotBlank() && it != trimmedTarget }?.let { v ->
-            fetchUserInterests(v).getOrNull()?.tags.orEmpty()
-        }.orEmpty()
-        val profile = UserPublicProfile(
-            user = user,
-            interestTags = tags,
-            availability = availability,
-            profileAvailabilityIntents = profileIntents,
-            viewerInterestTags = viewerTags,
-            sharedConnection = shared,
-        )
+        val shared =
+            viewerUserId?.takeIf { it.isNotBlank() && it != trimmedTarget }?.let { v ->
+                fetchSharedConnectionBetween(v, trimmedTarget)
+            }
+        val viewerTags =
+            viewerUserId
+                ?.takeIf { it.isNotBlank() && it != trimmedTarget }
+                ?.let { v ->
+                    fetchUserInterests(v).getOrNull()?.tags.orEmpty()
+                }.orEmpty()
+        val profile =
+            UserPublicProfile(
+                user = user,
+                interestTags = tags,
+                personalityTags = user.personalityTags,
+                availability = availability,
+                profileAvailabilityIntents = profileIntents,
+                viewerInterestTags = viewerTags,
+                sharedConnection = shared,
+            )
         cacheUserPublicProfile(trimmedTarget, profile)
         return profile
     }
@@ -464,12 +510,17 @@ class SupabaseRepository {
                 @SerialName("availability_intents")
                 val availabilityIntents: List<ProfileAvailabilityIntentBubble>? = null,
             )
-            val row = supabase.from("users")
-                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("availability_intents")) {
-                    filter { eq("id", userId) }
-                }
-                .decodeList<Row>()
-                .firstOrNull()
+            val row =
+                supabase
+                    .from("users")
+                    .select(
+                        columns =
+                            io.github.jan.supabase.postgrest.query.Columns
+                                .list("availability_intents"),
+                    ) {
+                        filter { eq("id", userId) }
+                    }.decodeList<Row>()
+                    .firstOrNull()
             val now = Clock.System.now()
             row?.availabilityIntents.orEmpty().filter { bubble ->
                 val exp = bubble.expiresAt?.let { runCatching { Instant.parse(it) }.getOrNull() } ?: return@filter true
@@ -488,15 +539,16 @@ class SupabaseRepository {
         if (targetUserId.isBlank()) return emptyList()
         return try {
             val nowIso = Clock.System.now().toString()
-            val rows = supabase.from("availability_intents")
-                .select {
-                    filter {
-                        eq("user_id", targetUserId)
-                        gte("expires_at", nowIso)
-                    }
-                    order("expires_at", Order.ASCENDING)
-                }
-                .decodeList<AvailabilityIntentRow>()
+            val rows =
+                supabase
+                    .from("availability_intents")
+                    .select {
+                        filter {
+                            eq("user_id", targetUserId)
+                            gte("expires_at", nowIso)
+                        }
+                        order("expires_at", Order.ASCENDING)
+                    }.decodeList<AvailabilityIntentRow>()
             rows.mapNotNull { row ->
                 val tag = row.intentTag?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
                 ProfileAvailabilityIntentBubble(
@@ -522,12 +574,14 @@ class SupabaseRepository {
                 @SerialName("peer_id") val peerId: String,
                 @SerialName("has_overlap") val hasOverlap: Boolean = false,
             )
-            val body = buildJsonObject {
-                putJsonArray("p_peer_ids") {
-                    peerUserIds.distinct().filter { it.isNotBlank() }.forEach { add(JsonPrimitive(it)) }
+            val body =
+                buildJsonObject {
+                    putJsonArray("p_peer_ids") {
+                        peerUserIds.distinct().filter { it.isNotBlank() }.forEach { add(JsonPrimitive(it)) }
+                    }
                 }
-            }
-            supabase.postgrest.rpc("get_availability_overlaps", body)
+            supabase.postgrest
+                .rpc("get_availability_overlaps", body)
                 .decodeList<OverlapRow>()
                 .associate { it.peerId to it.hasOverlap }
         } catch (e: Exception) {
@@ -569,18 +623,20 @@ class SupabaseRepository {
         }
         return try {
             val hidden = getHiddenConnectionIds(viewerUserId)
-            val rows = supabase.from("connections")
-                .select(columns = connectionsSelectWithEncounters) {
-                    filter {
-                        contains("user_ids", listOf(viewerUserId, peerUserId))
-                    }
+            val rows =
+                supabase
+                    .from("connections")
+                    .select(columns = connectionsSelectWithEncounters) {
+                        filter {
+                            contains("user_ids", listOf(viewerUserId, peerUserId))
+                        }
+                    }.decodeList<Connection>()
+                    .withEncountersSortedNewestFirst()
+                    .filter { it.isVisibleInActiveUi() && it.id !in hidden }
+            val best =
+                rows.maxByOrNull { conn ->
+                    (conn.last_message_at ?: 0L).coerceAtLeast(conn.created)
                 }
-                .decodeList<Connection>()
-                .withEncountersSortedNewestFirst()
-                .filter { it.isVisibleInActiveUi() && it.id !in hidden }
-            val best = rows.maxByOrNull { conn ->
-                (conn.last_message_at ?: 0L).coerceAtLeast(conn.created)
-            }
             best
         } catch (e: CancellationException) {
             throw e
@@ -591,19 +647,25 @@ class SupabaseRepository {
         }
     }
 
-    private fun findSharedConnectionInMemory(viewerUserId: String, peerUserId: String): Connection? {
-        val currentUserId = compose.project.click.click.data.AppDataManager.currentUser.value?.id
-        if (currentUserId != viewerUserId || !compose.project.click.click.data.AppDataManager.isDataLoaded.value) {
+    private fun findSharedConnectionInMemory(
+        viewerUserId: String,
+        peerUserId: String,
+    ): Connection? {
+        val currentUserId =
+            compose.project.click.click.data.AppDataManager.currentUser.value // pragma: allowlist secret
+                ?.id
+        if (currentUserId != viewerUserId || !compose.project.click.click.data.AppDataManager.isDataLoaded.value) { // pragma: allowlist secret
             return null
         }
-        val hidden = compose.project.click.click.data.AppDataManager.hiddenConnectionIds.value
-        val rows = compose.project.click.click.data.AppDataManager.connections.value
-            .filter { conn ->
-                viewerUserId in conn.user_ids &&
-                    peerUserId in conn.user_ids &&
-                    conn.isVisibleInActiveUi() &&
-                    conn.id !in hidden
-            }
+        val hidden = compose.project.click.click.data.AppDataManager.hiddenConnectionIds.value // pragma: allowlist secret
+        val rows =
+            compose.project.click.click.data.AppDataManager.connections.value // pragma: allowlist secret
+                .filter { conn ->
+                    viewerUserId in conn.user_ids &&
+                        peerUserId in conn.user_ids &&
+                        conn.isVisibleInActiveUi() &&
+                        conn.id !in hidden
+                }
         return rows.maxByOrNull { conn ->
             (conn.last_message_at ?: 0L).coerceAtLeast(conn.created)
         }
@@ -632,18 +694,22 @@ class SupabaseRepository {
         val validArchiveIds = archivedIds - hiddenIds
         val archivedRows = fetchArchivedChannelConnections(userId, validArchiveIds)
         val lifecycleArchivedRows = fetchLifecycleArchivedConnections(userId, hiddenIds)
-        val merged = dedupeOneToOneConnectionsByPeer(
-            viewerUserId = userId,
-            connections = (activeRows + archivedRows + lifecycleArchivedRows)
-                .distinctBy { it.id }
-                .filter { it.normalizedConnectionStatus() != "removed" }
-                .filter { conn ->
-                    // Exclude connections where the other participant has blocked this user
-                    if (blockedByUserIds.isEmpty()) true
-                    else conn.user_ids.none { it != userId && it in blockedByUserIds }
-                }
-                .sortedByDescending { it.created },
-        )
+        val merged =
+            dedupeOneToOneConnectionsByPeer(
+                viewerUserId = userId,
+                connections =
+                    (activeRows + archivedRows + lifecycleArchivedRows)
+                        .distinctBy { it.id }
+                        .filter { it.normalizedConnectionStatus() != "removed" }
+                        .filter { conn ->
+                            // Exclude connections where the other participant has blocked this user
+                            if (blockedByUserIds.isEmpty()) {
+                                true
+                            } else {
+                                conn.user_ids.none { it != userId && it in blockedByUserIds }
+                            }
+                        }.sortedByDescending { it.created },
+            )
         return UserConnectionsSnapshot(
             connections = merged,
             archivedConnectionIds = archivedIds,
@@ -654,7 +720,10 @@ class SupabaseRepository {
     }
 
     private suspend fun sweepStaleConnectionsForUserIfDue(userId: String) {
-        val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+        val now =
+            kotlinx.datetime.Clock.System
+                .now()
+                .toEpochMilliseconds()
         if (lastStaleSweepUserId == userId && now - lastStaleSweepAtMs < STALE_SWEEP_INTERVAL_MS) {
             return
         }
@@ -674,9 +743,10 @@ class SupabaseRepository {
     private suspend fun fetchActiveChannelConnections(
         userId: String,
         excludedIds: Set<String>,
-    ): List<Connection> {
-        return try {
-            supabase.from("connections")
+    ): List<Connection> =
+        try {
+            supabase
+                .from("connections")
                 .select(columns = connectionsSelectWithEncounters) {
                     filter {
                         contains("user_ids", listOf(userId))
@@ -693,15 +763,13 @@ class SupabaseRepository {
                     order("created", Order.DESCENDING)
                     order("encountered_at", Order.DESCENDING, referencedTable = CONNECTION_ENCOUNTERS_TABLE)
                     limit(CONNECTION_ENCOUNTERS_PER_CONNECTION, referencedTable = CONNECTION_ENCOUNTERS_TABLE)
-                }
-                .decodeList<Connection>()
+                }.decodeList<Connection>()
                 .withEncountersSortedNewestFirst()
         } catch (e: Exception) {
             if (e.isOfflineNetworkFailure()) throw e
             println("fetchActiveChannelConnections (redacted): ${e.redactedRestMessage()}")
             emptyList()
         }
-    }
 
     /** Archived tab: rows in `connection_archives` minus `connection_hidden`, restricted to participant. */
     private suspend fun fetchArchivedChannelConnections(
@@ -711,7 +779,8 @@ class SupabaseRepository {
         if (validArchiveIds.isEmpty()) return emptyList()
         return try {
             val ids = validArchiveIds.toList()
-            supabase.from("connections")
+            supabase
+                .from("connections")
                 .select(columns = connectionsSelectWithEncounters) {
                     filter {
                         contains("user_ids", listOf(userId))
@@ -720,8 +789,7 @@ class SupabaseRepository {
                     order("created", Order.DESCENDING)
                     order("encountered_at", Order.DESCENDING, referencedTable = CONNECTION_ENCOUNTERS_TABLE)
                     limit(CONNECTION_ENCOUNTERS_PER_CONNECTION, referencedTable = CONNECTION_ENCOUNTERS_TABLE)
-                }
-                .decodeList<Connection>()
+                }.decodeList<Connection>()
                 .withEncountersSortedNewestFirst()
         } catch (e: Exception) {
             if (e.isOfflineNetworkFailure()) throw e
@@ -740,7 +808,8 @@ class SupabaseRepository {
     ): List<Connection> {
         if (userId.isBlank()) return emptyList()
         return try {
-            supabase.from("connections")
+            supabase
+                .from("connections")
                 .select(columns = connectionsSelectWithEncounters) {
                     filter {
                         contains("user_ids", listOf(userId))
@@ -752,8 +821,7 @@ class SupabaseRepository {
                     order("created", Order.DESCENDING)
                     order("encountered_at", Order.DESCENDING, referencedTable = CONNECTION_ENCOUNTERS_TABLE)
                     limit(CONNECTION_ENCOUNTERS_PER_CONNECTION, referencedTable = CONNECTION_ENCOUNTERS_TABLE)
-                }
-                .decodeList<Connection>()
+                }.decodeList<Connection>()
                 .withEncountersSortedNewestFirst()
         } catch (e: Exception) {
             if (e.isOfflineNetworkFailure()) throw e
@@ -778,24 +846,24 @@ class SupabaseRepository {
     /**
      * Fetch a connection by ID
      */
-    suspend fun fetchConnectionById(connectionId: String): Connection? {
-        return try {
-            val connections = supabase.from("connections")
-                .select(columns = connectionsSelectWithEncounters) {
-                    filter {
-                        eq("id", connectionId)
-                    }
-                    order("encountered_at", Order.DESCENDING, referencedTable = CONNECTION_ENCOUNTERS_TABLE)
-                    limit(CONNECTION_ENCOUNTERS_PER_CONNECTION, referencedTable = CONNECTION_ENCOUNTERS_TABLE)
-                }
-                .decodeList<Connection>()
-                .withEncountersSortedNewestFirst()
+    suspend fun fetchConnectionById(connectionId: String): Connection? =
+        try {
+            val connections =
+                supabase
+                    .from("connections")
+                    .select(columns = connectionsSelectWithEncounters) {
+                        filter {
+                            eq("id", connectionId)
+                        }
+                        order("encountered_at", Order.DESCENDING, referencedTable = CONNECTION_ENCOUNTERS_TABLE)
+                        limit(CONNECTION_ENCOUNTERS_PER_CONNECTION, referencedTable = CONNECTION_ENCOUNTERS_TABLE)
+                    }.decodeList<Connection>()
+                    .withEncountersSortedNewestFirst()
             connections.firstOrNull()
         } catch (e: Exception) {
             println("Error fetching connection (redacted): ${e.redactedRestMessage()}")
             null
         }
-    }
 
     /**
      * Fetch multiple users by their IDs.
@@ -809,13 +877,15 @@ class SupabaseRepository {
         if (userIds.isEmpty()) return emptyList()
 
         return try {
-            val (tableUsers, rpcUsers) = coroutineScope {
-                val tableDeferred = async {
-                    fetchUserCoresByIds(userIds)
+            val (tableUsers, rpcUsers) =
+                coroutineScope {
+                    val tableDeferred =
+                        async {
+                            fetchUserCoresByIds(userIds)
+                        }
+                    val rpcDeferred = async { fetchDisplayNamesViaRpc(userIds) }
+                    tableDeferred.await() to rpcDeferred.await()
                 }
-                val rpcDeferred = async { fetchDisplayNamesViaRpc(userIds) }
-                tableDeferred.await() to rpcDeferred.await()
-            }
 
             val tableById = tableUsers.associate { it.id to it.toUser() }
             val rpcById = rpcUsers.associateBy { it.id }
@@ -825,20 +895,21 @@ class SupabaseRepository {
             userIds.mapNotNull { userId ->
                 val rpcUser = rpcById[userId]
                 val tableUser = tableById[userId]
-                val merged = when {
-                    rpcUser != null && isResolvedDisplayName(rpcUser.name) -> {
-                        // RPC gave a real name — merge with any extra table data
-                        rpcUser.copy(
-                            image = rpcUser.image ?: tableUser?.image,
-                            lastPolled = rpcUser.lastPolled ?: tableUser?.lastPolled,
-                            email = rpcUser.email ?: tableUser?.email
-                        )
+                val merged =
+                    when {
+                        rpcUser != null && isResolvedDisplayName(rpcUser.name) -> {
+                            // RPC gave a real name — merge with any extra table data
+                            rpcUser.copy(
+                                image = rpcUser.image ?: tableUser?.image,
+                                lastPolled = rpcUser.lastPolled ?: tableUser?.lastPolled,
+                                email = rpcUser.email ?: tableUser?.email,
+                            )
+                        }
+                        tableUser != null && isResolvedDisplayName(tableUser.name) -> tableUser
+                        rpcUser != null -> rpcUser
+                        tableUser != null -> tableUser
+                        else -> null
                     }
-                    tableUser != null && isResolvedDisplayName(tableUser.name) -> tableUser
-                    rpcUser != null -> rpcUser
-                    tableUser != null -> tableUser
-                    else -> null
-                }
                 merged?.copy(tags = interestsByUserId[userId] ?: merged.tags)
             }
         } catch (e: Exception) {
@@ -847,28 +918,37 @@ class SupabaseRepository {
         }
     }
 
-    private suspend fun fetchDisplayNamesViaRpc(userIds: List<String>): List<User> {
-        return try {
-            supabase.postgrest.rpc("get_user_display_names", buildJsonObject {
-                put("user_ids", kotlinx.serialization.json.JsonArray(userIds.map { kotlinx.serialization.json.JsonPrimitive(it) }))
-            }).decodeList<DisplayNameRpcRow>().map { it.toUser() }
+    private suspend fun fetchDisplayNamesViaRpc(userIds: List<String>): List<User> =
+        try {
+            supabase.postgrest
+                .rpc(
+                    "get_user_display_names",
+                    buildJsonObject {
+                        put("user_ids", kotlinx.serialization.json.JsonArray(userIds.map { kotlinx.serialization.json.JsonPrimitive(it) }))
+                    },
+                ).decodeList<DisplayNameRpcRow>()
+                .map { it.toUser() }
         } catch (e: Exception) {
             println("Error resolving display names via RPC (redacted): ${e.redactedRestMessage()}")
             emptyList()
         }
-    }
 
     private suspend fun fetchUserCoresByIds(userIds: List<String>): List<UserCore> {
         var lastError: Throwable? = null
 
         for (columns in userColumnSets) {
-            val attempt = runCatching {
-                supabase.from("users")
-                    .select(columns = io.github.jan.supabase.postgrest.query.Columns.list(*columns.toTypedArray())) {
-                        filter { isIn("id", userIds) }
-                    }
-                    .decodeList<UserCore>()
-            }
+            val attempt =
+                runCatching {
+                    supabase
+                        .from("users")
+                        .select(
+                            columns =
+                                io.github.jan.supabase.postgrest.query.Columns
+                                    .list(*columns.toTypedArray()),
+                        ) {
+                            filter { isIn("id", userIds) }
+                        }.decodeList<UserCore>()
+                }
 
             if (attempt.isSuccess) {
                 return attempt.getOrThrow()
@@ -885,14 +965,19 @@ class SupabaseRepository {
      * Update user's last polled timestamp.
      * Callers must ensure a fresh JWT ([EnsureFreshAccessToken]) before invoking.
      */
-    suspend fun updateUserLastPolled(userId: String, timestamp: Long): Boolean {
+    suspend fun updateUserLastPolled(
+        userId: String,
+        timestamp: Long,
+    ): Boolean {
         if (lastPolledWritesDisabled) return true
         // Soft refresh if SDK session is near expiry — avoids "JWT expired" spam every 30s.
         runCatching {
-            compose.project.click.click.data.auth.EnsureFreshAccessToken.get()
+            compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
+                .get()
         }
         return try {
-            supabase.from("users")
+            supabase
+                .from("users")
                 .update({
                     set("last_polled", timestamp)
                 }) {
@@ -916,10 +1001,11 @@ class SupabaseRepository {
      */
     suspend fun updateConnectionShouldContinue(
         connectionId: String,
-        shouldContinue: List<Boolean>
-    ): Boolean {
-        return try {
-            supabase.from("connections")
+        shouldContinue: List<Boolean>,
+    ): Boolean =
+        try {
+            supabase
+                .from("connections")
                 .update({
                     set("should_continue", shouldContinue)
                 }) {
@@ -932,17 +1018,17 @@ class SupabaseRepository {
             println("Error updating connection (redacted): ${e.redactedRestMessage()}")
             false
         }
-    }
-    
+
     /**
      * Update connection has_begun status when chat starts (Vibe Check begins)
      */
     suspend fun updateConnectionHasBegun(
         connectionId: String,
-        hasBegun: Boolean
-    ): Boolean {
-        return try {
-            supabase.from("connections")
+        hasBegun: Boolean,
+    ): Boolean =
+        try {
+            supabase
+                .from("connections")
                 .update({
                     set("has_begun", hasBegun)
                 }) {
@@ -955,7 +1041,6 @@ class SupabaseRepository {
             println("Error updating connection has_begun (redacted): ${e.redactedRestMessage()}")
             false
         }
-    }
 
     /**
      * Update connection expiry_state lifecycle.
@@ -963,23 +1048,28 @@ class SupabaseRepository {
      */
     suspend fun updateConnectionExpiryState(
         connectionId: String,
-        state: String
+        state: String,
     ): Boolean {
         return try {
             if (state == "pending" || state == "active" || state == "kept") {
-                val withStatus = runCatching {
-                    supabase.from("connections")
-                        .update({
-                            set("expiry_state", state)
-                            set("status", state)
-                        }) {
-                            filter { eq("id", connectionId) }
-                        }
-                }
+                val withStatus =
+                    runCatching {
+                        supabase
+                            .from("connections")
+                            .update({
+                                set("expiry_state", state)
+                                set("status", state)
+                            }) {
+                                filter { eq("id", connectionId) }
+                            }
+                    }
                 if (withStatus.isSuccess) return true
-                println("updateConnectionExpiryState (status column may be missing): ${withStatus.exceptionOrNull()?.redactedRestMessage()}")
+                println(
+                    "updateConnectionExpiryState (status column may be missing): ${withStatus.exceptionOrNull()?.redactedRestMessage()}",
+                )
             }
-            supabase.from("connections")
+            supabase
+                .from("connections")
                 .update({
                     set("expiry_state", state)
                 }) {
@@ -993,7 +1083,7 @@ class SupabaseRepository {
             false
         }
     }
-    
+
     /**
      * Update a specific user's keep decision for a connection.
      * @param connectionId The connection ID
@@ -1007,7 +1097,7 @@ class SupabaseRepository {
         userId: String,
         keepConnection: Boolean,
         currentShouldContinue: List<Boolean>,
-        userIds: List<String>
+        userIds: List<String>,
     ): Boolean {
         return try {
             val userIndex = userIds.indexOf(userId)
@@ -1015,7 +1105,7 @@ class SupabaseRepository {
                 println("User not found in connection")
                 return false
             }
-            
+
             // Create new should_continue list with updated value
             val newShouldContinue = currentShouldContinue.toMutableList()
             // Ensure the list has at least 2 elements
@@ -1023,8 +1113,9 @@ class SupabaseRepository {
                 newShouldContinue.add(false)
             }
             newShouldContinue[userIndex] = keepConnection
-            
-            supabase.from("connections")
+
+            supabase
+                .from("connections")
                 .update({
                     set("should_continue", newShouldContinue.toList())
                 }) {
@@ -1038,14 +1129,22 @@ class SupabaseRepository {
             false
         }
     }
-    
+
     /**
      * Hide a connection for [userId] via [connection_hidden] (user "Remove Connection").
      * Does not mutate [connections.status] or delete the connection row.
      */
-    suspend fun hideConnectionForUser(userId: String, connectionId: String): Boolean {
+    suspend fun hideConnectionForUser(
+        userId: String,
+        connectionId: String,
+    ): Boolean {
         if (userId.isBlank() || connectionId.isBlank()) return false
-        val sessionUid = supabase.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
+        val sessionUid =
+            supabase.auth
+                .currentUserOrNull()
+                ?.id
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
         if (sessionUid == null || sessionUid != userId.trim()) {
             println("hideConnectionForUser: session user mismatch")
             return false
@@ -1065,9 +1164,17 @@ class SupabaseRepository {
      * Hides the connection for the signed-in user only (`POST /api/connections/hide`).
      * [userIds] must include the current session user (used to validate before calling the API).
      */
-    suspend fun hideConnectionForUsers(userIds: List<String>, connectionId: String): Boolean {
+    suspend fun hideConnectionForUsers(
+        userIds: List<String>,
+        connectionId: String,
+    ): Boolean {
         if (connectionId.isBlank() || userIds.isEmpty()) return false
-        val sessionUid = supabase.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+        val sessionUid =
+            supabase.auth
+                .currentUserOrNull()
+                ?.id
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() } ?: return false
         val distinct = userIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         if (distinct.isEmpty() || sessionUid !in distinct) return false
         return hideConnectionForUser(sessionUid, connectionId)
@@ -1077,14 +1184,23 @@ class SupabaseRepository {
      * Clears [connection_archives] and [connection_hidden] for [connectionId] for both users in [userIds].
      * Used when restoring a connection after QR/NFC reconnect.
      */
-    suspend fun clearConnectionJunctionForPair(connectionId: String, userIds: List<String>): Boolean {
+    suspend fun clearConnectionJunctionForPair(
+        connectionId: String,
+        userIds: List<String>,
+    ): Boolean {
         if (connectionId.isBlank() || userIds.size < 2) return false
-        val pair = userIds.take(2).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        val pair =
+            userIds
+                .take(2)
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .distinct()
         if (pair.size < 2) return false
         return try {
             if (!connectionHiddenTableMissing) {
                 try {
-                    supabase.from("connection_hidden")
+                    supabase
+                        .from("connection_hidden")
                         .delete {
                             filter {
                                 eq("connection_id", connectionId)
@@ -1101,7 +1217,8 @@ class SupabaseRepository {
             }
             if (!connectionArchivesTableMissing) {
                 try {
-                    supabase.from("connection_archives")
+                    supabase
+                        .from("connection_archives")
                         .delete {
                             filter {
                                 eq("connection_id", connectionId)
@@ -1122,61 +1239,65 @@ class SupabaseRepository {
             false
         }
     }
-    
+
     // ==================== Availability Methods ====================
-    
+
     /**
      * Fetch a user's availability
      */
-    suspend fun fetchUserAvailability(userId: String): compose.project.click.click.data.models.UserAvailability? {
-        return try {
-            val availabilities = supabase.from("user_availability")
-                .select {
-                    filter {
-                        eq("user_id", userId)
-                    }
-                }
-                .decodeList<compose.project.click.click.data.models.UserAvailability>()
+    suspend fun fetchUserAvailability(userId: String): UserAvailability? =
+        // pragma: allowlist secret
+        try {
+            val availabilities =
+                supabase
+                    .from("user_availability")
+                    .select {
+                        filter {
+                            eq("user_id", userId)
+                        }
+                    }.decodeList<UserAvailability>() // pragma: allowlist secret
             availabilities.firstOrNull()
         } catch (e: Exception) {
             println("Error fetching user availability (redacted): ${e.redactedRestMessage()}")
             null
         }
-    }
-    
+
     /**
      * Fetch availability for multiple users
      */
-    suspend fun fetchAvailabilityForUsers(userIds: List<String>): Map<String, compose.project.click.click.data.models.UserAvailability> {
+    suspend fun fetchAvailabilityForUsers(userIds: List<String>): Map<String, UserAvailability> { // pragma: allowlist secret
         if (userIds.isEmpty()) return emptyMap()
-        
+
         return try {
-            val availabilities = supabase.from("user_availability")
-                .select {
-                    filter {
-                        isIn("user_id", userIds)
-                    }
-                }
-                .decodeList<compose.project.click.click.data.models.UserAvailability>()
+            val availabilities =
+                supabase
+                    .from("user_availability")
+                    .select {
+                        filter {
+                            isIn("user_id", userIds)
+                        }
+                    }.decodeList<UserAvailability>() // pragma: allowlist secret
             availabilities.associateBy { it.userId }
         } catch (e: Exception) {
             println("Error fetching availabilities (redacted): ${e.redactedRestMessage()}")
             emptyMap()
         }
     }
-    
+
     /**
      * Update user's availability (upsert)
      * Uses manual field setting to avoid issues with empty ID
      */
-    suspend fun updateUserAvailability(availability: compose.project.click.click.data.models.UserAvailability): Boolean {
-        return try {
+    suspend fun updateUserAvailability(availability: UserAvailability): Boolean =
+        // pragma: allowlist secret
+        try {
             // Check if record exists first
             val existing = fetchUserAvailability(availability.userId)
-            
+
             if (existing != null) {
                 // Update existing record
-                supabase.from("user_availability")
+                supabase
+                    .from("user_availability")
                     .update({
                         set("is_free_this_week", availability.isFreeThisWeek)
                         set("available_days", availability.availableDays)
@@ -1190,7 +1311,8 @@ class SupabaseRepository {
                     }
             } else {
                 // Insert new record using serializable DTO (let Supabase generate ID)
-                supabase.from("user_availability")
+                supabase
+                    .from("user_availability")
                     .insert(availability.toInsertDto())
             }
             println("Successfully updated availability for user ${availability.userId}: isFreeThisWeek=${availability.isFreeThisWeek}")
@@ -1199,22 +1321,31 @@ class SupabaseRepository {
             println("Error updating availability (redacted): ${e.redactedRestMessage()}")
             false
         }
-    }
-    
+
     /**
      * Set user's "I'm free this week" status
      */
-    suspend fun setFreeThisWeek(userId: String, isFree: Boolean): Boolean {
-        return try {
+    suspend fun setFreeThisWeek(
+        userId: String,
+        isFree: Boolean,
+    ): Boolean =
+        try {
             val existing = fetchUserAvailability(userId)
-            val availability = existing?.copy(
-                isFreeThisWeek = isFree,
-                lastUpdated = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
-            ) ?: compose.project.click.click.data.models.UserAvailability(
-                userId = userId,
-                isFreeThisWeek = isFree,
-                lastUpdated = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
-            )
+            val availability =
+                existing?.copy(
+                    isFreeThisWeek = isFree,
+                    lastUpdated =
+                        kotlinx.datetime.Clock.System
+                            .now()
+                            .toEpochMilliseconds(),
+                ) ?: UserAvailability( // pragma: allowlist secret
+                    userId = userId,
+                    isFreeThisWeek = isFree,
+                    lastUpdated =
+                        kotlinx.datetime.Clock.System
+                            .now()
+                            .toEpochMilliseconds(),
+                )
             val result = updateUserAvailability(availability)
             println("setFreeThisWeek for $userId: isFree=$isFree, result=$result")
             result
@@ -1222,13 +1353,12 @@ class SupabaseRepository {
             println("Error setting free this week (redacted): ${e.redactedRestMessage()}")
             false
         }
-    }
 
     /**
      * Inserts one row into [public.availability_intents] for the current user.
      */
-    suspend fun insertAvailabilityIntent(row: AvailabilityIntentInsert): AvailabilityIntentInsertResult {
-        return try {
+    suspend fun insertAvailabilityIntent(row: AvailabilityIntentInsert): AvailabilityIntentInsertResult =
+        try {
             supabase.from("availability_intents").insert(row)
             AvailabilityIntentInsertResult(success = true)
         } catch (e: Exception) {
@@ -1236,7 +1366,6 @@ class SupabaseRepository {
             println("Error inserting availability_intent (redacted): $short")
             AvailabilityIntentInsertResult(success = false, errorMessage = short)
         }
-    }
 
     /**
      * Active intent rows for [userId] where expiry is in the future (local server/client clock).
@@ -1244,20 +1373,20 @@ class SupabaseRepository {
     suspend fun fetchActiveAvailabilityIntentsForUser(userId: String): List<AvailabilityIntentRow> {
         if (userId.isBlank()) return emptyList()
         return try {
-            val rows = supabase.from("availability_intents")
-                .select {
-                    filter {
-                        eq("user_id", userId)
-                    }
-                }
-                .decodeList<AvailabilityIntentRow>()
+            val rows =
+                supabase
+                    .from("availability_intents")
+                    .select {
+                        filter {
+                            eq("user_id", userId)
+                        }
+                    }.decodeList<AvailabilityIntentRow>()
             val now = Clock.System.now()
             rows
                 .filter { row ->
                     val end = row.expiresInstantOrNull() ?: return@filter false
                     end > now
-                }
-                .sortedByDescending { it.createdOrStartInstant() }
+                }.sortedByDescending { it.createdOrStartInstant() }
         } catch (e: Exception) {
             println("Error fetching availability_intents (redacted): ${e.redactedRestMessage()}")
             emptyList()
@@ -1280,7 +1409,8 @@ class SupabaseRepository {
             return AvailabilityIntentInsertResult(success = false, errorMessage = "Missing intent id.")
         }
         return try {
-            supabase.from("availability_intents")
+            supabase
+                .from("availability_intents")
                 .update({
                     set("intent_tag", intentTag)
                     set("timeframe", timeframe)
@@ -1309,7 +1439,8 @@ class SupabaseRepository {
             return AvailabilityIntentInsertResult(success = false, errorMessage = "Missing intent id.")
         }
         return try {
-            supabase.from("availability_intents")
+            supabase
+                .from("availability_intents")
                 .delete {
                     filter {
                         eq("id", intentId)
@@ -1322,11 +1453,14 @@ class SupabaseRepository {
             AvailabilityIntentInsertResult(success = false, errorMessage = short)
         }
     }
-    
+
     /**
      * Update user's name
      */
-    suspend fun updateUserName(userId: String, name: String): Result<Unit> {
+    suspend fun updateUserName(
+        userId: String,
+        name: String,
+    ): Result<Unit> {
         val trimmed = name.trim()
         val spaceIdx = trimmed.indexOf(' ')
         val first = if (spaceIdx < 0) trimmed else trimmed.take(spaceIdx).trim()
@@ -1337,13 +1471,19 @@ class SupabaseRepository {
     /**
      * Updates [public.users] display fields from explicit first/last name (via click-web PATCH).
      */
-    suspend fun updateUserProfileNames(userId: String, firstName: String, lastName: String): Result<Unit> {
+    suspend fun updateUserProfileNames(
+        userId: String,
+        firstName: String,
+        lastName: String,
+    ): Result<Unit> {
         val f = firstName.trim()
         val l = lastName.trim()
         if (f.isEmpty()) {
             return Result.failure(IllegalArgumentException("First name is required"))
         }
-        return clickWebApi.patchUserProfile(userId = userId, firstName = f, lastName = l).map { }
+        return clickWebApi
+            .patchUserProfile(userId = userId, firstName = f, lastName = l)
+            .map { }
             .onFailure { e ->
                 println("Error updating user profile names (redacted): ${e.redactedRestMessage()}")
             }
@@ -1361,38 +1501,44 @@ class SupabaseRepository {
     ): Result<Unit> {
         val f = firstName.trim()
         val l = lastName.trim()
-        val b = birthdayIso
-            .trim()
-            .substringBefore('T')
-            .substringBefore(' ')
+        val b =
+            birthdayIso
+                .trim()
+                .substringBefore('T')
+                .substringBefore(' ')
         if (f.isEmpty()) {
             return Result.failure(IllegalArgumentException("First name is required"))
         }
         if (b.isEmpty()) {
             return Result.failure(IllegalArgumentException("Birthday is required"))
         }
-        return clickWebApi.patchUserProfile(
-            userId = userId,
-            firstName = f,
-            lastName = l,
-            birthday = b,
-        ).map { }
+        return clickWebApi
+            .patchUserProfile(
+                userId = userId,
+                firstName = f,
+                lastName = l,
+                birthday = b,
+            ).map { }
             .onFailure { e ->
                 println("Error updating user profile basics (redacted): ${e.redactedRestMessage()}")
             }
     }
-    
+
     /**
      * Upsert a user record in the users table.
      * This ensures the user exists and is properly synchronized with Supabase Auth.
      */
-    suspend fun upsertUser(user: compose.project.click.click.data.models.User): Boolean {
-        return try {
+    suspend fun upsertUser(user: User): Boolean =
+        try {
             // Check if user exists
             val existing = fetchUserById(user.id)
-            val resolvedName = user.name?.trim()?.takeIf { it.isNotEmpty() }
-                ?: user.email?.substringBefore('@')?.trim()?.takeIf { it.isNotEmpty() }
-                ?: "User"
+            val resolvedName =
+                user.name?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: user.email
+                        ?.substringBefore('@')
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() }
+                    ?: "User"
             val resolvedFirst = user.firstName?.trim()?.takeIf { it.isNotEmpty() }
             val resolvedLast = user.lastName?.trim()?.takeIf { it.isNotEmpty() }
             val resolvedBirthday = user.birthday?.trim()?.takeIf { it.isNotEmpty() }
@@ -1407,7 +1553,8 @@ class SupabaseRepository {
                         (user.birthday != null && user.birthday != existing.birthday)
                 if (profileChanged) {
                     runCatching {
-                        supabase.from("users")
+                        supabase
+                            .from("users")
                             .update({
                                 set("name", resolvedName)
                                 set("full_name", resolvedName)
@@ -1422,7 +1569,8 @@ class SupabaseRepository {
                                 }
                             }
                     }.getOrElse {
-                        supabase.from("users")
+                        supabase
+                            .from("users")
                             .update({
                                 set("name", resolvedName)
                                 user.email?.let { set("email", it) }
@@ -1438,7 +1586,8 @@ class SupabaseRepository {
             } else {
                 // Insert a valid user row so other clients can resolve this user's name directly from Supabase.
                 runCatching {
-                    supabase.from("users")
+                    supabase
+                        .from("users")
                         .insert(
                             buildJsonObject {
                                 put("id", user.id)
@@ -1448,12 +1597,24 @@ class SupabaseRepository {
                                 resolvedLast?.let { put("last_name", it) }
                                 resolvedBirthday?.let { put("birthday", it) }
                                 put("email", user.email ?: "")
-                                put("created_at", if (user.createdAt > 0L) user.createdAt else kotlinx.datetime.Clock.System.now().toEpochMilliseconds())
+                                put(
+                                    "created_at",
+                                    if (user.createdAt >
+                                        0L
+                                    ) {
+                                        user.createdAt
+                                    } else {
+                                        kotlinx.datetime.Clock.System
+                                            .now()
+                                            .toEpochMilliseconds()
+                                    },
+                                )
                                 user.image?.let { put("image", it) }
-                            }
+                            },
                         )
                 }.getOrElse {
-                    supabase.from("users")
+                    supabase
+                        .from("users")
                         .insert(user.toInsertDto().copy(name = resolvedName, email = user.email ?: ""))
                 }
                 true
@@ -1462,7 +1623,6 @@ class SupabaseRepository {
             println("Error upserting user (redacted): ${e.redactedRestMessage()}")
             false
         }
-    }
 
     @Serializable
     private data class UserInterestsDto(
@@ -1478,14 +1638,15 @@ class SupabaseRepository {
      *
      * @return [Result.success] with `null` when no row exists; [Result.failure] on transport/schema errors.
      */
-    suspend fun fetchUserInterests(userId: String): Result<UserInterests?> {
-        return try {
-            val rows = supabase.from("user_interests")
-                .select {
-                    filter { eq("user_id", userId) }
-                    limit(1)
-                }
-                .decodeList<UserInterestsDto>()
+    suspend fun fetchUserInterests(userId: String): Result<UserInterests?> =
+        try {
+            val rows =
+                supabase
+                    .from("user_interests")
+                    .select {
+                        filter { eq("user_id", userId) }
+                        limit(1)
+                    }.decodeList<UserInterestsDto>()
             val row = rows.firstOrNull()
             Result.success(
                 row?.let {
@@ -1496,29 +1657,32 @@ class SupabaseRepository {
             println("Error fetching user_interests (redacted): ${e.redactedRestMessage()}")
             Result.failure(e)
         }
-    }
 
     /**
      * Insert or update interest tags for the user (canonical store for onboarding + Common Ground).
      * Persisted through click-web so the mobile client does not write `user_interests` directly.
      */
-    suspend fun updateUserInterests(userId: String, tags: List<String>): Result<Unit> {
-        return clickWebApi.patchUserProfile(userId = userId, tags = tags).map { }
+    suspend fun updateUserInterests(
+        userId: String,
+        tags: List<String>,
+    ): Result<Unit> =
+        clickWebApi
+            .patchUserProfile(userId = userId, tags = tags)
+            .map { }
             .onFailure { e ->
                 println("Error updating user_interests (redacted): ${e.redactedRestMessage()}")
             }
-    }
 
     private suspend fun fetchUserInterestsMap(userIds: List<String>): Map<String, List<String>> {
         if (userIds.isEmpty()) return emptyMap()
         return try {
-            supabase.from("user_interests")
+            supabase
+                .from("user_interests")
                 .select {
                     filter {
                         isIn("user_id", userIds)
                     }
-                }
-                .decodeList<UserInterestsDto>()
+                }.decodeList<UserInterestsDto>()
                 .associate { it.userId to it.tags }
         } catch (e: Exception) {
             println("Error batch-fetching user_interests (redacted): ${e.redactedRestMessage()}")
@@ -1532,30 +1696,37 @@ class SupabaseRepository {
      * Fetch location privacy preferences for a user.
      * Returns default (all true) if columns are missing or on error.
      */
-    suspend fun fetchLocationPreferences(userId: String): LocationPreferences {
-        return try {
-            val result = supabase.from("users")
-                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list(
-                    "location_connection_snap_enabled",
-                    "location_show_on_map_enabled",
-                    "location_include_in_insights_enabled"
-                )) {
-                    filter { eq("id", userId) }
-                }
-                .decodeList<LocationPreferences>()
+    suspend fun fetchLocationPreferences(userId: String): LocationPreferences =
+        try {
+            val result =
+                supabase
+                    .from("users")
+                    .select(
+                        columns =
+                            io.github.jan.supabase.postgrest.query.Columns.list(
+                                "location_connection_snap_enabled",
+                                "location_show_on_map_enabled",
+                                "location_include_in_insights_enabled",
+                            ),
+                    ) {
+                        filter { eq("id", userId) }
+                    }.decodeList<LocationPreferences>()
             result.firstOrNull() ?: LocationPreferences()
         } catch (e: Exception) {
             println("Error fetching location preferences (redacted): ${e.redactedRestMessage()}")
             LocationPreferences()
         }
-    }
 
     /**
      * Update location privacy preferences for a user.
      */
-    suspend fun updateLocationPreferences(userId: String, prefs: LocationPreferences): Boolean {
-        return try {
-            supabase.from("users")
+    suspend fun updateLocationPreferences(
+        userId: String,
+        prefs: LocationPreferences,
+    ): Boolean =
+        try {
+            supabase
+                .from("users")
                 .update({
                     set("location_connection_snap_enabled", prefs.connectionSnapEnabled)
                     set("location_show_on_map_enabled", prefs.showOnMapEnabled)
@@ -1568,7 +1739,6 @@ class SupabaseRepository {
             println("Error updating location preferences (redacted): ${e.redactedRestMessage()}")
             false
         }
-    }
 
     /**
      * User IDs that have blocked [userId] (rows in `user_blocks` where `blocked_id = userId`).
@@ -1577,7 +1747,12 @@ class SupabaseRepository {
      */
     suspend fun getBlockedByUserIds(userId: String): Set<String> {
         if (userId.isBlank()) return emptySet()
-        val sessionUid = supabase.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
+        val sessionUid =
+            supabase.auth
+                .currentUserOrNull()
+                ?.id
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
         if (sessionUid == null || sessionUid != userId.trim()) {
             println("getBlockedByUserIds: session user mismatch")
             return emptySet()
@@ -1587,10 +1762,12 @@ class SupabaseRepository {
             data class BlockRow(
                 @SerialName("blocker_id") val blockerId: String,
             )
-            val rows = supabase.postgrest.rpc(
-                "blockers_for_blocked_user",
-                buildJsonObject { },
-            ).decodeList<BlockRow>()
+            val rows =
+                supabase.postgrest
+                    .rpc(
+                        "blockers_for_blocked_user",
+                        buildJsonObject { },
+                    ).decodeList<BlockRow>()
             rows.map { it.blockerId }.toSet()
         } catch (e: Exception) {
             println("getBlockedByUserIds (non-fatal, redacted): ${e.redactedRestMessage()}")
@@ -1603,25 +1780,39 @@ class SupabaseRepository {
     /**
      * Block a user. Inserts into user_blocks table.
      */
-    suspend fun blockUser(blockerId: String, blockedId: String): Boolean {
-        return try {
-            supabase.from("user_blocks")
-                .insert(buildJsonObject {
-                    put("blocker_id", blockerId)
-                    put("blocked_id", blockedId)
-                })
+    suspend fun blockUser(
+        blockerId: String,
+        blockedId: String,
+    ): Boolean =
+        try {
+            supabase
+                .from("user_blocks")
+                .insert(
+                    buildJsonObject {
+                        put("blocker_id", blockerId)
+                        put("blocked_id", blockedId)
+                    },
+                )
             true
         } catch (e: Exception) {
             println("Error blocking user (redacted): ${e.redactedRestMessage()}")
             false
         }
-    }
 
     /**
      * Report a connection for safety review.
      */
-    suspend fun reportConnection(connectionId: String, reporterId: String, reason: String): Boolean {
-        val sessionUid = supabase.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
+    suspend fun reportConnection(
+        connectionId: String,
+        reporterId: String,
+        reason: String,
+    ): Boolean {
+        val sessionUid =
+            supabase.auth
+                .currentUserOrNull()
+                ?.id
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
         if (sessionUid == null || sessionUid != reporterId.trim()) {
             println("reportConnection: session user mismatch")
             return false
@@ -1641,8 +1832,16 @@ class SupabaseRepository {
      * Inserts into the connection_archives table (see database/add_connection_archives.sql).
      * Silently no-ops if the table has not been provisioned yet.
      */
-    suspend fun archiveConnection(userId: String, connectionId: String): Boolean {
-        val sessionUid = supabase.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
+    suspend fun archiveConnection(
+        userId: String,
+        connectionId: String,
+    ): Boolean {
+        val sessionUid =
+            supabase.auth
+                .currentUserOrNull()
+                ?.id
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
         if (sessionUid == null || sessionUid != userId.trim()) {
             println("archiveConnection: session user mismatch")
             return false
@@ -1661,8 +1860,16 @@ class SupabaseRepository {
     /**
      * Unarchive a connection, removing it from the user's archive list.
      */
-    suspend fun unarchiveConnection(userId: String, connectionId: String): Boolean {
-        val sessionUid = supabase.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
+    suspend fun unarchiveConnection(
+        userId: String,
+        connectionId: String,
+    ): Boolean {
+        val sessionUid =
+            supabase.auth
+                .currentUserOrNull()
+                ?.id
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
         if (sessionUid == null || sessionUid != userId.trim()) {
             println("unarchiveConnection: session user mismatch")
             return false
@@ -1686,13 +1893,18 @@ class SupabaseRepository {
         return try {
             @kotlinx.serialization.Serializable
             data class ArchiveRow(
-                @kotlinx.serialization.SerialName("connection_id") val connectionId: String
+                @kotlinx.serialization.SerialName("connection_id") val connectionId: String,
             )
-            val rows = supabase.from("connection_archives")
-                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("connection_id")) {
-                    filter { eq("user_id", userId) }
-                }
-                .decodeList<ArchiveRow>()
+            val rows =
+                supabase
+                    .from("connection_archives")
+                    .select(
+                        columns =
+                            io.github.jan.supabase.postgrest.query.Columns
+                                .list("connection_id"),
+                    ) {
+                        filter { eq("user_id", userId) }
+                    }.decodeList<ArchiveRow>()
             rows.map { it.connectionId }.toSet()
         } catch (e: Exception) {
             if (isConnectionArchivesUnavailableError(e)) {
@@ -1734,17 +1946,22 @@ class SupabaseRepository {
         )
     }
 
-    private suspend fun getCoreConnectionIdsFromSupabase(userId: String): Set<String> {
-        return try {
+    private suspend fun getCoreConnectionIdsFromSupabase(userId: String): Set<String> =
+        try {
             @Serializable
             data class CoreRow(
                 @SerialName("connection_id") val connectionId: String,
             )
-            val rows = supabase.from("connection_core")
-                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("connection_id")) {
-                    filter { eq("user_id", userId) }
-                }
-                .decodeList<CoreRow>()
+            val rows =
+                supabase
+                    .from("connection_core")
+                    .select(
+                        columns =
+                            io.github.jan.supabase.postgrest.query.Columns
+                                .list("connection_id"),
+                    ) {
+                        filter { eq("user_id", userId) }
+                    }.decodeList<CoreRow>()
             rows.map { it.connectionId }.toSet()
         } catch (e: Exception) {
             if (!isConnectionCoreUnavailableError(e)) {
@@ -1752,10 +1969,17 @@ class SupabaseRepository {
             }
             emptySet()
         }
-    }
 
-    suspend fun addConnectionToCore(userId: String, connectionId: String): Boolean {
-        val sessionUid = supabase.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
+    suspend fun addConnectionToCore(
+        userId: String,
+        connectionId: String,
+    ): Boolean {
+        val sessionUid =
+            supabase.auth
+                .currentUserOrNull()
+                ?.id
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
         if (sessionUid == null || sessionUid != userId.trim()) return false
         return try {
             val result = clickWebApi.postConnectionCore(connectionId.trim())
@@ -1766,8 +1990,16 @@ class SupabaseRepository {
         }
     }
 
-    suspend fun removeConnectionFromCore(userId: String, connectionId: String): Boolean {
-        val sessionUid = supabase.auth.currentUserOrNull()?.id?.trim()?.takeIf { it.isNotEmpty() }
+    suspend fun removeConnectionFromCore(
+        userId: String,
+        connectionId: String,
+    ): Boolean {
+        val sessionUid =
+            supabase.auth
+                .currentUserOrNull()
+                ?.id
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
         if (sessionUid == null || sessionUid != userId.trim()) return false
         return try {
             val result = clickWebApi.deleteConnectionCore(connectionId.trim())
@@ -1794,11 +2026,16 @@ class SupabaseRepository {
             data class HiddenRow(
                 @SerialName("connection_id") val connectionId: String,
             )
-            val rows = supabase.from("connection_hidden")
-                .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("connection_id")) {
-                    filter { eq("user_id", userId) }
-                }
-                .decodeList<HiddenRow>()
+            val rows =
+                supabase
+                    .from("connection_hidden")
+                    .select(
+                        columns =
+                            io.github.jan.supabase.postgrest.query.Columns
+                                .list("connection_id"),
+                    ) {
+                        filter { eq("user_id", userId) }
+                    }.decodeList<HiddenRow>()
             rows.map { it.connectionId }.toSet()
         } catch (e: Exception) {
             if (isConnectionHiddenUnavailableError(e)) {
@@ -1818,22 +2055,24 @@ class SupabaseRepository {
         if (userId.isBlank()) return false
         return try {
             val rows = fetchActiveAvailabilityIntentsForUser(userId)
-            val bubbles = buildJsonArray {
-                rows.forEach { row ->
-                    val exp = row.expiresAt ?: row.endsAt
-                    if (!row.intentTag.isNullOrBlank() && !exp.isNullOrBlank()) {
-                        add(
-                            buildJsonObject {
-                                put("intent_tag", row.intentTag!!)
-                                put("timeframe", row.timeframe ?: "")
-                                put("expires_at", exp)
-                            },
-                        )
+            val bubbles =
+                buildJsonArray {
+                    rows.forEach { row ->
+                        val exp = row.expiresAt ?: row.endsAt
+                        if (!row.intentTag.isNullOrBlank() && !exp.isNullOrBlank()) {
+                            add(
+                                buildJsonObject {
+                                    put("intent_tag", row.intentTag!!)
+                                    put("timeframe", row.timeframe ?: "")
+                                    put("expires_at", exp)
+                                },
+                            )
+                        }
                     }
                 }
-            }
             val nowIso = Clock.System.now().toString()
-            supabase.from("users")
+            supabase
+                .from("users")
                 .update({
                     set("availability_intents", bubbles)
                     set("last_intent_update_at", nowIso)
@@ -1853,43 +2092,72 @@ class SupabaseRepository {
      * Edit the content of an existing message and stamp time_edited.
      * Encrypts the new content if the original message was encrypted.
      */
-    suspend fun editMessage(messageId: String, newContent: String, chatId: String? = null): Boolean {
-        return try {
-            val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+    suspend fun editMessage(
+        messageId: String,
+        newContent: String,
+        chatId: String? = null,
+    ): Boolean =
+        try {
+            val now =
+                kotlinx.datetime.Clock.System
+                    .now()
+                    .toEpochMilliseconds()
 
             var wireContent = newContent
             if (chatId != null) {
-                val chatRepo = SupabaseChatRepository(tokenStorage = compose.project.click.click.data.storage.createTokenStorage())
+                val chatRepo =
+                    SupabaseChatRepository(
+                        tokenStorage =
+                            compose.project.click.click.data.storage // pragma: allowlist secret
+                                .createTokenStorage(),
+                    )
                 // Attempt encryption if we can resolve keys
                 try {
-                    val chat = supabase.from("chats")
-                        .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("connection_id")) {
-                            filter { eq("id", chatId) }
-                            limit(1)
-                        }
-                        .decodeList<ChatConnectionIdOnly>()
-                        .firstOrNull()
-
-                    if (chat != null) {
-                        val connection = supabase.from("connections")
-                            .select(columns = io.github.jan.supabase.postgrest.query.Columns.list("id", "user_ids")) {
-                                filter { eq("id", chat.connectionId) }
+                    val chat =
+                        supabase
+                            .from("chats")
+                            .select(
+                                columns =
+                                    io.github.jan.supabase.postgrest.query.Columns
+                                        .list("connection_id"),
+                            ) {
+                                filter { eq("id", chatId) }
                                 limit(1)
-                            }
-                            .decodeList<ConnectionUserIdsOnlyRow>()
+                            }.decodeList<ChatConnectionIdOnly>()
                             .firstOrNull()
 
+                    if (chat != null) {
+                        val connection =
+                            supabase
+                                .from("connections")
+                                .select(
+                                    columns =
+                                        io.github.jan.supabase.postgrest.query.Columns
+                                            .list("id", "user_ids"),
+                                ) {
+                                    filter { eq("id", chat.connectionId) }
+                                    limit(1)
+                                }.decodeList<ConnectionUserIdsOnlyRow>()
+                                .firstOrNull()
+
                         if (connection != null) {
-                            val keys = compose.project.click.click.crypto.MessageCrypto.deriveKeysForConnection(
-                                connection.id, connection.userIds
-                            )
-                            wireContent = compose.project.click.click.crypto.MessageCrypto.encryptContent(newContent, keys)
+                            val keys =
+                                compose.project.click.click.crypto.MessageCrypto.deriveKeysForConnection( // pragma: allowlist secret
+                                    connection.id,
+                                    connection.userIds,
+                                )
+                            wireContent =
+                                compose.project.click.click.crypto.MessageCrypto // pragma: allowlist secret
+                                    .encryptContent(newContent, keys)
                         }
                     }
-                } catch (_: Exception) { /* fall through with plaintext */ }
+                } catch (_: Exception) {
+                    // fall through with plaintext
+                }
             }
 
-            supabase.from("messages")
+            supabase
+                .from("messages")
                 .update({
                     set("content", wireContent)
                     set("time_edited", now)
@@ -1901,27 +2169,27 @@ class SupabaseRepository {
             println("Error editing message (redacted): ${e.redactedRestMessage()}")
             false
         }
-    }
 
     @kotlinx.serialization.Serializable
     private data class ChatConnectionIdOnly(
         @kotlinx.serialization.SerialName("connection_id")
-        val connectionId: String
+        val connectionId: String,
     )
 
     @kotlinx.serialization.Serializable
     private data class ConnectionUserIdsOnlyRow(
         val id: String,
         @kotlinx.serialization.SerialName("user_ids")
-        val userIds: List<String>
+        val userIds: List<String>,
     )
 
     /**
      * Hard-delete a single message.
      */
-    suspend fun deleteMessage(messageId: String): Boolean {
-        return try {
-            supabase.from("messages")
+    suspend fun deleteMessage(messageId: String): Boolean =
+        try {
+            supabase
+                .from("messages")
                 .delete {
                     filter { eq("id", messageId) }
                 }
@@ -1930,7 +2198,6 @@ class SupabaseRepository {
             println("Error deleting message (redacted): ${e.redactedRestMessage()}")
             false
         }
-    }
 
     /** Short PostgREST / Supabase error (never includes URL, headers, or tokens). */
     private fun restErrorSummary(e: Throwable): String {
@@ -1945,4 +2212,3 @@ class SupabaseRepository {
         return e.redactedRestMessage()
     }
 }
-

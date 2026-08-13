@@ -27,13 +27,15 @@ Authenticated
  onboardingStep == "loading"? ──yes──► AppShimmerScreen
       │ no
       ▼
- onboardingStep != "complete"? ──yes──► Welcome → Interests → Avatar
+ onboardingStep != "complete"? ──yes──► Welcome → Interests → Personality → Avatar
       │ no
       ▼
  onboardingHandoff shimmer (600ms) → Home reveal overlay → Main shell (Home)
 ```
 
-**OnboardingViewModel step order:** `Loading → Welcome → Interests → Avatar → Complete`
+**OnboardingViewModel step order:** `Loading → Welcome → Interests → Personality → Avatar → Complete`
+
+Personality is shown only for **new** signups (`personalityCompleted == false` and the account is not legacy-complete). Existing users with interests + avatar skip it and edit traits in Settings.
 
 Permissions (`PermissionsOnboardingScreen`, `LocationOnboardingScreen`) are **legacy** — not wired in active `App.kt` Phase 2 gate. Documented below for revamp awareness.
 
@@ -79,6 +81,19 @@ Permissions (`PermissionsOnboardingScreen`, `LocationOnboardingScreen`) are **le
        └───────┬───────┘   │
                │ Continue  │
                └─────┬─────┘
+                     │
+              ┌──────▼──────────────────┐
+              │ personalityCompleted    │
+              │ == false AND not legacy │
+              │ complete?               │
+              └─────┬────────────┬──────┘
+                 yes│            │no
+       ┌────────────▼──┐         │
+       │  Personality  │         │
+       │  (exactly 5)  │         │
+       └───────┬───────┘         │
+               │ Continue        │
+               └─────┬───────────┘
                      │
               ┌──────▼──────┐
               │ avatar not  │

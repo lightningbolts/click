@@ -34,16 +34,20 @@ fun Throwable.isOfflineNetworkFailure(): Boolean {
  * True when a refresh/session failure means credentials are dead (not a transient network blip).
  * Callers should clear auth tokens and force re-login rather than staying "logged in" with a
  * poisoned JWT that makes PostgREST/RLS return empty forever.
+ *
+ * Do **not** treat AuthRestException / AuthApiException by class name: GoTrue wraps refreshable
+ * "JWT expired" in those types. Only dead refresh credentials force re-login.
  */
 fun Throwable.isHardAuthFailure(): Boolean {
     if (isOfflineNetworkFailure()) return false
-    val name = this::class.simpleName.orEmpty().lowercase()
-    if (name.contains("authrest") || name.contains("authexception") || name.contains("authapi")) {
-        return true
-    }
     val message = redactedRestMessage().lowercase()
     // Soft "JWT expired" / access-token expiry is refreshable — never treat as hard failure.
-    // Only dead refresh credentials force re-login.
+    if (message.contains("jwt expired") ||
+        message.contains("access token expired") ||
+        (message.contains("jwt") && message.contains("expired"))
+    ) {
+        return false
+    }
     return message.contains("invalid refresh") ||
         message.contains("refresh token not found") ||
         message.contains("refresh_token_not_found") ||

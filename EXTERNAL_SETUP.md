@@ -242,7 +242,7 @@ curl -i -X POST https://joinclick.co/api/livekit/token \
 ```
 
 - `401 Unauthorized` — token missing/expired; try again with a real session.
-- `500 {"error":"LiveKit environment is not configured"}` — set `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, and `LIVEKIT_WS_URL` (or `LIVEKIT_URL`) on the web deployment. No client code change.
+- `500 {"error":"LiveKit environment is not configured"}` — set `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, and `LIVEKIT_WS_URL` (or `LIVEKIT_URL`) on the **Cloudflare Worker** `click-web` (not GitHub Actions). Confirm presence via `GET /api/health/env`. Deploy with `--keep-vars`. No client code change.
 - `200` + JWT — server mint works; remaining call failures are client connect/publish (Android `CallManager`, iOS `ClickLiveKitBridge`, web `DashboardView` Room).
 
 ## 8. Android Voice And Video Calls

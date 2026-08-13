@@ -1,8 +1,8 @@
-package compose.project.click.click.data.repository
+package compose.project.click.click.data.repository // pragma: allowlist secret
 
-import compose.project.click.click.data.SupabaseConfig
-import compose.project.click.click.data.api.ApiClient
-import compose.project.click.click.data.api.NotificationPreferencesPatchBody
+import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
+import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
+import compose.project.click.click.data.api.NotificationPreferencesPatchBody // pragma: allowlist secret
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
 import kotlinx.serialization.SerialName
@@ -11,30 +11,45 @@ import kotlinx.serialization.Serializable
 data class NotificationPreferences(
     val messagePushEnabled: Boolean = true,
     val callPushEnabled: Boolean = true,
+    val eventReminderPushEnabled: Boolean = true,
+    val availabilityMatchPushEnabled: Boolean = true,
+    val hubMessagePushEnabled: Boolean = true,
 )
 
 class NotificationPreferencesRepository {
     private val supabase by lazy { SupabaseConfig.client }
     private val clickWebApi by lazy { ApiClient() }
 
-    suspend fun fetchPreferences(userId: String): NotificationPreferences {
-        return try {
-            val rows = supabase.from("notification_preferences")
-                .select(columns = Columns.list("message_push_enabled", "call_push_enabled")) {
-                    filter {
-                        eq("user_id", userId)
-                    }
-                }
-                .decodeList<NotificationPreferencesRow>()
+    suspend fun fetchPreferences(userId: String): NotificationPreferences =
+        try {
+            val rows =
+                supabase
+                    .from("notification_preferences")
+                    .select(
+                        columns =
+                            Columns.list(
+                                "message_push_enabled",
+                                "call_push_enabled",
+                                "event_reminder_push_enabled",
+                                "availability_match_push_enabled",
+                                "hub_message_push_enabled",
+                            ),
+                    ) {
+                        filter {
+                            eq("user_id", userId)
+                        }
+                    }.decodeList<NotificationPreferencesRow>()
 
             rows.firstOrNull()?.toNotificationPreferences() ?: NotificationPreferences()
         } catch (error: Exception) {
             println("NotificationPreferencesRepository: Failed to fetch preferences: ${error.message}")
             NotificationPreferences()
         }
-    }
 
-    suspend fun savePreferences(userId: String, preferences: NotificationPreferences): Result<Unit> {
+    suspend fun savePreferences(
+        userId: String,
+        preferences: NotificationPreferences,
+    ): Result<Unit> {
         if (userId.isBlank()) {
             return Result.failure(IllegalStateException("Missing user id"))
         }
@@ -43,9 +58,11 @@ class NotificationPreferencesRepository {
                 NotificationPreferencesPatchBody(
                     messagePushEnabled = preferences.messagePushEnabled,
                     callPushEnabled = preferences.callPushEnabled,
+                    eventReminderPushEnabled = preferences.eventReminderPushEnabled,
+                    availabilityMatchPushEnabled = preferences.availabilityMatchPushEnabled,
+                    hubMessagePushEnabled = preferences.hubMessagePushEnabled,
                 ),
-            )
-            .map { }
+            ).map { }
             .onFailure { error ->
                 println("NotificationPreferencesRepository: Failed to save preferences: ${error.message}")
             }
@@ -57,12 +74,20 @@ class NotificationPreferencesRepository {
         val messagePushEnabled: Boolean = true,
         @SerialName("call_push_enabled")
         val callPushEnabled: Boolean = true,
+        @SerialName("event_reminder_push_enabled")
+        val eventReminderPushEnabled: Boolean = true,
+        @SerialName("availability_match_push_enabled")
+        val availabilityMatchPushEnabled: Boolean = true,
+        @SerialName("hub_message_push_enabled")
+        val hubMessagePushEnabled: Boolean = true,
     ) {
-        fun toNotificationPreferences(): NotificationPreferences {
-            return NotificationPreferences(
+        fun toNotificationPreferences(): NotificationPreferences =
+            NotificationPreferences(
                 messagePushEnabled = messagePushEnabled,
                 callPushEnabled = callPushEnabled,
+                eventReminderPushEnabled = eventReminderPushEnabled,
+                availabilityMatchPushEnabled = availabilityMatchPushEnabled,
+                hubMessagePushEnabled = hubMessagePushEnabled,
             )
-        }
     }
 }

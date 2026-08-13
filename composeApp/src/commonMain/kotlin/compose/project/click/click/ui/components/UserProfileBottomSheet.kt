@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.background
@@ -10,34 +12,27 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Air
 import androidx.compose.material.icons.outlined.Cloud
-import androidx.compose.material.icons.outlined.BatteryStd
-import androidx.compose.material.icons.outlined.DirectionsRun
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.LocationOn
-import androidx.compose.material.icons.outlined.NightsStay
 import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Terrain
 import androidx.compose.material.icons.outlined.Thermostat
-import androidx.compose.material.icons.outlined.WbSunny
-import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -57,51 +52,51 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.graphics.vector.ImageVector
-import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.ContextTagTaxonomy // pragma: allowlist secret
+import compose.project.click.click.data.models.ConnectionEncounter // pragma: allowlist secret
+import compose.project.click.click.data.models.HeightCategory // pragma: allowlist secret
+import compose.project.click.click.data.models.NoiseLevelCategory // pragma: allowlist secret
+import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
+import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
+import compose.project.click.click.events.EventSchedule // pragma: allowlist secret
+import compose.project.click.click.events.formatEventScheduleRange // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
-import compose.project.click.click.ui.components.ProvideSheetSwipeDismiss
-import compose.project.click.click.ui.components.rememberSheetScrollAtTop
-import compose.project.click.click.ui.components.sheetBodyScroll
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.data.models.ConnectionEncounter // pragma: allowlist secret
-import compose.project.click.click.data.ContextTagTaxonomy
-import compose.project.click.click.deeplink.EventDeepLinkRouter
-import compose.project.click.click.events.EventSchedule
-import compose.project.click.click.events.formatEventScheduleRange
-import compose.project.click.click.data.models.HeightCategory // pragma: allowlist secret
-import compose.project.click.click.data.models.NoiseLevelCategory // pragma: allowlist secret
-import kotlinx.datetime.Instant
-import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
-import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
-import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.ui.components.ProvideSheetSwipeDismiss // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberSheetScrollAtTop // pragma: allowlist secret
+import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
-import kotlinx.datetime.toLocalDateTime
-import kotlinx.datetime.plus
+import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.plus
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.todayIn
 import kotlin.math.roundToInt
 
-internal fun sharedInterestTags(viewer: List<String>, other: List<String>): List<String> {
+internal fun sharedInterestTags(
+    viewer: List<String>,
+    other: List<String>,
+): List<String> {
     if (viewer.isEmpty() || other.isEmpty()) return emptyList()
     val viewerNorm = viewer.map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
     return other.map { it.trim() }.filter { it.isNotEmpty() && it.lowercase() in viewerNorm }.distinct()
@@ -125,6 +120,7 @@ internal fun ProfileAvailabilityIntentBubble.activeUntilShort(): String {
     val local = instant.toLocalDateTime(tz)
     val today = Clock.System.todayIn(tz)
     val d = local.date
+
     fun pad(n: Int) = n.toString().padStart(2, '0')
     val timePart = "${pad(local.hour)}:${pad(local.minute)}"
     val tomorrow = today.plus(1, DateTimeUnit.DAY)
@@ -135,13 +131,22 @@ internal fun ProfileAvailabilityIntentBubble.activeUntilShort(): String {
     }
 }
 
-private fun formatEncounterEventSchedule(startIso: String?, endIso: String?): String? {
-    val startMs = startIso?.trim()?.takeIf { it.isNotEmpty() }
-        ?.let { runCatching { Instant.parse(it).toEpochMilliseconds() }.getOrNull() }
-        ?: return null
-    val endMs = endIso?.trim()?.takeIf { it.isNotEmpty() }
-        ?.let { runCatching { Instant.parse(it).toEpochMilliseconds() }.getOrNull() }
-        ?: return null
+private fun formatEncounterEventSchedule(
+    startIso: String?,
+    endIso: String?,
+): String? {
+    val startMs =
+        startIso
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { runCatching { Instant.parse(it).toEpochMilliseconds() }.getOrNull() }
+            ?: return null
+    val endMs =
+        endIso
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { runCatching { Instant.parse(it).toEpochMilliseconds() }.getOrNull() }
+            ?: return null
     if (endMs <= startMs) return null
     return formatEventScheduleRange(EventSchedule(startEpochMs = startMs, endEpochMs = endMs))
 }
@@ -165,36 +170,42 @@ private fun ageFromBirthdayIso(birthday: String?): Int? {
 
 private fun ConnectionEncounter.metricNoiseLabel(): String? {
     val raw = noiseLevel?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-    val friendly = runCatching { NoiseLevelCategory.valueOf(raw.uppercase().replace(' ', '_')) }
-        .getOrNull()?.let { formatNoiseCategoryForTimeline(it) }
-        ?: raw.replace('_', ' ').lowercase().replaceFirstChar { it.titlecase() }
+    val friendly =
+        runCatching { NoiseLevelCategory.valueOf(raw.uppercase().replace(' ', '_')) }
+            .getOrNull()
+            ?.let { formatNoiseCategoryForTimeline(it) }
+            ?: raw.replace('_', ' ').lowercase().replaceFirstChar { it.titlecase() }
     return friendly
 }
 
-private fun formatNoiseCategoryForTimeline(cat: NoiseLevelCategory): String = when (cat) {
-    NoiseLevelCategory.VERY_QUIET -> "Very quiet"
-    NoiseLevelCategory.QUIET -> "Quiet"
-    NoiseLevelCategory.MODERATE -> "Moderate"
-    NoiseLevelCategory.LOUD -> "Loud"
-    NoiseLevelCategory.VERY_LOUD -> "Very loud"
-}
+private fun formatNoiseCategoryForTimeline(cat: NoiseLevelCategory): String =
+    when (cat) {
+        NoiseLevelCategory.VERY_QUIET -> "Very quiet"
+        NoiseLevelCategory.QUIET -> "Quiet"
+        NoiseLevelCategory.MODERATE -> "Moderate"
+        NoiseLevelCategory.LOUD -> "Loud"
+        NoiseLevelCategory.VERY_LOUD -> "Very loud"
+    }
 
 private fun ConnectionEncounter.metricElevationLabel(): String? {
     val parts = mutableListOf<String>()
     elevationCategory?.trim()?.takeIf { it.isNotEmpty() }?.let { raw ->
-        val friendly = runCatching { HeightCategory.valueOf(raw.uppercase().replace(' ', '_')) }
-            .getOrNull()?.let { hc ->
-                when (hc) {
-                    HeightCategory.BELOW_GROUND -> "Below ground"
-                    HeightCategory.GROUND_LEVEL -> "Ground level"
-                    HeightCategory.ELEVATED -> "Elevated"
-                    HeightCategory.HIGH_RISE -> "High rise"
-                }
-            } ?: raw.replace('_', ' ').lowercase().replaceFirstChar { it.titlecase() }
+        val friendly =
+            runCatching { HeightCategory.valueOf(raw.uppercase().replace(' ', '_')) }
+                .getOrNull()
+                ?.let { hc ->
+                    when (hc) {
+                        HeightCategory.BELOW_GROUND -> "Below ground"
+                        HeightCategory.GROUND_LEVEL -> "Ground level"
+                        HeightCategory.ELEVATED -> "Elevated"
+                        HeightCategory.HIGH_RISE -> "High rise"
+                    }
+                } ?: raw.replace('_', ' ').lowercase().replaceFirstChar { it.titlecase() }
         parts.add(friendly)
     }
-    val meters = relativeAltitudeM?.takeIf { it.isFinite() }
-        ?: exactBarometricElevationM?.takeIf { it.isFinite() }
+    val meters =
+        relativeAltitudeM?.takeIf { it.isFinite() }
+            ?: exactBarometricElevationM?.takeIf { it.isFinite() }
     meters?.let { parts.add("${it.roundToInt()} m") }
     return parts.joinToString(" · ").takeIf { it.isNotEmpty() }
 }
@@ -204,12 +215,13 @@ private fun ConnectionEncounter.metricWindLabel(): String? {
     val kph = ws.windSpeedKph ?: return null
     if (!kph.isFinite()) return null
     val deg = ws.windDirectionDegrees
-    val suffix = deg?.takeIf { it in 0..359 }?.let { d ->
-        val dirs = listOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")
-        val x = ((d % 360) + 360) % 360
-        val idx = (kotlin.math.floor((x + 22.5) / 45.0).toInt() % 8 + 8) % 8
-        " ${dirs[idx]}"
-    } ?: ""
+    val suffix =
+        deg?.takeIf { it in 0..359 }?.let { d ->
+            val dirs = listOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+            val x = ((d % 360) + 360) % 360
+            val idx = (kotlin.math.floor((x + 22.5) / 45.0).toInt() % 8 + 8) % 8
+            " ${dirs[idx]}"
+        } ?: ""
     return "${kph.roundToInt()} km/h$suffix"
 }
 
@@ -218,7 +230,11 @@ private fun ConnectionEncounter.metricPressureLabel(): String? =
 
 private fun ConnectionEncounter.metricConditionLabel(): String? =
     weatherSnapshot?.condition?.trim()?.takeIf { it.isNotEmpty() }
-        ?: weatherSnapshot?.iconCode?.trim()?.takeIf { it.isNotEmpty() }?.replaceFirstChar { it.titlecase() }
+        ?: weatherSnapshot
+            ?.iconCode
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.replaceFirstChar { it.titlecase() }
 
 private fun ConnectionEncounter.metricTemperatureLabel(): String? {
     val c = weatherSnapshot?.temperatureCelsius ?: return null
@@ -238,11 +254,12 @@ private fun TimelineMetricPill(
     body: Color,
 ) {
     Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .border(1.dp, cardBorder, RoundedCornerShape(50))
-            .background(cardBg)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(50))
+                .border(1.dp, cardBorder, RoundedCornerShape(50))
+                .background(cardBg)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -273,10 +290,11 @@ internal fun OurTimelineSection(encounters: List<ConnectionEncounter>) {
         )
         return
     }
-    val sorted = encounters.sortedWith(
-        compareByDescending<ConnectionEncounter> { it.encounteredAt }
-            .thenByDescending { it.id },
-    )
+    val sorted =
+        encounters.sortedWith(
+            compareByDescending<ConnectionEncounter> { it.encounteredAt }
+                .thenByDescending { it.id },
+        )
     val oldestId = sorted.lastOrNull()?.id
     val lineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
     val dotBorder = MaterialTheme.colorScheme.surface
@@ -286,121 +304,130 @@ internal fun OurTimelineSection(encounters: List<ConnectionEncounter>) {
     val body = MaterialTheme.colorScheme.onSurface
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .drawBehind {
-                val stroke = 2.dp.toPx()
-                val x = 16.dp.toPx()
-                drawLine(
-                    color = lineColor,
-                    start = Offset(x, 0f),
-                    end = Offset(x, size.height),
-                    strokeWidth = stroke,
-                )
-            },
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .drawBehind {
+                    val stroke = 2.dp.toPx()
+                    val x = 16.dp.toPx()
+                    drawLine(
+                        color = lineColor,
+                        start = Offset(x, 0f),
+                        end = Offset(x, size.height),
+                        strokeWidth = stroke,
+                    )
+                },
     ) {
-            sorted.forEach { enc ->
-                val isOldest = enc.id == oldestId
-                Row(
-                    modifier = Modifier
+        sorted.forEach { enc ->
+            val isOldest = enc.id == oldestId
+            Row(
+                modifier =
+                    Modifier
                         .fillMaxWidth()
                         .padding(vertical = 10.dp),
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    Box(
-                        modifier = Modifier
+                verticalAlignment = Alignment.Top,
+            ) {
+                Box(
+                    modifier =
+                        Modifier
                             .width(32.dp)
                             .padding(top = 2.dp),
-                        contentAlignment = Alignment.TopCenter,
-                    ) {
-                        Box(
-                            modifier = Modifier
+                    contentAlignment = Alignment.TopCenter,
+                ) {
+                    Box(
+                        modifier =
+                            Modifier
                                 .size(12.dp)
                                 .clip(CircleShape)
                                 .border(2.dp, dotBorder, CircleShape)
                                 .background(PrimaryBlue),
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    if (isOldest) {
+                        Text(
+                            text = "Where it started",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = LightBlue.copy(alpha = 0.95f),
+                            modifier = Modifier.padding(bottom = 4.dp),
                         )
                     }
-                    Column(modifier = Modifier.weight(1f)) {
-                        if (isOldest) {
-                            Text(
-                                text = "Where it started",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = LightBlue.copy(alpha = 0.95f),
-                                modifier = Modifier.padding(bottom = 4.dp),
-                            )
-                        }
-                        Text(
-                            text = formatEncounterTimelineWhenLine(enc.encounteredAt)
+                    Text(
+                        text =
+                            formatEncounterTimelineWhenLine(enc.encounteredAt)
                                 ?: enc.encounteredAt,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = muted,
-                        )
-                        Text(
-                            text = formatEncounterPlaceLine(
+                        style = MaterialTheme.typography.labelSmall,
+                        color = muted,
+                    )
+                    Text(
+                        text =
+                            formatEncounterPlaceLine(
                                 locationName = enc.locationName,
                                 displayLocation = enc.displayLocation,
                                 semanticLocationJson = enc.semanticLocation,
                             ) ?: "Unknown place",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = body,
-                            modifier = Modifier.padding(top = 2.dp),
-                        )
-                        val eventTitle = enc.eventBeaconTitle?.trim()?.takeIf { it.isNotEmpty() }
-                        val eventBeaconId = enc.eventBeaconId?.trim()?.takeIf { it.isNotEmpty() }
-                        if (eventTitle != null || eventBeaconId != null) {
-                            val scheduleLabel = formatEncounterEventSchedule(
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = body,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                    val eventTitle = enc.eventBeaconTitle?.trim()?.takeIf { it.isNotEmpty() }
+                    val eventBeaconId = enc.eventBeaconId?.trim()?.takeIf { it.isNotEmpty() }
+                    if (eventTitle != null || eventBeaconId != null) {
+                        val scheduleLabel =
+                            formatEncounterEventSchedule(
                                 enc.eventBeaconStartAt,
                                 enc.eventBeaconEndAt,
                             )
+                        Text(
+                            text = eventTitle ?: "Event",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = PrimaryBlue,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
+                        if (scheduleLabel != null) {
                             Text(
-                                text = eventTitle ?: "Event",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = PrimaryBlue,
-                                modifier = Modifier.padding(top = 6.dp),
+                                text = scheduleLabel,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = muted,
+                                modifier = Modifier.padding(top = 2.dp),
                             )
-                            if (scheduleLabel != null) {
-                                Text(
-                                    text = scheduleLabel,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = muted,
-                                    modifier = Modifier.padding(top = 2.dp),
-                                )
-                            }
-                            if (eventBeaconId != null) {
-                                TextButton(
-                                    onClick = { EventDeepLinkRouter.setPendingBeaconId(eventBeaconId) },
-                                    modifier = Modifier.padding(top = 2.dp),
-                                ) {
-                                    Text("View on map", fontWeight = FontWeight.SemiBold)
-                                }
+                        }
+                        if (eventBeaconId != null) {
+                            TextButton(
+                                onClick = { EventDeepLinkRouter.setPendingBeaconId(eventBeaconId) },
+                                modifier = Modifier.padding(top = 2.dp),
+                            ) {
+                                Text("View on map", fontWeight = FontWeight.SemiBold)
                             }
                         }
-                        val momentTags = enc.contextTags
+                    }
+                    val momentTags =
+                        enc.contextTags
                             .mapNotNull { it.trim().takeIf { s -> s.isNotEmpty() } }
                             .distinct()
-                        if (momentTags.isNotEmpty()) {
-                            FlowRow(
-                                modifier = Modifier.padding(top = 6.dp),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                momentTags.forEach { tag ->
-                                    TimelineMetricPill(
-                                        icon = Icons.Filled.AutoAwesome,
-                                        iconTint = PrimaryBlue.copy(alpha = 0.9f),
-                                        text = ContextTagTaxonomy.displayLabel(tag),
-                                        cardBorder = cardBorder,
-                                        cardBg = cardBg,
-                                        body = body,
-                                    )
-                                }
+                    if (momentTags.isNotEmpty()) {
+                        FlowRow(
+                            modifier = Modifier.padding(top = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            momentTags.forEach { tag ->
+                                TimelineMetricPill(
+                                    icon = Icons.Filled.AutoAwesome,
+                                    iconTint = PrimaryBlue.copy(alpha = 0.9f),
+                                    text = ContextTagTaxonomy.displayLabel(tag),
+                                    cardBorder = cardBorder,
+                                    cardBg = cardBg,
+                                    body = body,
+                                )
                             }
                         }
-                        val pills = buildList {
+                    }
+                    val pills =
+                        buildList {
                             enc.metricConditionLabel()?.let { add(Triple(Icons.Outlined.Cloud, Color(0xFFB0BEC5), it)) }
                             enc.metricTemperatureLabel()?.let { add(Triple(Icons.Outlined.Thermostat, Color(0xFFFFCC80), it)) }
                             enc.metricWindLabel()?.let { add(Triple(Icons.Outlined.Air, Color(0xFF81D4FA), it)) }
@@ -408,20 +435,20 @@ internal fun OurTimelineSection(encounters: List<ConnectionEncounter>) {
                             enc.metricElevationLabel()?.let { add(Triple(Icons.Outlined.Terrain, LightBlue.copy(alpha = 0.95f), it)) }
                             enc.metricCompassAzimuthLabel()?.let { add(Triple(Icons.Outlined.Explore, Color(0xFFB39DDB), it)) }
                         }
-                        if (pills.isNotEmpty()) {
-                            FlowRow(
-                                modifier = Modifier.padding(top = 8.dp),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                pills.forEach { (ic, tint, lbl) ->
-                                    TimelineMetricPill(ic, tint, lbl, cardBorder, cardBg, body)
-                                }
+                    if (pills.isNotEmpty()) {
+                        FlowRow(
+                            modifier = Modifier.padding(top = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            pills.forEach { (ic, tint, lbl) ->
+                                TimelineMetricPill(ic, tint, lbl, cardBorder, cardBg, body)
                             }
                         }
                     }
                 }
             }
+        }
     }
 }
 
@@ -444,9 +471,10 @@ fun ProfileLegacyTimelineContent(
 ) {
     if (loading && profile == null) {
         Box(
-            modifier = modifier
-                .fillMaxWidth()
-                .heightIn(min = 160.dp),
+            modifier =
+                modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 160.dp),
             contentAlignment = Alignment.Center,
         ) {
             CircularProgressIndicator(color = PrimaryBlue)
@@ -470,15 +498,17 @@ fun ProfileLegacyTimelineContent(
     Column(modifier = modifier.fillMaxWidth()) {
         val p = profile
         val conn = p.sharedConnection
-        val hasMoment = conn != null && listOfNotNull(
-            conn.profileContextLine(),
-            conn.profilePlaceLine(),
-            conn.profileAddressDetailLine(),
-            conn.profileWhenLine(),
-            conn.profileWeatherLine(),
-            conn.profileNoiseLine(),
-            conn.profileBarometricLine(),
-        ).isNotEmpty()
+        val hasMoment =
+            conn != null &&
+                listOfNotNull(
+                    conn.profileContextLine(),
+                    conn.profilePlaceLine(),
+                    conn.profileAddressDetailLine(),
+                    conn.profileWhenLine(),
+                    conn.profileWeatherLine(),
+                    conn.profileNoiseLine(),
+                    conn.profileBarometricLine(),
+                ).isNotEmpty()
 
         if (hasMoment && conn != null) {
             Text(
@@ -506,10 +536,11 @@ fun ProfileLegacyTimelineContent(
                         body = body,
                     )
                 }
-                val placeLine = listOfNotNull(
-                    conn.profilePlaceLine(),
-                    conn.profileAddressDetailLine(),
-                ).joinToString(" · ").takeIf { it.isNotEmpty() }
+                val placeLine =
+                    listOfNotNull(
+                        conn.profilePlaceLine(),
+                        conn.profileAddressDetailLine(),
+                    ).joinToString(" · ").takeIf { it.isNotEmpty() }
                 placeLine?.let { line ->
                     LegacyMomentCard(
                         icon = Icons.Outlined.LocationOn,
@@ -599,6 +630,39 @@ fun ProfileLegacyTimelineContent(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 p.interestTags.forEach { tag ->
+                    FilterChip(
+                        selected = false,
+                        onClick = { },
+                        label = { Text(tag, style = MaterialTheme.typography.labelMedium) },
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text(
+            text = "Personality",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        val personality = p.personalityTags.ifEmpty { p.user.personalityTags }
+        if (personality.isEmpty()) {
+            Text(
+                text = "No personality traits shared yet",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                personality.forEach { tag ->
                     FilterChip(
                         selected = false,
                         onClick = { },
@@ -726,12 +790,13 @@ private fun LegacyMomentCard(
     body: Color,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .border(1.dp, cardBorder, RoundedCornerShape(14.dp))
-            .background(cardBg)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .border(1.dp, cardBorder, RoundedCornerShape(14.dp))
+                .background(cardBg)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Icon(
@@ -777,11 +842,12 @@ fun UserProfileBottomSheet(
         profile = repository.getCachedUserPublicProfile(userId)
         loading = profile == null
         error = null
-        val result = runCatching {
-            withContext(Dispatchers.Default) {
-                repository.refreshUserPublicProfile(viewerUserId, userId)
+        val result =
+            runCatching {
+                withContext(Dispatchers.Default) {
+                    repository.refreshUserPublicProfile(viewerUserId, userId)
+                }
             }
-        }
         result.getOrNull()?.let { profile = it }
         if (profile == null) {
             error = result.exceptionOrNull()?.message
@@ -792,11 +858,12 @@ fun UserProfileBottomSheet(
     val proximityEncounterEpoch by AppDataManager.proximityEncounterEpoch.collectAsState()
     LaunchedEffect(proximityEncounterEpoch, userId, viewerUserId) {
         if (proximityEncounterEpoch <= 0L || userId.isNullOrBlank()) return@LaunchedEffect
-        val refreshed = runCatching {
-            withContext(Dispatchers.Default) {
-                repository.refreshUserPublicProfile(viewerUserId, userId)
-            }
-        }.getOrNull()
+        val refreshed =
+            runCatching {
+                withContext(Dispatchers.Default) {
+                    repository.refreshUserPublicProfile(viewerUserId, userId)
+                }
+            }.getOrNull()
         if (refreshed != null) {
             profile = refreshed
             error = null
@@ -818,201 +885,211 @@ fun UserProfileBottomSheet(
             onDismissRequest = onDismiss,
             scrollAtTop = profileScrollAtTop,
         ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight()
-                .background(sheetPageBackground())
-        ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .sheetBodyScroll(profileScroll)
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-                .padding(bottom = 28.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight()
+                        .background(sheetPageBackground()),
             ) {
-                Text(
-                    text = "Profile",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = GlassSheetTokens.OnOled(),
-                    modifier = Modifier.weight(1f)
-                )
-                IconButton(onClick = { dismiss() }) {
-                    Icon(Icons.Filled.Close, contentDescription = "Close", tint = GlassSheetTokens.OnOled())
-                }
-            }
-
-            when {
-                loading -> {
-                    Box(
-                        modifier = Modifier
+                Column(
+                    modifier =
+                        Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 220.dp)
-                            .padding(32.dp),
-                        contentAlignment = Alignment.Center
+                            .sheetBodyScroll(profileScroll)
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .padding(bottom = 28.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        CircularProgressIndicator(color = PrimaryBlue)
-                    }
-                }
-                error != null && profile == null -> {
-                    Text(
-                        text = error ?: "Could not load profile",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(vertical = 16.dp)
-                    )
-                    TextButton(onClick = { dismiss() }) { Text("Close", color = GlassSheetTokens.OnOled()) }
-                }
-                profile != null -> {
-                    val p = profile!!
-                    val u = p.user
-                    val age = ageFromBirthdayIso(u.birthday)
-                    val title = buildString {
-                        append(u.name ?: "Member")
-                        if (age != null) append(", $age")
-                    }
-                    val mutual = sharedInterestTags(p.viewerInterestTags, p.interestTags)
-                    val conn = p.sharedConnection
-                    val capsuleLines = if (conn != null) {
-                        listOfNotNull(
-                            conn.profileContextLine(),
-                            conn.profilePlaceLine(),
-                            conn.profileWhenLine(),
-                            conn.profileWeatherLine(),
-                            conn.profileNoiseLine(),
-                        ).map { it.trim() }.filter { it.isNotEmpty() }
-                    } else {
-                        emptyList()
+                        Text(
+                            text = "Profile",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = GlassSheetTokens.OnOled(),
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = { dismiss() }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Close", tint = GlassSheetTokens.OnOled())
+                        }
                     }
 
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        GlassCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            usePrimaryBorder = true,
-                            contentPadding = 16.dp,
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    when {
+                        loading -> {
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 220.dp)
+                                        .padding(32.dp),
+                                contentAlignment = Alignment.Center,
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(88.dp)
-                                        .clip(CircleShape)
-                                        .background(PrimaryBlue),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Text(
-                                        text = u.name?.firstOrNull()?.toString()?.uppercase() ?: "?",
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 32.sp,
-                                    )
-                                }
-                                Column {
-                                    Text(
-                                        text = title,
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    if (!u.email.isNullOrBlank()) {
-                                        Text(
-                                            text = u.email ?: "",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(top = 4.dp),
-                                        )
-                                    }
-                                }
+                                CircularProgressIndicator(color = PrimaryBlue)
                             }
                         }
-
-                        if (mutual.isNotEmpty()) {
-                            GlassCard(
-                                modifier = Modifier.fillMaxWidth(),
-                                contentPadding = 14.dp,
-                            ) {
-                                Text(
-                                    text = "Mutual interests",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Spacer(modifier = Modifier.height(10.dp))
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    mutual.forEach { tag ->
-                                        Text(
-                                            text = tag,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(GlassSheetTokens.BentoInteriorCorner))
-                                                .background(
-                                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                                                )
-                                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                                        )
-                                    }
-                                }
-                            }
+                        error != null && profile == null -> {
+                            Text(
+                                text = error ?: "Could not load profile",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(vertical = 16.dp),
+                            )
+                            TextButton(onClick = { dismiss() }) { Text("Close", color = GlassSheetTokens.OnOled()) }
                         }
+                        profile != null -> {
+                            val p = profile!!
+                            val u = p.user
+                            val age = ageFromBirthdayIso(u.birthday)
+                            val title =
+                                buildString {
+                                    append(u.name ?: "Member")
+                                    if (age != null) append(", $age")
+                                }
+                            val mutual = sharedInterestTags(p.viewerInterestTags, p.interestTags)
+                            val conn = p.sharedConnection
+                            val capsuleLines =
+                                if (conn != null) {
+                                    listOfNotNull(
+                                        conn.profileContextLine(),
+                                        conn.profilePlaceLine(),
+                                        conn.profileWhenLine(),
+                                        conn.profileWeatherLine(),
+                                        conn.profileNoiseLine(),
+                                    ).map { it.trim() }.filter { it.isNotEmpty() }
+                                } else {
+                                    emptyList()
+                                }
 
-                        if (capsuleLines.isNotEmpty() && conn != null) {
-                            GlassCard(
-                                modifier = Modifier.fillMaxWidth(),
-                                contentPadding = 0.dp,
-                            ) {
-                                Box(modifier = Modifier.fillMaxWidth()) {
-                                    ChatAmbientMeshBackground(
-                                        connection = conn,
-                                        isHubNeutral = false,
-                                        animateMesh = true,
-                                        modifier = Modifier.fillMaxSize(),
-                                    )
-                                    Column(
-                                        modifier = Modifier.padding(16.dp),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                GlassCard(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    usePrimaryBorder = true,
+                                    contentPadding = 16.dp,
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(14.dp),
                                     ) {
-                                        Text(
-                                            text = "Memory capsule",
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                        )
-                                        capsuleLines.take(6).forEach { line ->
+                                        Box(
+                                            modifier =
+                                                Modifier
+                                                    .size(88.dp)
+                                                    .clip(CircleShape)
+                                                    .background(PrimaryBlue),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
                                             Text(
-                                                text = line,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                text =
+                                                    u.name
+                                                        ?.firstOrNull()
+                                                        ?.toString()
+                                                        ?.uppercase() ?: "?",
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 32.sp,
                                             )
+                                        }
+                                        Column {
+                                            Text(
+                                                text = title,
+                                                style = MaterialTheme.typography.titleLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                            )
+                                            if (!u.email.isNullOrBlank()) {
+                                                Text(
+                                                    text = u.email ?: "",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.padding(top = 4.dp),
+                                                )
+                                            }
                                         }
                                     }
                                 }
+
+                                if (mutual.isNotEmpty()) {
+                                    GlassCard(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentPadding = 14.dp,
+                                    ) {
+                                        Text(
+                                            text = "Mutual interests",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        Spacer(modifier = Modifier.height(10.dp))
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            mutual.forEach { tag ->
+                                                Text(
+                                                    text = tag,
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                    modifier =
+                                                        Modifier
+                                                            .clip(RoundedCornerShape(GlassSheetTokens.BentoInteriorCorner))
+                                                            .background(
+                                                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                                            ).padding(horizontal = 10.dp, vertical = 6.dp),
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (capsuleLines.isNotEmpty() && conn != null) {
+                                    GlassCard(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentPadding = 0.dp,
+                                    ) {
+                                        Box(modifier = Modifier.fillMaxWidth()) {
+                                            ChatAmbientMeshBackground(
+                                                connection = conn,
+                                                isHubNeutral = false,
+                                                animateMesh = true,
+                                                modifier = Modifier.fillMaxSize(),
+                                            )
+                                            Column(
+                                                modifier = Modifier.padding(16.dp),
+                                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                            ) {
+                                                Text(
+                                                    text = "Memory capsule",
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                )
+                                                capsuleLines.take(6).forEach { line ->
+                                                    Text(
+                                                        text = line,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                ProfileLegacyTimelineContent(
+                                    profile = p,
+                                    loading = false,
+                                    error = null,
+                                )
                             }
                         }
-
-                        ProfileLegacyTimelineContent(
-                            profile = p,
-                            loading = false,
-                            error = null,
-                        )
+                        else -> {
+                            Text("Profile unavailable", color = GlassSheetTokens.OnOledMuted())
+                        }
                     }
                 }
-                else -> {
-                    Text("Profile unavailable", color = GlassSheetTokens.OnOledMuted())
-                }
             }
-        }
-        }
         }
     }
 }

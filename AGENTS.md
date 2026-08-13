@@ -34,6 +34,7 @@ Requires `local.properties` with `sdk.dir=/opt/android-sdk` and `MAPS_API_KEY=<k
 - **All Kotlin tests:** `./gradlew :composeApp:allTests`
 - **Maestro E2E (device/simulator + CLI):** `bash scripts/maestro-smoke-android.sh` (assembleDebug, uninstall snapshot APK, install, then `maestro test .maestro --include-tags smoke`). Do not run Maestro against an emulator that already has an old Click install. Smoke flows: `launch_login`, `login_signup_toggle`. Auth (onboarded user **with avatar**): `maestro test .maestro/auth --include-tags auth -e TEST_EMAIL=... -e TEST_PASSWORD=...` (`tabs.yaml` asserts no `onboarding-avatar` and map chrome). Do not add Maestro Cloud to PR CI.
 - **Supabase drift (when `../click-web` is present):** `bash scripts/check-supabase-drift.sh`
+- Shared prefs/personality migration lives in click-web (`20260813180000_notification_prefs_personality.sql`) and is mirrored here.
 
 CI: Android job runs on Linux (`testDebugUnitTest` + `assembleDebug`); iOS job runs on `macos-26` + Xcode 26 (`iosSimulatorArm64Test`).
 
