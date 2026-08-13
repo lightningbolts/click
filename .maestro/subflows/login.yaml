@@ -1,0 +1,12 @@
+tags:
+  - subflow
+---
+- tapOn:
+    id: "login-email"
+- inputText: ${TEST_EMAIL}
+- tapOn:
+    id: "login-password"
+- inputText: ${TEST_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: "login-submit"

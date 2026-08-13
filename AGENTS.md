@@ -32,6 +32,7 @@ Requires `local.properties` with `sdk.dir=/opt/android-sdk` and `MAPS_API_KEY=<k
 - **Kotlin unit tests (Android JVM):** `./gradlew :composeApp:testDebugUnitTest`
 - **Kotlin / Compose UI tests (iOS Simulator):** `./gradlew :composeApp:iosSimulatorArm64Test` (macOS + Xcode required)
 - **All Kotlin tests:** `./gradlew :composeApp:allTests`
+- **Maestro E2E (device/simulator + CLI):** `maestro test .maestro --include-tags smoke` after `assembleDebug` / iOS sim install. Auth flows: `maestro test .maestro/auth -e TEST_EMAIL=... -e TEST_PASSWORD=...`
 - **Supabase drift (when `../click-web` is present):** `bash scripts/check-supabase-drift.sh`
 
 CI: Android job runs on Linux (`testDebugUnitTest` + `assembleDebug`); iOS job runs on `macos-26` + Xcode 26 (`iosSimulatorArm64Test`).

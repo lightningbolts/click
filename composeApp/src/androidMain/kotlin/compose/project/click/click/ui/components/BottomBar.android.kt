@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -163,6 +164,7 @@ private fun MaterialBottomBarItem(
     // No clip here — clipping was cutting off "Settings" / "Add Click".
     Column(
         modifier = modifier
+            .testTag(item.maestroTestTag)
             .clickable(
                 interactionSource = interactionSource,
                 indication = ripple(bounded = false, radius = 36.dp, color = accent.copy(alpha = 0.2f)),

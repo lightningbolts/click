@@ -71,3 +71,8 @@ composeApp/release/
 composeApp/.idea/
 **/xcuserdata/
 *.xcuserstate
+
+### Maestro local artifacts (keep .maestro/**/*.yaml) ###
+.maestro/**/*.png
+.maestro/**/*.mp4
+.maestro/.screenshots/

@@ -123,6 +123,30 @@ Create `local.properties` at the repo root with `sdk.dir` and `MAPS_API_KEY` (se
 
 Xcode’s **Compile Kotlin Framework** phase runs `./gradlew :composeApp:embedAndSignAppleFrameworkForXcode`. That Gradle configure step needs `MAPS_API_KEY` via `local.properties` or the checked-in `local.defaults.properties` fallback (Xcode Cloud writes `local.properties` in [`iosApp/ci_scripts/ci_pre_xcodebuild.sh`](./iosApp/ci_scripts/ci_pre_xcodebuild.sh)).
 
+### Maestro (E2E UI)
+
+Black-box flows live in [`.maestro/`](./.maestro/). Install the [Maestro CLI](https://docs.maestro.dev/maestro-cli/how-to-install-maestro-cli.md) (Java 17+) — do not vendor the Maestro source:
+
+```shell
+curl -fsSL "https://get.maestro.mobile.dev" | bash
+```
+
+```shell
+./gradlew :composeApp:assembleDebug
+maestro start-device --platform android   # or boot an iOS Simulator
+maestro test .maestro --include-tags smoke
+```
+
+Email/password journeys (dedicated test user that has finished onboarding):
+
+```shell
+maestro test .maestro/auth --include-tags auth \
+  -e TEST_EMAIL=you@example.com \
+  -e TEST_PASSWORD=secret
+```
+
+Package id is `compose.project.click.click` on Android and iOS. Grant runtime permissions in flows via `launchApp.permissions`. Cloud uploads (optional) use [`.github/workflows/maestro-cloud.yml`](./.github/workflows/maestro-cloud.yml) (`workflow_dispatch`, secrets `MAESTRO_API_KEY` + `MAESTRO_PROJECT_ID`).
+
 ### Database and server-side setup
 
 SQL migrations and ordering: [`database/`](./database/). Full operator checklist (Edge Function secrets, APNs, FCM, LiveKit env): **[`EXTERNAL_SETUP.md`](./EXTERNAL_SETUP.md)**.

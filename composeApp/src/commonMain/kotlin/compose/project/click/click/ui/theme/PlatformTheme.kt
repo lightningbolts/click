@@ -1,5 +1,7 @@
 package compose.project.click.click.ui.theme
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -9,6 +11,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.Dp
@@ -168,7 +171,15 @@ fun PlatformThemeProvider(
         typography = clickTypography(),
     ) {
         CompositionLocalProvider(LocalIsDarkMode provides isDarkMode) {
-            PlatformStyleProvider(content)
+            PlatformStyleProvider {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .maestroTestTagsAsResourceId(),
+                ) {
+                    content()
+                }
+            }
         }
     }
 }

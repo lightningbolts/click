@@ -1,0 +1,18 @@
+appId: ${APP_ID}
+name: Launch shows sign-in
+tags:
+  - smoke
+---
+- launchApp:
+    appId: ${APP_ID}
+    clearState: true
+    permissions:
+      all: allow
+- assertVisible:
+    id: "login-email"
+- assertVisible:
+    id: "login-password"
+- assertVisible:
+    id: "login-submit"
+- assertVisible: "Sign In"
+- assertVisible: "Connect with your world"

@@ -28,6 +28,7 @@ import compose.project.click.click.ui.theme.LocalIsDarkMode
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
 import platform.Foundation.NSProcessInfo
+import platform.Foundation.setValue
 import platform.UIKit.NSLayoutConstraint
 import platform.UIKit.UIColor
 import platform.UIKit.UIImage
@@ -166,7 +167,9 @@ actual fun PlatformBottomBar(
                 title = navItem.title,
                 image = image,
                 tag = index.toLong(),
-            )
+            ).apply {
+                setValue(navItem.maestroTestTag, forKey = "accessibilityIdentifier")
+            }
         }
         tabBar.setItems(uiItems)
         val selectedIdx = items.indexOfFirst { it.route == currentRouteState }.coerceAtLeast(0)

@@ -1,0 +1,26 @@
+appId: ${APP_ID}
+name: Authenticated tab smoke
+tags:
+  - auth
+---
+- launchApp:
+    appId: ${APP_ID}
+    clearState: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../subflows/login.yaml
+- extendedWaitUntil:
+    visible:
+      id: "nav-home"
+    timeout: 30000
+- tapOn:
+    id: "nav-clicks"
+- tapOn:
+    id: "nav-map"
+- tapOn:
+    id: "nav-settings"
+- tapOn:
+    id: "nav-home"
+- assertVisible:
+    id: "nav-home"
