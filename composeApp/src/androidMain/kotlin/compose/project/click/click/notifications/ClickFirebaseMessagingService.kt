@@ -43,10 +43,27 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
         ensureNotificationChannel(applicationContext)
 
         val type = message.data["type"]
-        if (type == "disposable_reveal") {
-            if (!NotificationRuntimeState.getNotificationPreferences().messageNotificationsEnabled) {
+        val prefs = NotificationRuntimeState.getNotificationPreferences()
+        if (type == "incoming_call") {
+            if (!prefs.callNotificationsEnabled) {
                 return
             }
+            message.toIncomingCallInvite()?.let { invite ->
+                PlatformIncomingCallUi.showIncomingCall(invite)
+                compose.project.click.click.calls.CallSessionManager.receiveIncomingPush(invite) // pragma: allowlist secret
+            }
+            return
+        }
+        val allowed = when (type) {
+            "event_reminder" -> prefs.eventReminderNotificationsEnabled
+            "availability_match" -> prefs.availabilityMatchNotificationsEnabled
+            "hub_message" -> prefs.hubMessageNotificationsEnabled
+            else -> prefs.messageNotificationsEnabled
+        }
+        if (!allowed) {
+            return
+        }
+        if (type == "disposable_reveal") {
             val connectionId = message.data["connection_id"] ?: ""
             val chatId = message.data["chat_id"] ?: ""
             val deepLinkId = connectionId.ifBlank { chatId }
@@ -90,23 +107,6 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
                 0,
                 notification,
             )
-            return
-        }
-        if (type == "incoming_call") {
-            if (!NotificationRuntimeState.getNotificationPreferences().callNotificationsEnabled) {
-                return
-            }
-
-            message.toIncomingCallInvite()?.let { invite ->
-                PlatformIncomingCallUi.showIncomingCall(invite)
-                // Always seed session state (not only foreground). Admission policy dedupes
-                // FCM + Realtime dual delivery so this is safe when the app is backgrounded.
-                compose.project.click.click.calls.CallSessionManager.receiveIncomingPush(invite)
-            }
-            return
-        }
-
-        if (!NotificationRuntimeState.getNotificationPreferences().messageNotificationsEnabled) {
             return
         }
 

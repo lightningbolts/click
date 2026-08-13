@@ -294,6 +294,7 @@ class SupabaseRepository {
                 )
     }
     private val userColumnSets = listOf(
+        listOf("id", "name", "full_name", "first_name", "last_name", "birthday", "email", "image", "last_polled", "personality_tags"),
         listOf("id", "name", "full_name", "first_name", "last_name", "birthday", "email", "image", "last_polled"),
         listOf("id", "name", "first_name", "last_name", "birthday", "email", "image", "last_polled"),
         listOf("id", "name", "first_name", "last_name", "birthday", "email", "image"),
@@ -410,9 +411,11 @@ class SupabaseRepository {
             ) {
                 viewerTagsFromBff = fetchUserInterests(viewerUserId).getOrNull()?.tags.orEmpty()
             }
+            val personalityTags = bffProfile.personalityTags.ifEmpty { bffProfile.user.personalityTags }
             val profile = UserPublicProfile(
-                user = user,
+                user = user.copy(personalityTags = personalityTags.ifEmpty { user.personalityTags }),
                 interestTags = tags,
+                personalityTags = personalityTags.ifEmpty { user.personalityTags },
                 availability = availability,
                 profileAvailabilityIntents = profileIntents,
                 viewerInterestTags = viewerTagsFromBff,
@@ -444,6 +447,7 @@ class SupabaseRepository {
         val profile = UserPublicProfile(
             user = user,
             interestTags = tags,
+            personalityTags = user.personalityTags,
             availability = availability,
             profileAvailabilityIntents = profileIntents,
             viewerInterestTags = viewerTags,

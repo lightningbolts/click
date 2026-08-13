@@ -102,12 +102,7 @@ class IosTokenStorage : TokenStorage {
         }
         userDefaults.synchronize()
 
-        // Always clear Keychain token slots before write so a failed Add cannot leave a stale JWT.
-        deleteKeychainItem(KEY_JWT)
-        deleteKeychainItem(KEY_REFRESH_TOKEN)
-        deleteKeychainItem(KEY_EXPIRES_AT)
-        deleteKeychainItem(KEY_TOKEN_TYPE)
-
+        // Update-or-add Keychain; keep last-good values on -50 / write failure.
         val jwtOk = setKeychainItem(KEY_JWT, jwt)
         val refreshOk = setKeychainItem(KEY_REFRESH_TOKEN, refreshToken)
         val expiresOk = if (expiresAt != null) {
@@ -121,13 +116,8 @@ class IosTokenStorage : TokenStorage {
             true
         }
         if (!jwtOk || !refreshOk || !expiresOk || !typeOk) {
-            // Failed writes must not leave partial/stale Keychain rows that outrank Defaults.
-            deleteKeychainItem(KEY_JWT)
-            deleteKeychainItem(KEY_REFRESH_TOKEN)
-            deleteKeychainItem(KEY_EXPIRES_AT)
-            deleteKeychainItem(KEY_TOKEN_TYPE)
             println(
-                "IosTokenStorage: NSUserDefaults saved; Keychain skipped after write failure " +
+                "IosTokenStorage: NSUserDefaults saved; Keychain write failed, last-good kept " +
                     "(jwt=$jwtOk refresh=$refreshOk expires=$expiresOk type=$typeOk)",
             )
         }

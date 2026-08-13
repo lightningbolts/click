@@ -65,6 +65,7 @@ private data class UserProfilePatchResponseDto(
 data class UserProfileGetResponse(
     val user: UserCore,
     val tags: List<String> = emptyList(),
+    @SerialName("personality_tags") val personalityTags: List<String> = emptyList(),
     @SerialName("viewerInterestTags") val viewerInterestTags: List<String> = emptyList(),
     @SerialName("sharedInterestTags") val sharedInterestTags: List<String> = emptyList(),
     /** Full legacy shape (availability, sharedConnection) preserved as JSON. */
@@ -73,6 +74,24 @@ data class UserProfileGetResponse(
     @SerialName("availabilityIntents")
     val availabilityIntents: List<ProfileAvailabilityIntentBubble> = emptyList(),
     @SerialName("sharedConnection") val sharedConnection: kotlinx.serialization.json.JsonElement? = null,
+)
+
+@Serializable
+data class ActivityRecapDto(
+    val window: String,
+    val since: String,
+    @SerialName("connections_formed") val connectionsFormed: Int = 0,
+    @SerialName("messages_sent") val messagesSent: Int = 0,
+    @SerialName("messages_received") val messagesReceived: Int = 0,
+    @SerialName("beacons_created") val beaconsCreated: Int = 0,
+    @SerialName("events_rsvped") val eventsRsvped: Int = 0,
+    @SerialName("events_checked_in") val eventsCheckedIn: Int = 0,
+    @SerialName("events_saved") val eventsSaved: Int = 0,
+)
+
+@Serializable
+private data class ActivityRecapResponseDto(
+    val recap: ActivityRecapDto,
 )
 
 /**
@@ -117,6 +136,12 @@ data class NotificationPreferencesPatchBody(
     val messagePushEnabled: Boolean,
     @SerialName("call_push_enabled")
     val callPushEnabled: Boolean,
+    @SerialName("event_reminder_push_enabled")
+    val eventReminderPushEnabled: Boolean = true,
+    @SerialName("availability_match_push_enabled")
+    val availabilityMatchPushEnabled: Boolean = true,
+    @SerialName("hub_message_push_enabled")
+    val hubMessagePushEnabled: Boolean = true,
 )
 
 @Serializable
@@ -699,6 +724,26 @@ class ApiClient {
      * listings for the profile sheet. Links remain client-side because message
      * [content] is E2EE on the wire; callers filter locally-decrypted state.
      */
+    /**
+     * GET `/api/me/recap?window=day|week` — Home activity rollup.
+     */
+    suspend fun getActivityRecap(window: String = "week"): Result<ActivityRecapDto> {
+        val normalized = if (window == "day") "day" else "week"
+        return try {
+            val response: HttpResponse =
+                clickWebClient.get("$clickWebAuthOrigin/api/me/recap") {
+                    parameter("window", normalized)
+                }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<ActivityRecapResponseDto>().recap)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun getConnectionTabs(connectionId: String): Result<ConnectionTabsGetResponse> {
         val id = connectionId.trim()
         if (id.isEmpty()) return Result.failure(IllegalArgumentException("connectionId required"))
@@ -724,8 +769,16 @@ class ApiClient {
         image: String? = null,
         tags: List<String>? = null,
         birthday: String? = null,
+        personalityTags: List<String>? = null,
     ): Result<User> {
-        if (firstName == null && lastName == null && image == null && tags == null && birthday == null) {
+        if (
+            firstName == null &&
+            lastName == null &&
+            image == null &&
+            tags == null &&
+            birthday == null &&
+            personalityTags == null
+        ) {
             return Result.failure(IllegalArgumentException("No profile fields to update"))
         }
         val body =
@@ -737,6 +790,9 @@ class ApiClient {
                     put("tags", JsonArray(list.map { JsonPrimitive(it) }))
                 }
                 birthday?.let { put("birthday", it) }
+                personalityTags?.let { list ->
+                    put("personality_tags", JsonArray(list.map { JsonPrimitive(it) }))
+                }
             }
         if (body.isEmpty()) {
             return Result.failure(IllegalArgumentException("No profile fields to update"))

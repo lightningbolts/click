@@ -30,6 +30,13 @@ class NetworkFailureUtilTest {
     }
 
     @Test
+    fun isHardAuthFailure_doesNotTreatAuthRestExceptionJwtExpiredAsHard() {
+        assertFalse(AuthRestException("JWT expired").isHardAuthFailure())
+        assertFalse(AuthApiException("access token expired").isHardAuthFailure())
+        assertTrue(AuthRestException("Refresh Token Not Found").isHardAuthFailure())
+    }
+
+    @Test
     fun isHardAuthFailure_rejectsNetworkErrors() {
         assertFalse(IOException("network unreachable").isHardAuthFailure())
         assertFalse(IllegalStateException("You are offline").isHardAuthFailure())
@@ -37,3 +44,8 @@ class NetworkFailureUtilTest {
 }
 
 private class IOException(message: String) : Exception(message)
+
+/** Mirrors GoTrue exception simple names without depending on the SDK in unit tests. */
+private class AuthRestException(message: String) : Exception(message)
+
+private class AuthApiException(message: String) : Exception(message)

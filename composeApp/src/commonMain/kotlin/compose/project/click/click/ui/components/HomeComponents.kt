@@ -39,6 +39,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import compose.project.click.click.data.models.MapBeaconKind
 import compose.project.click.click.data.models.PollPairSuggestion
 import compose.project.click.click.events.HomeEventReminder
+import compose.project.click.click.data.api.ActivityRecapDto // pragma: allowlist secret
 import compose.project.click.click.ui.theme.*
 import compose.project.click.click.ui.utils.userFacingLabel
 import compose.project.click.click.viewmodel.MapLayerFilter
@@ -444,6 +445,104 @@ fun ExploreNearbyBeaconsSection(
                 }
             }
         }
+    }
+}
+
+/**
+ * Day/week activity rollup on Home, shown above saved events.
+ */
+@Composable
+fun ActivityRecapSection(
+    recap: ActivityRecapDto,
+    window: String,
+    onWindowChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(16.dp)
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = "Your recap",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            RecapWindowChip(
+                label = "Day",
+                selected = window == "day",
+                onClick = { onWindowChange("day") },
+            )
+            RecapWindowChip(
+                label = "Week",
+                selected = window == "week",
+                onClick = { onWindowChange("week") },
+            )
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                .border(2.dp, clickBorderColor(), shape)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            RecapStatRow("Connections formed", recap.connectionsFormed)
+            RecapStatRow("Messages sent", recap.messagesSent)
+            RecapStatRow("Messages received", recap.messagesReceived)
+            RecapStatRow("Beacons created", recap.beaconsCreated)
+            RecapStatRow("Events RSVP’d", recap.eventsRsvped)
+            RecapStatRow("Check-ins", recap.eventsCheckedIn)
+            RecapStatRow("Events saved", recap.eventsSaved)
+        }
+    }
+}
+
+@Composable
+private fun RecapWindowChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(12.dp)
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold,
+        color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier
+            .clip(shape)
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.surfaceContainerLow,
+            )
+            .border(2.dp, clickBorderColor(), shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    )
+}
+
+@Composable
+private fun RecapStatRow(label: String, value: Int) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = value.toString(),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 

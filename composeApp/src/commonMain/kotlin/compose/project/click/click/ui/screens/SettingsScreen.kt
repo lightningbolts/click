@@ -28,6 +28,11 @@ import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -44,6 +49,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -66,6 +72,8 @@ import compose.project.click.click.ui.components.AvailabilitySheet // pragma: al
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenScaffold
+import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
+import compose.project.click.click.ui.components.SavedEventsSection // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastHost
 import compose.project.click.click.ui.components.rememberBottomChromePadding
 import compose.project.click.click.ui.components.rememberUnifiedToastState
@@ -95,6 +103,21 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import compose.project.click.click.ui.chat.rememberChatMediaPickers
 import compose.project.click.click.ui.components.ClickOutlinedTextField
+
+private enum class SettingsPage {
+    Hub, Availability, Alerts, Privacy, Interests, Personality, Saved, Appearance
+}
+
+private fun SettingsPage.title(): String = when (this) {
+    SettingsPage.Hub -> "Settings"
+    SettingsPage.Availability -> "Availability"
+    SettingsPage.Alerts -> "Alerts"
+    SettingsPage.Privacy -> "Privacy & data"
+    SettingsPage.Interests -> "Interests"
+    SettingsPage.Personality -> "Personality"
+    SettingsPage.Saved -> "Saved events"
+    SettingsPage.Appearance -> "Appearance"
+}
 
 @Composable
 fun SettingsScreen(
@@ -195,14 +218,35 @@ fun SettingsScreen(
     var seedAvailabilityIntent by remember { mutableStateOf<AvailabilityIntentRow?>(null) }
     var pendingDeleteAvailabilityIntent by remember { mutableStateOf<AvailabilityIntentRow?>(null) }
     var showPermissionsHub by remember { mutableStateOf(false) }
+    var settingsPage by remember { mutableStateOf(SettingsPage.Hub) }
+    val savedEventBookmarks by AppDataManager.cachedEventBookmarks.collectAsState()
+
+    PlatformBackHandler(enabled = settingsPage != SettingsPage.Hub) { // pragma: allowlist secret
+        settingsPage = SettingsPage.Hub
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
             AppScreenScaffold(
-                title = "Settings",
-                onOpenSearch = onOpenSearch,
+                title = settingsPage.title(),
+                onOpenSearch = if (settingsPage == SettingsPage.Hub) onOpenSearch else null,
+                navigationIcon = if (settingsPage != SettingsPage.Hub) {
+                    {
+                        IconButton(onClick = { settingsPage = SettingsPage.Hub }) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back to settings",
+                                tint = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+                } else {
+                    null
+                },
                 verticalArrangement = Arrangement.spacedBy(24.dp),
             ) {
+                when (settingsPage) {
+                    SettingsPage.Hub -> {
                 item {
                     SettingsProfileHeader(
                         user = currentUser,
@@ -217,6 +261,16 @@ fun SettingsScreen(
                     )
                 }
 
+                item {
+                    SettingsHubNavCard(onOpen = { settingsPage = it })
+                }
+
+                item {
+                    SettingsSignOutButton(onSignOut = onSignOut)
+                }
+                    }
+
+                    SettingsPage.Availability -> {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         SettingsSectionHeader("Availability")
@@ -345,7 +399,9 @@ fun SettingsScreen(
                         }
                     }
                 }
+                    }
 
+                    SettingsPage.Alerts -> {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         SettingsSectionHeader("Alerts")
@@ -363,6 +419,30 @@ fun SettingsScreen(
                                     title = "Call alerts",
                                     checked = notificationPreferences.callPushEnabled,
                                     onCheckedChange = { AppDataManager.setCallNotificationsEnabled(it) }
+                                )
+                                SettingsDivider()
+                                SettingsToggleRow(
+                                    icon = Icons.Default.Notifications,
+                                    title = "Event reminders",
+                                    subtitle = "Day-of and 30-minutes-before alerts for events you created.",
+                                    checked = notificationPreferences.eventReminderPushEnabled,
+                                    onCheckedChange = { AppDataManager.setEventReminderNotificationsEnabled(it) }
+                                )
+                                SettingsDivider()
+                                SettingsToggleRow(
+                                    icon = Icons.Default.EventAvailable,
+                                    title = "Availability matches",
+                                    subtitle = "When a connection posts a matching intent and overlapping timeframe.",
+                                    checked = notificationPreferences.availabilityMatchPushEnabled,
+                                    onCheckedChange = { AppDataManager.setAvailabilityMatchNotificationsEnabled(it) }
+                                )
+                                SettingsDivider()
+                                SettingsToggleRow(
+                                    icon = Icons.Default.Notifications,
+                                    title = "Hub messages",
+                                    subtitle = "Community hub chat alerts when you are a participant.",
+                                    checked = notificationPreferences.hubMessagePushEnabled,
+                                    onCheckedChange = { AppDataManager.setHubMessageNotificationsEnabled(it) }
                                 )
                                 SettingsDivider()
                                 SettingsToggleRow(
@@ -392,7 +472,9 @@ fun SettingsScreen(
                         }
                     }
                 }
+                    }
 
+                    SettingsPage.Privacy -> {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         SettingsSectionHeader("Privacy & data")
@@ -475,7 +557,9 @@ fun SettingsScreen(
                         }
                     }
                 }
+                    }
 
+                    SettingsPage.Interests -> {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         SettingsSectionHeader("Interests")
@@ -486,7 +570,44 @@ fun SettingsScreen(
                         )
                     }
                 }
+                    }
 
+                    SettingsPage.Personality -> {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SettingsSectionHeader("Personality")
+                        SettingsPersonalityCard(
+                            userId = currentUser?.id,
+                            onFeedback = { msg -> toastState.show(settingsScope, msg) },
+                        )
+                    }
+                }
+                    }
+
+                    SettingsPage.Saved -> {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SettingsSectionHeader("Saved events")
+                        if (savedEventBookmarks.isEmpty()) {
+                            AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    text = "No saved events yet. Bookmark events from Home or the map.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(16.dp),
+                                )
+                            }
+                        } else {
+                            SavedEventsSection( // pragma: allowlist secret
+                                bookmarks = savedEventBookmarks,
+                                onBookmarkClick = {},
+                            )
+                        }
+                    }
+                }
+                    }
+
+                    SettingsPage.Appearance -> {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         SettingsSectionHeader("Appearance")
@@ -500,9 +621,7 @@ fun SettingsScreen(
                         }
                     }
                 }
-
-                item {
-                    SettingsSignOutButton(onSignOut = onSignOut)
+                    }
                 }
             }
         }
@@ -979,6 +1098,103 @@ private fun SettingsSignOutButton(onSignOut: () -> Unit) {
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text("Sign out", fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun SettingsHubNavCard(onOpen: (SettingsPage) -> Unit) {
+    AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            SettingsHubNavRow(
+                icon = Icons.Default.EventAvailable,
+                title = "Availability",
+                subtitle = "Free this week and intent posts",
+                onClick = { onOpen(SettingsPage.Availability) },
+            )
+            SettingsDivider()
+            SettingsHubNavRow(
+                icon = Icons.Default.Notifications,
+                title = "Alerts",
+                subtitle = "Messages, calls, events, hubs",
+                onClick = { onOpen(SettingsPage.Alerts) },
+            )
+            SettingsDivider()
+            SettingsHubNavRow(
+                icon = Icons.Default.PrivacyTip,
+                title = "Privacy & data",
+                subtitle = "Ghost mode, location, permissions",
+                onClick = { onOpen(SettingsPage.Privacy) },
+            )
+            SettingsDivider()
+            SettingsHubNavRow(
+                icon = Icons.Default.Star,
+                title = "Interests",
+                subtitle = "Common Ground tags",
+                onClick = { onOpen(SettingsPage.Interests) },
+            )
+            SettingsDivider()
+            SettingsHubNavRow(
+                icon = Icons.Default.Person,
+                title = "Personality",
+                subtitle = "Five traits that describe you",
+                onClick = { onOpen(SettingsPage.Personality) },
+            )
+            SettingsDivider()
+            SettingsHubNavRow(
+                icon = Icons.Default.Bookmark,
+                title = "Saved events",
+                subtitle = "Bookmarks from Home and the map",
+                onClick = { onOpen(SettingsPage.Saved) },
+            )
+            SettingsDivider()
+            SettingsHubNavRow(
+                icon = Icons.Default.DarkMode,
+                title = "Appearance",
+                subtitle = "Dark mode",
+                onClick = { onOpen(SettingsPage.Appearance) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsHubNavRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(22.dp),
+            tint = PrimaryBlue,
+        )
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

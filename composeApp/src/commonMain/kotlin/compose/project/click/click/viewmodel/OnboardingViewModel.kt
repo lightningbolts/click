@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.update
 /**
  * Pure state machine for the Phase 2 (B2) onboarding flow.
  *
- * Target order:   **Loading → Welcome → Interests → Avatar → Complete**
+ * Target order:   **Loading → Welcome → Interests → Personality → Avatar → Complete**
  *
  * Design decisions:
  *   * Permissions are **no longer** part of the onboarding graph — they are requested contextually
@@ -24,7 +24,8 @@ import kotlinx.coroutines.flow.update
  *
  * Regression / migration (see B2 in the refactor plan):
  *   If [OnboardingState.interestsCompleted] is already true *and* the caller reports that the user
- *   has an avatar URL, we fast-forward past Avatar so existing accounts do not re-onboard.
+ *   has an avatar URL, we fast-forward past Avatar **and Personality** so existing accounts do not
+ *   re-onboard. Personality is required only for new signups (`legacyComplete` is false).
  *   Welcome is shown for accounts with `welcomeSeen = false` regardless of legacy completion —
  *   it is a short copy screen and gives us a place to announce B2.
  *
@@ -42,11 +43,12 @@ class OnboardingViewModel(
     }
 
     /**
-     * Discrete onboarding steps. Ordered: [Loading] → [Welcome] → [Interests] → [Avatar] → [Complete].
+     * Discrete onboarding steps. Ordered:
+     * [Loading] → [Welcome] → [Interests] → [Personality] → [Avatar] → [Complete].
      * [Loading] is shown while initial data (user + persisted state + remote interest resolution)
      * is being fetched.
      */
-    enum class Step { Loading, Welcome, Interests, Avatar, Complete }
+    enum class Step { Loading, Welcome, Interests, Personality, Avatar, Complete }
 
     private val _state: MutableStateFlow<OnboardingState> = MutableStateFlow(initialState)
 
@@ -89,6 +91,12 @@ class OnboardingViewModel(
             copy(interestsCompleted = true)
         }
 
+    /** User selected exactly 5 personality traits and saved them remotely. */
+    fun onPersonalitySaved() =
+        updateAnd {
+            copy(personalityCompleted = true)
+        }
+
     /** User either picked an avatar or tapped "skip for now". */
     fun onAvatarSetOrSkipped() =
         updateAnd {
@@ -108,16 +116,18 @@ class OnboardingViewModel(
         when (_step.value) {
             Step.Welcome -> onWelcomeAcknowledged()
             Step.Interests -> onInterestsSaved()
+            Step.Personality -> onPersonalitySaved()
             Step.Avatar -> onAvatarSetOrSkipped()
             Step.Loading, Step.Complete -> Unit
         }
     }
 
-    /** Welcome has no back. Interests → Welcome; Avatar → Interests. Does not wipe saved interests. */
+    /** Welcome has no back. Interests → Welcome; Personality → Interests; Avatar → Personality. */
     fun goBack() {
         val target =
             when (_step.value) {
-                Step.Avatar -> Step.Interests
+                Step.Avatar -> Step.Personality
+                Step.Personality -> Step.Interests
                 Step.Interests -> Step.Welcome
                 else -> return
             }
@@ -125,17 +135,21 @@ class OnboardingViewModel(
         _step.value = target
     }
 
-    fun canGoBack(): Boolean = _step.value == Step.Interests || _step.value == Step.Avatar
+    fun canGoBack(): Boolean =
+        _step.value == Step.Interests ||
+            _step.value == Step.Personality ||
+            _step.value == Step.Avatar
 
-    /** 0-based index into Welcome / Interests / Avatar for the progress indicator. */
+    /** 0-based index into Welcome / Interests / Personality / Avatar for the progress indicator. */
     fun visibleStepIndex(): Int =
         when (_step.value) {
             Step.Loading, Step.Welcome -> 0
             Step.Interests -> 1
-            Step.Avatar, Step.Complete -> 2
+            Step.Personality -> 2
+            Step.Avatar, Step.Complete -> 3
         }
 
-    fun visibleStepCount(): Int = 3
+    fun visibleStepCount(): Int = 4
 
     private inline fun updateAnd(crossinline mutator: OnboardingState.() -> OnboardingState) {
         stepOverride = null
@@ -166,8 +180,8 @@ class OnboardingViewModel(
         return when {
             !s.welcomeSeen -> Step.Welcome
             !s.interestsCompleted -> Step.Interests
+            !s.personalityCompleted && !legacyComplete -> Step.Personality
             !s.avatarSetOrSkipped && !hasAvatar -> Step.Avatar
-            legacyComplete -> Step.Complete
             else -> Step.Complete
         }
     }

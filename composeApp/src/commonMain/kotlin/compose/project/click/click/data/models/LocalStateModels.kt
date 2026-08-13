@@ -33,6 +33,11 @@ data class OnboardingState(
     // (see [OnboardingViewModel.needsPhase2Onboarding]).
     val welcomeSeen: Boolean = false,
     val avatarSetOrSkipped: Boolean = false,
+    /**
+     * New signups pick exactly 5 personality traits after interests.
+     * Defaults false; [OnboardingViewModel] skips the step for legacy-complete accounts.
+     */
+    val personalityCompleted: Boolean = false,
 ) {
     /**
      * Completion predicate for cold-start / restore.

@@ -612,6 +612,39 @@ fun ProfileLegacyTimelineContent(
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
         Spacer(modifier = Modifier.height(12.dp))
 
+        Text(
+            text = "Personality",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        val personality = p.personalityTags.ifEmpty { p.user.personalityTags }
+        if (personality.isEmpty()) {
+            Text(
+                text = "No personality traits shared yet",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                personality.forEach { tag ->
+                    FilterChip(
+                        selected = false,
+                        onClick = { },
+                        label = { Text(tag, style = MaterialTheme.typography.labelMedium) },
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+        Spacer(modifier = Modifier.height(12.dp))
+
         val sharedTags = sharedInterestTags(p.viewerInterestTags, p.interestTags)
 
         Text(

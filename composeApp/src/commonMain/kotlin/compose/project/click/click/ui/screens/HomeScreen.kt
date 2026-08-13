@@ -71,6 +71,7 @@ import compose.project.click.click.ui.components.FeaturedEventSection // pragma:
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeExploreTile // pragma: allowlist secret
 import compose.project.click.click.ui.components.SavedEventsSection // pragma: allowlist secret
+import compose.project.click.click.ui.components.ActivityRecapSection // pragma: allowlist secret
 import compose.project.click.click.ui.components.homeGreetingTitle // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeGreetingSubtitle // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeSearchPill // pragma: allowlist secret
@@ -131,6 +132,8 @@ fun HomeScreen(
     val reconnectReminders by homeViewModel.reconnectReminders.collectAsState()
     val homeEventReminders by homeViewModel.homeEventReminders.collectAsState()
     val savedEventBookmarks by homeViewModel.savedEventBookmarks.collectAsState()
+    val activityRecap by homeViewModel.activityRecap.collectAsState()
+    val recapWindow by homeViewModel.recapWindow.collectAsState()
     val connectionInsights by homeViewModel.connectionInsights.collectAsState()
     val showInsightsPanel by homeViewModel.showInsightsPanel.collectAsState()
     val locationGroupedConnections by homeViewModel.locationGroupedConnections.collectAsState()
@@ -375,6 +378,16 @@ fun HomeScreen(
                                         }
                                     }
                                 }
+                            }
+                        }
+
+                        activityRecap?.let { recap ->
+                            item(key = "activity_recap") {
+                                ActivityRecapSection( // pragma: allowlist secret
+                                    recap = recap,
+                                    window = recapWindow,
+                                    onWindowChange = { homeViewModel.setRecapWindow(it) },
+                                )
                             }
                         }
 

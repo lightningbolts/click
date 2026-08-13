@@ -17,6 +17,8 @@ import compose.project.click.click.data.models.ReconnectHelper // pragma: allowl
 import compose.project.click.click.data.models.ReconnectReminder // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.api.EventBookmarkItemDto
+import compose.project.click.click.data.api.ActivityRecapDto // pragma: allowlist secret
+import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
@@ -68,6 +70,7 @@ class HomeViewModel(
     private val connectionRepository: ConnectionRepository = ConnectionRepository(),
     private val supabaseRepository: SupabaseRepository = SupabaseRepository(),
     private val mapBeaconRepository: MapBeaconRepository = MapBeaconRepository(),
+    private val apiClient: ApiClient = ApiClient(),
 ) : ViewModel() {
 
     private val _homeState = MutableStateFlow<HomeState>(HomeState.Loading)
@@ -83,6 +86,12 @@ class HomeViewModel(
     private val _savedEventBookmarks =
         MutableStateFlow(AppDataManager.cachedEventBookmarks.value)
     val savedEventBookmarks: StateFlow<List<EventBookmarkItemDto>> = _savedEventBookmarks.asStateFlow()
+
+    private val _activityRecap = MutableStateFlow<ActivityRecapDto?>(null)
+    val activityRecap: StateFlow<ActivityRecapDto?> = _activityRecap.asStateFlow()
+
+    private val _recapWindow = MutableStateFlow("week")
+    val recapWindow: StateFlow<String> = _recapWindow.asStateFlow()
 
     private val _dismissedEventReminderKeys = MutableStateFlow<Set<String>>(emptySet())
     
@@ -263,6 +272,7 @@ class HomeViewModel(
                     _connectedUsers.value = emptyMap()
                     _homeAvailabilityIntents.value = emptyList()
                     _homeAvailabilityOverlapMessages.value = emptyList()
+                    _activityRecap.value = null
                     AvailabilityOverlapCache.clear()
                     ViewerAvailabilityBubblesCache.clear()
                     availabilityIntentRefreshJob?.cancel()
@@ -416,6 +426,7 @@ class HomeViewModel(
             loadReconnectReminders(userId, connections, lastMessageByConnectionId)
             loadHomeEventReminders(userId)
             loadSavedEventBookmarks()
+            loadActivityRecap()
             loadConnectionInsights(userId, connections, lastMessageByConnectionId)
         } catch (e: Exception) {
             println("Error preloading home derived data: ${e.redactedRestMessage()}")
@@ -702,6 +713,23 @@ class HomeViewModel(
         bookmarksFetchPending = true
         AppDataManager.refresh(force = true)
         retrySavedEventBookmarksIfNeeded()
+        viewModelScope.launch { loadActivityRecap() }
+    }
+
+    fun setRecapWindow(window: String) {
+        val normalized = if (window == "day") "day" else "week"
+        if (_recapWindow.value == normalized) return
+        _recapWindow.value = normalized
+        viewModelScope.launch { loadActivityRecap() }
+    }
+
+    private suspend fun loadActivityRecap() {
+        apiClient.getActivityRecap(_recapWindow.value).fold(
+            onSuccess = { _activityRecap.value = it },
+            onFailure = { e ->
+                println("HomeViewModel: recap load failed: ${e.redactedRestMessage()}")
+            },
+        )
     }
     
     /**

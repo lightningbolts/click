@@ -90,6 +90,9 @@ data class User(
     val last_paired: Long? = null,
     // Interest tags for Common Ground feature (e.g., "music", "coding", "hiking")
     val tags: List<String> = emptyList(),
+    /** Curated vibe traits from `users.personality_tags` (exactly 5 when set). */
+    @SerialName("personality_tags")
+    val personalityTags: List<String> = emptyList(),
     /** Present on bind-proximity-connection match rows when the edge already exists. */
     @SerialName("connection_id")
     val connectionId: String? = null,
@@ -165,6 +168,8 @@ data class UserCore(
     val image: String? = null,
     @SerialName("last_polled")
     val lastPolled: Long? = null,
+    @SerialName("personality_tags")
+    val personalityTags: List<String> = emptyList(),
 ) {
     /**
      * Convert to full User model with defaults for missing fields.
@@ -191,7 +196,8 @@ data class UserCore(
             connections = emptyList(),
             paired_with = emptyList(),
             connection_today = -1,
-            last_paired = null
+            last_paired = null,
+            personalityTags = personalityTags,
         )
     }
 }
@@ -257,6 +263,7 @@ data class UserInterests(
 data class UserPublicProfile(
     val user: User,
     val interestTags: List<String>,
+    val personalityTags: List<String> = emptyList(),
     val availability: UserAvailability?,
     /** From [public.users.availability_intents]; may be empty when unset or expired server-side. */
     val profileAvailabilityIntents: List<ProfileAvailabilityIntentBubble> = emptyList(),

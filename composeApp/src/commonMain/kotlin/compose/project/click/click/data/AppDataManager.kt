@@ -1063,6 +1063,9 @@ object AppDataManager {
                 NotificationRuntimeState.setNotificationPreferences(
                     messageEnabled = localNotificationPreferences.messagePushEnabled,
                     callEnabled = localNotificationPreferences.callPushEnabled,
+                    eventReminderEnabled = localNotificationPreferences.eventReminderPushEnabled,
+                    availabilityMatchEnabled = localNotificationPreferences.availabilityMatchPushEnabled,
+                    hubMessageEnabled = localNotificationPreferences.hubMessagePushEnabled,
                 )
 
                 // Push registration is non-critical for first paint. Keep it off the main
@@ -1082,6 +1085,9 @@ object AppDataManager {
                     NotificationRuntimeState.setNotificationPreferences(
                         messageEnabled = remotePreferences.messagePushEnabled,
                         callEnabled = remotePreferences.callPushEnabled,
+                        eventReminderEnabled = remotePreferences.eventReminderPushEnabled,
+                        availabilityMatchEnabled = remotePreferences.availabilityMatchPushEnabled,
+                        hubMessageEnabled = remotePreferences.hubMessagePushEnabled,
                     )
                     tokenStorage.saveMessageNotificationsEnabled(remotePreferences.messagePushEnabled)
                     tokenStorage.saveCallNotificationsEnabled(remotePreferences.callPushEnabled)
@@ -1409,7 +1415,13 @@ object AppDataManager {
         _notificationPreferences.value = NotificationPreferences()
         _locationPreferences.value = LocationPreferences()
         _pendingConnectionsCount.value = 0
-        NotificationRuntimeState.setNotificationPreferences(messageEnabled = true, callEnabled = true)
+        NotificationRuntimeState.setNotificationPreferences(
+            messageEnabled = true,
+            callEnabled = true,
+            eventReminderEnabled = true,
+            availabilityMatchEnabled = true,
+            hubMessageEnabled = true,
+        )
     }
 
     /**
@@ -1612,6 +1624,24 @@ object AppDataManager {
         }.getOrElse { 0 }
     }
 
+    fun setEventReminderNotificationsEnabled(enabled: Boolean) {
+        updateNotificationPreferences(
+            _notificationPreferences.value.copy(eventReminderPushEnabled = enabled)
+        )
+    }
+
+    fun setAvailabilityMatchNotificationsEnabled(enabled: Boolean) {
+        updateNotificationPreferences(
+            _notificationPreferences.value.copy(availabilityMatchPushEnabled = enabled)
+        )
+    }
+
+    fun setHubMessageNotificationsEnabled(enabled: Boolean) {
+        updateNotificationPreferences(
+            _notificationPreferences.value.copy(hubMessagePushEnabled = enabled)
+        )
+    }
+
     fun setMessageNotificationsEnabled(enabled: Boolean) {
         updateNotificationPreferences(
             _notificationPreferences.value.copy(messagePushEnabled = enabled)
@@ -1631,6 +1661,9 @@ object AppDataManager {
         NotificationRuntimeState.setNotificationPreferences(
             messageEnabled = preferences.messagePushEnabled,
             callEnabled = preferences.callPushEnabled,
+            eventReminderEnabled = preferences.eventReminderPushEnabled,
+            availabilityMatchEnabled = preferences.availabilityMatchPushEnabled,
+            hubMessageEnabled = preferences.hubMessagePushEnabled,
         )
 
         scope.launch {
@@ -1642,6 +1675,9 @@ object AppDataManager {
                 NotificationRuntimeState.setNotificationPreferences(
                     messageEnabled = previousPreferences.messagePushEnabled,
                     callEnabled = previousPreferences.callPushEnabled,
+                    eventReminderEnabled = previousPreferences.eventReminderPushEnabled,
+                    availabilityMatchEnabled = previousPreferences.availabilityMatchPushEnabled,
+                    hubMessageEnabled = previousPreferences.hubMessagePushEnabled,
                 )
                 tokenStorage.saveMessageNotificationsEnabled(previousPreferences.messagePushEnabled)
                 tokenStorage.saveCallNotificationsEnabled(previousPreferences.callPushEnabled)
@@ -1953,6 +1989,15 @@ object AppDataManager {
         scope.launch {
             runCatching { schedulePersistSnapshot() }
                 .onFailure { println("applyInterestTags: snapshot failed: ${it.message}") }
+        }
+    }
+
+    fun applyPersonalityTags(tags: List<String>) {
+        val latest = _currentUser.value ?: return
+        _currentUser.value = latest.copy(personalityTags = tags)
+        scope.launch {
+            runCatching { schedulePersistSnapshot() }
+                .onFailure { println("applyPersonalityTags: snapshot failed: ${it.message}") }
         }
     }
 

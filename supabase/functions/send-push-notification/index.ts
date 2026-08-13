@@ -42,6 +42,9 @@ interface PushTokenRow {
 interface NotificationPreferenceRow {
   message_push_enabled: boolean;
   call_push_enabled: boolean;
+  event_reminder_push_enabled?: boolean;
+  availability_match_push_enabled?: boolean;
+  hub_message_push_enabled?: boolean;
 }
 
 interface UserProfileRow {
@@ -61,7 +64,14 @@ type PushError = {
   error: string;
 };
 
-type PushCategory = "chat_message" | "incoming_call" | "archive_warning" | "disposable_reveal" | "event_reminder";
+type PushCategory =
+  | "chat_message"
+  | "incoming_call"
+  | "archive_warning"
+  | "disposable_reveal"
+  | "event_reminder"
+  | "availability_match"
+  | "hub_message";
 
 function normalizePrivateKey(value: string): string {
   return value.replace(/\\n/g, "\n");
@@ -266,6 +276,8 @@ function getPushCategory(requestBody: PushRequestBody): PushCategory {
   if (t === "archive_warning") return "archive_warning";
   if (t === "disposable_reveal") return "disposable_reveal";
   if (t === "event_reminder") return "event_reminder";
+  if (t === "availability_match") return "availability_match";
+  if (t === "hub_message") return "hub_message";
   return "chat_message";
 }
 
@@ -284,7 +296,9 @@ function shouldSendToToken(
     category === "chat_message" ||
     category === "archive_warning" ||
     category === "disposable_reveal" ||
-    category === "event_reminder"
+    category === "event_reminder" ||
+    category === "availability_match" ||
+    category === "hub_message"
   ) {
     return tokenType != "voip";
   }
@@ -684,7 +698,9 @@ async function recipientAllowsPush(
 ): Promise<boolean> {
   const { data, error } = await supabase
     .from("notification_preferences")
-    .select("message_push_enabled, call_push_enabled")
+    .select(
+      "message_push_enabled, call_push_enabled, event_reminder_push_enabled, availability_match_push_enabled, hub_message_push_enabled",
+    )
     .eq("user_id", requestBody.recipient_user_id)
     .maybeSingle<NotificationPreferenceRow>();
 
@@ -696,7 +712,16 @@ async function recipientAllowsPush(
   if (cat === "incoming_call") {
     return data.call_push_enabled !== false;
   }
-  if (cat === "disposable_reveal" || cat === "chat_message" || cat === "archive_warning" || cat === "event_reminder") {
+  if (cat === "event_reminder") {
+    return data.event_reminder_push_enabled !== false;
+  }
+  if (cat === "availability_match") {
+    return data.availability_match_push_enabled !== false;
+  }
+  if (cat === "hub_message") {
+    return data.hub_message_push_enabled !== false;
+  }
+  if (cat === "disposable_reveal" || cat === "chat_message" || cat === "archive_warning") {
     return data.message_push_enabled !== false;
   }
   return data.message_push_enabled !== false;

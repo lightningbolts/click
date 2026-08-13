@@ -11,6 +11,9 @@ import kotlinx.serialization.Serializable
 data class NotificationPreferences(
     val messagePushEnabled: Boolean = true,
     val callPushEnabled: Boolean = true,
+    val eventReminderPushEnabled: Boolean = true,
+    val availabilityMatchPushEnabled: Boolean = true,
+    val hubMessagePushEnabled: Boolean = true,
 )
 
 class NotificationPreferencesRepository {
@@ -20,7 +23,13 @@ class NotificationPreferencesRepository {
     suspend fun fetchPreferences(userId: String): NotificationPreferences {
         return try {
             val rows = supabase.from("notification_preferences")
-                .select(columns = Columns.list("message_push_enabled", "call_push_enabled")) {
+                .select(columns = Columns.list(
+                    "message_push_enabled",
+                    "call_push_enabled",
+                    "event_reminder_push_enabled",
+                    "availability_match_push_enabled",
+                    "hub_message_push_enabled",
+                )) {
                     filter {
                         eq("user_id", userId)
                     }
@@ -43,6 +52,9 @@ class NotificationPreferencesRepository {
                 NotificationPreferencesPatchBody(
                     messagePushEnabled = preferences.messagePushEnabled,
                     callPushEnabled = preferences.callPushEnabled,
+                    eventReminderPushEnabled = preferences.eventReminderPushEnabled,
+                    availabilityMatchPushEnabled = preferences.availabilityMatchPushEnabled,
+                    hubMessagePushEnabled = preferences.hubMessagePushEnabled,
                 ),
             )
             .map { }
@@ -57,11 +69,20 @@ class NotificationPreferencesRepository {
         val messagePushEnabled: Boolean = true,
         @SerialName("call_push_enabled")
         val callPushEnabled: Boolean = true,
+        @SerialName("event_reminder_push_enabled")
+        val eventReminderPushEnabled: Boolean = true,
+        @SerialName("availability_match_push_enabled")
+        val availabilityMatchPushEnabled: Boolean = true,
+        @SerialName("hub_message_push_enabled")
+        val hubMessagePushEnabled: Boolean = true,
     ) {
         fun toNotificationPreferences(): NotificationPreferences {
             return NotificationPreferences(
                 messagePushEnabled = messagePushEnabled,
                 callPushEnabled = callPushEnabled,
+                eventReminderPushEnabled = eventReminderPushEnabled,
+                availabilityMatchPushEnabled = availabilityMatchPushEnabled,
+                hubMessagePushEnabled = hubMessagePushEnabled,
             )
         }
     }

@@ -16,11 +16,14 @@ Tracker [#58](https://github.com/lightningbolts/click/issues/58) stays open. Chi
 | [#64](https://github.com/lightningbolts/click/issues/64) realtime | Landed — hub `HubRealtimeState`; `chats` + `group_members` inserts; subscribe-first on open thread |
 | [#65](https://github.com/lightningbolts/click/issues/65) map pins | Landed — all connection pins; Memory Map does not filter; single `updateRenderData` writer |
 | [#68](https://github.com/lightningbolts/click/issues/68) root SSR | Already fixed on main; SSR regression test added |
-| [#61](https://github.com/lightningbolts/click/issues/61) LiveKit calls | **Not claimed fixed.** Client surfaces 5xx token errors; web Room options match mobile (`adaptiveStream`/`dynacast` false); token route contract tests. Authenticated probe of `POST /api/livekit/token` still required before rewriting connect. Env is operator-owned. |
+| [#61](https://github.com/lightningbolts/click/issues/61) LiveKit calls | Landed (env plumbing) — token route reads LiveKit via `runtimeEnv` + URL normalize; `GET /api/health/env` reports presence flags. Production Worker vars still operator-owned; authenticated token mint after deploy is the remaining probe. |
+| [#66](https://github.com/lightningbolts/click/issues/66) prefs/senders | Landed — per-type columns + Settings toggles; availability-match cron; hub message fan-out; `send-push-notification` category gates |
+| [#69](https://github.com/lightningbolts/click/issues/69) recap/settings | Landed — `GET /api/me/recap`; Home recap card; Settings hub + subpages including saved events |
+| Personality picker | Landed — `users.personality_tags`; exactly 5 from curated taxonomy; onboarding for **new** signups only; Settings editor for everyone |
 
 ## Landed S2–S3 remainder (2026-08-12)
 
-Tracker [#58](https://github.com/lightningbolts/click/issues/58) stays open until child comments exist. **Out of scope** still: [#66](https://github.com/lightningbolts/click/issues/66) prefs/senders, [#69](https://github.com/lightningbolts/click/issues/69) recap/settings, personality picker, [#54](https://github.com/lightningbolts/click/issues/54) `ClickButton`.
+Tracker [#58](https://github.com/lightningbolts/click/issues/58) stays open until child comments exist. **Out of scope** still: [#54](https://github.com/lightningbolts/click/issues/54) `ClickButton`. **Now landed in this remainder:** [#61](https://github.com/lightningbolts/click/issues/61) LiveKit env plumbing, [#66](https://github.com/lightningbolts/click/issues/66) prefs/senders, [#69](https://github.com/lightningbolts/click/issues/69) recap/settings, personality picker.
 
 | Item | Status |
 |---|---|

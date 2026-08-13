@@ -48,16 +48,16 @@ internal object SupabaseSettingsSessionReader {
         }
     }
 
-    /** Copies SDK session tokens into [TokenStorage] when our dual-storage copy is empty. */
+    /** Copies SDK session tokens into [TokenStorage] when missing or the refresh token differs. */
     suspend fun syncTokensToStorageIfMissing(tokenStorage: TokenStorage) {
-        if (!tokenStorage.getJwt().isNullOrBlank() && !tokenStorage.getRefreshToken().isNullOrBlank()) return
-
         val raw = createSupabaseAuthSettings().getStringOrNull(SESSION_SETTINGS_KEY)?.trim().orEmpty()
         if (raw.isEmpty()) return
 
         val session = runCatching { sessionJson.decodeFromString<UserSession>(raw) }.getOrNull() ?: return
         val accessToken = session.accessToken.trim().takeIf { it.isNotEmpty() } ?: return
         val refreshToken = session.refreshToken.trim().takeIf { it.isNotEmpty() } ?: return
+        val storedRefresh = tokenStorage.getRefreshToken()?.trim().orEmpty()
+        if (storedRefresh.isNotEmpty() && storedRefresh == refreshToken) return
 
         tokenStorage.saveTokens(
             jwt = accessToken,

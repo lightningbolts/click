@@ -23,7 +23,7 @@ class OnboardingViewModelTest {
     }
 
     @Test
-    fun fullHappyPath_goesWelcomeInterestsAvatarComplete() {
+    fun fullHappyPath_goesWelcomeInterestsPersonalityAvatarComplete() {
         val recorder = PersistRecorder()
         val vm = OnboardingViewModel(onPersist = recorder, clockMillis = { 1_700_000_000_000L })
 
@@ -34,16 +34,19 @@ class OnboardingViewModelTest {
         assertTrue(vm.state.value.welcomeSeen)
 
         vm.onInterestsSaved()
-        assertEquals(OnboardingViewModel.Step.Avatar, vm.step.value)
+        assertEquals(OnboardingViewModel.Step.Personality, vm.step.value)
         assertTrue(vm.state.value.interestsCompleted)
+
+        vm.onPersonalitySaved()
+        assertEquals(OnboardingViewModel.Step.Avatar, vm.step.value)
+        assertTrue(vm.state.value.personalityCompleted)
 
         vm.onAvatarSetOrSkipped()
         assertEquals(OnboardingViewModel.Step.Complete, vm.step.value)
         assertTrue(vm.state.value.avatarSetOrSkipped)
         assertEquals(1_700_000_000_000L, vm.state.value.completedAt)
 
-        // Exactly three persists — one per advancing step.
-        assertEquals(3, recorder.snapshots.size)
+        assertEquals(4, recorder.snapshots.size)
     }
 
     @Test
@@ -51,6 +54,8 @@ class OnboardingViewModelTest {
         val vm = OnboardingViewModel()
         vm.advance()
         assertEquals(OnboardingViewModel.Step.Interests, vm.step.value)
+        vm.advance()
+        assertEquals(OnboardingViewModel.Step.Personality, vm.step.value)
         vm.advance()
         assertEquals(OnboardingViewModel.Step.Avatar, vm.step.value)
         vm.advance()
@@ -164,6 +169,7 @@ class OnboardingViewModelTest {
 
         vm.onWelcomeAcknowledged()
         vm.onInterestsSaved()
+        vm.onPersonalitySaved()
         vm.onAvatarSetOrSkipped()
 
         assertEquals(true, recorder.snapshots[0].welcomeSeen)
@@ -171,9 +177,12 @@ class OnboardingViewModelTest {
 
         assertEquals(true, recorder.snapshots[1].welcomeSeen)
         assertEquals(true, recorder.snapshots[1].interestsCompleted)
-        assertEquals(false, recorder.snapshots[1].avatarSetOrSkipped)
+        assertEquals(false, recorder.snapshots[1].personalityCompleted)
 
-        assertEquals(true, recorder.snapshots[2].avatarSetOrSkipped)
+        assertEquals(true, recorder.snapshots[2].personalityCompleted)
+        assertEquals(false, recorder.snapshots[2].avatarSetOrSkipped)
+
+        assertEquals(true, recorder.snapshots[3].avatarSetOrSkipped)
     }
 
     @Test
@@ -198,28 +207,77 @@ class OnboardingViewModelTest {
     }
 
     @Test
-    fun absentAvatar_showsAvatarStep() {
+    fun absentAvatar_showsPersonalityThenAvatar() {
         val vm =
             OnboardingViewModel(
                 initialState = OnboardingState(welcomeSeen = true, interestsCompleted = true),
+                userHasAvatar = { false },
+            )
+        assertEquals(OnboardingViewModel.Step.Personality, vm.step.value)
+    }
+
+    @Test
+    fun personalityCompletedWithoutAvatar_showsAvatar() {
+        val vm =
+            OnboardingViewModel(
+                initialState =
+                    OnboardingState(
+                        welcomeSeen = true,
+                        interestsCompleted = true,
+                        personalityCompleted = true,
+                    ),
                 userHasAvatar = { false },
             )
         assertEquals(OnboardingViewModel.Step.Avatar, vm.step.value)
     }
 
     @Test
-    fun goBack_fromAvatarToInterestsWithoutClearingInterests() {
+    fun existingUser_skipsPersonalityGate() {
+        val vm =
+            OnboardingViewModel(
+                initialState =
+                    OnboardingState(
+                        welcomeSeen = true,
+                        interestsCompleted = true,
+                        personalityCompleted = false,
+                    ),
+                userHasAvatar = { true },
+            )
+        assertEquals(OnboardingViewModel.Step.Complete, vm.step.value)
+        assertFalse(vm.needsPhase2Onboarding())
+    }
+
+    @Test
+    fun goBack_fromAvatarToPersonalityWithoutClearingPersonality() {
+        val vm =
+            OnboardingViewModel(
+                initialState =
+                    OnboardingState(
+                        welcomeSeen = true,
+                        interestsCompleted = true,
+                        personalityCompleted = true,
+                    ),
+                userHasAvatar = { false },
+            )
+        assertEquals(OnboardingViewModel.Step.Avatar, vm.step.value)
+        vm.goBack()
+        assertEquals(OnboardingViewModel.Step.Personality, vm.step.value)
+        assertTrue(vm.state.value.personalityCompleted)
+        assertTrue(vm.canGoBack())
+        assertEquals(2, vm.visibleStepIndex())
+    }
+
+    @Test
+    fun goBack_fromPersonalityToInterests() {
         val vm =
             OnboardingViewModel(
                 initialState = OnboardingState(welcomeSeen = true, interestsCompleted = true),
                 userHasAvatar = { false },
             )
-        assertEquals(OnboardingViewModel.Step.Avatar, vm.step.value)
+        assertEquals(OnboardingViewModel.Step.Personality, vm.step.value)
         vm.goBack()
         assertEquals(OnboardingViewModel.Step.Interests, vm.step.value)
         assertTrue(vm.state.value.interestsCompleted)
-        assertTrue(vm.canGoBack())
-        assertEquals(1, vm.visibleStepIndex())
     }
 
     @Test
@@ -232,7 +290,7 @@ class OnboardingViewModelTest {
         assertEquals(OnboardingViewModel.Step.Welcome, vm.step.value)
         assertFalse(vm.canGoBack())
         assertEquals(0, vm.visibleStepIndex())
-        assertEquals(3, vm.visibleStepCount())
+        assertEquals(4, vm.visibleStepCount())
     }
 
     @Test

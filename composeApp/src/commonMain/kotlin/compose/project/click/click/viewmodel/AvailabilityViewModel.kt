@@ -116,7 +116,7 @@ class AvailabilityViewModel(
         SupabaseConfig.client.auth.currentUserOrNull()?.id?.takeIf { it.isNotBlank() }?.let { return it }
         // Offline fast-boot can leave AuthState.Success while GoTrue has no session yet.
         val tokenStorage = createTokenStorage()
-        runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+        runCatching { SupabaseConfig.importStoredSessionIfSdkEmpty(tokenStorage) }
         SupabaseConfig.client.auth.currentUserOrNull()?.id?.takeIf { it.isNotBlank() }?.let { return it }
         runCatching { AuthRepository(tokenStorage).refreshSession() }
         return SupabaseConfig.client.auth.currentUserOrNull()?.id?.takeIf { it.isNotBlank() }

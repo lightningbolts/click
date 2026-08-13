@@ -78,6 +78,9 @@ object SupabaseConfig {
     /**
      * Imports a persisted session into the GoTrue client without triggering a network refresh.
      * Used for offline-first cold boot so UI can render before connectivity returns.
+     *
+     * Never call this when [client] already has a session — that overwrites a good
+     * SettingsSessionManager refresh token with a stale TokenStorage copy.
      */
     suspend fun importStoredSessionWithoutRefresh(tokenStorage: TokenStorage): Boolean {
         val accessToken = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() } ?: return false
@@ -115,6 +118,26 @@ object SupabaseConfig {
             client.auth.importSession(session)
             true
         }.getOrDefault(false)
+    }
+
+    /**
+     * Hydrate GoTrue from TokenStorage only when the SDK has no session. When a live session
+     * exists, copy it into TokenStorage so dual-store drift cannot poison the next refresh.
+     */
+    suspend fun importStoredSessionIfSdkEmpty(tokenStorage: TokenStorage): Boolean {
+        val existing = client.auth.currentSessionOrNull()
+        if (existing != null) {
+            runCatching {
+                tokenStorage.saveTokens(
+                    jwt = existing.accessToken,
+                    refreshToken = existing.refreshToken,
+                    expiresAt = existing.expiresAt?.toEpochMilliseconds(),
+                    tokenType = existing.tokenType,
+                )
+            }
+            return true
+        }
+        return importStoredSessionWithoutRefresh(tokenStorage)
     }
 
     fun startSessionSync(tokenStorage: TokenStorage) {

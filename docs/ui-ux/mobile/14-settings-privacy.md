@@ -1,7 +1,7 @@
 # 14 — Settings & Privacy
 
-**Scope:** `SettingsScreen`, `SettingsInterestsCard`, `AvailabilitySheet` (modal from Settings), `Edit name` dialog, `PermissionDisplayState` hints, `InterestEditor` / `InterestTaxonomy`.  
-**Source:** `ui/screens/SettingsScreen.kt`, `ui/screens/SettingsInterestsCard.kt`, `ui/screens/PermissionDisplayState.kt`, `ui/components/AvailabilitySheet.kt`, `ui/components/InterestEditor.kt`, `ui/components/InterestTaxonomy.kt`, `viewmodel/AvailabilityViewModel.kt`  
+**Scope:** `SettingsScreen` hub + subpages, `SettingsInterestsCard`, `SettingsPersonalityCard`, `AvailabilitySheet` (modal from Settings), `Edit name` dialog, `PermissionDisplayState` hints, `InterestEditor` / `InterestTaxonomy`, `PersonalityEditor` / `PersonalityTaxonomy`.  
+**Source:** `ui/screens/SettingsScreen.kt`, `ui/screens/SettingsInterestsCard.kt`, `ui/screens/SettingsPersonalityCard.kt`, `ui/screens/PermissionDisplayState.kt`, `ui/components/AvailabilitySheet.kt`, `ui/components/InterestEditor.kt`, `ui/components/InterestTaxonomy.kt`, `ui/components/PersonalityEditor.kt`, `ui/components/PersonalityTaxonomy.kt`, `viewmodel/AvailabilityViewModel.kt`  
 **Out of scope:** Web, backend APIs, onboarding permission screens (`PermissionsOnboardingScreen`, `LocationOnboardingScreen`), redesign proposals.
 
 **Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: `click/docs/design-assets/settings/`.
@@ -12,22 +12,15 @@
 
 ```
 SettingsScreen (tab route "settings")
-├── AppScreenScaffold
-│   ├── PageHeader title: "Settings"
-│   │   └── Search action → UnifiedSearchSheet
-│   └── LazyColumn (24dp cluster spacing)
-│       ├── SettingsProfileHeader (avatar, name, email, Edit Profile)
-│       ├── Cluster "Availability"
-│       ├── Cluster "Alerts" (notifications + ambient sound)
-│       ├── Cluster "Privacy & data" (Your Data toggles + Permissions Hub)
-│       ├── Cluster "Interests"
-│       │   └── SettingsInterestsCard (hidden when userId blank)
-│       ├── Cluster "Appearance"
-│       └── SettingsSignOutButton (standalone)
+├── Hub (AppScreenScaffold title: "Settings")
+│   ├── SettingsProfileHeader (avatar, name, email, Edit Profile)
+│   ├── Nav rows → Availability / Alerts / Privacy / Interests / Personality / Saved events / Appearance
+│   └── SettingsSignOutButton
+├── Subpages (back → hub): Availability, Alerts, Privacy & data, Interests, Personality, Saved events, Appearance
 ├── AvailabilitySheet (modal)
 ├── Remove availability? dialog
 ├── Edit name dialog (from Edit Profile)
-└── Local SnackbarHost (avatar, interests, media errors)
+└── Local SnackbarHost (avatar, interests, personality, media errors)
 ```
 
 **Navigation:** Bottom tab `"Settings"` → route `NavigationItem.Settings.route` (`"settings"`). Global snackbar (app `Scaffold`) handles name-update and notification-save errors via `AppDataManager.transientUserMessages`.
@@ -77,7 +70,10 @@ SettingsScreen (tab route "settings")
 | Section header | `"Alerts"` |
 | Toggle 1 | `"Message notifications"` (no subtitle) |
 | Toggle 2 | `"Call alerts"` (no subtitle) |
-| Toggle 3 | `"Ambient sound enrichment"` |
+| Toggle 3 | `"Event reminders"` |
+| Toggle 4 | `"Availability matches"` |
+| Toggle 5 | `"Hub messages"` |
+| Toggle 6 | `"Ambient sound enrichment"` |
 | Subtitle 3 | `"Short mic sample at connect time for a noise category only. No recordings stored."` |
 | Conditional error (mic off + opt-in on) | `"Microphone access is off — enable it in system settings to use ambient enrichment."` |
 

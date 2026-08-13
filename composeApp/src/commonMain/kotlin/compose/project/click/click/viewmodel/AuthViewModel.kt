@@ -22,6 +22,7 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 sealed class AuthState {
     object Idle : AuthState()
@@ -112,9 +113,8 @@ class AuthViewModel(
                 isAuthenticated = true
                 authState = cachedBoot
                 AppDataManager.primeOfflineBootCache()
-                // Import JWT into the SDK immediately so chat send/fetch/realtime aren't empty
-                // while background refresh is still running.
-                runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+                // Prefer live GoTrue session. Blind TokenStorage import overwrites a good refresh.
+                runCatching { SupabaseConfig.importStoredSessionIfSdkEmpty(tokenStorage) }
                 ensureSupabaseObserversStarted()
                 launch(Dispatchers.IO) { refreshSessionAndProfileInBackground() }
                 return@launch
@@ -171,9 +171,7 @@ class AuthViewModel(
      */
     private suspend fun refreshSessionAndProfileInBackground() {
         withContext(Dispatchers.IO) {
-            if (SupabaseConfig.client.auth.currentSessionOrNull() == null) {
-                runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
-            }
+            runCatching { SupabaseConfig.importStoredSessionIfSdkEmpty(tokenStorage) }
             runCatching { authRepository.refreshSession() }
                 .onSuccess {
                     runCatching { SupabaseConfig.client.auth.startAutoRefreshForCurrentSession() }
@@ -214,9 +212,7 @@ class AuthViewModel(
                 delay(45 * 60 * 1000L)
                 if (isAuthenticated) {
                     try {
-                        if (SupabaseConfig.client.auth.currentSessionOrNull() == null) {
-                            runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
-                        }
+                        runCatching { SupabaseConfig.importStoredSessionIfSdkEmpty(tokenStorage) }
                         authRepository.refreshSession()
                             .onSuccess {
                                 runCatching {
@@ -453,8 +449,49 @@ class AuthViewModel(
     /**
      * Hard auth failure (invalid/revoked refresh) — clear tokens and force re-login instead of
      * staying "logged in" with a dead JWT that makes chat/media look empty forever.
+     *
+     * Retry once from the live SDK session only (no TokenStorage re-import) in case the first
+     * failure was dual-store drift or a misclassified JWT expiry.
      */
     private suspend fun forceSessionExpiredReLogin(error: Throwable) {
+        val sdkSession = SupabaseConfig.client.auth.currentSessionOrNull()
+        if (sdkSession != null) {
+            val retry = runCatching {
+                withTimeout(12_000L) {
+                    SupabaseConfig.client.auth.refreshCurrentSession()
+                }
+            }
+            val recovered = retry.isSuccess &&
+                SupabaseConfig.client.auth.currentSessionOrNull() != null
+            if (recovered) {
+                val session = SupabaseConfig.client.auth.currentSessionOrNull()
+                if (session != null) {
+                    runCatching {
+                        tokenStorage.saveTokens(
+                            jwt = session.accessToken,
+                            refreshToken = session.refreshToken,
+                            expiresAt = session.expiresAt?.toEpochMilliseconds(),
+                            tokenType = session.tokenType,
+                        )
+                    }
+                    runCatching { SupabaseConfig.client.auth.startAutoRefreshForCurrentSession() }
+                    println(
+                        "AuthViewModel: Recovered session after hard-failure retry " +
+                            "(original: ${error.redactedRestMessage()})",
+                    )
+                    return
+                }
+            }
+            val retryError = retry.exceptionOrNull()
+            if (retryError != null && !retryError.isHardAuthFailure()) {
+                println(
+                    "AuthViewModel: Hard-failure retry was soft; keeping session: " +
+                        retryError.redactedRestMessage(),
+                )
+                restoreOfflineSessionIfPossible(retryError)
+                return
+            }
+        }
         println(
             "AuthViewModel: Hard auth failure — forcing re-login: ${error.redactedRestMessage()}",
         )
