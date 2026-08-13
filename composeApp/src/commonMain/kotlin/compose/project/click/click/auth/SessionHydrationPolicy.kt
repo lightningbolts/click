@@ -12,7 +12,10 @@ object SessionHydrationPolicy {
      * Copy SDK/Settings tokens into TokenStorage when storage is empty or the refresh
      * token differs (stale TokenStorage must not win).
      */
-    fun shouldSyncSdkTokensToStorage(storedRefresh: String?, sdkRefresh: String?): Boolean {
+    fun shouldSyncSdkTokensToStorage(
+        storedRefresh: String?,
+        sdkRefresh: String?,
+    ): Boolean {
         val sdk = sdkRefresh?.trim()?.takeIf { it.isNotEmpty() } ?: return false
         val stored = storedRefresh?.trim().orEmpty()
         return stored.isEmpty() || stored != sdk

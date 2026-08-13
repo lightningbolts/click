@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.layout.Arrangement
@@ -42,10 +44,11 @@ fun PersonalityEditor(
                 },
                 enabled = isSelected || selected.size < PERSONALITY_REQUIRED_TAG_COUNT,
                 label = { Text(trait) },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = PrimaryBlue.copy(alpha = 0.18f),
-                    selectedLabelColor = PrimaryBlue,
-                ),
+                colors =
+                    FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = PrimaryBlue.copy(alpha = 0.18f),
+                        selectedLabelColor = PrimaryBlue,
+                    ),
             )
         }
     }

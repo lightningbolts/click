@@ -1,4 +1,4 @@
-package compose.project.click.click.data.storage
+package compose.project.click.click.data.storage // pragma: allowlist secret
 
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.MemScope
@@ -56,7 +56,6 @@ import platform.darwin.OSStatus
  */
 @OptIn(ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)
 class IosTokenStorage : TokenStorage {
-
     companion object {
         private const val SERVICE_NAME = "com.click.auth"
         private const val PREFS_SUITE_NAME = "click_auth_prefs"
@@ -80,13 +79,19 @@ class IosTokenStorage : TokenStorage {
         private const val KEY_ACTIVE_HUBS = "active_hubs"
         private const val KEY_BEACON_RSVP_SNAPSHOT = "beacon_rsvp_snapshot"
         private const val KEY_BEACON_ENGAGEMENT_SNAPSHOT = "beacon_engagement_snapshot"
+
         /** OSStatus errSecParam — invalid Keychain query/value parameters. */
         private const val ERR_SEC_PARAM = -50
     }
 
     private val userDefaults = NSUserDefaults(suiteName = PREFS_SUITE_NAME) ?: NSUserDefaults.standardUserDefaults
 
-    override suspend fun saveTokens(jwt: String, refreshToken: String, expiresAt: Long?, tokenType: String?) {
+    override suspend fun saveTokens(
+        jwt: String,
+        refreshToken: String,
+        expiresAt: Long?,
+        tokenType: String?,
+    ) {
         // Defaults are the live session source of truth.
         userDefaults.setObject(jwt, KEY_JWT)
         userDefaults.setObject(refreshToken, KEY_REFRESH_TOKEN)
@@ -105,16 +110,18 @@ class IosTokenStorage : TokenStorage {
         // Update-or-add Keychain; keep last-good values on -50 / write failure.
         val jwtOk = setKeychainItem(KEY_JWT, jwt)
         val refreshOk = setKeychainItem(KEY_REFRESH_TOKEN, refreshToken)
-        val expiresOk = if (expiresAt != null) {
-            setKeychainItem(KEY_EXPIRES_AT, expiresAt.toString())
-        } else {
-            true
-        }
-        val typeOk = if (tokenType != null) {
-            setKeychainItem(KEY_TOKEN_TYPE, tokenType)
-        } else {
-            true
-        }
+        val expiresOk =
+            if (expiresAt != null) {
+                setKeychainItem(KEY_EXPIRES_AT, expiresAt.toString())
+            } else {
+                true
+            }
+        val typeOk =
+            if (tokenType != null) {
+                setKeychainItem(KEY_TOKEN_TYPE, tokenType)
+            } else {
+                true
+            }
         if (!jwtOk || !refreshOk || !expiresOk || !typeOk) {
             println(
                 "IosTokenStorage: NSUserDefaults saved; Keychain write failed, last-good kept " +
@@ -171,104 +178,96 @@ class IosTokenStorage : TokenStorage {
         userDefaults.synchronize()
     }
 
-    override suspend fun getFreeThisWeek(): Boolean? {
-        return if (userDefaults.objectForKey(KEY_FREE_THIS_WEEK) != null) {
+    override suspend fun getFreeThisWeek(): Boolean? =
+        if (userDefaults.objectForKey(KEY_FREE_THIS_WEEK) != null) {
             userDefaults.boolForKey(KEY_FREE_THIS_WEEK)
         } else {
             null
         }
-    }
 
     override suspend fun saveTagsInitialized(initialized: Boolean) {
         userDefaults.setBool(initialized, KEY_TAGS_INITIALIZED)
         userDefaults.synchronize()
     }
 
-    override suspend fun getTagsInitialized(): Boolean? {
-        return if (userDefaults.objectForKey(KEY_TAGS_INITIALIZED) != null) {
+    override suspend fun getTagsInitialized(): Boolean? =
+        if (userDefaults.objectForKey(KEY_TAGS_INITIALIZED) != null) {
             userDefaults.boolForKey(KEY_TAGS_INITIALIZED)
         } else {
             null
         }
-    }
 
     override suspend fun saveDarkModeEnabled(isDarkMode: Boolean) {
         userDefaults.setBool(isDarkMode, KEY_DARK_MODE_ENABLED)
         userDefaults.synchronize()
     }
 
-    override suspend fun getDarkModeEnabled(): Boolean? {
-        return if (userDefaults.objectForKey(KEY_DARK_MODE_ENABLED) != null) {
+    override suspend fun getDarkModeEnabled(): Boolean? =
+        if (userDefaults.objectForKey(KEY_DARK_MODE_ENABLED) != null) {
             userDefaults.boolForKey(KEY_DARK_MODE_ENABLED)
         } else {
             null
         }
-    }
 
     override suspend fun saveMessageNotificationsEnabled(enabled: Boolean) {
         userDefaults.setBool(enabled, KEY_MESSAGE_NOTIFICATIONS_ENABLED)
         userDefaults.synchronize()
     }
 
-    override suspend fun getMessageNotificationsEnabled(): Boolean? {
-        return if (userDefaults.objectForKey(KEY_MESSAGE_NOTIFICATIONS_ENABLED) != null) {
+    override suspend fun getMessageNotificationsEnabled(): Boolean? =
+        if (userDefaults.objectForKey(KEY_MESSAGE_NOTIFICATIONS_ENABLED) != null) {
             userDefaults.boolForKey(KEY_MESSAGE_NOTIFICATIONS_ENABLED)
         } else {
             null
         }
-    }
 
     override suspend fun saveCallNotificationsEnabled(enabled: Boolean) {
         userDefaults.setBool(enabled, KEY_CALL_NOTIFICATIONS_ENABLED)
         userDefaults.synchronize()
     }
 
-    override suspend fun getCallNotificationsEnabled(): Boolean? {
-        return if (userDefaults.objectForKey(KEY_CALL_NOTIFICATIONS_ENABLED) != null) {
+    override suspend fun getCallNotificationsEnabled(): Boolean? =
+        if (userDefaults.objectForKey(KEY_CALL_NOTIFICATIONS_ENABLED) != null) {
             userDefaults.boolForKey(KEY_CALL_NOTIFICATIONS_ENABLED)
         } else {
             null
         }
-    }
 
     override suspend fun saveAmbientNoiseOptIn(enabled: Boolean) {
         userDefaults.setBool(enabled, KEY_AMBIENT_NOISE_OPT_IN)
         userDefaults.synchronize()
     }
 
-    override suspend fun getAmbientNoiseOptIn(): Boolean? {
-        return if (userDefaults.objectForKey(KEY_AMBIENT_NOISE_OPT_IN) != null) {
+    override suspend fun getAmbientNoiseOptIn(): Boolean? =
+        if (userDefaults.objectForKey(KEY_AMBIENT_NOISE_OPT_IN) != null) {
             userDefaults.boolForKey(KEY_AMBIENT_NOISE_OPT_IN)
         } else {
             null
         }
-    }
 
     override suspend fun saveBarometricContextOptIn(enabled: Boolean) {
         userDefaults.setBool(enabled, KEY_BAROMETRIC_CONTEXT_OPT_IN)
         userDefaults.synchronize()
     }
 
-    override suspend fun getBarometricContextOptIn(): Boolean? {
-        return if (userDefaults.objectForKey(KEY_BAROMETRIC_CONTEXT_OPT_IN) != null) {
+    override suspend fun getBarometricContextOptIn(): Boolean? =
+        if (userDefaults.objectForKey(KEY_BAROMETRIC_CONTEXT_OPT_IN) != null) {
             userDefaults.boolForKey(KEY_BAROMETRIC_CONTEXT_OPT_IN)
         } else {
             null
         }
-    }
 
     override suspend fun saveLocationExplainerSeen(seen: Boolean) {
         userDefaults.setBool(seen, KEY_LOCATION_EXPLAINER_SEEN)
         userDefaults.synchronize()
     }
 
-    override suspend fun getLocationExplainerSeen(): Boolean? {
-        return if (userDefaults.objectForKey(KEY_LOCATION_EXPLAINER_SEEN) != null) {
+    override suspend fun getLocationExplainerSeen(): Boolean? =
+        if (userDefaults.objectForKey(KEY_LOCATION_EXPLAINER_SEEN) != null) {
             userDefaults.boolForKey(KEY_LOCATION_EXPLAINER_SEEN)
         } else {
             null
         }
-    }
 
     override suspend fun saveOnboardingState(state: String?) {
         if (state == null) {
@@ -279,22 +278,19 @@ class IosTokenStorage : TokenStorage {
         userDefaults.synchronize()
     }
 
-    override suspend fun getOnboardingState(): String? {
-        return userDefaults.stringForKey(KEY_ONBOARDING_STATE)
-    }
+    override suspend fun getOnboardingState(): String? = userDefaults.stringForKey(KEY_ONBOARDING_STATE)
 
     override suspend fun saveHasCompletedOnboarding(completed: Boolean) {
         userDefaults.setBool(completed, KEY_HAS_COMPLETED_ONBOARDING)
         userDefaults.synchronize()
     }
 
-    override suspend fun getHasCompletedOnboarding(): Boolean? {
-        return if (userDefaults.objectForKey(KEY_HAS_COMPLETED_ONBOARDING) != null) {
+    override suspend fun getHasCompletedOnboarding(): Boolean? =
+        if (userDefaults.objectForKey(KEY_HAS_COMPLETED_ONBOARDING) != null) {
             userDefaults.boolForKey(KEY_HAS_COMPLETED_ONBOARDING)
         } else {
             null
         }
-    }
 
     override suspend fun saveCachedAppSnapshot(snapshot: String?) {
         if (snapshot == null) {
@@ -305,9 +301,7 @@ class IosTokenStorage : TokenStorage {
         userDefaults.synchronize()
     }
 
-    override suspend fun getCachedAppSnapshot(): String? {
-        return userDefaults.stringForKey(KEY_CACHED_APP_SNAPSHOT)
-    }
+    override suspend fun getCachedAppSnapshot(): String? = userDefaults.stringForKey(KEY_CACHED_APP_SNAPSHOT)
 
     override suspend fun savePendingConnectionQueue(queue: String?) {
         if (queue == null) {
@@ -318,9 +312,7 @@ class IosTokenStorage : TokenStorage {
         userDefaults.synchronize()
     }
 
-    override suspend fun getPendingConnectionQueue(): String? {
-        return userDefaults.stringForKey(KEY_PENDING_CONNECTION_QUEUE)
-    }
+    override suspend fun getPendingConnectionQueue(): String? = userDefaults.stringForKey(KEY_PENDING_CONNECTION_QUEUE)
 
     override suspend fun savePendingProximityHandshakeQueue(queue: String?) {
         if (queue == null) {
@@ -331,9 +323,7 @@ class IosTokenStorage : TokenStorage {
         userDefaults.synchronize()
     }
 
-    override suspend fun getPendingProximityHandshakeQueue(): String? {
-        return userDefaults.stringForKey(KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE)
-    }
+    override suspend fun getPendingProximityHandshakeQueue(): String? = userDefaults.stringForKey(KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE)
 
     override suspend fun saveActiveHubs(json: String?) {
         if (json == null) {
@@ -344,9 +334,7 @@ class IosTokenStorage : TokenStorage {
         userDefaults.synchronize()
     }
 
-    override suspend fun getActiveHubs(): String? {
-        return userDefaults.stringForKey(KEY_ACTIVE_HUBS)
-    }
+    override suspend fun getActiveHubs(): String? = userDefaults.stringForKey(KEY_ACTIVE_HUBS)
 
     override suspend fun saveBeaconRsvpSnapshot(snapshot: String?) {
         if (snapshot == null) {
@@ -357,9 +345,7 @@ class IosTokenStorage : TokenStorage {
         userDefaults.synchronize()
     }
 
-    override suspend fun getBeaconRsvpSnapshot(): String? {
-        return userDefaults.stringForKey(KEY_BEACON_RSVP_SNAPSHOT)
-    }
+    override suspend fun getBeaconRsvpSnapshot(): String? = userDefaults.stringForKey(KEY_BEACON_RSVP_SNAPSHOT)
 
     override suspend fun saveBeaconEngagementSnapshot(snapshot: String?) {
         if (snapshot == null) {
@@ -370,21 +356,30 @@ class IosTokenStorage : TokenStorage {
         userDefaults.synchronize()
     }
 
-    override suspend fun getBeaconEngagementSnapshot(): String? {
-        return userDefaults.stringForKey(KEY_BEACON_ENGAGEMENT_SNAPSHOT)
-    }
+    override suspend fun getBeaconEngagementSnapshot(): String? = userDefaults.stringForKey(KEY_BEACON_ENGAGEMENT_SNAPSHOT)
 
     override suspend fun clearSessionData() {
-        val sessionKeys = listOf(
-            KEY_JWT, KEY_REFRESH_TOKEN, KEY_EXPIRES_AT, KEY_TOKEN_TYPE,
-            KEY_FREE_THIS_WEEK, KEY_TAGS_INITIALIZED,
-            KEY_MESSAGE_NOTIFICATIONS_ENABLED, KEY_CALL_NOTIFICATIONS_ENABLED,
-            KEY_AMBIENT_NOISE_OPT_IN, KEY_BAROMETRIC_CONTEXT_OPT_IN, KEY_LOCATION_EXPLAINER_SEEN,
-            KEY_ONBOARDING_STATE, KEY_HAS_COMPLETED_ONBOARDING, KEY_CACHED_APP_SNAPSHOT, KEY_PENDING_CONNECTION_QUEUE,
-            KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE,
-            KEY_BEACON_RSVP_SNAPSHOT,
-            KEY_BEACON_ENGAGEMENT_SNAPSHOT,
-        )
+        val sessionKeys =
+            listOf(
+                KEY_JWT,
+                KEY_REFRESH_TOKEN,
+                KEY_EXPIRES_AT,
+                KEY_TOKEN_TYPE,
+                KEY_FREE_THIS_WEEK,
+                KEY_TAGS_INITIALIZED,
+                KEY_MESSAGE_NOTIFICATIONS_ENABLED,
+                KEY_CALL_NOTIFICATIONS_ENABLED,
+                KEY_AMBIENT_NOISE_OPT_IN,
+                KEY_BAROMETRIC_CONTEXT_OPT_IN,
+                KEY_LOCATION_EXPLAINER_SEEN,
+                KEY_ONBOARDING_STATE,
+                KEY_HAS_COMPLETED_ONBOARDING,
+                KEY_CACHED_APP_SNAPSHOT,
+                KEY_PENDING_CONNECTION_QUEUE,
+                KEY_PENDING_PROXIMITY_HANDSHAKE_QUEUE,
+                KEY_BEACON_RSVP_SNAPSHOT,
+                KEY_BEACON_ENGAGEMENT_SNAPSHOT,
+            )
         sessionKeys.forEach { userDefaults.removeObjectForKey(it) }
         userDefaults.synchronize()
 
@@ -400,118 +395,131 @@ class IosTokenStorage : TokenStorage {
      * Uses CFDictionaryCreate + CFBridgingRetain (same pattern as multiplatform-settings).
      * Kotlin Map → CFBridgingRetain often yields errSecParam (-50) for SecItemAdd/Update.
      */
-    private fun setKeychainItem(key: String, value: String): Boolean = memScoped {
-        if (value.isEmpty()) return false
-        @Suppress("CAST_NEVER_SUCCEEDS")
-        val nsString = value as NSString
-        val valueData = nsString.dataUsingEncoding(NSUTF8StringEncoding) ?: run {
-            println("IosTokenStorage: Failed to encode value for key '$key'")
-            return false
-        }
-
-        val cfAccount = CFBridgingRetain(key)
-        val cfService = CFBridgingRetain(SERVICE_NAME)
-        val cfValue = CFBridgingRetain(valueData)
-        try {
-            val basePairs = mapOf<CFStringRef?, CFTypeRef?>(
-                kSecClass to kSecClassGenericPassword,
-                kSecAttrService to cfService,
-                kSecAttrAccount to cfAccount,
-            )
-            val updatePairs = mapOf<CFStringRef?, CFTypeRef?>(
-                kSecValueData to cfValue,
-            )
-            val addPairs = basePairs + mapOf(
-                kSecValueData to cfValue,
-                kSecAttrAccessible to kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
-            )
-
-            val cfBase = cfDictionaryOf(basePairs)
-            val cfUpdate = cfDictionaryOf(updatePairs)
-            var status: OSStatus = SecItemUpdate(cfBase, cfUpdate)
-            CFBridgingRelease(cfUpdate)
-
-            if (status == errSecItemNotFound) {
-                val cfAdd = cfDictionaryOf(addPairs)
-                status = SecItemAdd(cfAdd, null)
-                CFBridgingRelease(cfAdd)
-                if (status == errSecDuplicateItem || status.toInt() == ERR_SEC_PARAM) {
-                    val cfRetry = cfDictionaryOf(updatePairs)
-                    status = SecItemUpdate(cfBase, cfRetry)
-                    CFBridgingRelease(cfRetry)
+    private fun setKeychainItem(
+        key: String,
+        value: String,
+    ): Boolean =
+        memScoped {
+            if (value.isEmpty()) return false
+            @Suppress("CAST_NEVER_SUCCEEDS")
+            val nsString = value as NSString
+            val valueData =
+                nsString.dataUsingEncoding(NSUTF8StringEncoding) ?: run {
+                    println("IosTokenStorage: Failed to encode value for key '$key'")
+                    return false
                 }
-            } else if (status.toInt() == ERR_SEC_PARAM || status == errSecDuplicateItem) {
-                deleteKeychainItem(key)
-                val cfAdd = cfDictionaryOf(addPairs)
-                status = SecItemAdd(cfAdd, null)
-                CFBridgingRelease(cfAdd)
+
+            val cfAccount = CFBridgingRetain(key)
+            val cfService = CFBridgingRetain(SERVICE_NAME)
+            val cfValue = CFBridgingRetain(valueData)
+            try {
+                val basePairs =
+                    mapOf<CFStringRef?, CFTypeRef?>(
+                        kSecClass to kSecClassGenericPassword,
+                        kSecAttrService to cfService,
+                        kSecAttrAccount to cfAccount,
+                    )
+                val updatePairs =
+                    mapOf<CFStringRef?, CFTypeRef?>(
+                        kSecValueData to cfValue,
+                    )
+                val addPairs =
+                    basePairs +
+                        mapOf(
+                            kSecValueData to cfValue,
+                            kSecAttrAccessible to kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+                        )
+
+                val cfBase = cfDictionaryOf(basePairs)
+                val cfUpdate = cfDictionaryOf(updatePairs)
+                var status: OSStatus = SecItemUpdate(cfBase, cfUpdate)
+                CFBridgingRelease(cfUpdate)
+
+                if (status == errSecItemNotFound) {
+                    val cfAdd = cfDictionaryOf(addPairs)
+                    status = SecItemAdd(cfAdd, null)
+                    CFBridgingRelease(cfAdd)
+                    if (status == errSecDuplicateItem || status.toInt() == ERR_SEC_PARAM) {
+                        val cfRetry = cfDictionaryOf(updatePairs)
+                        status = SecItemUpdate(cfBase, cfRetry)
+                        CFBridgingRelease(cfRetry)
+                    }
+                } else if (status.toInt() == ERR_SEC_PARAM || status == errSecDuplicateItem) {
+                    deleteKeychainItem(key)
+                    val cfAdd = cfDictionaryOf(addPairs)
+                    status = SecItemAdd(cfAdd, null)
+                    CFBridgingRelease(cfAdd)
+                    if (status != errSecSuccess) {
+                        val cfRetry = cfDictionaryOf(updatePairs)
+                        status = SecItemUpdate(cfBase, cfRetry)
+                        CFBridgingRelease(cfRetry)
+                    }
+                }
+
+                CFBridgingRelease(cfBase)
+
                 if (status != errSecSuccess) {
-                    val cfRetry = cfDictionaryOf(updatePairs)
-                    status = SecItemUpdate(cfBase, cfRetry)
-                    CFBridgingRelease(cfRetry)
+                    println(
+                        "IosTokenStorage: Keychain set failed for '$key', status: $status" +
+                            if (status.toInt() == ERR_SEC_PARAM) " (errSecParam)" else "",
+                    )
                 }
+                return status == errSecSuccess
+            } finally {
+                CFBridgingRelease(cfAccount)
+                CFBridgingRelease(cfService)
+                CFBridgingRelease(cfValue)
             }
+        }
 
-            CFBridgingRelease(cfBase)
-
-            if (status != errSecSuccess) {
-                println(
-                    "IosTokenStorage: Keychain set failed for '$key', status: $status" +
-                        if (status.toInt() == ERR_SEC_PARAM) " (errSecParam)" else "",
-                )
+    private fun getKeychainItem(key: String): String? =
+        memScoped {
+            val cfAccount = CFBridgingRetain(key)
+            val cfService = CFBridgingRetain(SERVICE_NAME)
+            try {
+                val query =
+                    cfDictionaryOf(
+                        mapOf(
+                            kSecClass to kSecClassGenericPassword,
+                            kSecAttrService to cfService,
+                            kSecAttrAccount to cfAccount,
+                            kSecReturnData to kCFBooleanTrue,
+                            kSecMatchLimit to kSecMatchLimitOne,
+                        ),
+                    )
+                val result = alloc<CFTypeRefVar>()
+                val status = SecItemCopyMatching(query, result.ptr)
+                CFBridgingRelease(query)
+                if (status != errSecSuccess) return null
+                val data = CFBridgingRelease(result.value) as? NSData ?: return null
+                NSString.create(data = data, encoding = NSUTF8StringEncoding) as? String
+            } finally {
+                CFBridgingRelease(cfAccount)
+                CFBridgingRelease(cfService)
             }
-            return status == errSecSuccess
-        } finally {
-            CFBridgingRelease(cfAccount)
-            CFBridgingRelease(cfService)
-            CFBridgingRelease(cfValue)
         }
-    }
 
-    private fun getKeychainItem(key: String): String? = memScoped {
-        val cfAccount = CFBridgingRetain(key)
-        val cfService = CFBridgingRetain(SERVICE_NAME)
-        try {
-            val query = cfDictionaryOf(
-                mapOf(
-                    kSecClass to kSecClassGenericPassword,
-                    kSecAttrService to cfService,
-                    kSecAttrAccount to cfAccount,
-                    kSecReturnData to kCFBooleanTrue,
-                    kSecMatchLimit to kSecMatchLimitOne,
-                ),
-            )
-            val result = alloc<CFTypeRefVar>()
-            val status = SecItemCopyMatching(query, result.ptr)
-            CFBridgingRelease(query)
-            if (status != errSecSuccess) return null
-            val data = CFBridgingRelease(result.value) as? NSData ?: return null
-            NSString.create(data = data, encoding = NSUTF8StringEncoding) as? String
-        } finally {
-            CFBridgingRelease(cfAccount)
-            CFBridgingRelease(cfService)
+    private fun deleteKeychainItem(key: String): Boolean =
+        memScoped {
+            val cfAccount = CFBridgingRetain(key)
+            val cfService = CFBridgingRetain(SERVICE_NAME)
+            try {
+                val query =
+                    cfDictionaryOf(
+                        mapOf(
+                            kSecClass to kSecClassGenericPassword,
+                            kSecAttrService to cfService,
+                            kSecAttrAccount to cfAccount,
+                        ),
+                    )
+                val status = SecItemDelete(query)
+                CFBridgingRelease(query)
+                status == errSecSuccess || status == errSecItemNotFound
+            } finally {
+                CFBridgingRelease(cfAccount)
+                CFBridgingRelease(cfService)
+            }
         }
-    }
-
-    private fun deleteKeychainItem(key: String): Boolean = memScoped {
-        val cfAccount = CFBridgingRetain(key)
-        val cfService = CFBridgingRetain(SERVICE_NAME)
-        try {
-            val query = cfDictionaryOf(
-                mapOf(
-                    kSecClass to kSecClassGenericPassword,
-                    kSecAttrService to cfService,
-                    kSecAttrAccount to cfAccount,
-                ),
-            )
-            val status = SecItemDelete(query)
-            CFBridgingRelease(query)
-            status == errSecSuccess || status == errSecItemNotFound
-        } finally {
-            CFBridgingRelease(cfAccount)
-            CFBridgingRelease(cfService)
-        }
-    }
 
     private fun MemScope.cfDictionaryOf(map: Map<CFStringRef?, CFTypeRef?>): CFDictionaryRef? {
         val size = map.size

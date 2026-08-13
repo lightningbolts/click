@@ -1,8 +1,8 @@
-package compose.project.click.click.auth
+package compose.project.click.click.auth // pragma: allowlist secret
 
-import compose.project.click.click.data.createSupabaseAuthSettings
-import compose.project.click.click.data.displayNameFromMetadata
-import compose.project.click.click.data.storage.TokenStorage
+import compose.project.click.click.data.createSupabaseAuthSettings // pragma: allowlist secret
+import compose.project.click.click.data.displayNameFromMetadata // pragma: allowlist secret
+import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import io.github.jan.supabase.auth.user.UserSession
 import kotlinx.serialization.json.Json
 
@@ -13,11 +13,12 @@ import kotlinx.serialization.json.Json
 internal object SupabaseSettingsSessionReader {
     private const val SESSION_SETTINGS_KEY = "session"
 
-    private val sessionJson = Json {
-        encodeDefaults = true
-        ignoreUnknownKeys = true
-        isLenient = true
-    }
+    private val sessionJson =
+        Json {
+            encodeDefaults = true
+            ignoreUnknownKeys = true
+            isLenient = true
+        }
 
     suspend fun readIdentity(): LocalSessionIdentity? {
         val raw = createSupabaseAuthSettings().getStringOrNull(SESSION_SETTINGS_KEY)?.trim().orEmpty()
@@ -32,8 +33,9 @@ internal object SupabaseSettingsSessionReader {
         val userId = user?.id?.takeIf { it.isNotBlank() } ?: fromJwt?.userId ?: return null
         val email = user?.email?.takeIf { it.isNotBlank() } ?: fromJwt?.email.orEmpty()
         val name = user?.displayNameFromMetadata()?.takeIf { it.isNotBlank() } ?: fromJwt?.name
-        val expiresAtEpochMs = session.expiresAt.toEpochMilliseconds().takeIf { it > 0L }
-            ?: fromJwt?.expiresAtEpochMs
+        val expiresAtEpochMs =
+            session.expiresAt.toEpochMilliseconds().takeIf { it > 0L }
+                ?: fromJwt?.expiresAtEpochMs
 
         return LocalSessionIdentity(
             userId = userId,

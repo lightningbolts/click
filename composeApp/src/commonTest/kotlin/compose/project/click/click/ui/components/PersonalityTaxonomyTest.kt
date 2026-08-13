@@ -15,9 +15,10 @@ class PersonalityTaxonomyTest {
 
     @Test
     fun canonicalizeDropsUnknownAndDedupes() {
-        val out = canonicalizePersonalityTags(
-            listOf("witty", "Witty", "not-a-trait", "Empathetic", "  curious  "),
-        )
+        val out =
+            canonicalizePersonalityTags(
+                listOf("witty", "Witty", "not-a-trait", "Empathetic", "  curious  "),
+            )
         assertEquals(listOf("Witty", "Empathetic", "Curious"), out)
     }
 

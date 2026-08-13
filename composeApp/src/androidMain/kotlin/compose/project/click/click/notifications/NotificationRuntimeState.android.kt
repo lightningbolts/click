@@ -1,4 +1,4 @@
-package compose.project.click.click.notifications
+package compose.project.click.click.notifications // pragma: allowlist secret
 
 import android.content.Context
 
@@ -11,8 +11,10 @@ private const val KEY_RUNTIME_HUB_MESSAGE_NOTIFICATIONS = "runtime_hub_message_n
 private const val KEY_RUNTIME_ACTIVE_CHAT_ID = "runtime_active_chat_id"
 
 actual object NotificationRuntimeState {
-    private fun prefs() = AndroidPushNotificationRuntime.requireContext()
-        ?.getSharedPreferences(CLICK_RUNTIME_PREFS, Context.MODE_PRIVATE)
+    private fun prefs() =
+        AndroidPushNotificationRuntime
+            .requireContext()
+            ?.getSharedPreferences(CLICK_RUNTIME_PREFS, Context.MODE_PRIVATE)
 
     actual fun setNotificationPreferences(
         messageEnabled: Boolean,
@@ -21,7 +23,8 @@ actual object NotificationRuntimeState {
         availabilityMatchEnabled: Boolean,
         hubMessageEnabled: Boolean,
     ) {
-        prefs()?.edit()
+        prefs()
+            ?.edit()
             ?.putBoolean(KEY_RUNTIME_MESSAGE_NOTIFICATIONS, messageEnabled)
             ?.putBoolean(KEY_RUNTIME_CALL_NOTIFICATIONS, callEnabled)
             ?.putBoolean(KEY_RUNTIME_EVENT_REMINDER_NOTIFICATIONS, eventReminderEnabled)
@@ -51,7 +54,5 @@ actual object NotificationRuntimeState {
         editor.apply()
     }
 
-    actual fun getActiveChatId(): String? {
-        return prefs()?.getString(KEY_RUNTIME_ACTIVE_CHAT_ID, null)
-    }
+    actual fun getActiveChatId(): String? = prefs()?.getString(KEY_RUNTIME_ACTIVE_CHAT_ID, null)
 }

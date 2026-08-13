@@ -1,4 +1,4 @@
-package compose.project.click.click.notifications
+package compose.project.click.click.notifications // pragma: allowlist secret
 
 import platform.Foundation.NSUserDefaults
 
@@ -28,25 +28,29 @@ actual object NotificationRuntimeState {
         defaults.synchronize()
     }
 
-    actual fun getNotificationPreferences(): LocalNotificationPreferences {
-        return LocalNotificationPreferences(
-            messageNotificationsEnabled = defaults.objectForKey(KEY_RUNTIME_MESSAGE_NOTIFICATIONS)?.let {
-                defaults.boolForKey(KEY_RUNTIME_MESSAGE_NOTIFICATIONS)
-            } ?: true,
-            callNotificationsEnabled = defaults.objectForKey(KEY_RUNTIME_CALL_NOTIFICATIONS)?.let {
-                defaults.boolForKey(KEY_RUNTIME_CALL_NOTIFICATIONS)
-            } ?: true,
-            eventReminderNotificationsEnabled = defaults.objectForKey(KEY_RUNTIME_EVENT_REMINDER_NOTIFICATIONS)?.let {
-                defaults.boolForKey(KEY_RUNTIME_EVENT_REMINDER_NOTIFICATIONS)
-            } ?: true,
-            availabilityMatchNotificationsEnabled = defaults.objectForKey(KEY_RUNTIME_AVAILABILITY_MATCH_NOTIFICATIONS)?.let {
-                defaults.boolForKey(KEY_RUNTIME_AVAILABILITY_MATCH_NOTIFICATIONS)
-            } ?: true,
-            hubMessageNotificationsEnabled = defaults.objectForKey(KEY_RUNTIME_HUB_MESSAGE_NOTIFICATIONS)?.let {
-                defaults.boolForKey(KEY_RUNTIME_HUB_MESSAGE_NOTIFICATIONS)
-            } ?: true,
+    actual fun getNotificationPreferences(): LocalNotificationPreferences =
+        LocalNotificationPreferences(
+            messageNotificationsEnabled =
+                defaults.objectForKey(KEY_RUNTIME_MESSAGE_NOTIFICATIONS)?.let {
+                    defaults.boolForKey(KEY_RUNTIME_MESSAGE_NOTIFICATIONS)
+                } ?: true,
+            callNotificationsEnabled =
+                defaults.objectForKey(KEY_RUNTIME_CALL_NOTIFICATIONS)?.let {
+                    defaults.boolForKey(KEY_RUNTIME_CALL_NOTIFICATIONS)
+                } ?: true,
+            eventReminderNotificationsEnabled =
+                defaults.objectForKey(KEY_RUNTIME_EVENT_REMINDER_NOTIFICATIONS)?.let {
+                    defaults.boolForKey(KEY_RUNTIME_EVENT_REMINDER_NOTIFICATIONS)
+                } ?: true,
+            availabilityMatchNotificationsEnabled =
+                defaults.objectForKey(KEY_RUNTIME_AVAILABILITY_MATCH_NOTIFICATIONS)?.let {
+                    defaults.boolForKey(KEY_RUNTIME_AVAILABILITY_MATCH_NOTIFICATIONS)
+                } ?: true,
+            hubMessageNotificationsEnabled =
+                defaults.objectForKey(KEY_RUNTIME_HUB_MESSAGE_NOTIFICATIONS)?.let {
+                    defaults.boolForKey(KEY_RUNTIME_HUB_MESSAGE_NOTIFICATIONS)
+                } ?: true,
         )
-    }
 
     actual fun setActiveChatId(chatId: String?) {
         if (chatId.isNullOrBlank()) {
@@ -57,7 +61,5 @@ actual object NotificationRuntimeState {
         defaults.synchronize()
     }
 
-    actual fun getActiveChatId(): String? {
-        return defaults.stringForKey(KEY_RUNTIME_ACTIVE_CHAT_ID)
-    }
+    actual fun getActiveChatId(): String? = defaults.stringForKey(KEY_RUNTIME_ACTIVE_CHAT_ID)
 }

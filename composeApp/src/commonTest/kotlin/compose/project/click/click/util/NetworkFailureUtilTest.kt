@@ -1,11 +1,10 @@
-package compose.project.click.click.util
+package compose.project.click.click.util // pragma: allowlist secret
 
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class NetworkFailureUtilTest {
-
     @Test
     fun isOfflineNetworkFailure_matchesIOExceptionClassName() {
         assertTrue(RuntimeException("socket closed", IOException("network")).isOfflineNetworkFailure())
@@ -43,9 +42,15 @@ class NetworkFailureUtilTest {
     }
 }
 
-private class IOException(message: String) : Exception(message)
+private class IOException(
+    message: String,
+) : Exception(message)
 
 /** Mirrors GoTrue exception simple names without depending on the SDK in unit tests. */
-private class AuthRestException(message: String) : Exception(message)
+private class AuthRestException(
+    message: String,
+) : Exception(message)
 
-private class AuthApiException(message: String) : Exception(message)
+private class AuthApiException(
+    message: String,
+) : Exception(message)

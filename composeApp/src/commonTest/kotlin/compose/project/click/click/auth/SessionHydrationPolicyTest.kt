@@ -5,7 +5,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class SessionHydrationPolicyTest {
-
     @Test
     fun shouldImportStoredSession_onlyWhenSdkEmpty() {
         assertTrue(SessionHydrationPolicy.shouldImportStoredSession(sdkHasSession = false))

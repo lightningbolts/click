@@ -1,4 +1,10 @@
-package compose.project.click.click.ui.screens
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+    "ktlint:standard:max-line-length",
+)
+
+package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -6,12 +12,19 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.BluetoothSearching
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.EventAvailable
@@ -21,39 +34,28 @@ import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import com.mohamedrejeb.calf.ui.toggle.AdaptiveSwitch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import compose.project.click.click.platformForegroundTickFlow
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -63,61 +65,72 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.components.AdaptiveBackground
-import compose.project.click.click.ui.components.AdaptiveCard
-import compose.project.click.click.ui.components.AvailabilitySheet // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
-import compose.project.click.click.ui.components.AppScreenScaffold
-import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
-import compose.project.click.click.ui.components.SavedEventsSection // pragma: allowlist secret
-import compose.project.click.click.ui.components.UnifiedToastHost
-import compose.project.click.click.ui.components.rememberBottomChromePadding
-import compose.project.click.click.ui.components.rememberUnifiedToastState
-import compose.project.click.click.ui.theme.LocalPlatformStyle
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.ui.theme.clickBorderColor
-import compose.project.click.click.viewmodel.AvailabilityViewModel
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.data.models.AvailabilityIntentRow
-import compose.project.click.click.data.models.User
-import compose.project.click.click.data.repository.AuthRepository
-import compose.project.click.click.data.repository.SupabaseRepository
-import compose.project.click.click.data.storage.createTokenStorage
-import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
-import compose.project.click.click.ui.utils.rememberLocationPermissionRequester
-import compose.project.click.click.ui.utils.rememberMicrophonePermissionRequester
-import compose.project.click.click.utils.LocationPermissionDisplayState
-import compose.project.click.click.utils.LocationService
-import compose.project.click.click.utils.readLocationPermissionDisplayState
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import compose.project.click.click.data.models.LocationPreferences
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
-import compose.project.click.click.ui.chat.rememberChatMediaPickers
-import compose.project.click.click.ui.components.ClickOutlinedTextField
+import com.mohamedrejeb.calf.ui.toggle.AdaptiveSwitch
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
+import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.platformForegroundTickFlow // pragma: allowlist secret
+import compose.project.click.click.sensors.rememberAmbientNoiseMonitor // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
+import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
+import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
+import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
+import compose.project.click.click.ui.components.AvailabilitySheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
+import compose.project.click.click.ui.components.SavedEventsSection // pragma: allowlist secret
+import compose.project.click.click.ui.components.UnifiedToastHost // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberUnifiedToastState // pragma: allowlist secret
+import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.utils.rememberLocationPermissionRequester // pragma: allowlist secret
+import compose.project.click.click.ui.utils.rememberMicrophonePermissionRequester // pragma: allowlist secret
+import compose.project.click.click.utils.LocationPermissionDisplayState // pragma: allowlist secret
+import compose.project.click.click.utils.LocationService // pragma: allowlist secret
+import compose.project.click.click.utils.readLocationPermissionDisplayState // pragma: allowlist secret
+import compose.project.click.click.viewmodel.AvailabilityViewModel // pragma: allowlist secret
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private enum class SettingsPage {
-    Hub, Availability, Alerts, Privacy, Interests, Personality, Saved, Appearance
+    Hub,
+    Availability,
+    Alerts,
+    Privacy,
+    Interests,
+    Personality,
+    Saved,
+    Appearance,
 }
 
-private fun SettingsPage.title(): String = when (this) {
-    SettingsPage.Hub -> "Settings"
-    SettingsPage.Availability -> "Availability"
-    SettingsPage.Alerts -> "Alerts"
-    SettingsPage.Privacy -> "Privacy & data"
-    SettingsPage.Interests -> "Interests"
-    SettingsPage.Personality -> "Personality"
-    SettingsPage.Saved -> "Saved events"
-    SettingsPage.Appearance -> "Appearance"
-}
+private fun SettingsPage.title(): String =
+    when (this) {
+        SettingsPage.Hub -> "Settings"
+        SettingsPage.Availability -> "Availability"
+        SettingsPage.Alerts -> "Alerts"
+        SettingsPage.Privacy -> "Privacy & data"
+        SettingsPage.Interests -> "Interests"
+        SettingsPage.Personality -> "Personality"
+        SettingsPage.Saved -> "Saved events"
+        SettingsPage.Appearance -> "Appearance"
+    }
 
 @Composable
 fun SettingsScreen(
@@ -125,7 +138,7 @@ fun SettingsScreen(
     onToggleDarkMode: () -> Unit,
     onSignOut: () -> Unit = {},
     onOpenSearch: (() -> Unit)? = null,
-    availabilityViewModel: AvailabilityViewModel = viewModel { AvailabilityViewModel() }
+    availabilityViewModel: AvailabilityViewModel = viewModel { AvailabilityViewModel() },
 ) {
     val currentAvailability by availabilityViewModel.currentAvailability.collectAsState()
     val activeAvailabilityIntents by availabilityViewModel.activeAvailabilityIntents.collectAsState()
@@ -147,32 +160,37 @@ fun SettingsScreen(
     var avatarUploading by remember { mutableStateOf(false) }
     val authRepoForAvatar = remember(tokenStorage) { AuthRepository(tokenStorage = tokenStorage) }
     val supabaseRepository = remember { SupabaseRepository() }
-    val mediaPickers = rememberChatMediaPickers(
-        onImagePicked = { bytes, mime ->
-            settingsScope.launch {
-                avatarUploading = true
-                try {
-                    authRepoForAvatar.uploadProfilePicture(bytes, mime).fold(
-                        onSuccess = { url ->
-                            AppDataManager.applyProfilePictureUrl(url)
-                            toastState.show(settingsScope, "Profile photo updated")
-                        },
-                        onFailure = { e ->
-                            val msg = e.message?.lines()?.firstOrNull()?.take(180)
-                                ?: "Could not update profile photo"
-                            toastState.show(settingsScope, msg)
-                        },
-                    )
-                } finally {
-                    avatarUploading = false
+    val mediaPickers =
+        rememberChatMediaPickers(
+            onImagePicked = { bytes, mime ->
+                settingsScope.launch {
+                    avatarUploading = true
+                    try {
+                        authRepoForAvatar.uploadProfilePicture(bytes, mime).fold(
+                            onSuccess = { url ->
+                                AppDataManager.applyProfilePictureUrl(url)
+                                toastState.show(settingsScope, "Profile photo updated")
+                            },
+                            onFailure = { e ->
+                                val msg =
+                                    e.message
+                                        ?.lines()
+                                        ?.firstOrNull()
+                                        ?.take(180)
+                                        ?: "Could not update profile photo"
+                                toastState.show(settingsScope, msg)
+                            },
+                        )
+                    } finally {
+                        avatarUploading = false
+                    }
                 }
-            }
-        },
-        onAudioPicked = { _, _, _ -> },
-        onMediaAccessBlocked = { msg ->
-            toastState.show(settingsScope, msg)
-        },
-    )
+            },
+            onAudioPicked = { _, _, _ -> },
+            onMediaAccessBlocked = { msg ->
+                toastState.show(settingsScope, msg)
+            },
+        )
 
     val foregroundSyncTick by platformForegroundTickFlow().collectAsState()
 
@@ -221,7 +239,8 @@ fun SettingsScreen(
     var settingsPage by remember { mutableStateOf(SettingsPage.Hub) }
     val savedEventBookmarks by AppDataManager.cachedEventBookmarks.collectAsState()
 
-    PlatformBackHandler(enabled = settingsPage != SettingsPage.Hub) { // pragma: allowlist secret
+    PlatformBackHandler(enabled = settingsPage != SettingsPage.Hub) {
+        // pragma: allowlist secret
         settingsPage = SettingsPage.Hub
     }
 
@@ -230,164 +249,179 @@ fun SettingsScreen(
             AppScreenScaffold(
                 title = settingsPage.title(),
                 onOpenSearch = if (settingsPage == SettingsPage.Hub) onOpenSearch else null,
-                navigationIcon = if (settingsPage != SettingsPage.Hub) {
-                    {
-                        IconButton(onClick = { settingsPage = SettingsPage.Hub }) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back to settings",
-                                tint = MaterialTheme.colorScheme.onSurface,
-                            )
+                navigationIcon =
+                    if (settingsPage != SettingsPage.Hub) {
+                        {
+                            IconButton(onClick = { settingsPage = SettingsPage.Hub }) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back to settings",
+                                    tint = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
                         }
-                    }
-                } else {
-                    null
-                },
+                    } else {
+                        null
+                    },
                 verticalArrangement = Arrangement.spacedBy(24.dp),
             ) {
                 when (settingsPage) {
                     SettingsPage.Hub -> {
-                item {
-                    SettingsProfileHeader(
-                        user = currentUser,
-                        avatarUploading = avatarUploading,
-                        onChangePhoto = { mediaPickers.openPhotoLibrary() },
-                        onEditProfile = {
-                            val (f, l) = namePartsForEditor(currentUser)
-                            newFirstName = f
-                            newLastName = l
-                            showNameDialog = true
-                        },
-                    )
-                }
+                        item {
+                            SettingsProfileHeader(
+                                user = currentUser,
+                                avatarUploading = avatarUploading,
+                                onChangePhoto = { mediaPickers.openPhotoLibrary() },
+                                onEditProfile = {
+                                    val (f, l) = namePartsForEditor(currentUser)
+                                    newFirstName = f
+                                    newLastName = l
+                                    showNameDialog = true
+                                },
+                            )
+                        }
 
-                item {
-                    SettingsHubNavCard(onOpen = { settingsPage = it })
-                }
+                        item {
+                            SettingsHubNavCard(onOpen = { settingsPage = it })
+                        }
 
-                item {
-                    SettingsSignOutButton(onSignOut = onSignOut)
-                }
+                        item {
+                            SettingsSignOutButton(onSignOut = onSignOut)
+                        }
                     }
 
                     SettingsPage.Availability -> {
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SettingsSectionHeader("Availability")
-                        AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                SettingsToggleRow(
-                                    icon = Icons.Default.EventAvailable,
-                                    iconTint = if (currentAvailability?.isFreeThisWeek == true)
-                                        PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    title = "Free currently",
-                                    checked = currentAvailability?.isFreeThisWeek ?: false,
-                                    onCheckedChange = { availabilityViewModel.toggleFreeThisWeek() }
-                                )
-                                SettingsDivider()
-                                Button(
-                                    onClick = {
-                                        availabilityViewModel.resetAvailabilityIntentSheet()
-                                        seedAvailabilityIntent = null
-                                        showAvailabilityIntentSheet = true
-                                    },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                                    shape = RoundedCornerShape(12.dp),
-                                ) {
-                                    Text("Share intent & timeframe")
-                                }
-                                SettingsDivider()
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = 72.dp)
-                                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    Text(
-                                        text = "Active availability post",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    intentListFeedback?.let { fb ->
-                                        Text(
-                                            text = fb,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.error,
+                        item {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                SettingsSectionHeader("Availability")
+                                AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        SettingsToggleRow(
+                                            icon = Icons.Default.EventAvailable,
+                                            iconTint =
+                                                if (currentAvailability?.isFreeThisWeek == true) {
+                                                    PrimaryBlue
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                                },
+                                            title = "Free currently",
+                                            checked = currentAvailability?.isFreeThisWeek ?: false,
+                                            onCheckedChange = { availabilityViewModel.toggleFreeThisWeek() },
                                         )
-                                    }
-                                    when {
-                                        loadingActiveAvailabilityIntents &&
-                                            activeAvailabilityIntents.isEmpty() &&
-                                            !hasResolvedActiveAvailabilityIntents -> {
-                                            Text(
-                                                text = "Loading…",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
+                                        SettingsDivider()
+                                        Button(
+                                            onClick = {
+                                                availabilityViewModel.resetAvailabilityIntentSheet()
+                                                seedAvailabilityIntent = null
+                                                showAvailabilityIntentSheet = true
+                                            },
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                            shape = RoundedCornerShape(12.dp),
+                                        ) {
+                                            Text("Share intent & timeframe")
                                         }
-                                        activeAvailabilityIntents.isEmpty() -> {
+                                        SettingsDivider()
+                                        Column(
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .heightIn(min = 72.dp)
+                                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
                                             Text(
-                                                text = "Nothing active yet. Post above to show connections what you’re up for and for how long.",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                text = "Active availability post",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurface,
                                             )
-                                        }
-                                        else -> {
-                                            activeAvailabilityIntents.forEachIndexed { index, row ->
-                                                if (index > 0) {
-                                                    HorizontalDivider(
-                                                        modifier = Modifier.padding(vertical = 4.dp),
-                                                        color = MaterialTheme.colorScheme.outlineVariant,
+                                            intentListFeedback?.let { fb ->
+                                                Text(
+                                                    text = fb,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.error,
+                                                )
+                                            }
+                                            when {
+                                                loadingActiveAvailabilityIntents &&
+                                                    activeAvailabilityIntents.isEmpty() &&
+                                                    !hasResolvedActiveAvailabilityIntents -> {
+                                                    Text(
+                                                        text = "Loading…",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     )
                                                 }
-                                                Text(
-                                                    text = row.intentTag?.trim().orEmpty().ifEmpty { "—" },
-                                                    style = MaterialTheme.typography.bodyLarge,
-                                                    fontWeight = FontWeight.Medium,
-                                                    color = MaterialTheme.colorScheme.onSurface,
-                                                )
-                                                val timeframe = row.timeframe?.trim().orEmpty()
-                                                val until = row.activeUntilLabel()
-                                                val detail = buildString {
-                                                    if (timeframe.isNotEmpty()) {
-                                                        append(timeframe)
-                                                        append(" · ")
-                                                    }
-                                                    append(until)
+                                                activeAvailabilityIntents.isEmpty() -> {
+                                                    Text(
+                                                        text = "Nothing active yet. Post above to show connections what you’re up for and for how long.",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    )
                                                 }
-                                                Text(
-                                                    text = detail,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                )
-                                                if (!row.id.isNullOrBlank()) {
-                                                    Row(
-                                                        modifier = Modifier.fillMaxWidth(),
-                                                        horizontalArrangement = Arrangement.End,
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                    ) {
-                                                        TextButton(
-                                                            onClick = {
-                                                                availabilityViewModel.beginEditAvailabilityIntent(row)
-                                                                seedAvailabilityIntent = row
-                                                                showAvailabilityIntentSheet = true
-                                                            },
-                                                        ) {
-                                                            Text("Edit")
+                                                else -> {
+                                                    activeAvailabilityIntents.forEachIndexed { index, row ->
+                                                        if (index > 0) {
+                                                            HorizontalDivider(
+                                                                modifier = Modifier.padding(vertical = 4.dp),
+                                                                color = MaterialTheme.colorScheme.outlineVariant,
+                                                            )
                                                         }
-                                                        TextButton(
-                                                            onClick = {
-                                                                pendingDeleteAvailabilityIntent = row
-                                                            },
-                                                            colors = ButtonDefaults.textButtonColors(
-                                                                contentColor = MaterialTheme.colorScheme.error,
-                                                            ),
-                                                        ) {
-                                                            Text("Remove")
+                                                        Text(
+                                                            text =
+                                                                row.intentTag
+                                                                    ?.trim()
+                                                                    .orEmpty()
+                                                                    .ifEmpty { "—" },
+                                                            style = MaterialTheme.typography.bodyLarge,
+                                                            fontWeight = FontWeight.Medium,
+                                                            color = MaterialTheme.colorScheme.onSurface,
+                                                        )
+                                                        val timeframe = row.timeframe?.trim().orEmpty()
+                                                        val until = row.activeUntilLabel()
+                                                        val detail =
+                                                            buildString {
+                                                                if (timeframe.isNotEmpty()) {
+                                                                    append(timeframe)
+                                                                    append(" · ")
+                                                                }
+                                                                append(until)
+                                                            }
+                                                        Text(
+                                                            text = detail,
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        )
+                                                        if (!row.id.isNullOrBlank()) {
+                                                            Row(
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                horizontalArrangement = Arrangement.End,
+                                                                verticalAlignment = Alignment.CenterVertically,
+                                                            ) {
+                                                                TextButton(
+                                                                    onClick = {
+                                                                        availabilityViewModel.beginEditAvailabilityIntent(row)
+                                                                        seedAvailabilityIntent = row
+                                                                        showAvailabilityIntentSheet = true
+                                                                    },
+                                                                ) {
+                                                                    Text("Edit")
+                                                                }
+                                                                TextButton(
+                                                                    onClick = {
+                                                                        pendingDeleteAvailabilityIntent = row
+                                                                    },
+                                                                    colors =
+                                                                        ButtonDefaults.textButtonColors(
+                                                                            contentColor = MaterialTheme.colorScheme.error,
+                                                                        ),
+                                                                ) {
+                                                                    Text("Remove")
+                                                                }
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -397,230 +431,229 @@ fun SettingsScreen(
                                 }
                             }
                         }
-                    }
-                }
                     }
 
                     SettingsPage.Alerts -> {
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SettingsSectionHeader("Alerts")
-                        AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                SettingsToggleRow(
-                                    icon = Icons.Default.Notifications,
-                                    title = "Message notifications",
-                                    checked = notificationPreferences.messagePushEnabled,
-                                    onCheckedChange = { AppDataManager.setMessageNotificationsEnabled(it) }
-                                )
-                                SettingsDivider()
-                                SettingsToggleRow(
-                                    icon = Icons.Default.PhoneInTalk,
-                                    title = "Call alerts",
-                                    checked = notificationPreferences.callPushEnabled,
-                                    onCheckedChange = { AppDataManager.setCallNotificationsEnabled(it) }
-                                )
-                                SettingsDivider()
-                                SettingsToggleRow(
-                                    icon = Icons.Default.Notifications,
-                                    title = "Event reminders",
-                                    subtitle = "Day-of and 30-minutes-before alerts for events you created.",
-                                    checked = notificationPreferences.eventReminderPushEnabled,
-                                    onCheckedChange = { AppDataManager.setEventReminderNotificationsEnabled(it) }
-                                )
-                                SettingsDivider()
-                                SettingsToggleRow(
-                                    icon = Icons.Default.EventAvailable,
-                                    title = "Availability matches",
-                                    subtitle = "When a connection posts a matching intent and overlapping timeframe.",
-                                    checked = notificationPreferences.availabilityMatchPushEnabled,
-                                    onCheckedChange = { AppDataManager.setAvailabilityMatchNotificationsEnabled(it) }
-                                )
-                                SettingsDivider()
-                                SettingsToggleRow(
-                                    icon = Icons.Default.Notifications,
-                                    title = "Hub messages",
-                                    subtitle = "Community hub chat alerts when you are a participant.",
-                                    checked = notificationPreferences.hubMessagePushEnabled,
-                                    onCheckedChange = { AppDataManager.setHubMessageNotificationsEnabled(it) }
-                                )
-                                SettingsDivider()
-                                SettingsToggleRow(
-                                    icon = Icons.Default.Mic,
-                                    title = "Ambient sound enrichment",
-                                    subtitle = "Short mic sample at connect time for a noise category only. No recordings stored.",
-                                    checked = ambientNoiseOptIn,
-                                    onCheckedChange = { enabled ->
-                                        settingsScope.launch {
-                                            ambientNoiseOptIn = enabled
-                                            tokenStorage.saveAmbientNoiseOptIn(enabled)
-                                            if (enabled && !ambientNoiseMonitor.hasPermission) {
-                                                requestMicrophonePermissionThen { micPermissionBump++ }
-                                            }
+                        item {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                SettingsSectionHeader("Alerts")
+                                AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        SettingsToggleRow(
+                                            icon = Icons.Default.Notifications,
+                                            title = "Message notifications",
+                                            checked = notificationPreferences.messagePushEnabled,
+                                            onCheckedChange = { AppDataManager.setMessageNotificationsEnabled(it) },
+                                        )
+                                        SettingsDivider()
+                                        SettingsToggleRow(
+                                            icon = Icons.Default.PhoneInTalk,
+                                            title = "Call alerts",
+                                            checked = notificationPreferences.callPushEnabled,
+                                            onCheckedChange = { AppDataManager.setCallNotificationsEnabled(it) },
+                                        )
+                                        SettingsDivider()
+                                        SettingsToggleRow(
+                                            icon = Icons.Default.Notifications,
+                                            title = "Event reminders",
+                                            subtitle = "Day-of and 30-minutes-before alerts for events you created.",
+                                            checked = notificationPreferences.eventReminderPushEnabled,
+                                            onCheckedChange = { AppDataManager.setEventReminderNotificationsEnabled(it) },
+                                        )
+                                        SettingsDivider()
+                                        SettingsToggleRow(
+                                            icon = Icons.Default.EventAvailable,
+                                            title = "Availability matches",
+                                            subtitle = "When a connection posts a matching intent and overlapping timeframe.",
+                                            checked = notificationPreferences.availabilityMatchPushEnabled,
+                                            onCheckedChange = { AppDataManager.setAvailabilityMatchNotificationsEnabled(it) },
+                                        )
+                                        SettingsDivider()
+                                        SettingsToggleRow(
+                                            icon = Icons.Default.Notifications,
+                                            title = "Hub messages",
+                                            subtitle = "Community hub chat alerts when you are a participant.",
+                                            checked = notificationPreferences.hubMessagePushEnabled,
+                                            onCheckedChange = { AppDataManager.setHubMessageNotificationsEnabled(it) },
+                                        )
+                                        SettingsDivider()
+                                        SettingsToggleRow(
+                                            icon = Icons.Default.Mic,
+                                            title = "Ambient sound enrichment",
+                                            subtitle = "Short mic sample at connect time for a noise category only. No recordings stored.",
+                                            checked = ambientNoiseOptIn,
+                                            onCheckedChange = { enabled ->
+                                                settingsScope.launch {
+                                                    ambientNoiseOptIn = enabled
+                                                    tokenStorage.saveAmbientNoiseOptIn(enabled)
+                                                    if (enabled && !ambientNoiseMonitor.hasPermission) {
+                                                        requestMicrophonePermissionThen { micPermissionBump++ }
+                                                    }
+                                                }
+                                            },
+                                        )
+                                        if (ambientNoiseOptIn && !microphoneGranted) {
+                                            Text(
+                                                text = "Microphone access is off — enable it in system settings to use ambient enrichment.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.padding(start = 36.dp, top = 4.dp, end = 4.dp),
+                                            )
                                         }
                                     }
-                                )
-                                if (ambientNoiseOptIn && !microphoneGranted) {
-                                    Text(
-                                        text = "Microphone access is off — enable it in system settings to use ambient enrichment.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.padding(start = 36.dp, top = 4.dp, end = 4.dp)
-                                    )
                                 }
                             }
                         }
-                    }
-                }
                     }
 
                     SettingsPage.Privacy -> {
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SettingsSectionHeader("Privacy & data")
-                        AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                YourDataLocationRows(
-                                    locationPreferences = locationPreferences,
-                                    ghostModeEnabled = ghostModeEnabled,
-                                    locationPermissionState = locationPermissionState,
-                                    onConnectionSnapCheckedChange = { enabled ->
-                                        settingsScope.launch {
-                                            AppDataManager.setConnectionSnapEnabled(enabled)
-                                            if (enabled && !locationService.hasLocationPermission()) {
-                                                requestLocationPermissionThen { locationPermissionBump++ }
+                        item {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                SettingsSectionHeader("Privacy & data")
+                                AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        YourDataLocationRows(
+                                            locationPreferences = locationPreferences,
+                                            ghostModeEnabled = ghostModeEnabled,
+                                            locationPermissionState = locationPermissionState,
+                                            onConnectionSnapCheckedChange = { enabled ->
+                                                settingsScope.launch {
+                                                    AppDataManager.setConnectionSnapEnabled(enabled)
+                                                    if (enabled && !locationService.hasLocationPermission()) {
+                                                        requestLocationPermissionThen { locationPermissionBump++ }
+                                                    }
+                                                }
+                                            },
+                                        )
+                                        SettingsDivider()
+                                        val chevronRotation by animateFloatAsState(
+                                            targetValue = if (showPermissionsHub) 180f else 0f,
+                                            label = "permissions_hub_chevron",
+                                        )
+                                        Row(
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable { showPermissionsHub = !showPermissionsHub }
+                                                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Shield,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(22.dp),
+                                                tint = PrimaryBlue,
+                                            )
+                                            Spacer(modifier = Modifier.width(14.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    "Permissions Hub",
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    fontWeight = FontWeight.Medium,
+                                                )
+                                                Text(
+                                                    "Review & fix microphone, location, and Bluetooth access.",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
                                             }
+                                            Icon(
+                                                Icons.Default.ExpandMore,
+                                                contentDescription = if (showPermissionsHub) "Collapse" else "Expand",
+                                                modifier = Modifier.rotate(chevronRotation),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
                                         }
-                                    },
-                                )
-                                SettingsDivider()
-                                val chevronRotation by animateFloatAsState(
-                                    targetValue = if (showPermissionsHub) 180f else 0f,
-                                    label = "permissions_hub_chevron",
-                                )
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { showPermissionsHub = !showPermissionsHub }
-                                        .padding(horizontal = 12.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Icon(
-                                        Icons.Default.Shield,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(22.dp),
-                                        tint = PrimaryBlue,
-                                    )
-                                    Spacer(modifier = Modifier.width(14.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            "Permissions Hub",
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            fontWeight = FontWeight.Medium,
-                                        )
-                                        Text(
-                                            "Review & fix microphone, location, and Bluetooth access.",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
+                                        AnimatedVisibility(
+                                            visible = showPermissionsHub,
+                                            enter = expandVertically() + fadeIn(),
+                                            exit = shrinkVertically() + fadeOut(),
+                                        ) {
+                                            InlinePermissionsPanel(
+                                                microphoneGranted = microphoneGranted,
+                                                locationStatus = locationPermissionState.toHubStatus(),
+                                                isRequestingMic = false,
+                                                isRequestingLocation = false,
+                                                onRequestMicrophone = {
+                                                    requestMicrophonePermissionThen { micPermissionBump++ }
+                                                },
+                                                onRequestLocation = {
+                                                    requestLocationPermissionThen { locationPermissionBump++ }
+                                                },
+                                                onOpenSystemSettings = {
+                                                    compose.project.click.click.ui.utils // pragma: allowlist secret
+                                                        .openApplicationSystemSettings()
+                                                },
+                                            )
+                                        }
                                     }
-                                    Icon(
-                                        Icons.Default.ExpandMore,
-                                        contentDescription = if (showPermissionsHub) "Collapse" else "Expand",
-                                        modifier = Modifier.rotate(chevronRotation),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                AnimatedVisibility(
-                                    visible = showPermissionsHub,
-                                    enter = expandVertically() + fadeIn(),
-                                    exit = shrinkVertically() + fadeOut(),
-                                ) {
-                                    InlinePermissionsPanel(
-                                        microphoneGranted = microphoneGranted,
-                                        locationStatus = locationPermissionState.toHubStatus(),
-                                        isRequestingMic = false,
-                                        isRequestingLocation = false,
-                                        onRequestMicrophone = {
-                                            requestMicrophonePermissionThen { micPermissionBump++ }
-                                        },
-                                        onRequestLocation = {
-                                            requestLocationPermissionThen { locationPermissionBump++ }
-                                        },
-                                        onOpenSystemSettings = {
-                                            compose.project.click.click.ui.utils
-                                                .openApplicationSystemSettings()
-                                        },
-                                    )
                                 }
                             }
                         }
-                    }
-                }
                     }
 
                     SettingsPage.Interests -> {
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SettingsSectionHeader("Interests")
-                        SettingsInterestsCard(
-                            userId = currentUser?.id,
-                            supabaseRepository = supabaseRepository,
-                            onFeedback = { msg -> toastState.show(settingsScope, msg) },
-                        )
-                    }
-                }
+                        item {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                SettingsSectionHeader("Interests")
+                                SettingsInterestsCard(
+                                    userId = currentUser?.id,
+                                    supabaseRepository = supabaseRepository,
+                                    onFeedback = { msg -> toastState.show(settingsScope, msg) },
+                                )
+                            }
+                        }
                     }
 
                     SettingsPage.Personality -> {
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SettingsSectionHeader("Personality")
-                        SettingsPersonalityCard(
-                            userId = currentUser?.id,
-                            onFeedback = { msg -> toastState.show(settingsScope, msg) },
-                        )
-                    }
-                }
+                        item {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                SettingsSectionHeader("Personality")
+                                SettingsPersonalityCard(
+                                    userId = currentUser?.id,
+                                    onFeedback = { msg -> toastState.show(settingsScope, msg) },
+                                )
+                            }
+                        }
                     }
 
                     SettingsPage.Saved -> {
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SettingsSectionHeader("Saved events")
-                        if (savedEventBookmarks.isEmpty()) {
-                            AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
-                                Text(
-                                    text = "No saved events yet. Bookmark events from Home or the map.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(16.dp),
-                                )
+                        item {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                SettingsSectionHeader("Saved events")
+                                if (savedEventBookmarks.isEmpty()) {
+                                    AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
+                                        Text(
+                                            text = "No saved events yet. Bookmark events from Home or the map.",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(16.dp),
+                                        )
+                                    }
+                                } else {
+                                    SavedEventsSection( // pragma: allowlist secret
+                                        bookmarks = savedEventBookmarks,
+                                        onBookmarkClick = {},
+                                    )
+                                }
                             }
-                        } else {
-                            SavedEventsSection( // pragma: allowlist secret
-                                bookmarks = savedEventBookmarks,
-                                onBookmarkClick = {},
-                            )
                         }
-                    }
-                }
                     }
 
                     SettingsPage.Appearance -> {
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SettingsSectionHeader("Appearance")
-                        AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
-                            SettingsToggleRow(
-                                icon = Icons.Default.DarkMode,
-                                title = "Dark mode",
-                                checked = isDarkMode,
-                                onCheckedChange = { onToggleDarkMode() }
-                            )
+                        item {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                SettingsSectionHeader("Appearance")
+                                AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
+                                    SettingsToggleRow(
+                                        icon = Icons.Default.DarkMode,
+                                        title = "Dark mode",
+                                        checked = isDarkMode,
+                                        onCheckedChange = { onToggleDarkMode() },
+                                    )
+                                }
+                            }
                         }
-                    }
-                }
                     }
                 }
             }
@@ -644,7 +677,11 @@ fun SettingsScreen(
                 onDismissRequest = { pendingDeleteAvailabilityIntent = null },
                 title = { Text("Remove availability?") },
                 text = {
-                    val label = pendingDelete.intentTag?.trim().orEmpty().ifEmpty { "this intent" }
+                    val label =
+                        pendingDelete.intentTag
+                            ?.trim()
+                            .orEmpty()
+                            .ifEmpty { "this intent" }
                     Text("Stop showing \"$label\" as your active availability.")
                 },
                 confirmButton = {
@@ -655,9 +692,10 @@ fun SettingsScreen(
                             }
                             pendingDeleteAvailabilityIntent = null
                         },
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error,
-                        ),
+                        colors =
+                            ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error,
+                            ),
                     ) {
                         Text("Remove")
                     }
@@ -671,22 +709,23 @@ fun SettingsScreen(
         }
 
         if (showNameDialog) {
-            val nameDialogFieldColors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = GlassSheetTokens.OnOled(),
-                unfocusedTextColor = GlassSheetTokens.OnOled(),
-                focusedBorderColor = PrimaryBlue,
-                unfocusedBorderColor = GlassSheetTokens.GlassBorder(),
-                cursorColor = PrimaryBlue,
-                focusedLabelColor = GlassSheetTokens.OnOledMuted(),
-                unfocusedLabelColor = GlassSheetTokens.OnOledMuted(),
-            )
+            val nameDialogFieldColors =
+                OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = GlassSheetTokens.OnOled(),
+                    unfocusedTextColor = GlassSheetTokens.OnOled(),
+                    focusedBorderColor = PrimaryBlue,
+                    unfocusedBorderColor = GlassSheetTokens.GlassBorder(),
+                    cursorColor = PrimaryBlue,
+                    focusedLabelColor = GlassSheetTokens.OnOledMuted(),
+                    unfocusedLabelColor = GlassSheetTokens.OnOledMuted(),
+                )
             GlassAlertDialog(
                 onDismissRequest = { showNameDialog = false },
                 title = { Text("Edit name") },
                 text = {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         ClickOutlinedTextField(
                             value = newFirstName,
@@ -713,7 +752,7 @@ fun SettingsScreen(
                                 AppDataManager.updateProfileName(newFirstName, newLastName)
                                 showNameDialog = false
                             }
-                        }
+                        },
                     ) {
                         Text("Save", color = GlassSheetTokens.OnOled())
                     }
@@ -722,20 +761,20 @@ fun SettingsScreen(
                     TextButton(onClick = { showNameDialog = false }) {
                         Text("Cancel", color = GlassSheetTokens.OnOledMuted())
                     }
-                }
+                },
             )
         }
 
         UnifiedToastHost(
             state = toastState,
             opaque = true,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = rememberBottomChromePadding() + 8.dp),
+            modifier =
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = rememberBottomChromePadding() + 8.dp),
         )
-
     }
 }
 
@@ -755,10 +794,11 @@ private fun InlinePermissionsPanel(
     onOpenSystemSettings: () -> Unit,
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp)
-            .padding(bottom = 12.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
+                .padding(bottom = 12.dp),
     ) {
         HorizontalDivider(
             modifier = Modifier.padding(vertical = 4.dp),
@@ -779,10 +819,11 @@ private fun InlinePermissionsPanel(
             description = "One pin at the moment of a connection.",
             status = locationStatus,
             primaryEnabled = !isRequestingLocation,
-            onPrimaryClick = when (locationStatus) {
-                PermissionHubStatus.Denied -> onOpenSystemSettings
-                else -> onRequestLocation
-            },
+            onPrimaryClick =
+                when (locationStatus) {
+                    PermissionHubStatus.Denied -> onOpenSystemSettings
+                    else -> onRequestLocation
+                },
         )
         PermissionRowDivider()
         PermissionRow(
@@ -799,10 +840,11 @@ private fun InlinePermissionsPanel(
             onClick = onOpenSystemSettings,
             modifier = Modifier.fillMaxWidth().height(48.dp),
             shape = RoundedCornerShape(14.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            ),
+            colors =
+                ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                ),
         ) {
             Icon(
                 Icons.Default.OpenInNew,
@@ -824,9 +866,10 @@ private fun PermissionRow(
     primaryEnabled: Boolean,
     onPrimaryClick: () -> Unit,
 ) {
-    val primaryLabel = status.primaryActionLabel(
-        permissionName = title.lowercase(),
-    )
+    val primaryLabel =
+        status.primaryActionLabel(
+            permissionName = title.lowercase(),
+        )
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
         verticalAlignment = Alignment.Top,
@@ -872,20 +915,21 @@ private fun PermissionRow(
 
 @Composable
 private fun PermissionStatusBadge(status: PermissionHubStatus) {
-    val (color, label, icon) = when (status) {
-        PermissionHubStatus.Granted ->
-            Triple(Color(0xFF2E7D32), "Granted", Icons.Default.CheckCircle)
-        PermissionHubStatus.NotSet ->
-            Triple(Color(0xFFF59E0B), "Not set", Icons.Default.WarningAmber)
-        PermissionHubStatus.Denied ->
-            Triple(MaterialTheme.colorScheme.error, "Denied", Icons.Default.WarningAmber)
-        PermissionHubStatus.SystemManaged ->
-            Triple(
-                MaterialTheme.colorScheme.onSurfaceVariant,
-                "System-managed",
-                Icons.Default.WarningAmber,
-            )
-    }
+    val (color, label, icon) =
+        when (status) {
+            PermissionHubStatus.Granted ->
+                Triple(Color(0xFF2E7D32), "Granted", Icons.Default.CheckCircle)
+            PermissionHubStatus.NotSet ->
+                Triple(Color(0xFFF59E0B), "Not set", Icons.Default.WarningAmber)
+            PermissionHubStatus.Denied ->
+                Triple(MaterialTheme.colorScheme.error, "Denied", Icons.Default.WarningAmber)
+            PermissionHubStatus.SystemManaged ->
+                Triple(
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                    "System-managed",
+                    Icons.Default.WarningAmber,
+                )
+        }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(14.dp))
         Spacer(modifier = Modifier.width(4.dp))
@@ -909,10 +953,11 @@ private fun PermissionRowDivider() {
 private fun profileAvatarInitials(user: User?): String {
     if (user == null) return "?"
     val (f, l) = namePartsForEditor(user)
-    val initials = buildString {
-        f.firstOrNull()?.uppercaseChar()?.let { append(it) }
-        if (length < 2) l.firstOrNull()?.uppercaseChar()?.let { append(it) }
-    }
+    val initials =
+        buildString {
+            f.firstOrNull()?.uppercaseChar()?.let { append(it) }
+            if (length < 2) l.firstOrNull()?.uppercaseChar()?.let { append(it) }
+        }
     return initials.ifEmpty { "?" }
 }
 
@@ -941,7 +986,7 @@ private fun SettingsSectionHeader(title: String) {
         style = MaterialTheme.typography.titleSmall,
         fontWeight = FontWeight.SemiBold,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 4.dp)
+        modifier = Modifier.padding(top = 4.dp),
     )
 }
 
@@ -954,10 +999,17 @@ private fun SettingsProfileHeader(
 ) {
     val avatarUrl = user?.image
     val (first, last) = namePartsForEditor(user)
-    val displayName = listOf(first, last)
-        .filter { it.isNotBlank() }
-        .joinToString(" ")
-        .ifBlank { user?.name?.trim().orEmpty().ifBlank { "—" } }
+    val displayName =
+        listOf(first, last)
+            .filter { it.isNotBlank() }
+            .joinToString(" ")
+            .ifBlank {
+                user
+                    ?.name
+                    ?.trim()
+                    .orEmpty()
+                    .ifBlank { "—" }
+            }
     val email = user?.email?.trim()?.takeIf { it.isNotEmpty() }
 
     AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
@@ -968,11 +1020,12 @@ private fun SettingsProfileHeader(
         ) {
             Box(modifier = Modifier.size(96.dp)) {
                 Box(
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .size(88.dp)
-                        .clip(CircleShape)
-                        .clickable(enabled = !avatarUploading, onClick = onChangePhoto),
+                    modifier =
+                        Modifier
+                            .align(Alignment.Center)
+                            .size(88.dp)
+                            .clip(CircleShape)
+                            .clickable(enabled = !avatarUploading, onClick = onChangePhoto),
                     contentAlignment = Alignment.Center,
                 ) {
                     if (!avatarUrl.isNullOrBlank()) {
@@ -984,9 +1037,10 @@ private fun SettingsProfileHeader(
                         )
                     } else {
                         Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(PrimaryBlue.copy(alpha = 0.45f)),
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    .background(PrimaryBlue.copy(alpha = 0.45f)),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
@@ -999,9 +1053,10 @@ private fun SettingsProfileHeader(
                     }
                     if (avatarUploading) {
                         Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f)),
+                            modifier =
+                                Modifier
+                                    .matchParentSize()
+                                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f)),
                             contentAlignment = Alignment.Center,
                         ) {
                             CircularProgressIndicator(
@@ -1012,12 +1067,13 @@ private fun SettingsProfileHeader(
                     }
                 }
                 Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .size(30.dp)
-                        .clip(CircleShape)
-                        .background(PrimaryBlue)
-                        .clickable(enabled = !avatarUploading, onClick = onChangePhoto),
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(30.dp)
+                            .clip(CircleShape)
+                            .background(PrimaryBlue)
+                            .clickable(enabled = !avatarUploading, onClick = onChangePhoto),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -1071,25 +1127,37 @@ private fun SettingsSignOutButton(onSignOut: () -> Unit) {
     val sStyle = LocalPlatformStyle.current
     Button(
         onClick = onSignOut,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (sStyle.isIOS) MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
-            else MaterialTheme.colorScheme.error,
-            contentColor = if (sStyle.isIOS) MaterialTheme.colorScheme.error
-            else MaterialTheme.colorScheme.onError,
-        ),
-        elevation = if (sStyle.isIOS) {
-            ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp)
-        } else {
-            ButtonDefaults.buttonElevation()
-        },
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+        colors =
+            ButtonDefaults.buttonColors(
+                containerColor =
+                    if (sStyle.isIOS) {
+                        MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
+                contentColor =
+                    if (sStyle.isIOS) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onError
+                    },
+            ),
+        elevation =
+            if (sStyle.isIOS) {
+                ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp)
+            } else {
+                ButtonDefaults.buttonElevation()
+            },
         shape = RoundedCornerShape(if (sStyle.isIOS) 10.dp else 12.dp),
-        border = BorderStroke(
-            width = sStyle.cardBorderWidth,
-            color = if (sStyle.isIOS) MaterialTheme.colorScheme.error else clickBorderColor(),
-        ),
+        border =
+            BorderStroke(
+                width = sStyle.cardBorderWidth,
+                color = if (sStyle.isIOS) MaterialTheme.colorScheme.error else clickBorderColor(),
+            ),
     ) {
         Icon(
             imageVector = Icons.AutoMirrored.Filled.Logout,
@@ -1165,10 +1233,11 @@ private fun SettingsHubNavRow(
     onClick: () -> Unit,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
@@ -1219,7 +1288,7 @@ private fun YourDataLocationRows(
                 "Ghost mode is on — location not shared.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 36.dp, top = 2.dp, bottom = 8.dp)
+                modifier = Modifier.padding(start = 36.dp, top = 2.dp, bottom = 8.dp),
             )
         }
 
@@ -1230,18 +1299,19 @@ private fun YourDataLocationRows(
             title = "Location snap",
             subtitle = "GPS recorded at moment of tap",
             checked = locationPreferences.connectionSnapEnabled,
-            onCheckedChange = onConnectionSnapCheckedChange
+            onCheckedChange = onConnectionSnapCheckedChange,
         )
         locationSnapHint(locationPermissionState)?.let { hint ->
             if (locationPreferences.connectionSnapEnabled) {
-                val hintColor = when (locationPermissionState) {
-                    LocationPermissionDisplayState.Denied ->
-                        MaterialTheme.colorScheme.error
-                    LocationPermissionDisplayState.NotSet ->
-                        Color(0xFFF59E0B)
-                    LocationPermissionDisplayState.Granted ->
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                }
+                val hintColor =
+                    when (locationPermissionState) {
+                        LocationPermissionDisplayState.Denied ->
+                            MaterialTheme.colorScheme.error
+                        LocationPermissionDisplayState.NotSet ->
+                            Color(0xFFF59E0B)
+                        LocationPermissionDisplayState.Granted ->
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                    }
                 Text(
                     text = hint,
                     style = MaterialTheme.typography.bodySmall,
@@ -1258,7 +1328,7 @@ private fun YourDataLocationRows(
             title = "Memory Map",
             subtitle = "Personal only, never shared",
             checked = locationPreferences.showOnMapEnabled,
-            onCheckedChange = { AppDataManager.setShowOnMapEnabled(it) }
+            onCheckedChange = { AppDataManager.setShowOnMapEnabled(it) },
         )
 
         SettingsDivider()
@@ -1268,7 +1338,7 @@ private fun YourDataLocationRows(
             title = "Business insights",
             subtitle = "Anonymized venue trends",
             checked = locationPreferences.includeInInsightsEnabled,
-            onCheckedChange = { AppDataManager.setIncludeInInsightsEnabled(it) }
+            onCheckedChange = { AppDataManager.setIncludeInInsightsEnabled(it) },
         )
     }
 }
@@ -1277,7 +1347,7 @@ private fun YourDataLocationRows(
 private fun SettingsDivider() {
     HorizontalDivider(
         modifier = Modifier.padding(start = 36.dp, top = 2.dp, bottom = 2.dp),
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
     )
 }
 
@@ -1291,29 +1361,30 @@ private fun SettingsToggleRow(
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
             modifier = Modifier.size(22.dp),
-            tint = iconTint
+            tint = iconTint,
         )
         Spacer(modifier = Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 title,
-                style = MaterialTheme.typography.bodyLarge
+                style = MaterialTheme.typography.bodyLarge,
             )
             if (subtitle != null) {
                 Text(
                     subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = MaterialTheme.typography.bodySmall.lineHeight
+                    lineHeight = MaterialTheme.typography.bodySmall.lineHeight,
                 )
             }
         }
@@ -1321,10 +1392,11 @@ private fun SettingsToggleRow(
         AdaptiveSwitch(
             checked = checked,
             onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = PrimaryBlue,
-                checkedTrackColor = PrimaryBlue.copy(alpha = 0.5f)
-            )
+            colors =
+                SwitchDefaults.colors(
+                    checkedThumbColor = PrimaryBlue,
+                    checkedTrackColor = PrimaryBlue.copy(alpha = 0.5f),
+                ),
         )
     }
 }

@@ -1,16 +1,17 @@
-package compose.project.click.click.data.api
+package compose.project.click.click.data.api // pragma: allowlist secret
 
-import compose.project.click.click.data.SupabaseConfig
-import compose.project.click.click.data.models.ErrorResponse
-import compose.project.click.click.data.models.MapBeacon
-import compose.project.click.click.data.models.MapBeaconInsert
-import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble
-import compose.project.click.click.data.models.ProfileTimelinePayload
-import compose.project.click.click.data.models.User
-import compose.project.click.click.data.models.UserCore
-import compose.project.click.click.data.models.parseMapBeaconRows
-import compose.project.click.click.data.storage.createTokenStorage
-import compose.project.click.click.util.redactedRestMessage
+import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
+import compose.project.click.click.data.models.ErrorResponse // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeaconInsert // pragma: allowlist secret
+import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
+import compose.project.click.click.data.models.ProfileTimelinePayload // pragma: allowlist secret
+import compose.project.click.click.data.models.StoredEventBookmark // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.UserCore // pragma: allowlist secret
+import compose.project.click.click.data.models.parseMapBeaconRows // pragma: allowlist secret
+import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.github.jan.supabase.auth.auth
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -720,11 +721,6 @@ class ApiClient {
     }
 
     /**
-     * GET `/api/connections/{connectionId}/tabs` on click-web — fetches Media + Files
-     * listings for the profile sheet. Links remain client-side because message
-     * [content] is E2EE on the wire; callers filter locally-decrypted state.
-     */
-    /**
      * GET `/api/me/recap?window=day|week` — Home activity rollup.
      */
     suspend fun getActivityRecap(window: String = "week"): Result<ActivityRecapDto> {
@@ -744,6 +740,11 @@ class ApiClient {
         }
     }
 
+    /**
+     * GET `/api/connections/{connectionId}/tabs` on click-web — fetches Media + Files
+     * listings for the profile sheet. Links remain client-side because message
+     * [content] is E2EE on the wire; callers filter locally-decrypted state.
+     */
     suspend fun getConnectionTabs(connectionId: String): Result<ConnectionTabsGetResponse> {
         val id = connectionId.trim()
         if (id.isEmpty()) return Result.failure(IllegalArgumentException("connectionId required"))
@@ -2045,8 +2046,8 @@ data class EventBookmarkItemDto(
     @SerialName("expires_at") val expiresAt: String? = null,
 )
 
-fun EventBookmarkItemDto.toStoredEventBookmark(): compose.project.click.click.data.models.StoredEventBookmark =
-    compose.project.click.click.data.models.StoredEventBookmark(
+fun EventBookmarkItemDto.toStoredEventBookmark(): StoredEventBookmark =
+    StoredEventBookmark(
         beaconId = beaconId,
         bookmarkedAt = bookmarkedAt,
         title = title,
@@ -2060,7 +2061,7 @@ fun EventBookmarkItemDto.toStoredEventBookmark(): compose.project.click.click.da
         expiresAt = expiresAt,
     )
 
-fun compose.project.click.click.data.models.StoredEventBookmark.toEventBookmarkItemDto(): EventBookmarkItemDto =
+fun StoredEventBookmark.toEventBookmarkItemDto(): EventBookmarkItemDto =
     EventBookmarkItemDto(
         beaconId = beaconId,
         bookmarkedAt = bookmarkedAt,

@@ -1,12 +1,14 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -46,9 +48,10 @@ internal fun SettingsPersonalityCard(
 
     val scope = rememberCoroutineScope()
     val currentUser by AppDataManager.currentUser.collectAsState()
-    val cached = remember(currentUser?.personalityTags) {
-        canonicalizePersonalityTags(currentUser?.personalityTags.orEmpty())
-    }
+    val cached =
+        remember(currentUser?.personalityTags) {
+            canonicalizePersonalityTags(currentUser?.personalityTags.orEmpty())
+        }
     var selected by remember(userId, cached) { mutableStateOf(cached) }
     var saved by remember(userId, cached) { mutableStateOf(cached) }
     var dirty by remember { mutableStateOf(false) }
@@ -63,10 +66,13 @@ internal fun SettingsPersonalityCard(
     }
 
     LaunchedEffect(userId) {
-        val loaded = apiClient.getUserProfile(userId).getOrNull()
-            ?.personalityTags
-            .orEmpty()
-            .let { canonicalizePersonalityTags(it) }
+        val loaded =
+            apiClient
+                .getUserProfile(userId)
+                .getOrNull()
+                ?.personalityTags
+                .orEmpty()
+                .let { canonicalizePersonalityTags(it) }
         if (loaded.isNotEmpty()) {
             AppDataManager.applyPersonalityTags(loaded)
             if (!dirty) {
@@ -78,9 +84,10 @@ internal fun SettingsPersonalityCard(
 
     AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 12.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
@@ -146,8 +153,12 @@ internal fun SettingsPersonalityCard(
                                 onFeedback("Saved $PERSONALITY_REQUIRED_TAG_COUNT personality traits")
                             },
                             onFailure = {
-                                val msg = it.message?.lines()?.firstOrNull()?.take(180)
-                                    ?: "Could not save personality traits"
+                                val msg =
+                                    it.message
+                                        ?.lines()
+                                        ?.firstOrNull()
+                                        ?.take(180)
+                                        ?: "Could not save personality traits"
                                 onFeedback(msg)
                             },
                         )
