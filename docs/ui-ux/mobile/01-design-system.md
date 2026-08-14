@@ -36,6 +36,8 @@
 - **Dark mode (inverse)**: `background` `#101212`, `surface` `#1a1c1c`, `surface-container` `#242626`, `surface-variant` `#2a2c2c`, `on-surface` `#f0f1f1`, `on-surface-variant` `#d6d9d9` — **opaque product surfaces + hard borders**; tab bar chrome is **transparent** so content under icons matches content above.
 - **Structural border**: **1dp** quiet edge — `#CCC3D8` (`BorderQuiet`) in light mode, `#4A3D5C` (`BorderQuietDark`) in dark mode — on cards, sheets, and inputs. Use `clickBorderColor()` / `clickBorderWidth()` / `clickBorderStroke()`. Keep **2dp** only for selected / focus / primary rings. Tab bar does **not** draw a filled top border band (see known issue `#23`).
 - **Secondary accent**: `#224CFF` (`SecondaryAccent`) for events / map / non-CTA emphasis. Material `secondary` maps to this token.
+- **Accent ratio:** Purple stays dominant. Shared `ClickAccent` / `accentColor(AccentRole)` plus `generateCardVisual` hash buckets are **5/8 purple, 3/8 blue** (~62.5 / 37.5), inside the product 60/40–65/35 band. Do not hardcode per-screen purple/blue mixes.
+- **Generated card / beacon visuals:** `generateCardVisual(id)` (common) may paint 2–3 stop gradients + a subtle pattern **only** on pile Polaroids, beacon pins, and beacon detail identity banners. Always draw `contentScrim` behind text. Chrome, buttons, and list cards stay solid Functional Clarity (no gradients).
 - **No glass primitives**: no `GlassWhite` alpha fills, no `GlassBorder` hairlines, no backdrop blur on product chrome.
 - **No gradient text**: headings use solid `on-surface` or `primary`; no `GradientTextStart`/`End` usage.
 - **Material color scheme** (`PlatformTheme.kt` `clickColorScheme`):

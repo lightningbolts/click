@@ -23,7 +23,7 @@ SettingsScreen (tab route "settings")
 └── Local SnackbarHost (avatar, interests, personality, media errors)
 ```
 
-**Navigation:** Bottom tab `"Settings"` → route `NavigationItem.Settings.route` (`"settings"`). Hub stays mounted; subpages overlay with a horizontal slide + `InteractiveSwipeBackContainer`. System / edge back pops the hub, not Home (`onSubpageOpenChanged` disables tab-level swipe). Global snackbar (app `Scaffold`) handles name-update and notification-save errors via `AppDataManager.transientUserMessages`.
+**Navigation:** Bottom tab `"Settings"` → route `NavigationItem.Settings.route` (`"settings"`). Hub stays mounted; subpages overlay with a horizontal slide + `InteractiveSwipeBackContainer` (same shared swipe-back as the rest of the app). Hub rows use `ClickNavRow` so press/ripple clips to compact rounded corners. System / edge / hardware back pops **one level** (subpage → hub, then hub → Home) — never skips the hub (`onSubpageOpenChanged` disables tab-level swipe while a subpage is open). Availability uses a dedicated `AvailabilityViewModel` key (`settings-availability`) so visiting Settings does not leak sheet state into Home.
 
 ---
 
@@ -129,7 +129,8 @@ Bottom button: `"System Settings"`.
 | Element | String |
 |---------|--------|
 | Section header | `"Appearance"` |
-| Toggle | `"Dark mode"` |
+| Toggle 1 | `"Dark mode"` |
+| Toggle 2 | `"Photo pile home"` — scatter Polaroids on Home; off = linear list (better with TalkBack / VoiceOver) |
 
 ### Sign out
 
@@ -428,6 +429,7 @@ Bottom button: `"System Settings"`.
 |-----|--------|
 | Section | `"Appearance"` |
 | Toggle | `"Dark mode"` |
+| Toggle | `"Photo pile home"` |
 
 ### Profile header / Sign out
 

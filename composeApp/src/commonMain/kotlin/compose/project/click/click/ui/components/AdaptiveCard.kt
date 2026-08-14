@@ -11,8 +11,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
@@ -94,6 +97,7 @@ fun AdaptiveBackground(
 enum class ClickButtonVariant {
     Primary,
     Secondary,
+    Accent,
     Destructive,
 }
 
@@ -126,6 +130,13 @@ fun ClickButton(
                     disabledContainerColor = SurfaceContainerHigh,
                     disabledContentColor = OnSurfaceVariant,
                 )
+            ClickButtonVariant.Accent ->
+                ButtonDefaults.buttonColors(
+                    containerColor = SecondaryAccent,
+                    contentColor = Color.White,
+                    disabledContainerColor = SurfaceContainerHigh,
+                    disabledContentColor = OnSurfaceVariant,
+                )
             ClickButtonVariant.Destructive ->
                 ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.error,
@@ -138,6 +149,7 @@ fun ClickButton(
         when (variant) {
             ClickButtonVariant.Primary -> null
             ClickButtonVariant.Secondary -> clickBorderStroke()
+            ClickButtonVariant.Accent -> null
             ClickButtonVariant.Destructive -> null
         }
     Button(
@@ -179,3 +191,64 @@ fun getAdaptiveCornerRadius(): Dp = LocalPlatformStyle.current.cardCornerRadius
 
 @Composable
 fun getAdaptivePadding(): Dp = 16.dp
+
+/**
+ * Rounded press-target row used by Settings hub and other list navigation.
+ * Ripple / highlight is clipped to [LocalPlatformStyle] compact corners.
+ */
+@Composable
+fun ClickNavRow(
+    title: String,
+    subtitle: String? = null,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    leadingIcon: ImageVector? = null,
+    leadingTint: Color = accentColor(AccentRole.Icon),
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    val style = LocalPlatformStyle.current
+    val shape = RoundedCornerShape(style.compactCardCornerRadius)
+    Surface(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth(),
+        shape = shape,
+        color = Color.Transparent,
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
+    ) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (leadingIcon != null) {
+                Icon(
+                    imageVector = leadingIcon,
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
+                    tint = leadingTint,
+                )
+                Spacer(modifier = Modifier.width(14.dp))
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                )
+                if (!subtitle.isNullOrBlank()) {
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            if (trailing != null) {
+                trailing()
+            }
+        }
+    }
+}

@@ -315,7 +315,7 @@ fun FeaturedEventCard(
                         .align(Alignment.BottomEnd)
                         .padding(12.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.primary)
+                        .background(accentColor(AccentRole.Emphasis))
                         .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(8.dp))
                         .padding(horizontal = 10.dp, vertical = 6.dp),
             ) {
@@ -738,7 +738,7 @@ private fun ExploreBeaconCategoryTile(
                 Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary)
+                    .background(ClickAccent.colorForStableId(tile.id))
                     .border(clickBorderWidth(), clickBorderColor(), CircleShape),
             contentAlignment = Alignment.Center,
         ) {

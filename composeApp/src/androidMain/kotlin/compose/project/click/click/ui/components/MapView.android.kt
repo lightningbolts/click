@@ -1,5 +1,15 @@
+@file:Suppress(
+    "ktlint:standard:no-wildcard-imports",
+    "ktlint:standard:function-naming",
+)
+
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
@@ -8,25 +18,22 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.RectF
 import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.maps.android.compose.*
-import compose.project.click.click.ui.components.markerHueDegrees
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.ui.theme.LocalIsDarkMode
-import compose.project.click.click.ui.utils.BeaconPinMetrics
-import compose.project.click.click.utils.LocationService
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.ui.components.markerHueDegrees // pragma: allowlist secret
+import compose.project.click.click.ui.theme.BeaconPinShape // pragma: allowlist secret
+import compose.project.click.click.ui.theme.LocalIsDarkMode // pragma: allowlist secret
+import compose.project.click.click.ui.utils.BeaconPinMetrics // pragma: allowlist secret
+import compose.project.click.click.utils.LocationService // pragma: allowlist secret
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.abs
 import kotlin.math.max
 
@@ -56,17 +63,19 @@ actual fun PlatformMap(
 
     // Initial frame only — device GPS / first pin. Programmatic moves use explicit centerLat/Lon.
     val deviceLoc = deviceLocation
-    val initialCenter = when {
-        centerLat != null && centerLon != null -> LatLng(centerLat, centerLon)
-        deviceLoc != null -> LatLng(deviceLoc.first, deviceLoc.second)
-        pins.isNotEmpty() -> LatLng(pins.first().latitude, pins.first().longitude)
-        clusters.isNotEmpty() -> LatLng(clusters.first().latitude, clusters.first().longitude)
-        else -> LatLng(40.7580, -73.9855) // Default to NYC
-    }
-    
-    val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(initialCenter, zoom.toFloat())
-    }
+    val initialCenter =
+        when {
+            centerLat != null && centerLon != null -> LatLng(centerLat, centerLon)
+            deviceLoc != null -> LatLng(deviceLoc.first, deviceLoc.second)
+            pins.isNotEmpty() -> LatLng(pins.first().latitude, pins.first().longitude)
+            clusters.isNotEmpty() -> LatLng(clusters.first().latitude, clusters.first().longitude)
+            else -> LatLng(40.7580, -73.9855) // Default to NYC
+        }
+
+    val cameraPositionState =
+        rememberCameraPositionState {
+            position = CameraPosition.fromLatLngZoom(initialCenter, zoom.toFloat())
+        }
 
     // One effect: lat/lon + zoom use newLatLngZoom together. A separate zoomTo effect kept the
     // old viewport center and broke cluster zoom.
@@ -78,11 +87,14 @@ actual fun PlatformMap(
             val target = LatLng(centerLat, centerLon)
             val z = zoom.toFloat()
             val pos = cameraPositionState.position
-            val moved = abs(pos.target.latitude - centerLat) > 1e-5 ||
-                abs(pos.target.longitude - centerLon) > 1e-5
+            val moved =
+                abs(pos.target.latitude - centerLat) > 1e-5 ||
+                    abs(pos.target.longitude - centerLon) > 1e-5
             val zoomChanged = abs(pos.zoom - z) > 0.05f
             if (moved || zoomChanged) {
-                val update = com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(target, z)
+                val update =
+                    com.google.android.gms.maps.CameraUpdateFactory
+                        .newLatLngZoom(target, z)
                 if (!mapGesturesEnabled) {
                     cameraPositionState.move(update)
                 } else {
@@ -119,10 +131,9 @@ actual fun PlatformMap(
                     bounds.southwest.latitude,
                     bounds.northeast.latitude,
                     bounds.southwest.longitude,
-                    bounds.northeast.longitude
+                    bounds.northeast.longitude,
                 )
-            }
-            .distinctUntilChanged()
+            }.distinctUntilChanged()
             .collectLatest { (minLat, maxLat, minLon, maxLon) ->
                 onVisibleBoundsChanged(minLat, maxLat, minLon, maxLon)
             }
@@ -130,17 +141,19 @@ actual fun PlatformMap(
 
     // Map basemap: ghost → grayscale; dark app → zinc dark style; light app → default color tiles
     // (PR #44 map_color_android + Track A dark/light policy).
-    val mapProperties = remember(ghostMode, canShowMyLocation, isDarkMode) {
-        MapProperties(
-            // Enabling my-location without runtime permission crashes with SecurityException.
-            isMyLocationEnabled = canShowMyLocation,
-            mapStyleOptions = when {
-                ghostMode -> MapStyleOptions(GRAYSCALE_MAP_STYLE)
-                isDarkMode -> MapStyleOptions(DARK_MAP_STYLE)
-                else -> null
-            }
-        )
-    }
+    val mapProperties =
+        remember(ghostMode, canShowMyLocation, isDarkMode) {
+            MapProperties(
+                // Enabling my-location without runtime permission crashes with SecurityException.
+                isMyLocationEnabled = canShowMyLocation,
+                mapStyleOptions =
+                    when {
+                        ghostMode -> MapStyleOptions(GRAYSCALE_MAP_STYLE)
+                        isDarkMode -> MapStyleOptions(DARK_MAP_STYLE)
+                        else -> null
+                    },
+            )
+        }
 
     val density = LocalDensity.current
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -154,22 +167,26 @@ actual fun PlatformMap(
         val urls = pins.mapNotNull { it.imageUrl?.trim()?.takeIf { u -> u.isNotEmpty() } }.distinct()
         urls.forEach { url ->
             if (loadedAvatarBitmaps.containsKey(url)) return@forEach
-            val request = coil3.request.ImageRequest.Builder(context)
-                .data(url)
-                .size(128)
-                .build()
+            val request =
+                coil3.request.ImageRequest
+                    .Builder(context)
+                    .data(url)
+                    .size(128)
+                    .build()
             val result = runCatching { imageLoader.execute(request) }.getOrNull()
             if (result is coil3.request.SuccessResult) {
-                val src = when (val img = result.image) {
-                    is coil3.BitmapImage -> img.bitmap
-                    else -> null
-                } ?: return@forEach
+                val src =
+                    when (val img = result.image) {
+                        is coil3.BitmapImage -> img.bitmap
+                        else -> null
+                    } ?: return@forEach
                 // Software copy — Google Maps markers reject hardware bitmaps.
-                val bmp = if (src.config == Bitmap.Config.HARDWARE) {
-                    src.copy(Bitmap.Config.ARGB_8888, false) ?: return@forEach
-                } else {
-                    src.copy(Bitmap.Config.ARGB_8888, false) ?: src
-                }
+                val bmp =
+                    if (src.config == Bitmap.Config.HARDWARE) {
+                        src.copy(Bitmap.Config.ARGB_8888, false) ?: return@forEach
+                    } else {
+                        src.copy(Bitmap.Config.ARGB_8888, false) ?: src
+                    }
                 loadedAvatarBitmaps = loadedAvatarBitmaps + (url to bmp)
             }
         }
@@ -178,104 +195,128 @@ actual fun PlatformMap(
     // GoogleMap is a SurfaceView-backed AndroidView: it must receive explicit max constraints.
     // Parent scale animations (e.g. AnimatedVisibility scaleIn) also break SurfaceView compositing.
     Box(modifier = modifier.fillMaxSize()) {
-    GoogleMap(
-        modifier = Modifier.fillMaxSize(),
-        cameraPositionState = cameraPositionState,
-        properties = mapProperties,
-        uiSettings = MapUiSettings(
-            zoomControlsEnabled = false,
-            compassEnabled = showCompass,
-            myLocationButtonEnabled = canShowMyLocation,
-            scrollGesturesEnabled = mapGesturesEnabled,
-            zoomGesturesEnabled = mapGesturesEnabled,
-            rotationGesturesEnabled = mapGesturesEnabled,
-            tiltGesturesEnabled = mapGesturesEnabled,
-        )
-    ) {
-        pins.forEach { pin ->
-            // Stable identity — do not remount Marker when Coil finishes loading a photo.
-            key(pin.id) {
-                val markerHue = pin.markerHueDegrees()
-                val squadScale = pin.squadMultiplier.coerceAtLeast(1f)
-                val position = remember(pin.id, pin.latitude, pin.longitude) {
-                    LatLng(pin.latitude, pin.longitude)
-                }
-                val markerState = remember(pin.id) { MarkerState(position = position) }
-                LaunchedEffect(pin.latitude, pin.longitude) {
-                    markerState.position = LatLng(pin.latitude, pin.longitude)
-                }
-                val photo = pin.imageUrl?.trim()?.takeIf { it.isNotEmpty() }
-                    ?.let { loadedAvatarBitmaps[it] }
-                // Fixed 44dp diameter for all avatar pins (squad only bumps z-index / pulse).
-                val avatarCacheKey =
-                    "${pin.id}|${pin.avatarInitials}|$markerHue|${pin.avatarFillArgb}|${photo?.generationId ?: 0}"
-                val icon = avatarPinCache.getOrPut(avatarCacheKey) {
-                    bitmapDescriptorForCircularAvatarPin(
-                        density = density,
-                        hueDegrees = markerHue,
-                        initials = pin.avatarInitials,
-                        photo = photo,
-                        scale = 1f,
-                        fillArgb = pin.avatarFillArgb,
+        GoogleMap(
+            modifier = Modifier.fillMaxSize(),
+            cameraPositionState = cameraPositionState,
+            properties = mapProperties,
+            uiSettings =
+                MapUiSettings(
+                    zoomControlsEnabled = false,
+                    compassEnabled = showCompass,
+                    myLocationButtonEnabled = canShowMyLocation,
+                    scrollGesturesEnabled = mapGesturesEnabled,
+                    zoomGesturesEnabled = mapGesturesEnabled,
+                    rotationGesturesEnabled = mapGesturesEnabled,
+                    tiltGesturesEnabled = mapGesturesEnabled,
+                ),
+        ) {
+            pins.forEach { pin ->
+                // Stable identity — do not remount Marker when Coil finishes loading a photo.
+                key(pin.id) {
+                    val markerHue = pin.markerHueDegrees()
+                    val squadScale = pin.squadMultiplier.coerceAtLeast(1f)
+                    val position =
+                        remember(pin.id, pin.latitude, pin.longitude) {
+                            LatLng(pin.latitude, pin.longitude)
+                        }
+                    val markerState = remember(pin.id) { MarkerState(position = position) }
+                    LaunchedEffect(pin.latitude, pin.longitude) {
+                        markerState.position = LatLng(pin.latitude, pin.longitude)
+                    }
+                    val photo =
+                        pin.imageUrl
+                            ?.trim()
+                            ?.takeIf { it.isNotEmpty() }
+                            ?.let { loadedAvatarBitmaps[it] }
+                    // Fixed 44dp diameter for all avatar pins (squad only bumps z-index / pulse).
+                    val avatarCacheKey =
+                        "${pin.id}|${pin.avatarInitials}|$markerHue|${pin.avatarFillArgb}|${pin.pinShape}|${photo?.generationId ?: 0}"
+                    val icon =
+                        avatarPinCache.getOrPut(avatarCacheKey) {
+                            if (pin.beaconKind != null) {
+                                bitmapDescriptorForShapedBeaconPin(
+                                    density = density,
+                                    shape = pin.pinShape,
+                                    fillArgb =
+                                        pin.avatarFillArgb ?: android.graphics.Color.HSVToColor(
+                                            floatArrayOf(markerHue, 0.72f, 0.92f),
+                                        ),
+                                    fillArgb2 = pin.visualFillArgb2,
+                                    initials = pin.avatarInitials,
+                                    photo = photo,
+                                )
+                            } else {
+                                bitmapDescriptorForCircularAvatarPin(
+                                    density = density,
+                                    hueDegrees = markerHue,
+                                    initials = pin.avatarInitials,
+                                    photo = photo,
+                                    scale = 1f,
+                                    fillArgb = pin.avatarFillArgb,
+                                )
+                            }
+                        }
+                    Marker(
+                        state = markerState,
+                        title = pin.title,
+                        alpha = pin.opacity,
+                        zIndex = pin.zIndex + if (squadScale > 1f) 500f else 0f,
+                        icon = icon,
+                        anchor = Offset(0.5f, 0.5f),
+                        onClick = {
+                            onPinTapped(pin)
+                            true
+                        },
                     )
                 }
-                Marker(
-                    state = markerState,
-                    title = pin.title,
-                    alpha = pin.opacity,
-                    zIndex = pin.zIndex + if (squadScale > 1f) 500f else 0f,
-                    icon = icon,
-                    anchor = Offset(0.5f, 0.5f),
-                    onClick = {
-                        onPinTapped(pin)
-                        true
-                    },
-                )
             }
-        }
 
-        // Render cluster pins
-        clusters.forEach { cluster ->
-            key("cluster-${cluster.id}") {
-                val clusterPosition = remember(cluster.id, cluster.latitude, cluster.longitude) {
-                    LatLng(cluster.latitude, cluster.longitude)
+            // Render cluster pins
+            clusters.forEach { cluster ->
+                key("cluster-${cluster.id}") {
+                    val clusterPosition =
+                        remember(cluster.id, cluster.latitude, cluster.longitude) {
+                            LatLng(cluster.latitude, cluster.longitude)
+                        }
+                    val clusterState = remember(cluster.id) { MarkerState(position = clusterPosition) }
+                    LaunchedEffect(cluster.latitude, cluster.longitude) {
+                        clusterState.position = LatLng(cluster.latitude, cluster.longitude)
+                    }
+                    val cacheKey =
+                        buildString {
+                            append(cluster.count)
+                            append('|')
+                            when {
+                                cluster.isConnectionOnly -> append("conn")
+                                cluster.hasLiveConnections -> append("live")
+                                else -> append("mix")
+                            }
+                        }
+                    val bmp =
+                        clusterIconCache.getOrPut(cacheKey) {
+                            val px = with(density) { 44.dp.roundToPx() }.coerceAtLeast(36)
+                            val fill =
+                                when {
+                                    cluster.isConnectionOnly -> android.graphics.Color.argb(230, 220, 0, 200)
+                                    cluster.hasLiveConnections -> android.graphics.Color.argb(230, 0, 163, 255)
+                                    else -> android.graphics.Color.argb(230, 255, 150, 50)
+                                }
+                            bitmapDescriptorFromClusterCount(cluster.count, px, fill)
+                        }
+                    Marker(
+                        state = clusterState,
+                        title = "${cluster.count}",
+                        zIndex = cluster.zIndex,
+                        icon = bmp,
+                        anchor = Offset(0.5f, 0.5f),
+                        onClick = {
+                            onClusterTapped(cluster)
+                            true
+                        },
+                    )
                 }
-                val clusterState = remember(cluster.id) { MarkerState(position = clusterPosition) }
-                LaunchedEffect(cluster.latitude, cluster.longitude) {
-                    clusterState.position = LatLng(cluster.latitude, cluster.longitude)
-                }
-            val cacheKey = buildString {
-                append(cluster.count)
-                append('|')
-                when {
-                    cluster.isConnectionOnly -> append("conn")
-                    cluster.hasLiveConnections -> append("live")
-                    else -> append("mix")
-                }
-            }
-            val bmp = clusterIconCache.getOrPut(cacheKey) {
-                val px = with(density) { 44.dp.roundToPx() }.coerceAtLeast(36)
-                val fill = when {
-                    cluster.isConnectionOnly -> android.graphics.Color.argb(230, 220, 0, 200)
-                    cluster.hasLiveConnections -> android.graphics.Color.argb(230, 0, 163, 255)
-                    else -> android.graphics.Color.argb(230, 255, 150, 50)
-                }
-                bitmapDescriptorFromClusterCount(cluster.count, px, fill)
-            }
-            Marker(
-                state = clusterState,
-                title = "${cluster.count}",
-                zIndex = cluster.zIndex,
-                icon = bmp,
-                anchor = Offset(0.5f, 0.5f),
-                onClick = {
-                    onClusterTapped(cluster)
-                    true
-                }
-            )
             }
         }
-    }
     }
 }
 
@@ -295,48 +336,169 @@ private fun bitmapDescriptorForCircularAvatarPin(
     val cy = sizePx / 2f
     val radius = sizePx / 2f - borderPx / 2f
 
-    val fillColor = fillArgb ?: run {
-        val hsv = floatArrayOf(hueDegrees, 0.72f, 0.92f)
-        android.graphics.Color.HSVToColor(hsv)
-    }
+    val fillColor =
+        fillArgb ?: run {
+            val hsv = floatArrayOf(hueDegrees, 0.72f, 0.92f)
+            android.graphics.Color.HSVToColor(hsv)
+        }
 
-    val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = fillColor
-        style = Paint.Style.FILL
-    }
+    val fillPaint =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = fillColor
+            style = Paint.Style.FILL
+        }
     canvas.drawCircle(cx, cy, radius, fillPaint)
 
     if (photo != null && !photo.isRecycled) {
         val shaderBmp = Bitmap.createScaledBitmap(photo, sizePx, sizePx, true)
-        val shader = android.graphics.BitmapShader(
-            shaderBmp,
-            android.graphics.Shader.TileMode.CLAMP,
-            android.graphics.Shader.TileMode.CLAMP,
-        )
-        val photoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            this.shader = shader
-        }
+        val shader =
+            android.graphics.BitmapShader(
+                shaderBmp,
+                android.graphics.Shader.TileMode.CLAMP,
+                android.graphics.Shader.TileMode.CLAMP,
+            )
+        val photoPaint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.shader = shader
+            }
         canvas.drawCircle(cx, cy, radius - borderPx * 0.25f, photoPaint)
     } else {
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.WHITE
-            textAlign = Paint.Align.CENTER
-            textSize = sizePx * 0.34f
-            isFakeBoldText = true
-        }
+        val textPaint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.WHITE
+                textAlign = Paint.Align.CENTER
+                textSize = sizePx * 0.34f
+                isFakeBoldText = true
+            }
         val glyph = initials.take(2).ifEmpty { "?" }
         val textY = cy - (textPaint.descent() + textPaint.ascent()) / 2f
         canvas.drawText(glyph, cx, textY, textPaint)
     }
 
-    val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.BLACK
-        style = Paint.Style.STROKE
-        strokeWidth = borderPx
-    }
+    val borderPaint =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.BLACK
+            style = Paint.Style.STROKE
+            strokeWidth = borderPx
+        }
     canvas.drawCircle(cx, cy, radius, borderPaint)
 
     return BitmapDescriptorFactory.fromBitmap(bmp)
+}
+
+private fun bitmapDescriptorForShapedBeaconPin(
+    density: androidx.compose.ui.unit.Density,
+    shape: BeaconPinShape,
+    fillArgb: Int,
+    fillArgb2: Int?,
+    initials: String,
+    photo: Bitmap?,
+): BitmapDescriptor {
+    val sizePx = with(density) { 44.dp.roundToPx() }.coerceAtLeast(36)
+    val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bmp)
+    val pad = sizePx * 0.08f
+    val path = beaconShapePath(shape, sizePx.toFloat(), pad)
+    canvas.save()
+    canvas.clipPath(path)
+    val fill =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = fillArgb
+            style = Paint.Style.FILL
+        }
+    canvas.drawPath(path, fill)
+    fillArgb2?.let { second ->
+        val overlay =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = second and 0x00FFFFFF or (0x66 shl 24)
+                style = Paint.Style.FILL
+            }
+        canvas.drawRect(sizePx / 2f, 0f, sizePx.toFloat(), sizePx.toFloat(), overlay)
+    }
+    if (photo != null && !photo.isRecycled) {
+        val shaderBmp = Bitmap.createScaledBitmap(photo, sizePx, sizePx, true)
+        val photoPaint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                shader =
+                    android.graphics.BitmapShader(
+                        shaderBmp,
+                        android.graphics.Shader.TileMode.CLAMP,
+                        android.graphics.Shader.TileMode.CLAMP,
+                    )
+            }
+        canvas.drawPath(path, photoPaint)
+    } else {
+        val textPaint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.WHITE
+                textAlign = Paint.Align.CENTER
+                textSize = sizePx * 0.30f
+                isFakeBoldText = true
+            }
+        val glyph = initials.take(2).ifEmpty { "?" }
+        val textY = sizePx / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
+        canvas.drawText(glyph, sizePx / 2f, textY, textPaint)
+    }
+    canvas.restore()
+    val border =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.BLACK
+            style = Paint.Style.STROKE
+            strokeWidth = with(density) { 2.dp.toPx() }.coerceAtLeast(2f)
+        }
+    canvas.drawPath(path, border)
+    return BitmapDescriptorFactory.fromBitmap(bmp)
+}
+
+private fun beaconShapePath(
+    shape: BeaconPinShape,
+    size: Float,
+    pad: Float,
+): Path {
+    val path = Path()
+    val rect = RectF(pad, pad, size - pad, size - pad)
+    val cx = size / 2f
+    when (shape) {
+        BeaconPinShape.CIRCLE -> path.addOval(rect, Path.Direction.CW)
+        BeaconPinShape.ROUNDED_SQUARE, BeaconPinShape.SQUIRCLE ->
+            path.addRoundRect(rect, size * 0.22f, size * 0.22f, Path.Direction.CW)
+        BeaconPinShape.ROUNDED_RECT ->
+            path.addRoundRect(rect, size * 0.12f, size * 0.28f, Path.Direction.CW)
+        BeaconPinShape.TRIANGLE -> {
+            path.moveTo(cx, pad)
+            path.lineTo(size - pad, size - pad)
+            path.lineTo(pad, size - pad)
+            path.close()
+        }
+        BeaconPinShape.DIAMOND -> {
+            path.moveTo(cx, pad)
+            path.lineTo(size - pad, cx)
+            path.lineTo(cx, size - pad)
+            path.lineTo(pad, cx)
+            path.close()
+        }
+        BeaconPinShape.HEXAGON -> {
+            val r = (size / 2f) - pad
+            for (i in 0 until 6) {
+                val a = Math.toRadians((60.0 * i) - 30.0)
+                val x = cx + r * kotlin.math.cos(a).toFloat()
+                val y = cx + r * kotlin.math.sin(a).toFloat()
+                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            path.close()
+        }
+        BeaconPinShape.PENTAGON -> {
+            val r = (size / 2f) - pad
+            for (i in 0 until 5) {
+                val a = Math.toRadians((72.0 * i) - 90.0)
+                val x = cx + r * kotlin.math.cos(a).toFloat()
+                val y = cx + r * kotlin.math.sin(a).toFloat()
+                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            path.close()
+        }
+    }
+    return path
 }
 
 private fun bitmapDescriptorForSquadPin(
@@ -350,43 +512,52 @@ private fun bitmapDescriptorForSquadPin(
     val canvas = Canvas(bmp)
     val cx = auraPx / 2f
     val cy = auraPx / 2f
-    val aura = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.argb(90, 0, 163, 255)
-        style = Paint.Style.FILL
-    }
+    val aura =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.argb(90, 0, 163, 255)
+            style = Paint.Style.FILL
+        }
     canvas.drawCircle(cx, cy, auraPx / 2f, aura)
-    val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.HSVToColor(floatArrayOf(hueDegrees, 0.92f, 0.95f))
-        style = Paint.Style.FILL
-    }
+    val dot =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.HSVToColor(floatArrayOf(hueDegrees, 0.92f, 0.95f))
+            style = Paint.Style.FILL
+        }
     canvas.drawCircle(cx, cy, basePx / 2f, dot)
     return BitmapDescriptorFactory.fromBitmap(bmp)
 }
 
-private fun bitmapDescriptorFromClusterCount(count: Int, sizePx: Int, fillArgb: Int): BitmapDescriptor {
+private fun bitmapDescriptorFromClusterCount(
+    count: Int,
+    sizePx: Int,
+    fillArgb: Int,
+): BitmapDescriptor {
     val d = sizePx.coerceIn(36, 128)
     val bmp = Bitmap.createBitmap(d, d, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bmp)
-    val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        color = fillArgb
-        style = android.graphics.Paint.Style.FILL
-    }
-    val stroke = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.BLACK
-        style = android.graphics.Paint.Style.STROKE
-        strokeWidth = (d * 0.06f).coerceAtLeast(2f)
-    }
+    val fill =
+        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = fillArgb
+            style = android.graphics.Paint.Style.FILL
+        }
+    val stroke =
+        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.BLACK
+            style = android.graphics.Paint.Style.STROKE
+            strokeWidth = (d * 0.06f).coerceAtLeast(2f)
+        }
     val r = RectF(0f, 0f, d.toFloat(), d.toFloat())
     val pad = d * 0.06f
     r.inset(pad, pad)
     canvas.drawOval(r, fill)
     canvas.drawOval(r, stroke)
-    val textPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.WHITE
-        textAlign = android.graphics.Paint.Align.CENTER
-        textSize = d * 0.36f
-        isFakeBoldText = true
-    }
+    val textPaint =
+        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+            textAlign = android.graphics.Paint.Align.CENTER
+            textSize = d * 0.36f
+            isFakeBoldText = true
+        }
     val label = if (count > 99) "99+" else count.toString()
     val cx = d / 2f
     val cy = d / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
@@ -410,12 +581,13 @@ private fun bitmapDescriptorForLabeledPin(
     val corner = with(density) { 6.dp.toPx() }
     val maxLabelPx = with(density) { 132.dp.roundToPx() }
 
-    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.argb(255, 250, 250, 250)
-        textSize = with(density) { 11.sp.toPx() }
-        textAlign = Paint.Align.CENTER
-        isFakeBoldText = true
-    }
+    val textPaint =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.argb(255, 250, 250, 250)
+            textSize = with(density) { 11.sp.toPx() }
+            textAlign = Paint.Align.CENTER
+            isFakeBoldText = true
+        }
     val fm = Paint.FontMetrics()
     textPaint.getFontMetrics(fm)
     val textH = (fm.descent - fm.ascent).toInt().coerceAtLeast(1)
@@ -429,21 +601,24 @@ private fun bitmapDescriptorForLabeledPin(
     val canvas = Canvas(bmp)
     val cx = totalW / 2f
 
-    val labelBg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.argb(228, 24, 24, 27)
-        style = Paint.Style.FILL
-    }
-    val labelStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.argb(200, 82, 82, 91)
-        style = Paint.Style.STROKE
-        strokeWidth = with(density) { 1.dp.toPx() }.coerceAtLeast(1f)
-    }
-    val labelRect = RectF(
-        cx - labelW / 2f,
-        0f,
-        cx + labelW / 2f,
-        labelH.toFloat(),
-    )
+    val labelBg =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.argb(228, 24, 24, 27)
+            style = Paint.Style.FILL
+        }
+    val labelStroke =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.argb(200, 82, 82, 91)
+            style = Paint.Style.STROKE
+            strokeWidth = with(density) { 1.dp.toPx() }.coerceAtLeast(1f)
+        }
+    val labelRect =
+        RectF(
+            cx - labelW / 2f,
+            0f,
+            cx + labelW / 2f,
+            labelH.toFloat(),
+        )
     canvas.drawRoundRect(labelRect, corner, corner, labelBg)
     canvas.drawRoundRect(labelRect, corner, corner, labelStroke)
 
@@ -456,15 +631,17 @@ private fun bitmapDescriptorForLabeledPin(
     val pinArgb = android.graphics.Color.HSVToColor(hsv)
     val a = (255f * pinOpacity.coerceIn(0f, 1f)).toInt().coerceIn(0, 255)
     val fillColor = pinArgb and 0x00FFFFFF or (a shl 24)
-    val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = fillColor
-        style = Paint.Style.FILL
-    }
-    val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.argb((180f * pinOpacity).toInt().coerceIn(0, 255), 255, 255, 255)
-        style = Paint.Style.STROKE
-        strokeWidth = with(density) { 2.dp.toPx() }.coerceAtLeast(2f)
-    }
+    val fill =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = fillColor
+            style = Paint.Style.FILL
+        }
+    val stroke =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.argb((180f * pinOpacity).toInt().coerceIn(0, 255), 255, 255, 255)
+            style = Paint.Style.STROKE
+            strokeWidth = with(density) { 2.dp.toPx() }.coerceAtLeast(2f)
+        }
     val cy = labelH + gap + pinRadius
     canvas.drawCircle(cx, cy.toFloat(), pinRadius.toFloat(), fill)
     canvas.drawCircle(cx, cy.toFloat(), pinRadius.toFloat(), stroke)

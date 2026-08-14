@@ -43,6 +43,7 @@ import compose.project.click.click.data.api.EventBookmarkItemDto // pragma: allo
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.ConnectionInsights // pragma: allowlist secret
+import compose.project.click.click.data.models.HomeLayoutMode // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconMetadata // pragma: allowlist secret
@@ -72,6 +73,9 @@ import compose.project.click.click.ui.components.GlassCard // pragma: allowlist 
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeExploreTile // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeGreetingSubtitle // pragma: allowlist secret
+import compose.project.click.click.ui.components.HomePhotoPileBoard // pragma: allowlist secret
+import compose.project.click.click.ui.components.HomePileActions // pragma: allowlist secret
+import compose.project.click.click.ui.components.HomePileBoardData // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeSearchPill // pragma: allowlist secret
 import compose.project.click.click.ui.components.PollPairCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.SavedEventsSection // pragma: allowlist secret
@@ -145,7 +149,8 @@ fun HomeScreen(
     val nudgeResult by homeViewModel.nudgeResult.collectAsState()
     val pollPairSuggestion by homeViewModel.pollPairSuggestion.collectAsState()
     val icebreakerSendCooldownSec by homeViewModel.icebreakerSendCooldownRemainingSec.collectAsState()
-    val availabilityViewModel: AvailabilityViewModel = viewModel { AvailabilityViewModel() }
+    val availabilityViewModel: AvailabilityViewModel =
+        viewModel(key = "home-availability") { AvailabilityViewModel() }
     var showAvailabilityIntentSheet by remember { mutableStateOf(false) }
     var seedAvailabilityIntent by remember { mutableStateOf<AvailabilityIntentRow?>(null) }
     val homeAvailabilityIntents by availabilityViewModel.activeAvailabilityIntents.collectAsState()
@@ -160,7 +165,9 @@ fun HomeScreen(
     val cachedEventBookmarks by AppDataManager.cachedEventBookmarks.collectAsState()
     val discoveryPrefetchComplete by AppDataManager.discoveryMapPrefetchComplete.collectAsState()
     val currentUser by AppDataManager.currentUser.collectAsState()
+    val homeLayoutMode by AppDataManager.homeLayoutMode.collectAsState()
     var selectedSavedEventBeacon by remember { mutableStateOf<MapBeacon?>(null) }
+    var selectedPileLocation by remember { mutableStateOf<String?>(null) }
     var shareSavedBeaconToChat by remember { mutableStateOf<MapBeacon?>(null) }
     var archiveBannerNow by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
 
@@ -344,6 +351,35 @@ fun HomeScreen(
                     // sits HeaderToSearchGap under the greeting, not CardSpacing×2.
                     belowHeaderSpacing = HeaderToSearchGap - CardSpacing,
                     verticalArrangement = Arrangement.spacedBy(CardSpacing),
+                    actions = {
+                        IconButton(
+                            onClick = {
+                                AppDataManager.setHomeLayoutMode(
+                                    if (homeLayoutMode == HomeLayoutMode.PILE) {
+                                        HomeLayoutMode.LINEAR
+                                    } else {
+                                        HomeLayoutMode.PILE
+                                    },
+                                )
+                            },
+                        ) {
+                            Icon(
+                                imageVector =
+                                    if (homeLayoutMode == HomeLayoutMode.PILE) {
+                                        Icons.Filled.Menu
+                                    } else {
+                                        Icons.Filled.Star
+                                    },
+                                contentDescription =
+                                    if (homeLayoutMode == HomeLayoutMode.PILE) {
+                                        "Switch to list view"
+                                    } else {
+                                        "Switch to photo pile"
+                                    },
+                                tint = accentColor(AccentRole.Icon),
+                            )
+                        }
+                    },
                 ) {
                     if (onOpenSearch != null) {
                         item(key = "home_search_pill") {
@@ -351,244 +387,362 @@ fun HomeScreen(
                         }
                     }
 
-                    featuredEvent?.let { reminder ->
-                        item(key = "featured_event") {
-                            FeaturedEventSection(
-                                reminder = reminder,
-                                onViewMap = { onNavigateToMap(reminder.beaconId) },
+                    if (homeLayoutMode == HomeLayoutMode.PILE) {
+                        item(key = "photo_pile") {
+                            HomePhotoPileBoard(
+                                data =
+                                    HomePileBoardData(
+                                        intents = homeAvailabilityIntents,
+                                        featuredEvent = featuredEvent,
+                                        recap = activityRecap,
+                                        savedBookmarks = displayedSavedBookmarks,
+                                        exploreTiles = exploreTiles,
+                                        archiveNotice = archiveBannerNotice,
+                                        pollPair = pollPairSuggestion,
+                                        reconnectReminders = reconnectReminders,
+                                        eventReminders = remainingEventReminders,
+                                        locationGroups = locationGroupedConnections,
+                                        insights =
+                                            if (connectionInsights != null && state.stats.totalConnections > 0) {
+                                                connectionInsights
+                                            } else {
+                                                null
+                                            },
+                                        stats = state.stats,
+                                        connectedUsers = connectedUsers,
+                                    ),
+                                actions =
+                                    HomePileActions(
+                                        onCreateIntent = {
+                                            availabilityViewModel.resetAvailabilityIntentSheet()
+                                            seedAvailabilityIntent = null
+                                            showAvailabilityIntentSheet = true
+                                        },
+                                        onEditIntent = { row ->
+                                            availabilityViewModel.beginEditAvailabilityIntent(row)
+                                            seedAvailabilityIntent = row
+                                            showAvailabilityIntentSheet = true
+                                        },
+                                        onFeaturedMap = { reminder -> onNavigateToMap(reminder.beaconId) },
+                                        onSavedEventClick = { bookmark ->
+                                            selectedSavedEventBeacon =
+                                                resolveSavedEventBeacon(
+                                                    bookmark = bookmark,
+                                                    mapBeacons = mapBeacons,
+                                                    prefetchedBeacons = prefetchedBeacons,
+                                                )
+                                        },
+                                        onExploreClick = { tile -> onNavigateToMapLayer(tile.layerFilter) },
+                                        onArchiveOpenChat = { notice -> onNavigateToChat(notice.connectionId) },
+                                        onArchiveIcebreaker = { notice ->
+                                            homeViewModel.sendArchiveBannerIcebreaker(notice)
+                                        },
+                                        onPollPairOpenChat = { suggestion ->
+                                            onNavigateToChat(suggestion.connectionId)
+                                        },
+                                        onPollPairIcebreaker = { suggestion ->
+                                            homeViewModel.sendPollPairIcebreaker(suggestion)
+                                        },
+                                        onReconnect = { reminder -> onNavigateToChat(reminder.connectionId) },
+                                        onDismissReconnect = { reminder ->
+                                            homeViewModel.dismissReminder(reminder.connectionId)
+                                        },
+                                        onEventReminderMap = { reminder -> onNavigateToMap(reminder.beaconId) },
+                                        onLocationClick = { location ->
+                                            selectedPileLocation = location
+                                        },
+                                    ),
+                                modifier = Modifier.fillParentMaxSize(),
                             )
                         }
-                    }
+                    } else {
+                        featuredEvent?.let { reminder ->
+                            item(key = "featured_event") {
+                                FeaturedEventSection(
+                                    reminder = reminder,
+                                    onViewMap = { onNavigateToMap(reminder.beaconId) },
+                                )
+                            }
+                        }
 
-                    item(key = "availability_intents_strip") {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            HomeAvailabilityIntentsRow(
-                                intents = homeAvailabilityIntents,
-                                onCreateIntent = {
-                                    availabilityViewModel.resetAvailabilityIntentSheet()
-                                    seedAvailabilityIntent = null
-                                    showAvailabilityIntentSheet = true
-                                },
-                                onEditIntent = { row ->
-                                    availabilityViewModel.beginEditAvailabilityIntent(row)
-                                    seedAvailabilityIntent = row
-                                    showAvailabilityIntentSheet = true
-                                },
-                            )
-                            if (homeAvailabilityOverlapMessages.isNotEmpty()) {
-                                Column(
+                        item(key = "availability_intents_strip") {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                HomeAvailabilityIntentsRow(
+                                    intents = homeAvailabilityIntents,
+                                    onCreateIntent = {
+                                        availabilityViewModel.resetAvailabilityIntentSheet()
+                                        seedAvailabilityIntent = null
+                                        showAvailabilityIntentSheet = true
+                                    },
+                                    onEditIntent = { row ->
+                                        availabilityViewModel.beginEditAvailabilityIntent(row)
+                                        seedAvailabilityIntent = row
+                                        showAvailabilityIntentSheet = true
+                                    },
+                                )
+                                if (homeAvailabilityOverlapMessages.isNotEmpty()) {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        homeAvailabilityOverlapMessages.forEach { line ->
+                                            Text(
+                                                text = line,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Medium,
+                                                color = MaterialTheme.colorScheme.tertiary,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        activityRecap?.let { recap ->
+                            item(key = "activity_recap") {
+                                ActivityRecapSection( // pragma: allowlist secret
+                                    recap = recap,
+                                    window = recapWindow,
+                                    onWindowChange = { homeViewModel.setRecapWindow(it) },
+                                )
+                            }
+                        }
+
+                        if (displayedSavedBookmarks.isNotEmpty()) {
+                            item(key = "saved_events") {
+                                SavedEventsSection(
+                                    bookmarks = displayedSavedBookmarks,
+                                    onBookmarkClick = { bookmark ->
+                                        selectedSavedEventBeacon =
+                                            resolveSavedEventBeacon(
+                                                bookmark = bookmark,
+                                                mapBeacons = mapBeacons,
+                                                prefetchedBeacons = prefetchedBeacons,
+                                            )
+                                    },
+                                )
+                            }
+                        }
+
+                        if (exploreTiles.isNotEmpty()) {
+                            item(key = "explore_nearby") {
+                                ExploreNearbyBeaconsSection(
+                                    tiles = exploreTiles,
+                                    onTileClick = { tile -> onNavigateToMapLayer(tile.layerFilter) },
+                                )
+                            }
+                        }
+
+                        archiveBannerNotice?.let { notice ->
+                            item(key = "archive_banner") {
+                                ConnectionArchiveWarningBanner(
+                                    notice = notice,
+                                    onOpenChat = { onNavigateToChat(notice.connectionId) },
+                                    onSendIcebreaker = { homeViewModel.sendArchiveBannerIcebreaker(notice) },
                                     modifier = Modifier.fillMaxWidth(),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                                ) {
-                                    homeAvailabilityOverlapMessages.forEach { line ->
+                                    icebreakerSendEnabled = icebreakerSendCooldownSec <= 0,
+                                    icebreakerCooldownSec = icebreakerSendCooldownSec,
+                                )
+                            }
+                        }
+                        pollPairSuggestion?.let { suggestion ->
+                            item(key = "poll_pair_card") {
+                                PollPairCard(
+                                    suggestion = suggestion,
+                                    onOpenChat = { onNavigateToChat(suggestion.connectionId) },
+                                    onSendIcebreaker = { homeViewModel.sendPollPairIcebreaker(suggestion) },
+                                    icebreakerSendEnabled = icebreakerSendCooldownSec <= 0,
+                                    icebreakerCooldownSec = icebreakerSendCooldownSec,
+                                )
+                            }
+                        }
+
+                        if (reconnectReminders.isNotEmpty()) {
+                            item(key = "reconnect_header") {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    SectionHeader(text = "Reconnect")
+                                    Text(
+                                        "Connections you haven't talked to in a while",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+
+                            items(
+                                reconnectReminders,
+                                key = { it.connectionId },
+                                contentType = { "reconnect_reminder" },
+                            ) { reminder ->
+                                val peer = connectedUsers[reminder.userId]
+                                ReconnectReminderCard(
+                                    reminder = reminder,
+                                    onReconnect = { onNavigateToChat(reminder.connectionId) },
+                                    onDismiss = { homeViewModel.dismissReminder(reminder.connectionId) },
+                                    avatarUrl = peer?.image,
+                                    email = peer?.email,
+                                )
+                            }
+                        }
+
+                        if (remainingEventReminders.isNotEmpty()) {
+                            item(key = "event_reminders_header") {
+                                SectionHeader(text = "Event reminders")
+                            }
+                            items(
+                                remainingEventReminders,
+                                key = { "${it.beaconId}:${it.kind.name}" },
+                                contentType = { "event_reminder" },
+                            ) { reminder ->
+                                HomeEventReminderCard(
+                                    reminder = reminder,
+                                    onDismiss = {
+                                        homeViewModel.dismissEventReminder(reminder.beaconId, reminder.kind)
+                                    },
+                                    onViewMap = { onNavigateToMap(reminder.beaconId) },
+                                )
+                            }
+                        }
+
+                        if (locationGroupedConnections.isNotEmpty()) {
+                            item(key = "recent_connections_header") {
+                                SectionHeader(text = "Recent Connections")
+                            }
+                            items(
+                                locationGroupedConnections.entries.toList(),
+                                key = { it.key },
+                                contentType = { "location_group" },
+                            ) { (location, connections) ->
+                                val isExpanded = location in expandedLocations
+                                LocationGroupCard(
+                                    location = location,
+                                    connections = connections,
+                                    isExpanded = isExpanded,
+                                    connectedUsers = connectedUsers,
+                                    currentUserId = state.user.id,
+                                    onToggleExpand = { homeViewModel.toggleLocationExpanded(location) },
+                                    onNavigateToChat = onNavigateToChat,
+                                    onNudge = { connectionId, otherUserName ->
+                                        homeViewModel.sendNudgeByConnectionId(connectionId, otherUserName)
+                                    },
+                                )
+                            }
+                        } else {
+                            item(key = "empty_connections") {
+                                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                                    Column(
+                                        modifier = Modifier.padding(16.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.TouchApp,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(48.dp),
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                        Spacer(modifier = Modifier.height(16.dp))
                                         Text(
-                                            text = line,
+                                            "No Connections Yet",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            "Start making connections by tapping Add Click",
                                             style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Medium,
-                                            color = MaterialTheme.colorScheme.tertiary,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     }
                                 }
                             }
                         }
-                    }
 
-                    activityRecap?.let { recap ->
-                        item(key = "activity_recap") {
-                            ActivityRecapSection( // pragma: allowlist secret
-                                recap = recap,
-                                window = recapWindow,
-                                onWindowChange = { homeViewModel.setRecapWindow(it) },
-                            )
-                        }
-                    }
-
-                    if (displayedSavedBookmarks.isNotEmpty()) {
-                        item(key = "saved_events") {
-                            SavedEventsSection(
-                                bookmarks = displayedSavedBookmarks,
-                                onBookmarkClick = { bookmark ->
-                                    selectedSavedEventBeacon =
-                                        resolveSavedEventBeacon(
-                                            bookmark = bookmark,
-                                            mapBeacons = mapBeacons,
-                                            prefetchedBeacons = prefetchedBeacons,
-                                        )
-                                },
-                            )
-                        }
-                    }
-
-                    if (exploreTiles.isNotEmpty()) {
-                        item(key = "explore_nearby") {
-                            ExploreNearbyBeaconsSection(
-                                tiles = exploreTiles,
-                                onTileClick = { tile -> onNavigateToMapLayer(tile.layerFilter) },
-                            )
-                        }
-                    }
-
-                    archiveBannerNotice?.let { notice ->
-                        item(key = "archive_banner") {
-                            ConnectionArchiveWarningBanner(
-                                notice = notice,
-                                onOpenChat = { onNavigateToChat(notice.connectionId) },
-                                onSendIcebreaker = { homeViewModel.sendArchiveBannerIcebreaker(notice) },
-                                modifier = Modifier.fillMaxWidth(),
-                                icebreakerSendEnabled = icebreakerSendCooldownSec <= 0,
-                                icebreakerCooldownSec = icebreakerSendCooldownSec,
-                            )
-                        }
-                    }
-                    pollPairSuggestion?.let { suggestion ->
-                        item(key = "poll_pair_card") {
-                            PollPairCard(
-                                suggestion = suggestion,
-                                onOpenChat = { onNavigateToChat(suggestion.connectionId) },
-                                onSendIcebreaker = { homeViewModel.sendPollPairIcebreaker(suggestion) },
-                                icebreakerSendEnabled = icebreakerSendCooldownSec <= 0,
-                                icebreakerCooldownSec = icebreakerSendCooldownSec,
-                            )
-                        }
-                    }
-
-                    if (reconnectReminders.isNotEmpty()) {
-                        item(key = "reconnect_header") {
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                SectionHeader(text = "Reconnect")
-                                Text(
-                                    "Connections you haven't talked to in a while",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        if (connectionInsights != null && state.stats.totalConnections > 0) {
+                            item(key = "connection_insights") {
+                                ConnectionInsightsCard(
+                                    insights = connectionInsights!!,
+                                    expanded = showInsightsPanel,
+                                    onToggle = { homeViewModel.toggleInsightsPanel() },
                                 )
                             }
                         }
 
-                        items(
-                            reconnectReminders,
-                            key = { it.connectionId },
-                            contentType = { "reconnect_reminder" },
-                        ) { reminder ->
-                            val peer = connectedUsers[reminder.userId]
-                            ReconnectReminderCard(
-                                reminder = reminder,
-                                onReconnect = { onNavigateToChat(reminder.connectionId) },
-                                onDismiss = { homeViewModel.dismissReminder(reminder.connectionId) },
-                                avatarUrl = peer?.image,
-                                email = peer?.email,
-                            )
+                        item(key = "stats_header") {
+                            SectionHeader(text = "Your Stats")
                         }
-                    }
 
-                    if (remainingEventReminders.isNotEmpty()) {
-                        item(key = "event_reminders_header") {
-                            SectionHeader(text = "Event reminders")
-                        }
-                        items(
-                            remainingEventReminders,
-                            key = { "${it.beaconId}:${it.kind.name}" },
-                            contentType = { "event_reminder" },
-                        ) { reminder ->
-                            HomeEventReminderCard(
-                                reminder = reminder,
-                                onDismiss = {
-                                    homeViewModel.dismissEventReminder(reminder.beaconId, reminder.kind)
-                                },
-                                onViewMap = { onNavigateToMap(reminder.beaconId) },
-                            )
-                        }
-                    }
-
-                    if (locationGroupedConnections.isNotEmpty()) {
-                        item(key = "recent_connections_header") {
-                            SectionHeader(text = "Recent Connections")
-                        }
-                        items(
-                            locationGroupedConnections.entries.toList(),
-                            key = { it.key },
-                            contentType = { "location_group" },
-                        ) { (location, connections) ->
-                            val isExpanded = location in expandedLocations
-                            LocationGroupCard(
-                                location = location,
-                                connections = connections,
-                                isExpanded = isExpanded,
-                                connectedUsers = connectedUsers,
-                                currentUserId = state.user.id,
-                                onToggleExpand = { homeViewModel.toggleLocationExpanded(location) },
-                                onNavigateToChat = onNavigateToChat,
-                                onNudge = { connectionId, otherUserName ->
-                                    homeViewModel.sendNudgeByConnectionId(connectionId, otherUserName)
-                                },
-                            )
-                        }
-                    } else {
-                        item(key = "empty_connections") {
-                            GlassCard(modifier = Modifier.fillMaxWidth()) {
-                                Column(
-                                    modifier = Modifier.padding(16.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                ) {
-                                    Icon(
-                                        Icons.Filled.TouchApp,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(48.dp),
-                                        tint = MaterialTheme.colorScheme.primary,
-                                    )
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    Text(
-                                        "No Connections Yet",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text(
-                                        "Start making connections by tapping Add Click",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
+                        item(key = "stats_row") {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                HomeStatCard(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Filled.Check,
+                                    value = state.stats.totalConnections.toString(),
+                                    label = "Total Clicks",
+                                )
+                                HomeStatCard(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Filled.LocationOn,
+                                    value = state.stats.uniqueLocations.toString(),
+                                    label = "Locations",
+                                    iconTint = accentColor(AccentRole.Emphasis),
+                                )
                             }
                         }
                     }
+                }
+            }
+        }
 
-                    if (connectionInsights != null && state.stats.totalConnections > 0) {
-                        item(key = "connection_insights") {
-                            ConnectionInsightsCard(
-                                insights = connectionInsights!!,
-                                expanded = showInsightsPanel,
-                                onToggle = { homeViewModel.toggleInsightsPanel() },
-                            )
-                        }
-                    }
-
-                    item(key = "stats_header") {
-                        SectionHeader(text = "Your Stats")
-                    }
-
-                    item(key = "stats_row") {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            HomeStatCard(
-                                modifier = Modifier.weight(1f),
-                                icon = Icons.Filled.Check,
-                                value = state.stats.totalConnections.toString(),
-                                label = "Total Clicks",
-                            )
-                            HomeStatCard(
-                                modifier = Modifier.weight(1f),
-                                icon = Icons.Filled.LocationOn,
-                                value = state.stats.uniqueLocations.toString(),
-                                label = "Locations",
-                            )
-                        }
-                    }
+        val pileLocation = selectedPileLocation
+        if (pileLocation != null) {
+            val successUserId =
+                (homeState as? HomeState.Success)?.user?.id
+                    ?: lastSuccessfulHomeState?.user?.id
+                    ?: ""
+            val pileConnections = locationGroupedConnections[pileLocation].orEmpty()
+            MapBeaconSheetRoot(
+                visible = true,
+                onDismissRequest = { selectedPileLocation = null },
+                containerColor = GlassSheetTokens.OledBlack(),
+                contentColor = GlassSheetTokens.OnOled(),
+                scrimColor = Color.Black.copy(alpha = ClickSheetDefaults.ScrimAlpha),
+                contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+                appColorScheme = MaterialTheme.colorScheme,
+                appTypography = MaterialTheme.typography,
+            ) {
+                ClickSheetDialogChrome(
+                    modifier = Modifier.fillMaxWidth(),
+                    sheetColor = GlassSheetTokens.OledBlack(),
+                    onSurface = GlassSheetTokens.OnOled(),
+                    alignSemanticColorsToSheet = true,
+                ) {
+                    LocationGroupCard(
+                        location = pileLocation,
+                        connections = pileConnections,
+                        isExpanded = true,
+                        connectedUsers = connectedUsers,
+                        currentUserId = successUserId,
+                        onToggleExpand = { selectedPileLocation = null },
+                        onNavigateToChat = { connectionId ->
+                            selectedPileLocation = null
+                            onNavigateToChat(connectionId)
+                        },
+                        onNudge = { connectionId, otherUserName ->
+                            homeViewModel.sendNudgeByConnectionId(connectionId, otherUserName)
+                        },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .sheetBodyScroll()
+                                .padding(horizontal = 24.dp, vertical = 12.dp),
+                    )
                 }
             }
         }
@@ -761,6 +915,7 @@ private fun HomeStatCard(
     icon: ImageVector,
     value: String,
     label: String,
+    iconTint: Color = MaterialTheme.colorScheme.primary,
 ) {
     GlassCard(
         modifier = modifier,
@@ -774,7 +929,7 @@ private fun HomeStatCard(
                 icon,
                 contentDescription = null,
                 modifier = Modifier.size(24.dp),
-                tint = MaterialTheme.colorScheme.primary,
+                tint = iconTint,
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -806,6 +961,7 @@ private fun LocationGroupCard(
     onToggleExpand: () -> Unit,
     onNavigateToChat: (String) -> Unit,
     onNudge: (connectionId: String, otherUserName: String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val chevronAngle by animateFloatAsState(
         targetValue = if (isExpanded) 90f else 0f,
@@ -814,7 +970,7 @@ private fun LocationGroupCard(
     )
 
     GlassCard(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         onClick = onToggleExpand,
         usePrimaryBorder = isExpanded,
     ) {

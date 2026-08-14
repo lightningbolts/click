@@ -900,6 +900,8 @@ enum class MapBeaconKind(
     }
 }
 
+fun MapBeaconKind.requiresAttachedImage(): Boolean = this != MapBeaconKind.SOUNDTRACK
+
 /**
  * Parsed JSONB `metadata` for map beacons (flexible keys).
  */
@@ -963,7 +965,7 @@ fun parseMapBeaconMetadata(element: JsonElement?): MapBeaconMetadata {
         previewUrl = str("preview_url"),
         trackName = str("track_name"),
         artistName = str("artist_name"),
-        albumArtUrl = str("album_art_url", "artworkUrl100"),
+        albumArtUrl = str("album_art_url", "artworkUrl100", "image_url", "cover_url"),
         eventCategories = parseEventCategories(obj),
         locationName = str("location_name", "place_name", "venue_name"),
         formattedAddress = str("formatted_address", "address", "display_address"),

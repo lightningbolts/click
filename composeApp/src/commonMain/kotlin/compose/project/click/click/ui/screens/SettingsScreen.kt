@@ -61,6 +61,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -80,11 +81,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.mohamedrejeb.calf.ui.toggle.AdaptiveSwitch
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
+import compose.project.click.click.data.models.HomeLayoutMode // pragma: allowlist secret
 import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
@@ -100,6 +103,7 @@ import compose.project.click.click.ui.components.AppScreenScaffold // pragma: al
 import compose.project.click.click.ui.components.AvailabilitySheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickButtonVariant // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickNavRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
@@ -109,6 +113,7 @@ import compose.project.click.click.ui.components.SavedEventsSection // pragma: a
 import compose.project.click.click.ui.components.UnifiedToastHost // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberUnifiedToastState // pragma: allowlist secret
+import compose.project.click.click.ui.theme.ClickAccent // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
@@ -153,7 +158,8 @@ fun SettingsScreen(
     onSignOut: () -> Unit = {},
     onOpenSearch: (() -> Unit)? = null,
     onSubpageOpenChanged: (Boolean) -> Unit = {},
-    availabilityViewModel: AvailabilityViewModel = viewModel { AvailabilityViewModel() },
+    availabilityViewModel: AvailabilityViewModel =
+        viewModel(key = "settings-availability") { AvailabilityViewModel() },
 ) {
     val currentAvailability by availabilityViewModel.currentAvailability.collectAsState()
     val activeAvailabilityIntents by availabilityViewModel.activeAvailabilityIntents.collectAsState()
@@ -263,6 +269,18 @@ fun SettingsScreen(
 
     LaunchedEffect(settingsPage) {
         onSubpageOpenChanged(settingsPage != SettingsPage.Hub)
+        if (settingsPage != SettingsPage.Availability && showAvailabilityIntentSheet) {
+            showAvailabilityIntentSheet = false
+            seedAvailabilityIntent = null
+            availabilityViewModel.resetAvailabilityIntentSheet()
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            onSubpageOpenChanged(false)
+            availabilityViewModel.resetAvailabilityIntentSheet()
+        }
     }
 
     PlatformBackHandler(enabled = settingsPage != SettingsPage.Hub && !isIOS) {
@@ -310,7 +328,7 @@ fun SettingsScreen(
                 val fadeSpec = tween<Float>(220, easing = LinearOutSlowInEasing)
                 AnimatedVisibility(
                     visible = settingsPage != SettingsPage.Hub,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().zIndex(8f),
                     enter =
                         slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it }) +
                         fadeIn(animationSpec = fadeSpec),
@@ -329,6 +347,12 @@ fun SettingsScreen(
                         previousContent = {},
                         onBack = { closeSettingsSubpage(SettingsTransitionMode.Gesture) },
                         currentContent = {
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .fillMaxSize()
+                                        .background(MaterialTheme.colorScheme.background),
+                            ) {
                             AppScreenScaffold(
                                 title = settingsPage.title(),
                                 onOpenSearch = null,
@@ -374,6 +398,7 @@ fun SettingsScreen(
                                                 Modifier
                                                     .fillMaxWidth()
                                                     .padding(horizontal = 12.dp, vertical = 8.dp),
+                                            variant = ClickButtonVariant.Accent,
                                         ) {
                                             Text("Share intent & timeframe")
                                         }
@@ -705,11 +730,25 @@ fun SettingsScreen(
                                         checked = isDarkMode,
                                         onCheckedChange = { onToggleDarkMode() },
                                     )
+                                    SettingsDivider()
+                                    val pileMode by AppDataManager.homeLayoutMode.collectAsState()
+                                    SettingsToggleRow(
+                                        icon = Icons.Default.Star,
+                                        title = "Photo pile home",
+                                        subtitle = "Scatter home cards on a corkboard. Turn off for a linear list (better with TalkBack / VoiceOver).",
+                                        checked = pileMode == HomeLayoutMode.PILE,
+                                        onCheckedChange = { enabled ->
+                                            AppDataManager.setHomeLayoutMode(
+                                                if (enabled) HomeLayoutMode.PILE else HomeLayoutMode.LINEAR,
+                                            )
+                                        },
+                                    )
                                 }
                             }
                         }
                     }
                                 }
+                            }
                             }
                         },
                     )
@@ -1231,6 +1270,7 @@ private fun SettingsHubNavCard(onOpen: (SettingsPage) -> Unit) {
                 title = "Availability",
                 subtitle = "Free this week and intent posts",
                 onClick = { onOpen(SettingsPage.Availability) },
+                accentSlot = 0,
             )
             SettingsDivider()
             SettingsHubNavRow(
@@ -1238,6 +1278,7 @@ private fun SettingsHubNavCard(onOpen: (SettingsPage) -> Unit) {
                 title = "Alerts",
                 subtitle = "Messages, calls, events, hubs",
                 onClick = { onOpen(SettingsPage.Alerts) },
+                accentSlot = 5,
             )
             SettingsDivider()
             SettingsHubNavRow(
@@ -1245,6 +1286,7 @@ private fun SettingsHubNavCard(onOpen: (SettingsPage) -> Unit) {
                 title = "Privacy & data",
                 subtitle = "Ghost mode, location, permissions",
                 onClick = { onOpen(SettingsPage.Privacy) },
+                accentSlot = 1,
             )
             SettingsDivider()
             SettingsHubNavRow(
@@ -1252,6 +1294,7 @@ private fun SettingsHubNavCard(onOpen: (SettingsPage) -> Unit) {
                 title = "Interests",
                 subtitle = "Common Ground tags",
                 onClick = { onOpen(SettingsPage.Interests) },
+                accentSlot = 6,
             )
             SettingsDivider()
             SettingsHubNavRow(
@@ -1259,6 +1302,7 @@ private fun SettingsHubNavCard(onOpen: (SettingsPage) -> Unit) {
                 title = "Personality",
                 subtitle = "Five traits that describe you",
                 onClick = { onOpen(SettingsPage.Personality) },
+                accentSlot = 2,
             )
             SettingsDivider()
             SettingsHubNavRow(
@@ -1266,13 +1310,15 @@ private fun SettingsHubNavCard(onOpen: (SettingsPage) -> Unit) {
                 title = "Saved events",
                 subtitle = "Bookmarks from Home and the map",
                 onClick = { onOpen(SettingsPage.Saved) },
+                accentSlot = 7,
             )
             SettingsDivider()
             SettingsHubNavRow(
                 icon = Icons.Default.DarkMode,
                 title = "Appearance",
-                subtitle = "Dark mode",
+                subtitle = "Dark mode and home layout",
                 onClick = { onOpen(SettingsPage.Appearance) },
+                accentSlot = 3,
             )
         }
     }
@@ -1284,40 +1330,22 @@ private fun SettingsHubNavRow(
     title: String,
     subtitle: String,
     onClick: () -> Unit,
+    accentSlot: Int = 0,
 ) {
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onClick)
-                .padding(horizontal = 12.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            modifier = Modifier.size(22.dp),
-            tint = PrimaryBlue,
-        )
-        Spacer(modifier = Modifier.width(14.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
+    ClickNavRow(
+        title = title,
+        subtitle = subtitle,
+        onClick = onClick,
+        leadingIcon = icon,
+        leadingTint = ClickAccent.colorForSlot(accentSlot),
+        trailing = {
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Icon(
-            Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
+        },
+    )
 }
 
 @Composable

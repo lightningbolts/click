@@ -536,6 +536,43 @@ class ApiClient {
         }
     }
 
+    /** Unencrypted public photo for a community beacon (max 2 MB after client compress). */
+    @OptIn(ExperimentalEncodingApi::class)
+    suspend fun uploadBeaconImage(
+        imageBytes: ByteArray,
+        mimeType: String,
+    ): Result<String> {
+        if (imageBytes.isEmpty()) {
+            return Result.failure(IllegalArgumentException("Empty image"))
+        }
+        val normalizedMime = mimeType.trim().ifEmpty { "image/jpeg" }
+        return try {
+            val payload =
+                AvatarUploadBodyDto(
+                    fileBase64 = Base64.encode(imageBytes),
+                    mimeType = normalizedMime,
+                )
+            val response =
+                clickWebClient.post("$clickWebAuthOrigin/api/beacons/image") {
+                    contentType(ContentType.Application.Json)
+                    setBody(payload)
+                }
+            if (response.status.value in 200..299) {
+                val dto = response.body<AvatarUploadResponseDto>()
+                val url = dto.image.trim()
+                if (url.isEmpty()) {
+                    Result.failure(Exception("Beacon image upload returned an empty URL"))
+                } else {
+                    Result.success(url)
+                }
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     @OptIn(ExperimentalEncodingApi::class)
     suspend fun uploadGroupAvatar(
         groupId: String,

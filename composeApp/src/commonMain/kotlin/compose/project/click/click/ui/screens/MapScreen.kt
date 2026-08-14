@@ -92,6 +92,7 @@ import compose.project.click.click.ui.components.LiquidGlassPill // pragma: allo
 import compose.project.click.click.ui.components.MapClusterPin // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPin // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPinKind // pragma: allowlist secret
+import compose.project.click.click.ui.components.PhotoCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformMap // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProfileBottomSheet // pragma: allowlist secret
@@ -710,6 +711,8 @@ fun MapScreen(
                     eventCategories,
                     venueScale,
                     eventLocation,
+                    imageBytes,
+                    imageMime,
                     onRejectedEarly,
                     ->
                     viewModel.submitBeaconDrop(
@@ -724,6 +727,8 @@ fun MapScreen(
                         eventCategories = eventCategories,
                         venueScale = venueScale,
                         eventLocation = eventLocation,
+                        imageBytes = imageBytes,
+                        imageMime = imageMime,
                         onAcceptedLocally = { showBeaconDropSheet = false },
                         onRejectedEarly = onRejectedEarly,
                         onRemoteFinished = { },
@@ -1272,6 +1277,28 @@ private fun MapLayerFilterDropdown(
 }
 
 @Composable
+private fun BeaconIdentityBanner(
+    beacon: MapBeacon,
+    subtitle: String? = null,
+) {
+    val visual =
+        remember(beacon.id, beacon.kind, beacon.sourceBeaconType) {
+            generateCardVisual(beacon.id, beacon.kind, beacon.sourceBeaconType)
+        }
+    PhotoCard(
+        id = beacon.id,
+        title = beacon.displayDynamicTitle(),
+        subtitle = subtitle,
+        imageUrl = beacon.metadata.albumArtUrl,
+        visual = visual,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(132.dp),
+    )
+}
+
+@Composable
 internal fun BeaconDetailSheetContent(
     beacon: MapBeacon,
     distanceMeters: Double?,
@@ -1561,6 +1588,10 @@ internal fun EventBeaconDetail(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
+        BeaconIdentityBanner(
+            beacon = displayBeacon,
+            subtitle = scheduleRange,
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -2375,6 +2406,10 @@ internal fun CommunityBeaconDetail(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
+        BeaconIdentityBanner(
+            beacon = beacon,
+            subtitle = kindLabel,
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -2565,6 +2600,10 @@ internal fun SoundtrackBeaconDetail(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
+        BeaconIdentityBanner(
+            beacon = displayBeacon,
+            subtitle = artistLine,
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),

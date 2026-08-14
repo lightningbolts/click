@@ -12,6 +12,7 @@ import compose.project.click.click.collaboration.CollaborationSessionManager // 
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.ClickWebAuthCoordinator // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
+import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
 import compose.project.click.click.data.api.BeaconAttendeeDto // pragma: allowlist secret
 import compose.project.click.click.data.api.BeaconEngagementHttpException // pragma: allowlist secret
 import compose.project.click.click.data.api.EngagementTelemetryBody // pragma: allowlist secret
@@ -24,6 +25,7 @@ import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlis
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.parseEpochMs // pragma: allowlist secret
 import compose.project.click.click.data.models.parseMapBeaconMetadata // pragma: allowlist secret
+import compose.project.click.click.data.models.requiresAttachedImage // pragma: allowlist secret
 import compose.project.click.click.data.models.visibleMapConnections // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
@@ -68,6 +70,7 @@ import compose.project.click.click.ui.utils.mergeMapBeaconLists // pragma: allow
 import compose.project.click.click.ui.utils.overlappingMapPins // pragma: allowlist secret
 import compose.project.click.click.ui.utils.resolveBeaconQuickDistanceMeters // pragma: allowlist secret
 import compose.project.click.click.ui.utils.toMapPoint // pragma: allowlist secret
+import compose.project.click.click.util.compressOutgoingChatImageForUpload // pragma: allowlist secret
 import compose.project.click.click.util.isValidStreamingUrl // pragma: allowlist secret
 import compose.project.click.click.util.teardownBlocking // pragma: allowlist secret
 import compose.project.click.click.utils.EVENT_FORMATTED_ADDRESS_METADATA_KEY // pragma: allowlist secret
@@ -273,6 +276,7 @@ class MapViewModel : ViewModel() {
     private val mapBeaconRepository = MapBeaconRepository()
     private val tokenStorage: TokenStorage = createTokenStorage()
     private val authRepository: AuthRepository by lazy { AuthRepository(tokenStorage) }
+    private val apiClient: ApiClient by lazy { ApiClient() }
 
     private val _beaconInsertError = MutableStateFlow<String?>(null)
     val beaconInsertError: StateFlow<String?> = _beaconInsertError.asStateFlow()
@@ -2189,6 +2193,8 @@ class MapViewModel : ViewModel() {
         eventCategories: List<String> = emptyList(),
         venueScale: EventVenueScale = EventVenueScale.DEFAULT,
         eventLocation: GeocodedPlace? = null,
+        imageBytes: ByteArray? = null,
+        imageMime: String? = null,
         onAcceptedLocally: () -> Unit = {},
         onRejectedEarly: () -> Unit = {},
         onRemoteFinished: (Boolean) -> Unit = {},
@@ -2358,6 +2364,44 @@ class MapViewModel : ViewModel() {
                             }
                         }
                     }
+                val metadataWithImage: JsonObject? =
+                    if (!kind.requiresAttachedImage()) {
+                        metadata
+                    } else {
+                        val raw = imageBytes
+                        if (raw == null || raw.isEmpty()) {
+                            _beaconInsertError.value =
+                                "Add a photo from your library or camera. Soundtrack beacons can skip this."
+                            onRejectedEarly()
+                            onRemoteFinished(false)
+                            return@launch
+                        }
+                        val mime = imageMime?.trim().orEmpty().ifEmpty { "image/jpeg" }
+                        val compressed = compressOutgoingChatImageForUpload(raw, mime)
+                        if (compressed.size > 2_000_000) {
+                            _beaconInsertError.value = "Image must be under 2 MB after compression."
+                            onRejectedEarly()
+                            onRemoteFinished(false)
+                            return@launch
+                        }
+                        val uploaded =
+                            apiClient.uploadBeaconImage(
+                                compressed,
+                                if (compressed !== raw) "image/jpeg" else mime,
+                            )
+                        val url =
+                            uploaded.getOrElse { err ->
+                                _beaconInsertError.value =
+                                    err.message?.take(180) ?: "Could not upload beacon photo."
+                                onRejectedEarly()
+                                onRemoteFinished(false)
+                                return@launch
+                            }
+                        buildJsonObject {
+                            metadata?.forEach { (k, v) -> put(k, v) }
+                            put("image_url", url)
+                        }
+                    }
                 val locLat: Double
                 val locLon: Double
                 if (useProvidedEventLocation) {
@@ -2388,7 +2432,7 @@ class MapViewModel : ViewModel() {
                         kind = kind.apiValue,
                         lat = locLat,
                         lon = locLon,
-                        metadata = metadata,
+                        metadata = metadataWithImage,
                         ttlMs =
                             when {
                                 kind == MapBeaconKind.SOUNDTRACK -> null
@@ -2407,7 +2451,7 @@ class MapViewModel : ViewModel() {
                         kind = kind,
                         latitude = locLat,
                         longitude = locLon,
-                        metadata = parseMapBeaconMetadata(metadata),
+                        metadata = parseMapBeaconMetadata(metadataWithImage),
                         createdByUserId = AppDataManager.currentUser.value?.id,
                         createdAtEpochMs = Clock.System.now().toEpochMilliseconds(),
                         expiresAtEpochMs = eventSchedule?.endEpochMs,
