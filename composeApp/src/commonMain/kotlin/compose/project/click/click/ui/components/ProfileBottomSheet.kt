@@ -95,6 +95,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
 import compose.project.click.click.data.models.GroupSharedInterest // pragma: allowlist secret
 import compose.project.click.click.data.models.ProfileTimelineJournalEntry // pragma: allowlist secret
@@ -3029,9 +3030,11 @@ private fun mergeProfileLinks(items: List<ProfileSheetLink>): List<ProfileSheetL
  * peer-profile data (name, avatar, interests, shared interests, mutual moments) via
  * the new tabbed [ProfileBottomSheet] (Timeline · Media · Links · Files).
  *
- * Wire from any list flow (e.g. the Clicks chat list) by setting [userId] to the peer
- * id and providing the signed-in viewer id; pass `null` for [userId] to keep the sheet
- * dismissed. The sheet hydrates `user_interests.tags` for [userId] via
+ * Wire from any list flow (e.g. the Clicks chat list) **or a map pin** by setting [userId] to the peer
+ * id (and optionally [connectionId] when the caller already knows the edge). Pass `null` for [userId]
+ * to keep the sheet dismissed unless [connectionId] can resolve the peer from [AppDataManager].
+ * Map and Clicks must not diverge: both entry points use this wrapper so Timeline / Beacons /
+ * Media / Links hydrate the same way. The sheet hydrates `user_interests.tags` for the peer via
  * [SupabaseRepository.fetchUserPublicProfile] (which queries the
  * `user_interests` Postgres `text[]`) so the Timeline tab renders interests as soon
  * as the row resolves; if the peer has no `user_interests` row the section shows the
@@ -3047,11 +3050,28 @@ fun TabbedUserProfileSheet(
     onNudge: (() -> Unit)? = null,
     onOpenDisposableRoll: ((String) -> Unit)? = null,
     localMessages: List<ProfileSheetLocalMessage> = emptyList(),
+    /**
+     * When set, used instead of looking the connection up from [AppDataManager.connections].
+     * Map pins pass this so Timeline / Beacons / Media / Links hydrate even if the pin's
+     * cached [User] is missing.
+     */
+    connectionId: String? = null,
+    statusBadge: ProfileSheetBadge? = null,
 ) {
-    if (userId.isNullOrBlank()) return
+    val connections by AppDataManager.connections.collectAsState()
+    val resolvedUserId =
+        remember(userId, connectionId, viewerUserId, connections) {
+            resolveProfilePeerUserId(
+                requestedUserId = userId,
+                viewerUserId = viewerUserId,
+                connectionId = connectionId,
+                connections = connections,
+            )
+        }
+    if (resolvedUserId.isNullOrBlank()) return
+    val userId = resolvedUserId
 
     val connectedUsers by AppDataManager.connectedUsers.collectAsState()
-    val connections by AppDataManager.connections.collectAsState()
     val inboxRows by AppDataManager.inboxFeedChats.collectAsState()
     val cached: User? = connectedUsers[userId]
     val inboxHint = remember(inboxRows, userId) {
@@ -3065,11 +3085,12 @@ fun TabbedUserProfileSheet(
             else -> inboxHint?.groupMemberUsers?.firstOrNull { member -> member.id == userId }
         }
     }
-    val profileConnectionId = remember(connections, inboxHint, userId, viewerUserId) {
-        connections.firstOrNull { conn ->
-            userId in conn.user_ids &&
-                (viewerUserId.isNullOrBlank() || viewerUserId in conn.user_ids)
-        }?.id ?: inboxHint?.connection?.id?.takeIf { it.isNotBlank() }
+    val profileConnectionId = remember(connections, inboxHint, userId, viewerUserId, connectionId) {
+        connectionId?.trim()?.takeIf { it.isNotEmpty() }
+            ?: connections.firstOrNull { conn ->
+                userId in conn.user_ids &&
+                    (viewerUserId.isNullOrBlank() || viewerUserId in conn.user_ids)
+            }?.id ?: inboxHint?.connection?.id?.takeIf { it.isNotBlank() }
     }
 
     var resolved by remember(userId) { mutableStateOf<User?>(cached ?: hintedUser) }
@@ -3108,13 +3129,14 @@ fun TabbedUserProfileSheet(
         localMessages,
         profileConnectionId,
         onMessage,
+        statusBadge,
     ) {
         ProfileSheetState(
             displayName = displayName,
             subtitle = resolved?.email?.takeIf { it.isNotBlank() }
                 ?: hintedUser?.email?.takeIf { it.isNotBlank() },
             avatarUrl = resolved?.image ?: hintedUser?.image,
-            statusBadge = null,
+            statusBadge = statusBadge,
             canNudge = onMessage != null && !profileConnectionId.isNullOrBlank(),
             timeline = emptyList(),
             media = emptyList(),
@@ -3155,6 +3177,21 @@ fun TabbedUserProfileSheet(
             },
         )
     }
+}
+
+internal fun resolveProfilePeerUserId(
+    requestedUserId: String?,
+    viewerUserId: String?,
+    connectionId: String?,
+    connections: List<Connection>,
+): String? {
+    requestedUserId?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+    val connId = connectionId?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val viewer = viewerUserId?.trim().orEmpty()
+    return connections
+        .firstOrNull { it.id == connId }
+        ?.user_ids
+        ?.firstOrNull { it.isNotBlank() && it != viewer }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

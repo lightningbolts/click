@@ -11,7 +11,7 @@
 ## ASCII hierarchy
 
 ```
-ProfileBottomSheet (organism — map pin / connections profile)
+ProfileBottomSheet (organism — map pin / connections profile; both entry points use `TabbedUserProfileSheet`)
 ├── ProfileSheetHeader — avatar, name, subtitle, status badge
 ├── ProfileActionGrid — Message | Nudge; Click Drops (conditional)
 ├── ScrollableTabRow — Timeline | Media | Links | Files [| Members if group]
@@ -253,7 +253,7 @@ Environmental lines are composed in profile timeline rows from `Connection` / `C
 
 ```mermaid
 flowchart TD
-    A[Map pin / connection avatar] --> B[ProfileBottomSheet]
+    A[Map pin / connection avatar] --> B[TabbedUserProfileSheet → ProfileBottomSheet]
     B --> C{Action}
     C -->|Message| D[Chat overlay]
     C -->|Nudge| E[Snackbar nudge result]
@@ -274,7 +274,7 @@ flowchart TD
     R --> S[Full scroll profile — no tab pager]
 ```
 
-**Data hydration:** `ProfileBottomSheet` Timeline uses `SupabaseRepository.fetchUserPublicProfile` when `userId` + `viewerUserId` present. Media/Links/Files use `ConnectionRepository.fetchConnectionTabs` when `connectionId` set. After BLE/proximity success, `AppDataManager.proximityEncounterEpoch` triggers a re-fetch of public profile + journal timeline so new encounters appear without clearing app cache.
+**Data hydration:** Map pins and the Clicks list both open `TabbedUserProfileSheet`, which builds one `ProfileSheetState` (peer `userId` + `connectionId`) and hosts `ProfileBottomSheet`. Timeline uses `SupabaseRepository.fetchUserPublicProfile` when `userId` + `viewerUserId` present. Media/Links/Files/Beacons use `ConnectionRepository.fetchConnectionTabs` when `connectionId` set. After BLE/proximity success, `AppDataManager.proximityEncounterEpoch` triggers a re-fetch of public profile + journal timeline so new encounters appear without clearing app cache.
 
 **Journal visibility mapping:** UI `"Everyone"` → storage `"shared"`; `"Private"` → `"private"`.
 

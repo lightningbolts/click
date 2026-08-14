@@ -94,9 +94,8 @@ import compose.project.click.click.ui.components.MapPin // pragma: allowlist sec
 import compose.project.click.click.ui.components.MapPinKind // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformMap // pragma: allowlist secret
-import compose.project.click.click.ui.components.ProfileBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProfileSheetBadge // pragma: allowlist secret
-import compose.project.click.click.ui.components.ProfileSheetState // pragma: allowlist secret
+import compose.project.click.click.ui.components.TabbedUserProfileSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastHost // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.interactiveSwipeBackUnderlay // pragma: allowlist secret
@@ -891,63 +890,41 @@ fun MapScreen(
                 .collectAsState()
                 .value
                 ?.id
-        val sheetData =
-            remember(connectionSelection, viewerUserId) {
-                buildProfileSheetState(connectionSelection, viewerUserId)
+        val peerUserId =
+            connectionSelection.otherUser?.id?.takeIf { it.isNotBlank() }
+                ?: connectionSelection.point.connection.user_ids.firstOrNull { id ->
+                    id.isNotBlank() && id != viewerUserId
+                }
+        val statusBadge =
+            when (connectionSelection.point.timeState) {
+                TimeState.LIVE -> ProfileSheetBadge("Live now", PrimaryBlue)
+                TimeState.RECENT -> ProfileSheetBadge("Recent", LightBlue)
+                TimeState.ARCHIVE -> ProfileSheetBadge("Memory", Color.Gray)
             }
-        val profileSheetColor = MaterialTheme.colorScheme.surface
-        val onProfileSheet = MaterialTheme.colorScheme.onSurface
-        MapBeaconSheetRoot(
-            visible = true,
-            onDismissRequest = {
+        TabbedUserProfileSheet(
+            userId = peerUserId,
+            viewerUserId = viewerUserId,
+            connectionId = connectionSelection.point.connection.id,
+            statusBadge = statusBadge,
+            onDismiss = {
                 selectedProfileId = null
                 viewModel.clearSelection()
             },
-            containerColor = profileSheetColor,
-            contentColor = onProfileSheet,
-            scrimColor = Color.Black.copy(alpha = ClickSheetDefaults.ScrimAlpha),
-            contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
-            appColorScheme = MaterialTheme.colorScheme,
-            appTypography = MaterialTheme.typography,
-            // Profile Column tabs under UIKit scroll-host (native dismiss; no surface-drag flicker).
-            useUiKitScrollHost = true,
-        ) {
-            ClickSheetDialogChrome(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight(),
-                sheetColor = profileSheetColor,
-                onSurface = onProfileSheet,
-                alignSemanticColorsToSheet = true,
-            ) {
-                ProfileBottomSheet(
-                    state = sheetData,
-                    onMessage = {
-                        selectedProfileId = null
-                        viewModel.clearSelection()
-                        onNavigateToChat?.invoke(connectionSelection.point.connection.id)
-                    },
-                    onNudge = {
-                        viewModel.sendNudge(
-                            connectionId = connectionSelection.point.connection.id,
-                            otherUserName = connectionSelection.otherUser?.name ?: "Someone",
-                        )
-                        selectedProfileId = null
-                        viewModel.clearSelection()
-                    },
-                    onOpenDisposableRoll =
-                        onOpenDisposableRoll?.let { open ->
-                            {
-                                val connectionId = connectionSelection.point.connection.id
-                                selectedProfileId = null
-                                viewModel.clearSelection()
-                                open(connectionId)
-                            }
-                        },
+            onMessage = {
+                selectedProfileId = null
+                viewModel.clearSelection()
+                onNavigateToChat?.invoke(connectionSelection.point.connection.id)
+            },
+            onNudge = {
+                viewModel.sendNudge(
+                    connectionId = connectionSelection.point.connection.id,
+                    otherUserName = connectionSelection.otherUser?.name ?: "Someone",
                 )
-            }
-        }
+                selectedProfileId = null
+                viewModel.clearSelection()
+            },
+            onOpenDisposableRoll = onOpenDisposableRoll,
+        )
     }
 
     val mapLocationService = remember { LocationService() }
@@ -977,53 +954,6 @@ fun MapScreen(
                     .zIndex(100f),
         )
     }
-}
-
-/**
- * Shapes a [MapSelection.ConnectionSelected] into the data the shared
- * [ProfileBottomSheet] renders. Media / Links / Files tabs are seeded empty — C15
- * (not in this phase) plumbs the message-history query that populates them. The
- * Timeline tab always has at least one row: the connection event itself.
- */
-private fun buildProfileSheetState(
-    sel: MapSelection.ConnectionSelected,
-    viewerUserId: String?,
-): ProfileSheetState {
-    val otherUser = sel.otherUser
-    val point = sel.point
-    val displayName =
-        otherUser?.name?.takeIf { it.isNotBlank() }
-            ?: "Connection"
-    val status =
-        when (point.timeState) {
-            TimeState.LIVE -> ProfileSheetBadge("Live now", PrimaryBlue)
-            TimeState.RECENT -> ProfileSheetBadge("Recent", LightBlue)
-            TimeState.ARCHIVE -> ProfileSheetBadge("Memory", Color.Gray)
-        }
-    return ProfileSheetState(
-        displayName = displayName,
-        subtitle = otherUser?.email?.takeIf { it.isNotBlank() },
-        avatarUrl = otherUser?.image,
-        statusBadge = status,
-        canNudge =
-            point.connection.id.isNotBlank() &&
-                (
-                    point.connection.has_begun ||
-                        point.connection.normalizedConnectionStatus() in setOf("active", "kept", "pending") ||
-                        point.timeState == TimeState.LIVE ||
-                        point.timeState == TimeState.RECENT
-                ),
-        timeline = emptyList(),
-        media = emptyList(),
-        links = emptyList(),
-        files = emptyList(),
-        userId = otherUser?.id,
-        email = otherUser?.email?.takeIf { it.isNotBlank() },
-        viewerUserId = viewerUserId,
-        // Drives the BFF-owned Media / Files hydration inside [ProfileBottomSheet]
-        // via `ConnectionRepository.fetchConnectionTabs`.
-        connectionId = point.connection.id,
-    )
 }
 
 @Composable

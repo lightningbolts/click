@@ -1781,6 +1781,16 @@ fun App() {
                                                                     }
                                                                 },
                                                                 onSignOut = { authViewModel.signOut() },
+                                                                mapViewModel = mapViewModel,
+                                                                onShareBeaconToChats = { beacon, chatIds, openConnectionId ->
+                                                                    chatIds.forEach { chatId ->
+                                                                        chatViewModel.sendBeaconMessageToChat(chatId, beacon)
+                                                                    }
+                                                                    if (openConnectionId != null) {
+                                                                        pendingChatId = openConnectionId
+                                                                        navigateTo(NavigationItem.Connections.route)
+                                                                    }
+                                                                },
                                                             )
                                                     }
                                                 }

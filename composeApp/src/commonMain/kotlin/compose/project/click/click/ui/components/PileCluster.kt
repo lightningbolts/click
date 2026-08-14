@@ -5,12 +5,12 @@
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,7 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -33,7 +33,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
@@ -42,6 +45,7 @@ import androidx.compose.ui.zIndex
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.platform.rememberReduceMotionEnabled // pragma: allowlist secret
 import compose.project.click.click.ui.theme.MotionTokens // pragma: allowlist secret
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -62,21 +66,17 @@ data class PilePhoto(
     val content: (@Composable BoxScope.() -> Unit)? = null,
 )
 
-private val PileDragElevation = 16.dp
-private val PileRestElevation = 6.dp
 private val PileFanSpacing = 10.dp
-private val PileRowBottomBreathingRoom = 8.dp
 
 /**
- * One pile cluster as a full-width row: a peeking stack of Polaroids that fans out in place.
+ * One pile cluster as a full-width row: a peeking stack of roughly-square Polaroids that fans out
+ * in place. The row occupies about half the screen height so the cluster is the dominant visual.
  *
- * Collapsed, the top card is draggable with spring physics — tilt proportional to travel, raised
- * elevation while held, spring-back under the commit threshold, and a throw-off that promotes the
- * next card with a haptic tick. Expanded, cards deal out on a staggered spring rather than snapping
- * into a new layout. Reduce Motion swaps all of that for a plain fade.
- *
- * Cards only ever peek right and down so the top card's title is never covered, and each cluster owns
- * its own row, so neighbouring clusters cannot collide the way the old free-floating board did.
+ * Collapsed, the top card tracks the finger 1:1 (no spring lag, no grid). Swipe up or right past
+ * the shared commit threshold flies it off with the swipe velocity; swipe left or down recalls the
+ * most recently dismissed card, which springs in from off-screen and can be grabbed mid-flight.
+ * Back layers scale down, dim, and drop elevation so the pile reads as physically stacked.
+ * Expanded, cards deal out — and collapse back — on the same staggered spring.
  */
 @Composable
 fun PileCluster(
@@ -87,12 +87,29 @@ fun PileCluster(
     onExpand: () -> Unit,
     onCollapse: () -> Unit,
     modifier: Modifier = Modifier,
-    photoWidth: Dp = 156.dp,
-    photoHeight: Dp = 188.dp,
+    photoWidth: Dp? = null,
+    photoHeight: Dp? = null,
 ) {
     if (photos.isEmpty()) return
+    val density = LocalDensity.current
+    val screenHeightPx = LocalWindowInfo.current.containerSize.height.coerceAtLeast(1)
+    val screenHeightDp = with(density) { screenHeightPx.toDp().value }
+    val sized = pileCardSizeDp(screenHeightDp).dp
+    val width = photoWidth ?: sized
+    val height = photoHeight ?: sized
     val (deepestPeekX, deepestPeekY) = pilePeekOffsetDp(PILE_MAX_VISIBLE_LAYERS - 1)
-    val rowHeight = photoHeight + deepestPeekY.dp + PileRowBottomBreathingRoom
+    val rowHeight = height + deepestPeekY.dp + 8.dp
+    var renderFan by remember(clusterId) { mutableStateOf(expanded) }
+
+    LaunchedEffect(clusterId, expanded, photos.size) {
+        if (expanded) {
+            renderFan = true
+        } else if (renderFan) {
+            delay(pileFanCollapseDurationMillis(photos.size).toLong())
+            renderFan = false
+        }
+    }
+
     Box(
         modifier =
             modifier
@@ -100,11 +117,12 @@ fun PileCluster(
                 .height(rowHeight)
                 .semantics { contentDescription = label },
     ) {
-        if (expanded) {
+        if (renderFan) {
             PileFanStrip(
                 photos = photos,
-                photoWidth = photoWidth,
-                photoHeight = photoHeight,
+                photoWidth = width,
+                photoHeight = height,
+                expanded = expanded,
                 onCollapse = onCollapse,
                 modifier = Modifier.align(Alignment.TopStart),
             )
@@ -112,9 +130,9 @@ fun PileCluster(
             PileCollapsedStack(
                 clusterId = clusterId,
                 photos = photos,
-                photoWidth = photoWidth,
-                photoHeight = photoHeight,
-                stackWidth = photoWidth + deepestPeekX.dp,
+                photoWidth = width,
+                photoHeight = height,
+                stackWidth = width + deepestPeekX.dp,
                 onExpand = onExpand,
                 modifier = Modifier.align(Alignment.TopStart),
             )
@@ -135,66 +153,160 @@ private fun PileCollapsedStack(
     val reduceMotion = rememberReduceMotionEnabled()
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
-    val dragOffset = remember(clusterId) { Animatable(0f) }
-    var topIndex by remember(clusterId) { mutableIntStateOf(0) }
-    var isDragging by remember(clusterId) { mutableStateOf(false) }
-    val cardWidthPx = with(density) { photoWidth.toPx() }
-    val canCycle = photos.size > 1
-    val elevation by animateDpAsState(
-        targetValue = if (isDragging) PileDragElevation else PileRestElevation,
-        animationSpec = MotionTokens.softEnterSpec(),
-        label = "pile_elevation",
-    )
+    val photoIds = remember(photos) { photos.map { it.id } }
+    var stackIds by remember(clusterId, photoIds) { mutableStateOf(photoIds) }
+    var dismissedIds by remember(clusterId, photoIds) { mutableStateOf(emptyList<String>()) }
+    val photoById = remember(photos) { photos.associateBy { it.id } }
 
-    val draggableState =
-        rememberDraggableState { delta ->
-            scope.launch { dragOffset.snapTo(dragOffset.value + delta) }
-        }
+    var dragging by remember(clusterId) { mutableStateOf(false) }
+    var liveX by remember(clusterId) { mutableFloatStateOf(0f) }
+    var liveY by remember(clusterId) { mutableFloatStateOf(0f) }
+    val animX = remember(clusterId) { Animatable(0f) }
+    val animY = remember(clusterId) { Animatable(0f) }
+    val cardSizePx = with(density) { minOf(photoWidth, photoHeight).toPx() }
 
     Box(
         modifier =
             modifier
                 .width(stackWidth)
-                .then(
-                    if (canCycle) {
-                        Modifier.draggable(
-                            state = draggableState,
-                            orientation = Orientation.Horizontal,
-                            onDragStarted = { isDragging = true },
-                            onDragStopped = { velocity ->
-                                isDragging = false
-                                if (shouldAdvancePileCard(dragOffset.value, cardWidthPx, velocity)) {
-                                    dragOffset.animateTo(
-                                        targetValue = pileCardExitTargetPx(dragOffset.value, cardWidthPx),
-                                        animationSpec = MotionTokens.softExitSpec(),
-                                    )
-                                    topIndex = (topIndex + 1) % photos.size
+                .height(photoHeight + pilePeekOffsetDp(PILE_MAX_VISIBLE_LAYERS - 1).second.dp)
+                .pointerInput(clusterId, stackIds, dismissedIds, cardSizePx, reduceMotion) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val velocityTracker = VelocityTracker()
+                        velocityTracker.addPosition(down.uptimeMillis, down.position)
+                        val slopChange =
+                            awaitTouchSlopOrCancellation(down.id) { change, _ ->
+                                change.consume()
+                            }
+                        if (slopChange == null) {
+                            if (!dragging) onExpand()
+                            return@awaitEachGesture
+                        }
+                        animX.stop()
+                        animY.stop()
+                        liveX = animX.value
+                        liveY = animY.value
+                        dragging = true
+                        liveX += slopChange.positionChange().x
+                        liveY += slopChange.positionChange().y
+                        velocityTracker.addPosition(slopChange.uptimeMillis, slopChange.position)
+                        val completed =
+                            drag(slopChange.id) { change ->
+                                change.consume()
+                                velocityTracker.addPosition(change.uptimeMillis, change.position)
+                                liveX += change.positionChange().x
+                                liveY += change.positionChange().y
+                            }
+                        val velocity = velocityTracker.calculateVelocity()
+                        val releaseX = liveX
+                        val releaseY = liveY
+                        dragging = false
+                        val action =
+                            pileSwipeAction(
+                                offsetXPx = releaseX,
+                                offsetYPx = releaseY,
+                                velocityXPxPerSec = velocity.x,
+                                velocityYPxPerSec = velocity.y,
+                                sizePx = cardSizePx,
+                                canDismiss = stackIds.size > 1,
+                                canRecall = dismissedIds.isNotEmpty(),
+                            )
+                        if (!completed) {
+                            scope.launch {
+                                animX.snapTo(releaseX)
+                                animY.snapTo(releaseY)
+                                launch { animX.animateTo(0f, MotionTokens.softEnterSpec()) }
+                                launch { animY.animateTo(0f, MotionTokens.softEnterSpec()) }
+                            }
+                            return@awaitEachGesture
+                        }
+                        scope.launch {
+                            animX.snapTo(releaseX)
+                            animY.snapTo(releaseY)
+                            when (action) {
+                                PileSwipeAction.Dismiss -> {
+                                    val (exitX, exitY) = pileCardExitTargetPx(releaseX, releaseY, cardSizePx)
+                                    coroutineScope {
+                                        launch {
+                                            animX.animateTo(
+                                                exitX,
+                                                MotionTokens.softExitSpec(),
+                                                initialVelocity = velocity.x,
+                                            )
+                                        }
+                                        launch {
+                                            animY.animateTo(
+                                                exitY,
+                                                MotionTokens.softExitSpec(),
+                                                initialVelocity = velocity.y,
+                                            )
+                                        }
+                                    }
+                                    val dismissed = stackIds.first()
+                                    stackIds = stackIds.drop(1)
+                                    dismissedIds = dismissedIds + dismissed
                                     PlatformHapticsPolicy.lightImpact()
-                                    dragOffset.snapTo(0f)
-                                } else {
-                                    dragOffset.animateTo(0f, MotionTokens.softEnterSpec())
+                                    animX.snapTo(0f)
+                                    animY.snapTo(0f)
                                 }
-                            },
-                        )
-                    } else {
-                        Modifier
-                    },
-                ),
+                                PileSwipeAction.Recall -> {
+                                    val recalled = dismissedIds.last()
+                                    dismissedIds = dismissedIds.dropLast(1)
+                                    stackIds = listOf(recalled) + stackIds
+                                    val (fromX, fromY) = pileRecallEnterFromPx(releaseX, releaseY, cardSizePx)
+                                    animX.snapTo(fromX)
+                                    animY.snapTo(fromY)
+                                    PlatformHapticsPolicy.lightImpact()
+                                    coroutineScope {
+                                        launch {
+                                            animX.animateTo(
+                                                0f,
+                                                MotionTokens.softEnterSpec(),
+                                                initialVelocity = velocity.x,
+                                            )
+                                        }
+                                        launch {
+                                            animY.animateTo(
+                                                0f,
+                                                MotionTokens.softEnterSpec(),
+                                                initialVelocity = velocity.y,
+                                            )
+                                        }
+                                    }
+                                }
+                                PileSwipeAction.SpringBack -> {
+                                    if (reduceMotion) {
+                                        animX.snapTo(0f)
+                                        animY.snapTo(0f)
+                                    } else {
+                                        coroutineScope {
+                                            launch { animX.animateTo(0f, MotionTokens.softEnterSpec()) }
+                                            launch { animY.animateTo(0f, MotionTokens.softEnterSpec()) }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
     ) {
-        val visibleLayers = minOf(photos.size, PILE_MAX_VISIBLE_LAYERS)
-        // Draw back-to-front so the interactive top card ends up on top and owns hit testing.
+        val visibleIds = stackIds.take(PILE_MAX_VISIBLE_LAYERS)
+        val visibleLayers = visibleIds.size
         for (reverseLayer in 0 until visibleLayers) {
             val layer = visibleLayers - 1 - reverseLayer
-            val photo = photos[(topIndex + layer) % photos.size]
+            val photo = photoById[visibleIds[layer]] ?: continue
             val (peekX, peekY) = pilePeekOffsetDp(layer)
             val isTop = layer == 0
             val restTilt = if (reduceMotion) 0f else pileCardTiltDeg(photo.id, layer)
+            val scale = if (reduceMotion) 1f else pileLayerScale(layer)
             PhotoCard(
                 id = photo.visualId,
                 title = if (isTop) photo.title else null,
                 subtitle = if (isTop) photo.subtitle else null,
                 imageUrl = photo.imageUrl,
-                elevation = if (isTop) elevation else PileRestElevation,
+                elevation = pileLayerElevationDp(if (isTop && dragging) 0 else layer).dp,
+                dimming = if (reduceMotion) 0f else pileLayerDim(layer),
                 modifier =
                     Modifier
                         .offset(x = peekX.dp, y = peekY.dp)
@@ -202,19 +314,27 @@ private fun PileCollapsedStack(
                         .height(photoHeight)
                         .zIndex((visibleLayers - layer).toFloat())
                         .graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                            alpha = if (reduceMotion) 1f else pileLayerAlpha(layer)
                             if (isTop) {
-                                translationX = dragOffset.value
+                                translationX = if (dragging) liveX else animX.value
+                                translationY = if (dragging) liveY else animY.value
                                 rotationZ =
                                     if (reduceMotion) {
                                         0f
                                     } else {
-                                        pileDragTiltDeg(dragOffset.value, size.width)
+                                        pileDragTiltDeg(
+                                            if (dragging) liveX else animX.value,
+                                            if (dragging) liveY else animY.value,
+                                            size.width,
+                                        )
                                     }
                             } else {
                                 rotationZ = restTilt
                             }
                         },
-                onClick = if (isTop) onExpand else null,
+                onClick = null,
                 content = if (isTop) photo.content else null,
             )
         }
@@ -226,6 +346,7 @@ private fun PileFanStrip(
     photos: List<PilePhoto>,
     photoWidth: Dp,
     photoHeight: Dp,
+    expanded: Boolean,
     onCollapse: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -239,13 +360,20 @@ private fun PileFanStrip(
         verticalAlignment = Alignment.Top,
     ) {
         photos.forEachIndexed { index, photo ->
-            val appear = remember(photo.id) { Animatable(if (reduceMotion) 1f else 0f) }
-            LaunchedEffect(photo.id, reduceMotion) {
+            val appear = remember(photo.id) { Animatable(if (reduceMotion || expanded) 0f else 1f) }
+            LaunchedEffect(photo.id, expanded, reduceMotion) {
                 if (reduceMotion) {
-                    appear.animateTo(1f, tween(durationMillis = 120))
-                } else {
-                    delay(pileFanStaggerMillis(index).toLong())
+                    appear.animateTo(if (expanded) 1f else 0f, tween(durationMillis = 120))
+                    return@LaunchedEffect
+                }
+                if (expanded) {
+                    if (appear.value == 0f) {
+                        delay(pileFanStaggerMillis(index).toLong())
+                    }
                     appear.animateTo(1f, MotionTokens.softEnterSpec())
+                } else {
+                    delay(pileFanStaggerMillis((photos.lastIndex - index).coerceAtLeast(0)).toLong())
+                    appear.animateTo(0f, MotionTokens.softEnterSpec())
                 }
             }
             PhotoCard(

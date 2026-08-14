@@ -48,7 +48,7 @@ App.kt (navigation shell)
 | `chat/` | Chat-only composables (keeps `ChatView` readable) | `ChatMessageBubble`, `ConnectionChatMessageComposer` |
 | `theme/` | Design tokens | `Color.kt`, `Typography.kt`, `PlatformTheme.kt`, `ClickAccent.kt`, `CardVisual.kt`, `Contrast.kt` |
 | `utils/` | Composable-side platform hooks | `LocationPermissionRequester`, `MapUtils` |
-| Home pile | One full-width Polaroid stack per section | `homePhotoPileItems`, `PileCluster`, `PhotoCard`, `PilePhysics.kt` (Compose-free math) |
+| Home pile | One full-width Polaroid stack per section | `homePhotoPileItems`, `PileCluster`, `PhotoCard`, `PilePhysics.kt` (Compose-free 2D dismiss/recall math) |
 
 ### Shared surfaces worth knowing before you write a new one
 
@@ -58,7 +58,7 @@ App.kt (navigation shell)
 | `SectionHeader.kt` | Every list section title (bold title, optional caption, optional trailing action) | A local `Row` with a `titleMedium` `Text` |
 | `MediaSourceButton.kt` | "Take photo" / "Photo library" pickers | A `TextButton` label, which reads as highlighted body text |
 | `InteractiveBackPersonality.kt` — `rememberInteractiveBackHostState()`, `Modifier.interactiveSwipeBackUnderlay(host)`, `host.dismiss()` | Parallaxing the screen behind an interactive back gesture *and* making tap-back animate identically | A per-screen `MutableFloatState` + bespoke `graphicsLayer` |
-| `PilePhysics.kt` | Peek offsets, tilt, drag commit thresholds, fan stagger | Inline magic numbers; commit thresholds must defer to `GlassGestureCommitFraction` / `GlassGestureFlickVelocityPxPerSec` |
+| `PilePhysics.kt` | Peek offsets, layer depth, 2D dismiss/recall commit, fan stagger | Inline magic numbers; commit thresholds must defer to `GlassGestureCommitFraction` / `GlassGestureFlickVelocityPxPerSec` |
 | `ClickOutlinedTextField(placeholderText = …)` | Plain single-line hints | A `placeholder = { Text(...) }` slot, which can wrap and strand the caret mid-field |
 
 ### Glass UI system

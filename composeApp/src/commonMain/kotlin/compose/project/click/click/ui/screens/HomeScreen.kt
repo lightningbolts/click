@@ -46,14 +46,10 @@ import compose.project.click.click.data.models.ConnectionInsights // pragma: all
 import compose.project.click.click.data.models.HomeLayoutMode // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
-import compose.project.click.click.data.models.MapBeaconMetadata // pragma: allowlist secret
 import compose.project.click.click.data.models.ReconnectReminder // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.mostUrgentArchiveNotice // pragma: allowlist secret
-import compose.project.click.click.data.models.parseEpochMs // pragma: allowlist secret
-import compose.project.click.click.data.models.withPreservedEventScheduleFrom // pragma: allowlist secret
-import compose.project.click.click.events.EventReminderCoordinator // pragma: allowlist secret
 import compose.project.click.click.events.HomeEventReminder // pragma: allowlist secret
 import compose.project.click.click.events.eventReminderBody // pragma: allowlist secret
 import compose.project.click.click.events.eventReminderTitle // pragma: allowlist secret
@@ -62,7 +58,6 @@ import compose.project.click.click.ui.components.ActivityRecapSection // pragma:
 import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppShimmerScreen // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvailabilitySheet // pragma: allowlist secret
-import compose.project.click.click.ui.components.BeaconShareToChatDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDialogChrome // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionArchiveWarningBanner // pragma: allowlist secret
@@ -91,8 +86,6 @@ import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allo
 import compose.project.click.click.ui.components.toHomeExploreTile // pragma: allowlist secret
 import compose.project.click.click.ui.sheet.MapBeaconSheetRoot // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
-import compose.project.click.click.ui.utils.hasUsableMapCoordinates // pragma: allowlist secret
-import compose.project.click.click.ui.utils.haversineDistance // pragma: allowlist secret
 import compose.project.click.click.ui.utils.mergeMapBeaconLists // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AvailabilityViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.HomeState // pragma: allowlist secret
@@ -105,9 +98,6 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
 import kotlin.time.Duration.Companion.milliseconds
 
 // Spacing constants matching app's consistent 20.dp horizontal padding
@@ -174,7 +164,6 @@ fun HomeScreen(
     var selectedPileLocation by remember { mutableStateOf<String?>(null) }
     // Hoisted here so system back collapses a fanned-out cluster, and only one cluster fans at a time.
     var expandedPileClusterId by remember { mutableStateOf<String?>(null) }
-    var shareSavedBeaconToChat by remember { mutableStateOf<MapBeacon?>(null) }
     var archiveBannerNow by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
 
     // Use the same auth-aware refresh path as Settings so intents aren't empty after fast boot.
@@ -764,94 +753,13 @@ fun HomeScreen(
         }
 
         val detailBeaconSeed = selectedSavedEventBeacon
-        if (detailBeaconSeed != null) {
-            // Keep sheet seed in sync with map/prefetch hydration so Host/Posted update live.
-            val detailBeacon =
-                remember(detailBeaconSeed, mapBeacons, prefetchedBeacons) {
-                    val live =
-                        mapBeacons.firstOrNull { it.id == detailBeaconSeed.id }
-                            ?: prefetchedBeacons.firstOrNull { it.id == detailBeaconSeed.id }
-                    live?.withPreservedEventScheduleFrom(detailBeaconSeed) ?: detailBeaconSeed
-                }
-            LaunchedEffect(detailBeaconSeed.id) {
-                mapViewModel.ensureEventBeaconDetail(detailBeaconSeed.id, seed = detailBeaconSeed)
-            }
-            val detailSurface = GlassSheetTokens.OledBlack()
-            val onDetailSurface = GlassSheetTokens.OnOled()
-            val distanceMeters =
-                AppDataManager.lastKnownDeviceLocation.value?.let { (lat, lon) ->
-                    haversineDistance(lat, lon, detailBeacon.latitude, detailBeacon.longitude)
-                }
-            val isCreator =
-                !currentUser?.id.isNullOrBlank() &&
-                    detailBeacon.createdByUserId == currentUser?.id
-            val inboxChats by AppDataManager.inboxFeedChats.collectAsState()
-            MapBeaconSheetRoot(
-                visible = true,
-                onDismissRequest = {
-                    shareSavedBeaconToChat = null
-                    selectedSavedEventBeacon = null
-                },
-                containerColor = detailSurface,
-                contentColor = onDetailSurface,
-                scrimColor = Color.Black.copy(alpha = ClickSheetDefaults.ScrimAlpha),
-                contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
-                appColorScheme = MaterialTheme.colorScheme,
-                appTypography = MaterialTheme.typography,
-            ) {
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    ClickSheetDialogChrome(
-                        modifier = Modifier.fillMaxWidth(),
-                        sheetColor = detailSurface,
-                        onSurface = onDetailSurface,
-                        alignSemanticColorsToSheet = true,
-                    ) {
-                        EventBeaconDetail(
-                            beacon = detailBeacon,
-                            distanceMeters = distanceMeters,
-                            viewModel = mapViewModel,
-                            isCreator = isCreator,
-                            onEdit = { selectedSavedEventBeacon = null },
-                            onDelete = { selectedSavedEventBeacon = null },
-                            onShareToChat = {
-                                shareSavedBeaconToChat = detailBeacon
-                            },
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .sheetBodyScroll()
-                                    .padding(horizontal = 24.dp, vertical = 12.dp),
-                        )
-                    }
-                    UnifiedToastHost(
-                        state = toastState,
-                        opaque = true,
-                        modifier =
-                            Modifier
-                                .align(Alignment.BottomCenter)
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
-                                .padding(bottom = 24.dp)
-                                .zIndex(100f),
-                    )
-                }
-                shareSavedBeaconToChat?.let { beaconToShare ->
-                    BeaconShareToChatDialog(
-                        beacon = beaconToShare,
-                        chats = inboxChats,
-                        onDismissRequest = { shareSavedBeaconToChat = null },
-                        onShare = { selectedChatIds, openChatConnectionId ->
-                            onShareBeaconToChats?.invoke(
-                                beaconToShare,
-                                selectedChatIds,
-                                openChatConnectionId,
-                            )
-                            shareSavedBeaconToChat = null
-                        },
-                    )
-                }
-            }
-        }
+        SavedEventDetailSheet(
+            beacon = detailBeaconSeed,
+            mapViewModel = mapViewModel,
+            currentUserId = currentUser?.id,
+            onDismiss = { selectedSavedEventBeacon = null },
+            onShareBeaconToChats = onShareBeaconToChats,
+        )
 
         UnifiedToastHost(
             state = toastState,
@@ -1237,134 +1145,6 @@ private fun ConnectionCard(
             )
         }
     }
-}
-
-/**
- * Resolve a bookmarked event into a [MapBeacon] for the Home detail sheet (no Map tab jump).
- * Bookmark `event_start_at` / `event_end_at` win over any stale map cache so Start Time matches Home.
- * Bookmark lat/lng and venue labels fill gaps when the map cache is sparse/null-island.
- */
-private fun resolveSavedEventBeacon(
-    bookmark: EventBookmarkItemDto,
-    mapBeacons: List<MapBeacon>,
-    prefetchedBeacons: List<MapBeacon>,
-): MapBeacon {
-    val id = bookmark.beaconId.trim()
-    val base =
-        mapBeacons.firstOrNull { it.id == id }
-            ?: EventReminderCoordinator.beaconById(id)
-            ?: prefetchedBeacons.firstOrNull { it.id == id }
-            ?: return bookmark.toSyntheticMapBeacon()
-    return base.withBookmarkScheduleOverlay(bookmark)
-}
-
-private fun MapBeacon.withBookmarkScheduleOverlay(bookmark: EventBookmarkItemDto): MapBeacon {
-    val startIso = bookmark.eventStartAt?.trim()?.takeIf { it.isNotEmpty() }
-    val endIso = bookmark.eventEndAt?.trim()?.takeIf { it.isNotEmpty() }
-    val locationName = bookmark.locationName?.trim()?.takeIf { it.isNotEmpty() }
-    val formattedAddress = bookmark.formattedAddress?.trim()?.takeIf { it.isNotEmpty() }
-    val categories =
-        bookmark.eventCategories
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .distinct()
-    val bookmarkLat = bookmark.latitude
-    val bookmarkLon = bookmark.longitude
-    val adoptBookmarkCoords =
-        !hasUsableMapCoordinates() &&
-            bookmarkLat != null &&
-            bookmarkLon != null &&
-            bookmarkLat.isFinite() &&
-            bookmarkLon.isFinite() &&
-            !(bookmarkLat == 0.0 && bookmarkLon == 0.0)
-
-    val existing = metadata.raw
-    val merged =
-        buildJsonObject {
-            existing?.forEach { (k, v) -> put(k, v) }
-            startIso?.let { put("event_start_at", JsonPrimitive(it)) }
-            endIso?.let { put("event_end_at", JsonPrimitive(it)) }
-            bookmark.title?.trim()?.takeIf { it.isNotEmpty() }?.let { title ->
-                if (existing?.get("title") == null) put("title", JsonPrimitive(title))
-            }
-            if (metadata.locationName.isNullOrBlank() && locationName != null) {
-                put("location_name", JsonPrimitive(locationName))
-            }
-            if (metadata.formattedAddress.isNullOrBlank() && formattedAddress != null) {
-                put("formatted_address", JsonPrimitive(formattedAddress))
-            }
-            if (metadata.eventCategories.isEmpty() && categories.isNotEmpty()) {
-                put("event_categories", JsonArray(categories.map { JsonPrimitive(it) }))
-            }
-        }
-    return copy(
-        latitude = if (adoptBookmarkCoords) bookmarkLat!! else latitude,
-        longitude = if (adoptBookmarkCoords) bookmarkLon!! else longitude,
-        createdByUserId = createdByUserId ?: bookmark.creatorId?.trim()?.takeIf { it.isNotEmpty() },
-        creatorDisplayName = creatorDisplayName ?: bookmark.creatorName?.trim()?.takeIf { it.isNotEmpty() },
-        createdAtEpochMs =
-            createdAtEpochMs ?: bookmark.createdAt
-                ?.trim()
-                ?.takeIf { it.isNotEmpty() }
-                ?.let { parseEpochMs(it) },
-        showCreatorName = showCreatorName || bookmark.showCreatorName,
-        metadata =
-            metadata.copy(
-                title = metadata.title ?: bookmark.title?.trim()?.takeIf { it.isNotEmpty() },
-                locationName = metadata.locationName?.takeIf { it.isNotBlank() } ?: locationName,
-                formattedAddress = metadata.formattedAddress?.takeIf { it.isNotBlank() } ?: formattedAddress,
-                eventCategories = metadata.eventCategories.ifEmpty { categories },
-                raw = merged,
-            ),
-    )
-}
-
-private fun EventBookmarkItemDto.toSyntheticMapBeacon(): MapBeacon {
-    val lat = latitude ?: 0.0
-    val lon = longitude ?: 0.0
-    val title = this.title?.takeIf { it.isNotBlank() }
-    val locationName = this.locationName?.takeIf { it.isNotBlank() }
-    val formattedAddress = this.formattedAddress?.takeIf { it.isNotBlank() }
-    val categories = eventCategories.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
-    val raw =
-        buildJsonObject {
-            title?.let { put("title", JsonPrimitive(it)) }
-            title?.let { put("description", JsonPrimitive(it)) }
-            eventStartAt?.takeIf { it.isNotBlank() }?.let { put("event_start_at", JsonPrimitive(it)) }
-            eventEndAt?.takeIf { it.isNotBlank() }?.let { put("event_end_at", JsonPrimitive(it)) }
-            locationName?.let { put("location_name", JsonPrimitive(it)) }
-            formattedAddress?.let { put("formatted_address", JsonPrimitive(it)) }
-            if (categories.isNotEmpty()) {
-                put("event_categories", JsonArray(categories.map { JsonPrimitive(it) }))
-            }
-        }
-    val expiresMs =
-        expiresAt
-            ?.let {
-                compose.project.click.click.data.models // pragma: allowlist secret
-                    .parseEpochMs(it)
-            }
-    return MapBeacon(
-        id = beaconId,
-        kind = MapBeaconKind.EVENT,
-        latitude = lat,
-        longitude = lon,
-        metadata =
-            MapBeaconMetadata(
-                title = title,
-                description = title,
-                locationName = locationName,
-                formattedAddress = formattedAddress,
-                eventCategories = categories,
-                raw = raw,
-            ),
-        createdByUserId = creatorId?.trim()?.takeIf { it.isNotEmpty() },
-        createdAtEpochMs = createdAt?.trim()?.takeIf { it.isNotEmpty() }?.let { parseEpochMs(it) },
-        expiresAtEpochMs = expiresMs,
-        sourceBeaconType = "event",
-        showCreatorName = showCreatorName,
-        creatorDisplayName = creatorName?.trim()?.takeIf { it.isNotEmpty() },
-    )
 }
 
 /**
