@@ -181,9 +181,11 @@ class PilePhysicsTest {
     @Test
     fun exitTargetLeavesTheScreenAlongTheThrownVector() {
         val size = 300f
-        val diagonal = pileCardExitTargetPx(40f, 30f, size)
-        assertTrue(diagonal.first > 0f && diagonal.second > 0f)
-        assertTrue(diagonal.first > size && diagonal.second > size * 0.5f)
+        val diagonal = pileCardExitTargetPx(40f, 40f, size)
+        assertTrue(diagonal.first > size && diagonal.second > size)
+        val fortyThirty = pileCardExitTargetPx(40f, 30f, size)
+        assertTrue(fortyThirty.first > 0f && fortyThirty.second > 0f)
+        assertTrue(fortyThirty.first > size && fortyThirty.second > size * 0.5f)
         val right = pileCardExitTargetPx(40f, 8f, size)
         assertTrue(right.first > size)
         val up = pileCardExitTargetPx(8f, -40f, size)

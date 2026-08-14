@@ -181,7 +181,7 @@ fun pileCardExitTargetPx(
 ): Pair<Float, Float> {
     val size = sizePx.coerceAtLeast(1f)
     val mag = hypot(offsetXPx, offsetYPx).coerceAtLeast(1f)
-    val scale = size * 1.35f / mag
+    val scale = size * 1.5f / mag
     return offsetXPx * scale to offsetYPx * scale
 }
 

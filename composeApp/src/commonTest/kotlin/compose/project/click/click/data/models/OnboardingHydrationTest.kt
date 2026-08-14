@@ -36,6 +36,32 @@ class OnboardingHydrationTest {
                 hasCompletedOnboarding = true,
             )
         assertTrue(state!!.welcomeSeen)
+        assertTrue(state.personalityCompleted)
+        assertTrue(state.avatarSetOrSkipped)
+        assertTrue(state.priorConnectionsSetOrSkipped)
+        assertTrue(state.interestsCompleted)
+    }
+
+    @Test
+    fun resolveOnboardingInitialState_completedLegacyPartialState_marksAllPhasesComplete() {
+        val saved =
+            OnboardingState(
+                welcomeSeen = false,
+                interestsCompleted = true,
+                personalityCompleted = false,
+                avatarSetOrSkipped = false,
+                priorConnectionsSetOrSkipped = false,
+            )
+        val state =
+            resolveOnboardingInitialState(
+                savedState = saved,
+                hasCompletedOnboarding = true,
+            )!!
+        assertTrue(state.welcomeSeen)
+        assertTrue(state.interestsCompleted)
+        assertTrue(state.personalityCompleted)
+        assertTrue(state.avatarSetOrSkipped)
+        assertTrue(state.priorConnectionsSetOrSkipped)
     }
 
     @Test

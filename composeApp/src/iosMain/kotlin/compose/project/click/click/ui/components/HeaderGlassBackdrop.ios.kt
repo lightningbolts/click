@@ -54,9 +54,7 @@ actual fun HeaderGlassBackdrop(
     if (reduceTransparency) {
         Box(
             modifier =
-                modifier
-                    .alpha(backdropAlpha)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
+                modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
         )
         return
     }

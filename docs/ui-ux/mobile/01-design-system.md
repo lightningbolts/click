@@ -237,7 +237,7 @@ Helpers: `rememberTabBarOverlayHeight()`, `rememberBottomChromePadding()`, `reme
 |-------|----------|
 | **Default** | Bottom chrome = measured tab/nav height + optional 16 dp scroll padding |
 | **Pressed/Highlighted** | N/A |
-| **Active** | Header `collapseFraction` 0→1 over 96 px scroll |
+| **Active** | Header `collapseFraction` 0→1 over `HeaderCollapseScrollThreshold` (20 dp, converted to px) |
 | **Focus** | IME lifts chat via `graphicsLayer` (iOS) or `offset` (Android) |
 | **Disabled** | N/A |
 | **Loading** | N/A |

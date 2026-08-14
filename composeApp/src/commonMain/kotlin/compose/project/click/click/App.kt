@@ -154,6 +154,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -363,6 +364,7 @@ fun App() {
                     )
                 }
             } finally {
+                if (!isActive) return@launch
                 if (onboardingState == null) {
                     val fallback =
                         resolveOnboardingAfterRemoteResolution(

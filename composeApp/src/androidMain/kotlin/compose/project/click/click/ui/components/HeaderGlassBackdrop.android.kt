@@ -13,6 +13,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import compose.project.click.click.platform.rememberReduceTransparencyEnabled // pragma: allowlist secret
 
 @Composable
@@ -23,14 +25,15 @@ actual fun HeaderGlassBackdrop(
     val reduceTransparency = rememberReduceTransparencyEnabled()
     val fraction = collapseFraction.coerceIn(0f, 1f)
     val surfaceColor = MaterialTheme.colorScheme.surface
-    val alpha = 0.55f + 0.3f * fraction
+    val alpha = if (reduceTransparency) 0.96f else 0.55f + 0.3f * fraction
+    val blurRadiusPx = with(LocalDensity.current) { 24.dp.toPx() }
 
     Box(
         modifier =
             modifier
                 .graphicsLayer {
                     if (Build.VERSION.SDK_INT >= 31 && !reduceTransparency) {
-                        renderEffect = BlurEffect(24f, 24f, TileMode.Clamp)
+                        renderEffect = BlurEffect(blurRadiusPx, blurRadiusPx, TileMode.Clamp)
                     }
                 }.background(surfaceColor.copy(alpha = alpha)),
     )

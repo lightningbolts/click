@@ -418,6 +418,7 @@ private fun PileFanStrip(
                 title = photo.title,
                 subtitle = photo.subtitle,
                 imageUrl = photo.imageUrl,
+                categoryBadge = photo.categoryBadge,
                 modifier =
                     Modifier
                         .width(photoWidth)

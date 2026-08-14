@@ -115,8 +115,13 @@ fun resolveOnboardingInitialState(
         if (completed) {
             state =
                 state.copy(
+                    flowVersion = state.flowVersion.coerceAtLeast(ONBOARDING_FLOW_VERSION_COMPLETE),
                     welcomeSeen = true,
-                    permissionsCompleted = state.permissionsCompleted || completed,
+                    permissionsCompleted = true,
+                    interestsCompleted = true,
+                    personalityCompleted = true,
+                    avatarSetOrSkipped = true,
+                    priorConnectionsSetOrSkipped = true,
                 )
         }
         return state
