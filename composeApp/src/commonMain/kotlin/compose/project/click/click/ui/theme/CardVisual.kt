@@ -1,25 +1,31 @@
 package compose.project.click.click.ui.theme // pragma: allowlist secret
 
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 
 /**
- * Deterministic per-id visual identity for pile photos, beacon pins, and detail sheets.
+ * Deterministic per-id visual identity for pile photos, beacon pins, list cards, and detail sheets.
  *
- * Hash buckets are 5/8 purple-dominant and 3/8 blue-dominant (62.5 / 37.5), inside the
- * product 60/40–65/35 purple/blue accent ratio. The same id always yields the same result.
+ * This is the **content** visual identity and is deliberately *not* the UI accent system. Chrome
+ * (buttons, nav, highlights) stays on the 60/40–65/35 purple/blue ratio owned by [ClickAccent];
+ * generated content draws from the full [CardHueFamily] palette so two events never look alike.
+ * Purple is still the heaviest bucket so the app reads on-brand. The same id always yields the same
+ * result.
  */
 data class CardVisual(
     val id: String,
     val hash: Int,
     val gradient: List<Color>,
     val pattern: CardPattern,
-    val purpleDominant: Boolean,
+    val hueFamily: CardHueFamily,
+    val scrimAlpha: Float,
     val contentScrim: Color,
     val onContent: Color,
     val pinShape: BeaconPinShape,
 ) {
+    /** Kept for map/pin parity with click-web; the palette is no longer purple-or-blue only. */
+    val purpleDominant: Boolean get() = hueFamily == CardHueFamily.PURPLE
+
     val fillArgb: Int get() = composeColorToArgb(gradient.first())
     val fillArgbSecondary: Int get() = composeColorToArgb(gradient.getOrElse(1) { gradient.first() })
 }
@@ -30,6 +36,17 @@ enum class CardPattern {
     GRAIN,
     GRID,
     CHEVRON,
+}
+
+/** Hue families a generated visual can draw from. Purple is the weighted brand anchor. */
+enum class CardHueFamily {
+    PURPLE,
+    BLUE,
+    TEAL,
+    CORAL,
+    GOLD,
+    MAGENTA,
+    GREEN,
 }
 
 /** Map-pin silhouette. Type-stable so beacons are distinguishable at a glance. */
@@ -44,7 +61,7 @@ enum class BeaconPinShape {
     PENTAGON,
 }
 
-private val PurpleFamily =
+private val PurpleStops =
     listOf(
         PrimaryBlue,
         LightBlue,
@@ -54,7 +71,7 @@ private val PurpleFamily =
         NeonPurple,
     )
 
-private val BlueFamily =
+private val BlueStops =
     listOf(
         SecondaryAccent,
         Color(0xFF3D63FF),
@@ -64,11 +81,88 @@ private val BlueFamily =
         Color(0xFF102A9E),
     )
 
-private val Patterns = CardPattern.entries.toTypedArray()
+private val TealStops =
+    listOf(
+        Color(0xFF0F766E),
+        Color(0xFF0D9488),
+        Color(0xFF14B8A6),
+        Color(0xFF115E59),
+        Color(0xFF2DD4BF),
+    )
 
-/** 5 purple buckets of 8 = 62.5% purple-dominant gradients. */
-internal const val CARD_VISUAL_PURPLE_BUCKETS = 5
-internal const val CARD_VISUAL_TOTAL_BUCKETS = 8
+private val CoralStops =
+    listOf(
+        Color(0xFFE11D48),
+        Color(0xFFF43F5E),
+        Color(0xFFBE123C),
+        Color(0xFFFB7185),
+        Color(0xFFEA580C),
+    )
+
+private val GoldStops =
+    listOf(
+        Color(0xFFD97706),
+        Color(0xFFF59E0B),
+        Color(0xFFB45309),
+        Color(0xFFFBBF24),
+    )
+
+private val MagentaStops =
+    listOf(
+        Color(0xFFA21CAF),
+        Color(0xFFC026D3),
+        Color(0xFF86198F),
+        Color(0xFFDB2777),
+        Color(0xFFE879F9),
+    )
+
+private val GreenStops =
+    listOf(
+        Color(0xFF15803D),
+        Color(0xFF16A34A),
+        Color(0xFF166534),
+        Color(0xFF22C55E),
+        Color(0xFF4ADE80),
+    )
+
+private fun stopsFor(family: CardHueFamily): List<Color> =
+    when (family) {
+        CardHueFamily.PURPLE -> PurpleStops
+        CardHueFamily.BLUE -> BlueStops
+        CardHueFamily.TEAL -> TealStops
+        CardHueFamily.CORAL -> CoralStops
+        CardHueFamily.GOLD -> GoldStops
+        CardHueFamily.MAGENTA -> MagentaStops
+        CardHueFamily.GREEN -> GreenStops
+    }
+
+/**
+ * Weighted hue buckets. Purple keeps the largest share (5/16 ≈ 31%) as the brand anchor while every
+ * other family still shows up often enough that a list of items reads as visually distinct.
+ */
+private val HueBuckets: List<CardHueFamily> =
+    listOf(
+        CardHueFamily.PURPLE,
+        CardHueFamily.PURPLE,
+        CardHueFamily.PURPLE,
+        CardHueFamily.PURPLE,
+        CardHueFamily.PURPLE,
+        CardHueFamily.BLUE,
+        CardHueFamily.BLUE,
+        CardHueFamily.BLUE,
+        CardHueFamily.TEAL,
+        CardHueFamily.TEAL,
+        CardHueFamily.CORAL,
+        CardHueFamily.CORAL,
+        CardHueFamily.MAGENTA,
+        CardHueFamily.MAGENTA,
+        CardHueFamily.GOLD,
+        CardHueFamily.GREEN,
+    )
+
+internal const val CARD_VISUAL_HUE_BUCKETS = 16
+
+private val Patterns = CardPattern.entries.toTypedArray()
 
 fun generateCardVisual(
     id: String,
@@ -77,28 +171,28 @@ fun generateCardVisual(
     val seed = id.ifBlank { "click" }
     val hash = fnv1a32(seed)
     val unsigned = hash.toUInt()
-    val purpleDominant = (unsigned % CARD_VISUAL_TOTAL_BUCKETS.toUInt()).toInt() < CARD_VISUAL_PURPLE_BUCKETS
-    val primaryFamily = if (purpleDominant) PurpleFamily else BlueFamily
-    val secondaryFamily = if (purpleDominant) BlueFamily else PurpleFamily
-    val stopA = primaryFamily[(unsigned / 8u % primaryFamily.size.toUInt()).toInt()]
-    val stopB = primaryFamily[(unsigned / 64u % primaryFamily.size.toUInt()).toInt()]
-    val stopC = secondaryFamily[(unsigned / 512u % secondaryFamily.size.toUInt()).toInt()]
+    val hueFamily = HueBuckets[(unsigned % CARD_VISUAL_HUE_BUCKETS.toUInt()).toInt()]
+    val primaryStops = stopsFor(hueFamily)
+    // Second hue family for the far gradient stop, so cards read as a blend rather than one flat hue.
+    val otherFamilies = CardHueFamily.entries.filter { it != hueFamily }
+    val secondaryFamily = otherFamilies[(unsigned / 16u % otherFamilies.size.toUInt()).toInt()]
+    val secondaryStops = stopsFor(secondaryFamily)
+    val stopA = primaryStops[(unsigned / 8u % primaryStops.size.toUInt()).toInt()]
+    val stopB = primaryStops[(unsigned / 64u % primaryStops.size.toUInt()).toInt()]
+    val stopC = secondaryStops[(unsigned / 512u % secondaryStops.size.toUInt()).toInt()]
     val gradient = listOf(stopA, stopB, stopC).distinct()
     val pattern = Patterns[(unsigned / 7u % Patterns.size.toUInt()).toInt()]
-    val avgLum =
-        gradient
-            .map { it.luminance() }
-            .average()
-            .toFloat()
-    val scrimAlpha = if (avgLum > 0.45f) 0.52f else 0.38f
+    val onContent = Color.White
+    val scrimAlpha = scrimAlphaForContrast(gradient, onContent)
     return CardVisual(
         id = seed,
         hash = hash,
         gradient = gradient,
         pattern = pattern,
-        purpleDominant = purpleDominant,
+        hueFamily = hueFamily,
+        scrimAlpha = scrimAlpha,
         contentScrim = Color.Black.copy(alpha = scrimAlpha),
-        onContent = Color.White,
+        onContent = onContent,
         pinShape = pinShape,
     )
 }
@@ -142,36 +236,4 @@ internal fun fnv1a32(text: String): Int {
         hash *= 0x01000193
     }
     return hash
-}
-
-/**
- * Seeded layout jitter so pile clusters stay scattered but stable across recompositions.
- * [index] and [total] space clusters across the board; hash of [id] adds a small offset/rotation.
- */
-data class PileLayoutSlot(
-    val xFrac: Float,
-    val yFrac: Float,
-    val rotationDeg: Float,
-)
-
-fun pileSlotForCluster(
-    id: String,
-    index: Int,
-    total: Int,
-): PileLayoutSlot {
-    val hash = fnv1a32(id).toUInt()
-    val cols = if (total <= 2) 1 else 2
-    val col = index % cols
-    val row = index / cols
-    val rows = ((total + cols - 1) / cols).coerceAtLeast(1)
-    val baseX = (col + 0.5f) / cols.toFloat()
-    val baseY = (row + 0.5f) / rows.toFloat()
-    val jitterX = ((hash % 17u).toInt() - 8) / 120f
-    val jitterY = (((hash / 17u) % 17u).toInt() - 8) / 140f
-    val rotation = ((hash / 289u) % 11u).toInt() - 5
-    return PileLayoutSlot(
-        xFrac = (baseX + jitterX).coerceIn(0.18f, 0.82f),
-        yFrac = (baseY + jitterY).coerceIn(0.16f, 0.84f),
-        rotationDeg = rotation.toFloat(),
-    )
 }

@@ -1,3 +1,7 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+)
+
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.background
@@ -74,23 +78,25 @@ fun AvailabilitySheet(
     ) {
         ProvideSheetSwipeDismiss(onDismissRequest = onDismiss, scrollAtTop = scrollAtTop) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight()
-                    .background(sheetPageBackground())
-                    .sheetImePadding()
-                    .padding(
-                        start = 24.dp,
-                        end = 24.dp,
-                        top = ClickSheetDefaults.ContentTopPaddingUnderGrabber,
-                        bottom = 16.dp,
-                    ),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight()
+                        .background(sheetPageBackground())
+                        .sheetImePadding()
+                        .padding(
+                            start = 24.dp,
+                            end = 24.dp,
+                            top = ClickSheetDefaults.ContentTopPaddingUnderGrabber,
+                            bottom = 16.dp,
+                        ),
             ) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .verticalScroll(scroll),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .verticalScroll(scroll),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     Text(
@@ -100,11 +106,12 @@ fun AvailabilitySheet(
                         color = GlassSheetTokens.OnOled(),
                     )
                     Text(
-                        text = if (isEditing) {
-                            "Time window starts again from now with the length you pick. Update your tag or timeframe below."
-                        } else {
-                            "Pick how long you're open, and a short tag so connections know what you're up for."
-                        },
+                        text =
+                            if (isEditing) {
+                                "Time window starts again from now with the length you pick. Update your tag or timeframe below."
+                            } else {
+                                "Pick how long you're open, and a short tag so connections know what you're up for."
+                            },
                         style = MaterialTheme.typography.bodyMedium,
                         color = GlassSheetTokens.OnOledMuted(),
                     )
@@ -135,17 +142,18 @@ fun AvailabilitySheet(
                             onValueChange = viewModel::updateIntentTagInput,
                             modifier = Modifier.fillMaxWidth(),
                             label = { Text("Intent tag") },
-                            placeholder = { Text("Coffee, study, walk…") },
+                            placeholderText = "Coffee, study, walk…",
                             supportingText = {
                                 Text("${tag.length}/${AvailabilityViewModel.AVAILABILITY_INTENT_TAG_MAX_LENGTH}")
                             },
                             singleLine = true,
                             enabled = !submitting,
                             maxLines = 1,
-                            keyboardOptions = KeyboardOptions(
-                                capitalization = KeyboardCapitalization.Words,
-                                imeAction = ImeAction.Done,
-                            ),
+                            keyboardOptions =
+                                KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.Words,
+                                    imeAction = ImeAction.Done,
+                                ),
                         )
                     }
 

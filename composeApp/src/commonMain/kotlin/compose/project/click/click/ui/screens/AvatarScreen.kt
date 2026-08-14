@@ -4,7 +4,6 @@ package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,7 +44,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -54,9 +52,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
+import compose.project.click.click.ui.components.MediaSourceButton // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
-import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 import kotlinx.coroutines.launch
 
 /**
@@ -167,14 +165,14 @@ fun AvatarScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                AvatarSourceButton(
+                MediaSourceButton(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Outlined.Image,
                     label = "From library",
                     onClick = { mediaPickers.openPhotoLibrary() },
                     enabled = !uploading,
                 )
-                AvatarSourceButton(
+                MediaSourceButton(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Outlined.PhotoCamera,
                     label = "Take photo",
@@ -292,38 +290,5 @@ private fun AvatarPreview(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun AvatarSourceButton(
-    modifier: Modifier = Modifier,
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    enabled: Boolean,
-) {
-    Column(
-        modifier =
-            modifier
-                .clip(RoundedCornerShape(16.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(16.dp))
-                .clickable(enabled = enabled) { onClick() }
-                .padding(vertical = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = PrimaryBlue,
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
     }
 }

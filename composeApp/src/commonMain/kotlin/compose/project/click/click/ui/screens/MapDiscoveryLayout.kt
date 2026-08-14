@@ -67,13 +67,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import coil3.compose.AsyncImage
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
@@ -83,12 +81,14 @@ import compose.project.click.click.events.formatEventScheduleRange // pragma: al
 import compose.project.click.click.events.isActiveForDiscoveryFeed // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppEmptyState // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
+import compose.project.click.click.ui.components.CardVisualHero // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickLogoPulse // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSearchField // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.DiscoverySortSegmentBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.HeaderRefreshIconButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberCardVisual // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
@@ -813,48 +813,27 @@ private fun DiscoveryEventCard(
                 .border(clickBorderWidth(), clickBorderColor(), shape)
                 .clickable(onClick = onOpen),
     ) {
-        Box(
+        val soundtrackArt =
+            beacon.metadata.albumArtUrl?.takeIf {
+                beacon.kind == MapBeaconKind.SOUNDTRACK && it.isNotBlank()
+            }
+        val visual = rememberCardVisual(beacon.id, beacon.kind, beacon.sourceBeaconType)
+        CardVisualHero(
+            id = beacon.id,
+            visual = visual,
+            imageUrl = soundtrackArt,
+            chipLabel = kindLabel,
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .height(96.dp)
-                    .background(MaterialTheme.colorScheme.surfaceContainerLow),
-            contentAlignment = Alignment.Center,
+                    .height(96.dp),
         ) {
-            val soundtrackArt =
-                beacon.metadata.albumArtUrl?.takeIf {
-                    beacon.kind == MapBeaconKind.SOUNDTRACK && it.isNotBlank()
-                }
-            if (soundtrackArt != null) {
-                AsyncImage(
-                    model = soundtrackArt,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
+            if (soundtrackArt == null) {
                 Icon(
                     kindIcon,
                     contentDescription = null,
                     modifier = Modifier.size(36.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            }
-            Box(
-                modifier =
-                    Modifier
-                        .align(Alignment.TopStart)
-                        .padding(10.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.primary)
-                        .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-            ) {
-                Text(
-                    text = kindLabel,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimary,
+                    tint = visual.onContent,
                 )
             }
         }

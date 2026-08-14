@@ -1,19 +1,25 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+)
+
 package compose.project.click.click.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
@@ -25,12 +31,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
-import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
-import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,17 +45,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.ui.components.ClickOutlinedTextField
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.birthdayIsoToUtcMidnightMillis
 import compose.project.click.click.ui.components.formatBirthdayDigitsInput
 import compose.project.click.click.ui.components.parseBirthdayIsoLocalDate
 import compose.project.click.click.ui.components.utcMidnightMillisToBirthdayIso
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
@@ -61,10 +64,17 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.until
 
-private const val MinSignupAgeYears = 13
+private const val MIN_SIGNUP_AGE_YEARS = 13
 
-private fun isAtLeastAge(birthDate: LocalDate, years: Int): Boolean {
-    val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+private fun isAtLeastAge(
+    birthDate: LocalDate,
+    years: Int,
+): Boolean {
+    val today =
+        Clock.System
+            .now()
+            .toLocalDateTime(TimeZone.currentSystemDefault())
+            .date
     val ageYears = birthDate.until(today, DateTimeUnit.YEAR)
     return ageYears >= years
 }
@@ -103,13 +113,14 @@ fun ProfileBasicsGateScreen(
     }
 
     val parsedBirth = remember(birthdayIso) { parseBirthdayIsoLocalDate(birthdayIso) }
-    val birthdayValid = parsedBirth != null && isAtLeastAge(parsedBirth, MinSignupAgeYears)
-    val birthdayHelper = when {
-        birthdayIso.isBlank() -> "Required — type YYYY-MM-DD or use calendar"
-        parsedBirth == null -> "Enter a valid date (YYYY-MM-DD)"
-        !isAtLeastAge(parsedBirth, MinSignupAgeYears) -> "You must be at least $MinSignupAgeYears years old"
-        else -> null
-    }
+    val birthdayValid = parsedBirth != null && isAtLeastAge(parsedBirth, MIN_SIGNUP_AGE_YEARS)
+    val birthdayHelper =
+        when {
+            birthdayIso.isBlank() -> "Required — type YYYY-MM-DD or use calendar"
+            parsedBirth == null -> "Enter a valid date (YYYY-MM-DD)"
+            !isAtLeastAge(parsedBirth, MIN_SIGNUP_AGE_YEARS) -> "You must be at least $MIN_SIGNUP_AGE_YEARS years old"
+            else -> null
+        }
 
     val birthdaySatisfied = if (requireBirthday) birthdayValid else true
 
@@ -120,12 +131,13 @@ fun ProfileBasicsGateScreen(
             !saving
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
-            .verticalScroll(scroll)
-            .padding(horizontal = 24.dp, vertical = 32.dp),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+                .verticalScroll(scroll)
+                .padding(horizontal = 24.dp, vertical = 32.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -160,7 +172,7 @@ fun ProfileBasicsGateScreen(
                 value = birthdayIso,
                 onValueChange = { birthdayIso = formatBirthdayDigitsInput(it) },
                 label = { Text("Birthday") },
-                placeholder = { Text("YYYY-MM-DD") },
+                placeholderText = "YYYY-MM-DD",
                 trailingIcon = {
                     IconButton(onClick = { showBirthdayPicker = true }, enabled = !saving) {
                         Icon(Icons.Filled.DateRange, contentDescription = "Open birthday calendar")
@@ -169,20 +181,23 @@ fun ProfileBasicsGateScreen(
                 supportingText = birthdayHelper?.let { { Text(it) } },
                 isError = birthdayIso.isNotBlank() && !birthdayValid,
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Number,
-                    imeAction = ImeAction.Done,
-                ),
+                keyboardOptions =
+                    KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Done,
+                    ),
                 keyboardActions = KeyboardActions(onDone = {}),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("profile-gate-birthday-field"),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .testTag("profile-gate-birthday-field"),
             )
             if (showBirthdayPicker) {
                 val initialMillis = remember(birthdayIso) { birthdayIsoToUtcMidnightMillis(birthdayIso) }
-                val birthdayPickerState = rememberDatePickerState(
-                    initialSelectedDateMillis = initialMillis,
-                )
+                val birthdayPickerState =
+                    rememberDatePickerState(
+                        initialSelectedDateMillis = initialMillis,
+                    )
                 LaunchedEffect(showBirthdayPicker, birthdayIso) {
                     if (showBirthdayPicker) {
                         birthdayIsoToUtcMidnightMillis(birthdayIso)?.let { ms ->
@@ -192,24 +207,25 @@ fun ProfileBasicsGateScreen(
                 }
                 DatePickerDialog(
                     onDismissRequest = { showBirthdayPicker = false },
-                    colors = DatePickerDefaults.colors(
-                        containerColor = GlassSheetTokens.OledBlack(),
-                        titleContentColor = GlassSheetTokens.OnOled(),
-                        headlineContentColor = GlassSheetTokens.OnOled(),
-                        weekdayContentColor = GlassSheetTokens.OnOledMuted(),
-                        subheadContentColor = GlassSheetTokens.OnOledMuted(),
-                        navigationContentColor = GlassSheetTokens.OnOled(),
-                        yearContentColor = GlassSheetTokens.OnOled(),
-                        currentYearContentColor = GlassSheetTokens.OnOled(),
-                        selectedYearContentColor = GlassSheetTokens.OnOled(),
-                        selectedYearContainerColor = PrimaryBlue,
-                        dayContentColor = GlassSheetTokens.OnOled(),
-                        selectedDayContainerColor = PrimaryBlue,
-                        selectedDayContentColor = GlassSheetTokens.OnOled(),
-                        todayDateBorderColor = PrimaryBlue,
-                        todayContentColor = PrimaryBlue,
-                        dayInSelectionRangeContainerColor = GlassSheetTokens.GlassSurface(),
-                    ),
+                    colors =
+                        DatePickerDefaults.colors(
+                            containerColor = GlassSheetTokens.OledBlack(),
+                            titleContentColor = GlassSheetTokens.OnOled(),
+                            headlineContentColor = GlassSheetTokens.OnOled(),
+                            weekdayContentColor = GlassSheetTokens.OnOledMuted(),
+                            subheadContentColor = GlassSheetTokens.OnOledMuted(),
+                            navigationContentColor = GlassSheetTokens.OnOled(),
+                            yearContentColor = GlassSheetTokens.OnOled(),
+                            currentYearContentColor = GlassSheetTokens.OnOled(),
+                            selectedYearContentColor = GlassSheetTokens.OnOled(),
+                            selectedYearContainerColor = PrimaryBlue,
+                            dayContentColor = GlassSheetTokens.OnOled(),
+                            selectedDayContainerColor = PrimaryBlue,
+                            selectedDayContentColor = GlassSheetTokens.OnOled(),
+                            todayDateBorderColor = PrimaryBlue,
+                            todayContentColor = PrimaryBlue,
+                            dayInSelectionRangeContainerColor = GlassSheetTokens.GlassSurface(),
+                        ),
                     confirmButton = {
                         TextButton(
                             onClick = {
@@ -246,20 +262,21 @@ fun ProfileBasicsGateScreen(
                 saving = true
                 error = null
                 scope.launch {
-                    val result = if (requireBirthday) {
-                        repo.updateUserProfileBasics(
-                            userId = userId,
-                            firstName = firstName,
-                            lastName = lastName,
-                            birthdayIso = birthdayIso.trim(),
-                        )
-                    } else {
-                        repo.updateUserProfileNames(
-                            userId = userId,
-                            firstName = firstName,
-                            lastName = lastName,
-                        )
-                    }
+                    val result =
+                        if (requireBirthday) {
+                            repo.updateUserProfileBasics(
+                                userId = userId,
+                                firstName = firstName,
+                                lastName = lastName,
+                                birthdayIso = birthdayIso.trim(),
+                            )
+                        } else {
+                            repo.updateUserProfileNames(
+                                userId = userId,
+                                firstName = firstName,
+                                lastName = lastName,
+                            )
+                        }
                     result.fold(
                         onSuccess = {
                             saving = false
@@ -267,7 +284,10 @@ fun ProfileBasicsGateScreen(
                         },
                         onFailure = { e ->
                             saving = false
-                            error = e.message?.trim()?.take(200)?.ifBlank { "Could not save profile." }
+                            error = e.message
+                                ?.trim()
+                                ?.take(200)
+                                ?.ifBlank { "Could not save profile." }
                                 ?: "Could not save profile."
                         },
                     )

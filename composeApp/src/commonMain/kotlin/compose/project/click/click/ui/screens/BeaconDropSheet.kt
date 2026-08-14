@@ -5,6 +5,7 @@
 
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,13 +22,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -48,12 +53,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.BeaconVisibilityAudience // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
@@ -70,10 +78,13 @@ import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: a
 import compose.project.click.click.ui.components.EventDateTimePicker // pragma: allowlist secret
 import compose.project.click.click.ui.components.EventSchedulePickerDialogs // pragma: allowlist secret
 import compose.project.click.click.ui.components.LocalSheetOnDismissRequest // pragma: allowlist secret
+import compose.project.click.click.ui.components.MediaSourceButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProvideSheetSwipeDismiss // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberEventSchedulePickerUiState // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberSheetScrollAtTop // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetImePadding // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 import compose.project.click.click.utils.GeocodedPlace // pragma: allowlist secret
 import compose.project.click.click.utils.GeocodingService // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers
@@ -93,6 +104,29 @@ enum class BeaconDropCategory {
     STUDY,
     EVENT,
     COMMUNITY_HUB,
+}
+
+/**
+ * The complete set of field requirements for dropping a beacon, or `null` when the form can submit.
+ *
+ * Pure so the requirements are testable and visible in one place. Notably **a photo is not one of
+ * them** for any category: photos are encouraged in the sheet, and a beacon without one falls back
+ * to its generated gradient. Event schedule validation stays in the sheet because it renders inline
+ * on the date pickers rather than as a submit error.
+ */
+fun beaconDropValidationError(
+    category: BeaconDropCategory,
+    title: String,
+    soundtrackUrl: String?,
+    hasEventLocation: Boolean,
+): String? {
+    val isSoundtrack = category == BeaconDropCategory.SOUNDTRACK
+    if (!isSoundtrack && title.isBlank()) return "Please add a title."
+    if (isSoundtrack && soundtrackUrl.isNullOrBlank()) return "Please add a music link."
+    if (category == BeaconDropCategory.EVENT && !hasEventLocation) {
+        return "Set an event location (search an address or use my location)."
+    }
+    return null
 }
 
 /**
@@ -366,12 +400,13 @@ fun BeaconDropSheetContent(
                                         onDismissError()
                                     }
                                 },
-                                modifier = Modifier.size(40.dp),
+                                // 36dp instead of 40dp so a long hint has room before ellipsizing.
+                                modifier = Modifier.size(36.dp),
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.ContentPaste,
                                     contentDescription = "Paste link",
-                                    modifier = Modifier.size(22.dp),
+                                    modifier = Modifier.size(20.dp),
                                 )
                             }
                         },
@@ -700,9 +735,11 @@ fun BeaconDropSheetContent(
                     )
                 }
 
-                if (!isHubMode && !isSoundtrack) {
+                // Optional for every category, including soundtracks — a beacon without a photo
+                // falls back to its generated gradient wherever it is rendered.
+                if (!isHubMode) {
                     Text(
-                        text = "Photo (required)",
+                        text = "Photo",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -712,7 +749,7 @@ fun BeaconDropSheetContent(
                             if (beaconImageBytes != null) {
                                 "Photo attached"
                             } else {
-                                "Choose one photo from your library or take one now. Soundtrack beacons can skip this."
+                                "Add a photo so people recognize this at a glance."
                             },
                         style = MaterialTheme.typography.bodySmall,
                         color =
@@ -724,14 +761,30 @@ fun BeaconDropSheetContent(
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        TextButton(onClick = { mediaPickers.openPhotoLibrary() }) {
-                            Text("Photo library")
-                        }
-                        TextButton(onClick = { mediaPickers.openCamera() }) {
-                            Text("Take photo")
-                        }
+                        MediaSourceButton(
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Outlined.PhotoCamera,
+                            label = "Take photo",
+                            onClick = { mediaPickers.openCamera() },
+                        )
+                        MediaSourceButton(
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Outlined.Image,
+                            label = "Photo library",
+                            onClick = { mediaPickers.openPhotoLibrary() },
+                        )
+                    }
+                    beaconImageBytes?.let { bytes ->
+                        BeaconAttachedPhotoThumbnail(
+                            bytes = bytes,
+                            onReplace = { mediaPickers.openPhotoLibrary() },
+                            onRemove = {
+                                beaconImageBytes = null
+                                beaconImageMime = null
+                            },
+                        )
                     }
                 }
 
@@ -824,12 +877,20 @@ fun BeaconDropSheetContent(
                                     expiration.value.durationMs
                                 }
                             val title = beaconTitleDraft.trim()
-                            if (!isSoundtrack && title.isEmpty()) {
-                                submitValidationError = "Please add a title."
+                            val description = beaconDescriptionDraft.trim().ifBlank { null }
+                            val url = if (isSoundtrack) soundtrackUrlDraft.trim().ifBlank { null } else null
+                            val fieldError =
+                                beaconDropValidationError(
+                                    category = category.value,
+                                    title = title,
+                                    soundtrackUrl = url,
+                                    hasEventLocation = selectedEventLocation != null,
+                                )
+                            if (fieldError != null) {
+                                submitValidationError = fieldError
                                 isSubmitting = false
                                 return@Button
                             }
-                            val description = beaconDescriptionDraft.trim().ifBlank { null }
                             val schedule =
                                 if (isEvent) {
                                     eventScheduleError =
@@ -845,24 +906,6 @@ fun BeaconDropSheetContent(
                                 } else {
                                     null
                                 }
-                            val url = if (isSoundtrack) soundtrackUrlDraft.trim().ifBlank { null } else null
-                            if (isSoundtrack && url.isNullOrEmpty()) {
-                                submitValidationError = "Please add a music link."
-                                isSubmitting = false
-                                return@Button
-                            }
-                            if (isEvent && selectedEventLocation == null) {
-                                submitValidationError =
-                                    "Set an event location (search an address or use my location)."
-                                isSubmitting = false
-                                return@Button
-                            }
-                            if (!isSoundtrack && beaconImageBytes == null) {
-                                submitValidationError =
-                                    "Add a photo from your library or camera. Soundtrack beacons can skip this."
-                                isSubmitting = false
-                                return@Button
-                            }
                             onSubmit(
                                 kind,
                                 title,
@@ -915,6 +958,42 @@ fun BeaconDropSheetContent(
     }
 }
 
+/**
+ * Confirms what will be uploaded and makes the optional state obvious: the photo can be swapped or
+ * dropped entirely without cancelling the drop.
+ */
+@Composable
+private fun BeaconAttachedPhotoThumbnail(
+    bytes: ByteArray,
+    onReplace: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AsyncImage(
+            model = bytes,
+            contentDescription = "Attached beacon photo",
+            contentScale = ContentScale.Crop,
+            modifier =
+                Modifier
+                    .size(72.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(12.dp)),
+        )
+        TextButton(onClick = onReplace) {
+            Text("Replace")
+        }
+        TextButton(onClick = onRemove) {
+            Icon(Icons.Filled.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.size(6.dp))
+            Text("Remove")
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BeaconDropOutlinedField(
@@ -932,7 +1011,7 @@ private fun BeaconDropOutlinedField(
         value = value,
         onValueChange = onValueChange,
         modifier = Modifier.fillMaxWidth(),
-        placeholder = { Text(placeholder) },
+        placeholderText = placeholder,
         singleLine = singleLine,
         minLines = lineCount,
         maxLines = if (singleLine) 1 else 6,

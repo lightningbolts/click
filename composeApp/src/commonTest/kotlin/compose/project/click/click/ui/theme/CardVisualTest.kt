@@ -1,7 +1,7 @@
 package compose.project.click.click.ui.theme // pragma: allowlist secret
 
+import androidx.compose.ui.graphics.Color
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
-import compose.project.click.click.data.models.requiresAttachedImage // pragma: allowlist secret
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -15,7 +15,7 @@ class CardVisualTest {
         assertEquals(a.hash, b.hash)
         assertEquals(a.gradient, b.gradient)
         assertEquals(a.pattern, b.pattern)
-        assertEquals(a.purpleDominant, b.purpleDominant)
+        assertEquals(a.hueFamily, b.hueFamily)
         assertEquals(a.pinShape, b.pinShape)
     }
 
@@ -26,12 +26,22 @@ class CardVisualTest {
         assertNotEquals(a.hash, b.hash)
     }
 
+    /**
+     * Purple stays the heaviest bucket so generated content still reads on-brand, but it is no
+     * longer ~62% the way the UI accent ratio is — that ratio now lives only in [ClickAccent].
+     */
     @Test
-    fun purpleBlueRatioStaysInBand() {
+    fun purpleRemainsWeightedAnchor() {
         val samples = (0 until 800).map { generateCardVisual("id-$it") }
-        val purple = samples.count { it.purpleDominant }
+        val purple = samples.count { it.hueFamily == CardHueFamily.PURPLE }
         val ratio = purple.toDouble() / samples.size
-        assertTrue(ratio in 0.58..0.68, "purple ratio was $ratio")
+        assertTrue(ratio in 0.25..0.40, "purple ratio was $ratio")
+    }
+
+    @Test
+    fun paletteCoversEveryHueFamily() {
+        val seen = (0 until 800).map { generateCardVisual("id-$it").hueFamily }.toSet()
+        assertEquals(CardHueFamily.entries.toSet(), seen, "unused hue families: ${CardHueFamily.entries - seen}")
     }
 
     @Test
@@ -63,25 +73,28 @@ class CardVisualTest {
     }
 
     @Test
-    fun pileSlotsAreSeededNotChaotic() {
-        val a = pileSlotForCluster("saved", 0, 6)
-        val b = pileSlotForCluster("saved", 0, 6)
-        assertEquals(a, b)
-        val other = pileSlotForCluster("reconnect", 0, 6)
-        assertTrue(a.rotationDeg != other.rotationDeg || a.xFrac != other.xFrac)
-    }
-
-    @Test
     fun contentAlwaysUsesLightOnScrim() {
         val visual = generateCardVisual("contrast-check")
         assertEquals(1f, visual.onContent.alpha, 0.01f)
-        assertTrue(visual.contentScrim.alpha in 0.3f..0.6f)
+        assertTrue(visual.contentScrim.alpha > 0f)
     }
 
+    /**
+     * The palette now includes gold and coral, which are far brighter than the old purple/blue-only
+     * set. Titles are white, so the scrim has to be searched per visual rather than fixed.
+     */
     @Test
-    fun soundtrackSkipsRequiredImage() {
-        assertTrue(!MapBeaconKind.SOUNDTRACK.requiresAttachedImage())
-        assertTrue(MapBeaconKind.EVENT.requiresAttachedImage())
-        assertTrue(MapBeaconKind.UTILITY.requiresAttachedImage())
+    fun whiteTextMeetsWcagOnEveryGeneratedVisual() {
+        (0 until 800).forEach { i ->
+            val visual = generateCardVisual("wcag-$i")
+            visual.gradient.forEach { stop ->
+                val scrimmed = compositeOver(Color.Black, visual.scrimAlpha, stop)
+                val ratio = contrastRatio(visual.onContent, scrimmed)
+                assertTrue(
+                    ratio >= WCAG_BODY_TEXT_MIN_RATIO,
+                    "wcag-$i stop $stop only reached $ratio at alpha ${visual.scrimAlpha}",
+                )
+            }
+        }
     }
 }

@@ -7,6 +7,7 @@ import compose.project.click.click.data.models.ReconnectReminder // pragma: allo
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.viewmodel.UserStats // pragma: allowlist secret
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class HomePhotoPileTest {
@@ -107,5 +108,62 @@ class HomePhotoPileTest {
         val availability = buildHomePileClusters(data, actions).first { it.id == "availability" }
         assertTrue(availability.photos.isNotEmpty())
         assertTrue(availability.zPriority > 20f)
+    }
+
+    /**
+     * List keys stay prefixed and unique, but the visual seed must be the raw entity id — otherwise
+     * the same connection gets one gradient on the pile and a different one everywhere else.
+     */
+    @Test
+    fun visualIdCarriesTheRawEntityId() {
+        val reminder =
+            ReconnectReminder(
+                connectionId = "conn-77",
+                userId = "user-77",
+                userName = "Alex",
+                lastMessageTime = 0L,
+                daysSinceContact = 9,
+                activityStatus = ConnectionActivityStatus.DORMANT,
+                suggestedMessage = "Hey",
+            )
+        val data =
+            HomePileBoardData(
+                intents = emptyList(),
+                featuredEvent = null,
+                recap = null,
+                savedBookmarks = emptyList(),
+                exploreTiles = emptyList(),
+                archiveNotice = null,
+                pollPair = null,
+                reconnectReminders = listOf(reminder),
+                eventReminders = emptyList(),
+                locationGroups = emptyMap(),
+                insights = null,
+                stats = UserStats(0, emptyList(), 0),
+                connectedUsers = emptyMap(),
+            )
+        val actions =
+            HomePileActions(
+                onCreateIntent = {},
+                onEditIntent = {},
+                onFeaturedMap = {},
+                onSavedEventClick = {},
+                onExploreClick = {},
+                onArchiveOpenChat = {},
+                onArchiveIcebreaker = {},
+                onPollPairOpenChat = {},
+                onPollPairIcebreaker = {},
+                onReconnect = {},
+                onDismissReconnect = {},
+                onEventReminderMap = {},
+                onLocationClick = {},
+            )
+        val photo =
+            buildHomePileClusters(data, actions)
+                .first { it.id == "reconnect" }
+                .photos
+                .first()
+        assertEquals("reconnect-conn-77", photo.id)
+        assertEquals("conn-77", photo.visualId)
     }
 }

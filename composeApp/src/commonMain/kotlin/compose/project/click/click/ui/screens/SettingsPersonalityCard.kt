@@ -97,7 +97,7 @@ internal fun SettingsPersonalityCard(
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                text = "Pick exactly $PERSONALITY_REQUIRED_TAG_COUNT traits. Existing accounts can skip this — it is not a login gate.",
+                text = "Pick exactly $PERSONALITY_REQUIRED_TAG_COUNT traits.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -651,7 +651,7 @@ fun ConnectionContextSheet(
                     },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Custom activity") },
-                    placeholder = { Text("Dorm lounge, coffee line, hackathon kickoff...") },
+                    placeholderText = "Dorm lounge, coffee line, hackathon kickoff...",
                     supportingText = {
                         Text(
                             text =

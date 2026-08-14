@@ -37,15 +37,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.takeOrElse
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -86,6 +90,10 @@ private val ClickMultilineContentPadding =
 /**
  * App outlined text field with field-safe typography, 16dp corners, and quiet 1dp borders.
  * Single-line text is vertically centered; multiline text and the caret stay on the first line.
+ *
+ * Prefer [placeholderText] over the [placeholder] slot for plain hint strings: a wrapping
+ * placeholder grows the decoration box past [minHeight], which pushes the vertically-centered
+ * single-line caret to the middle of a double-height field. Long hints ellipsize instead.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -97,6 +105,8 @@ fun ClickOutlinedTextField(
     readOnly: Boolean = false,
     textStyle: TextStyle = clickTextFieldTextStyle(),
     label: @Composable (() -> Unit)? = null,
+    /** Plain hint text, rendered as one ellipsized line when [singleLine] is true. */
+    placeholderText: String? = null,
     placeholder: @Composable (() -> Unit)? = null,
     leadingIcon: @Composable (() -> Unit)? = null,
     trailingIcon: @Composable (() -> Unit)? = null,
@@ -131,6 +141,47 @@ fun ClickOutlinedTextField(
             ClickMultilineContentPadding
         } else {
             ClickTextFieldContentPadding
+        }
+    // Height-clamp both paths: a wrapping hint is what makes a 56dp single-line field 112dp tall.
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val oneLineHeight =
+        remember(mergedTextStyle, density) {
+            with(density) {
+                textMeasurer
+                    .measure(
+                        text = AnnotatedString("Ag"),
+                        style = mergedTextStyle,
+                        maxLines = 1,
+                    ).size.height
+                    .toDp()
+            }
+        }
+    val placeholderSlot: @Composable (() -> Unit)? =
+        when {
+            placeholderText != null -> {
+                {
+                    Text(
+                        text = placeholderText,
+                        style = mergedTextStyle,
+                        maxLines = if (singleLine) 1 else Int.MAX_VALUE,
+                        overflow = if (singleLine) TextOverflow.Ellipsis else TextOverflow.Clip,
+                    )
+                }
+            }
+            placeholder != null && singleLine -> {
+                {
+                    Box(
+                        modifier =
+                            Modifier
+                                .heightIn(max = oneLineHeight)
+                                .clipToBounds(),
+                    ) {
+                        placeholder()
+                    }
+                }
+            }
+            else -> placeholder
         }
 
     BasicTextField(
@@ -169,7 +220,7 @@ fun ClickOutlinedTextField(
                         innerTextField()
                     }
                 },
-                placeholder = placeholder,
+                placeholder = placeholderSlot,
                 label = label,
                 leadingIcon = leadingIcon,
                 trailingIcon = trailingIcon,

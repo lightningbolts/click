@@ -381,7 +381,7 @@ Minimum tags: `INTEREST_ONBOARDING_MIN_TAGS = 5`.
 | Scroll | `Column` centered | 24dp horizontal, status bar + 28dp top |
 | Header | Title + body | Center-aligned |
 | Preview | 168dp circle | Placeholder person icon, existing URL, or selected bytes |
-| Sources | Two `AvatarSourceButton` columns | Library / Camera side by side |
+| Sources | Two shared `MediaSourceButton` columns (`ui/components/MediaSourceButton.kt`) | Library / Camera side by side; the same control the beacon-drop sheet uses, so "Take photo" / "Photo library" read as real buttons in both places |
 | Error | Inline `Text` | Upload or permission errors |
 | Primary | Upload `Button` | 52dp, 16dp corners |
 | Secondary | Skip `TextButton` | Full width |

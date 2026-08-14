@@ -6,11 +6,11 @@ package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.ui.components.stableAvatarPlaceholderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.BeaconPinShape // pragma: allowlist secret
+import compose.project.click.click.ui.theme.composeColorToArgb // pragma: allowlist secret
 import compose.project.click.click.ui.theme.generateCardVisual // pragma: allowlist secret
 import compose.project.click.click.ui.utils.BeaconPinMetrics // pragma: allowlist secret
 import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
@@ -44,14 +44,6 @@ internal fun mapPinAvatarInitials(title: String): String {
         parts.size == 1 -> parts[0].take(2).uppercase()
         else -> "?"
     }
-}
-
-internal fun composeColorToArgb(color: Color): Int {
-    val a = (color.alpha * 255f + 0.5f).toInt().coerceIn(0, 255)
-    val r = (color.red * 255f + 0.5f).toInt().coerceIn(0, 255)
-    val g = (color.green * 255f + 0.5f).toInt().coerceIn(0, 255)
-    val b = (color.blue * 255f + 0.5f).toInt().coerceIn(0, 255)
-    return (a shl 24) or (r shl 16) or (g shl 8) or b
 }
 
 /**

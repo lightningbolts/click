@@ -1,10 +1,14 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+)
+
 package compose.project.click.click.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,10 +17,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -25,7 +29,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -67,9 +70,15 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.ChatWithDetails
+import compose.project.click.click.data.models.MapBeacon
+import compose.project.click.click.ui.components.AppEmptyState
+import compose.project.click.click.ui.components.ClickLogoPulse
+import compose.project.click.click.ui.components.ClickTextFieldMinHeight
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
 import compose.project.click.click.ui.components.GlassSheetTokens
-import compose.project.click.click.ui.components.ClickTextFieldMinHeight
+import compose.project.click.click.ui.components.cardVisualBackground
+import compose.project.click.click.ui.components.rememberBottomChromePadding
+import compose.project.click.click.ui.components.rememberCardVisual
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.ui.theme.SoftBlue
 import compose.project.click.click.ui.theme.clickBorderColor
@@ -83,9 +92,6 @@ import compose.project.click.click.viewmodel.beaconDisplayTitle
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import compose.project.click.click.ui.components.ClickLogoPulse
-import compose.project.click.click.ui.components.AppEmptyState
-import compose.project.click.click.ui.components.rememberBottomChromePadding
 
 /**
  * @deprecated Use [UnifiedSearchSheet] from the current screen context instead of routing here.
@@ -104,9 +110,10 @@ fun GlobalSearchScreen(
     val isSearching by viewModel.isSearching.collectAsState()
     val visibleCategories by viewModel.visibleCategories.collectAsState()
 
-    val visibleResults = remember(results, visibleCategories) {
-        results.visible(visibleCategories)
-    }
+    val visibleResults =
+        remember(results, visibleCategories) {
+            results.visible(visibleCategories)
+        }
 
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
@@ -134,9 +141,10 @@ fun GlobalSearchScreen(
                         .windowInsetsPadding(WindowInsets.statusBars),
                 ) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Surface(
@@ -146,10 +154,11 @@ fun GlobalSearchScreen(
                             border = BorderStroke(1.dp, clickBorderColor()),
                         ) {
                             TextField(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = ClickTextFieldMinHeight)
-                                    .focusRequester(focusRequester),
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = ClickTextFieldMinHeight)
+                                        .focusRequester(focusRequester),
                                 value = query,
                                 onValueChange = { viewModel.search(it, userId) },
                                 singleLine = true,
@@ -160,25 +169,27 @@ fun GlobalSearchScreen(
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                                     )
                                 },
-                                colors = TextFieldDefaults.colors(
-                                    focusedContainerColor = Color.Transparent,
-                                    unfocusedContainerColor = Color.Transparent,
-                                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                                    cursorColor = PrimaryBlue,
-                                    focusedIndicatorColor = Color.Transparent,
-                                    unfocusedIndicatorColor = Color.Transparent,
-                                ),
+                                colors =
+                                    TextFieldDefaults.colors(
+                                        focusedContainerColor = Color.Transparent,
+                                        unfocusedContainerColor = Color.Transparent,
+                                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                        cursorColor = PrimaryBlue,
+                                        focusedIndicatorColor = Color.Transparent,
+                                        unfocusedIndicatorColor = Color.Transparent,
+                                    ),
                                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                                 keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
                             )
                         }
                     }
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         for (cat in SearchResultCategory.entries) {
@@ -187,12 +198,13 @@ fun GlobalSearchScreen(
                                 selected = selected,
                                 onClick = { viewModel.toggleCategory(cat) },
                                 label = { Text(categoryLabel(cat)) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = PrimaryBlue,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                                    containerColor = clickCardSurface(),
-                                    labelColor = GlassSheetTokens.OnOled(),
-                                ),
+                                colors =
+                                    FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = PrimaryBlue,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                                        containerColor = clickCardSurface(),
+                                        labelColor = GlassSheetTokens.OnOled(),
+                                    ),
                             )
                         }
                     }
@@ -201,10 +213,11 @@ fun GlobalSearchScreen(
         },
     ) { paddingValues ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .imePadding(),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .imePadding(),
         ) {
             when {
                 isSearching -> {
@@ -336,15 +349,17 @@ internal fun searchResultStableKey(r: SearchResult): String =
 @Composable
 internal fun SearchSectionHeader(label: String) {
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.titleSmall.copy(
-                fontWeight = FontWeight.Bold,
-            ),
+            style =
+                MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                ),
             color = PrimaryBlue,
         )
     }
@@ -358,13 +373,14 @@ internal fun SearchResultRow(
     onNavigateToBeacon: (String) -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
 ) {
-    val archivedLook = when (result) {
-        is SearchResult.ArchivedConnection -> true
-        is SearchResult.IntentMatch -> result.isArchivedChannel
-        is SearchResult.InterestMatch -> result.isArchivedChannel
-        is SearchResult.MemoryContextMatch -> result.isArchivedChannel
-        else -> false
-    }
+    val archivedLook =
+        when (result) {
+            is SearchResult.ArchivedConnection -> true
+            is SearchResult.IntentMatch -> result.isArchivedChannel
+            is SearchResult.InterestMatch -> result.isArchivedChannel
+            is SearchResult.MemoryContextMatch -> result.isArchivedChannel
+            else -> false
+        }
     val alpha = if (archivedLook) 0.7f else 1f
     Column(modifier = Modifier.fillMaxWidth().alpha(alpha)) {
         Row(
@@ -383,14 +399,13 @@ internal fun SearchResultRow(
                         is SearchResult.InterestMatch -> onNavigateToChat(result.details.connection.id)
                         is SearchResult.MemoryContextMatch -> onNavigateToChat(result.details.connection.id)
                     }
-                }
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                }.padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             when (result) {
                 is SearchResult.MessageHit -> MessageLeadingIcon()
                 is SearchResult.LocationBucket -> LocationLeadingIcon()
-                is SearchResult.BeaconMatch -> BeaconLeadingIcon()
+                is SearchResult.BeaconMatch -> BeaconLeadingIcon(result.beacon)
                 is SearchResult.OwnAvailabilityIntentMatch -> IntentLeadingIcon()
                 is SearchResult.ActiveConnection -> PersonLeadingAvatar(result.details)
                 is SearchResult.ArchivedConnection -> PersonLeadingAvatar(result.details)
@@ -452,13 +467,15 @@ internal fun TinyBadge(text: String) {
 
 @Composable
 internal fun TitleAndSubtitle(result: SearchResult) {
-    val titleStyle = MaterialTheme.typography.bodyLarge.copy(
-        color = MaterialTheme.colorScheme.onSurface,
-        fontWeight = FontWeight.SemiBold,
-    )
-    val subtitleStyle = MaterialTheme.typography.bodySmall.copy(
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-    )
+    val titleStyle =
+        MaterialTheme.typography.bodyLarge.copy(
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.SemiBold,
+        )
+    val subtitleStyle =
+        MaterialTheme.typography.bodySmall.copy(
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+        )
     when (result) {
         is SearchResult.ActiveConnection -> {
             Text(result.details.otherUser.name ?: "Unknown", style = titleStyle)
@@ -475,8 +492,9 @@ internal fun TitleAndSubtitle(result: SearchResult) {
         is SearchResult.IntentMatch -> {
             Text(result.details.otherUser.name ?: "Unknown", style = titleStyle)
             Text(
-                text = "Looking for ${result.intentLabel}" +
-                    (result.intentTimeframe?.let { " · $it" } ?: ""),
+                text =
+                    "Looking for ${result.intentLabel}" +
+                        (result.intentTimeframe?.let { " · $it" } ?: ""),
                 style = subtitleStyle,
             )
         }
@@ -504,11 +522,12 @@ internal fun TitleAndSubtitle(result: SearchResult) {
         }
         is SearchResult.LocationBucket -> {
             Text(result.result.location, style = titleStyle)
-            val countLabel = if (result.result.connectionCount == 1) {
-                "1 connection"
-            } else {
-                "${result.result.connectionCount} connections"
-            }
+            val countLabel =
+                if (result.result.connectionCount == 1) {
+                    "1 connection"
+                } else {
+                    "${result.result.connectionCount} connections"
+                }
             Text(countLabel, style = subtitleStyle)
         }
         is SearchResult.BeaconMatch -> {
@@ -519,11 +538,21 @@ internal fun TitleAndSubtitle(result: SearchResult) {
             )
         }
         is SearchResult.OwnAvailabilityIntentMatch -> {
-            val label = result.intent.intentTag?.trim().orEmpty().ifEmpty { "Availability" }
+            val label =
+                result.intent.intentTag
+                    ?.trim()
+                    .orEmpty()
+                    .ifEmpty { "Availability" }
             Text(label, style = titleStyle)
             Text(
-                text = "Your availability" +
-                    (result.intent.timeframe?.trim()?.takeIf { it.isNotEmpty() }?.let { " · $it" } ?: ""),
+                text =
+                    "Your availability" +
+                        (
+                            result.intent.timeframe
+                                ?.trim()
+                                ?.takeIf { it.isNotEmpty() }
+                                ?.let { " · $it" } ?: ""
+                        ),
                 style = subtitleStyle,
             )
         }
@@ -565,13 +594,18 @@ internal fun LocationLeadingIcon() {
     }
 }
 
+/**
+ * Beacon rows show the beacon's own generated visual instead of the generic blue tile, so a search
+ * hit is recognisable as the same item the user saw on the map or in a list.
+ */
 @Composable
-internal fun BeaconLeadingIcon() {
-    SearchLeadingIconBox {
+internal fun BeaconLeadingIcon(beacon: MapBeacon) {
+    val visual = rememberCardVisual(beacon.id, beacon.kind, beacon.sourceBeaconType)
+    SearchLeadingIconBox(background = Modifier.cardVisualBackground(visual)) {
         Icon(
             imageVector = Icons.Filled.Place,
             contentDescription = null,
-            tint = PrimaryBlue,
+            tint = visual.onContent,
             modifier = Modifier.size(22.dp),
         )
     }
@@ -590,13 +624,17 @@ internal fun IntentLeadingIcon() {
 }
 
 @Composable
-private fun SearchLeadingIconBox(content: @Composable () -> Unit) {
+private fun SearchLeadingIconBox(
+    background: Modifier = Modifier.background(SoftBlue),
+    content: @Composable () -> Unit,
+) {
     Box(
-        modifier = Modifier
-            .size(42.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(SoftBlue)
-            .border(1.dp, clickBorderColor(), RoundedCornerShape(12.dp)),
+        modifier =
+            Modifier
+                .size(42.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .then(background)
+                .border(1.dp, clickBorderColor(), RoundedCornerShape(12.dp)),
         contentAlignment = Alignment.Center,
     ) {
         content()
@@ -609,10 +647,11 @@ internal fun formatSearchTime(timestamp: Long): String {
     val hour = dateTime.hour
     val minute = dateTime.minute.toString().padStart(2, '0')
     val amPm = if (hour < 12) "AM" else "PM"
-    val displayHour = when {
-        hour == 0 -> 12
-        hour > 12 -> hour - 12
-        else -> hour
-    }
+    val displayHour =
+        when {
+            hour == 0 -> 12
+            hour > 12 -> hour - 12
+            else -> hour
+        }
     return "$displayHour:$minute $amPm"
 }

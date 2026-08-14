@@ -1,3 +1,7 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+)
+
 package compose.project.click.click.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
@@ -13,39 +17,34 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.IntOffset
-
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.getPlatform
+import compose.project.click.click.notifications.ChatNotificationDismisser
 import compose.project.click.click.ui.chat.ConnectionMemberPickerSheet
-import compose.project.click.click.ui.chat.GroupMembersPickerContext
-import compose.project.click.click.ui.chat.GroupMembersPickerSheet
 import compose.project.click.click.ui.chat.ConnectionSheetDialog
 import compose.project.click.click.ui.chat.ConnectionSheetDialogs
+import compose.project.click.click.ui.chat.GroupMembersPickerContext
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
-import compose.project.click.click.ui.components.InteractiveSwipeBackParallaxPeekRatio
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
 import compose.project.click.click.ui.components.PlatformBackHandler
 import compose.project.click.click.ui.components.TabbedGroupProfileSheet
 import compose.project.click.click.ui.components.TabbedUserProfileSheet
-import compose.project.click.click.notifications.ChatNotificationDismisser
+import compose.project.click.click.ui.components.interactiveSwipeBackUnderlay
+import compose.project.click.click.ui.components.rememberInteractiveBackHostState
 import compose.project.click.click.viewmodel.ChatViewModel
 import compose.project.click.click.viewmodel.VerifiedCliqueProximityIntent
 import kotlinx.coroutines.Job
@@ -72,11 +71,13 @@ fun ConnectionsScreen(
     onOpenDisposableRollForChat: ((String) -> Unit)? = null,
     shareableBeacons: List<compose.project.click.click.data.models.MapBeacon> = emptyList(),
     mapViewModel: compose.project.click.click.viewmodel.MapViewModel? = null,
-    onShareBeaconToChats: ((
-        beacon: compose.project.click.click.data.models.MapBeacon,
-        chatIds: List<String>,
-        openConnectionId: String?,
-    ) -> Unit)? = null,
+    onShareBeaconToChats: (
+        (
+            beacon: compose.project.click.click.data.models.MapBeacon,
+            chatIds: List<String>,
+            openConnectionId: String?,
+        ) -> Unit
+    )? = null,
     viewModel: ChatViewModel = viewModel { ChatViewModel() },
     verifiedCliqueProximityAutofill: VerifiedCliqueProximityIntent? = null,
     onVerifiedCliqueProximityAutofillConsumed: () -> Unit = {},
@@ -84,9 +85,10 @@ fun ConnectionsScreen(
     var selectedChatId by remember { mutableStateOf(initialChatId) }
     var listRevealEpoch by remember { mutableStateOf(0) }
     val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
+
     /** Shared with [InteractiveSwipeBackContainer] so the persistent list mirrors layer-1 parallax. */
-    val iosChatSwipeDragPx = remember { mutableFloatStateOf(0f) }
-    var iosChatSwipeBehindLayers by remember { mutableStateOf(false) }
+    val chatBackHost = rememberInteractiveBackHostState()
+    val iosChatSwipeDragPx = chatBackHost.dragOffsetPx
     var iosChatRightToLeftPeek by remember { mutableStateOf<InteractiveSwipeBackRightToLeftPeek?>(null) }
     var chatTransitionMode by remember { mutableStateOf(ChatTransitionMode.Tap) }
     var isTapCloseInFlight by remember { mutableStateOf(false) }
@@ -100,6 +102,7 @@ fun ConnectionsScreen(
     var selectedAddMemberIds by remember { mutableStateOf(setOf<String>()) }
     var addMemberEligibilityMask by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
     var addMemberEligibilityReady by remember { mutableStateOf(false) }
+
     /** Last opened thread id so iOS overlay exit animation still composes [ChatView] after [selectedChatId] clears. */
     var lastOpenChatIdForIosOverlay by remember { mutableStateOf<String?>(initialChatId) }
     val focusManager = LocalFocusManager.current
@@ -114,8 +117,7 @@ fun ConnectionsScreen(
         viewModel.leaveChatRoom(clearMessageSurface = leaveChatClearsMessageSurface)
         // Do not loadChats here — refreshing the inbox on the same frame as chrome restore
         // makes the list look like it remounted with the tab bar.
-        iosChatSwipeDragPx.floatValue = 0f
-        iosChatSwipeBehindLayers = false
+        chatBackHost.reset()
         iosChatRightToLeftPeek = null
         onChatDismissed?.invoke()
         onChatOpenStateChanged(false)
@@ -137,21 +139,23 @@ fun ConnectionsScreen(
             // Keep the bar behind Compose until settle. It stays at alpha 1 the whole time
             // (sendSubviewToBack while suppressed), so bring-to-front on finalize does not
             // rematerialize Liquid Glass. Do not un-suppress mid-slide — that covers the chat.
-            closeCleanupJob = screenScope.launch {
-                val settleMs = if (mode == ChatTransitionMode.Tap) {
-                    CHAT_TRANSITION_DURATION_MS
-                } else {
-                    CHAT_GESTURE_CLOSE_SETTLE_MS
+            closeCleanupJob =
+                screenScope.launch {
+                    val settleMs =
+                        if (mode == ChatTransitionMode.Tap) {
+                            CHAT_TRANSITION_DURATION_MS
+                        } else {
+                            CHAT_GESTURE_CLOSE_SETTLE_MS
+                        }
+                    delay(settleMs)
+                    if (selectedChatId == null) {
+                        finalizeChatClose(
+                            leaveChatClearsMessageSurface = mode != ChatTransitionMode.Gesture,
+                        )
+                    }
+                    isTapCloseInFlight = false
+                    closeCleanupJob = null
                 }
-                delay(settleMs)
-                if (selectedChatId == null) {
-                    finalizeChatClose(
-                        leaveChatClearsMessageSurface = mode != ChatTransitionMode.Gesture,
-                    )
-                }
-                isTapCloseInFlight = false
-                closeCleanupJob = null
-            }
         }
     }
 
@@ -188,7 +192,7 @@ fun ConnectionsScreen(
 
     PlatformBackHandler(
         enabled = selectedChatId != null && !isIOS,
-        onBack = { closeActiveChat(ChatTransitionMode.Tap) }
+        onBack = { closeActiveChat(ChatTransitionMode.Tap) },
     )
 
     fun openChat(chatId: String) {
@@ -211,20 +215,10 @@ fun ConnectionsScreen(
         // visibility are mirrored onto this Box so the list receives the same parallax as layer 1.
         Box(modifier = Modifier.fillMaxSize()) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        if (!iosChatSwipeBehindLayers) {
-                            translationX = 0f
-                            return@graphicsLayer
-                        }
-                        val w = size.width.coerceAtLeast(1f)
-                        val o = iosChatSwipeDragPx.floatValue.coerceIn(0f, w)
-                        val progress = (o / w).coerceIn(0f, 1f)
-                        // Parallax only — scale during drag was janking the gesture.
-                        translationX =
-                            -(size.width * InteractiveSwipeBackParallaxPeekRatio) * (1f - progress)
-                    },
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .interactiveSwipeBackUnderlay(chatBackHost),
             ) {
                 ConnectionsListView(
                     viewModel = viewModel,
@@ -270,14 +264,16 @@ fun ConnectionsScreen(
             AnimatedVisibility(
                 visible = selectedChatId != null,
                 modifier = Modifier.fillMaxSize(),
-                enter = slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it }) +
-                    fadeIn(animationSpec = fadeSpec),
-                exit = if (chatTransitionMode == ChatTransitionMode.Tap) {
-                    slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { it }) +
-                        fadeOut(animationSpec = fadeSpec)
-                } else {
-                    ExitTransition.None
-                },
+                enter =
+                    slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it }) +
+                        fadeIn(animationSpec = fadeSpec),
+                exit =
+                    if (chatTransitionMode == ChatTransitionMode.Tap) {
+                        slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { it }) +
+                            fadeOut(animationSpec = fadeSpec)
+                    } else {
+                        ExitTransition.None
+                    },
                 label = "chat_overlay",
             ) {
                 val activeChatId = lastOpenChatIdForIosOverlay
@@ -296,7 +292,7 @@ fun ConnectionsScreen(
                         opaquePreviousBackground = false,
                         externalDragOffsetPx = iosChatSwipeDragPx,
                         onBehindLayersVisibleChanged = { revealing ->
-                            iosChatSwipeBehindLayers = revealing
+                            chatBackHost.behindLayersVisible = revealing
                         },
                         rightToLeftPeek = iosChatRightToLeftPeek,
                         previousContent = {},
@@ -324,185 +320,194 @@ fun ConnectionsScreen(
                 }
             }
         }
-    // C13 directive: chat-list avatar taps must surface the new tabbed
-    // ProfileBottomSheet (Timeline · Media · Links · Files), NOT the legacy
-    // UserProfileBottomSheet. The Timeline subtab hydrates user_interests.tags
-    // for the tapped peer via SupabaseRepository.fetchUserPublicProfile.
-    TabbedUserProfileSheet(
-        userId = profileUserId,
-        viewerUserId = userId,
-        onDismiss = { profileUserId = null },
-        onMessage = {
-            val pid = profileUserId
-            if (pid != null) {
-                val conn = compose.project.click.click.data.AppDataManager.connections.value
-                    .firstOrNull { c -> pid in c.user_ids && c.user_ids.contains(userId) }
+        // C13 directive: chat-list avatar taps must surface the new tabbed
+        // ProfileBottomSheet (Timeline · Media · Links · Files), NOT the legacy
+        // UserProfileBottomSheet. The Timeline subtab hydrates user_interests.tags
+        // for the tapped peer via SupabaseRepository.fetchUserPublicProfile.
+        TabbedUserProfileSheet(
+            userId = profileUserId,
+            viewerUserId = userId,
+            onDismiss = { profileUserId = null },
+            onMessage = {
+                val pid = profileUserId
+                if (pid != null) {
+                    val conn =
+                        compose.project.click.click.data.AppDataManager.connections.value
+                            .firstOrNull { c -> pid in c.user_ids && c.user_ids.contains(userId) }
+                    if (conn != null) {
+                        profileUserId = null
+                        openChat(conn.id)
+                    }
+                }
+            },
+            onNudge = {
+                val pid = profileUserId ?: return@TabbedUserProfileSheet
+                val conn =
+                    AppDataManager.connections.value
+                        .firstOrNull { c -> pid in c.user_ids && c.user_ids.contains(userId) }
+                val peer = AppDataManager.connectedUsers.value[pid]
                 if (conn != null) {
                     profileUserId = null
-                    openChat(conn.id)
-                }
-            }
-        },
-        onNudge = {
-            val pid = profileUserId ?: return@TabbedUserProfileSheet
-            val conn = AppDataManager.connections.value
-                .firstOrNull { c -> pid in c.user_ids && c.user_ids.contains(userId) }
-            val peer = AppDataManager.connectedUsers.value[pid]
-            if (conn != null) {
-                profileUserId = null
-                viewModel.sendNudgeToChat(conn.id, peer?.name ?: "them")
-            }
-        },
-        onOpenDisposableRoll = onOpenDisposableRoll,
-        localMessages = viewModel.currentChatLocalMessages(),
-    )
-    val groupPickerContext = groupMembersPickerContext
-    if (showGroupMembersSheet && groupPickerContext != null) {
-        val isGroupCreator = groupPickerContext.createdByUserId == userId
-        TabbedGroupProfileSheet(
-            groupName = groupPickerContext.groupName,
-            groupId = groupPickerContext.groupId,
-            chatId = groupPickerContext.chatId,
-            avatarUrl = groupPickerContext.avatarUrl,
-            viewerUserId = userId,
-            members = groupPickerContext.members,
-            groupCreatorId = groupPickerContext.createdByUserId,
-            onDismiss = {
-                showGroupMembersSheet = false
-                groupMembersPickerContext = null
-            },
-            onMessage = groupPickerContext.chatId?.let { chatId ->
-                {
-                    showGroupMembersSheet = false
-                    groupMembersPickerContext = null
-                    openChat(chatId)
+                    viewModel.sendNudgeToChat(conn.id, peer?.name ?: "them")
                 }
             },
-            onNudge = groupPickerContext.chatId?.let { chatId ->
-                {
-                    showGroupMembersSheet = false
-                    groupMembersPickerContext = null
-                    viewModel.sendNudgeToChat(chatId, groupPickerContext.groupName ?: "the group")
-                }
-            },
-            onOpenDisposableRoll = onOpenDisposableRollForChat,
-            onAddMember = {
-                showGroupMembersSheet = false
-                selectedAddMemberIds = emptySet()
-                showGroupAddMemberPicker = true
-            },
-            onRemoveMember = if (isGroupCreator) {
-                { memberId ->
-                    val memberName = groupPickerContext.members
-                        .find { it.id == memberId }
-                        ?.name
-                        ?.trim()
-                        ?.ifBlank { null }
-                        ?: "This member"
-                    pendingRemoveGroupMember = ConnectionSheetDialog.RemoveGroupMember(
-                        memberUserId = memberId,
-                        memberName = memberName,
-                    )
-                }
-            } else {
-                null
-            },
-            onMemberClick = { id ->
-                showGroupMembersSheet = false
-                groupMembersPickerContext = null
-                profileUserId = id
-            },
-            onGroupAvatarUrlChanged = { url ->
-                groupMembersPickerContext = groupMembersPickerContext?.copy(avatarUrl = url)
-            },
+            onOpenDisposableRoll = onOpenDisposableRoll,
             localMessages = viewModel.currentChatLocalMessages(),
         )
-    }
-    val removeMemberContext = groupPickerContext
-    ConnectionSheetDialogs(
-        dialog = pendingRemoveGroupMember,
-        onDismiss = { pendingRemoveGroupMember = null },
-        onConfirmRemove = { },
-        onConfirmBlock = { },
-        onConfirmReport = { },
-        onConfirmLeaveGroup = { },
-        onConfirmDeleteGroup = { },
-        onConfirmRemoveGroupMember = { memberId ->
-            val groupId = removeMemberContext?.groupId
-            if (groupId != null) {
-                viewModel.removeMemberFromVerifiedClique(groupId, memberId)
-            }
-            pendingRemoveGroupMember = null
-        },
-    )
-    if (showGroupAddMemberPicker && groupPickerContext != null) {
-        val memberIds = groupPickerContext.memberUserIds.toSet()
-        val candidates = AppDataManager.connectedUsers.value.values
-            .filter { candidate ->
-                candidate.id != userId &&
-                    candidate.id !in memberIds &&
-                    AppDataManager.connections.value.any { conn ->
-                        conn.user_ids.contains(candidate.id) &&
-                            conn.user_ids.contains(userId) &&
-                            conn.normalizedConnectionStatus() in setOf("active", "kept")
-                    }
-            }
-            .sortedBy { it.name?.lowercase().orEmpty() }
-        LaunchedEffect(
-            showGroupAddMemberPicker,
-            groupPickerContext.groupId,
-            selectedAddMemberIds,
-            candidates.map { it.id },
-        ) {
-            if (!showGroupAddMemberPicker) {
-                addMemberEligibilityMask = emptyMap()
-                addMemberEligibilityReady = false
-                return@LaunchedEffect
-            }
-            addMemberEligibilityReady = false
-            addMemberEligibilityMask = viewModel.computeVerifiedCliqueAddableMask(
-                baseMemberUserIds = groupPickerContext.memberUserIds,
-                candidateUserIds = candidates.map { it.id },
-                selectedCandidateIds = selectedAddMemberIds,
+        val groupPickerContext = groupMembersPickerContext
+        if (showGroupMembersSheet && groupPickerContext != null) {
+            val isGroupCreator = groupPickerContext.createdByUserId == userId
+            TabbedGroupProfileSheet(
+                groupName = groupPickerContext.groupName,
+                groupId = groupPickerContext.groupId,
+                chatId = groupPickerContext.chatId,
+                avatarUrl = groupPickerContext.avatarUrl,
+                viewerUserId = userId,
+                members = groupPickerContext.members,
+                groupCreatorId = groupPickerContext.createdByUserId,
+                onDismiss = {
+                    showGroupMembersSheet = false
+                    groupMembersPickerContext = null
+                },
+                onMessage =
+                    groupPickerContext.chatId?.let { chatId ->
+                        {
+                            showGroupMembersSheet = false
+                            groupMembersPickerContext = null
+                            openChat(chatId)
+                        }
+                    },
+                onNudge =
+                    groupPickerContext.chatId?.let { chatId ->
+                        {
+                            showGroupMembersSheet = false
+                            groupMembersPickerContext = null
+                            viewModel.sendNudgeToChat(chatId, groupPickerContext.groupName ?: "the group")
+                        }
+                    },
+                onOpenDisposableRoll = onOpenDisposableRollForChat,
+                onAddMember = {
+                    showGroupMembersSheet = false
+                    selectedAddMemberIds = emptySet()
+                    showGroupAddMemberPicker = true
+                },
+                onRemoveMember =
+                    if (isGroupCreator) {
+                        { memberId ->
+                            val memberName =
+                                groupPickerContext.members
+                                    .find { it.id == memberId }
+                                    ?.name
+                                    ?.trim()
+                                    ?.ifBlank { null }
+                                    ?: "This member"
+                            pendingRemoveGroupMember =
+                                ConnectionSheetDialog.RemoveGroupMember(
+                                    memberUserId = memberId,
+                                    memberName = memberName,
+                                )
+                        }
+                    } else {
+                        null
+                    },
+                onMemberClick = { id ->
+                    showGroupMembersSheet = false
+                    groupMembersPickerContext = null
+                    profileUserId = id
+                },
+                onGroupAvatarUrlChanged = { url ->
+                    groupMembersPickerContext = groupMembersPickerContext?.copy(avatarUrl = url)
+                },
+                localMessages = viewModel.currentChatLocalMessages(),
             )
-            addMemberEligibilityReady = true
         }
-        ConnectionMemberPickerSheet(
-            onDismissRequest = {
-                showGroupAddMemberPicker = false
-                selectedAddMemberIds = emptySet()
-            },
-            title = "Add to group",
-            subtitle = "Choose verified connections who are connected to everyone in this click.",
-            candidates = candidates,
-            selectedIds = selectedAddMemberIds,
-            onSelectedIdsChange = { selectedAddMemberIds = it },
-            eligibilityMask = addMemberEligibilityMask,
-            eligibilityReady = addMemberEligibilityReady,
-            eligibilityCheckingLabel = "Checking who can join…",
-            onSelectionBlocked = { viewModel.notifyVerifiedCliqueSelectionBlocked() },
-            primaryButtonLabel = when (selectedAddMemberIds.size) {
-                0 -> "Add"
-                1 -> "Add"
-                else -> "Add ${selectedAddMemberIds.size}"
-            },
-            primaryEnabled = addMemberEligibilityReady && selectedAddMemberIds.isNotEmpty(),
-            onPrimaryClick = {
-                showGroupAddMemberPicker = false
-                viewModel.addMembersToVerifiedClique(
-                    groupId = groupPickerContext.groupId,
-                    newMemberUserIds = selectedAddMemberIds.toList(),
-                )
-                selectedAddMemberIds = emptySet()
+        val removeMemberContext = groupPickerContext
+        ConnectionSheetDialogs(
+            dialog = pendingRemoveGroupMember,
+            onDismiss = { pendingRemoveGroupMember = null },
+            onConfirmRemove = { },
+            onConfirmBlock = { },
+            onConfirmReport = { },
+            onConfirmLeaveGroup = { },
+            onConfirmDeleteGroup = { },
+            onConfirmRemoveGroupMember = { memberId ->
+                val groupId = removeMemberContext?.groupId
+                if (groupId != null) {
+                    viewModel.removeMemberFromVerifiedClique(groupId, memberId)
+                }
+                pendingRemoveGroupMember = null
             },
         )
-    }
+        if (showGroupAddMemberPicker && groupPickerContext != null) {
+            val memberIds = groupPickerContext.memberUserIds.toSet()
+            val candidates =
+                AppDataManager.connectedUsers.value.values
+                    .filter { candidate ->
+                        candidate.id != userId &&
+                            candidate.id !in memberIds &&
+                            AppDataManager.connections.value.any { conn ->
+                                conn.user_ids.contains(candidate.id) &&
+                                    conn.user_ids.contains(userId) &&
+                                    conn.normalizedConnectionStatus() in setOf("active", "kept")
+                            }
+                    }.sortedBy { it.name?.lowercase().orEmpty() }
+            LaunchedEffect(
+                showGroupAddMemberPicker,
+                groupPickerContext.groupId,
+                selectedAddMemberIds,
+                candidates.map { it.id },
+            ) {
+                if (!showGroupAddMemberPicker) {
+                    addMemberEligibilityMask = emptyMap()
+                    addMemberEligibilityReady = false
+                    return@LaunchedEffect
+                }
+                addMemberEligibilityReady = false
+                addMemberEligibilityMask =
+                    viewModel.computeVerifiedCliqueAddableMask(
+                        baseMemberUserIds = groupPickerContext.memberUserIds,
+                        candidateUserIds = candidates.map { it.id },
+                        selectedCandidateIds = selectedAddMemberIds,
+                    )
+                addMemberEligibilityReady = true
+            }
+            ConnectionMemberPickerSheet(
+                onDismissRequest = {
+                    showGroupAddMemberPicker = false
+                    selectedAddMemberIds = emptySet()
+                },
+                title = "Add to group",
+                subtitle = "Choose verified connections who are connected to everyone in this click.",
+                candidates = candidates,
+                selectedIds = selectedAddMemberIds,
+                onSelectedIdsChange = { selectedAddMemberIds = it },
+                eligibilityMask = addMemberEligibilityMask,
+                eligibilityReady = addMemberEligibilityReady,
+                eligibilityCheckingLabel = "Checking who can join…",
+                onSelectionBlocked = { viewModel.notifyVerifiedCliqueSelectionBlocked() },
+                primaryButtonLabel =
+                    when (selectedAddMemberIds.size) {
+                        0 -> "Add"
+                        1 -> "Add"
+                        else -> "Add ${selectedAddMemberIds.size}"
+                    },
+                primaryEnabled = addMemberEligibilityReady && selectedAddMemberIds.isNotEmpty(),
+                onPrimaryClick = {
+                    showGroupAddMemberPicker = false
+                    viewModel.addMembersToVerifiedClique(
+                        groupId = groupPickerContext.groupId,
+                        newMemberUserIds = selectedAddMemberIds.toList(),
+                    )
+                    selectedAddMemberIds = emptySet()
+                },
+            )
+        }
     }
 }
 
 internal enum class ChatTransitionMode {
     Tap,
-    Gesture
+    Gesture,
 }
 
 internal const val CHAT_TRANSITION_DURATION_MS = 300L

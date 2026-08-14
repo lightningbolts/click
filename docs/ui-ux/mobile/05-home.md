@@ -4,9 +4,9 @@
 **Source:** `ui/screens/HomeScreen.kt`, `ui/components/HomeComponents.kt`, `ui/components/HomePhotoPile.kt`, `ui/components/PileCluster.kt`, `ui/components/PhotoCard.kt`, `ui/components/ConnectionArchiveWarningBanner.kt`, `ui/components/AppScreenScaffold.kt`, `ui/theme/CardVisual.kt`, `viewmodel/HomeViewModel.kt`  
 **Out of scope:** Web, backend APIs.
 
-**Visual system:** Functional Clarity chrome (opaque surfaces, 1dp quiet borders, primary `#630ed4`, secondary `#224CFF`). **Exception:** photo-pile Polaroids and beacon identity banners use deterministic `generateCardVisual` gradients + patterns with a contrast scrim (`CardVisual.contentScrim`) so body text stays readable.
+**Visual system:** Functional Clarity chrome (opaque surfaces, 1dp quiet borders, primary `#630ed4`, secondary `#224CFF`). **Exception:** generated content surfaces — photo-pile Polaroids, event/explore tiles, beacon identity banners — paint through `CardVisualHero` / `Modifier.cardVisualBackground` with a WCAG-searched contrast scrim (`CardVisual.contentScrim`) so body text stays readable on every hue.
 
-**Home layout:** Default is **photo pile** (`HomeLayoutMode.PILE`) — corkboard clusters of Polaroids. Header greeting + search stay pinned (not in the pile). Toggle in the header (list / pile icons) and **Settings → Appearance → Photo pile home**. Linear list is the accessibility fallback (TalkBack / VoiceOver). Persistence: `TokenStorage` key `home_layout_mode`.
+**Home layout:** Default is **photo pile** (`HomeLayoutMode.PILE`) — one full-width, draggable stack of Polaroids per section, stacked vertically. Header greeting + search stay pinned (not in the pile). Toggle in the header (list / pile icons) and **Settings → Appearance → Photo pile home**. Linear list is the accessibility fallback (TalkBack / VoiceOver). Persistence: `TokenStorage` key `home_layout_mode`.
 
 **Track C (2026-07-17):** Discovery-first IA — greeting + search pill + Featured Event + dynamic nearby explore; availability + reconnect remain first-class above Explore. Greeting uses the same floating `LiquidGlassPageHeader` overlay as other tab roots (not an in-feed item).
 
@@ -29,7 +29,7 @@ HomeScreen (organism)
     │   └── layout toggle (pile ↔ linear)
     └── LazyColumn
         ├── HomeSearchPill              // pinned; not part of the pile
-        ├── [PILE default] HomePhotoPileBoard
+        ├── [PILE default] homePhotoPileItems — one SectionHeader + PileCluster row per cluster
         │   ├── PileCluster "I'm down for…" (z-priority 40; always present)
         │   ├── Featured / Recap / Saved events / Explore nearby
         │   ├── Stay in touch (archive + Poll-Pair in one stack)
@@ -163,9 +163,19 @@ Triggered from `HomeAvailabilityIntentsRow` chip taps. See [13-availability.md](
 | Insights | Hidden if no connections | Collapsed/expanded |
 | Stats | Always | Two stat cards |
 
-### Photo pile (`HomePhotoPileBoard`)
+### Photo pile (`homePhotoPileItems`)
 
-Shared components: `PileCluster`, `PhotoCard`, `generateCardVisual(id)`. Visuals are hashed (FNV-1a) so the same event/person/location always gets the same gradient + one of five patterns (dots, diagonals, grain, grid, chevron), 5/8 purple-dominant and 3/8 blue-dominant. Tap a cluster to fan into a horizontal strip; tap a photo to reuse the existing sheet (availability, saved event, chat, location drill-in). Tap outside / back collapses the fan. Long-press on stay-in-touch photos sends icebreaker; long-press reconnect dismisses.
+**One cluster per full-width row.** `LazyListScope.homePhotoPileItems` emits a `SectionHeader` label plus its own `PileCluster` per cluster, stacked vertically in the same `LazyColumn` as every other home section. The clusters are *not* scattered across a shared canvas — the earlier board positioned every cluster absolutely inside one viewport-sized box, so clusters overlapped and sliced each other's labels in half.
+
+Shared components: `PileCluster`, `PhotoCard`, `CardVisualHero`, `SectionHeader`, `generateCardVisual(id)`, and the Compose-free `PilePhysics.kt`. Visuals are hashed (FNV-1a) so the same event/person/location always gets the same gradient plus one of five patterns (dots, diagonals, grain, grid, chevron), drawn from the full `CardHueFamily` palette with purple as the weighted anchor. Photos seed on `visualId` (the raw `beaconId` / `connectionId`) while `id` stays list-key unique, so a beacon looks identical on the pile, in the Events list, on its map pin, and in its detail sheet.
+
+**Collapsed stack.** The top card plus up to three peeking layers (`PILE_MAX_VISIBLE_LAYERS`). Peek offsets only go **right and down** (`pilePeekOffsetDp`), so the top card's bottom-start title block is never covered; titles ellipsize rather than wrap unbounded. Back layers get a deterministic ±4° resting tilt (`pileCardTiltDeg`) so a stack looks hand-dropped, not machine-aligned.
+
+**Drag physics.** The top card is horizontally draggable with spring physics: tilt proportional to travel (`pileDragTiltDeg`, ±8° max), elevation raised 6dp → 16dp while held, and on release either a spring-back or a throw-off. The commit threshold is **not** re-invented — `shouldAdvancePileCard` defers to `GlassGestureCommitFraction` (half width) and `GlassGestureFlickVelocityPxPerSec` (fast flick in the drag direction), the app's single gesture-physics authority. A committed throw animates past the edge, promotes the next card, and fires `PlatformHapticsPolicy.lightImpact()`.
+
+**Fan-out.** Tapping a cluster fans it into a horizontal strip where each card animates in on its own `Animatable` after `pileFanStaggerMillis(index)` (40ms steps, capped at 240ms) — a real staggered deal rather than an instant layout swap. Tap a photo to reuse the existing sheet (availability, saved event, chat, location drill-in). "Show less" in the section header, a tap past the trailing card, or system back collapses the fan (state and `PlatformBackHandler` are hoisted into `HomeScreen`). Long-press on stay-in-touch photos sends an icebreaker; long-press reconnect dismisses.
+
+**Reduce Motion** (`rememberReduceMotionEnabled`) replaces tilt, spring, and stagger with a plain fade. `HomeLayoutMode.LINEAR` remains the TalkBack / VoiceOver fallback.
 
 ---
 

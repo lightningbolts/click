@@ -73,15 +73,19 @@ import compose.project.click.click.ui.components.GlassCard // pragma: allowlist 
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeExploreTile // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeGreetingSubtitle // pragma: allowlist secret
-import compose.project.click.click.ui.components.HomePhotoPileBoard // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomePileActions // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomePileBoardData // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeSearchPill // pragma: allowlist secret
+import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
 import compose.project.click.click.ui.components.PollPairCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.SavedEventsSection // pragma: allowlist secret
+import compose.project.click.click.ui.components.SectionHeader // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastHost // pragma: allowlist secret
+import compose.project.click.click.ui.components.cardVisualBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.homeGreetingTitle // pragma: allowlist secret
+import compose.project.click.click.ui.components.homePhotoPileItems // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberCardVisual // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberUnifiedToastState // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
 import compose.project.click.click.ui.components.toHomeExploreTile // pragma: allowlist secret
@@ -168,6 +172,8 @@ fun HomeScreen(
     val homeLayoutMode by AppDataManager.homeLayoutMode.collectAsState()
     var selectedSavedEventBeacon by remember { mutableStateOf<MapBeacon?>(null) }
     var selectedPileLocation by remember { mutableStateOf<String?>(null) }
+    // Hoisted here so system back collapses a fanned-out cluster, and only one cluster fans at a time.
+    var expandedPileClusterId by remember { mutableStateOf<String?>(null) }
     var shareSavedBeaconToChat by remember { mutableStateOf<MapBeacon?>(null) }
     var archiveBannerNow by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
 
@@ -343,6 +349,9 @@ fun HomeScreen(
                         ?.firstOrNull()
                         ?.takeIf { it.isNotBlank() }
                         ?: "there"
+                PlatformBackHandler(enabled = expandedPileClusterId != null) {
+                    expandedPileClusterId = null
+                }
                 AppScreenScaffold(
                     title = homeGreetingTitle(firstName),
                     subtitle = HomeGreetingSubtitle,
@@ -388,73 +397,72 @@ fun HomeScreen(
                     }
 
                     if (homeLayoutMode == HomeLayoutMode.PILE) {
-                        item(key = "photo_pile") {
-                            HomePhotoPileBoard(
-                                data =
-                                    HomePileBoardData(
-                                        intents = homeAvailabilityIntents,
-                                        featuredEvent = featuredEvent,
-                                        recap = activityRecap,
-                                        savedBookmarks = displayedSavedBookmarks,
-                                        exploreTiles = exploreTiles,
-                                        archiveNotice = archiveBannerNotice,
-                                        pollPair = pollPairSuggestion,
-                                        reconnectReminders = reconnectReminders,
-                                        eventReminders = remainingEventReminders,
-                                        locationGroups = locationGroupedConnections,
-                                        insights =
-                                            if (connectionInsights != null && state.stats.totalConnections > 0) {
-                                                connectionInsights
-                                            } else {
-                                                null
-                                            },
-                                        stats = state.stats,
-                                        connectedUsers = connectedUsers,
-                                    ),
-                                actions =
-                                    HomePileActions(
-                                        onCreateIntent = {
-                                            availabilityViewModel.resetAvailabilityIntentSheet()
-                                            seedAvailabilityIntent = null
-                                            showAvailabilityIntentSheet = true
+                        homePhotoPileItems(
+                            data =
+                                HomePileBoardData(
+                                    intents = homeAvailabilityIntents,
+                                    featuredEvent = featuredEvent,
+                                    recap = activityRecap,
+                                    savedBookmarks = displayedSavedBookmarks,
+                                    exploreTiles = exploreTiles,
+                                    archiveNotice = archiveBannerNotice,
+                                    pollPair = pollPairSuggestion,
+                                    reconnectReminders = reconnectReminders,
+                                    eventReminders = remainingEventReminders,
+                                    locationGroups = locationGroupedConnections,
+                                    insights =
+                                        if (connectionInsights != null && state.stats.totalConnections > 0) {
+                                            connectionInsights
+                                        } else {
+                                            null
                                         },
-                                        onEditIntent = { row ->
-                                            availabilityViewModel.beginEditAvailabilityIntent(row)
-                                            seedAvailabilityIntent = row
-                                            showAvailabilityIntentSheet = true
-                                        },
-                                        onFeaturedMap = { reminder -> onNavigateToMap(reminder.beaconId) },
-                                        onSavedEventClick = { bookmark ->
-                                            selectedSavedEventBeacon =
-                                                resolveSavedEventBeacon(
-                                                    bookmark = bookmark,
-                                                    mapBeacons = mapBeacons,
-                                                    prefetchedBeacons = prefetchedBeacons,
-                                                )
-                                        },
-                                        onExploreClick = { tile -> onNavigateToMapLayer(tile.layerFilter) },
-                                        onArchiveOpenChat = { notice -> onNavigateToChat(notice.connectionId) },
-                                        onArchiveIcebreaker = { notice ->
-                                            homeViewModel.sendArchiveBannerIcebreaker(notice)
-                                        },
-                                        onPollPairOpenChat = { suggestion ->
-                                            onNavigateToChat(suggestion.connectionId)
-                                        },
-                                        onPollPairIcebreaker = { suggestion ->
-                                            homeViewModel.sendPollPairIcebreaker(suggestion)
-                                        },
-                                        onReconnect = { reminder -> onNavigateToChat(reminder.connectionId) },
-                                        onDismissReconnect = { reminder ->
-                                            homeViewModel.dismissReminder(reminder.connectionId)
-                                        },
-                                        onEventReminderMap = { reminder -> onNavigateToMap(reminder.beaconId) },
-                                        onLocationClick = { location ->
-                                            selectedPileLocation = location
-                                        },
-                                    ),
-                                modifier = Modifier.fillParentMaxSize(),
-                            )
-                        }
+                                    stats = state.stats,
+                                    connectedUsers = connectedUsers,
+                                ),
+                            actions =
+                                HomePileActions(
+                                    onCreateIntent = {
+                                        availabilityViewModel.resetAvailabilityIntentSheet()
+                                        seedAvailabilityIntent = null
+                                        showAvailabilityIntentSheet = true
+                                    },
+                                    onEditIntent = { row ->
+                                        availabilityViewModel.beginEditAvailabilityIntent(row)
+                                        seedAvailabilityIntent = row
+                                        showAvailabilityIntentSheet = true
+                                    },
+                                    onFeaturedMap = { reminder -> onNavigateToMap(reminder.beaconId) },
+                                    onSavedEventClick = { bookmark ->
+                                        selectedSavedEventBeacon =
+                                            resolveSavedEventBeacon(
+                                                bookmark = bookmark,
+                                                mapBeacons = mapBeacons,
+                                                prefetchedBeacons = prefetchedBeacons,
+                                            )
+                                    },
+                                    onExploreClick = { tile -> onNavigateToMapLayer(tile.layerFilter) },
+                                    onArchiveOpenChat = { notice -> onNavigateToChat(notice.connectionId) },
+                                    onArchiveIcebreaker = { notice ->
+                                        homeViewModel.sendArchiveBannerIcebreaker(notice)
+                                    },
+                                    onPollPairOpenChat = { suggestion ->
+                                        onNavigateToChat(suggestion.connectionId)
+                                    },
+                                    onPollPairIcebreaker = { suggestion ->
+                                        homeViewModel.sendPollPairIcebreaker(suggestion)
+                                    },
+                                    onReconnect = { reminder -> onNavigateToChat(reminder.connectionId) },
+                                    onDismissReconnect = { reminder ->
+                                        homeViewModel.dismissReminder(reminder.connectionId)
+                                    },
+                                    onEventReminderMap = { reminder -> onNavigateToMap(reminder.beaconId) },
+                                    onLocationClick = { location ->
+                                        selectedPileLocation = location
+                                    },
+                                ),
+                            expandedClusterId = expandedPileClusterId,
+                            onExpandedClusterChange = { expandedPileClusterId = it },
+                        )
                     } else {
                         featuredEvent?.let { reminder ->
                             item(key = "featured_event") {
@@ -562,14 +570,10 @@ fun HomeScreen(
 
                         if (reconnectReminders.isNotEmpty()) {
                             item(key = "reconnect_header") {
-                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    SectionHeader(text = "Reconnect")
-                                    Text(
-                                        "Connections you haven't talked to in a while",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
+                                SectionHeader(
+                                    text = "Reconnect",
+                                    caption = "Connections you haven't talked to in a while",
+                                )
                             }
 
                             items(
@@ -891,19 +895,6 @@ private fun buildHomeExploreTiles(
         addAll(kindTiles)
         hubTile?.let { add(it) }
     }
-}
-
-/**
- * Section header with solid Neo-Brutalist typography.
- */
-@Composable
-private fun SectionHeader(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface,
-    )
 }
 
 /**
@@ -1394,6 +1385,17 @@ fun HomeEventReminderCard(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            // Identity stripe rather than a full hero: this is a notification row, but it should still
+            // carry the same generated colours as the event's card, pin, and detail sheet.
+            val visual = rememberCardVisual(reminder.beaconId, MapBeaconKind.EVENT)
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .cardVisualBackground(visual),
+            )
             Text(
                 text = eventReminderTitle(reminder.kind, reminder.description),
                 style = MaterialTheme.typography.titleSmall,

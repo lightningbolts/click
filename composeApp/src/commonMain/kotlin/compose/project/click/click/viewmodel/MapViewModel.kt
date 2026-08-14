@@ -25,7 +25,6 @@ import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlis
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.parseEpochMs // pragma: allowlist secret
 import compose.project.click.click.data.models.parseMapBeaconMetadata // pragma: allowlist secret
-import compose.project.click.click.data.models.requiresAttachedImage // pragma: allowlist secret
 import compose.project.click.click.data.models.visibleMapConnections // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
@@ -2364,17 +2363,13 @@ class MapViewModel : ViewModel() {
                             }
                         }
                     }
+                // A photo is optional for every beacon kind — it is encouraged in the drop sheet, not
+                // gated. Beacons without one fall back to their generated gradient everywhere.
                 val metadataWithImage: JsonObject? =
-                    if (!kind.requiresAttachedImage()) {
-                        metadata
-                    } else {
+                    run {
                         val raw = imageBytes
                         if (raw == null || raw.isEmpty()) {
-                            _beaconInsertError.value =
-                                "Add a photo from your library or camera. Soundtrack beacons can skip this."
-                            onRejectedEarly()
-                            onRemoteFinished(false)
-                            return@launch
+                            return@run metadata
                         }
                         val mime = imageMime?.trim().orEmpty().ifEmpty { "image/jpeg" }
                         val compressed = compressOutgoingChatImageForUpload(raw, mime)

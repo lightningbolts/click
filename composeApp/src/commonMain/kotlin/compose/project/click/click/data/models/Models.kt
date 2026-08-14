@@ -900,8 +900,6 @@ enum class MapBeaconKind(
     }
 }
 
-fun MapBeaconKind.requiresAttachedImage(): Boolean = this != MapBeaconKind.SOUNDTRACK
-
 /**
  * Parsed JSONB `metadata` for map beacons (flexible keys).
  */
