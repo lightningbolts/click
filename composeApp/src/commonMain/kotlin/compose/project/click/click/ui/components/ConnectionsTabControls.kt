@@ -75,47 +75,56 @@ fun ConnectionsFloatingHeader(
             compact = wantCompact
         }
     }
-    AnimatedContent(
-        targetState = compact,
-        modifier = modifier.fillMaxWidth(),
-        transitionSpec = {
-            fadeIn(tween(160)) togetherWith fadeOut(tween(120))
-        },
-        label = "connections_header_mode",
-    ) { isCompact ->
-        if (isCompact) {
-            ConnectionsCompactHeaderRow(
-                title = title,
-                subtitle = subtitle,
-                selectedTabIndex = selectedTabIndex,
-                onTabSelected = onTabSelected,
-                activeCount = activeCount,
-                groupCount = groupCount,
-                archivedCount = archivedCount,
-                onOpenSearch = onOpenSearch,
+    val showGlass = collapseFraction > 0.01f
+    Box(modifier = modifier.fillMaxWidth()) {
+        if (showGlass) {
+            HeaderGlassBackdrop(
+                modifier = Modifier.matchParentSize(),
+                collapseFraction = collapseFraction,
             )
-        } else {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                LiquidGlassPageHeader(
+        }
+        AnimatedContent(
+            targetState = compact,
+            modifier = Modifier.fillMaxWidth(),
+            transitionSpec = {
+                fadeIn(tween(160)) togetherWith fadeOut(tween(120))
+            },
+            label = "connections_header_mode",
+        ) { isCompact ->
+            if (isCompact) {
+                ConnectionsCompactHeaderRow(
                     title = title,
                     subtitle = subtitle,
-                    collapseFraction = collapseFraction,
-                    actions =
-                        if (onOpenSearch != null) {
-                            { HeaderSearchIconButton(onClick = onOpenSearch) }
-                        } else {
-                            null
-                        },
+                    selectedTabIndex = selectedTabIndex,
+                    onTabSelected = onTabSelected,
+                    activeCount = activeCount,
+                    groupCount = groupCount,
+                    archivedCount = archivedCount,
+                    onOpenSearch = onOpenSearch,
                 )
-                if (showTabs) {
-                    ConnectionsSegmentBar(
-                        selectedTabIndex = selectedTabIndex,
-                        onTabSelected = onTabSelected,
-                        activeCount = activeCount,
-                        groupCount = groupCount,
-                        archivedCount = archivedCount,
-                        modifier = Modifier.padding(top = 8.dp),
+            } else {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    LiquidGlassPageHeader(
+                        title = title,
+                        subtitle = subtitle,
+                        collapseFraction = collapseFraction,
+                        actions =
+                            if (onOpenSearch != null) {
+                                { HeaderSearchIconButton(onClick = onOpenSearch) }
+                            } else {
+                                null
+                            },
                     )
+                    if (showTabs) {
+                        ConnectionsSegmentBar(
+                            selectedTabIndex = selectedTabIndex,
+                            onTabSelected = onTabSelected,
+                            activeCount = activeCount,
+                            groupCount = groupCount,
+                            archivedCount = archivedCount,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
                 }
             }
         }
@@ -133,48 +142,45 @@ private fun ConnectionsCompactHeaderRow(
     archivedCount: Int,
     onOpenSearch: (() -> Unit)? = null,
 ) {
-    LiquidGlassPill(
-        modifier = Modifier.fillMaxWidth(),
-        cornerRadiusDp = GlassSheetTokens.BentoExteriorCorner.value.toInt(),
-        backgroundStrength = 1f,
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        Column(
+            modifier = Modifier.weight(1f),
         ) {
-            Column(
-                modifier = Modifier.weight(1f),
-            ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (!subtitle.isNullOrBlank()) {
                 Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (!subtitle.isNullOrBlank()) {
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
             }
-            if (onOpenSearch != null) {
-                HeaderSearchIconButton(onClick = onOpenSearch)
-            }
-            ConnectionsTabFilterMenuChip(
-                selectedTabIndex = selectedTabIndex,
-                onTabSelected = onTabSelected,
-                activeCount = activeCount,
-                groupCount = groupCount,
-                archivedCount = archivedCount,
-            )
         }
+        if (onOpenSearch != null) {
+            HeaderSearchIconButton(onClick = onOpenSearch)
+        }
+        ConnectionsTabFilterMenuChip(
+            selectedTabIndex = selectedTabIndex,
+            onTabSelected = onTabSelected,
+            activeCount = activeCount,
+            groupCount = groupCount,
+            archivedCount = archivedCount,
+        )
     }
 }
 
@@ -254,22 +260,28 @@ fun DiscoveryFloatingHeader(
 ) {
     val compact = collapseFraction > 0.42f
     val sortLabels = listOf("Distance", "Recent")
-    AnimatedContent(
-        targetState = compact,
-        modifier = modifier.fillMaxWidth(),
-        transitionSpec = {
-            fadeIn(tween(160)) togetherWith fadeOut(tween(120))
-        },
-        label = "discovery_header_mode",
-    ) { isCompact ->
-        if (isCompact) {
-            LiquidGlassPill(
-                modifier = Modifier.fillMaxWidth(),
-                cornerRadiusDp = GlassSheetTokens.BentoExteriorCorner.value.toInt(),
-                backgroundStrength = 1f,
-            ) {
+    val showGlass = collapseFraction > 0.01f
+    Box(modifier = modifier.fillMaxWidth()) {
+        if (showGlass) {
+            HeaderGlassBackdrop(
+                modifier = Modifier.matchParentSize(),
+                collapseFraction = collapseFraction,
+            )
+        }
+        AnimatedContent(
+            targetState = compact,
+            modifier = Modifier.fillMaxWidth(),
+            transitionSpec = {
+                fadeIn(tween(160)) togetherWith fadeOut(tween(120))
+            },
+            label = "discovery_header_mode",
+        ) { isCompact ->
+            if (isCompact) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -307,35 +319,35 @@ fun DiscoveryFloatingHeader(
                         labels = sortLabels,
                     )
                 }
-            }
-        } else {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                LiquidGlassPageHeader(
-                    title = title,
-                    subtitle = subtitle,
-                    collapseFraction = collapseFraction,
-                    actions =
-                        if (onRefresh != null || onOpenSearch != null) {
-                            {
-                                if (onRefresh != null) {
-                                    HeaderRefreshIconButton(
-                                        onClick = onRefresh,
-                                        enabled = !isRefreshing,
-                                    )
+            } else {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    LiquidGlassPageHeader(
+                        title = title,
+                        subtitle = subtitle,
+                        collapseFraction = collapseFraction,
+                        actions =
+                            if (onRefresh != null || onOpenSearch != null) {
+                                {
+                                    if (onRefresh != null) {
+                                        HeaderRefreshIconButton(
+                                            onClick = onRefresh,
+                                            enabled = !isRefreshing,
+                                        )
+                                    }
+                                    if (onOpenSearch != null) {
+                                        HeaderSearchIconButton(onClick = onOpenSearch)
+                                    }
                                 }
-                                if (onOpenSearch != null) {
-                                    HeaderSearchIconButton(onClick = onOpenSearch)
-                                }
-                            }
-                        } else {
-                            null
-                        },
-                )
-                DiscoverySortSegmentBar(
-                    selectedTabIndex = selectedSortIndex,
-                    onTabSelected = onSortSelected,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
+                            } else {
+                                null
+                            },
+                    )
+                    DiscoverySortSegmentBar(
+                        selectedTabIndex = selectedSortIndex,
+                        onTabSelected = onSortSelected,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
             }
         }
     }

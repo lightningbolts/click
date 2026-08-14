@@ -138,7 +138,7 @@ Permissions (`PermissionsOnboardingScreen`, `LocationOnboardingScreen`) are **le
 
 **Avatar tri-state:** `userHasAvatar: () -> Boolean?`. `null` (unknown) keeps `computeStep` on Loading — **never** show Avatar. Local non-blank `image` → `true` immediately. Blank local cache → hold `profileGatePending` / shimmer until `getUserProfile` returns, then `true`/`false`. Fetch failure stays unknown until ~2.5s timeout, then `false` so first-time users are not stuck.
 
-**Welcome vs interests fetch:** `isDataReady` does **not** wait on `interestsRemoteResolved`. Welcome can render while interests load; only the Interests step waits.
+**Welcome vs interests fetch:** Cold start keeps `onboardingState = null` (loading shimmer) until remote `user_interests` / profile signals resolve when no persisted state exists. Returning accounts are seeded with `welcomeSeen = true` via `existingHydratedOnboardingState()` or `resolveOnboardingAfterRemoteResolution` (tags ≥ 5, profile name+birthday, or avatar URL) so Welcome does not flash. Only brand-new installs with no profile signals get `OnboardingState()` and see Welcome. The Interests step still waits on `interestsRemoteResolved`.
 
 **Interests remain required** (`canSkip = false`). Avatar remains skippable.
 
@@ -229,7 +229,7 @@ Birthday field: `testTag = "profile-gate-birthday-field"`. Date picker matches S
 ## WelcomeScreen
 
 **Source:** `ui/screens/WelcomeScreen.kt`  
-**When shown:** `OnboardingViewModel.Step.Welcome` (`welcomeSeen == false`).  
+**When shown:** `OnboardingViewModel.Step.Welcome` (`welcomeSeen == false` **and** `interestsCompleted == false` — brand-new accounts only).  
 **Persistence:** `onboardingVm.onWelcomeAcknowledged()` sets `welcomeSeen = true`.
 
 ### Layout / Container

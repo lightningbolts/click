@@ -1,4 +1,8 @@
-package compose.project.click.click.ui.components
+@file:Suppress(
+    "ktlint:standard:function-naming",
+)
+
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,9 +13,9 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
@@ -29,10 +33,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import compose.project.click.click.encounter.EncounterTetherManager
-import compose.project.click.click.encounter.tetherCompassMessage
-import compose.project.click.click.utils.LocationService
-import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -40,13 +40,17 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import compose.project.click.click.encounter.EncounterTetherManager // pragma: allowlist secret
+import compose.project.click.click.encounter.tetherCompassMessage // pragma: allowlist secret
+import compose.project.click.click.utils.LocationService // pragma: allowlist secret
+import kotlinx.coroutines.delay
 
-private const val FloatingHeaderInsetItemKey = "__floating_header_inset__"
+private const val FLOATING_HEADER_INSET_ITEM_KEY = "__floating_header_inset__"
 
 /**
  * Standard tab-root layout: scrollable body extends under the floating nav bar, with bottom
- * content padding so every control stays reachable. A Functional Clarity header island floats at
- * the top and collapses as the user scrolls.
+ * content padding so every control stays reachable. A borderless large title floats at the top
+ * and collapses to a semi-translucent glass bar as the user scrolls.
  *
  * When [showFloatingHeader] is false, only status-bar top inset is applied — no title
  * island. Prefer [showFloatingHeader] true for tab roots (including Home’s greeting).
@@ -77,44 +81,54 @@ fun AppScreenScaffold(
     val statusBarTop = rememberStatusBarTopPadding()
     val bottomChrome = rememberBottomChromePadding()
     val density = LocalDensity.current
+    val thresholdPx = with(density) { AppScreenDefaults.HeaderCollapseScrollThreshold.roundToPx() }
     val compactHeaderClearance = rememberCompactFloatingHeaderClearance(statusBarTop)
-    val collapseFraction by remember(lazyListState) {
+    val collapseFraction by remember(lazyListState, thresholdPx) {
         derivedStateOf {
-            if (showFloatingHeader) lazyListState.headerCollapseFraction() else 0f
+            if (showFloatingHeader) {
+                lazyListState.headerCollapseFraction(thresholdPx)
+            } else {
+                0f
+            }
         }
     }
     val (measuredTopPadding, headerMeasureModifier) =
         rememberFloatingHeaderTopPadding(collapseFraction, statusBarTop, belowHeaderSpacing)
-    val topContentPadding = if (showFloatingHeader) {
-        measuredTopPadding
-    } else {
-        statusBarTop + 16.dp
-    }
-    val expandedHeaderSlack = remember(topContentPadding, compactHeaderClearance) {
-        (topContentPadding - compactHeaderClearance).coerceAtLeast(0.dp)
-    }
-    val headerHidden = if (showFloatingHeader) {
-        rememberLazyFloatingHeaderHidden(
-            lazyListState = lazyListState,
-            expandedHeaderSlack = expandedHeaderSlack,
-            density = density,
-        )
-    } else {
-        true
-    }
+    val topContentPadding =
+        if (showFloatingHeader) {
+            measuredTopPadding
+        } else {
+            statusBarTop + 16.dp
+        }
+    val expandedHeaderSlack =
+        remember(topContentPadding, compactHeaderClearance) {
+            (topContentPadding - compactHeaderClearance).coerceAtLeast(0.dp)
+        }
+    val headerHidden =
+        if (showFloatingHeader) {
+            rememberLazyFloatingHeaderHidden(
+                lazyListState = lazyListState,
+                expandedHeaderSlack = expandedHeaderSlack,
+                density = density,
+                thresholdPx = thresholdPx,
+            )
+        } else {
+            true
+        }
 
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
             state = lazyListState,
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = verticalArrangement,
-            contentPadding = PaddingValues(
-                start = horizontalPadding,
-                end = horizontalPadding,
-                bottom = bottomChrome,
-            ),
+            contentPadding =
+                PaddingValues(
+                    start = horizontalPadding,
+                    end = horizontalPadding,
+                    bottom = bottomChrome,
+                ),
         ) {
-            item(key = FloatingHeaderInsetItemKey) {
+            item(key = FLOATING_HEADER_INSET_ITEM_KEY) {
                 Spacer(Modifier.height(topContentPadding))
             }
             content()
@@ -125,22 +139,24 @@ fun AppScreenScaffold(
                 hidden = headerHidden,
                 horizontalPadding = horizontalPadding,
                 headerMeasureModifier = headerMeasureModifier,
+                collapseFraction = collapseFraction,
             ) {
                 LiquidGlassPageHeader(
                     title = title,
                     subtitle = subtitle,
                     presenceOnline = presenceOnline,
                     navigationIcon = navigationIcon,
-                    actions = if (onOpenSearch != null || actions != null) {
-                        {
-                            if (onOpenSearch != null) {
-                                HeaderSearchIconButton(onClick = onOpenSearch)
+                    actions =
+                        if (onOpenSearch != null || actions != null) {
+                            {
+                                if (onOpenSearch != null) {
+                                    HeaderSearchIconButton(onClick = onOpenSearch)
+                                }
+                                actions?.invoke(this)
                             }
-                            actions?.invoke(this)
-                        }
-                    } else {
-                        null
-                    },
+                        } else {
+                            null
+                        },
                     collapseFraction = collapseFraction,
                 )
                 headerBelowContent?.invoke()
@@ -167,32 +183,43 @@ fun AppScreenScaffoldScroll(
     val statusBarTop = rememberStatusBarTopPadding()
     val bottomChrome = rememberBottomChromePadding()
     val density = LocalDensity.current
+    val thresholdPx = with(density) { AppScreenDefaults.HeaderCollapseScrollThreshold.roundToPx() }
     val compactHeaderClearance = rememberCompactFloatingHeaderClearance(statusBarTop)
-    val collapseFraction by remember(scrollState) {
-        derivedStateOf { scrollState.headerCollapseFraction() }
+    val collapseFraction by remember(scrollState, thresholdPx) {
+        derivedStateOf {
+            computeHeaderCollapseFraction(
+                scrollOffsetPx = scrollState.value,
+                firstVisibleItemIndex = 0,
+                thresholdPx = thresholdPx,
+            )
+        }
     }
     val (topContentPadding, headerMeasureModifier) =
         rememberFloatingHeaderTopPadding(collapseFraction, statusBarTop)
-    val expandedHeaderSlack = remember(topContentPadding, compactHeaderClearance) {
-        (topContentPadding - compactHeaderClearance).coerceAtLeast(0.dp)
-    }
-    val headerHidden = rememberScrollFloatingHeaderHidden(
-        scrollState = scrollState,
-        expandedHeaderSlack = expandedHeaderSlack,
-        density = density,
-    )
+    val expandedHeaderSlack =
+        remember(topContentPadding, compactHeaderClearance) {
+            (topContentPadding - compactHeaderClearance).coerceAtLeast(0.dp)
+        }
+    val headerHidden =
+        rememberScrollFloatingHeaderHidden(
+            scrollState = scrollState,
+            expandedHeaderSlack = expandedHeaderSlack,
+            density = density,
+            thresholdPx = thresholdPx,
+        )
 
     Box(modifier = modifier.fillMaxSize()) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(
-                    start = horizontalPadding,
-                    end = horizontalPadding,
-                    top = topContentPadding,
-                    bottom = bottomChrome,
-                ),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(
+                        start = horizontalPadding,
+                        end = horizontalPadding,
+                        top = topContentPadding,
+                        bottom = bottomChrome,
+                    ),
         ) {
             content(Modifier.fillMaxWidth())
         }
@@ -201,6 +228,7 @@ fun AppScreenScaffoldScroll(
             hidden = headerHidden,
             horizontalPadding = horizontalPadding,
             headerMeasureModifier = headerMeasureModifier,
+            collapseFraction = collapseFraction,
         ) {
             LiquidGlassPageHeader(
                 title = title,
@@ -214,15 +242,30 @@ fun AppScreenScaffoldScroll(
     }
 }
 
-fun LazyListState.headerCollapseFraction(): Float {
-    val threshold = AppScreenDefaults.HeaderCollapseScrollThreshold
+/**
+ * Scroll offset → 0 (large) … 1 (compact) for tab-root floating headers.
+ * [thresholdPx] should be [AppScreenDefaults.HeaderCollapseScrollThreshold] converted with [Density].
+ */
+fun computeHeaderCollapseFraction(
+    scrollOffsetPx: Int,
+    firstVisibleItemIndex: Int,
+    thresholdPx: Int,
+): Float {
+    val threshold = thresholdPx.coerceAtLeast(1)
     return when {
         firstVisibleItemIndex > 0 -> 1f
-        else -> (firstVisibleItemScrollOffset.toFloat() / threshold).coerceIn(0f, 1f)
+        else -> (scrollOffsetPx.toFloat() / threshold).coerceIn(0f, 1f)
     }
 }
 
-private const val FloatingHeaderHideHysteresisPx = 32f
+fun LazyListState.headerCollapseFraction(thresholdPx: Int): Float =
+    computeHeaderCollapseFraction(
+        scrollOffsetPx = firstVisibleItemScrollOffset,
+        firstVisibleItemIndex = firstVisibleItemIndex,
+        thresholdPx = thresholdPx,
+    )
+
+private const val FLOATING_HEADER_HIDE_HYSTERESIS_PX = 32f
 
 @Composable
 private fun rememberFloatingHeaderHidden(
@@ -236,7 +279,7 @@ private fun rememberFloatingHeaderHidden(
         when {
             forceHidden -> hidden = true
             hidden -> {
-                if (scrollPx <= slackPx - FloatingHeaderHideHysteresisPx) {
+                if (scrollPx <= slackPx - FLOATING_HEADER_HIDE_HYSTERESIS_PX) {
                     hidden = false
                 }
             }
@@ -251,9 +294,16 @@ private fun rememberScrollFloatingHeaderHidden(
     scrollState: androidx.compose.foundation.ScrollState,
     expandedHeaderSlack: Dp,
     density: Density,
+    thresholdPx: Int,
 ): Boolean {
-    val collapseFraction by remember(scrollState) {
-        derivedStateOf { scrollState.headerCollapseFraction() }
+    val collapseFraction by remember(scrollState, thresholdPx) {
+        derivedStateOf {
+            computeHeaderCollapseFraction(
+                scrollOffsetPx = scrollState.value,
+                firstVisibleItemIndex = 0,
+                thresholdPx = thresholdPx,
+            )
+        }
     }
     val scrollPx by remember(scrollState) {
         derivedStateOf { scrollState.value.toFloat() }
@@ -271,9 +321,10 @@ private fun rememberLazyFloatingHeaderHidden(
     lazyListState: LazyListState,
     expandedHeaderSlack: Dp,
     density: Density,
+    thresholdPx: Int,
 ): Boolean {
-    val collapseFraction by remember(lazyListState) {
-        derivedStateOf { lazyListState.headerCollapseFraction() }
+    val collapseFraction by remember(lazyListState, thresholdPx) {
+        derivedStateOf { lazyListState.headerCollapseFraction(thresholdPx) }
     }
     val scrollPx by remember(lazyListState) {
         derivedStateOf {
@@ -296,31 +347,36 @@ private fun rememberLazyFloatingHeaderHidden(
     )
 }
 
-private fun androidx.compose.foundation.ScrollState.headerCollapseFraction(): Float {
-    val threshold = AppScreenDefaults.HeaderCollapseScrollThreshold
-    return (value.toFloat() / threshold).coerceIn(0f, 1f)
-}
-
 @Composable
 private fun BoxScope.FloatingHeaderOverlay(
     hidden: Boolean,
     horizontalPadding: Dp,
     headerMeasureModifier: Modifier,
+    collapseFraction: Float,
     headerContent: @Composable () -> Unit,
 ) {
     if (hidden) return
+    val showGlass = collapseFraction > 0.01f
     Box(
-        modifier = Modifier
-            .align(Alignment.TopCenter)
-            .zIndex(1f)
-            .fillMaxWidth()
-            .floatingHeaderStatusBarPadding()
-            .padding(start = horizontalPadding, end = horizontalPadding),
+        modifier =
+            Modifier
+                .align(Alignment.TopCenter)
+                .zIndex(1f)
+                .fillMaxWidth(),
     ) {
+        if (showGlass) {
+            HeaderGlassBackdrop(
+                modifier = Modifier.matchParentSize(),
+                collapseFraction = collapseFraction,
+            )
+        }
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(headerMeasureModifier),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .floatingHeaderStatusBarPadding()
+                    .padding(start = horizontalPadding, end = horizontalPadding)
+                    .then(headerMeasureModifier),
         ) {
             headerContent()
         }
@@ -343,35 +399,47 @@ fun AppScreenWithFloatingHeader(
 ) {
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
+    val thresholdPx = with(density) { AppScreenDefaults.HeaderCollapseScrollThreshold.roundToPx() }
     val statusBarTop = rememberStatusBarTopPadding()
     val bottomChrome = rememberBottomChromePadding()
-    val collapseFraction by remember(scrollState) {
-        derivedStateOf { scrollState.headerCollapseFraction() }
+    val collapseFraction by remember(scrollState, thresholdPx) {
+        derivedStateOf {
+            computeHeaderCollapseFraction(
+                scrollOffsetPx = scrollState.value,
+                firstVisibleItemIndex = 0,
+                thresholdPx = thresholdPx,
+            )
+        }
     }
-    val (topContentPadding, headerMeasureModifier) = rememberFloatingHeaderTopPadding(
-        collapseFraction = collapseFraction,
-        statusBarTop = statusBarTop,
-    )
+    val (topContentPadding, headerMeasureModifier) =
+        rememberFloatingHeaderTopPadding(
+            collapseFraction = collapseFraction,
+            statusBarTop = statusBarTop,
+        )
     val compactHeaderClearance = rememberCompactFloatingHeaderClearance(statusBarTop)
-    val expandedHeaderSlack = remember(topContentPadding, compactHeaderClearance) {
-        (topContentPadding - compactHeaderClearance).coerceAtLeast(0.dp)
-    }
-    val headerHidden = rememberScrollFloatingHeaderHidden(
-        scrollState = scrollState,
-        expandedHeaderSlack = expandedHeaderSlack,
-        density = density,
-    )
+    val expandedHeaderSlack =
+        remember(topContentPadding, compactHeaderClearance) {
+            (topContentPadding - compactHeaderClearance).coerceAtLeast(0.dp)
+        }
+    val headerHidden =
+        rememberScrollFloatingHeaderHidden(
+            scrollState = scrollState,
+            expandedHeaderSlack = expandedHeaderSlack,
+            density = density,
+            thresholdPx = thresholdPx,
+        )
 
     Box(modifier = modifier.fillMaxSize()) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(
-                    start = horizontalPadding,
-                    end = horizontalPadding,
-                    bottom = bottomChrome,
-                ),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(
+                        start = horizontalPadding,
+                        end = horizontalPadding,
+                        bottom = bottomChrome,
+                    ),
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Spacer(Modifier.height(topContentPadding))
@@ -383,6 +451,7 @@ fun AppScreenWithFloatingHeader(
             hidden = headerHidden,
             horizontalPadding = horizontalPadding,
             headerMeasureModifier = headerMeasureModifier,
+            collapseFraction = collapseFraction,
         ) {
             LiquidGlassPageHeader(
                 title = title,
@@ -397,32 +466,31 @@ fun AppScreenWithFloatingHeader(
 }
 
 /**
- * Root-level tether compass toast — mount once from [compose.project.click.click.App] so pings
+ * Root-level tether compass toast — mount once from [compose.project.click.click.App] so pings // pragma: allowlist secret
  * surface on any tab, not only inside an open chat.
  */
 @Composable
-fun GlobalTetherOverlay(
-    modifier: Modifier = Modifier,
-) {
+fun GlobalTetherOverlay(modifier: Modifier = Modifier) {
     val payload by EncounterTetherManager.activeTetherPayload.collectAsState()
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     var toastMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(payload) {
-        toastMessage = payload?.let { ping ->
-            val receiver = LocationService().getCurrentLocation()
-            if (receiver != null) {
-                tetherCompassMessage(
-                    senderName = ping.senderName,
-                    receiverLat = receiver.latitude,
-                    receiverLng = receiver.longitude,
-                    senderLat = ping.latitude,
-                    senderLng = ping.longitude,
-                )
-            } else {
-                "${ping.senderName} pinged their tether"
+        toastMessage =
+            payload?.let { ping ->
+                val receiver = LocationService().getCurrentLocation()
+                if (receiver != null) {
+                    tetherCompassMessage(
+                        senderName = ping.senderName,
+                        receiverLat = receiver.latitude,
+                        receiverLng = receiver.longitude,
+                        senderLat = ping.latitude,
+                        senderLng = ping.longitude,
+                    )
+                } else {
+                    "${ping.senderName} pinged their tether"
+                }
             }
-        }
     }
 
     LaunchedEffect(payload?.timestampMs) {
@@ -435,8 +503,9 @@ fun GlobalTetherOverlay(
 
     TetherCompassToast(
         message = toastMessage,
-        modifier = modifier
-            .padding(top = statusBarTop + 64.dp),
+        modifier =
+            modifier
+                .padding(top = statusBarTop + 64.dp),
         onDismissed = { EncounterTetherManager.clearActiveTetherPayload() },
     )
 }

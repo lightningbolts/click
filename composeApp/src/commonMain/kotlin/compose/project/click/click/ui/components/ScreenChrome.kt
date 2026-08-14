@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.components
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -28,7 +28,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.LocalPlatformStyle
+import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 
 private val AndroidStatusBarFallback = 24.dp
 
@@ -36,7 +36,9 @@ private val AndroidStatusBarFallback = 24.dp
 object AppScreenDefaults {
     val HorizontalPadding = 20.dp
     val SectionSpacing = 24.dp
-    val HeaderCollapseScrollThreshold = 96
+
+    /** First-item scroll offset (~20dp) before the tab-root header fully collapses. */
+    val HeaderCollapseScrollThreshold = 20.dp
     val FloatingHeaderLargeHeight = 112.dp
     val FloatingHeaderCompactHeight = 52.dp
     val ExtraScrollBottomPadding = 16.dp
@@ -81,9 +83,7 @@ fun rememberTabBarOverlayHeight(): Dp {
 }
 
 @Composable
-fun rememberBottomChromePadding(extra: Dp = AppScreenDefaults.ExtraScrollBottomPadding): Dp {
-    return rememberTabBarOverlayHeight() + extra
-}
+fun rememberBottomChromePadding(extra: Dp = AppScreenDefaults.ExtraScrollBottomPadding): Dp = rememberTabBarOverlayHeight() + extra
 
 /**
  * Reliable top safe-area inset for floating headers.
@@ -96,25 +96,27 @@ fun rememberStatusBarTopPadding(): Dp {
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     if (style.isIOS) return statusBarTop
 
-    val safeTop = WindowInsets.safeDrawing
-        .only(WindowInsetsSides.Top)
-        .asPaddingValues()
-        .calculateTopPadding()
+    val safeTop =
+        WindowInsets.safeDrawing
+            .only(WindowInsetsSides.Top)
+            .asPaddingValues()
+            .calculateTopPadding()
     val measured = maxOf(statusBarTop, safeTop)
     return if (measured < 1.dp) AndroidStatusBarFallback else measured
 }
 
 /** Declarative status-bar padding for overlay headers (Android cutout-safe). */
-fun Modifier.floatingHeaderStatusBarPadding(): Modifier = composed {
-    val style = LocalPlatformStyle.current
-    if (style.isIOS) {
-        Modifier.windowInsetsPadding(WindowInsets.statusBars)
-    } else {
-        Modifier.windowInsetsPadding(
-            WindowInsets.safeDrawing.only(WindowInsetsSides.Top),
-        )
+fun Modifier.floatingHeaderStatusBarPadding(): Modifier =
+    composed {
+        val style = LocalPlatformStyle.current
+        if (style.isIOS) {
+            Modifier.windowInsetsPadding(WindowInsets.statusBars)
+        } else {
+            Modifier.windowInsetsPadding(
+                WindowInsets.safeDrawing.only(WindowInsetsSides.Top),
+            )
+        }
     }
-}
 
 /**
  * Measures expanded header body height (excluding status bar) so scroll content clears
@@ -148,19 +150,20 @@ fun rememberFloatingHeaderTopPadding(
     var hasLockedExpandedHeight by remember {
         mutableStateOf(savedExpandedBodyDp > 0f)
     }
-    val measureModifier = Modifier.onGloballyPositioned { coordinates ->
-        if (collapseFraction < 0.05f) {
-            val measuredBody = with(density) { coordinates.size.height.toDp() }
-            if (measuredBody >= AppScreenDefaults.FloatingHeaderCompactHeight) {
-                if (measuredBody > expandedHeaderBodyHeight || !hasLockedExpandedHeight) {
-                    val next = maxOf(measuredBody, minimumExpandedBodyHeight)
-                    expandedHeaderBodyHeight = next
-                    savedExpandedBodyDp = next.value
-                    hasLockedExpandedHeight = true
+    val measureModifier =
+        Modifier.onGloballyPositioned { coordinates ->
+            if (collapseFraction < 0.05f) {
+                val measuredBody = with(density) { coordinates.size.height.toDp() }
+                if (measuredBody >= AppScreenDefaults.FloatingHeaderCompactHeight) {
+                    if (measuredBody > expandedHeaderBodyHeight || !hasLockedExpandedHeight) {
+                        val next = maxOf(measuredBody, minimumExpandedBodyHeight)
+                        expandedHeaderBodyHeight = next
+                        savedExpandedBodyDp = next.value
+                        hasLockedExpandedHeight = true
+                    }
                 }
             }
         }
-    }
     // Fixed expanded inset — overlay header collapses visually; do not shrink this during
     // scroll (causes jitter on both LazyColumn and verticalScroll screens).
     val topPadding = statusBarTop + expandedHeaderBodyHeight + belowHeaderSpacing
@@ -169,21 +172,16 @@ fun rememberFloatingHeaderTopPadding(
 
 /** Minimum top inset for scroll content on collapsing-header screens (compact pill + safe area). */
 @Composable
-fun rememberCompactFloatingHeaderClearance(
-    statusBarTop: Dp = rememberStatusBarTopPadding(),
-): Dp =
+fun rememberCompactFloatingHeaderClearance(statusBarTop: Dp = rememberStatusBarTopPadding()): Dp =
     statusBarTop + AppScreenDefaults.FloatingHeaderCompactHeight + AppScreenDefaults.SectionSpacing
 
 /** FABs / map controls sit [AppScreenDefaults.FabGapAboveTabBar] above the tab bar top edge. */
 @Composable
-fun rememberFabAboveNavPadding(): Dp =
-    rememberTabBarOverlayHeight() + AppScreenDefaults.FabGapAboveTabBar
+fun rememberFabAboveNavPadding(): Dp = rememberTabBarOverlayHeight() + AppScreenDefaults.FabGapAboveTabBar
 
 /** Bottom inset for composers sitting above the floating tab bar. */
 @Composable
-fun rememberComposerBottomPadding(extra: Dp = 0.dp): Dp {
-    return rememberTabBarOverlayHeight() + extra
-}
+fun rememberComposerBottomPadding(extra: Dp = 0.dp): Dp = rememberTabBarOverlayHeight() + extra
 
 /**
  * Smooth keyboard dock.
@@ -205,45 +203,48 @@ private fun Modifier.chatBottomInsetUnion(
     nativeKeyboardLiftPx: Float? = null,
     nativeKeyboardLiftPxState: MutableFloatState? = null,
     clearNativeTabBar: Boolean = false,
-): Modifier = composed {
-    val density = LocalDensity.current
-    val style = LocalPlatformStyle.current
-    val imeInsets = WindowInsets.ime
-    val navInsets = WindowInsets.navigationBars
-    val navBottomPx = navInsets.getBottom(density)
-    val navBottomDp = with(density) { navBottomPx.toDp() }
+): Modifier =
+    composed {
+        val density = LocalDensity.current
+        val style = LocalPlatformStyle.current
+        val imeInsets = WindowInsets.ime
+        val navInsets = WindowInsets.navigationBars
+        val navBottomPx = navInsets.getBottom(density)
+        val navBottomDp = with(density) { navBottomPx.toDp() }
 
-    if (style.isIOS) {
-        val bottomPad = if (clearNativeTabBar) {
-            rememberTabBarOverlayHeight()
-        } else {
-            navBottomDp
-        }
-        return@composed Modifier
-            .padding(bottom = bottomPad + extraBottom)
-            .clipToBounds()
-            .graphicsLayer {
-                val liftPx = when {
-                    nativeKeyboardLiftPxState != null ->
-                        nativeKeyboardLiftPxState.floatValue.coerceAtLeast(0f)
-                    else -> nativeKeyboardLiftPx?.coerceAtLeast(0f) ?: 0f
+        if (style.isIOS) {
+            val bottomPad =
+                if (clearNativeTabBar) {
+                    rememberTabBarOverlayHeight()
+                } else {
+                    navBottomDp
                 }
-                translationY = -liftPx
+            return@composed Modifier
+                .padding(bottom = bottomPad + extraBottom)
+                .clipToBounds()
+                .graphicsLayer {
+                    val liftPx =
+                        when {
+                            nativeKeyboardLiftPxState != null ->
+                                nativeKeyboardLiftPxState.floatValue.coerceAtLeast(0f)
+                            else -> nativeKeyboardLiftPx?.coerceAtLeast(0f) ?: 0f
+                        }
+                    translationY = -liftPx
+                }
+        }
+
+        // Android remains directly driven by WindowInsets.ime. Reading inside offset's placement
+        // lambda lets inset animation reposition the dock without rebuilding the chat composition.
+        Modifier
+            .padding(bottom = navBottomDp + extraBottom)
+            .clipToBounds()
+            .offset {
+                val imePx = imeInsets.getBottom(density)
+                val navPx = navInsets.getBottom(density)
+                val liftPx = (imePx - navPx).coerceAtLeast(0)
+                IntOffset(0, -liftPx)
             }
     }
-
-    // Android remains directly driven by WindowInsets.ime. Reading inside offset's placement
-    // lambda lets inset animation reposition the dock without rebuilding the chat composition.
-    Modifier
-        .padding(bottom = navBottomDp + extraBottom)
-        .clipToBounds()
-        .offset {
-            val imePx = imeInsets.getBottom(density)
-            val navPx = navInsets.getBottom(density)
-            val liftPx = (imePx - navPx).coerceAtLeast(0)
-            IntOffset(0, -liftPx)
-        }
-}
 
 /**
  * Pins non-thread composer chrome above the tab bar.
@@ -251,10 +252,11 @@ private fun Modifier.chatBottomInsetUnion(
  * This helper deliberately does not react to the keyboard. Chat threads must use
  * [chatThreadKeyboardDock]; forms and sheets must use `imePadding`.
  */
-fun Modifier.chatComposerDock(extraBottom: Dp = 0.dp): Modifier = composed {
-    val tabStack = rememberTabBarOverlayHeight() + extraBottom
-    Modifier.padding(bottom = tabStack)
-}
+fun Modifier.chatComposerDock(extraBottom: Dp = 0.dp): Modifier =
+    composed {
+        val tabStack = rememberTabBarOverlayHeight() + extraBottom
+        Modifier.padding(bottom = tabStack)
+    }
 
 /**
  * Thread + composer column below the fixed chat header. Slides the **entire** block (messages and
@@ -265,20 +267,20 @@ fun Modifier.chatThreadKeyboardDock(
     nativeKeyboardLiftPx: Float? = null,
     nativeKeyboardLiftPxState: MutableFloatState? = null,
     clearNativeTabBar: Boolean = false,
-): Modifier = chatBottomInsetUnion(
-    extraBottom,
-    nativeKeyboardLiftPx,
-    nativeKeyboardLiftPxState,
-    clearNativeTabBar,
-)
+): Modifier =
+    chatBottomInsetUnion(
+        extraBottom,
+        nativeKeyboardLiftPx,
+        nativeKeyboardLiftPxState,
+        clearNativeTabBar,
+    )
 
 /**
  * Edge-to-edge chat dock. On iOS callers that need keyboard movement must use
  * [chatThreadKeyboardDock] and supply the native lift; this overload intentionally resolves to
  * zero native lift so it can never fall back to Compose IME handling.
  */
-fun Modifier.chatComposerDockEdgeToEdge(extraBottom: Dp = 0.dp): Modifier =
-    chatBottomInsetUnion(extraBottom)
+fun Modifier.chatComposerDockEdgeToEdge(extraBottom: Dp = 0.dp): Modifier = chatBottomInsetUnion(extraBottom)
 
 @Composable
 fun rememberEdgeToEdgeBottomPadding(extra: Dp = 0.dp): Dp {
@@ -286,10 +288,12 @@ fun rememberEdgeToEdgeBottomPadding(extra: Dp = 0.dp): Dp {
     return navigationBar + extra
 }
 
-fun Modifier.bottomChromePadding(extra: Dp = AppScreenDefaults.ExtraScrollBottomPadding): Modifier = composed {
-    Modifier.padding(bottom = rememberBottomChromePadding(extra))
-}
+fun Modifier.bottomChromePadding(extra: Dp = AppScreenDefaults.ExtraScrollBottomPadding): Modifier =
+    composed {
+        Modifier.padding(bottom = rememberBottomChromePadding(extra))
+    }
 
-fun Modifier.composerBottomPadding(extra: Dp = 0.dp): Modifier = composed {
-    Modifier.chatComposerDock(extra)
-}
+fun Modifier.composerBottomPadding(extra: Dp = 0.dp): Modifier =
+    composed {
+        Modifier.chatComposerDock(extra)
+    }

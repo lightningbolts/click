@@ -72,6 +72,7 @@ import compose.project.click.click.events.EventVenueScale // pragma: allowlist s
 import compose.project.click.click.events.defaultEventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.validateEventSchedule // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
+import compose.project.click.click.ui.components.ActionChipButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickFieldTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
@@ -155,22 +156,6 @@ enum class BeaconDuration(
     SEVEN_DAYS(7L * 24L * 60L * 60_000L, "7 days"),
 }
 
-private val hubCategoryOptions =
-    listOf(
-        "general",
-        "music",
-        "study",
-        "sports",
-        "food",
-        "nightlife",
-        "gaming",
-        "tech",
-        "art",
-        "fitness",
-        "networking",
-        "party",
-    )
-
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun BeaconDropSheetContent(
@@ -184,15 +169,15 @@ fun BeaconDropSheetContent(
         ttlMs: Long?,
         showCreatorName: Boolean,
         visibilityAudience: BeaconVisibilityAudience,
-        eventSchedule: compose.project.click.click.events.EventSchedule?,
+        eventSchedule: compose.project.click.click.events.EventSchedule?, // pragma: allowlist secret
         eventCategories: List<String>,
-        venueScale: compose.project.click.click.events.EventVenueScale,
+        venueScale: compose.project.click.click.events.EventVenueScale, // pragma: allowlist secret
         eventLocation: GeocodedPlace?,
         imageBytes: ByteArray?,
         imageMime: String?,
         onRejectedEarly: () -> Unit,
     ) -> Unit,
-    onCreateHub: (name: String, category: String) -> Unit = { _, _ -> },
+    onCreateHub: () -> Unit = {},
     onResolveCurrentLocation: suspend () -> GeocodedPlace? = { null },
     submitLocked: Boolean = false,
     modifier: Modifier = Modifier,
@@ -222,8 +207,6 @@ fun BeaconDropSheetContent(
     var resolvingCurrentLocation by remember { mutableStateOf(false) }
     var addressSearchJob by remember { mutableStateOf<Job?>(null) }
 
-    var hubNameDraft by remember { mutableStateOf("") }
-    var hubCategory by remember { mutableStateOf(hubCategoryOptions.first()) }
     var showCreatorName by remember { mutableStateOf(false) }
     var visibilityAudience by remember { mutableStateOf(BeaconVisibilityAudience.EVERYONE) }
     var beaconImageBytes by remember { mutableStateOf<ByteArray?>(null) }
@@ -240,8 +223,6 @@ fun BeaconDropSheetContent(
 
     val isSoundtrack = category.value == BeaconDropCategory.SOUNDTRACK
     val isEvent = category.value == BeaconDropCategory.EVENT
-
-    val isHubMode = category.value == BeaconDropCategory.COMMUNITY_HUB
 
     val kind =
         when (category.value) {
@@ -312,8 +293,13 @@ fun BeaconDropSheetContent(
                         FilterChip(
                             selected = category.value == cat,
                             onClick = {
+                                if (cat == BeaconDropCategory.COMMUNITY_HUB) {
+                                    focusManager.clearFocus(force = true)
+                                    onCreateHub()
+                                    return@FilterChip
+                                }
                                 if (category.value == cat) return@FilterChip
-                                // Dismiss IME before swapping Hub↔Event forms to avoid sheet height thrash.
+                                // Dismiss IME before swapping Event forms to avoid sheet height thrash.
                                 focusManager.clearFocus(force = true)
                                 scope.launch {
                                     delay(40)
@@ -346,42 +332,7 @@ fun BeaconDropSheetContent(
                     }
                 }
 
-                if (isHubMode) {
-                    BeaconDropOutlinedField(
-                        value = hubNameDraft,
-                        onValueChange = { hubNameDraft = it.take(80) },
-                        placeholder = "Hub name",
-                        singleLine = true,
-                        trailingIcon = null,
-                        colors = fieldColors,
-                        onDismissKeyboard = dismissKeyboard,
-                    )
-                    Text(
-                        text = "Category",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        hubCategoryOptions.forEach { c ->
-                            FilterChip(
-                                selected = hubCategory == c,
-                                onClick = { hubCategory = c },
-                                label = { Text(c.replaceFirstChar { ch -> ch.uppercase() }) },
-                                colors =
-                                    FilterChipDefaults.filterChipColors(
-                                        containerColor = chipContainer,
-                                        selectedContainerColor = chipSelected,
-                                        labelColor = MaterialTheme.colorScheme.onSurface,
-                                        selectedLabelColor = MaterialTheme.colorScheme.onSurface,
-                                    ),
-                            )
-                        }
-                    }
-                } else if (isSoundtrack) {
+                if (isSoundtrack) {
                     BeaconDropOutlinedField(
                         value = soundtrackUrlDraft,
                         onValueChange = {
@@ -737,117 +688,113 @@ fun BeaconDropSheetContent(
 
                 // Optional for every category, including soundtracks — a beacon without a photo
                 // falls back to its generated gradient wherever it is rendered.
-                if (!isHubMode) {
-                    Text(
-                        text = "Photo",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
+                Text(
+                    text = "Photo",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text =
+                        if (beaconImageBytes != null) {
+                            "Photo attached"
+                        } else {
+                            "Add a photo so people recognize this at a glance."
+                        },
+                    style = MaterialTheme.typography.bodySmall,
+                    color =
+                        if (beaconImageBytes != null) {
+                            MaterialTheme.colorScheme.secondary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    MediaSourceButton(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Outlined.PhotoCamera,
+                        label = "Take photo",
+                        onClick = { mediaPickers.openCamera() },
                     )
-                    Text(
-                        text =
-                            if (beaconImageBytes != null) {
-                                "Photo attached"
-                            } else {
-                                "Add a photo so people recognize this at a glance."
-                            },
-                        style = MaterialTheme.typography.bodySmall,
-                        color =
-                            if (beaconImageBytes != null) {
-                                MaterialTheme.colorScheme.secondary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
+                    MediaSourceButton(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Outlined.Image,
+                        label = "Photo library",
+                        onClick = { mediaPickers.openPhotoLibrary() },
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        MediaSourceButton(
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Outlined.PhotoCamera,
-                            label = "Take photo",
-                            onClick = { mediaPickers.openCamera() },
-                        )
-                        MediaSourceButton(
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Outlined.Image,
-                            label = "Photo library",
-                            onClick = { mediaPickers.openPhotoLibrary() },
-                        )
-                    }
-                    beaconImageBytes?.let { bytes ->
-                        BeaconAttachedPhotoThumbnail(
-                            bytes = bytes,
-                            onReplace = { mediaPickers.openPhotoLibrary() },
-                            onRemove = {
-                                beaconImageBytes = null
-                                beaconImageMime = null
+                }
+                beaconImageBytes?.let { bytes ->
+                    BeaconAttachedPhotoThumbnail(
+                        bytes = bytes,
+                        onReplace = { mediaPickers.openCamera() },
+                        onRemove = {
+                            beaconImageBytes = null
+                            beaconImageMime = null
+                        },
+                    )
+                }
+
+                Text(
+                    text = "Who can see this",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(
+                        items = BeaconVisibilityAudience.entries.toList(),
+                        key = { it.name },
+                    ) { option ->
+                        FilterChip(
+                            selected = visibilityAudience == option,
+                            onClick = { visibilityAudience = option },
+                            label = {
+                                Text(
+                                    when (option) {
+                                        BeaconVisibilityAudience.EVERYONE -> "Everyone"
+                                        BeaconVisibilityAudience.CONNECTIONS -> "Connections only"
+                                        BeaconVisibilityAudience.CORE_CONNECTIONS -> "Core connections only"
+                                    },
+                                )
                             },
+                            colors =
+                                FilterChipDefaults.filterChipColors(
+                                    containerColor = chipContainer,
+                                    selectedContainerColor = chipSelected,
+                                    labelColor = MaterialTheme.colorScheme.onSurface,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onSurface,
+                                ),
                         )
                     }
                 }
-
-                if (!isHubMode) {
-                    Text(
-                        text = "Who can see this",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        items(
-                            items = BeaconVisibilityAudience.entries.toList(),
-                            key = { it.name },
-                        ) { option ->
-                            FilterChip(
-                                selected = visibilityAudience == option,
-                                onClick = { visibilityAudience = option },
-                                label = {
-                                    Text(
-                                        when (option) {
-                                            BeaconVisibilityAudience.EVERYONE -> "Everyone"
-                                            BeaconVisibilityAudience.CONNECTIONS -> "Connections only"
-                                            BeaconVisibilityAudience.CORE_CONNECTIONS -> "Core connections only"
-                                        },
-                                    )
-                                },
-                                colors =
-                                    FilterChipDefaults.filterChipColors(
-                                        containerColor = chipContainer,
-                                        selectedContainerColor = chipSelected,
-                                        labelColor = MaterialTheme.colorScheme.onSurface,
-                                        selectedLabelColor = MaterialTheme.colorScheme.onSurface,
-                                    ),
-                            )
-                        }
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Display my name",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Text(
-                                text = "Show your name on the map pin for others nearby.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Switch(
-                            checked = showCreatorName,
-                            onCheckedChange = { showCreatorName = it },
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Display my name",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = "Show your name on the map pin for others nearby.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    Switch(
+                        checked = showCreatorName,
+                        onCheckedChange = { showCreatorName = it },
+                    )
                 }
 
                 listOfNotNull(
@@ -866,66 +813,61 @@ fun BeaconDropSheetContent(
                         dismissKeyboard()
                         submitValidationError = null
                         isSubmitting = true
-                        if (isHubMode) {
-                            onCreateHub(hubNameDraft.trim(), hubCategory)
+                        val ttl =
+                            if (isSoundtrack || isEvent) {
+                                null
+                            } else {
+                                expiration.value.durationMs
+                            }
+                        val title = beaconTitleDraft.trim()
+                        val description = beaconDescriptionDraft.trim().ifBlank { null }
+                        val url = if (isSoundtrack) soundtrackUrlDraft.trim().ifBlank { null } else null
+                        val fieldError =
+                            beaconDropValidationError(
+                                category = category.value,
+                                title = title,
+                                soundtrackUrl = url,
+                                hasEventLocation = selectedEventLocation != null,
+                            )
+                        if (fieldError != null) {
+                            submitValidationError = fieldError
                             isSubmitting = false
-                        } else {
-                            val ttl =
-                                if (isSoundtrack || isEvent) {
-                                    null
-                                } else {
-                                    expiration.value.durationMs
+                            return@Button
+                        }
+                        val schedule =
+                            if (isEvent) {
+                                eventScheduleError =
+                                    validateEventSchedule(
+                                        eventSchedule.startEpochMs,
+                                        eventSchedule.endEpochMs,
+                                    )
+                                if (eventScheduleError != null) {
+                                    isSubmitting = false
+                                    return@Button
                                 }
-                            val title = beaconTitleDraft.trim()
-                            val description = beaconDescriptionDraft.trim().ifBlank { null }
-                            val url = if (isSoundtrack) soundtrackUrlDraft.trim().ifBlank { null } else null
-                            val fieldError =
-                                beaconDropValidationError(
-                                    category = category.value,
-                                    title = title,
-                                    soundtrackUrl = url,
-                                    hasEventLocation = selectedEventLocation != null,
-                                )
-                            if (fieldError != null) {
-                                submitValidationError = fieldError
-                                isSubmitting = false
-                                return@Button
+                                eventSchedule
+                            } else {
+                                null
                             }
-                            val schedule =
-                                if (isEvent) {
-                                    eventScheduleError =
-                                        validateEventSchedule(
-                                            eventSchedule.startEpochMs,
-                                            eventSchedule.endEpochMs,
-                                        )
-                                    if (eventScheduleError != null) {
-                                        isSubmitting = false
-                                        return@Button
-                                    }
-                                    eventSchedule
-                                } else {
-                                    null
-                                }
-                            onSubmit(
-                                kind,
-                                title,
-                                description,
-                                url,
-                                ttl,
-                                showCreatorName,
-                                visibilityAudience,
-                                schedule,
-                                if (isEvent) eventCategories.toList() else emptyList(),
-                                if (isEvent) venueScale else EventVenueScale.DEFAULT,
-                                if (isEvent) selectedEventLocation else null,
-                                beaconImageBytes,
-                                beaconImageMime,
-                            ) {
-                                isSubmitting = false
-                            }
+                        onSubmit(
+                            kind,
+                            title,
+                            description,
+                            url,
+                            ttl,
+                            showCreatorName,
+                            visibilityAudience,
+                            schedule,
+                            if (isEvent) eventCategories.toList() else emptyList(),
+                            if (isEvent) venueScale else EventVenueScale.DEFAULT,
+                            if (isEvent) selectedEventLocation else null,
+                            beaconImageBytes,
+                            beaconImageMime,
+                        ) {
+                            isSubmitting = false
                         }
                     },
-                    enabled = !isSubmitting && !submitLocked && if (isHubMode) hubNameDraft.isNotBlank() else true,
+                    enabled = !isSubmitting && !submitLocked,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Row(
@@ -938,7 +880,7 @@ fun BeaconDropSheetContent(
                                 modifier = Modifier.size(18.dp),
                             )
                         }
-                        Text(if (isHubMode) "Create hub" else "Drop pin")
+                        Text("Drop pin")
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -983,14 +925,16 @@ private fun BeaconAttachedPhotoThumbnail(
                     .clip(RoundedCornerShape(12.dp))
                     .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(12.dp)),
         )
-        TextButton(onClick = onReplace) {
-            Text("Replace")
-        }
-        TextButton(onClick = onRemove) {
-            Icon(Icons.Filled.Close, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.size(6.dp))
-            Text("Remove")
-        }
+        ActionChipButton(
+            label = "Replace",
+            onClick = onReplace,
+        )
+        ActionChipButton(
+            label = "Remove",
+            onClick = onRemove,
+            leadingIcon = Icons.Filled.Close,
+            contentDescription = null,
+        )
     }
 }
 

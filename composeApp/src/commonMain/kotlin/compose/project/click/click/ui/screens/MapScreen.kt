@@ -385,8 +385,6 @@ fun MapScreen(
     var selectedProfileId by remember { mutableStateOf<String?>(null) }
     var showBeaconDropSheet by remember { mutableStateOf(false) }
     var showCreateHubModal by remember { mutableStateOf(false) }
-    var pendingHubName by remember { mutableStateOf("") }
-    var pendingHubCategory by remember { mutableStateOf("general") }
 
     LaunchedEffect(showBeaconDropSheet) {
         if (showBeaconDropSheet) {
@@ -658,7 +656,7 @@ fun MapScreen(
                             null
                         } else {
                             val reverse =
-                                compose.project.click.click.utils.GeocodingService.reverseGeocode(
+                                compose.project.click.click.utils.GeocodingService.reverseGeocode( // pragma: allowlist secret
                                     loc.latitude,
                                     loc.longitude,
                                 )
@@ -668,7 +666,7 @@ fun MapScreen(
                                 val lat = (kotlin.math.round(loc.latitude * 100_000.0) / 100_000.0)
                                 val lon = (kotlin.math.round(loc.longitude * 100_000.0) / 100_000.0)
                                 val coords = "$lat, $lon"
-                                compose.project.click.click.utils.GeocodedPlace(
+                                compose.project.click.click.utils.GeocodedPlace( // pragma: allowlist secret
                                     latitude = loc.latitude,
                                     longitude = loc.longitude,
                                     displayName = coords,
@@ -713,11 +711,9 @@ fun MapScreen(
                         onRemoteFinished = { },
                     )
                 },
-                onCreateHub = { name, hubCat ->
+                onCreateHub = {
                     showBeaconDropSheet = false
                     showCreateHubModal = true
-                    pendingHubName = name
-                    pendingHubCategory = hubCat
                 },
             )
         }
@@ -811,7 +807,7 @@ fun MapScreen(
         var shareBeaconToChat by remember(beaconSel.beacon.id) {
             mutableStateOf<MapBeacon?>(null)
         }
-        val inboxChats by compose.project.click.click.data.AppDataManager.inboxFeedChats
+        val inboxChats by compose.project.click.click.data.AppDataManager.inboxFeedChats // pragma: allowlist secret
             .collectAsState()
         MapBeaconSheetRoot(
             visible = true,
@@ -884,7 +880,7 @@ fun MapScreen(
     if (showBottomSheet && selection is MapSelection.ConnectionSelected) {
         val connectionSelection = selection as MapSelection.ConnectionSelected
         val viewerUserId =
-            compose.project.click.click.data.AppDataManager
+            compose.project.click.click.data.AppDataManager // pragma: allowlist secret
                 .currentUser
                 .collectAsState()
                 .value
@@ -932,8 +928,6 @@ fun MapScreen(
         onDismiss = { showCreateHubModal = false },
         onHubCreated = { hubId -> onJoinCommunityHub(hubId) },
         locationService = mapLocationService,
-        initialName = pendingHubName,
-        initialCategory = pendingHubCategory,
         onError = { msg ->
             toastState.show(mapScope, msg, durationMs = UnifiedToastTokens.LongDurationMs)
         },
@@ -1578,7 +1572,7 @@ internal fun EventBeaconDetail(
             ) {
                 val reverse =
                     withContext(Dispatchers.Default) {
-                        compose.project.click.click.utils.GeocodingService.reverseGeocode(
+                        compose.project.click.click.utils.GeocodingService.reverseGeocode( // pragma: allowlist secret
                             displayBeacon.latitude,
                             displayBeacon.longitude,
                         )
@@ -1645,7 +1639,7 @@ internal fun EventBeaconDetail(
             attendees =
                 directoryAttendees.ifEmpty {
                     attendees.map {
-                        compose.project.click.click.events.DirectoryAttendee(
+                        compose.project.click.click.events.DirectoryAttendee( // pragma: allowlist secret
                             userId = it.userId,
                             name = it.name,
                             avatarUrl = it.avatarUrl,
@@ -1669,7 +1663,7 @@ internal fun EventBeaconDetail(
                     attendees =
                         directoryAttendees.ifEmpty {
                             attendees.map {
-                                compose.project.click.click.events.DirectoryAttendee(
+                                compose.project.click.click.events.DirectoryAttendee( // pragma: allowlist secret
                                     userId = it.userId,
                                     name = it.name,
                                     avatarUrl = it.avatarUrl,
@@ -1692,7 +1686,7 @@ internal fun EventBeaconDetail(
                 directoryAttendees.firstOrNull { it.userId == profileId }
                     ?: attendees
                         .map {
-                            compose.project.click.click.events.DirectoryAttendee(
+                            compose.project.click.click.events.DirectoryAttendee( // pragma: allowlist secret
                                 userId = it.userId,
                                 name = it.name,
                                 avatarUrl = it.avatarUrl,
@@ -1701,7 +1695,7 @@ internal fun EventBeaconDetail(
             if (attendee != null) {
                 val viewerId = currentUser?.id
                 val canMessage =
-                    compose.project.click.click.events.allowsDirectoryConnectActions(
+                    compose.project.click.click.events.allowsDirectoryConnectActions( // pragma: allowlist secret
                         attendee.relationship,
                     )
                 EventDirectoryUserProfileSheet(
@@ -1712,7 +1706,7 @@ internal fun EventBeaconDetail(
                         if (canMessage) {
                             {
                                 val conn =
-                                    compose.project.click.click.data.AppDataManager.connections.value
+                                    compose.project.click.click.data.AppDataManager.connections.value // pragma: allowlist secret
                                         .firstOrNull { c ->
                                             attendee.userId in c.user_ids &&
                                                 (viewerId.isNullOrBlank() || viewerId in c.user_ids)
@@ -2184,7 +2178,7 @@ private fun EventHostCard(
 
 @Composable
 private fun EventAttendeeStack(
-    attendees: List<compose.project.click.click.data.api.BeaconAttendeeDto>,
+    attendees: List<compose.project.click.click.data.api.BeaconAttendeeDto>, // pragma: allowlist secret
     loading: Boolean,
     border: Color,
     cardSurface: Color,
@@ -2991,7 +2985,7 @@ private fun MapContent(
     ghostMode: Boolean,
     mapGesturesEnabled: Boolean = true,
     showCompass: Boolean = true,
-    cameraTarget: compose.project.click.click.viewmodel.CameraTarget?,
+    cameraTarget: compose.project.click.click.viewmodel.CameraTarget?, // pragma: allowlist secret
     userLat: Double? = null,
     userLon: Double? = null,
     currentUserId: String? = null,

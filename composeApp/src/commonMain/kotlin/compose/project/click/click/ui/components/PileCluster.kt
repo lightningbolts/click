@@ -31,6 +31,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -53,7 +54,7 @@ data class PilePhoto(
     /** Unique within its cluster; used for list keys and animation identity. */
     val id: String,
     /**
-     * Seed for [compose.project.click.click.ui.theme.generateCardVisual]. Defaults to [id] but should
+     * Seed for [compose.project.click.click.ui.theme.generateCardVisual]. Defaults to [id] but should // pragma: allowlist secret
      * be the raw entity id (e.g. `beacon.id`) so the same item keeps one gradient across every
      * surface that renders it.
      */
@@ -61,6 +62,7 @@ data class PilePhoto(
     val title: String,
     val subtitle: String? = null,
     val imageUrl: String? = null,
+    val categoryBadge: String? = null,
     val onClick: () -> Unit,
     val onLongClick: (() -> Unit)? = null,
     val content: (@Composable BoxScope.() -> Unit)? = null,
@@ -72,10 +74,10 @@ private val PileFanSpacing = 10.dp
  * One pile cluster as a full-width row: a peeking stack of roughly-square Polaroids that fans out
  * in place. The row occupies about half the screen height so the cluster is the dominant visual.
  *
- * Collapsed, the top card tracks the finger 1:1 (no spring lag, no grid). Swipe up or right past
- * the shared commit threshold flies it off with the swipe velocity; swipe left or down recalls the
- * most recently dismissed card, which springs in from off-screen and can be grabbed mid-flight.
- * Back layers scale down, dim, and drop elevation so the pile reads as physically stacked.
+ * Collapsed, the top card tracks the finger 1:1 (no spring lag, no grid). Swipe past the shared
+ * commit threshold in any direction flies it off with the swipe velocity; a lower-left swipe (or
+ * one opposing the last throw) recalls the most recently dismissed card. Back layers scale down,
+ * dim, and drop elevation so the pile reads as physically stacked.
  * Expanded, cards deal out — and collapse back — on the same staggered spring.
  */
 @Composable
@@ -99,7 +101,7 @@ fun PileCluster(
     val sized = pileCardSizeDp(screenHeightDp).dp
     val width = photoWidth ?: sized
     val height = photoHeight ?: sized
-    val (deepestPeekX, deepestPeekY) = pilePeekOffsetDp(PILE_MAX_VISIBLE_LAYERS - 1)
+    val deepestPeekY = pilePeekOffsetDp(PILE_MAX_VISIBLE_LAYERS - 1).second
     val rowHeight = height + deepestPeekY.dp + 8.dp
     var renderFan by remember(clusterId) { mutableStateOf(expanded) }
 
@@ -134,7 +136,7 @@ fun PileCluster(
                 photos = photos,
                 photoWidth = width,
                 photoHeight = height,
-                stackWidth = width + deepestPeekX.dp,
+                stackWidth = width,
                 onExpand = onExpand,
                 modifier = Modifier.align(Alignment.TopStart),
             )
@@ -163,8 +165,14 @@ private fun PileCollapsedStack(
     var dragging by remember(clusterId) { mutableStateOf(false) }
     var liveX by remember(clusterId) { mutableFloatStateOf(0f) }
     var liveY by remember(clusterId) { mutableFloatStateOf(0f) }
+    var lastExitX by remember(clusterId) { mutableFloatStateOf(0f) }
+    var lastExitY by remember(clusterId) { mutableFloatStateOf(0f) }
+    var touchAnchorX by remember(clusterId) { mutableFloatStateOf(0.5f) }
+    var touchAnchorY by remember(clusterId) { mutableFloatStateOf(0.5f) }
     val animX = remember(clusterId) { Animatable(0f) }
     val animY = remember(clusterId) { Animatable(0f) }
+    val jiggleScale = remember(clusterId) { Animatable(1f) }
+    val jiggleRot = remember(clusterId) { Animatable(0f) }
     val cardSizePx = with(density) { minOf(photoWidth, photoHeight).toPx() }
 
     Box(
@@ -177,12 +185,31 @@ private fun PileCollapsedStack(
                         val down = awaitFirstDown(requireUnconsumed = false)
                         val velocityTracker = VelocityTracker()
                         velocityTracker.addPosition(down.uptimeMillis, down.position)
+                        touchAnchorX = (down.position.x / cardSizePx).coerceIn(0f, 1f)
+                        touchAnchorY = (down.position.y / cardSizePx).coerceIn(0f, 1f)
                         val slopChange =
                             awaitTouchSlopOrCancellation(down.id) { change, _ ->
                                 change.consume()
                             }
                         if (slopChange == null) {
-                            if (!dragging) onExpand()
+                            if (!dragging) {
+                                scope.launch {
+                                    if (!reduceMotion) {
+                                        val wobble =
+                                            if (stackIds.firstOrNull()?.hashCode()?.and(1) == 0) {
+                                                -PILE_TAP_JIGGLE_WOBBLE_DEG
+                                            } else {
+                                                PILE_TAP_JIGGLE_WOBBLE_DEG
+                                            }
+                                        jiggleRot.snapTo(wobble)
+                                        jiggleScale.animateTo(PILE_TAP_JIGGLE_SCALE, MotionTokens.softEnterSpec())
+                                        jiggleRot.animateTo(0f, MotionTokens.softEnterSpec())
+                                        jiggleScale.animateTo(1f, MotionTokens.softEnterSpec())
+                                    }
+                                    PlatformHapticsPolicy.lightImpact()
+                                    onExpand()
+                                }
+                            }
                             return@awaitEachGesture
                         }
                         liveX = animX.value
@@ -190,6 +217,8 @@ private fun PileCollapsedStack(
                         dragging = true
                         liveX += slopChange.positionChange().x
                         liveY += slopChange.positionChange().y
+                        liveX = pileRubberBandOffset(liveX, cardSizePx)
+                        liveY = pileRubberBandOffset(liveY, cardSizePx)
                         velocityTracker.addPosition(slopChange.uptimeMillis, slopChange.position)
                         val completed =
                             drag(slopChange.id) { change ->
@@ -197,6 +226,8 @@ private fun PileCollapsedStack(
                                 velocityTracker.addPosition(change.uptimeMillis, change.position)
                                 liveX += change.positionChange().x
                                 liveY += change.positionChange().y
+                                liveX = pileRubberBandOffset(liveX, cardSizePx)
+                                liveY = pileRubberBandOffset(liveY, cardSizePx)
                             }
                         val velocity = velocityTracker.calculateVelocity()
                         val releaseX = liveX
@@ -211,6 +242,8 @@ private fun PileCollapsedStack(
                                 sizePx = cardSizePx,
                                 canDismiss = stackIds.size > 1,
                                 canRecall = dismissedIds.isNotEmpty(),
+                                lastExitXPx = lastExitX,
+                                lastExitYPx = lastExitY,
                             )
                         if (!completed) {
                             scope.launch {
@@ -227,6 +260,8 @@ private fun PileCollapsedStack(
                             when (action) {
                                 PileSwipeAction.Dismiss -> {
                                     val (exitX, exitY) = pileCardExitTargetPx(releaseX, releaseY, cardSizePx)
+                                    lastExitX = releaseX
+                                    lastExitY = releaseY
                                     coroutineScope {
                                         launch {
                                             animX.animateTo(
@@ -305,6 +340,7 @@ private fun PileCollapsedStack(
                 title = if (isTop) photo.title else null,
                 subtitle = if (isTop) photo.subtitle else null,
                 imageUrl = photo.imageUrl,
+                categoryBadge = if (isTop) photo.categoryBadge else null,
                 elevation = pileLayerElevationDp(if (isTop && dragging) 0 else layer).dp,
                 dimming = if (reduceMotion) 0f else pileLayerDim(layer),
                 modifier =
@@ -314,10 +350,11 @@ private fun PileCollapsedStack(
                         .height(photoHeight)
                         .zIndex((visibleLayers - layer).toFloat())
                         .graphicsLayer {
-                            scaleX = scale
-                            scaleY = scale
+                            scaleX = scale * if (isTop) jiggleScale.value else 1f
+                            scaleY = scale * if (isTop) jiggleScale.value else 1f
                             alpha = if (reduceMotion) 1f else pileLayerAlpha(layer)
                             if (isTop) {
+                                transformOrigin = TransformOrigin(touchAnchorX, touchAnchorY)
                                 translationX = if (dragging) liveX else animX.value
                                 translationY = if (dragging) liveY else animY.value
                                 rotationZ =
@@ -328,7 +365,7 @@ private fun PileCollapsedStack(
                                             if (dragging) liveX else animX.value,
                                             if (dragging) liveY else animY.value,
                                             size.width,
-                                        )
+                                        ) + jiggleRot.value
                                     }
                             } else {
                                 rotationZ = restTilt
@@ -381,6 +418,7 @@ private fun PileFanStrip(
                 title = photo.title,
                 subtitle = photo.subtitle,
                 imageUrl = photo.imageUrl,
+                categoryBadge = photo.categoryBadge,
                 modifier =
                     Modifier
                         .width(photoWidth)

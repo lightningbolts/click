@@ -1,10 +1,10 @@
-package compose.project.click.click.data.auth
+package compose.project.click.click.data.auth // pragma: allowlist secret
 
-import compose.project.click.click.data.SupabaseConfig
-import compose.project.click.click.data.repository.AuthRepository
-import compose.project.click.click.data.storage.TokenStorage
-import compose.project.click.click.data.storage.createTokenStorage
-import compose.project.click.click.util.redactedRestMessage
+import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
+import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
+import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
+import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.github.jan.supabase.auth.auth
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
@@ -32,53 +32,87 @@ object EnsureFreshAccessToken {
         val now = Clock.System.now().toEpochMilliseconds()
         val supabase = SupabaseConfig.client
 
-        fun usable(token: String?, expiresAtMs: Long?): String? {
+        fun usable(
+            token: String?,
+            expiresAtMs: Long?,
+        ): String? {
             val t = token?.trim()?.takeIf { it.isNotEmpty() } ?: return null
             val exp = expiresAtMs ?: jwtExpEpochMs(t)
             if (exp != null && exp <= now) return null
             return t
         }
 
-        val sdkSession = supabase.auth.currentSessionOrNull()
-        if (sdkSession != null) {
-            usable(
-                sdkSession.accessToken,
-                sdkSession.expiresAt?.toEpochMilliseconds(),
-            )?.let { token ->
-                runCatching {
-                    tokenStorage.saveTokens(
-                        jwt = sdkSession.accessToken,
-                        refreshToken = sdkSession.refreshToken,
-                        expiresAt = sdkSession.expiresAt?.toEpochMilliseconds(),
-                        tokenType = sdkSession.tokenType,
+        suspend fun persistAndMaybeRefresh(
+            accessToken: String,
+            refreshToken: String?,
+            expiresAtMs: Long?,
+            tokenType: String?,
+        ): String? {
+            val token = usable(accessToken, expiresAtMs) ?: return null
+            runCatching {
+                tokenStorage.saveTokens(
+                    jwt = accessToken,
+                    refreshToken = refreshToken.orEmpty(),
+                    expiresAt = expiresAtMs,
+                    tokenType = tokenType,
+                )
+            }
+            val exp = expiresAtMs ?: jwtExpEpochMs(token)
+            val needsRefresh =
+                forceRefresh ||
+                    (exp != null && exp <= now + REFRESH_SKEW_MS)
+            if (!needsRefresh) return token
+            authRepository
+                .refreshSession()
+                .onFailure {
+                    println(
+                        "EnsureFreshAccessToken: refresh failed: ${it.redactedRestMessage()}",
                     )
                 }
-                val exp = sdkSession.expiresAt?.toEpochMilliseconds() ?: jwtExpEpochMs(token)
-                val needsRefresh = forceRefresh ||
-                    (exp != null && exp <= now + REFRESH_SKEW_MS)
-                if (needsRefresh) {
-                    authRepository.refreshSession()
-                        .onFailure {
-                            println(
-                                "EnsureFreshAccessToken: refresh failed: ${it.redactedRestMessage()}",
-                            )
-                        }
-                    val refreshed = supabase.auth.currentSessionOrNull()
-                    usable(
-                        refreshed?.accessToken,
-                        refreshed?.expiresAt?.toEpochMilliseconds(),
-                    )?.let { return it }
-                    // Soft failure: keep previous usable token only if still unexpired.
-                    if (!forceRefresh) return token.takeIf { usable(it, exp) != null }
-                    return null
-                }
-                return token
-            }
+            val refreshed = supabase.auth.currentSessionOrNull()
+            usable(
+                refreshed?.accessToken,
+                refreshed?.expiresAt?.toEpochMilliseconds(),
+            )?.let { return it }
+            // Soft failure: keep previous usable token only if still unexpired.
+            if (!forceRefresh) return token.takeIf { usable(it, exp) != null }
+            return null
         }
 
-        // SDK empty — hydrate from TokenStorage, then refresh once under SessionRefreshCoordinator.
+        val sdkSession = supabase.auth.currentSessionOrNull()
+        if (sdkSession != null) {
+            persistAndMaybeRefresh(
+                accessToken = sdkSession.accessToken,
+                refreshToken = sdkSession.refreshToken,
+                expiresAtMs = sdkSession.expiresAt?.toEpochMilliseconds(),
+                tokenType = sdkSession.tokenType,
+            )?.let { return it }
+        }
+
+        // SDK empty — hydrate from TokenStorage. Skip network refresh when the stored
+        // access token still has headroom so unit tests and offline writes do not block
+        // on GoTrue (refresh still runs on forceRefresh, near-expiry, or 401 retry).
         runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
-        authRepository.refreshSession()
+        val imported = supabase.auth.currentSessionOrNull()
+        if (imported != null) {
+            persistAndMaybeRefresh(
+                accessToken = imported.accessToken,
+                refreshToken = imported.refreshToken,
+                expiresAtMs = imported.expiresAt?.toEpochMilliseconds(),
+                tokenType = imported.tokenType,
+            )?.let { return it }
+        }
+
+        val stored = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+        val storedExp = tokenStorage.getExpiresAt() ?: jwtExpEpochMs(stored)
+        val storedUsable = usable(stored, storedExp)
+        if (storedUsable != null && !forceRefresh) {
+            val needsRefresh = storedExp != null && storedExp <= now + REFRESH_SKEW_MS
+            if (!needsRefresh) return storedUsable
+        }
+
+        authRepository
+            .refreshSession()
             .onFailure {
                 println(
                     "EnsureFreshAccessToken: refresh-after-import failed: ${it.redactedRestMessage()}",
@@ -103,12 +137,7 @@ object EnsureFreshAccessToken {
             }
         }
 
-        // Last resort: TokenStorage only if JWT is not expired.
-        val stored = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
-        return stored?.takeIf { jwt ->
-            val exp = tokenStorage.getExpiresAt() ?: jwtExpEpochMs(jwt)
-            exp == null || exp > now
-        }
+        return storedUsable
     }
 
     /** Best-effort JWT `exp` (seconds) → epoch ms; null if unparseable. */
@@ -116,24 +145,26 @@ object EnsureFreshAccessToken {
         if (jwt.isNullOrBlank()) return null
         val parts = jwt.split('.')
         if (parts.size < 2) return null
-        val payload = parts[1]
-            .replace('-', '+')
-            .replace('_', '/')
-            .let { raw ->
-                val pad = (4 - raw.length % 4) % 4
-                raw + "=".repeat(pad)
-            }
+        val payload =
+            parts[1]
+                .replace('-', '+')
+                .replace('_', '/')
+                .let { raw ->
+                    val pad = (4 - raw.length % 4) % 4
+                    raw + "=".repeat(pad)
+                }
         return runCatching {
             val json = Json.parseToJsonElement(payload.decodeBase64ToString())
-            val exp = (json as? JsonObject)
-                ?.get("exp")
-                ?.let { el ->
-                    when (el) {
-                        is JsonPrimitive ->
-                            el.content.toLongOrNull() ?: el.content.toDoubleOrNull()?.toLong()
-                        else -> null
+            val exp =
+                (json as? JsonObject)
+                    ?.get("exp")
+                    ?.let { el ->
+                        when (el) {
+                            is JsonPrimitive ->
+                                el.content.toLongOrNull() ?: el.content.toDoubleOrNull()?.toLong()
+                            else -> null
+                        }
                     }
-                }
             exp?.times(1000L)
         }.getOrNull()
     }

@@ -1,18 +1,39 @@
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
-import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Event
+import compose.project.click.click.data.api.EventBookmarkItemDto // pragma: allowlist secret
+import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.ConnectionActivityStatus // pragma: allowlist secret
-import compose.project.click.click.data.models.ConnectionInsights // pragma: allowlist secret
 import compose.project.click.click.data.models.ReconnectReminder // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
 import compose.project.click.click.viewmodel.UserStats // pragma: allowlist secret
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class HomePhotoPileTest {
+    private fun emptyActions() =
+        HomePileActions(
+            onCreateIntent = {},
+            onEditIntent = {},
+            onFeaturedMap = {},
+            onSavedEventClick = {},
+            onExploreClick = {},
+            onArchiveOpenChat = {},
+            onArchiveIcebreaker = {},
+            onPollPairOpenChat = {},
+            onPollPairIcebreaker = {},
+            onReconnect = {},
+            onDismissReconnect = {},
+            onEventReminderMap = {},
+            onLocationClick = {},
+        )
+
     @Test
-    fun requiredSectionsArePresentWhenDataExists() {
+    fun pileClustersExcludeAvailabilityInsightsAndStats() {
         val data =
             HomePileBoardData(
                 intents = emptyList(),
@@ -36,50 +57,48 @@ class HomePhotoPileTest {
                     ),
                 eventReminders = emptyList(),
                 locationGroups = emptyMap(),
-                insights =
-                    ConnectionInsights(
-                        totalConnections = 4,
-                        keepRate = 50f,
-                        activeConnections = 2,
-                        dormantConnections = 1,
-                    ),
+                insights = null,
                 stats = UserStats(totalConnections = 4, recentConnections = emptyList(), uniqueLocations = 2),
                 connectedUsers = emptyMap<String, User>(),
             )
-        val actions =
-            HomePileActions(
-                onCreateIntent = {},
-                onEditIntent = {},
-                onFeaturedMap = {},
-                onSavedEventClick = {},
-                onExploreClick = {},
-                onArchiveOpenChat = {},
-                onArchiveIcebreaker = {},
-                onPollPairOpenChat = {},
-                onPollPairIcebreaker = {},
-                onReconnect = {},
-                onDismissReconnect = {},
-                onEventReminderMap = {},
-                onLocationClick = {},
-            )
-        val ids = buildHomePileClusters(data, actions).map { it.id }.toSet()
-        assertTrue("availability" in ids)
-        assertTrue("reconnect" in ids)
+        val ids = buildHomePileClusters(data, emptyActions()).map { it.id }.toSet()
+        assertTrue("stay" in ids)
         assertTrue("recent" in ids)
-        assertTrue("insights" in ids)
-        assertTrue("stats" in ids)
-        assertTrue(ids.containsAll(setOf("availability", "recent", "stats")))
+        assertFalse("availability" in ids)
+        assertFalse("insights" in ids)
+        assertFalse("stats" in ids)
+        assertFalse("reconnect" in ids, "reconnect merges into stay")
     }
 
     @Test
-    fun availabilityCtaAlwaysPresent() {
+    fun requiredClusterIdsMatchPileSections() {
+        assertEquals(
+            setOf("saved", "explore", "stay", "recent"),
+            homePileRequiredClusterIds(),
+        )
+    }
+
+    @Test
+    fun clustersSortByZPriorityDescending() {
         val data =
             HomePileBoardData(
-                intents = listOf(AvailabilityIntentRow()),
+                intents = emptyList(),
                 featuredEvent = null,
                 recap = null,
-                savedBookmarks = emptyList(),
-                exploreTiles = emptyList(),
+                savedBookmarks =
+                    List(2) { index ->
+                        EventBookmarkItemDto(beaconId = "b$index", title = "Saved $index")
+                    },
+                exploreTiles =
+                    listOf(
+                        HomeExploreTile(
+                            id = "explore-events",
+                            label = "Events",
+                            count = 3,
+                            layerFilter = MapLayerFilter.EVENTS,
+                            icon = Icons.Filled.Event,
+                        ),
+                    ),
                 archiveNotice = null,
                 pollPair = null,
                 reconnectReminders = emptyList(),
@@ -89,25 +108,72 @@ class HomePhotoPileTest {
                 stats = UserStats(0, emptyList(), 0),
                 connectedUsers = emptyMap(),
             )
-        val actions =
-            HomePileActions(
-                onCreateIntent = {},
-                onEditIntent = {},
-                onFeaturedMap = {},
-                onSavedEventClick = {},
-                onExploreClick = {},
-                onArchiveOpenChat = {},
-                onArchiveIcebreaker = {},
-                onPollPairOpenChat = {},
-                onPollPairIcebreaker = {},
-                onReconnect = {},
-                onDismissReconnect = {},
-                onEventReminderMap = {},
-                onLocationClick = {},
+        val priorities = buildHomePileClusters(data, emptyActions()).map { it.zPriority }
+        assertEquals(priorities, priorities.sortedDescending())
+    }
+
+    @Test
+    fun savedExploreStayAndRecentClustersRespectCaps() {
+        val saved =
+            List(8) { index ->
+                EventBookmarkItemDto(beaconId = "saved-$index", title = "Saved $index")
+            }
+        val explore =
+            List(12) { index ->
+                HomeExploreTile(
+                    id = "tile-$index",
+                    label = "Tile $index",
+                    count = index + 1,
+                    layerFilter = MapLayerFilter.EVENTS,
+                    icon = Icons.Filled.Event,
+                )
+            }
+        val reconnect =
+            List(12) { index ->
+                ReconnectReminder(
+                    connectionId = "c$index",
+                    userId = "u$index",
+                    userName = "User $index",
+                    lastMessageTime = 0L,
+                    daysSinceContact = index,
+                    activityStatus = ConnectionActivityStatus.DORMANT,
+                    suggestedMessage = "Hey",
+                )
+            }
+        val locations =
+            List(12) { index ->
+                "Loc $index" to
+                    listOf(
+                        Connection(
+                            id = "conn-$index",
+                            created = index.toLong(),
+                            expiry = 9_999_999_999L,
+                            user_ids = listOf("me", "peer-$index"),
+                            semantic_location = "Loc $index",
+                        ),
+                    )
+            }.toMap()
+        val data =
+            HomePileBoardData(
+                intents = emptyList(),
+                featuredEvent = null,
+                recap = null,
+                savedBookmarks = saved,
+                exploreTiles = explore,
+                archiveNotice = null,
+                pollPair = null,
+                reconnectReminders = reconnect,
+                eventReminders = emptyList(),
+                locationGroups = locations,
+                insights = null,
+                stats = UserStats(0, emptyList(), 0),
+                connectedUsers = emptyMap(),
             )
-        val availability = buildHomePileClusters(data, actions).first { it.id == "availability" }
-        assertTrue(availability.photos.isNotEmpty())
-        assertTrue(availability.zPriority > 20f)
+        val clusters = buildHomePileClusters(data, emptyActions()).associateBy { it.id }
+        assertEquals(5, clusters.getValue("saved").photos.size)
+        assertEquals(10, clusters.getValue("explore").photos.size)
+        assertEquals(10, clusters.getValue("stay").photos.size)
+        assertEquals(10, clusters.getValue("recent").photos.size)
     }
 
     /**
@@ -142,25 +208,9 @@ class HomePhotoPileTest {
                 stats = UserStats(0, emptyList(), 0),
                 connectedUsers = emptyMap(),
             )
-        val actions =
-            HomePileActions(
-                onCreateIntent = {},
-                onEditIntent = {},
-                onFeaturedMap = {},
-                onSavedEventClick = {},
-                onExploreClick = {},
-                onArchiveOpenChat = {},
-                onArchiveIcebreaker = {},
-                onPollPairOpenChat = {},
-                onPollPairIcebreaker = {},
-                onReconnect = {},
-                onDismissReconnect = {},
-                onEventReminderMap = {},
-                onLocationClick = {},
-            )
         val photo =
-            buildHomePileClusters(data, actions)
-                .first { it.id == "reconnect" }
+            buildHomePileClusters(data, emptyActions())
+                .first { it.id == "stay" }
                 .photos
                 .first()
         assertEquals("reconnect-conn-77", photo.id)

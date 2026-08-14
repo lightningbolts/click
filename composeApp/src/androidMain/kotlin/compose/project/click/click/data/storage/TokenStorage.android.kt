@@ -1,7 +1,8 @@
-package compose.project.click.click.data.storage
+package compose.project.click.click.data.storage // pragma: allowlist secret
 
 import android.content.Context
 import android.content.SharedPreferences
+import compose.project.click.click.auth.LocalSessionCache // pragma: allowlist secret
 
 class AndroidTokenStorage(
     private val context: Context,
@@ -15,12 +16,14 @@ class AndroidTokenStorage(
         expiresAt: Long?,
         tokenType: String?,
     ) {
+        val userId = LocalSessionCache.parseIdentityFromJwt(jwt)?.userId
         sharedPreferences.edit().apply {
             putString(KEY_JWT, jwt)
             putString(KEY_REFRESH_TOKEN, refreshToken)
             if (expiresAt != null) putLong(KEY_EXPIRES_AT, expiresAt) else remove(KEY_EXPIRES_AT)
             if (tokenType != null) putString(KEY_TOKEN_TYPE, tokenType) else remove(KEY_TOKEN_TYPE)
-            apply()
+            if (userId != null) putString(KEY_USER_ID, userId) else remove(KEY_USER_ID)
+            commit()
         }
     }
 
@@ -35,13 +38,16 @@ class AndroidTokenStorage(
 
     override suspend fun getTokenType(): String? = sharedPreferences.getString(KEY_TOKEN_TYPE, null)
 
+    override suspend fun getUserId(): String? = sharedPreferences.getString(KEY_USER_ID, null)
+
     override suspend fun clearTokens() {
         sharedPreferences.edit().apply {
             remove(KEY_JWT)
             remove(KEY_REFRESH_TOKEN)
             remove(KEY_EXPIRES_AT)
             remove(KEY_TOKEN_TYPE)
-            apply()
+            remove(KEY_USER_ID)
+            commit()
         }
     }
 
@@ -51,6 +57,7 @@ class AndroidTokenStorage(
         private const val KEY_REFRESH_TOKEN = "refresh_token"
         private const val KEY_EXPIRES_AT = "expires_at"
         private const val KEY_TOKEN_TYPE = "token_type"
+        private const val KEY_USER_ID = "user_id"
         private const val KEY_FREE_THIS_WEEK = "free_this_week"
         private const val KEY_TAGS_INITIALIZED = "tags_initialized"
         private const val KEY_DARK_MODE_ENABLED = "dark_mode_enabled"
@@ -285,6 +292,7 @@ class AndroidTokenStorage(
                     KEY_REFRESH_TOKEN,
                     KEY_EXPIRES_AT,
                     KEY_TOKEN_TYPE,
+                    KEY_USER_ID,
                     KEY_FREE_THIS_WEEK,
                     KEY_TAGS_INITIALIZED,
                     KEY_MESSAGE_NOTIFICATIONS_ENABLED,

@@ -1,6 +1,6 @@
 package compose.project.click.click.data.api // pragma: allowlist secret
 
-import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
+import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.models.ErrorResponse // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconInsert // pragma: allowlist secret
@@ -12,7 +12,6 @@ import compose.project.click.click.data.models.UserCore // pragma: allowlist sec
 import compose.project.click.click.data.models.parseMapBeaconRows // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
-import io.github.jan.supabase.auth.auth
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.ClientRequestException
@@ -460,6 +459,7 @@ class ApiClient {
                     json(json)
                 }
                 installClickWebBearerAuth(tokenStorage)
+                installClickWeb403RetryInterceptor(tokenStorage)
             }
         }
     private val clickWebClient: HttpClient get() = clickWebClientLazy.value
@@ -524,16 +524,7 @@ class ApiClient {
         return Result.failure(ClickWebRequestException(status, message))
     }
 
-    private suspend fun currentAccessToken(): String? =
-        tokenStorage
-            .getJwt()
-            ?.trim()
-            ?.takeIf { it.isNotEmpty() }
-            ?: SupabaseConfig.client.auth
-                .currentSessionOrNull()
-                ?.accessToken
-                ?.trim()
-                ?.takeIf { it.isNotEmpty() }
+    private suspend fun currentAccessToken(): String? = EnsureFreshAccessToken.get(tokenStorage)
 
     /**
      * POST `/api/user/avatar` on click-web (JSON base64 `file_b64` + JWT bearer).

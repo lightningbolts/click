@@ -213,7 +213,7 @@ Detection: `getPlatform().name.contains("iOS")`.
 |-------|-------|
 | `HorizontalPadding` | 16 dp (`margin-mobile`) |
 | `SectionSpacing` | 24 dp |
-| `HeaderCollapseScrollThreshold` | 96 px |
+| `HeaderCollapseScrollThreshold` | 20 dp (~20 px at mdpi; converted per [Density] at runtime) |
 | `FloatingHeaderLargeHeight` | 112 dp (initial fallback) |
 | `FloatingHeaderCompactHeight` | 52 dp |
 | `ExtraScrollBottomPadding` | 16 dp |
@@ -227,7 +227,7 @@ Helpers: `rememberTabBarOverlayHeight()`, `rememberBottomChromePadding()`, `reme
 
 ### 4.2 Interactive Elements
 
-- Floating headers: `LiquidGlassPageHeader` API → **solid header bar** with **2dp** bottom `#000` border (no blur).
+- Floating headers: tab-root screens use **borderless large titles at rest** and collapse to a **native semi-translucent bar** (iOS `UIVisualEffectView` blur / Android surface alpha + `BlurEffect` when API 31+). This is an intentional exception to Functional Clarity opaque bordered chrome; sheets, cards, and in-flow controls stay FC.
 - FABs sit `FabGapAboveTabBar` above measured tab bar top.
 - Chat composers dock above tab bar; iOS uses `maxOf(tabStack, imeBottom)`.
 
@@ -237,7 +237,7 @@ Helpers: `rememberTabBarOverlayHeight()`, `rememberBottomChromePadding()`, `reme
 |-------|----------|
 | **Default** | Bottom chrome = measured tab/nav height + optional 16 dp scroll padding |
 | **Pressed/Highlighted** | N/A |
-| **Active** | Header `collapseFraction` 0→1 over 96 px scroll |
+| **Active** | Header `collapseFraction` 0→1 over `HeaderCollapseScrollThreshold` (20 dp, converted to px) |
 | **Focus** | IME lifts chat via `graphicsLayer` (iOS) or `offset` (Android) |
 | **Disabled** | N/A |
 | **Loading** | N/A |

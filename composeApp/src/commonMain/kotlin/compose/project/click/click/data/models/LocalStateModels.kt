@@ -59,6 +59,127 @@ data class OnboardingState(
 }
 
 /**
+ * Fully-hydrated onboarding state for returning users — skips Welcome and marks prior steps done.
+ * Used when [TokenStorage.getHasCompletedOnboarding] is true or remote profile/interests prove
+ * an existing account (prevents the Welcome flash on cold start).
+ */
+fun existingHydratedOnboardingState(permissionsCompleted: Boolean = true): OnboardingState =
+    OnboardingState(
+        flowVersion = ONBOARDING_FLOW_VERSION_COMPLETE,
+        permissionsCompleted = permissionsCompleted,
+        interestsCompleted = true,
+        welcomeSeen = true,
+        personalityCompleted = true,
+        avatarSetOrSkipped = true,
+        priorConnectionsSetOrSkipped = true,
+    )
+
+/** Seed for returning accounts that must never see Welcome again. */
+fun skipWelcomeExistingUserState(
+    interestsCompleted: Boolean,
+    permissionsCompleted: Boolean = false,
+): OnboardingState =
+    OnboardingState(
+        flowVersion = if (interestsCompleted) ONBOARDING_FLOW_VERSION_COMPLETE else 0,
+        permissionsCompleted = permissionsCompleted,
+        interestsCompleted = interestsCompleted,
+        welcomeSeen = true,
+        personalityCompleted = interestsCompleted,
+        avatarSetOrSkipped = interestsCompleted,
+        priorConnectionsSetOrSkipped = interestsCompleted,
+    )
+
+fun isExistingAccountForOnboarding(
+    tagCount: Int,
+    userFirstName: String?,
+    userBirthday: String?,
+    userAvatarUrl: String?,
+    minInterestTags: Int,
+): Boolean =
+    tagCount >= minInterestTags ||
+        (!userFirstName.isNullOrBlank() && !userBirthday.isNullOrBlank()) ||
+        !userAvatarUrl.isNullOrBlank()
+
+/**
+ * Disk hydration before remote interests/profile resolve.
+ * Returns null when no saved state and onboarding is not marked complete — caller keeps
+ * [onboardingState] null so the loading shimmer stays up.
+ */
+fun resolveOnboardingInitialState(
+    savedState: OnboardingState?,
+    hasCompletedOnboarding: Boolean?,
+): OnboardingState? {
+    val completed = hasCompletedOnboarding == true
+    if (savedState != null) {
+        var state = savedState
+        if (completed) {
+            state =
+                state.copy(
+                    flowVersion = state.flowVersion.coerceAtLeast(ONBOARDING_FLOW_VERSION_COMPLETE),
+                    welcomeSeen = true,
+                    permissionsCompleted = true,
+                    interestsCompleted = true,
+                    personalityCompleted = true,
+                    avatarSetOrSkipped = true,
+                    priorConnectionsSetOrSkipped = true,
+                )
+        }
+        return state
+    }
+    if (completed) {
+        return existingHydratedOnboardingState()
+    }
+    return null
+}
+
+/**
+ * After [fetchUserInterests] (and optional profile signals), decide whether the account is new
+ * or returning and merge/persist the correct [OnboardingState].
+ */
+fun resolveOnboardingAfterRemoteResolution(
+    currentState: OnboardingState?,
+    tagCount: Int,
+    userFirstName: String?,
+    userBirthday: String?,
+    userAvatarUrl: String?,
+    minInterestTags: Int,
+): OnboardingState {
+    val interestsSatisfied = tagCount >= minInterestTags
+    val isExisting =
+        isExistingAccountForOnboarding(
+            tagCount = tagCount,
+            userFirstName = userFirstName,
+            userBirthday = userBirthday,
+            userAvatarUrl = userAvatarUrl,
+            minInterestTags = minInterestTags,
+        )
+
+    if (currentState != null) {
+        if (!isExisting) {
+            return currentState
+        }
+        var merged =
+            currentState.copy(
+                welcomeSeen = true,
+            )
+        if (interestsSatisfied && !merged.interestsCompleted) {
+            merged =
+                merged.copy(
+                    interestsCompleted = true,
+                    flowVersion = merged.flowVersion.coerceAtLeast(ONBOARDING_FLOW_VERSION_COMPLETE),
+                )
+        }
+        return merged
+    }
+
+    return if (isExisting) {
+        skipWelcomeExistingUserState(interestsCompleted = interestsSatisfied)
+    } else {
+        OnboardingState()
+    }
+}
+
+/**
  * Cold-start snapshot. Subjective proximity tags are not staged here; they flow from
  * [ConnectionState.TaggingContext] into each `connections` row after creation.
  */

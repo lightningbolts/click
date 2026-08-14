@@ -1,5 +1,6 @@
 package compose.project.click.click.data.storage // pragma: allowlist secret
 
+import compose.project.click.click.auth.LocalSessionCache // pragma: allowlist secret
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.MemScope
 import kotlinx.cinterop.alloc
@@ -63,6 +64,7 @@ class IosTokenStorage : TokenStorage {
         private const val KEY_REFRESH_TOKEN = "refresh_token"
         private const val KEY_EXPIRES_AT = "expires_at"
         private const val KEY_TOKEN_TYPE = "token_type"
+        private const val KEY_USER_ID = "user_id"
         private const val KEY_FREE_THIS_WEEK = "free_this_week"
         private const val KEY_TAGS_INITIALIZED = "tags_initialized"
         private const val KEY_DARK_MODE_ENABLED = "dark_mode_enabled"
@@ -94,6 +96,7 @@ class IosTokenStorage : TokenStorage {
         tokenType: String?,
     ) {
         // Defaults are the live session source of truth.
+        val userId = LocalSessionCache.parseIdentityFromJwt(jwt)?.userId
         userDefaults.setObject(jwt, KEY_JWT)
         userDefaults.setObject(refreshToken, KEY_REFRESH_TOKEN)
         if (expiresAt != null) {
@@ -106,28 +109,40 @@ class IosTokenStorage : TokenStorage {
         } else {
             userDefaults.removeObjectForKey(KEY_TOKEN_TYPE)
         }
+        if (userId != null) {
+            userDefaults.setObject(userId, KEY_USER_ID)
+        } else {
+            userDefaults.removeObjectForKey(KEY_USER_ID)
+        }
         userDefaults.synchronize()
 
-        // Update-or-add Keychain; keep last-good values on -50 / write failure.
+        // Update-or-add Keychain; delete stale entries when writes fail so empty Defaults
+        // cannot resurrect an expired refresh token on fallback read.
         val jwtOk = setKeychainItem(KEY_JWT, jwt)
         val refreshOk = setKeychainItem(KEY_REFRESH_TOKEN, refreshToken)
         val expiresOk =
             if (expiresAt != null) {
                 setKeychainItem(KEY_EXPIRES_AT, expiresAt.toString())
             } else {
+                deleteKeychainItem(KEY_EXPIRES_AT)
                 true
             }
         val typeOk =
             if (tokenType != null) {
                 setKeychainItem(KEY_TOKEN_TYPE, tokenType)
             } else {
+                deleteKeychainItem(KEY_TOKEN_TYPE)
                 true
             }
         if (!jwtOk || !refreshOk || !expiresOk || !typeOk) {
             println(
-                "IosTokenStorage: NSUserDefaults saved; Keychain write failed, last-good kept " +
+                "IosTokenStorage: NSUserDefaults saved; Keychain write failed, purging stale entries " +
                     "(jwt=$jwtOk refresh=$refreshOk expires=$expiresOk type=$typeOk)",
             )
+            if (!jwtOk) deleteKeychainItem(KEY_JWT)
+            if (!refreshOk) deleteKeychainItem(KEY_REFRESH_TOKEN)
+            if (!expiresOk) deleteKeychainItem(KEY_EXPIRES_AT)
+            if (!typeOk) deleteKeychainItem(KEY_TOKEN_TYPE)
         }
     }
 
@@ -161,11 +176,14 @@ class IosTokenStorage : TokenStorage {
         return getKeychainItem(KEY_TOKEN_TYPE)?.takeIf { it.isNotBlank() }
     }
 
+    override suspend fun getUserId(): String? = userDefaults.stringForKey(KEY_USER_ID)
+
     override suspend fun clearTokens() {
         userDefaults.removeObjectForKey(KEY_JWT)
         userDefaults.removeObjectForKey(KEY_REFRESH_TOKEN)
         userDefaults.removeObjectForKey(KEY_EXPIRES_AT)
         userDefaults.removeObjectForKey(KEY_TOKEN_TYPE)
+        userDefaults.removeObjectForKey(KEY_USER_ID)
         userDefaults.synchronize()
 
         deleteKeychainItem(KEY_JWT)
@@ -373,6 +391,7 @@ class IosTokenStorage : TokenStorage {
                 KEY_REFRESH_TOKEN,
                 KEY_EXPIRES_AT,
                 KEY_TOKEN_TYPE,
+                KEY_USER_ID,
                 KEY_FREE_THIS_WEEK,
                 KEY_TAGS_INITIALIZED,
                 KEY_MESSAGE_NOTIFICATIONS_ENABLED,

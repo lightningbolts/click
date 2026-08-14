@@ -39,6 +39,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -68,11 +69,12 @@ import compose.project.click.click.ui.chat.connectionListActivityTs // pragma: a
 import compose.project.click.click.ui.chat.connectionRowPressGestures // pragma: allowlist secret
 import compose.project.click.click.ui.chat.connectionRowPressHighlight // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
-import compose.project.click.click.ui.components.AppEmptyState
+import compose.project.click.click.ui.components.AppEmptyState // pragma: allowlist secret
+import compose.project.click.click.ui.components.AppScreenDefaults // pragma: allowlist secret
 import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickCircularGlassIconButton // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickOutlinedTextField
+import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionsFloatingHeader // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
@@ -86,7 +88,7 @@ import compose.project.click.click.ui.components.rememberFabAboveNavPadding // p
 import compose.project.click.click.ui.components.rememberFloatingHeaderTopPadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberGlassToastState // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberStatusBarTopPadding // pragma: allowlist secret
-import compose.project.click.click.ui.components.sheetPageBackground
+import compose.project.click.click.ui.components.sheetPageBackground // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.util.ViewerAvailabilityBubblesCache // pragma: allowlist secret
 import compose.project.click.click.util.dedupeOneToOneChatsByPeer // pragma: allowlist secret
@@ -222,8 +224,12 @@ fun ConnectionsListView(
         // Snap to top so floating-header measure can lock expanded height again.
         connectionsLazyListState.scrollToItem(0)
     }
-    val collapseFraction by remember(connectionsLazyListState) {
-        derivedStateOf { connectionsLazyListState.headerCollapseFraction() }
+    val thresholdPx =
+        with(LocalDensity.current) {
+            AppScreenDefaults.HeaderCollapseScrollThreshold.roundToPx()
+        }
+    val collapseFraction by remember(connectionsLazyListState, thresholdPx) {
+        derivedStateOf { connectionsLazyListState.headerCollapseFraction(thresholdPx) }
     }
 
     // Render only the unified inbox payload emitted by ChatViewModel.

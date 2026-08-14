@@ -8,7 +8,7 @@
 
 **Home layout:** Default is **photo pile** (`HomeLayoutMode.PILE`) — one full-width, draggable stack of Polaroids per section, stacked vertically. Header greeting + search stay pinned (not in the pile). Toggle in the header (list / pile icons) and **Settings → Appearance → Photo pile home**. Linear list is the accessibility fallback (TalkBack / VoiceOver). Persistence: `TokenStorage` key `home_layout_mode`.
 
-**Track C (2026-07-17):** Discovery-first IA — greeting + search pill + Featured Event + dynamic nearby explore; availability + reconnect remain first-class above Explore. Greeting uses the same floating `LiquidGlassPageHeader` overlay as other tab roots (not an in-feed item).
+**Track C (2026-07-17):** Discovery-first IA — greeting + search pill + Featured Event + dynamic nearby explore; availability + reconnect remain first-class above Explore. Greeting uses the same floating `LiquidGlassPageHeader` overlay as other tab roots: **borderless large title at scroll rest**, collapsing to a **semi-translucent glass bar** after ~20 dp scroll (not an in-feed item).
 
 ---
 
@@ -29,12 +29,13 @@ HomeScreen (organism)
     │   └── layout toggle (pile ↔ linear)
     └── LazyColumn
         ├── HomeSearchPill              // pinned; not part of the pile
-        ├── [PILE default] homePhotoPileItems — one SectionHeader + PileCluster row per cluster
-        │   ├── PileCluster "I'm down for…" (z-priority 40; always present)
-        │   ├── Featured / Recap / Saved events / Explore nearby
-        │   ├── Stay in touch (archive + Poll-Pair in one stack)
-        │   ├── Reconnect / Event reminders / Recent Connections
-        │   └── Insights + Your Stats (one photo each)
+        ├── [PILE default] HomeAvailabilityIntentsRow (pill strip; not a pile cluster)
+        ├── homePhotoPileItems — one SectionHeader + PileCluster row per cluster
+        │   ├── Featured / Saved events / Explore nearby
+        │   ├── Stay in touch (archive + Poll-Pair + reconnect, capped at 10)
+        │   ├── Event reminders / Recent Connections
+        │   └── (availability, recap, insights, stats are NOT pile clusters)
+        ├── ActivityRecapSection / ConnectionInsightsCard / Your Stats row (telemetry; not Polaroids)
         └── [LINEAR fallback] same sections as a vertical list (FeaturedEventSection, …)
     └── LazyColumn (24dp spacing, 20dp horizontal; top inset clears floating header)
         ├── HomeSearchPill              // → onOpenSearch / UnifiedSearchSheet
@@ -81,7 +82,7 @@ HomeScreen (organism)
 | Background | `MaterialTheme.colorScheme.background` |
 | Horizontal padding | 20dp |
 | Section spacing | 24dp (`CardSpacing`) |
-| Header | Floating `LiquidGlassPageHeader` via `AppScreenScaffold` — same status-bar overlay level as Clicks/Map/etc.; title = `homeGreetingTitle`, subtitle = `"Ready to connect today?"` (no `"Home"` title) |
+| Header | Floating `LiquidGlassPageHeader` via `AppScreenScaffold` — transparent at rest (no bordered pill); collapses to native glass backdrop after ~20 dp scroll; title = `homeGreetingTitle`, subtitle = `"Ready to connect today?"` (no `"Home"` title) |
 | Header → search | **8dp** under greeting (`HeaderToSearchGap`; compensates list `spacedBy` after header inset) |
 | List | `LazyColumn` when `HomeState.Success` |
 | Bottom chrome | Transparent nav overlay + `rememberBottomChromePadding()` |
@@ -156,7 +157,7 @@ Triggered from `HomeAvailabilityIntentsRow` chip taps. See [13-availability.md](
 | Greeting / search | Always (search if `onOpenSearch` set) | — |
 | Featured Event | Hidden | First `HomeEventReminder` |
 | I'm down for… | `"Set what you're down for"` chip | Intent chips + `"Edit intents"` |
-| Reconnect | Hidden | Up to 3 cards with `ConnectionListUserAvatarFace` (same as Clicks inbox) |
+| Reconnect | Hidden | Up to 10 cards with `ConnectionListUserAvatarFace` (same as Clicks inbox) |
 | Explore nearby | Hidden | One tile per kind/hub with count > 0 |
 | Event reminders | Hidden / deduped vs featured | Remaining reminders |
 | Recent Connections | Empty bordered card | Location groups |
@@ -165,17 +166,20 @@ Triggered from `HomeAvailabilityIntentsRow` chip taps. See [13-availability.md](
 
 ### Photo pile (`homePhotoPileItems`)
 
-**One cluster per full-width row.** `LazyListScope.homePhotoPileItems` emits a `SectionHeader` label plus its own `PileCluster` per cluster, stacked vertically in the same `LazyColumn` as every other home section. The clusters are *not* scattered across a shared canvas — the earlier board positioned every cluster absolutely inside one viewport-sized box, so clusters overlapped and sliced each other's labels in half.
+**One cluster per full-width row.** `LazyListScope.homePhotoPileItems` emits a `SectionHeader` label plus its own `PileCluster` per cluster, stacked vertically below the availability pill and above the telemetry section (recap, insights, stats). Availability, recap, insights, and stats are **not** pile clusters — they render as the same linear composables used in list mode.
 
-Shared components: `PileCluster`, `PhotoCard`, `CardVisualHero`, `SectionHeader`, `generateCardVisual(id)`, and the Compose-free `PilePhysics.kt`. Visuals are hashed (FNV-1a) so the same event/person/location always gets the same gradient plus one of five patterns (dots, diagonals, grain, grid, chevron), drawn from the full `CardHueFamily` palette with purple as the weighted anchor. Photos seed on `visualId` (the raw `beaconId` / `connectionId`) while `id` stays list-key unique, so a beacon looks identical on the pile, in the Events list, on its map pin, and in its detail sheet.
+Shared components: `PileCluster`, `PhotoCard`, `CardVisualHero`, `SectionHeader`, `generateCardVisual(id)`, and the Compose-free `PilePhysics.kt`. Visuals are hashed (FNV-1a) so the same event/person/location always gets the same gradient plus one of five patterns (dots, diagonals, grain, grid, chevron), drawn from the full `CardHueFamily` palette with purple as the weighted anchor. Photos seed on `visualId` (the raw `beaconId` / `connectionId`) while `id` stays list-key unique, so a beacon looks identical on the pile, in the Events list, on its map pin, and in its detail sheet. Mixed stay/reconnect stacks may show a small category chip on the top card.
 
-**Collapsed stack.** The top card plus up to three peeking layers (`PILE_MAX_VISIBLE_LAYERS`). Each cluster occupies roughly half the screen height with a **roughly-square** Polaroid (`pileCardSizeDp`). Peek offsets only go **right and down** (`pilePeekOffsetDp`), so the top card's bottom-start title block is never covered; titles ellipsize rather than wrap unbounded. Back layers get a deterministic ±4° resting tilt (`pileCardTiltDeg`) plus scale-down, dimming, and lower elevation (`pileLayerScale` / `pileLayerDim` / `pileLayerElevationDp`) so the pile reads as physically stacked.
+**Cluster caps:** saved bookmarks `.take(5)`, explore `.take(10)`, stay+reconnect combined `.take(10)`, recent connections `.take(10)`. Clusters sort by `zPriority` descending.
 
-**Drag physics.** While a finger is down, the top card tracks **1:1** (`liveX`/`liveY` written in the pointer coroutine and read inside `graphicsLayer` — no `scope.launch` snap, no grid). Tilt is proportional to travel (`pileDragTiltDeg`). On release:
+**Collapsed stack.** The top card plus up to two peeking layers (`PILE_MAX_VISIBLE_LAYERS = 3`; scales 1.0 / 0.95 / 0.90). Each cluster occupies roughly half the screen height with a **roughly-square** Polaroid (`pileCardSizeDp`). Peek offsets are **vertical only** (`pilePeekOffsetDp`: 0 / 12 / 24 dp, x = 0) so the top card's bottom-start title block is never covered; titles ellipsize rather than wrap unbounded. Every layer, including the top card, gets a deterministic ±4° resting tilt (`pileCardTiltDeg`) plus scale-down, dimming, and lower elevation on back layers (`pileLayerScale` / `pileLayerDim` / `pileLayerElevationDp`) so the pile reads as physically stacked.
 
-- Swipe **up** or **right** past `GlassGestureCommitFraction` (or a flick at `GlassGestureFlickVelocityPxPerSec`) → velocity-aware spring exit (`pileCardExitTargetPx`) and the card is removed from the top of the stack.
-- Swipe **left** or **down** past the same threshold → the most recently dismissed card is recalled, springs in from off-screen (`pileRecallEnterFromPx`), and can be grabbed mid-flight: a new down event copies the current `Animatable` value into `liveX`/`liveY` (pointerInput cannot call `Animatable.stop()` — Compose's restricted pointer scope).
+**Drag physics.** While a finger is down, the top card tracks **1:1** (`liveX`/`liveY` with rubber-band past ~85% of card size via `pileRubberBandOffset`). Rotation pivots around the initial touch anchor (`transformOrigin`). Tilt is proportional to travel (`pileDragTiltDeg`). On release:
+
+- Any swipe past `GlassGestureCommitFraction` (or a flick at `GlassGestureFlickVelocityPxPerSec`) in the throw direction → omnidirectional velocity-aware spring exit (`pileCardExitTargetPx` along the actual 2D vector) and the card is removed from the top of the stack.
+- Lower-left swipe (`offsetX < 0 && offsetY >= 0`) or a gesture opposing the last throw → recall the most recently dismissed card, which springs in from the reverse trajectory (`pileRecallEnterFromPx`) and can be grabbed mid-flight.
 - Below threshold → spring back to center.
+- Tap without crossing touch slop → playful jiggle (`PILE_TAP_JIGGLE_SCALE` 1.02, ±2° wobble) then fan-out.
 
 A committed throw/recall fires `PlatformHapticsPolicy.lightImpact()`.
 

@@ -1,44 +1,50 @@
-package compose.project.click.click.data.repository
+@file:Suppress("ktlint:standard:max-line-length")
 
-import compose.project.click.click.auth.LocalSessionCache
-import compose.project.click.click.auth.LocalSessionIdentity
-import compose.project.click.click.data.SupabaseConfig
-import compose.project.click.click.data.auth.SessionRefreshCoordinator
+package compose.project.click.click.data.repository // pragma: allowlist secret
+
+import compose.project.click.click.auth.GoogleOAuthConfig // pragma: allowlist secret
+import compose.project.click.click.auth.LocalSessionCache // pragma: allowlist secret
+import compose.project.click.click.auth.LocalSessionIdentity // pragma: allowlist secret
+import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
+import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
+import compose.project.click.click.data.auth.SessionRefreshCoordinator // pragma: allowlist secret
+import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
+import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.getPlatform // pragma: allowlist secret
+import compose.project.click.click.proximity.isSimulatorOrEmulatorRuntime // pragma: allowlist secret
+import compose.project.click.click.util.compressOutgoingChatImageForUpload // pragma: allowlist secret
+import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.Apple
 import io.github.jan.supabase.auth.providers.Google
 import io.github.jan.supabase.auth.providers.OAuthProvider
-import io.github.jan.supabase.auth.providers.builtin.IDToken
 import io.github.jan.supabase.auth.providers.builtin.Email
+import io.github.jan.supabase.auth.providers.builtin.IDToken
 import io.github.jan.supabase.auth.user.UserInfo
 import io.github.jan.supabase.auth.user.UserSession
+import kotlinx.coroutines.withTimeout
+import kotlinx.datetime.Clock
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import compose.project.click.click.util.redactedRestMessage
-import compose.project.click.click.util.compressOutgoingChatImageForUpload
-import compose.project.click.click.data.api.ApiClient
-import compose.project.click.click.data.storage.TokenStorage
-import compose.project.click.click.data.storage.createTokenStorage
-import compose.project.click.click.auth.GoogleOAuthConfig
-import compose.project.click.click.getPlatform
-import compose.project.click.click.proximity.isSimulatorOrEmulatorRuntime
-import kotlinx.coroutines.withTimeout
-import kotlinx.datetime.Clock
 
 class AuthRepository(
-    private val tokenStorage: TokenStorage = createTokenStorage()
+    private val tokenStorage: TokenStorage = createTokenStorage(),
 ) {
     /** Lazy so [AppDataManager] and JVM tests can load without touching Supabase / Android crypto. */
     private val supabase by lazy { SupabaseConfig.client }
     private val clickWebApi by lazy { ApiClient() }
+
     private companion object {
         const val AUTH_TIMEOUT_MS = 12_000L
         const val AUTH_INTERACTIVE_TIMEOUT_MS = 120_000L
         const val MAX_PROFILE_IMAGE_BYTES = 2_000_000
     }
 
-    suspend fun signInWithEmail(email: String, password: String): Result<UserInfo> {
+    suspend fun signInWithEmail(
+        email: String,
+        password: String,
+    ): Result<UserInfo> {
         return try {
             withTimeout(AUTH_TIMEOUT_MS) {
                 supabase.auth.signInWith(Email) {
@@ -55,7 +61,7 @@ class AuthRepository(
                     jwt = session.accessToken,
                     refreshToken = session.refreshToken,
                     expiresAt = session.expiresAt?.toEpochMilliseconds(),
-                    tokenType = session.tokenType
+                    tokenType = session.tokenType,
                 )
                 Result.success(user)
             } else {
@@ -83,13 +89,14 @@ class AuthRepository(
                 supabase.auth.signUpWith(Email) {
                     this.email = email
                     this.password = password
-                    data = buildJsonObject {
-                        put("first_name", f)
-                        put("last_name", l)
-                        put("birthday", b)
-                        put("full_name", display.ifEmpty { f })
-                        put("name", display.ifEmpty { f })
-                    }
+                    data =
+                        buildJsonObject {
+                            put("first_name", f)
+                            put("last_name", l)
+                            put("birthday", b)
+                            put("full_name", display.ifEmpty { f })
+                            put("name", display.ifEmpty { f })
+                        }
                 }
             }
 
@@ -97,14 +104,15 @@ class AuthRepository(
             val session = supabase.auth.currentSessionOrNull()
 
             if (session != null) {
-                val user = session.user ?: return Result.failure(
-                    Exception("Sign up succeeded, but your session could not be restored. Please sign in.")
-                )
+                val user =
+                    session.user ?: return Result.failure(
+                        Exception("Sign up succeeded, but your session could not be restored. Please sign in."),
+                    )
                 tokenStorage.saveTokens(
                     jwt = session.accessToken,
                     refreshToken = session.refreshToken,
                     expiresAt = session.expiresAt?.toEpochMilliseconds(),
-                    tokenType = session.tokenType
+                    tokenType = session.tokenType,
                 )
                 Result.success(user)
             } else {
@@ -135,8 +143,8 @@ class AuthRepository(
      * ExternalAuthAction backed by ASWebAuthenticationSession if stricter fidelity
      * is ever required.
      */
-    suspend fun signInWithOAuth(provider: OAuthProvider): Result<Unit> {
-        return try {
+    suspend fun signInWithOAuth(provider: OAuthProvider): Result<Unit> =
+        try {
             supabase.auth.signInWith(provider)
             Result.success(Unit)
         } catch (e: Exception) {
@@ -149,7 +157,6 @@ class AuthRepository(
                 ),
             )
         }
-    }
 
     suspend fun signInWithGoogle(): Result<Unit> {
         return try {
@@ -159,9 +166,10 @@ class AuthRepository(
                 }
             }
 
-            val nativePayloadResult = withTimeout(AUTH_INTERACTIVE_TIMEOUT_MS) {
-                requestNativeGoogleSignInPayload()
-            }
+            val nativePayloadResult =
+                withTimeout(AUTH_INTERACTIVE_TIMEOUT_MS) {
+                    requestNativeGoogleSignInPayload()
+                }
 
             nativePayloadResult.fold(
                 onSuccess = { nativePayload ->
@@ -224,16 +232,17 @@ class AuthRepository(
         }
     }
 
-    suspend fun signInWithApple(): Result<Unit> {
-        return try {
+    suspend fun signInWithApple(): Result<Unit> =
+        try {
             // Native Apple Sign-In is the canonical path on iOS.
             // IMPORTANT: do not convert native failures into OAuth fallback, otherwise we can
             // get stuck waiting for a browser deep link that never returns on simulator.
             // Native Apple sign-in is user-interactive and can legitimately take longer
             // than API-style timeouts while users authenticate/approve in system sheets.
-            val nativePayloadResult = withTimeout(AUTH_INTERACTIVE_TIMEOUT_MS) {
-                requestNativeAppleSignInPayload()
-            }
+            val nativePayloadResult =
+                withTimeout(AUTH_INTERACTIVE_TIMEOUT_MS) {
+                    requestNativeAppleSignInPayload()
+                }
 
             nativePayloadResult.fold(
                 onSuccess = { nativePayload ->
@@ -249,7 +258,11 @@ class AuthRepository(
                                 Result.success(Unit)
                             },
                             onFailure = { idTokenError ->
-                                val normalizedError = idTokenError.message?.trim().orEmpty().lowercase()
+                                val normalizedError =
+                                    idTokenError.message
+                                        ?.trim()
+                                        .orEmpty()
+                                        .lowercase()
                                 if (isAppleAudienceMismatchError(normalizedError)) {
                                     if (!isSimulatorOrEmulatorRuntime()) {
                                         signInWithOAuth(Apple)
@@ -294,10 +307,9 @@ class AuthRepository(
                 ),
             )
         }
-    }
 
-    suspend fun signOut(): Result<Unit> {
-        return try {
+    suspend fun signOut(): Result<Unit> =
+        try {
             supabase.auth.signOut()
             tokenStorage.clearTokens()
             Result.success(Unit)
@@ -306,7 +318,6 @@ class AuthRepository(
             tokenStorage.clearTokens()
             Result.failure(e)
         }
-    }
 
     suspend fun restoreSession(): Result<UserInfo> {
         return try {
@@ -339,7 +350,7 @@ class AuthRepository(
                         jwt = currentSession.accessToken,
                         refreshToken = currentSession.refreshToken,
                         expiresAt = currentSession.expiresAt?.toEpochMilliseconds(),
-                        tokenType = currentSession.tokenType
+                        tokenType = currentSession.tokenType,
                     )
                 }
                 return Result.success(user)
@@ -353,34 +364,46 @@ class AuthRepository(
                 println("AuthRepository: Attempting restore from TokenStorage (Keychain/EncryptedPrefs)")
                 val expiresAt = tokenStorage.getExpiresAt()
                 val tokenType = tokenStorage.getTokenType() ?: "bearer"
-                
+
                 // Calculate expiresIn based on stored expiresAt
-                val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
-                val expiresIn = if (expiresAt != null) {
-                    val remaining = (expiresAt - now) / 1000
-                    if (remaining > 0) remaining else 0L
-                } else 3600L
+                val now =
+                    kotlinx.datetime.Clock.System
+                        .now()
+                        .toEpochMilliseconds()
+                val expiresIn =
+                    if (expiresAt != null) {
+                        val remaining = (expiresAt - now) / 1000
+                        if (remaining > 0) remaining else 0L
+                    } else {
+                        3600L
+                    }
 
                 val identity = LocalSessionCache.parseIdentityFromJwt(accessToken)
                 val sessionUser = identity?.let { offlineUserInfoFromIdentity(it) }
-                val session = UserSession(
-                    accessToken = accessToken,
-                    refreshToken = refreshToken,
-                    expiresIn = expiresIn,
-                    tokenType = tokenType,
-                    user = sessionUser,
-                )
-                
+                val session =
+                    UserSession(
+                        accessToken = accessToken,
+                        refreshToken = refreshToken,
+                        expiresIn = expiresIn,
+                        tokenType = tokenType,
+                        user = sessionUser,
+                    )
+
                 // Import the session into Supabase
                 supabase.auth.importSession(session)
-                
+
                 // Refresh when online; offline boots must not block on this call.
                 var refreshFailed = false
                 try {
                     withTimeout(AUTH_TIMEOUT_MS) {
-                        supabase.auth.refreshCurrentSession()
+                        val refreshResult = refreshSession()
+                        if (refreshResult.isFailure) {
+                            refreshFailed = true
+                        }
                     }
-                    println("AuthRepository: Successfully refreshed session from TokenStorage")
+                    if (!refreshFailed) {
+                        println("AuthRepository: Successfully refreshed session from TokenStorage")
+                    }
                 } catch (e: Exception) {
                     refreshFailed = true
                     println("AuthRepository: Failed to refresh session from TokenStorage: ${e.redactedRestMessage()}")
@@ -396,7 +419,7 @@ class AuthRepository(
                             jwt = currentSession.accessToken,
                             refreshToken = currentSession.refreshToken,
                             expiresAt = currentSession.expiresAt?.toEpochMilliseconds(),
-                            tokenType = currentSession.tokenType
+                            tokenType = currentSession.tokenType,
                         )
                     }
                     Result.success(user)
@@ -422,9 +445,7 @@ class AuthRepository(
         }
     }
 
-    fun getCurrentUser(): UserInfo? {
-        return supabase.auth.currentUserOrNull()
-    }
+    fun getCurrentUser(): UserInfo? = supabase.auth.currentUserOrNull()
 
     fun isAuthenticated(): Boolean {
         if (supabase.auth.currentUserOrNull() != null) return true
@@ -433,60 +454,72 @@ class AuthRepository(
 
     suspend fun hasValidLocalSession(): Boolean = LocalSessionCache.read(tokenStorage) != null
 
-    suspend fun refreshSession(): Result<Unit> = SessionRefreshCoordinator.singleFlightRefresh {
-        try {
-            // Prefer the live GoTrue / SettingsSessionManager session. Re-importing TokenStorage
-            // over it can overwrite a good refresh token with a stale one (then AuthRestException
-            // and "no fresh JWT" until sign-out). Only import when the SDK has no session.
-            if (supabase.auth.currentSessionOrNull() == null) {
-                runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+    suspend fun refreshSession(): Result<Unit> =
+        SessionRefreshCoordinator.singleFlightRefresh {
+            try {
+                // Prefer the live GoTrue / SettingsSessionManager session. Re-importing TokenStorage
+                // over it can overwrite a good refresh token with a stale one (then AuthRestException
+                // and "no fresh JWT" until sign-out). Only import when the SDK has no session.
+                if (supabase.auth.currentSessionOrNull() == null) {
+                    runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+                }
+                val existing = supabase.auth.currentSessionOrNull()
+                val now = Clock.System.now().toEpochMilliseconds()
+                val existingExp = existing?.expiresAt?.toEpochMilliseconds()
+                // Access token still has headroom — sync TokenStorage from SDK and skip network refresh
+                // to avoid concurrent refresh-token rotation races.
+                // Skip network refresh only when access token has headroom AND GoTrue knows the user.
+                // Offline import used to set user=null; skipping then left currentUserOrNull() empty forever.
+                if (existing != null &&
+                    existingExp != null &&
+                    existingExp > now + 120_000L &&
+                    supabase.auth
+                        .currentUserOrNull()
+                        ?.id
+                        ?.isNotBlank() == true
+                ) {
+                    tokenStorage.saveTokens(
+                        jwt = existing.accessToken,
+                        refreshToken = existing.refreshToken,
+                        expiresAt = existingExp,
+                        tokenType = existing.tokenType,
+                    )
+                    return@singleFlightRefresh Result.success(Unit)
+                }
+                // Session token present but user missing — re-import identity from JWT before refresh.
+                if (existing != null &&
+                    supabase.auth
+                        .currentUserOrNull()
+                        ?.id
+                        .isNullOrBlank()
+                ) {
+                    runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+                }
+                withTimeout(AUTH_TIMEOUT_MS) {
+                    supabase.auth.refreshCurrentSession()
+                }
+                val session = supabase.auth.currentSessionOrNull()
+                if (session != null) {
+                    tokenStorage.saveTokens(
+                        jwt = session.accessToken,
+                        refreshToken = session.refreshToken,
+                        expiresAt = session.expiresAt?.toEpochMilliseconds(),
+                        tokenType = session.tokenType,
+                    )
+                }
+                Result.success(Unit)
+            } catch (e: Exception) {
+                Result.failure(e)
             }
-            val existing = supabase.auth.currentSessionOrNull()
-            val now = Clock.System.now().toEpochMilliseconds()
-            val existingExp = existing?.expiresAt?.toEpochMilliseconds()
-            // Access token still has headroom — sync TokenStorage from SDK and skip network refresh
-            // to avoid concurrent refresh-token rotation races.
-            // Skip network refresh only when access token has headroom AND GoTrue knows the user.
-            // Offline import used to set user=null; skipping then left currentUserOrNull() empty forever.
-            if (existing != null &&
-                existingExp != null &&
-                existingExp > now + 120_000L &&
-                supabase.auth.currentUserOrNull()?.id?.isNotBlank() == true
-            ) {
-                tokenStorage.saveTokens(
-                    jwt = existing.accessToken,
-                    refreshToken = existing.refreshToken,
-                    expiresAt = existingExp,
-                    tokenType = existing.tokenType,
-                )
-                return@singleFlightRefresh Result.success(Unit)
-            }
-            // Session token present but user missing — re-import identity from JWT before refresh.
-            if (existing != null && supabase.auth.currentUserOrNull()?.id.isNullOrBlank()) {
-                runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
-            }
-            withTimeout(AUTH_TIMEOUT_MS) {
-                supabase.auth.refreshCurrentSession()
-            }
-            val session = supabase.auth.currentSessionOrNull()
-            if (session != null) {
-                tokenStorage.saveTokens(
-                    jwt = session.accessToken,
-                    refreshToken = session.refreshToken,
-                    expiresAt = session.expiresAt?.toEpochMilliseconds(),
-                    tokenType = session.tokenType
-                )
-            }
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
         }
-    }
-    
+
     /**
      * Update auth user_metadata with explicit first/last names (and derived full_name / name).
      */
-    suspend fun updateUserProfileNames(firstName: String, lastName: String): Result<Unit> {
+    suspend fun updateUserProfileNames(
+        firstName: String,
+        lastName: String,
+    ): Result<Unit> {
         return try {
             val f = firstName.trim()
             val l = lastName.trim()
@@ -496,12 +529,13 @@ class AuthRepository(
             val display = listOf(f, l).filter { it.isNotEmpty() }.joinToString(" ")
             println("AuthRepository: Updating profile names: $display")
             supabase.auth.updateUser {
-                data = buildJsonObject {
-                    put("first_name", JsonPrimitive(f))
-                    put("last_name", JsonPrimitive(l))
-                    put("full_name", JsonPrimitive(display))
-                    put("name", JsonPrimitive(display))
-                }
+                data =
+                    buildJsonObject {
+                        put("first_name", JsonPrimitive(f))
+                        put("last_name", JsonPrimitive(l))
+                        put("full_name", JsonPrimitive(display))
+                        put("name", JsonPrimitive(display))
+                    }
             }
             println("AuthRepository: Successfully updated user profile names")
             Result.success(Unit)
@@ -523,18 +557,22 @@ class AuthRepository(
     /**
      * Uploads a profile image via click-web [POST /api/user/avatar] (thin client); updates [public.users.image] server-side.
      */
-    suspend fun uploadProfilePicture(imageBytes: ByteArray, mimeType: String = "image/jpeg"): Result<String> {
+    suspend fun uploadProfilePicture(
+        imageBytes: ByteArray,
+        mimeType: String = "image/jpeg",
+    ): Result<String> {
         if (imageBytes.isEmpty()) {
             return Result.failure(IllegalArgumentException("Empty image"))
         }
         supabase.auth.currentUserOrNull() ?: return Result.failure(Exception("Not signed in"))
         val normalizedMime = mimeType.trim().ifEmpty { "image/jpeg" }
         return try {
-            val compressedCandidate = if (imageBytes.size > MAX_PROFILE_IMAGE_BYTES) {
-                compressOutgoingChatImageForUpload(imageBytes, normalizedMime)
-            } else {
-                imageBytes
-            }
+            val compressedCandidate =
+                if (imageBytes.size > MAX_PROFILE_IMAGE_BYTES) {
+                    compressOutgoingChatImageForUpload(imageBytes, normalizedMime)
+                } else {
+                    imageBytes
+                }
             val wasReencoded = compressedCandidate !== imageBytes
             val bytesToUpload = compressedCandidate
             if (bytesToUpload.size > MAX_PROFILE_IMAGE_BYTES) {
@@ -552,7 +590,10 @@ class AuthRepository(
         }
     }
 
-    private fun mapAuthErrorMessage(error: Throwable, defaultMessage: String): String {
+    private fun mapAuthErrorMessage(
+        error: Throwable,
+        defaultMessage: String,
+    ): String {
         val rawMessage = error.message?.trim().orEmpty()
         val normalized = rawMessage.lowercase()
 
@@ -576,7 +617,10 @@ class AuthRepository(
         }
     }
 
-    private fun mapAppleSignInErrorMessage(error: Throwable, defaultMessage: String): String {
+    private fun mapAppleSignInErrorMessage(
+        error: Throwable,
+        defaultMessage: String,
+    ): String {
         val rawMessage = error.message?.trim().orEmpty()
         val normalized = rawMessage.lowercase()
         val appleDomainHint =
@@ -592,7 +636,8 @@ class AuthRepository(
         if (
             normalized.contains("canceled") ||
             normalized.contains("cancelled") ||
-            normalized.contains("asauthorizationerror") && normalized.contains("1001")
+            normalized.contains("asauthorizationerror") &&
+            normalized.contains("1001")
         ) {
             return "Apple sign-in was canceled."
         }
@@ -622,8 +667,9 @@ class AuthRepository(
 
     private fun isAppleAudienceMismatchError(normalizedMessage: String): Boolean {
         if (normalizedMessage.isBlank()) return false
-        return normalizedMessage.contains("unacceptable audience in id_token") ||
-            normalizedMessage.contains("audience in id_token")
+        val unacceptableAudience = "unacceptable audience in id_token"
+        val audienceClaim = "audience in id_token"
+        return unacceptableAudience in normalizedMessage || audienceClaim in normalizedMessage
     }
 
     private fun isGoogleAudienceMismatchError(normalizedMessage: String): Boolean {
@@ -633,7 +679,10 @@ class AuthRepository(
             isAppleAudienceMismatchError(normalizedMessage)
     }
 
-    private fun mapGoogleSignInErrorMessage(error: Throwable, defaultMessage: String): String {
+    private fun mapGoogleSignInErrorMessage(
+        error: Throwable,
+        defaultMessage: String,
+    ): String {
         val rawMessage = error.message?.trim().orEmpty()
         val normalized = rawMessage.lowercase()
         if (normalized.contains("cancel")) {
@@ -654,17 +703,16 @@ class AuthRepository(
             id = identity.userId,
             aud = "authenticated",
             email = identity.email.takeIf { it.isNotBlank() },
-            userMetadata = buildJsonObject {
-                identity.name?.let { put("name", it) }
-            },
+            userMetadata =
+                buildJsonObject {
+                    identity.name?.let { put("name", it) }
+                },
         )
 
-    private fun isIosRuntime(): Boolean =
-        getPlatform().name.contains("iOS", ignoreCase = true)
+    private fun isIosRuntime(): Boolean = getPlatform().name.contains("iOS", ignoreCase = true)
 
-    private fun appleAudienceMismatchMessage(): String {
-        return "Apple sign-in configuration mismatch: native token audience is compose.project.click.click. Add this iOS bundle ID to Apple provider Client IDs in Supabase Auth settings."
-    }
+    private fun appleAudienceMismatchMessage(): String =
+        "Apple sign-in configuration mismatch: native token audience is compose.project.click.click. Add this iOS bundle ID to Apple provider Client IDs in Supabase Auth settings." // pragma: allowlist secret
 
     private fun isLikelyNetworkErrorMessage(normalizedMessage: String): Boolean {
         if (normalizedMessage.isBlank()) return false
@@ -684,4 +732,3 @@ class AuthRepository(
         return false
     }
 }
-

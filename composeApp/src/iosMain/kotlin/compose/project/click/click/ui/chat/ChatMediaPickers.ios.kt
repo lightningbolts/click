@@ -1,11 +1,14 @@
 @file:OptIn(kotlin.time.ExperimentalTime::class)
 
-package compose.project.click.click.ui.chat
+@file:Suppress(
+    "ktlint:standard:no-wildcard-imports",
+    "ktlint:standard:function-naming",
+)
+
+package compose.project.click.click.ui.chat // pragma: allowlist secret
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
-import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
-import compose.project.click.click.ui.utils.iosTopViewControllerForPresentation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -18,12 +21,13 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.uikit.LocalUIViewController
+import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
+import compose.project.click.click.ui.utils.iosTopViewControllerForPresentation // pragma: allowlist secret
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.refTo
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlin.time.Clock
 import platform.AVFAudio.AVAudioQualityMedium
 import platform.AVFAudio.AVAudioRecorder
 import platform.AVFAudio.AVAudioSession
@@ -35,17 +39,16 @@ import platform.AVFAudio.AVFormatIDKey
 import platform.AVFAudio.AVNumberOfChannelsKey
 import platform.AVFAudio.AVSampleRateKey
 import platform.AVFoundation.*
-import platform.Foundation.NSFileManager
-import platform.Foundation.NSError
-import platform.Foundation.NSURL
-import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSData
+import platform.Foundation.NSError
+import platform.Foundation.NSFileManager
+import platform.Foundation.NSTemporaryDirectory
+import platform.Foundation.NSURL
 import platform.PhotosUI.PHPickerConfiguration
 import platform.PhotosUI.PHPickerFilter
 import platform.PhotosUI.PHPickerResult
 import platform.PhotosUI.PHPickerViewController
 import platform.PhotosUI.PHPickerViewControllerDelegateProtocol
-import platform.UniformTypeIdentifiers.UTTypeImage
 import platform.UIKit.UIImage
 import platform.UIKit.UIImageJPEGRepresentation
 import platform.UIKit.UIImagePickerController
@@ -53,10 +56,12 @@ import platform.UIKit.UIImagePickerControllerDelegateProtocol
 import platform.UIKit.UIImagePickerControllerOriginalImage
 import platform.UIKit.UIImagePickerControllerSourceType
 import platform.UIKit.UINavigationControllerDelegateProtocol
+import platform.UniformTypeIdentifiers.UTTypeImage
 import platform.darwin.NSObject
 import platform.darwin.dispatch_async
 import platform.darwin.dispatch_get_main_queue
 import platform.posix.memcpy
+import kotlin.time.Clock
 
 /**
  * iOS: PHPicker, UIImagePickerController (camera), and AVAudioRecorder-backed voice dialog.
@@ -74,87 +79,97 @@ actual fun rememberChatMediaPickers(
     val onImagePickedState by rememberUpdatedState(onImagePicked)
     val onAudioPickedState by rememberUpdatedState(onAudioPicked)
     val onMediaAccessBlockedState by rememberUpdatedState(onMediaAccessBlocked)
-    val launchFilePicker = rememberFilePicker(
-        onFilePicked = onFilePicked,
-        onFilePickFailed = { message -> onMediaAccessBlockedState(message) },
-    )
+    val launchFilePicker =
+        rememberFilePicker(
+            onFilePicked = onFilePicked,
+            onFilePickFailed = { message -> onMediaAccessBlockedState(message) },
+        )
 
     var showVoiceDialog by remember { mutableStateOf(false) }
 
-    val photoPickerDelegate = remember {
-        object : NSObject(), PHPickerViewControllerDelegateProtocol {
-            override fun picker(picker: PHPickerViewController, didFinishPicking: List<*>) {
-                picker.dismissViewControllerAnimated(true, completion = null)
-                val results = didFinishPicking.mapNotNull { it as? PHPickerResult }
-                if (results.isEmpty()) return
+    val photoPickerDelegate =
+        remember {
+            object : NSObject(), PHPickerViewControllerDelegateProtocol {
+                override fun picker(
+                    picker: PHPickerViewController,
+                    didFinishPicking: List<*>,
+                ) {
+                    picker.dismissViewControllerAnimated(true, completion = null)
+                    val results = didFinishPicking.mapNotNull { it as? PHPickerResult }
+                    if (results.isEmpty()) return
 
-                results.forEach { result ->
-                    val provider = result.itemProvider
-                    provider.loadDataRepresentationForTypeIdentifier(UTTypeImage.identifier) { data, err ->
-                        val nsErr = err as? NSError
-                        if (nsErr != null) {
-                            println(
-                                "ChatMediaPickers: PHPicker load failed: code=${nsErr.code} domain=${nsErr.domain} " +
-                                    nsErr.localizedDescription,
-                            )
-                            dispatch_async(dispatch_get_main_queue()) {
-                                onMediaAccessBlockedState(
-                                    "Cannot load image from iCloud. Please try a local photo.",
+                    results.forEach { result ->
+                        val provider = result.itemProvider
+                        provider.loadDataRepresentationForTypeIdentifier(UTTypeImage.identifier) { data, err ->
+                            val nsErr = err as? NSError
+                            if (nsErr != null) {
+                                println(
+                                    "ChatMediaPickers: PHPicker load failed: code=${nsErr.code} domain=${nsErr.domain} " +
+                                        nsErr.localizedDescription,
                                 )
+                                dispatch_async(dispatch_get_main_queue()) {
+                                    onMediaAccessBlockedState(
+                                        "Cannot load image from iCloud. Please try a local photo.",
+                                    )
+                                }
+                                return@loadDataRepresentationForTypeIdentifier
                             }
-                            return@loadDataRepresentationForTypeIdentifier
-                        }
-                        if (data == null) {
-                            dispatch_async(dispatch_get_main_queue()) {
-                                onMediaAccessBlockedState(
-                                    "Cannot load image from iCloud. Please try a local photo.",
-                                )
+                            if (data == null) {
+                                dispatch_async(dispatch_get_main_queue()) {
+                                    onMediaAccessBlockedState(
+                                        "Cannot load image from iCloud. Please try a local photo.",
+                                    )
+                                }
+                                return@loadDataRepresentationForTypeIdentifier
                             }
-                            return@loadDataRepresentationForTypeIdentifier
-                        }
-                        val bytes = data.toByteArray()
-                        dispatch_async(dispatch_get_main_queue()) {
-                            if (bytes.isNotEmpty()) {
-                                onImagePickedState(bytes, "image/jpeg")
-                            } else {
-                                onMediaAccessBlockedState(
-                                    "Couldn't read that photo. Enable Photos access for Click in Settings.",
-                                )
+                            val bytes = data.toByteArray()
+                            dispatch_async(dispatch_get_main_queue()) {
+                                if (bytes.isNotEmpty()) {
+                                    onImagePickedState(bytes, "image/jpeg")
+                                } else {
+                                    onMediaAccessBlockedState(
+                                        "Couldn't read that photo. Enable Photos access for Click in Settings.",
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
         }
-    }
 
-    val cameraPickerDelegate = remember {
-        object : NSObject(), UIImagePickerControllerDelegateProtocol, UINavigationControllerDelegateProtocol {
-            override fun imagePickerController(
-                picker: UIImagePickerController,
-                didFinishPickingMediaWithInfo: Map<Any?, *>,
-            ) {
-                picker.dismissViewControllerAnimated(true, completion = null)
-                val image = didFinishPickingMediaWithInfo[UIImagePickerControllerOriginalImage] as? UIImage
-                    ?: return
-                val jpeg = UIImageJPEGRepresentation(image, 0.92) ?: return
-                val bytes = jpeg.toByteArray()
-                if (bytes.isNotEmpty()) {
-                    onImagePickedState(bytes, "image/jpeg")
+    val cameraPickerDelegate =
+        remember {
+            object : NSObject(), UIImagePickerControllerDelegateProtocol, UINavigationControllerDelegateProtocol {
+                override fun imagePickerController(
+                    picker: UIImagePickerController,
+                    didFinishPickingMediaWithInfo: Map<Any?, *>,
+                ) {
+                    picker.dismissViewControllerAnimated(true, completion = null)
+                    val image =
+                        didFinishPickingMediaWithInfo[UIImagePickerControllerOriginalImage] as? UIImage
+                            ?: return
+                    val jpeg = UIImageJPEGRepresentation(image, 0.92) ?: return
+                    val bytes = jpeg.toByteArray()
+                    dispatch_async(dispatch_get_main_queue()) {
+                        if (bytes.isNotEmpty()) {
+                            onImagePickedState(bytes, "image/jpeg")
+                        }
+                    }
+                }
+
+                override fun imagePickerControllerDidCancel(picker: UIImagePickerController) {
+                    picker.dismissViewControllerAnimated(true, completion = null)
                 }
             }
-
-            override fun imagePickerControllerDidCancel(picker: UIImagePickerController) {
-                picker.dismissViewControllerAnimated(true, completion = null)
-            }
         }
-    }
 
     fun openPhotoLibrary() {
-        val config = PHPickerConfiguration().apply {
-            filter = PHPickerFilter.imagesFilter
-            selectionLimit = 10L
-        }
+        val config =
+            PHPickerConfiguration().apply {
+                filter = PHPickerFilter.imagesFilter
+                selectionLimit = 10L
+            }
         val picker = PHPickerViewController(configuration = config)
         picker.delegate = photoPickerDelegate
         val presenter = iosTopViewControllerForPresentation() ?: viewController
@@ -261,24 +276,26 @@ private fun IosVoiceRecordDialog(
     val scope = rememberCoroutineScope()
     var phase by remember { mutableStateOf(VoiceRecordUiPhase.Idle) }
     var recorder by remember { mutableStateOf<AVAudioRecorder?>(null) }
-    val outputUrl = remember {
-        NSURL.fileURLWithPath(
-            NSTemporaryDirectory().trimEnd('/') + "/click_voice_${kotlin.random.Random.nextLong()}.m4a",
-        )
-    }
+    val outputUrl =
+        remember {
+            NSURL.fileURLWithPath(
+                NSTemporaryDirectory().trimEnd('/') + "/click_voice_${kotlin.random.Random.nextLong()}.m4a",
+            )
+        }
     var elapsedSec by remember { mutableLongStateOf(0L) }
     var recordedDurationSec by remember { mutableLongStateOf(0L) }
     var recordStartMs by remember { mutableLongStateOf(0L) }
     var waveformSamples by remember { mutableStateOf(List(40) { 0.06f }) }
 
-    val settings = remember {
-        mapOf<Any?, Any>(
-            AVFormatIDKey to 1633772320u,
-            AVSampleRateKey to 44_100.0,
-            AVNumberOfChannelsKey to 1,
-            AVEncoderAudioQualityKey to AVAudioQualityMedium,
-        )
-    }
+    val settings =
+        remember {
+            mapOf<Any?, Any>(
+                AVFormatIDKey to 1633772320u,
+                AVSampleRateKey to 44_100.0,
+                AVNumberOfChannelsKey to 1,
+                AVEncoderAudioQualityKey to AVAudioQualityMedium,
+            )
+        }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -316,18 +333,21 @@ private fun IosVoiceRecordDialog(
         }
     }
 
-    val displaySeconds = when (phase) {
-        VoiceRecordUiPhase.Preview -> recordedDurationSec
-        else -> elapsedSec
-    }
+    val displaySeconds =
+        when (phase) {
+            VoiceRecordUiPhase.Preview -> recordedDurationSec
+            else -> elapsedSec
+        }
     val pathForPreview = outputUrl.path
-    val previewFileOk = pathForPreview != null &&
-        NSFileManager.defaultManager.fileExistsAtPath(pathForPreview)
-    val previewUrl = if (phase == VoiceRecordUiPhase.Preview && previewFileOk) {
-        outputUrl.absoluteString
-    } else {
-        null
-    }
+    val previewFileOk =
+        pathForPreview != null &&
+            NSFileManager.defaultManager.fileExistsAtPath(pathForPreview)
+    val previewUrl =
+        if (phase == VoiceRecordUiPhase.Preview && previewFileOk) {
+            outputUrl.absoluteString
+        } else {
+            null
+        }
 
     GlassAlertDialog(
         onDismissRequest = {
@@ -392,10 +412,11 @@ private fun IosVoiceRecordDialog(
                             }
                         }
                         recorder = null
-                        recordedDurationSec = kotlin.math.max(
-                            0L,
-                            (Clock.System.now().toEpochMilliseconds() - recordStartMs) / 1000L,
-                        )
+                        recordedDurationSec =
+                            kotlin.math.max(
+                                0L,
+                                (Clock.System.now().toEpochMilliseconds() - recordStartMs) / 1000L,
+                            )
                         elapsedSec = recordedDurationSec
                         phase = VoiceRecordUiPhase.Preview
                     },
