@@ -1,57 +1,51 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.components
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Message
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Place
-import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -60,15 +54,12 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ripple
-import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
-import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -81,11 +72,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
@@ -93,42 +83,48 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
-import compose.project.click.click.data.models.Message // pragma: allowlist secret
-import compose.project.click.click.data.models.User // pragma: allowlist secret
-import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
+import compose.project.click.click.chat.attachments.AttachmentCrypto // pragma: allowlist secret
+import compose.project.click.click.chat.attachments.ChatAttachmentValidator // pragma: allowlist secret
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
+import compose.project.click.click.data.api.ConnectionEventRecommendationDto // pragma: allowlist secret
+import compose.project.click.click.data.api.ConnectionTabMessage // pragma: allowlist secret
+import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.GroupSharedInterest // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.ProfileTimelineJournalEntry // pragma: allowlist secret
 import compose.project.click.click.data.models.ProfileTimelinePayload // pragma: allowlist secret
-import compose.project.click.click.data.models.isEncryptedMedia
-import compose.project.click.click.data.api.ConnectionTabMessage
-import compose.project.click.click.data.api.ApiClient
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
+import compose.project.click.click.data.models.beaconIdFromMetadata // pragma: allowlist secret
+import compose.project.click.click.data.models.beaconShareUrlFromMetadata // pragma: allowlist secret
+import compose.project.click.click.data.models.beaconTitleFromMetadata // pragma: allowlist secret
+import compose.project.click.click.data.models.beaconTypeFromMetadata // pragma: allowlist secret
+import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
-import compose.project.click.click.chat.attachments.AttachmentCrypto
-import compose.project.click.click.chat.attachments.ChatAttachmentValidator
-import compose.project.click.click.ui.chat.ChatAudioBubble
-import compose.project.click.click.ui.chat.ChatAudioChromeKind
-import compose.project.click.click.ui.chat.rememberChatMediaPickers
+import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
+import compose.project.click.click.events.buildEventShareUrl // pragma: allowlist secret
+import compose.project.click.click.ui.chat.BeaconPreviewCard // pragma: allowlist secret
+import compose.project.click.click.ui.chat.BeaconPreviewModel // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatAudioBubble // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatAudioChromeKind // pragma: allowlist secret
 import compose.project.click.click.ui.chat.fetchImageBytesFromUrl // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 import compose.project.click.click.ui.chat.saveChatImageToGallery // pragma: allowlist secret
-import compose.project.click.click.ui.chat.shareDecryptedImage // pragma: allowlist secret
-import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile
 import compose.project.click.click.ui.chat.saveDecryptedAttachmentToDownloads // pragma: allowlist secret
+import compose.project.click.click.ui.chat.shareDecryptedImage // pragma: allowlist secret
+import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile // pragma: allowlist secret
+import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.ui.utils.beaconTypeDisplayLabel // pragma: allowlist secret
+import compose.project.click.click.util.LruMemoryCache // pragma: allowlist secret
+import compose.project.click.click.util.profileMediaVaultId // pragma: allowlist secret
+import compose.project.click.click.util.profileMediaVaultLocalPath // pragma: allowlist secret
+import compose.project.click.click.util.readProfileMediaVaultBytes // pragma: allowlist secret
+import compose.project.click.click.util.writeProfileMediaVaultBytes // pragma: allowlist secret
 import compose.project.click.click.utils.toImageBitmap // pragma: allowlist secret
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.longOrNull
-import compose.project.click.click.ui.theme.LightBlue
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.util.LruMemoryCache
-import compose.project.click.click.util.profileMediaVaultId
-import compose.project.click.click.util.profileMediaVaultLocalPath
-import compose.project.click.click.util.readProfileMediaVaultBytes
-import compose.project.click.click.util.writeProfileMediaVaultBytes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -137,8 +133,16 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
-import compose.project.click.click.ui.components.sheetBodyScroll
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
+
+// Bounded pager height under UIKit scroll-host (Metal texture max 16384px @3x).
+private val ProfileSheetPagerHeight = 560.dp // fallback when not fill-viewport
 
 /**
  * Phase 2 — C13: shared profile bottom sheet displayed when a map pin is tapped.
@@ -152,9 +156,6 @@ import compose.project.click.click.ui.components.sheetBodyScroll
  * [UserProfileBottomSheet]. Media / Links / Files are derived client-side from
  * [ProfileSheetState.localMessages] because chat message content is E2EE on the wire.
  */
-/** Bounded pager height under UIKit scroll-host (Metal texture max 16384px @3x). */
-private val ProfileSheetPagerHeight = 560.dp // fallback when not fill-viewport
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileBottomSheet(
@@ -168,15 +169,16 @@ fun ProfileBottomSheet(
     avatarUploading: Boolean = false,
     onOpenBeacon: ((beaconId: String) -> Unit)? = null,
 ) {
-    val visibleTabs = remember(state.isGroup) {
-        listOf(
-            ProfileSheetTab.Timeline,
-            ProfileSheetTab.Beacons,
-            ProfileSheetTab.Media,
-            ProfileSheetTab.Links,
-            ProfileSheetTab.Files,
-        ) + if (state.isGroup) listOf(ProfileSheetTab.Members) else emptyList()
-    }
+    val visibleTabs =
+        remember(state.isGroup) {
+            listOf(
+                ProfileSheetTab.Timeline,
+                ProfileSheetTab.Beacons,
+                ProfileSheetTab.Media,
+                ProfileSheetTab.Links,
+                ProfileSheetTab.Files,
+            ) + if (state.isGroup) listOf(ProfileSheetTab.Members) else emptyList()
+        }
     val pagerState = rememberPagerState(pageCount = { visibleTabs.size })
     val timelineScroll = rememberScrollState()
     val mediaScroll = rememberScrollState()
@@ -185,28 +187,29 @@ fun ProfileBottomSheet(
     val beaconsScroll = rememberScrollState()
     val membersScroll = rememberScrollState()
     val sheetOnDismiss = LocalSheetOnDismissRequest.current
-    val profileScrollAtTop = remember(
-        pagerState,
-        visibleTabs,
-        timelineScroll,
-        mediaScroll,
-        linksScroll,
-        filesScroll,
-        beaconsScroll,
-        membersScroll,
-    ) {
-        {
-            when (visibleTabs.getOrNull(pagerState.currentPage)) {
-                ProfileSheetTab.Timeline -> timelineScroll.isSheetScrollAtTop()
-                ProfileSheetTab.Media -> mediaScroll.isSheetScrollAtTop()
-                ProfileSheetTab.Links -> linksScroll.isSheetScrollAtTop()
-                ProfileSheetTab.Files -> filesScroll.isSheetScrollAtTop()
-                ProfileSheetTab.Beacons -> beaconsScroll.isSheetScrollAtTop()
-                ProfileSheetTab.Members -> membersScroll.isSheetScrollAtTop()
-                null -> true
+    val profileScrollAtTop =
+        remember(
+            pagerState,
+            visibleTabs,
+            timelineScroll,
+            mediaScroll,
+            linksScroll,
+            filesScroll,
+            beaconsScroll,
+            membersScroll,
+        ) {
+            {
+                when (visibleTabs.getOrNull(pagerState.currentPage)) {
+                    ProfileSheetTab.Timeline -> timelineScroll.isSheetScrollAtTop()
+                    ProfileSheetTab.Media -> mediaScroll.isSheetScrollAtTop()
+                    ProfileSheetTab.Links -> linksScroll.isSheetScrollAtTop()
+                    ProfileSheetTab.Files -> filesScroll.isSheetScrollAtTop()
+                    ProfileSheetTab.Beacons -> beaconsScroll.isSheetScrollAtTop()
+                    ProfileSheetTab.Members -> membersScroll.isSheetScrollAtTop()
+                    null -> true
+                }
             }
         }
-    }
     val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
     var selectedMediaForPreview by remember { mutableStateOf<ProfileSheetMedia?>(null) }
@@ -236,7 +239,12 @@ fun ProfileBottomSheet(
     }
     val selectedUserId = state.userId?.trim().orEmpty()
     val connectionRepository = remember { ConnectionRepository() }
-    val appViewerUserId = AppDataManager.currentUser.collectAsState().value?.id?.trim()
+    val appViewerUserId =
+        AppDataManager.currentUser
+            .collectAsState()
+            .value
+            ?.id
+            ?.trim()
     val effectiveViewerUserId = state.viewerUserId?.trim().takeIf { !it.isNullOrBlank() } ?: appViewerUserId
     var connectionLocalMessages by remember(state.connectionId, selectedUserId, effectiveViewerUserId) {
         mutableStateOf<List<ProfileSheetLocalMessage>>(emptyList())
@@ -271,80 +279,90 @@ fun ProfileBottomSheet(
     LaunchedEffect(selectedUserId, state.connectionId, effectiveViewerUserId) {
         profileTabsHydrating = true
         try {
-        val connectionId = state.connectionId?.trim().orEmpty()
-        if (connectionId.isBlank()) {
-            connectionLocalMessages = emptyList()
-            connectionChatId = null
-            connectionTabMedia = emptyList()
-            connectionTabFiles = emptyList()
-            connectionTabBeacons = emptyList()
-            return@LaunchedEffect
-        }
-
-        val fetched = if (!effectiveViewerUserId.isNullOrBlank()) {
-            runCatching {
-                if (state.isGroup) {
-                    connectionRepository.fetchDecryptedMessagesForChat(
-                        chatId = connectionId,
-                        viewerUserId = effectiveViewerUserId,
-                    )
-                } else {
-                    connectionRepository.fetchDecryptedMessagesForProfileConnection(
-                        connectionId = connectionId,
-                        viewerUserId = effectiveViewerUserId,
-                    )
-                }
-            }.getOrDefault(emptyList())
-        } else {
-            emptyList()
-        }
-
-        connectionLocalMessages = fetched
-            .sortedBy { it.timeCreated }
-            .map { msg ->
-                ProfileSheetLocalMessage(
-                    id = msg.id,
-                    content = msg.content,
-                    messageType = msg.messageType,
-                    timestamp = formatProfileSheetDate(msg.timeCreated),
-                    metadata = msg.metadata,
-                    sortEpochMs = msg.timeCreated,
-                )
+            val connectionId = state.connectionId?.trim().orEmpty()
+            if (connectionId.isBlank()) {
+                connectionLocalMessages = emptyList()
+                connectionChatId = null
+                connectionTabMedia = emptyList()
+                connectionTabFiles = emptyList()
+                connectionTabBeacons = emptyList()
+                return@LaunchedEffect
             }
 
-        val tabsPayload = runCatching {
-            connectionRepository.fetchConnectionTabs(connectionId).getOrNull()
-        }.getOrNull()
-        connectionChatId = tabsPayload?.chatId
+            val fetched =
+                if (!effectiveViewerUserId.isNullOrBlank()) {
+                    runCatching {
+                        if (state.isGroup) {
+                            connectionRepository.fetchDecryptedMessagesForChat(
+                                chatId = connectionId,
+                                viewerUserId = effectiveViewerUserId,
+                            )
+                        } else {
+                            connectionRepository.fetchDecryptedMessagesForProfileConnection(
+                                connectionId = connectionId,
+                                viewerUserId = effectiveViewerUserId,
+                            )
+                        }
+                    }.getOrDefault(emptyList())
+                } else {
+                    emptyList()
+                }
 
-        connectionTabMedia = tabsPayload?.media
-            ?.mapNotNull { it.toProfileSheetMediaFromTab() }
-            .orEmpty()
-            .sortedByDescending { profileMediaSortEpoch(it) }
-        val decryptedById = connectionLocalMessages.associateBy { it.id }
-        connectionTabFiles = tabsPayload?.files?.mapNotNull { tab ->
-            decryptedById[tab.id]?.toProfileSheetFile()
-                ?: tab.toProfileSheetFileFromTab().takeIf { it.canOpenProfileFile() }
-        }.orEmpty()
-        connectionTabBeacons = tabsPayload?.beacons.orEmpty().map { tab ->
-            decryptedById[tab.id] ?: ProfileSheetLocalMessage(
-                id = tab.id,
-                content = tab.content,
-                messageType = tab.messageType,
-                timestamp = formatProfileSheetDate(tab.timeCreated),
-                metadata = tab.metadata,
-                sortEpochMs = tab.timeCreated,
-            )
-        }
+            connectionLocalMessages =
+                fetched
+                    .sortedBy { it.timeCreated }
+                    .map { msg ->
+                        ProfileSheetLocalMessage(
+                            id = msg.id,
+                            content = msg.content,
+                            messageType = msg.messageType,
+                            timestamp = formatProfileSheetDate(msg.timeCreated),
+                            metadata = msg.metadata,
+                            sortEpochMs = msg.timeCreated,
+                        )
+                    }
+
+            val tabsPayload =
+                runCatching {
+                    connectionRepository.fetchConnectionTabs(connectionId).getOrNull()
+                }.getOrNull()
+            connectionChatId = tabsPayload?.chatId
+
+            connectionTabMedia =
+                tabsPayload
+                    ?.media
+                    ?.mapNotNull { it.toProfileSheetMediaFromTab() }
+                    .orEmpty()
+                    .sortedByDescending { profileMediaSortEpoch(it) }
+            val decryptedById = connectionLocalMessages.associateBy { it.id }
+            connectionTabFiles =
+                tabsPayload
+                    ?.files
+                    ?.mapNotNull { tab ->
+                        decryptedById[tab.id]?.toProfileSheetFile()
+                            ?: tab.toProfileSheetFileFromTab().takeIf { it.canOpenProfileFile() }
+                    }.orEmpty()
+            connectionTabBeacons =
+                tabsPayload?.beacons.orEmpty().map { tab ->
+                    decryptedById[tab.id] ?: ProfileSheetLocalMessage(
+                        id = tab.id,
+                        content = tab.content,
+                        messageType = tab.messageType,
+                        timestamp = formatProfileSheetDate(tab.timeCreated),
+                        metadata = tab.metadata,
+                        sortEpochMs = tab.timeCreated,
+                    )
+                }
         } finally {
             profileTabsHydrating = false
         }
     }
 
-    val profileLocalMessages = remember(state.localMessages, connectionLocalMessages) {
-        val chosen = if (connectionLocalMessages.isNotEmpty()) connectionLocalMessages else state.localMessages
-        chosen.filterNot { it.content.isLikelyWireEncrypted() }
-    }
+    val profileLocalMessages =
+        remember(state.localMessages, connectionLocalMessages) {
+            val chosen = if (connectionLocalMessages.isNotEmpty()) connectionLocalMessages else state.localMessages
+            chosen.filterNot { it.content.isLikelyWireEncrypted() }
+        }
 
     // Hydrate legacy profile data for the Timeline subtab whenever both ids are known.
     val repository = remember { SupabaseRepository() }
@@ -376,11 +394,12 @@ fun ProfileBottomSheet(
         legacyProfile = repository.getCachedUserPublicProfile(uid)
         legacyLoading = legacyProfile == null
         legacyError = null
-        val result = runCatching {
-            withContext(Dispatchers.Default) {
-                repository.refreshUserPublicProfile(effectiveViewerUserId, uid)
+        val result =
+            runCatching {
+                withContext(Dispatchers.Default) {
+                    repository.refreshUserPublicProfile(effectiveViewerUserId, uid)
+                }
             }
-        }
         val refreshed = result.getOrNull()
         if (refreshed != null) {
             legacyProfile = refreshed
@@ -395,11 +414,12 @@ fun ProfileBottomSheet(
     LaunchedEffect(proximityEncounterEpoch, state.userId, effectiveViewerUserId) {
         if (proximityEncounterEpoch <= 0L) return@LaunchedEffect
         val uid = state.userId?.trim() ?: return@LaunchedEffect
-        val refreshed = runCatching {
-            withContext(Dispatchers.Default) {
-                repository.refreshUserPublicProfile(effectiveViewerUserId, uid)
-            }
-        }.getOrNull()
+        val refreshed =
+            runCatching {
+                withContext(Dispatchers.Default) {
+                    repository.refreshUserPublicProfile(effectiveViewerUserId, uid)
+                }
+            }.getOrNull()
         if (refreshed != null) {
             legacyProfile = refreshed
             legacyError = null
@@ -407,18 +427,20 @@ fun ProfileBottomSheet(
         }
     }
 
-    val timelineTargetType = if (state.isGroup) {
-        "chat"
-    } else if (!state.userId.isNullOrBlank()) {
-        "user"
-    } else {
-        null
-    }
-    val timelineTargetId = if (state.isGroup) {
-        state.connectionId?.trim()
-    } else {
-        state.userId?.trim()
-    }?.takeIf { it.isNotEmpty() }
+    val timelineTargetType =
+        if (state.isGroup) {
+            "chat"
+        } else if (!state.userId.isNullOrBlank()) {
+            "user"
+        } else {
+            null
+        }
+    val timelineTargetId =
+        if (state.isGroup) {
+            state.connectionId?.trim()
+        } else {
+            state.userId?.trim()
+        }?.takeIf { it.isNotEmpty() }
     var profileTimeline by remember(timelineTargetType, timelineTargetId) {
         mutableStateOf<ProfileTimelinePayload?>(null)
     }
@@ -439,11 +461,12 @@ fun ProfileBottomSheet(
             return@LaunchedEffect
         }
         profileTimeline = repository.getCachedProfileTimeline(type, id)
-        val refreshed = runCatching {
-            withContext(Dispatchers.Default) {
-                repository.refreshProfileTimeline(type, id)
-            }
-        }.getOrNull()
+        val refreshed =
+            runCatching {
+                withContext(Dispatchers.Default) {
+                    repository.refreshProfileTimeline(type, id)
+                }
+            }.getOrNull()
         if (refreshed != null) {
             profileTimeline = refreshed
             AppDataManager.persistProfileTimelineCaches()
@@ -454,11 +477,12 @@ fun ProfileBottomSheet(
         if (proximityEncounterEpoch <= 0L) return@LaunchedEffect
         val type = timelineTargetType ?: return@LaunchedEffect
         val id = timelineTargetId ?: return@LaunchedEffect
-        val refreshed = runCatching {
-            withContext(Dispatchers.Default) {
-                repository.refreshProfileTimeline(type, id)
-            }
-        }.getOrNull()
+        val refreshed =
+            runCatching {
+                withContext(Dispatchers.Default) {
+                    repository.refreshProfileTimeline(type, id)
+                }
+            }.getOrNull()
         if (refreshed != null) {
             profileTimeline = refreshed
             AppDataManager.persistProfileTimelineCaches()
@@ -473,16 +497,17 @@ fun ProfileBottomSheet(
             scope.launch {
                 journalPosting = true
                 journalError = null
-                val refreshed = runCatching {
-                    withContext(Dispatchers.Default) {
-                        repository.createProfileTimelineJournalEntry(
-                            targetType = type,
-                            targetId = id,
-                            body = text,
-                            visibility = journalVisibility,
-                        )
-                    }
-                }.getOrNull()
+                val refreshed =
+                    runCatching {
+                        withContext(Dispatchers.Default) {
+                            repository.createProfileTimelineJournalEntry(
+                                targetType = type,
+                                targetId = id,
+                                body = text,
+                                visibility = journalVisibility,
+                            )
+                        }
+                    }.getOrNull()
                 if (refreshed != null) {
                     profileTimeline = refreshed
                     journalText = ""
@@ -511,15 +536,16 @@ fun ProfileBottomSheet(
             scope.launch {
                 mutatingJournalIds = mutatingJournalIds + entryId
                 journalError = null
-                val refreshed = runCatching {
-                    withContext(Dispatchers.Default) {
-                        repository.updateProfileTimelineJournalEntry(
-                            id = entryId,
-                            body = text,
-                            visibility = editingJournalVisibility,
-                        )
-                    }
-                }.getOrNull()
+                val refreshed =
+                    runCatching {
+                        withContext(Dispatchers.Default) {
+                            repository.updateProfileTimelineJournalEntry(
+                                id = entryId,
+                                body = text,
+                                visibility = editingJournalVisibility,
+                            )
+                        }
+                    }.getOrNull()
                 if (refreshed != null) {
                     profileTimeline = refreshed
                     cancelEditJournalEntry()
@@ -536,11 +562,12 @@ fun ProfileBottomSheet(
             scope.launch {
                 mutatingJournalIds = mutatingJournalIds + entryId
                 journalError = null
-                val refreshed = runCatching {
-                    withContext(Dispatchers.Default) {
-                        repository.deleteProfileTimelineJournalEntry(entryId)
-                    }
-                }.getOrNull()
+                val refreshed =
+                    runCatching {
+                        withContext(Dispatchers.Default) {
+                            repository.deleteProfileTimelineJournalEntry(entryId)
+                        }
+                    }.getOrNull()
                 if (refreshed != null) {
                     profileTimeline = refreshed
                     if (editingJournalId == entryId) cancelEditJournalEntry()
@@ -553,52 +580,59 @@ fun ProfileBottomSheet(
         }
     }
 
-    val localMediaMessages = remember(profileLocalMessages) {
-        profileLocalMessages.filter {
-            val type = it.messageType.lowercase()
-            type == "image" ||
-                type == "audio" ||
-                it.hasMetadataMediaUrl()
+    val localMediaMessages =
+        remember(profileLocalMessages) {
+            profileLocalMessages.filter {
+                val type = it.messageType.lowercase()
+                type == "image" ||
+                    type == "audio" ||
+                    it.hasMetadataMediaUrl()
+            }
         }
-    }
-    val localFileMessages = remember(profileLocalMessages) {
-        profileLocalMessages.filter {
-            val type = it.messageType.lowercase()
-            type == "file" ||
-                it.hasMetadataAttachmentV1() ||
-                it.content.startsWith(AttachmentCrypto.ENVELOPE_PREFIX)
+    val localFileMessages =
+        remember(profileLocalMessages) {
+            profileLocalMessages.filter {
+                val type = it.messageType.lowercase()
+                type == "file" ||
+                    it.hasMetadataAttachmentV1() ||
+                    it.content.startsWith(AttachmentCrypto.ENVELOPE_PREFIX)
+            }
         }
-    }
-    val localLinkMessages = remember(profileLocalMessages) {
-        profileLocalMessages.filter {
-            it.messageType == "text" &&
-                (it.content.contains("http://") || it.content.contains("https://"))
+    val localLinkMessages =
+        remember(profileLocalMessages) {
+            profileLocalMessages.filter {
+                it.messageType == "text" &&
+                    (it.content.contains("http://") || it.content.contains("https://"))
+            }
         }
-    }
-    val localBeaconMessages = remember(profileLocalMessages, connectionTabBeacons) {
-        val fromLocal = profileLocalMessages.filter { it.messageType.equals("beacon", ignoreCase = true) }
-        val localIds = fromLocal.map { it.id }.toSet()
-        (fromLocal + connectionTabBeacons.filter { it.id !in localIds })
-            .distinctBy { it.id }
-    }
+    val localBeaconMessages =
+        remember(profileLocalMessages, connectionTabBeacons) {
+            val fromLocal = profileLocalMessages.filter { it.messageType.equals("beacon", ignoreCase = true) }
+            val localIds = fromLocal.map { it.id }.toSet()
+            (fromLocal + connectionTabBeacons.filter { it.id !in localIds })
+                .distinctBy { it.id }
+        }
 
-    val effectiveMedia = remember(localMediaMessages, connectionTabMedia, state.media) {
-        mergeProfileMedia(
-            localMediaMessages.mapNotNull { it.toProfileSheetMedia() } + connectionTabMedia + state.media,
-        )
-    }
-    val effectiveFiles = remember(localFileMessages, connectionTabFiles, state.files) {
-        val localFiles = localFileMessages.map { it.toProfileSheetFile() }
-        val localFileIds = localFiles.map { it.id }.toSet()
-        mergeProfileFiles(
-            localFiles +
-                connectionTabFiles.filter { it.id !in localFileIds } +
-                state.files,
-        )
-    }
-    val effectiveLinks = remember(localLinkMessages, state.links) {
-        mergeProfileLinks(extractLinksFromLocalMessages(localLinkMessages) + state.links)
-    }
+    val effectiveMedia =
+        remember(localMediaMessages, connectionTabMedia, state.media) {
+            mergeProfileMedia(
+                localMediaMessages.mapNotNull { it.toProfileSheetMedia() } + connectionTabMedia + state.media,
+            )
+        }
+    val effectiveFiles =
+        remember(localFileMessages, connectionTabFiles, state.files) {
+            val localFiles = localFileMessages.map { it.toProfileSheetFile() }
+            val localFileIds = localFiles.map { it.id }.toSet()
+            mergeProfileFiles(
+                localFiles +
+                    connectionTabFiles.filter { it.id !in localFileIds } +
+                    state.files,
+            )
+        }
+    val effectiveLinks =
+        remember(localLinkMessages, state.links) {
+            mergeProfileLinks(extractLinksFromLocalMessages(localLinkMessages) + state.links)
+        }
 
     LaunchedEffect(effectiveMedia, connectionChatId, effectiveViewerUserId) {
         resolvingMediaIds = emptySet()
@@ -635,7 +669,7 @@ fun ProfileBottomSheet(
         resolvedAudioLocalPaths = cachedAudioPaths
     }
 
-    val ensureProfileMediaResolved: (ProfileSheetMedia) -> Unit = ensure@ { media ->
+    val ensureProfileMediaResolved: (ProfileSheetMedia) -> Unit = ensure@{ media ->
         if (media.id in resolvingMediaIds) return@ensure
         if (resolvedMediaUrls.containsKey(media.id) ||
             resolvedMediaBitmaps.containsKey(media.id) ||
@@ -682,11 +716,12 @@ fun ProfileBottomSheet(
                 val chatId = connectionChatId?.trim().orEmpty()
                 val viewerId = effectiveViewerUserId?.trim().orEmpty()
                 if (chatId.isBlank() || viewerId.isBlank()) return@launch
-                val bytes = connectionRepository.downloadAndDecryptChatMedia(
-                    chatId = chatId,
-                    viewerUserId = viewerId,
-                    mediaUrl = url,
-                )
+                val bytes =
+                    connectionRepository.downloadAndDecryptChatMedia(
+                        chatId = chatId,
+                        viewerUserId = viewerId,
+                        mediaUrl = url,
+                    )
                 val plaintext = bytes?.takeIf { it.isNotEmpty() } ?: return@launch
                 writeProfileMediaVaultBytes(vaultId, plaintext, vaultExt)
                 if (media.mediaType == ProfileSheetMediaType.Image) {
@@ -694,8 +729,9 @@ fun ProfileBottomSheet(
                     profileMediaBitmapCache.put(cacheKey, bitmap)
                     resolvedMediaBitmaps = resolvedMediaBitmaps + (media.id to bitmap)
                 } else {
-                    val localPath = profileMediaVaultLocalPath(vaultId, vaultExt)
-                        ?: writeSecureChatAudioTempFile(media.id, plaintext, vaultExt)
+                    val localPath =
+                        profileMediaVaultLocalPath(vaultId, vaultExt)
+                            ?: writeSecureChatAudioTempFile(media.id, plaintext, vaultExt)
                     if (localPath.isNullOrBlank()) return@launch
                     profileMediaAudioPathCache.put(cacheKey, localPath)
                     resolvedAudioLocalPaths = resolvedAudioLocalPaths + (media.id to localPath)
@@ -706,59 +742,61 @@ fun ProfileBottomSheet(
         }
     }
 
-    val handleOpenLink: (String) -> Unit = remember(onOpenLink, uriHandler) {
-        { url ->
-            val normalized = normalizeExternalUri(url)
-            runCatching { uriHandler.openUri(normalized) }
-            onOpenLink?.invoke(normalized)
+    val handleOpenLink: (String) -> Unit =
+        remember(onOpenLink, uriHandler) {
+            { url ->
+                val normalized = normalizeExternalUri(url)
+                runCatching { uriHandler.openUri(normalized) }
+                onOpenLink?.invoke(normalized)
+            }
         }
-    }
     val handleDownloadFile: (ProfileSheetFile) -> Unit = { file ->
         if (file.id !in openingFileIds) {
             openingFileIds = openingFileIds + file.id
             scope.launch {
                 try {
-                var handled = false
-                val path = file.attachmentPath?.trim().orEmpty()
-                val key = file.attachmentKeyBase64?.trim().orEmpty()
-                val sha = file.attachmentSha256Base64?.trim().orEmpty()
-                val saveName = ensureProfileAttachmentFileName(file.fileName, file.mimeType)
+                    var handled = false
+                    val path = file.attachmentPath?.trim().orEmpty()
+                    val key = file.attachmentKeyBase64?.trim().orEmpty()
+                    val sha = file.attachmentSha256Base64?.trim().orEmpty()
+                    val saveName = ensureProfileAttachmentFileName(file.fileName, file.mimeType)
 
-                if (path.isNotBlank() && key.isNotBlank() && sha.isNotBlank()) {
-                    val plain = connectionRepository.downloadAttachmentPlaintext(
-                        path = path,
-                        fileMasterKeyBase64 = key,
-                        expectedSha256Base64 = sha,
-                    )
-                    if (plain != null) {
-                        handled = saveDecryptedAttachmentToDownloads(
-                            bytes = plain,
-                            fileName = saveName,
-                            mimeType = file.mimeType,
-                        ) != null
-                    }
-                }
-
-                // Encrypted chat-attachments must never be saved from a raw signed URL — that
-                // writes ciphertext to disk and Preview reports the file as corrupted.
-                val isEncryptedAttachment = path.isNotBlank()
-                if (!handled && !isEncryptedAttachment) {
-                    val directUrl = file.downloadUrl?.trim().orEmpty()
-                    if (directUrl.isNotBlank()) {
-                        val bytes = fetchImageBytesFromUrl(directUrl)
-                        if (bytes != null && bytes.isNotEmpty()) {
+                    if (path.isNotBlank() && key.isNotBlank() && sha.isNotBlank()) {
+                        val plain =
+                            connectionRepository.downloadAttachmentPlaintext(
+                                path = path,
+                                fileMasterKeyBase64 = key,
+                                expectedSha256Base64 = sha,
+                            )
+                        if (plain != null) {
                             handled = saveDecryptedAttachmentToDownloads(
-                                bytes = bytes,
+                                bytes = plain,
                                 fileName = saveName,
                                 mimeType = file.mimeType,
                             ) != null
                         }
                     }
-                }
 
-                if (!handled) {
-                    onDownloadFile?.invoke(file)
-                }
+                    // Encrypted chat-attachments must never be saved from a raw signed URL — that
+                    // writes ciphertext to disk and Preview reports the file as corrupted.
+                    val isEncryptedAttachment = path.isNotBlank()
+                    if (!handled && !isEncryptedAttachment) {
+                        val directUrl = file.downloadUrl?.trim().orEmpty()
+                        if (directUrl.isNotBlank()) {
+                            val bytes = fetchImageBytesFromUrl(directUrl)
+                            if (bytes != null && bytes.isNotEmpty()) {
+                                handled = saveDecryptedAttachmentToDownloads(
+                                    bytes = bytes,
+                                    fileName = saveName,
+                                    mimeType = file.mimeType,
+                                ) != null
+                            }
+                        }
+                    }
+
+                    if (!handled) {
+                        onDownloadFile?.invoke(file)
+                    }
                 } finally {
                     openingFileIds = openingFileIds - file.id
                 }
@@ -770,225 +808,235 @@ fun ProfileBottomSheet(
         onDismissRequest = sheetOnDismiss,
         scrollAtTop = profileScrollAtTop,
     ) {
-    val scrollOwnedByHost = LocalSheetScrollOwnedByHost.current
-    Box(modifier = Modifier.fillMaxWidth().fillMaxSize()) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .fillMaxHeight()
-            .background(sheetPageBackground())
-            .padding(horizontal = 20.dp)
-            .padding(top = 12.dp, bottom = 12.dp),
-    ) {
-        Text(
-            text = "Profile",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = GlassSheetTokens.OnOled(),
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp),
-        )
-        ProfileSheetHeader(
-            displayName = state.displayName,
-            subtitle = state.subtitle,
-            avatarUrl = state.avatarUrl,
-            userId = state.userId,
-            email = state.email ?: state.subtitle,
-            statusBadge = state.statusBadge,
-            onAvatarClick = onAvatarClick,
-            avatarUploading = avatarUploading,
-        )
+        val scrollOwnedByHost = LocalSheetScrollOwnedByHost.current
+        Box(modifier = Modifier.fillMaxWidth().fillMaxSize()) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight()
+                        .background(sheetPageBackground())
+                        .padding(horizontal = 20.dp)
+                        .padding(top = 12.dp, bottom = 12.dp),
+            ) {
+                Text(
+                    text = "Profile",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = GlassSheetTokens.OnOled(),
+                    textAlign = TextAlign.Center,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                )
+                ProfileSheetHeader(
+                    displayName = state.displayName,
+                    subtitle = state.subtitle,
+                    avatarUrl = state.avatarUrl,
+                    userId = state.userId,
+                    email = state.email ?: state.subtitle,
+                    statusBadge = state.statusBadge,
+                    onAvatarClick = onAvatarClick,
+                    avatarUploading = avatarUploading,
+                )
 
-        Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(16.dp))
 
-        ProfileActionGrid(
-            showNudge = state.canNudge,
-            showDisposableRoll = onOpenDisposableRoll != null && !state.connectionId.isNullOrBlank(),
-            onMessage = onMessage,
-            onNudge = onNudge,
-            onOpenDisposableRoll = onOpenDisposableRoll,
-        )
+                ProfileActionGrid(
+                    showNudge = state.canNudge,
+                    showDisposableRoll = onOpenDisposableRoll != null && !state.connectionId.isNullOrBlank(),
+                    onMessage = onMessage,
+                    onNudge = onNudge,
+                    onOpenDisposableRoll = onOpenDisposableRoll,
+                )
 
-        Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(18.dp))
 
-        ScrollableTabRow(
-            selectedTabIndex = pagerState.currentPage,
-            containerColor = GlassSheetTokens.OledBlack(),
-            contentColor = GlassSheetTokens.OnOled(),
-            edgePadding = 0.dp,
-        ) {
-            visibleTabs.forEachIndexed { index, tab ->
-                val selected = pagerState.currentPage == index
-                Tab(
-                    selected = selected,
-                    onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
-                    text = {
-                        Text(
-                            tab.label,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                ScrollableTabRow(
+                    selectedTabIndex = pagerState.currentPage,
+                    containerColor = GlassSheetTokens.OledBlack(),
+                    contentColor = GlassSheetTokens.OnOled(),
+                    edgePadding = 0.dp,
+                ) {
+                    visibleTabs.forEachIndexed { index, tab ->
+                        val selected = pagerState.currentPage == index
+                        Tab(
+                            selected = selected,
+                            onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                            text = {
+                                Text(
+                                    tab.label,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            },
+                            icon = {
+                                Icon(
+                                    tab.icon,
+                                    contentDescription = tab.label,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            },
+                            selectedContentColor = PrimaryBlue,
+                            unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                    },
-                    icon = {
-                        Icon(
-                            tab.icon,
-                            contentDescription = tab.label,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    },
-                    selectedContentColor = PrimaryBlue,
-                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        HorizontalDivider(
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-            thickness = 1.dp,
-        )
-
-        // Stop media preview / audio when leaving Media so tab switches never freeze the sheet.
-        LaunchedEffect(pagerState.currentPage) {
-            val tab = visibleTabs.getOrNull(pagerState.currentPage)
-            if (tab != ProfileSheetTab.Media && selectedMediaForPreview != null) {
-                selectedMediaForPreview = null
-            }
-        }
-
-        HorizontalPager(
-            state = pagerState,
-            // Fill remaining sheet height so each tab can scroll to its last row.
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            verticalAlignment = Alignment.Top,
-            pageSpacing = 14.dp,
-            userScrollEnabled = true,
-        ) { pageIndex ->
-            when (visibleTabs[pageIndex]) {
-                ProfileSheetTab.Timeline -> TimelinePanel(
-                    scrollState = timelineScroll,
-                    items = state.timeline,
-                    legacyProfile = legacyProfile,
-                    legacyLoading = legacyLoading,
-                    legacyError = legacyError,
-                    showLegacy = !state.userId.isNullOrBlank(),
-                    isGroup = state.isGroup,
-                    sharedInterests = profileTimeline?.sharedInterests.orEmpty(),
-                    journalEntries = profileTimeline?.journalEntries.orEmpty(),
-                    journalText = journalText,
-                    onJournalTextChange = { journalText = it.take(1_200) },
-                    journalVisibility = journalVisibility,
-                    onJournalVisibilityChange = { journalVisibility = it },
-                    journalPosting = journalPosting,
-                    journalError = journalError,
-                    onSubmitJournalEntry = submitJournalEntry,
-                    viewerUserId = effectiveViewerUserId,
-                    editingJournalId = editingJournalId,
-                    editingJournalText = editingJournalText,
-                    onEditingJournalTextChange = { editingJournalText = it.take(1_200) },
-                    editingJournalVisibility = editingJournalVisibility,
-                    onEditingJournalVisibilityChange = { editingJournalVisibility = it },
-                    mutatingJournalIds = mutatingJournalIds,
-                    onStartEditJournalEntry = startEditJournalEntry,
-                    onCancelEditJournalEntry = cancelEditJournalEntry,
-                    onSaveEditJournalEntry = saveEditJournalEntry,
-                    onDeleteJournalEntry = deleteJournalEntry,
-                )
-                ProfileSheetTab.Media -> MediaPanel(
-                    scrollState = mediaScroll,
-                    items = effectiveMedia,
-                    resolvedUrls = resolvedMediaUrls,
-                    resolvedBitmaps = resolvedMediaBitmaps,
-                    resolvedAudioLocalPaths = resolvedAudioLocalPaths,
-                    isLoading = profileTabsHydrating,
-                    resolvingMediaIds = resolvingMediaIds,
-                    onEnsureMediaResolved = ensureProfileMediaResolved,
-                    onOpenMedia = { media ->
-                        if (!media.isDisposableRollLocked()) {
-                            selectedMediaForPreview = media
-                        }
-                    },
-                )
-                ProfileSheetTab.Links -> LinksPanel(
-                    scrollState = linksScroll,
-                    items = effectiveLinks,
-                    onOpen = handleOpenLink,
-                )
-                ProfileSheetTab.Files -> FilesPanel(
-                    scrollState = filesScroll,
-                    items = effectiveFiles,
-                    openingFileIds = openingFileIds,
-                    onDownload = handleDownloadFile,
-                )
-                ProfileSheetTab.Beacons -> BeaconsPanel(
-                    scrollState = beaconsScroll,
-                    messages = localBeaconMessages,
-                    connectionId = state.connectionId,
-                    isGroup = state.isGroup,
-                    onOpenBeacon = { id ->
-                        onOpenBeacon?.invoke(id)
-                            ?: compose.project.click.click.deeplink.EventDeepLinkRouter.setPendingBeaconId(id)
-                    },
-                )
-                ProfileSheetTab.Members -> MembersPanel(
-                    scrollState = membersScroll,
-                    members = state.groupMembers,
-                    viewerUserId = state.viewerUserId,
-                    groupCreatorId = state.groupCreatorId,
-                    onAddMember = state.onAddMember,
-                    onRemoveMember = state.onRemoveMember,
-                    onMemberClick = state.onMemberClick,
-                )
-            }
-        }
-    }
-
-        val previewMedia = mediaPreviewModel
-        if (previewMedia != null) {
-            val media = previewMedia
-            val previewImageFade = remember(media.id) { Animatable(0f) }
-            val bitmapForPreview = resolvedMediaBitmaps[media.id]
-            LaunchedEffect(media.id, media.mediaType, mediaPreviewVisible, bitmapForPreview) {
-                when (media.mediaType) {
-                    ProfileSheetMediaType.Image -> {
-                        if (!mediaPreviewVisible) {
-                            previewImageFade.animateTo(
-                                0f,
-                                tween(280, easing = FastOutSlowInEasing),
-                            )
-                        } else if (bitmapForPreview != null) {
-                            previewImageFade.snapTo(0f)
-                            previewImageFade.animateTo(
-                                1f,
-                                tween(420, easing = FastOutSlowInEasing),
-                            )
-                        } else {
-                            previewImageFade.snapTo(0f)
-                        }
                     }
-                    else -> previewImageFade.snapTo(1f)
+                }
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                    thickness = 1.dp,
+                )
+
+                // Stop media preview / audio when leaving Media so tab switches never freeze the sheet.
+                LaunchedEffect(pagerState.currentPage) {
+                    val tab = visibleTabs.getOrNull(pagerState.currentPage)
+                    if (tab != ProfileSheetTab.Media && selectedMediaForPreview != null) {
+                        selectedMediaForPreview = null
+                    }
+                }
+
+                HorizontalPager(
+                    state = pagerState,
+                    // Fill remaining sheet height so each tab can scroll to its last row.
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                    verticalAlignment = Alignment.Top,
+                    pageSpacing = 14.dp,
+                    userScrollEnabled = true,
+                ) { pageIndex ->
+                    when (visibleTabs[pageIndex]) {
+                        ProfileSheetTab.Timeline ->
+                            TimelinePanel(
+                                scrollState = timelineScroll,
+                                items = state.timeline,
+                                legacyProfile = legacyProfile,
+                                legacyLoading = legacyLoading,
+                                legacyError = legacyError,
+                                showLegacy = !state.userId.isNullOrBlank(),
+                                isGroup = state.isGroup,
+                                sharedInterests = profileTimeline?.sharedInterests.orEmpty(),
+                                journalEntries = profileTimeline?.journalEntries.orEmpty(),
+                                journalText = journalText,
+                                onJournalTextChange = { journalText = it.take(1_200) },
+                                journalVisibility = journalVisibility,
+                                onJournalVisibilityChange = { journalVisibility = it },
+                                journalPosting = journalPosting,
+                                journalError = journalError,
+                                onSubmitJournalEntry = submitJournalEntry,
+                                viewerUserId = effectiveViewerUserId,
+                                editingJournalId = editingJournalId,
+                                editingJournalText = editingJournalText,
+                                onEditingJournalTextChange = { editingJournalText = it.take(1_200) },
+                                editingJournalVisibility = editingJournalVisibility,
+                                onEditingJournalVisibilityChange = { editingJournalVisibility = it },
+                                mutatingJournalIds = mutatingJournalIds,
+                                onStartEditJournalEntry = startEditJournalEntry,
+                                onCancelEditJournalEntry = cancelEditJournalEntry,
+                                onSaveEditJournalEntry = saveEditJournalEntry,
+                                onDeleteJournalEntry = deleteJournalEntry,
+                            )
+                        ProfileSheetTab.Media ->
+                            MediaPanel(
+                                scrollState = mediaScroll,
+                                items = effectiveMedia,
+                                resolvedUrls = resolvedMediaUrls,
+                                resolvedBitmaps = resolvedMediaBitmaps,
+                                resolvedAudioLocalPaths = resolvedAudioLocalPaths,
+                                isLoading = profileTabsHydrating,
+                                resolvingMediaIds = resolvingMediaIds,
+                                onEnsureMediaResolved = ensureProfileMediaResolved,
+                                onOpenMedia = { media ->
+                                    if (!media.isDisposableRollLocked()) {
+                                        selectedMediaForPreview = media
+                                    }
+                                },
+                            )
+                        ProfileSheetTab.Links ->
+                            LinksPanel(
+                                scrollState = linksScroll,
+                                items = effectiveLinks,
+                                onOpen = handleOpenLink,
+                            )
+                        ProfileSheetTab.Files ->
+                            FilesPanel(
+                                scrollState = filesScroll,
+                                items = effectiveFiles,
+                                openingFileIds = openingFileIds,
+                                onDownload = handleDownloadFile,
+                            )
+                        ProfileSheetTab.Beacons ->
+                            BeaconsPanel(
+                                scrollState = beaconsScroll,
+                                messages = localBeaconMessages,
+                                connectionId = state.connectionId,
+                                isGroup = state.isGroup,
+                                onOpenBeacon = { id ->
+                                    onOpenBeacon?.invoke(id)
+                                        ?: EventDeepLinkRouter.setPendingBeaconId(id)
+                                },
+                            )
+                        ProfileSheetTab.Members ->
+                            MembersPanel(
+                                scrollState = membersScroll,
+                                members = state.groupMembers,
+                                viewerUserId = state.viewerUserId,
+                                groupCreatorId = state.groupCreatorId,
+                                onAddMember = state.onAddMember,
+                                onRemoveMember = state.onRemoveMember,
+                                onMemberClick = state.onMemberClick,
+                            )
+                    }
                 }
             }
-            GlassFullscreenMediaOverlay(
-                visible = mediaPreviewVisible,
-                onDismissRequest = { selectedMediaForPreview = null },
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                val previewShape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner)
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 22.dp)
-                        .clip(previewShape)
-                        .border(1.dp, GlassSheetTokens.GlassBorder(), previewShape),
-                    shape = previewShape,
-                    color = GlassSheetTokens.OledBlack(),
-                    tonalElevation = 0.dp,
+
+            val previewMedia = mediaPreviewModel
+            if (previewMedia != null) {
+                val media = previewMedia
+                val previewImageFade = remember(media.id) { Animatable(0f) }
+                val bitmapForPreview = resolvedMediaBitmaps[media.id]
+                LaunchedEffect(media.id, media.mediaType, mediaPreviewVisible, bitmapForPreview) {
+                    when (media.mediaType) {
+                        ProfileSheetMediaType.Image -> {
+                            if (!mediaPreviewVisible) {
+                                previewImageFade.animateTo(
+                                    0f,
+                                    tween(280, easing = FastOutSlowInEasing),
+                                )
+                            } else if (bitmapForPreview != null) {
+                                previewImageFade.snapTo(0f)
+                                previewImageFade.animateTo(
+                                    1f,
+                                    tween(420, easing = FastOutSlowInEasing),
+                                )
+                            } else {
+                                previewImageFade.snapTo(0f)
+                            }
+                        }
+                        else -> previewImageFade.snapTo(1f)
+                    }
+                }
+                GlassFullscreenMediaOverlay(
+                    visible = mediaPreviewVisible,
+                    onDismissRequest = { selectedMediaForPreview = null },
+                    modifier = Modifier.fillMaxSize(),
                 ) {
+                    val previewShape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner)
+                    Surface(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 22.dp)
+                                .clip(previewShape)
+                                .border(1.dp, GlassSheetTokens.GlassBorder(), previewShape),
+                        shape = previewShape,
+                        color = GlassSheetTokens.OledBlack(),
+                        tonalElevation = 0.dp,
+                    ) {
                         Column(
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -1001,12 +1049,13 @@ fun ProfileBottomSheet(
                                         bitmap = bitmap,
                                         contentDescription = null,
                                         contentScale = ContentScale.Fit,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .heightIn(max = 360.dp)
-                                            .graphicsLayer { alpha = previewImageFade.value }
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(max = 360.dp)
+                                                .graphicsLayer { alpha = previewImageFade.value }
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceVariant),
                                     )
                                 } else {
                                     AsyncImage(
@@ -1030,19 +1079,21 @@ fun ProfileBottomSheet(
                                         onError = {
                                             scope.launch { previewImageFade.snapTo(0f) }
                                         },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .heightIn(max = 360.dp)
-                                            .graphicsLayer { alpha = previewImageFade.value }
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(max = 360.dp)
+                                                .graphicsLayer { alpha = previewImageFade.value }
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceVariant),
                                     )
                                 }
                             } else {
                                 val stream = resolvedMediaUrls[media.id] ?: media.mediaUrl
                                 val local = resolvedAudioLocalPaths[media.id]
-                                val canPlay = !local.isNullOrBlank() ||
-                                    (stream?.isNotBlank() == true && !media.isEncrypted)
+                                val canPlay =
+                                    !local.isNullOrBlank() ||
+                                        (stream?.isNotBlank() == true && !media.isEncrypted)
                                 if (canPlay) {
                                     ChatAudioBubble(
                                         mediaUrl = stream.orEmpty(),
@@ -1063,9 +1114,10 @@ fun ProfileBottomSheet(
                                         imageVector = Icons.Outlined.ErrorOutline,
                                         contentDescription = "Playback unavailable",
                                         tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier
-                                            .padding(vertical = 12.dp)
-                                            .size(40.dp),
+                                        modifier =
+                                            Modifier
+                                                .padding(vertical = 12.dp)
+                                                .size(40.dp),
                                     )
                                 }
                             }
@@ -1079,15 +1131,17 @@ fun ProfileBottomSheet(
                                         onClick = {
                                             scope.launch {
                                                 val url = (resolvedMediaUrls[media.id] ?: media.mediaUrl)?.trim().orEmpty()
-                                                if (url.isNotBlank() && media.isEncrypted &&
+                                                if (url.isNotBlank() &&
+                                                    media.isEncrypted &&
                                                     !connectionChatId.isNullOrBlank() &&
                                                     !effectiveViewerUserId.isNullOrBlank()
                                                 ) {
-                                                    val bytes = connectionRepository.downloadAndDecryptChatMedia(
-                                                        chatId = connectionChatId!!,
-                                                        viewerUserId = effectiveViewerUserId!!,
-                                                        mediaUrl = url,
-                                                    )
+                                                    val bytes =
+                                                        connectionRepository.downloadAndDecryptChatMedia(
+                                                            chatId = connectionChatId!!,
+                                                            viewerUserId = effectiveViewerUserId!!,
+                                                            mediaUrl = url,
+                                                        )
                                                     if (bytes != null && bytes.isNotEmpty()) {
                                                         saveChatImageToGallery(
                                                             imageUrl = url,
@@ -1108,21 +1162,23 @@ fun ProfileBottomSheet(
                                         onClick = {
                                             scope.launch {
                                                 val url = (resolvedMediaUrls[media.id] ?: media.mediaUrl)?.trim().orEmpty()
-                                                val ext = when {
-                                                    media.mimeType?.contains("png", ignoreCase = true) == true -> "png"
-                                                    media.mimeType?.contains("webp", ignoreCase = true) == true -> "webp"
-                                                    else -> "jpg"
-                                                }
+                                                val ext =
+                                                    when {
+                                                        media.mimeType?.contains("png", ignoreCase = true) == true -> "png"
+                                                        media.mimeType?.contains("webp", ignoreCase = true) == true -> "webp"
+                                                        else -> "jpg"
+                                                    }
                                                 if (url.isNotBlank()) {
                                                     if (media.isEncrypted &&
                                                         !connectionChatId.isNullOrBlank() &&
                                                         !effectiveViewerUserId.isNullOrBlank()
                                                     ) {
-                                                        val bytes = connectionRepository.downloadAndDecryptChatMedia(
-                                                            chatId = connectionChatId!!,
-                                                            viewerUserId = effectiveViewerUserId!!,
-                                                            mediaUrl = url,
-                                                        )
+                                                        val bytes =
+                                                            connectionRepository.downloadAndDecryptChatMedia(
+                                                                chatId = connectionChatId!!,
+                                                                viewerUserId = effectiveViewerUserId!!,
+                                                                mediaUrl = url,
+                                                            )
                                                         if (bytes != null && bytes.isNotEmpty()) {
                                                             shareDecryptedImage(bytes, "click_share.$ext")
                                                         }
@@ -1147,9 +1203,9 @@ fun ProfileBottomSheet(
                             }
                         }
                     }
+                }
             }
         }
-    }
     }
 }
 
@@ -1270,7 +1326,10 @@ data class ProfileSheetFile(
     val attachmentSha256Base64: String? = null,
 )
 
-enum class ProfileSheetTab(val label: String, val icon: ImageVector) {
+enum class ProfileSheetTab(
+    val label: String,
+    val icon: ImageVector,
+) {
     Timeline("Timeline", Icons.Outlined.History),
     Media("Media", Icons.Outlined.Image),
     Links("Links", Icons.Outlined.Link),
@@ -1295,18 +1354,20 @@ private fun ProfileSheetHeader(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            modifier = Modifier
-                .size(78.dp)
-                .clickable(enabled = onAvatarClick != null && !avatarUploading) {
-                    onAvatarClick?.invoke()
-                },
+            modifier =
+                Modifier
+                    .size(78.dp)
+                    .clickable(enabled = onAvatarClick != null && !avatarUploading) {
+                        onAvatarClick?.invoke()
+                    },
             contentAlignment = Alignment.Center,
         ) {
             Box(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .size(68.dp)
-                    .clip(CircleShape),
+                modifier =
+                    Modifier
+                        .align(Alignment.Center)
+                        .size(68.dp)
+                        .clip(CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 ConnectionListUserAvatarFace(
@@ -1319,11 +1380,12 @@ private fun ProfileSheetHeader(
             }
             if (avatarUploading) {
                 Box(
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .size(68.dp)
-                        .clip(CircleShape)
-                        .background(GlassSheetTokens.OledBlack().copy(alpha = 0.55f)),
+                    modifier =
+                        Modifier
+                            .align(Alignment.Center)
+                            .size(68.dp)
+                            .clip(CircleShape)
+                            .background(GlassSheetTokens.OledBlack().copy(alpha = 0.55f)),
                     contentAlignment = Alignment.Center,
                 ) {
                     CircularProgressIndicator(
@@ -1333,11 +1395,12 @@ private fun ProfileSheetHeader(
                 }
             } else if (onAvatarClick != null) {
                 Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .size(30.dp)
-                        .clip(CircleShape)
-                        .background(PrimaryBlue),
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(30.dp)
+                            .clip(CircleShape)
+                            .background(PrimaryBlue),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -1449,10 +1512,11 @@ private fun ProfileActionCard(
         contentPadding = 0.dp,
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 52.dp)
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 52.dp)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
@@ -1507,13 +1571,14 @@ private fun TimelinePanel(
 ) {
     val hasTimelineItems = items.isNotEmpty()
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .fillMaxSize()
-            // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
-            // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
-            .verticalScroll(scrollState)
-            .padding(top = 12.dp, bottom = 48.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .fillMaxSize()
+                // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
+                // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
+                .verticalScroll(scrollState)
+                .padding(top = 12.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         JournalComposerCard(
@@ -1590,12 +1655,13 @@ private fun JournalComposerCard(
 ) {
     val shape = RoundedCornerShape(18.dp)
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .border(1.dp, PrimaryBlue.copy(alpha = 0.28f), shape)
-            .background(GlassSheetTokens.GlassSurface())
-            .padding(14.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .border(1.dp, PrimaryBlue.copy(alpha = 0.28f), shape)
+                .background(GlassSheetTokens.GlassSurface())
+                .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text(
@@ -1639,10 +1705,11 @@ private fun JournalComposerCard(
                 enabled = addEnabled,
                 shape = addShape,
                 color = if (addEnabled) PrimaryBlue.copy(alpha = 0.18f) else Color.Transparent,
-                border = BorderStroke(
-                    1.dp,
-                    if (addEnabled) PrimaryBlue.copy(alpha = 0.7f) else GlassSheetTokens.GlassBorder(),
-                ),
+                border =
+                    BorderStroke(
+                        1.dp,
+                        if (addEnabled) PrimaryBlue.copy(alpha = 0.7f) else GlassSheetTokens.GlassBorder(),
+                    ),
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
@@ -1686,10 +1753,11 @@ private fun ProfileVisibilityPill(
         onClick = onClick,
         shape = shape,
         color = if (selected) PrimaryBlue.copy(alpha = 0.18f) else Color.Transparent,
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            if (selected) PrimaryBlue.copy(alpha = 0.7f) else GlassSheetTokens.GlassBorder(),
-        ),
+        border =
+            androidx.compose.foundation.BorderStroke(
+                1.dp,
+                if (selected) PrimaryBlue.copy(alpha = 0.7f) else GlassSheetTokens.GlassBorder(),
+            ),
     ) {
         Text(
             text = label,
@@ -1703,10 +1771,11 @@ private fun ProfileVisibilityPill(
 
 @Composable
 private fun SharedInterestsTimelineSection(items: List<GroupSharedInterest>) {
-    val grouped = items
-        .groupBy { it.count }
-        .entries
-        .sortedByDescending { entry -> entry.key }
+    val grouped =
+        items
+            .groupBy { it.count }
+            .entries
+            .sortedByDescending { entry -> entry.key }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             text = "Common ground",
@@ -1720,20 +1789,22 @@ private fun SharedInterestsTimelineSection(items: List<GroupSharedInterest>) {
             val tags = entry.value
             val shape = RoundedCornerShape(16.dp)
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(shape)
-                    .border(1.dp, GlassSheetTokens.GlassBorder(), shape)
-                    .background(GlassSheetTokens.GlassSurface())
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(shape)
+                        .border(1.dp, GlassSheetTokens.GlassBorder(), shape)
+                        .background(GlassSheetTokens.GlassSurface())
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    text = if (count == tags.firstOrNull()?.userIds?.size && count > 2) {
-                        "$count members share"
-                    } else {
-                        "$count people share"
-                    },
+                    text =
+                        if (count == tags.firstOrNull()?.userIds?.size && count > 2) {
+                            "$count members share"
+                        } else {
+                            "$count people share"
+                        },
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = PrimaryBlue,
@@ -1773,12 +1844,13 @@ private fun JournalTimelineRow(
 ) {
     val shape = RoundedCornerShape(16.dp)
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .border(1.dp, GlassSheetTokens.GlassBorder(), shape)
-            .background(GlassSheetTokens.GlassSurface())
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .border(1.dp, GlassSheetTokens.GlassBorder(), shape)
+                .background(GlassSheetTokens.GlassSurface())
+                .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1860,26 +1932,29 @@ private fun JournalTimelineRow(
 private fun TimelineRow(item: ProfileSheetTimelineItem) {
     val rowShape = RoundedCornerShape(14.dp)
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(rowShape)
-            .border(1.dp, GlassSheetTokens.GlassBorder(), rowShape)
-            .background(GlassSheetTokens.GlassSurface())
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(rowShape)
+                .border(1.dp, GlassSheetTokens.GlassBorder(), rowShape)
+                .background(GlassSheetTokens.GlassSurface())
+                .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.Top,
     ) {
         Box(
-            modifier = Modifier
-                .width(32.dp)
-                .padding(top = 6.dp),
+            modifier =
+                Modifier
+                    .width(32.dp)
+                    .padding(top = 6.dp),
             contentAlignment = Alignment.TopCenter,
         ) {
             Box(
-                modifier = Modifier
-                    .size(12.dp)
-                    .clip(CircleShape)
-                    .border(2.dp, PrimaryBlue.copy(alpha = 0.35f), CircleShape)
-                    .background(PrimaryBlue),
+                modifier =
+                    Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .border(2.dp, PrimaryBlue.copy(alpha = 0.35f), CircleShape)
+                        .background(PrimaryBlue),
             )
         }
         Spacer(Modifier.width(4.dp))
@@ -1919,20 +1994,23 @@ private fun MediaPanel(
     onEnsureMediaResolved: (ProfileSheetMedia) -> Unit,
     onOpenMedia: (ProfileSheetMedia) -> Unit,
 ) {
-    val imageItems = items
-        .filter { it.mediaType == ProfileSheetMediaType.Image }
-        .sortedByDescending { profileMediaSortEpoch(it) }
-    val audioItems = items
-        .filter { it.mediaType == ProfileSheetMediaType.Audio }
-        .sortedByDescending { profileMediaSortEpoch(it) }
+    val imageItems =
+        items
+            .filter { it.mediaType == ProfileSheetMediaType.Image }
+            .sortedByDescending { profileMediaSortEpoch(it) }
+    val audioItems =
+        items
+            .filter { it.mediaType == ProfileSheetMediaType.Audio }
+            .sortedByDescending { profileMediaSortEpoch(it) }
     val imageRows = imageItems.chunked(3)
 
     if (items.isEmpty()) {
         if (isLoading) {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = 12.dp, start = 16.dp, end = 16.dp),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(top = 12.dp, start = 16.dp, end = 16.dp),
             ) {
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth(),
@@ -1948,12 +2026,13 @@ private fun MediaPanel(
                         repeat(3) {
                             val skelShape = RoundedCornerShape(14.dp)
                             Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(96.dp)
-                                    .clip(skelShape)
-                                    .border(1.dp, GlassSheetTokens.GlassBorder(), skelShape)
-                                    .background(GlassSheetTokens.GlassSurface()),
+                                modifier =
+                                    Modifier
+                                        .weight(1f)
+                                        .height(96.dp)
+                                        .clip(skelShape)
+                                        .border(1.dp, GlassSheetTokens.GlassBorder(), skelShape)
+                                        .background(GlassSheetTokens.GlassSurface()),
                             )
                         }
                     }
@@ -1971,13 +2050,14 @@ private fun MediaPanel(
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .fillMaxSize()
-            // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
-            // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
-            .verticalScroll(scrollState)
-            .padding(top = 12.dp, bottom = 48.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .fillMaxSize()
+                // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
+                // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
+                .verticalScroll(scrollState)
+                .padding(top = 12.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         imageRows.forEach { row ->
@@ -1988,16 +2068,25 @@ private fun MediaPanel(
                     val resolvedUrl = resolvedUrls[media.id] ?: media.mediaUrl
                     val thumbResolving = media.id in resolvingMediaIds
                     val thumbUnlocking = bitmap == null && thumbResolving
-                    val thumbReady = bitmap != null ||
-                        (!media.isEncrypted && !resolvedUrl.isNullOrBlank())
-                    val countdownLabel = remember(media.id, rollLocked) {
-                        media.disposableRollCountdownLabel()
-                    }
+                    val thumbReady =
+                        bitmap != null ||
+                            (!media.isEncrypted && !resolvedUrl.isNullOrBlank())
+                    val countdownLabel =
+                        remember(media.id, rollLocked) {
+                            media.disposableRollCountdownLabel()
+                        }
                     LaunchedEffect(media.id) {
                         if (!thumbReady) onEnsureMediaResolved(media)
                     }
                     val thumbReveal by animateFloatAsState(
-                        targetValue = if (thumbReady) 1f else if (thumbUnlocking) 0.55f else 0.38f,
+                        targetValue =
+                            if (thumbReady) {
+                                1f
+                            } else if (thumbUnlocking) {
+                                0.55f
+                            } else {
+                                0.38f
+                            },
                         animationSpec = tween(220, easing = FastOutSlowInEasing),
                         label = "media_thumb_${media.id}",
                     )
@@ -2011,22 +2100,22 @@ private fun MediaPanel(
                     val thumbShape = RoundedCornerShape(14.dp)
                     val thumbBorder = GlassSheetTokens.GlassBorder()
                     val thumbBg = GlassSheetTokens.GlassSurface()
-                    val thumbModifier = Modifier
-                        .weight(1f)
-                        .height(110.dp)
-                        .graphicsLayer {
-                            scaleX = thumbScale
-                            scaleY = thumbScale
-                            alpha = thumbReveal
-                        }
-                        .clip(thumbShape)
-                        .border(1.dp, thumbBorder, thumbShape)
-                        .background(thumbBg)
-                        .clickable(
-                            interactionSource = thumbInteraction,
-                            indication = ripple(bounded = true, radius = 52.dp),
-                            enabled = thumbReady && !rollLocked,
-                        ) { onOpenMedia(media) }
+                    val thumbModifier =
+                        Modifier
+                            .weight(1f)
+                            .height(110.dp)
+                            .graphicsLayer {
+                                scaleX = thumbScale
+                                scaleY = thumbScale
+                                alpha = thumbReveal
+                            }.clip(thumbShape)
+                            .border(1.dp, thumbBorder, thumbShape)
+                            .background(thumbBg)
+                            .clickable(
+                                interactionSource = thumbInteraction,
+                                indication = ripple(bounded = true, radius = 52.dp),
+                                enabled = thumbReady && !rollLocked,
+                            ) { onOpenMedia(media) }
                     Box(modifier = thumbModifier, contentAlignment = Alignment.Center) {
                         when {
                             bitmap != null -> {
@@ -2034,9 +2123,10 @@ private fun MediaPanel(
                                     bitmap = bitmap,
                                     contentDescription = null,
                                     contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .then(if (rollLocked) Modifier.blur(25.dp) else Modifier),
+                                    modifier =
+                                        Modifier
+                                            .fillMaxSize()
+                                            .then(if (rollLocked) Modifier.blur(25.dp) else Modifier),
                                 )
                             }
                             thumbUnlocking -> {
@@ -2052,18 +2142,20 @@ private fun MediaPanel(
                                     model = resolvedUrl,
                                     contentDescription = null,
                                     contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .then(if (rollLocked) Modifier.blur(25.dp) else Modifier),
+                                    modifier =
+                                        Modifier
+                                            .fillMaxSize()
+                                            .then(if (rollLocked) Modifier.blur(25.dp) else Modifier),
                                 )
                             }
                         }
                         if (rollLocked && countdownLabel != null) {
                             Box(
-                                modifier = Modifier
-                                    .matchParentSize()
-                                    .clip(thumbShape)
-                                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.28f)),
+                                modifier =
+                                    Modifier
+                                        .matchParentSize()
+                                        .clip(thumbShape)
+                                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.28f)),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Text(
@@ -2079,9 +2171,10 @@ private fun MediaPanel(
                 }
                 repeat(3 - row.size) {
                     Spacer(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(110.dp),
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .height(110.dp),
                     )
                 }
             }
@@ -2091,8 +2184,9 @@ private fun MediaPanel(
             audioItems.forEach { media ->
                 val stream = resolvedUrls[media.id] ?: media.mediaUrl
                 val local = resolvedAudioLocalPaths[media.id]
-                val canPlay = !local.isNullOrBlank() ||
-                    (stream?.isNotBlank() == true && !media.isEncrypted)
+                val canPlay =
+                    !local.isNullOrBlank() ||
+                        (stream?.isNotBlank() == true && !media.isEncrypted)
                 val resolvingAudio = media.id in resolvingMediaIds
                 LaunchedEffect(media.id) {
                     if (!canPlay) onEnsureMediaResolved(media)
@@ -2106,9 +2200,10 @@ private fun MediaPanel(
                     label = "media_audio_${media.id}",
                 )
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .graphicsLayer { alpha = rowReveal },
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .graphicsLayer { alpha = rowReveal },
                 ) {
                     when {
                         canPlay -> {
@@ -2130,12 +2225,13 @@ private fun MediaPanel(
                         unlockingAudio -> {
                             val lockShape = RoundedCornerShape(14.dp)
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(lockShape)
-                                    .border(1.dp, GlassSheetTokens.GlassBorder(), lockShape)
-                                    .background(GlassSheetTokens.GlassSurface())
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clip(lockShape)
+                                        .border(1.dp, GlassSheetTokens.GlassBorder(), lockShape)
+                                        .background(GlassSheetTokens.GlassSurface())
+                                        .padding(horizontal = 16.dp, vertical = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
@@ -2165,9 +2261,10 @@ private fun MediaPanel(
                                 imageVector = Icons.Outlined.ErrorOutline,
                                 contentDescription = "Voice note unavailable",
                                 tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier
-                                    .padding(vertical = 10.dp)
-                                    .size(36.dp),
+                                modifier =
+                                    Modifier
+                                        .padding(vertical = 10.dp)
+                                        .size(36.dp),
                             )
                         }
                     }
@@ -2187,7 +2284,7 @@ private fun BeaconsPanel(
 ) {
     val scope = rememberCoroutineScope()
     var recommendation by remember(connectionId) {
-        mutableStateOf<compose.project.click.click.data.api.ConnectionEventRecommendationDto?>(null)
+        mutableStateOf<ConnectionEventRecommendationDto?>(null)
     }
     var recommendationDismissed by remember(connectionId) { mutableStateOf(false) }
     var rsvpInProgress by remember { mutableStateOf(false) }
@@ -2195,78 +2292,101 @@ private fun BeaconsPanel(
     LaunchedEffect(connectionId, isGroup) {
         if (isGroup) return@LaunchedEffect
         val connId = connectionId?.trim()?.takeIf { it.isNotEmpty() } ?: return@LaunchedEffect
-        recommendation = withContext(Dispatchers.Default) {
-            runCatching {
-                compose.project.click.click.data.api.ApiClient()
-                    .getConnectionEventRecommendation(connId)
-                    .getOrNull()
-                    ?.recommendation
-            }.getOrNull()
-        }
+        recommendation =
+            withContext(Dispatchers.Default) {
+                runCatching {
+                    ApiClient()
+                        .getConnectionEventRecommendation(connId)
+                        .getOrNull()
+                        ?.recommendation
+                }.getOrNull()
+            }
     }
 
-    val previews = remember(messages) {
-        messages.mapNotNull { msg ->
-            val id = compose.project.click.click.data.models.beaconIdFromMetadata(msg.metadata)
-                ?: return@mapNotNull null
-            val meta = msg.metadata as? kotlinx.serialization.json.JsonObject
-            val title = compose.project.click.click.data.models.beaconTitleFromMetadata(msg.metadata)
-                ?: msg.content.removePrefix("Beacon:").trim().ifBlank { "Beacon" }
-            val typeRaw = compose.project.click.click.data.models.beaconTypeFromMetadata(msg.metadata)
-            val kind = compose.project.click.click.data.models.MapBeaconKind.fromRaw(typeRaw)
-            val schedule = meta?.get("schedule_label")?.let {
-                (it as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
-            }?.trim()?.takeIf { it.isNotEmpty() }
-            val description = meta?.get("description")?.let {
-                (it as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
-            }?.trim()?.takeIf { it.isNotEmpty() }
-            compose.project.click.click.ui.chat.BeaconPreviewModel(
-                beaconId = id,
-                title = title,
-                kindLabel = compose.project.click.click.ui.utils.beaconTypeDisplayLabel(typeRaw, kind),
-                kind = kind,
-                description = description,
-                scheduleLabel = schedule,
-                shareUrl = compose.project.click.click.data.models.beaconShareUrlFromMetadata(msg.metadata)
-                    ?: compose.project.click.click.events.buildEventShareUrl(id),
-                albumArtUrl = meta?.get("album_art_url")?.let {
-                    (it as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
-                },
-            )
-        }.distinctBy { it.beaconId }
-    }
+    val previews =
+        remember(messages) {
+            messages
+                .mapNotNull { msg ->
+                    val id =
+                        beaconIdFromMetadata(msg.metadata)
+                            ?: return@mapNotNull null
+                    val meta = msg.metadata as? kotlinx.serialization.json.JsonObject
+                    val title =
+                        beaconTitleFromMetadata(msg.metadata)
+                            ?: msg.content
+                                .removePrefix("Beacon:")
+                                .trim()
+                                .ifBlank { "Beacon" }
+                    val typeRaw =
+                        beaconTypeFromMetadata(msg.metadata)
+                    val kind =
+                        MapBeaconKind.fromRaw(typeRaw)
+                    val schedule =
+                        meta
+                            ?.get("schedule_label")
+                            ?.let {
+                                (it as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
+                            }?.trim()
+                            ?.takeIf { it.isNotEmpty() }
+                    val description =
+                        meta
+                            ?.get("description")
+                            ?.let {
+                                (it as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
+                            }?.trim()
+                            ?.takeIf { it.isNotEmpty() }
+                    BeaconPreviewModel(
+                        beaconId = id,
+                        title = title,
+                        kindLabel =
+                            beaconTypeDisplayLabel(typeRaw, kind),
+                        kind = kind,
+                        description = description,
+                        scheduleLabel = schedule,
+                        shareUrl =
+                            beaconShareUrlFromMetadata(msg.metadata)
+                                ?: buildEventShareUrl(id),
+                        albumArtUrl =
+                            meta?.get("album_art_url")?.let {
+                                (it as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
+                            },
+                    )
+                }.distinctBy { it.beaconId }
+        }
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .fillMaxSize()
-            // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
-            // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
-            .verticalScroll(scrollState)
-            .padding(top = 12.dp, bottom = 48.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .fillMaxSize()
+                // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
+                // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
+                .verticalScroll(scrollState)
+                .padding(top = 12.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (!isGroup) {
             val rec = recommendation
             if (rec != null && !recommendationDismissed) {
                 ConnectionEventRecommendationCard(
-                        recommendation = rec,
-                        rsvpInProgress = rsvpInProgress,
-                        onRsvp = {
-                            rsvpInProgress = true
-                            scope.launch(Dispatchers.Default) {
-                                runCatching {
-                                    compose.project.click.click.data.api.ApiClient().postBeaconRsvp(rec.beaconId)
-                                }
-                                withContext(Dispatchers.Main) {
-                                    recommendationDismissed = true
-                                    rsvpInProgress = false
-                                    onOpenBeacon(rec.beaconId)
-                                }
+                    recommendation = rec,
+                    rsvpInProgress = rsvpInProgress,
+                    onRsvp = {
+                        rsvpInProgress = true
+                        scope.launch(Dispatchers.Default) {
+                            runCatching {
+                                ApiClient()
+                                    .postBeaconRsvp(rec.beaconId)
                             }
-                        },
-                        onDismiss = { recommendationDismissed = true },
-                    )
+                            withContext(Dispatchers.Main) {
+                                recommendationDismissed = true
+                                rsvpInProgress = false
+                                onOpenBeacon(rec.beaconId)
+                            }
+                        }
+                    },
+                    onDismiss = { recommendationDismissed = true },
+                )
             }
         }
 
@@ -2278,7 +2398,7 @@ private fun BeaconsPanel(
             )
         } else {
             previews.forEach { model ->
-                compose.project.click.click.ui.chat.BeaconPreviewCard(
+                BeaconPreviewCard(
                     model = model,
                     onClick = { onOpenBeacon(model.beaconId) },
                 )
@@ -2302,13 +2422,14 @@ private fun LinksPanel(
         return
     }
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .fillMaxSize()
-            // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
-            // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
-            .verticalScroll(scrollState)
-            .padding(top = 12.dp, bottom = 48.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .fillMaxSize()
+                // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
+                // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
+                .verticalScroll(scrollState)
+                .padding(top = 12.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items.forEach { link ->
@@ -2316,13 +2437,14 @@ private fun LinksPanel(
             val cardBorder = GlassSheetTokens.GlassBorder()
             val cardBg = GlassSheetTokens.GlassSurface()
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(linkShape)
-                    .border(1.dp, cardBorder, linkShape)
-                    .background(cardBg)
-                    .clickable { onOpen(link.url) }
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(linkShape)
+                        .border(1.dp, cardBorder, linkShape)
+                        .background(cardBg)
+                        .clickable { onOpen(link.url) }
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(Icons.Outlined.Link, contentDescription = null, tint = PrimaryBlue)
@@ -2366,13 +2488,14 @@ private fun MembersPanel(
 ) {
     val isGroupAdmin = !viewerUserId.isNullOrBlank() && viewerUserId == groupCreatorId
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .fillMaxSize()
-            // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
-            // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
-            .verticalScroll(scrollState)
-            .padding(top = 12.dp, bottom = 48.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .fillMaxSize()
+                // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
+                // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
+                .verticalScroll(scrollState)
+                .padding(top = 12.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (onAddMember != null) {
@@ -2389,25 +2512,28 @@ private fun MembersPanel(
         } else {
             members.forEach { user ->
                 val label = user.name?.trim()?.takeIf { it.isNotEmpty() } ?: "Member"
-                val canRemove = isGroupAdmin &&
-                    onRemoveMember != null &&
-                    !viewerUserId.isNullOrBlank() &&
-                    user.id != viewerUserId
+                val canRemove =
+                    isGroupAdmin &&
+                        onRemoveMember != null &&
+                        !viewerUserId.isNullOrBlank() &&
+                        user.id != viewerUserId
                 ListItem(
                     headlineContent = {
                         Text(label, color = MaterialTheme.colorScheme.onSurface)
                     },
-                    supportingContent = user.email?.trim()?.takeIf { it.isNotEmpty() }?.let { email ->
-                        {
-                            Text(email, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    },
+                    supportingContent =
+                        user.email?.trim()?.takeIf { it.isNotEmpty() }?.let { email ->
+                            {
+                                Text(email, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        },
                     leadingContent = {
                         Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(PrimaryBlue.copy(alpha = 0.16f)),
+                            modifier =
+                                Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(PrimaryBlue.copy(alpha = 0.16f)),
                             contentAlignment = Alignment.Center,
                         ) {
                             ConnectionListUserAvatarFace(
@@ -2420,19 +2546,21 @@ private fun MembersPanel(
                             )
                         }
                     },
-                    trailingContent = if (canRemove) {
-                        {
-                            TextButton(onClick = { onRemoveMember?.invoke(user.id) }) {
-                                Text("Remove", color = MaterialTheme.colorScheme.error)
+                    trailingContent =
+                        if (canRemove) {
+                            {
+                                TextButton(onClick = { onRemoveMember?.invoke(user.id) }) {
+                                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                                }
                             }
-                        }
-                    } else {
-                        null
-                    },
+                        } else {
+                            null
+                        },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable { onMemberClick?.invoke(user.id) },
+                    modifier =
+                        Modifier
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { onMemberClick?.invoke(user.id) },
                 )
             }
         }
@@ -2455,26 +2583,28 @@ private fun FilesPanel(
         return
     }
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .fillMaxSize()
-            // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
-            // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
-            .verticalScroll(scrollState)
-            .padding(top = 12.dp, bottom = 48.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .fillMaxSize()
+                // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
+                // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
+                .verticalScroll(scrollState)
+                .padding(top = 12.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items.forEach { file ->
             val opening = file.id in openingFileIds
             val fileShape = RoundedCornerShape(14.dp)
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(fileShape)
-                    .border(1.dp, GlassSheetTokens.GlassBorder(), fileShape)
-                    .background(GlassSheetTokens.GlassSurface())
-                    .clickable(enabled = !opening) { onDownload(file) }
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(fileShape)
+                        .border(1.dp, GlassSheetTokens.GlassBorder(), fileShape)
+                        .background(GlassSheetTokens.GlassSurface())
+                        .clickable(enabled = !opening) { onDownload(file) }
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (opening) {
@@ -2522,7 +2652,11 @@ private fun FilesPanel(
 }
 
 @Composable
-private fun EmptyTabState(icon: ImageVector, title: String, body: String) {
+private fun EmptyTabState(
+    icon: ImageVector,
+    title: String,
+    body: String,
+) {
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -2552,11 +2686,12 @@ private fun EmptyTabState(icon: ImageVector, title: String, body: String) {
     }
 }
 
-private fun formatFileSize(bytes: Long): String = when {
-    bytes < 1_024 -> "$bytes B"
-    bytes < 1_024L * 1_024 -> "${bytes / 1_024} KB"
-    else -> "${(bytes * 10 / (1_024L * 1_024)) / 10.0} MB"
-}
+private fun formatFileSize(bytes: Long): String =
+    when {
+        bytes < 1_024 -> "$bytes B"
+        bytes < 1_024L * 1_024 -> "${bytes / 1_024} KB"
+        else -> "${(bytes * 10 / (1_024L * 1_024)) / 10.0} MB"
+    }
 
 private fun formatProfileSheetDate(epochMs: Long): String {
     if (epochMs <= 0L) return ""
@@ -2575,9 +2710,10 @@ private fun profileMediaCacheKey(
     chatId: String?,
     viewerUserId: String?,
 ): String {
-    val source = media.storagePath?.trim()?.takeIf { it.isNotEmpty() }
-        ?: media.mediaUrl?.trim()?.takeIf { it.isNotEmpty() }
-        ?: media.id
+    val source =
+        media.storagePath?.trim()?.takeIf { it.isNotEmpty() }
+            ?: media.mediaUrl?.trim()?.takeIf { it.isNotEmpty() }
+            ?: media.id
     return listOf(
         chatId?.trim().orEmpty(),
         viewerUserId?.trim().orEmpty(),
@@ -2591,7 +2727,10 @@ private suspend fun resolveProfileMediaUrl(
     media: ProfileSheetMedia,
     connectionRepository: ConnectionRepository,
 ): String? {
-    media.mediaUrl?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+    media.mediaUrl
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.let { return it }
     val path = media.storagePath?.trim()?.takeIf { it.isNotEmpty() } ?: return null
     profileSignedUrlCache.get(path)?.let { return it }
     val signed = connectionRepository.getSignedChatAttachmentUrl(path)?.trim()?.takeIf { it.isNotEmpty() }
@@ -2601,29 +2740,32 @@ private suspend fun resolveProfileMediaUrl(
     return signed
 }
 
-private fun shortProfileMonth(monthNumber: Int): String = when (monthNumber) {
-    1 -> "Jan"
-    2 -> "Feb"
-    3 -> "Mar"
-    4 -> "Apr"
-    5 -> "May"
-    6 -> "Jun"
-    7 -> "Jul"
-    8 -> "Aug"
-    9 -> "Sep"
-    10 -> "Oct"
-    11 -> "Nov"
-    else -> "Dec"
-}
+private fun shortProfileMonth(monthNumber: Int): String =
+    when (monthNumber) {
+        1 -> "Jan"
+        2 -> "Feb"
+        3 -> "Mar"
+        4 -> "Apr"
+        5 -> "May"
+        6 -> "Jun"
+        7 -> "Jul"
+        8 -> "Aug"
+        9 -> "Sep"
+        10 -> "Oct"
+        11 -> "Nov"
+        else -> "Dec"
+    }
 
 private fun ProfileSheetLocalMessage.toProfileSheetMedia(): ProfileSheetMedia? {
     val meta = metadata as? JsonObject ?: return null
-    val url = METADATA_URL_KEYS.firstNotNullOfOrNull { key ->
-        meta[key]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-    }
-    val path = METADATA_PATH_KEYS.firstNotNullOfOrNull { key ->
-        meta[key]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-    }
+    val url =
+        METADATA_URL_KEYS.firstNotNullOfOrNull { key ->
+            meta[key]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+        }
+    val path =
+        METADATA_PATH_KEYS.firstNotNullOfOrNull { key ->
+            meta[key]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+        }
     if (url == null && path == null) return null
     val lowerType = messageType.lowercase()
     val mediaType = if (lowerType == "audio") ProfileSheetMediaType.Audio else ProfileSheetMediaType.Image
@@ -2632,24 +2774,29 @@ private fun ProfileSheetLocalMessage.toProfileSheetMedia(): ProfileSheetMedia? {
         id = id,
         mediaUrl = url,
         storagePath = path,
-        mimeType = meta.stringAt("original_mime_type")
-            ?: meta.stringAt("mime_type")
-            ?: meta.stringAt("content_type"),
-        isEncrypted = Message(
-            id = id,
-            user_id = "",
-            content = content.trim().ifBlank { " " },
-            timeCreated = 0L,
-            messageType = lowerType,
-            metadata = metadata,
-        ).isEncryptedMedia(),
+        mimeType =
+            meta.stringAt("original_mime_type")
+                ?: meta.stringAt("mime_type")
+                ?: meta.stringAt("content_type"),
+        isEncrypted =
+            Message(
+                id = id,
+                user_id = "",
+                content = content.trim().ifBlank { " " },
+                timeCreated = 0L,
+                messageType = lowerType,
+                metadata = metadata,
+            ).isEncryptedMedia(),
         mediaType = mediaType,
-        captionedAt = content.takeUnless { it.isLikelyWireEncrypted() || it.startsWith("ccx:v1:") }
-            ?.takeIf { it.isNotBlank() },
+        captionedAt =
+            content
+                .takeUnless { it.isLikelyWireEncrypted() || it.startsWith("ccx:v1:") }
+                ?.takeIf { it.isNotBlank() },
         sortEpochMs = sortEpochMs,
-        durationSeconds = meta.intAt("duration_seconds")
-            ?: meta.intAt("durationSeconds")
-            ?: meta["duration"]?.jsonPrimitive?.intOrNull,
+        durationSeconds =
+            meta.intAt("duration_seconds")
+                ?: meta.intAt("durationSeconds")
+                ?: meta["duration"]?.jsonPrimitive?.intOrNull,
         isDisposableRoll = isDisposableRoll,
         collaborationTtlIso = collaborationTtlIso,
     )
@@ -2659,38 +2806,53 @@ private fun ConnectionTabMessage.toProfileSheetMediaFromTab(): ProfileSheetMedia
     val lowerType = messageType.lowercase()
     if (lowerType != "image" && lowerType != "audio") return null
     val meta = metadata as? JsonObject
-    val url = METADATA_URL_KEYS.firstNotNullOfOrNull { key ->
-        meta?.get(key)?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-    }
-    val path = METADATA_PATH_KEYS.firstNotNullOfOrNull { key ->
-        meta?.get(key)?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-    }
+    val url =
+        METADATA_URL_KEYS.firstNotNullOfOrNull { key ->
+            meta
+                ?.get(key)
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?.takeIf { it.isNotBlank() }
+        }
+    val path =
+        METADATA_PATH_KEYS.firstNotNullOfOrNull { key ->
+            meta
+                ?.get(key)
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?.takeIf { it.isNotBlank() }
+        }
     if (url == null && path == null) return null
     val (isDisposableRoll, collaborationTtlIso) = meta?.disposableRollMetadata() ?: (false to null)
     return ProfileSheetMedia(
         id = id,
         mediaUrl = url,
         storagePath = path,
-        mimeType = meta?.stringAt("original_mime_type")
-            ?: meta?.stringAt("mime_type")
-            ?: meta?.stringAt("content_type"),
-        isEncrypted = Message(
-            id = id,
-            user_id = userId,
-            content = content.trim().ifBlank { " " },
-            timeCreated = timeCreated,
-            messageType = lowerType,
-            metadata = metadata,
-        ).isEncryptedMedia(),
+        mimeType =
+            meta?.stringAt("original_mime_type")
+                ?: meta?.stringAt("mime_type")
+                ?: meta?.stringAt("content_type"),
+        isEncrypted =
+            Message(
+                id = id,
+                user_id = userId,
+                content = content.trim().ifBlank { " " },
+                timeCreated = timeCreated,
+                messageType = lowerType,
+                metadata = metadata,
+            ).isEncryptedMedia(),
         mediaType = if (lowerType == "audio") ProfileSheetMediaType.Audio else ProfileSheetMediaType.Image,
-        captionedAt = content.takeUnless { it.isLikelyWireEncrypted() || it.startsWith("ccx:v1:") }
-            ?.takeIf { it.isNotBlank() },
+        captionedAt =
+            content
+                .takeUnless { it.isLikelyWireEncrypted() || it.startsWith("ccx:v1:") }
+                ?.takeIf { it.isNotBlank() },
         sortEpochMs = timeCreated,
-        durationSeconds = meta?.let { m ->
-            m.intAt("duration_seconds")
-                ?: m.intAt("durationSeconds")
-                ?: m["duration"]?.jsonPrimitive?.intOrNull
-        },
+        durationSeconds =
+            meta?.let { m ->
+                m.intAt("duration_seconds")
+                    ?: m.intAt("durationSeconds")
+                    ?: m["duration"]?.jsonPrimitive?.intOrNull
+            },
         isDisposableRoll = isDisposableRoll,
         collaborationTtlIso = collaborationTtlIso,
     )
@@ -2720,39 +2882,47 @@ private fun buildProfileSheetFile(
 ): ProfileSheetFile {
     val envelope = AttachmentCrypto.resolveEnvelope(content, metadata)
     val meta = metadata as? JsonObject
-    val fileName = envelope?.name?.takeIf { it.isNotBlank() }
-        ?: meta?.firstString("attachment_name", "file_name", "filename", "name")
-        ?: content.takeUnless { it.isLikelyWireEncrypted() || it.startsWith("ccx:v1:") }
-            ?.takeIf { it.isNotBlank() }
-        ?: "Attachment"
-    val size = envelope?.size
-        ?: meta?.firstLong("attachment_size", "file_size", "size_bytes", "size")
-        ?: 0L
-    val mime = envelope?.mime?.takeIf { it.isNotBlank() }
-        ?: meta?.firstString("attachment_mime", "mime_type", "content_type")
-        ?: "application/octet-stream"
-    val attachmentPath = envelope?.path?.takeIf { it.isNotBlank() }
-        ?: meta?.stringAt("attachment_path")
-        ?: meta?.stringAt("path")
-        ?: meta?.stringAt("storage_path")
-        ?: meta?.stringAt("object_path")
-        ?: meta?.stringAt("media_path")
-    val attachmentKeyBase64 = envelope?.key?.takeIf { it.isNotBlank() }
-        ?: meta?.stringAt("key")
-        ?: meta?.stringAt("file_key")
-        ?: meta?.stringAt("file_master_key")
-    val attachmentSha256Base64 = envelope?.sha256?.takeIf { it.isNotBlank() }
-        ?: meta?.stringAt("sha256")
-        ?: meta?.stringAt("sha256_base64")
-    val downloadUrl = if (!attachmentPath.isNullOrBlank()) {
-        null
-    } else {
-        meta?.stringAt("signed_url")
-            ?: meta?.stringAt("public_url")
-            ?: meta?.stringAt("url")
-            ?: meta?.stringAt("storage_url")
-            ?: meta?.stringAt("media_url")
-    }
+    val fileName =
+        envelope?.name?.takeIf { it.isNotBlank() }
+            ?: meta?.firstString("attachment_name", "file_name", "filename", "name")
+            ?: content
+                .takeUnless { it.isLikelyWireEncrypted() || it.startsWith("ccx:v1:") }
+                ?.takeIf { it.isNotBlank() }
+            ?: "Attachment"
+    val size =
+        envelope?.size
+            ?: meta?.firstLong("attachment_size", "file_size", "size_bytes", "size")
+            ?: 0L
+    val mime =
+        envelope?.mime?.takeIf { it.isNotBlank() }
+            ?: meta?.firstString("attachment_mime", "mime_type", "content_type")
+            ?: "application/octet-stream"
+    val attachmentPath =
+        envelope?.path?.takeIf { it.isNotBlank() }
+            ?: meta?.stringAt("attachment_path")
+            ?: meta?.stringAt("path")
+            ?: meta?.stringAt("storage_path")
+            ?: meta?.stringAt("object_path")
+            ?: meta?.stringAt("media_path")
+    val attachmentKeyBase64 =
+        envelope?.key?.takeIf { it.isNotBlank() }
+            ?: meta?.stringAt("key")
+            ?: meta?.stringAt("file_key")
+            ?: meta?.stringAt("file_master_key")
+    val attachmentSha256Base64 =
+        envelope?.sha256?.takeIf { it.isNotBlank() }
+            ?: meta?.stringAt("sha256")
+            ?: meta?.stringAt("sha256_base64")
+    val downloadUrl =
+        if (!attachmentPath.isNullOrBlank()) {
+            null
+        } else {
+            meta?.stringAt("signed_url")
+                ?: meta?.stringAt("public_url")
+                ?: meta?.stringAt("url")
+                ?: meta?.stringAt("storage_url")
+                ?: meta?.stringAt("media_url")
+        }
     return ProfileSheetFile(
         id = id,
         fileName = fileName,
@@ -2775,44 +2945,55 @@ private fun ProfileSheetFile.canOpenProfileFile(): Boolean {
     return !downloadUrl.isNullOrBlank()
 }
 
-private fun ensureProfileAttachmentFileName(fileName: String, mimeType: String): String {
+private fun ensureProfileAttachmentFileName(
+    fileName: String,
+    mimeType: String,
+): String {
     val trimmed = fileName.trim().ifBlank { "attachment" }
     if (ChatAttachmentValidator.extensionOf(trimmed) != null) return trimmed
-    val ext = when {
-        mimeType.contains("pdf", ignoreCase = true) -> "pdf"
-        mimeType.contains("png", ignoreCase = true) -> "png"
-        mimeType.contains("jpeg", ignoreCase = true) || mimeType.contains("jpg", ignoreCase = true) -> "jpg"
-        mimeType.contains("plain", ignoreCase = true) || mimeType.contains("text/", ignoreCase = true) -> "txt"
-        mimeType.contains("csv", ignoreCase = true) -> "csv"
-        mimeType.contains("zip", ignoreCase = true) -> "zip"
-        mimeType.contains("mp4", ignoreCase = true) -> "mp4"
-        mimeType.contains("quicktime", ignoreCase = true) -> "mov"
-        mimeType.contains("wordprocessingml", ignoreCase = true) -> "docx"
-        else -> return trimmed
-    }
+    val ext =
+        when {
+            mimeType.contains("pdf", ignoreCase = true) -> "pdf"
+            mimeType.contains("png", ignoreCase = true) -> "png"
+            mimeType.contains("jpeg", ignoreCase = true) || mimeType.contains("jpg", ignoreCase = true) -> "jpg"
+            mimeType.contains("plain", ignoreCase = true) || mimeType.contains("text/", ignoreCase = true) -> "txt"
+            mimeType.contains("csv", ignoreCase = true) -> "csv"
+            mimeType.contains("zip", ignoreCase = true) -> "zip"
+            mimeType.contains("mp4", ignoreCase = true) -> "mp4"
+            mimeType.contains("quicktime", ignoreCase = true) -> "mov"
+            mimeType.contains("wordprocessingml", ignoreCase = true) -> "docx"
+            else -> return trimmed
+        }
     return "$trimmed.$ext"
 }
 
-private val METADATA_URL_KEYS = listOf(
-    "signed_url",
-    "public_url",
-    "url",
-    "storage_url",
-    "image_url",
-    "audio_url",
-    "media_url",
-)
+private val METADATA_URL_KEYS =
+    listOf(
+        "signed_url",
+        "public_url",
+        "url",
+        "storage_url",
+        "image_url",
+        "audio_url",
+        "media_url",
+    )
 
-private val METADATA_PATH_KEYS = listOf(
-    "path",
-    "storage_path",
-    "object_path",
-    "media_path",
-)
+private val METADATA_PATH_KEYS =
+    listOf(
+        "path",
+        "storage_path",
+        "object_path",
+        "media_path",
+    )
 
 private fun JsonObject.disposableRollMetadata(): Pair<Boolean, String?> {
     val isRoll = this["disposable_roll"]?.jsonPrimitive?.booleanOrNull == true
-    val ttl = this["collaboration_ttl"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+    val ttl =
+        this["collaboration_ttl"]
+            ?.jsonPrimitive
+            ?.contentOrNull
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
     return isRoll to ttl
 }
 
@@ -2849,11 +3030,9 @@ private fun ProfileSheetLocalMessage.hasMetadataAttachmentV1(): Boolean {
     return raw.contentOrNull?.equals("true", ignoreCase = true) == true
 }
 
-private fun JsonObject.stringAt(key: String): String? =
-    this[key]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+private fun JsonObject.stringAt(key: String): String? = this[key]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
 
-private fun JsonObject.firstString(vararg keys: String): String? =
-    keys.firstNotNullOfOrNull { key -> stringAt(key) }
+private fun JsonObject.firstString(vararg keys: String): String? = keys.firstNotNullOfOrNull { key -> stringAt(key) }
 
 private fun JsonObject.firstLong(vararg keys: String): Long? =
     keys.firstNotNullOfOrNull { key ->
@@ -2864,7 +3043,10 @@ private fun JsonObject.firstLong(vararg keys: String): Long? =
 private fun JsonObject.intAt(key: String): Int? {
     val raw = this[key]?.jsonPrimitive ?: return null
     raw.intOrNull?.let { return it }
-    raw.contentOrNull?.trim()?.toIntOrNull()?.let { return it }
+    raw.contentOrNull
+        ?.trim()
+        ?.toIntOrNull()
+        ?.let { return it }
     return null
 }
 
@@ -2887,7 +3069,11 @@ private fun profileMediaVaultExtension(media: ProfileSheetMedia): String {
     if (media.mediaType == ProfileSheetMediaType.Audio) {
         return extensionFromMimeType(media.mimeType)
     }
-    val mt = media.mimeType?.trim()?.lowercase().orEmpty()
+    val mt =
+        media.mimeType
+            ?.trim()
+            ?.lowercase()
+            .orEmpty()
     return when {
         "png" in mt -> "png"
         "webp" in mt -> "webp"
@@ -2930,28 +3116,28 @@ private val URL_REGEX = Regex("https?://\\S+", RegexOption.IGNORE_CASE)
  * client-side because message `content` is E2EE on the server and the BFF
  * intentionally does not parse links.
  */
-private fun extractLinksFromLocalMessages(
-    messages: List<ProfileSheetLocalMessage>,
-): List<ProfileSheetLink> {
+private fun extractLinksFromLocalMessages(messages: List<ProfileSheetLocalMessage>): List<ProfileSheetLink> {
     if (messages.isEmpty()) return emptyList()
     val seen = mutableSetOf<String>()
     val out = mutableListOf<ProfileSheetLink>()
-    messages.filter {
-        it.messageType == "text" &&
-            (it.content.contains("http://") || it.content.contains("https://"))
-    }.forEach { msg ->
-        URL_REGEX.findAll(msg.content).forEach { match ->
-            val url = match.value.trimEnd('.', ',', ')', ']', '}', ';', ':')
-            if (url.isNotBlank() && seen.add(url)) {
-                out += ProfileSheetLink(
-                    id = "${msg.id}:$url",
-                    url = url,
-                    title = null,
-                    timestamp = msg.timestamp,
-                )
+    messages
+        .filter {
+            it.messageType == "text" &&
+                (it.content.contains("http://") || it.content.contains("https://"))
+        }.forEach { msg ->
+            URL_REGEX.findAll(msg.content).forEach { match ->
+                val url = match.value.trimEnd('.', ',', ')', ']', '}', ';', ':')
+                if (url.isNotBlank() && seen.add(url)) {
+                    out +=
+                        ProfileSheetLink(
+                            id = "${msg.id}:$url",
+                            url = url,
+                            title = null,
+                            timestamp = msg.timestamp,
+                        )
+                }
             }
         }
-    }
     return out
 }
 
@@ -2964,18 +3150,19 @@ private fun mergeProfileMedia(items: List<ProfileSheetMedia>): List<ProfileSheet
             merged[media.id] = media
             return@forEach
         }
-        merged[media.id] = prev.copy(
-            mediaUrl = media.mediaUrl ?: prev.mediaUrl,
-            storagePath = media.storagePath ?: prev.storagePath,
-            mimeType = media.mimeType ?: prev.mimeType,
-            isEncrypted = media.isEncrypted || prev.isEncrypted,
-            mediaType = if (prev.mediaType == ProfileSheetMediaType.Audio) prev.mediaType else media.mediaType,
-            captionedAt = media.captionedAt ?: prev.captionedAt,
-            sortEpochMs = maxOf(media.sortEpochMs, prev.sortEpochMs),
-            durationSeconds = media.durationSeconds ?: prev.durationSeconds,
-            isDisposableRoll = media.isDisposableRoll || prev.isDisposableRoll,
-            collaborationTtlIso = media.collaborationTtlIso ?: prev.collaborationTtlIso,
-        )
+        merged[media.id] =
+            prev.copy(
+                mediaUrl = media.mediaUrl ?: prev.mediaUrl,
+                storagePath = media.storagePath ?: prev.storagePath,
+                mimeType = media.mimeType ?: prev.mimeType,
+                isEncrypted = media.isEncrypted || prev.isEncrypted,
+                mediaType = if (prev.mediaType == ProfileSheetMediaType.Audio) prev.mediaType else media.mediaType,
+                captionedAt = media.captionedAt ?: prev.captionedAt,
+                sortEpochMs = maxOf(media.sortEpochMs, prev.sortEpochMs),
+                durationSeconds = media.durationSeconds ?: prev.durationSeconds,
+                isDisposableRoll = media.isDisposableRoll || prev.isDisposableRoll,
+                collaborationTtlIso = media.collaborationTtlIso ?: prev.collaborationTtlIso,
+            )
     }
     return merged.values
         .sortedByDescending { profileMediaSortEpoch(it) }
@@ -2985,7 +3172,11 @@ private fun profileMediaSortEpoch(media: ProfileSheetMedia): Long {
     if (media.sortEpochMs > 0L) return media.sortEpochMs
     val raw = media.captionedAt?.trim().orEmpty()
     if (raw.isEmpty()) return 0L
-    return runCatching { kotlinx.datetime.Instant.parse(raw).toEpochMilliseconds() }.getOrNull()
+    return runCatching {
+        kotlinx.datetime.Instant
+            .parse(raw)
+            .toEpochMilliseconds()
+    }.getOrNull()
         ?: raw.filter(Char::isDigit).takeLast(13).toLongOrNull()
         ?: 0L
 }
@@ -2999,17 +3190,19 @@ private fun mergeProfileFiles(items: List<ProfileSheetFile>): List<ProfileSheetF
             merged[file.id] = file
             return@forEach
         }
-        merged[file.id] = prev.copy(
-            fileName = if (file.fileName != "Attachment") file.fileName else prev.fileName,
-            sizeBytes = if (file.sizeBytes > 0) file.sizeBytes else prev.sizeBytes,
-            mimeType = if (file.mimeType != "application/octet-stream") file.mimeType else prev.mimeType,
-            timestamp = if (file.timestamp.isNotBlank()) file.timestamp else prev.timestamp,
-            downloadUrl = file.downloadUrl?.takeIf { it.isNotBlank() } ?: prev.downloadUrl,
-            attachmentPath = file.attachmentPath?.takeIf { it.isNotBlank() } ?: prev.attachmentPath,
-            attachmentKeyBase64 = file.attachmentKeyBase64?.takeIf { it.isNotBlank() } ?: prev.attachmentKeyBase64,
-            attachmentSha256Base64 = file.attachmentSha256Base64?.takeIf { it.isNotBlank() }
-                ?: prev.attachmentSha256Base64,
-        )
+        merged[file.id] =
+            prev.copy(
+                fileName = if (file.fileName != "Attachment") file.fileName else prev.fileName,
+                sizeBytes = if (file.sizeBytes > 0) file.sizeBytes else prev.sizeBytes,
+                mimeType = if (file.mimeType != "application/octet-stream") file.mimeType else prev.mimeType,
+                timestamp = if (file.timestamp.isNotBlank()) file.timestamp else prev.timestamp,
+                downloadUrl = file.downloadUrl?.takeIf { it.isNotBlank() } ?: prev.downloadUrl,
+                attachmentPath = file.attachmentPath?.takeIf { it.isNotBlank() } ?: prev.attachmentPath,
+                attachmentKeyBase64 = file.attachmentKeyBase64?.takeIf { it.isNotBlank() } ?: prev.attachmentKeyBase64,
+                attachmentSha256Base64 =
+                    file.attachmentSha256Base64?.takeIf { it.isNotBlank() }
+                        ?: prev.attachmentSha256Base64,
+            )
     }
     return merged.values.toList()
 }
@@ -3029,9 +3222,11 @@ private fun mergeProfileLinks(items: List<ProfileSheetLink>): List<ProfileSheetL
  * peer-profile data (name, avatar, interests, shared interests, mutual moments) via
  * the new tabbed [ProfileBottomSheet] (Timeline · Media · Links · Files).
  *
- * Wire from any list flow (e.g. the Clicks chat list) by setting [userId] to the peer
- * id and providing the signed-in viewer id; pass `null` for [userId] to keep the sheet
- * dismissed. The sheet hydrates `user_interests.tags` for [userId] via
+ * Wire from any list flow (e.g. the Clicks chat list) **or a map pin** by setting [userId] to the peer
+ * id (and optionally [connectionId] when the caller already knows the edge). Pass `null` for [userId]
+ * to keep the sheet dismissed unless [connectionId] can resolve the peer from [AppDataManager].
+ * Map and Clicks must not diverge: both entry points use this wrapper so Timeline / Beacons /
+ * Media / Links hydrate the same way. The sheet hydrates `user_interests.tags` for the peer via
  * [SupabaseRepository.fetchUserPublicProfile] (which queries the
  * `user_interests` Postgres `text[]`) so the Timeline tab renders interests as soon
  * as the row resolves; if the peer has no `user_interests` row the section shows the
@@ -3047,39 +3242,62 @@ fun TabbedUserProfileSheet(
     onNudge: (() -> Unit)? = null,
     onOpenDisposableRoll: ((String) -> Unit)? = null,
     localMessages: List<ProfileSheetLocalMessage> = emptyList(),
+    /**
+     * When set, used instead of looking the connection up from [AppDataManager.connections].
+     * Map pins pass this so Timeline / Beacons / Media / Links hydrate even if the pin's
+     * cached [User] is missing.
+     */
+    connectionId: String? = null,
+    statusBadge: ProfileSheetBadge? = null,
 ) {
-    if (userId.isNullOrBlank()) return
+    val connections by AppDataManager.connections.collectAsState()
+    val resolvedUserId =
+        remember(userId, connectionId, viewerUserId, connections) {
+            resolveProfilePeerUserId(
+                requestedUserId = userId,
+                viewerUserId = viewerUserId,
+                connectionId = connectionId,
+                connections = connections,
+            )
+        }
+    if (resolvedUserId.isNullOrBlank()) return
+    val userId = resolvedUserId
 
     val connectedUsers by AppDataManager.connectedUsers.collectAsState()
-    val connections by AppDataManager.connections.collectAsState()
     val inboxRows by AppDataManager.inboxFeedChats.collectAsState()
     val cached: User? = connectedUsers[userId]
-    val inboxHint = remember(inboxRows, userId) {
-        inboxRows.firstOrNull { row ->
-            row.otherUser.id == userId || row.groupMemberUsers.any { member -> member.id == userId }
+    val inboxHint =
+        remember(inboxRows, userId) {
+            inboxRows.firstOrNull { row ->
+                row.otherUser.id == userId || row.groupMemberUsers.any { member -> member.id == userId }
+            }
         }
-    }
-    val hintedUser = remember(inboxHint, userId) {
-        when {
-            inboxHint?.otherUser?.id == userId -> inboxHint.otherUser
-            else -> inboxHint?.groupMemberUsers?.firstOrNull { member -> member.id == userId }
+    val hintedUser =
+        remember(inboxHint, userId) {
+            when {
+                inboxHint?.otherUser?.id == userId -> inboxHint.otherUser
+                else -> inboxHint?.groupMemberUsers?.firstOrNull { member -> member.id == userId }
+            }
         }
-    }
-    val profileConnectionId = remember(connections, inboxHint, userId, viewerUserId) {
-        connections.firstOrNull { conn ->
-            userId in conn.user_ids &&
-                (viewerUserId.isNullOrBlank() || viewerUserId in conn.user_ids)
-        }?.id ?: inboxHint?.connection?.id?.takeIf { it.isNotBlank() }
-    }
+    val profileConnectionId =
+        remember(connections, inboxHint, userId, viewerUserId, connectionId) {
+            connectionId?.trim()?.takeIf { it.isNotEmpty() }
+                ?: connections
+                    .firstOrNull { conn ->
+                        userId in conn.user_ids &&
+                            (viewerUserId.isNullOrBlank() || viewerUserId in conn.user_ids)
+                    }?.id ?: inboxHint?.connection?.id?.takeIf { it.isNotBlank() }
+        }
 
     var resolved by remember(userId) { mutableStateOf<User?>(cached ?: hintedUser) }
     LaunchedEffect(userId, cached, hintedUser) {
         val local = AppDataManager.connectedUsers.value[userId] ?: cached ?: hintedUser
         val currentName = resolved?.name?.trim().orEmpty()
-        val shouldUseLocal = resolved == null ||
-            currentName.isBlank() ||
-            currentName.equals("Member", ignoreCase = true) ||
-            currentName.equals("Connection", ignoreCase = true)
+        val shouldUseLocal =
+            resolved == null ||
+                currentName.isBlank() ||
+                currentName.equals("Member", ignoreCase = true) ||
+                currentName.equals("Connection", ignoreCase = true)
         if (local != null && shouldUseLocal) {
             resolved = local
             return@LaunchedEffect
@@ -3093,41 +3311,46 @@ fun TabbedUserProfileSheet(
         }
     }
 
-    val displayName = resolved?.name?.takeIf { it.isNotBlank() }
-        ?: cached?.name?.takeIf { it.isNotBlank() }
-        ?: hintedUser?.name?.takeIf { it.isNotBlank() }
-        ?: "Connection"
-    val state = remember(
-        userId,
-        viewerUserId,
-        displayName,
-        resolved?.image,
-        resolved?.email,
-        hintedUser?.image,
-        hintedUser?.email,
-        localMessages,
-        profileConnectionId,
-        onMessage,
-    ) {
-        ProfileSheetState(
-            displayName = displayName,
-            subtitle = resolved?.email?.takeIf { it.isNotBlank() }
-                ?: hintedUser?.email?.takeIf { it.isNotBlank() },
-            avatarUrl = resolved?.image ?: hintedUser?.image,
-            statusBadge = null,
-            canNudge = onMessage != null && !profileConnectionId.isNullOrBlank(),
-            timeline = emptyList(),
-            media = emptyList(),
-            links = emptyList(),
-            files = emptyList(),
-            userId = userId,
-            email = resolved?.email?.takeIf { it.isNotBlank() }
-                ?: hintedUser?.email?.takeIf { it.isNotBlank() },
-            viewerUserId = viewerUserId,
-            connectionId = profileConnectionId,
-            localMessages = localMessages,
-        )
-    }
+    val displayName =
+        resolved?.name?.takeIf { it.isNotBlank() }
+            ?: cached?.name?.takeIf { it.isNotBlank() }
+            ?: hintedUser?.name?.takeIf { it.isNotBlank() }
+            ?: "Connection"
+    val state =
+        remember(
+            userId,
+            viewerUserId,
+            displayName,
+            resolved?.image,
+            resolved?.email,
+            hintedUser?.image,
+            hintedUser?.email,
+            localMessages,
+            profileConnectionId,
+            onMessage,
+            statusBadge,
+        ) {
+            ProfileSheetState(
+                displayName = displayName,
+                subtitle =
+                    resolved?.email?.takeIf { it.isNotBlank() }
+                        ?: hintedUser?.email?.takeIf { it.isNotBlank() },
+                avatarUrl = resolved?.image ?: hintedUser?.image,
+                statusBadge = statusBadge,
+                canNudge = onMessage != null && !profileConnectionId.isNullOrBlank(),
+                timeline = emptyList(),
+                media = emptyList(),
+                links = emptyList(),
+                files = emptyList(),
+                userId = userId,
+                email =
+                    resolved?.email?.takeIf { it.isNotBlank() }
+                        ?: hintedUser?.email?.takeIf { it.isNotBlank() },
+                viewerUserId = viewerUserId,
+                connectionId = profileConnectionId,
+                localMessages = localMessages,
+            )
+        }
 
     ClickFormBottomSheet(
         onDismissRequest = onDismiss,
@@ -3145,16 +3368,32 @@ fun TabbedUserProfileSheet(
                 onNudge?.invoke()
                 onDismiss()
             },
-            onOpenDisposableRoll = profileConnectionId?.let { cid ->
-                onOpenDisposableRoll?.let { open ->
-                    {
-                        open(cid)
-                        onDismiss()
+            onOpenDisposableRoll =
+                profileConnectionId?.let { cid ->
+                    onOpenDisposableRoll?.let { open ->
+                        {
+                            open(cid)
+                            onDismiss()
+                        }
                     }
-                }
-            },
+                },
         )
     }
+}
+
+internal fun resolveProfilePeerUserId(
+    requestedUserId: String?,
+    viewerUserId: String?,
+    connectionId: String?,
+    connections: List<Connection>,
+): String? {
+    requestedUserId?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+    val connId = connectionId?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val viewer = viewerUserId?.trim().orEmpty()
+    return connections
+        .firstOrNull { it.id == connId }
+        ?.user_ids
+        ?.firstOrNull { it.isNotBlank() && it != viewer }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -3187,79 +3426,85 @@ fun TabbedGroupProfileSheet(
     }
     var avatarUploading by remember { mutableStateOf(false) }
     var avatarUploadError by remember { mutableStateOf<String?>(null) }
-    val mediaPickers = rememberChatMediaPickers(
-        onImagePicked = { bytes, mime ->
-            if (resolvedGroupId.isBlank() || avatarUploading) return@rememberChatMediaPickers
-            scope.launch {
-                avatarUploading = true
-                avatarUploadError = null
-                try {
-                    apiClient.uploadGroupAvatar(resolvedGroupId, bytes, mime).fold(
-                        onSuccess = { url ->
-                            groupAvatarUrl = url
-                            onGroupAvatarUrlChanged?.invoke(url)
-                        },
-                        onFailure = { e ->
-                            avatarUploadError = e.message?.lines()?.firstOrNull()?.take(160)
-                                ?: "Could not update group avatar"
-                        },
-                    )
-                } finally {
-                    avatarUploading = false
+    val mediaPickers =
+        rememberChatMediaPickers(
+            onImagePicked = { bytes, mime ->
+                if (resolvedGroupId.isBlank() || avatarUploading) return@rememberChatMediaPickers
+                scope.launch {
+                    avatarUploading = true
+                    avatarUploadError = null
+                    try {
+                        apiClient.uploadGroupAvatar(resolvedGroupId, bytes, mime).fold(
+                            onSuccess = { url ->
+                                groupAvatarUrl = url
+                                onGroupAvatarUrlChanged?.invoke(url)
+                            },
+                            onFailure = { e ->
+                                avatarUploadError = e.message
+                                    ?.lines()
+                                    ?.firstOrNull()
+                                    ?.take(160)
+                                    ?: "Could not update group avatar"
+                            },
+                        )
+                    } finally {
+                        avatarUploading = false
+                    }
                 }
-            }
-        },
-        onAudioPicked = { _, _, _ -> },
-        onMediaAccessBlocked = { msg -> avatarUploadError = msg },
-    )
+            },
+            onAudioPicked = { _, _, _ -> },
+            onMediaAccessBlocked = { msg -> avatarUploadError = msg },
+        )
 
     val displayName = groupName?.trim()?.takeIf { it.isNotEmpty() } ?: "Group Click"
-    val subtitle = when (members.size) {
-        0 -> "No members"
-        1 -> "1 member"
-        else -> "${members.size} members"
-    }
+    val subtitle =
+        when (members.size) {
+            0 -> "No members"
+            1 -> "1 member"
+            else -> "${members.size} members"
+        }
     val uploadErrorBadge = avatarUploadError?.let { ProfileSheetBadge(it, MaterialTheme.colorScheme.error) }
-    val state = remember(
-        displayName,
-        subtitle,
-        resolvedChatId,
-        viewerUserId,
-        members,
-        groupAvatarUrl,
-        uploadErrorBadge,
-        groupCreatorId,
-        onAddMember,
-        onRemoveMember,
-        onMemberClick,
-        onMessage,
-        onNudge,
-        onOpenDisposableRoll,
-        localMessages,
-    ) {
-        ProfileSheetState(
-            displayName = displayName,
-            subtitle = subtitle,
-            avatarUrl = groupAvatarUrl,
-            statusBadge = uploadErrorBadge,
-            canNudge = onNudge != null,
-            timeline = emptyList(),
-            media = emptyList(),
-            links = emptyList(),
-            files = emptyList(),
-            userId = resolvedGroupId.takeIf { it.isNotBlank() } ?: resolvedChatId,
-            viewerUserId = viewerUserId,
-            connectionId = resolvedChatId,
-            isGroup = true,
-            groupMembers = members,
-            groupCreatorId = groupCreatorId,
-            onAddMember = onAddMember,
-            onRemoveMember = onRemoveMember,
-            onMemberClick = onMemberClick,
-            onGroupAvatarUrlChanged = onGroupAvatarUrlChanged,
-            localMessages = localMessages,
-        )
-    }
+    val state =
+        remember(
+            displayName,
+            subtitle,
+            resolvedChatId,
+            viewerUserId,
+            members,
+            groupAvatarUrl,
+            uploadErrorBadge,
+            groupCreatorId,
+            onAddMember,
+            onRemoveMember,
+            onMemberClick,
+            onMessage,
+            onNudge,
+            onOpenDisposableRoll,
+            localMessages,
+        ) {
+            ProfileSheetState(
+                displayName = displayName,
+                subtitle = subtitle,
+                avatarUrl = groupAvatarUrl,
+                statusBadge = uploadErrorBadge,
+                canNudge = onNudge != null,
+                timeline = emptyList(),
+                media = emptyList(),
+                links = emptyList(),
+                files = emptyList(),
+                userId = resolvedGroupId.takeIf { it.isNotBlank() } ?: resolvedChatId,
+                viewerUserId = viewerUserId,
+                connectionId = resolvedChatId,
+                isGroup = true,
+                groupMembers = members,
+                groupCreatorId = groupCreatorId,
+                onAddMember = onAddMember,
+                onRemoveMember = onRemoveMember,
+                onMemberClick = onMemberClick,
+                onGroupAvatarUrlChanged = onGroupAvatarUrlChanged,
+                localMessages = localMessages,
+            )
+        }
 
     ClickFormBottomSheet(
         onDismissRequest = onDismiss,
@@ -3276,17 +3521,19 @@ fun TabbedGroupProfileSheet(
                 onNudge?.invoke()
                 onDismiss()
             },
-            onOpenDisposableRoll = onOpenDisposableRoll?.let { open ->
-                {
-                    open(resolvedChatId)
-                    onDismiss()
-                }
-            },
-            onAvatarClick = if (resolvedGroupId.isNotBlank()) {
-                { mediaPickers.openPhotoLibrary() }
-            } else {
-                null
-            },
+            onOpenDisposableRoll =
+                onOpenDisposableRoll?.let { open ->
+                    {
+                        open(resolvedChatId)
+                        onDismiss()
+                    }
+                },
+            onAvatarClick =
+                if (resolvedGroupId.isNotBlank()) {
+                    { mediaPickers.openPhotoLibrary() }
+                } else {
+                    null
+                },
             avatarUploading = avatarUploading,
         )
     }

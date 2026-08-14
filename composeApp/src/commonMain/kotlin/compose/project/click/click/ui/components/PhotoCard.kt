@@ -7,8 +7,10 @@ package compose.project.click.click.ui.components // pragma: allowlist secret
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,6 +49,8 @@ fun PhotoCard(
     visual: CardVisual = rememberCardVisual(id),
     cornerRadius: Dp = 12.dp,
     elevation: Dp = 6.dp,
+    /** 0–1 black scrim used by stacked pile layers so back cards read as further away. */
+    dimming: Float = 0f,
     onClick: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
     content: @Composable (BoxScope.() -> Unit)? = null,
@@ -77,6 +82,14 @@ fun PhotoCard(
         contentAlignment = Alignment.BottomStart,
     ) {
         val heroScope = this
+        if (dimming > 0f) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = dimming.coerceIn(0f, 1f))),
+            )
+        }
         Column(
             modifier =
                 Modifier

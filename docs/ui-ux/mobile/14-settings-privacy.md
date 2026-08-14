@@ -131,6 +131,15 @@ Bottom button: `"System Settings"`.
 | Card title | `"My personality"` |
 | Helper | `"Pick exactly 5 traits."` — nothing else. The old `"Existing accounts can skip this — it is not a login gate."` carve-out is gone; it described gate mechanics the user does not need at edit time. Mirrored in click-web `SettingsView.tsx`. |
 
+### Cluster: Saved events
+
+| Element | Detail |
+|---------|--------|
+| Section header | `"Saved events"` |
+| Empty | `"No saved events yet. Bookmark events from Home or the map."` |
+| Tiles | Same `SavedEventsSection` as Home |
+| Tile tap | Opens `SavedEventDetailSheet` — the same `EventBeaconDetail` bottom sheet Home uses |
+
 ### Cluster: Appearance
 
 | Element | String |

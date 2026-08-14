@@ -88,6 +88,7 @@ import compose.project.click.click.data.AppDataManager // pragma: allowlist secr
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.HomeLayoutMode // pragma: allowlist secret
 import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
@@ -124,6 +125,7 @@ import compose.project.click.click.utils.LocationPermissionDisplayState // pragm
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import compose.project.click.click.utils.readLocationPermissionDisplayState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AvailabilityViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -159,6 +161,8 @@ fun SettingsScreen(
     onSubpageOpenChanged: (Boolean) -> Unit = {},
     availabilityViewModel: AvailabilityViewModel =
         viewModel(key = "settings-availability") { AvailabilityViewModel() },
+    mapViewModel: MapViewModel,
+    onShareBeaconToChats: ((MapBeacon, List<String>, String?) -> Unit)? = null,
 ) {
     val currentAvailability by availabilityViewModel.currentAvailability.collectAsState()
     val activeAvailabilityIntents by availabilityViewModel.activeAvailabilityIntents.collectAsState()
@@ -258,6 +262,9 @@ fun SettingsScreen(
     var showPermissionsHub by remember { mutableStateOf(false) }
     var settingsPage by remember { mutableStateOf(SettingsPage.Hub) }
     val savedEventBookmarks by AppDataManager.cachedEventBookmarks.collectAsState()
+    val mapBeacons by mapViewModel.mapBeacons.collectAsState()
+    val prefetchedBeacons by AppDataManager.prefetchedMapBeacons.collectAsState()
+    var selectedSavedEventBeacon by remember { mutableStateOf<MapBeacon?>(null) }
     val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
     // One host state means tap-back and swipe-back share a single animation and the hub behind gets
     // the same parallax either way, instead of tap-back using a separate slide-out with no underlay.
@@ -716,7 +723,14 @@ fun SettingsScreen(
                                 } else {
                                     SavedEventsSection( // pragma: allowlist secret
                                         bookmarks = savedEventBookmarks,
-                                        onBookmarkClick = {},
+                                        onBookmarkClick = { bookmark ->
+                                            selectedSavedEventBeacon =
+                                                resolveSavedEventBeacon(
+                                                    bookmark = bookmark,
+                                                    mapBeacons = mapBeacons,
+                                                    prefetchedBeacons = prefetchedBeacons,
+                                                )
+                                        },
                                     )
                                 }
                             }
@@ -771,6 +785,14 @@ fun SettingsScreen(
                 },
             )
         }
+
+        SavedEventDetailSheet(
+            beacon = selectedSavedEventBeacon,
+            mapViewModel = mapViewModel,
+            currentUserId = currentUser?.id,
+            onDismiss = { selectedSavedEventBeacon = null },
+            onShareBeaconToChats = onShareBeaconToChats,
+        )
 
         val pendingDelete = pendingDeleteAvailabilityIntent
         if (pendingDelete != null) {
