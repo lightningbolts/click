@@ -1,4 +1,4 @@
-package compose.project.click.click.calls
+package compose.project.click.click.calls // pragma: allowlist secret
 
 /**
  * One person in the LiveKit room, including the local user.
@@ -91,5 +91,38 @@ object CallLayoutPolicy {
         val minutes = totalSec / 60L
         val seconds = totalSec % 60L
         return "${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
+    }
+
+    /**
+     * FaceTime-style row sizes that fill the stage instead of a sparse 2-column square grid.
+     * 1: full; 2: side-by-side; 3: 1+2; 4: 2x2; 5: 2+3; 6: 3x2; 7: 3+2+2; 8: 3+3+2.
+     */
+    fun gridRowSizes(participantCount: Int): List<Int> {
+        val n = participantCount.coerceAtLeast(0)
+        return when (n) {
+            0 -> emptyList()
+            1 -> listOf(1)
+            2 -> listOf(2)
+            3 -> listOf(1, 2)
+            4 -> listOf(2, 2)
+            5 -> listOf(2, 3)
+            6 -> listOf(3, 3)
+            7 -> listOf(3, 2, 2)
+            else -> {
+                val rows = mutableListOf<Int>()
+                var remaining = n
+                while (remaining > 0) {
+                    val take =
+                        when {
+                            remaining == 4 -> 2
+                            remaining >= 3 -> 3
+                            else -> remaining
+                        }
+                    rows += take
+                    remaining -= take
+                }
+                rows
+            }
+        }
     }
 }

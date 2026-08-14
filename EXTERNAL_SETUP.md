@@ -12,6 +12,13 @@ Run these SQL files in the Supabase SQL editor, in this order:
 2. `click/database/add_push_notification_trigger.sql`
 3. `click/database/fix_message_push_trigger_resilience.sql`
 
+Shared schema (source of truth: `click-web/supabase/migrations/`) also includes:
+
+4. `click-web/supabase/migrations/20260813120000_push_tokens_device_id.sql` — `push_tokens.device_id` / `token_type` uniqueness and `group_members` realtime.
+5. `click-web/supabase/migrations/20260813180000_notification_prefs_personality.sql` — per-type notification prefs, `users.personality_tags`, availability-match push dedupe.
+
+The mobile repo mirrors those two files under `click/supabase/migrations/`. Apply them from **click-web** (`supabase db push` or the SQL editor) so both apps stay in sync.
+
 Before running the trigger SQL, enable the required extension:
 
 1. In Supabase Dashboard, open `Database > Extensions`.

@@ -1,4 +1,9 @@
-package compose.project.click.click.calls
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
+
+package compose.project.click.click.calls // pragma: allowlist secret
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -7,9 +12,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,9 +20,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -53,12 +53,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.PlatformHapticsPolicy
-import compose.project.click.click.ui.theme.BackgroundDark
-import compose.project.click.click.ui.theme.BorderHardDark
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.ui.theme.SoftBlue
-import compose.project.click.click.ui.theme.SurfaceDark
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.ui.theme.BackgroundDark // pragma: allowlist secret
+import compose.project.click.click.ui.theme.BorderQuietDark // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.SoftBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.SurfaceDark // pragma: allowlist secret
 import kotlinx.coroutines.delay
 import kotlinx.datetime.Clock
 
@@ -75,16 +75,21 @@ fun CallParticipantTile(
     labelOverride: String? = null,
     showVisibilityHint: Boolean = false,
 ) {
-    val borderColor = if (isActiveSpeaker) PrimaryBlue else BorderHardDark
+    val borderColor = if (isActiveSpeaker) PrimaryBlue else BorderQuietDark
     val borderWidth = if (isActiveSpeaker) 2.dp else 1.dp
-    val label = labelOverride
-        ?: if (participant.isLocal) CallLayoutPolicy.selfLabel(participant.displayName)
-        else participant.displayName
+    val label =
+        labelOverride
+            ?: if (participant.isLocal) {
+                CallLayoutPolicy.selfLabel(participant.displayName)
+            } else {
+                participant.displayName
+            }
 
     Box(
-        modifier = modifier
-            .background(SurfaceDark, TileCorner)
-            .border(borderWidth, borderColor, TileCorner),
+        modifier =
+            modifier
+                .background(SurfaceDark, TileCorner)
+                .border(borderWidth, borderColor, TileCorner),
     ) {
         if (!blankVideo && participant.hasVideo) {
             CallVideoSurface(
@@ -95,17 +100,19 @@ fun CallParticipantTile(
             )
         } else {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color(0xFF2A2C2C)),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFF2A2C2C)),
                 contentAlignment = Alignment.Center,
             ) {
                 Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(PrimaryBlue)
-                        .border(2.dp, BorderHardDark, CircleShape),
+                    modifier =
+                        Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(PrimaryBlue)
+                            .border(1.dp, BorderQuietDark, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
@@ -119,13 +126,14 @@ fun CallParticipantTile(
         }
 
         Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(10.dp)
-                .size(28.dp)
-                .clip(CircleShape)
-                .background(if (participant.isSpeaking && !participant.isMuted) PrimaryBlue else Color(0xCC101212))
-                .border(1.dp, BorderHardDark, CircleShape),
+            modifier =
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(10.dp)
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(if (participant.isSpeaking && !participant.isMuted) PrimaryBlue else Color(0xCC101212))
+                    .border(1.dp, BorderQuietDark, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -137,11 +145,12 @@ fun CallParticipantTile(
         }
 
         Row(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(8.dp)
-                .background(NameScrim, RoundedCornerShape(8.dp))
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+            modifier =
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(8.dp)
+                    .background(NameScrim, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
@@ -184,10 +193,11 @@ fun CallActiveHeader(
     val duration = connectedAtMs?.let { CallLayoutPolicy.formatDuration(nowMs - it) } ?: "00:00"
 
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .graphicsLayer { alpha = chromeAlpha }
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .graphicsLayer { alpha = chromeAlpha }
+                .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -205,10 +215,11 @@ fun CallActiveHeader(
                 modifier = Modifier.padding(top = 4.dp),
             ) {
                 Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(PrimaryBlue),
+                    modifier =
+                        Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(PrimaryBlue),
                 )
                 Text(
                     text = "$duration · $participantCount active",
@@ -223,10 +234,11 @@ fun CallActiveHeader(
                 PlatformHapticsPolicy.lightImpact()
                 onToggleLayout()
             },
-            modifier = Modifier
-                .size(40.dp)
-                .border(2.dp, BorderHardDark, RoundedCornerShape(10.dp))
-                .background(SurfaceDark, RoundedCornerShape(10.dp)),
+            modifier =
+                Modifier
+                    .size(40.dp)
+                    .border(1.dp, BorderQuietDark, RoundedCornerShape(10.dp))
+                    .background(SurfaceDark, RoundedCornerShape(10.dp)),
         ) {
             Icon(
                 imageVector = if (layoutMode == CallLayoutMode.Grid) Icons.Filled.ViewAgenda else Icons.Filled.Apps,
@@ -250,11 +262,12 @@ fun CallControlBar(
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = modifier
-            .graphicsLayer { alpha = chromeAlpha }
-            .background(BackgroundDark, RoundedCornerShape(40.dp))
-            .border(2.dp, BorderHardDark, RoundedCornerShape(40.dp))
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier =
+            modifier
+                .graphicsLayer { alpha = chromeAlpha }
+                .background(BackgroundDark, RoundedCornerShape(40.dp))
+                .border(1.dp, BorderQuietDark, RoundedCornerShape(40.dp))
+                .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -310,12 +323,13 @@ private fun CallControlCircleButton(
             onClick()
         },
         interactionSource = interaction,
-        modifier = Modifier
-            .size(size)
-            .scale(if (pressed) 0.94f else 1f)
-            .clip(CircleShape)
-            .background(filled)
-            .border(1.dp, BorderHardDark, CircleShape),
+        modifier =
+            Modifier
+                .size(size)
+                .scale(if (pressed) 0.94f else 1f)
+                .clip(CircleShape)
+                .background(filled)
+                .border(1.dp, BorderQuietDark, CircleShape),
     ) {
         Icon(
             imageVector = icon,
@@ -334,23 +348,35 @@ fun CallGridLayout(
     blankVideo: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+    val rows = remember(participants.size) { CallLayoutPolicy.gridRowSizes(participants.size) }
+    Column(
+        modifier = modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        items(participants, key = { it.identity }) { participant ->
-            CallParticipantTile(
-                callManager = callManager,
-                participant = participant,
-                isActiveSpeaker = participant.identity == activeSpeakerId,
-                blankVideo = blankVideo,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f),
-            )
+        var index = 0
+        rows.forEach { rowSize ->
+            val slice = participants.drop(index).take(rowSize)
+            index += rowSize
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                slice.forEach { participant ->
+                    CallParticipantTile(
+                        callManager = callManager,
+                        participant = participant,
+                        isActiveSpeaker = participant.identity == activeSpeakerId,
+                        blankVideo = blankVideo,
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                    )
+                }
+            }
         }
     }
 }
@@ -365,23 +391,18 @@ fun CallSpeakerLayout(
 ) {
     val local = participants.firstOrNull { it.isLocal }
     val remotes = participants.filter { !it.isLocal }
-    val primary = activeSpeaker?.takeIf { !it.isLocal } ?: remotes.firstOrNull()
-    val secondary = remotes.firstOrNull { it.identity != primary?.identity }
-    val pipRemote = remotes.firstOrNull {
-        it.identity != primary?.identity && it.identity != secondary?.identity
-    }
+    val primary = activeSpeaker?.takeIf { !it.isLocal } ?: remotes.firstOrNull() ?: local
+    val otherRemotes = remotes.filter { it.identity != primary?.identity }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+    Box(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (primary != null) {
                 CallParticipantTile(
@@ -389,63 +410,49 @@ fun CallSpeakerLayout(
                     participant = primary,
                     isActiveSpeaker = true,
                     blankVideo = blankVideo,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .weight(if (otherRemotes.isEmpty()) 1f else 1.6f),
                 )
             }
-            if (secondary != null) {
-                CallParticipantTile(
-                    callManager = callManager,
-                    participant = secondary,
-                    isActiveSpeaker = secondary.identity == activeSpeaker?.identity,
-                    blankVideo = blankVideo,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                )
-            } else if (primary == null && local != null) {
-                CallParticipantTile(
-                    callManager = callManager,
-                    participant = local,
-                    isActiveSpeaker = false,
-                    blankVideo = blankVideo,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                )
-            }
-        }
-
-        if (local != null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1.15f),
-            ) {
-                CallParticipantTile(
-                    callManager = callManager,
-                    participant = local,
-                    isActiveSpeaker = local.identity == activeSpeaker?.identity,
-                    blankVideo = blankVideo,
-                    labelOverride = CallLayoutPolicy.selfLabel(local.displayName),
-                    showVisibilityHint = true,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                if (pipRemote != null) {
-                    CallParticipantTile(
-                        callManager = callManager,
-                        participant = pipRemote,
-                        isActiveSpeaker = pipRemote.identity == activeSpeaker?.identity,
-                        blankVideo = blankVideo,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(12.dp)
-                            .width(96.dp)
-                            .height(128.dp),
-                    )
+            if (otherRemotes.isNotEmpty()) {
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    otherRemotes.forEach { remote ->
+                        CallParticipantTile(
+                            callManager = callManager,
+                            participant = remote,
+                            isActiveSpeaker = remote.identity == activeSpeaker?.identity,
+                            blankVideo = blankVideo,
+                            modifier =
+                                Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight(),
+                        )
+                    }
                 }
             }
+        }
+        if (local != null && primary?.identity != local.identity) {
+            CallParticipantTile(
+                callManager = callManager,
+                participant = local,
+                isActiveSpeaker = false,
+                blankVideo = blankVideo,
+                labelOverride = CallLayoutPolicy.selfLabel(local.displayName),
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(12.dp)
+                        .width(108.dp)
+                        .height(144.dp),
+            )
         }
     }
 }

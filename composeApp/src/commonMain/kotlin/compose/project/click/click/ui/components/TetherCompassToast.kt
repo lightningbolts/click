@@ -1,4 +1,9 @@
-package compose.project.click.click.ui.components
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
+
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -26,8 +31,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.ui.theme.clickBorderColor
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 import kotlinx.coroutines.delay
 
 private const val TETHER_TOAST_VISIBLE_MS = 30_000L
@@ -56,9 +62,10 @@ fun TetherCompassToast(
 
     AnimatedVisibility(
         visible = visible && displayMessage != null,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
         enter = fadeIn(animationSpec = tween(UnifiedToastTokens.EnterMillis)),
         exit = fadeOut(animationSpec = tween(UnifiedToastTokens.ExitMillis)),
     ) {
@@ -67,22 +74,23 @@ fun TetherCompassToast(
             contentAlignment = Alignment.Center,
         ) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        PrimaryBlue,
-                        RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
-                    )
-                    .border(
-                        2.dp,
-                        clickBorderColor(),
-                        RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
-                    )
-                    .padding(horizontal = 18.dp, vertical = 16.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(
+                            PrimaryBlue,
+                            RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
+                        ).border(
+                            clickBorderWidth(),
+                            clickBorderColor(),
+                            RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
+                        ).padding(horizontal = 18.dp, vertical = 16.dp),
             ) {
                 androidx.compose.foundation.layout.Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+                    horizontalArrangement =
+                        androidx.compose.foundation.layout.Arrangement
+                            .spacedBy(12.dp),
                 ) {
                     Icon(
                         Icons.Filled.Explore,

@@ -45,72 +45,73 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage // pragma: allowlist secret
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
-import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
-import compose.project.click.click.data.models.withPreservedEventScheduleFrom
-import compose.project.click.click.data.repository.MapBeaconRepository
-import compose.project.click.click.events.EventReminderCoordinator
-import compose.project.click.click.events.EventSchedule
-import compose.project.click.click.events.buildEventShareText
-import compose.project.click.click.events.buildEventShareUrl
-import compose.project.click.click.events.eventCheckInCtaLabel
-import compose.project.click.click.events.eventSchedule
-import compose.project.click.click.events.formatEventEndDateLabel
-import compose.project.click.click.events.formatEventEndTimeLabel
-import compose.project.click.click.events.formatEventPostedAtLabel
-import compose.project.click.click.events.formatEventScheduleRange
-import compose.project.click.click.events.formatEventStartDateLabel
-import compose.project.click.click.events.formatEventStartTimeLabel
-import compose.project.click.click.events.isLive
-import compose.project.click.click.events.openEventMapsRoute
-import compose.project.click.click.getPlatform
+import compose.project.click.click.data.models.withPreservedEventScheduleFrom // pragma: allowlist secret
+import compose.project.click.click.events.EventReminderCoordinator // pragma: allowlist secret
+import compose.project.click.click.events.EventSchedule // pragma: allowlist secret
+import compose.project.click.click.events.buildEventShareText // pragma: allowlist secret
+import compose.project.click.click.events.buildEventShareUrl // pragma: allowlist secret
+import compose.project.click.click.events.eventCheckInCtaLabel // pragma: allowlist secret
+import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
+import compose.project.click.click.events.formatEventEndDateLabel // pragma: allowlist secret
+import compose.project.click.click.events.formatEventEndTimeLabel // pragma: allowlist secret
+import compose.project.click.click.events.formatEventPostedAtLabel // pragma: allowlist secret
+import compose.project.click.click.events.formatEventScheduleRange // pragma: allowlist secret
+import compose.project.click.click.events.formatEventStartDateLabel // pragma: allowlist secret
+import compose.project.click.click.events.formatEventStartTimeLabel // pragma: allowlist secret
+import compose.project.click.click.events.isLive // pragma: allowlist secret
+import compose.project.click.click.events.openEventMapsRoute // pragma: allowlist secret
+import compose.project.click.click.getPlatform // pragma: allowlist secret
 import compose.project.click.click.media.rememberChatAudioPlayer // pragma: allowlist secret
 import compose.project.click.click.openBeaconOriginalMediaUrl // pragma: allowlist secret
-import compose.project.click.click.platform.shareText
-import compose.project.click.click.telemetry.TelemetryBatcher
-import compose.project.click.click.ui.components.AdaptiveBackground
+import compose.project.click.click.platform.shareText // pragma: allowlist secret
+import compose.project.click.click.telemetry.TelemetryBatcher // pragma: allowlist secret
+import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.AnimatedClickDialog // pragma: allowlist secret
-import compose.project.click.click.ui.components.BeaconShareToChatDialog
+import compose.project.click.click.ui.components.BeaconShareToChatDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickCircularGlassIconButton // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickFormBottomSheet
-import compose.project.click.click.ui.components.ClickOutlinedTextField
+import compose.project.click.click.ui.components.ClickDropdownMenu // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickMenuItem // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDialogChrome // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
-import compose.project.click.click.ui.components.CreateHubModal
-import compose.project.click.click.ui.components.EventDirectoryUserProfileSheet
-import compose.project.click.click.ui.components.EventPeopleDirectorySection
-import compose.project.click.click.ui.components.EventPeopleDirectorySheetContent
+import compose.project.click.click.ui.components.CreateHubModal // pragma: allowlist secret
+import compose.project.click.click.ui.components.EventDirectoryUserProfileSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.EventPeopleDirectorySection // pragma: allowlist secret
+import compose.project.click.click.ui.components.EventPeopleDirectorySheetContent // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassmorphicOverlay
+import compose.project.click.click.ui.components.GlassmorphicOverlay // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackParallaxPeekRatio // pragma: allowlist secret
 import compose.project.click.click.ui.components.LiquidGlassPill // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapClusterPin // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPin // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPinKind // pragma: allowlist secret
-import compose.project.click.click.ui.components.PlatformBackHandler
+import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformMap // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProfileBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProfileSheetBadge // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProfileSheetState // pragma: allowlist secret
-import compose.project.click.click.ui.components.UnifiedToastHost
-import compose.project.click.click.ui.components.UnifiedToastTokens
-import compose.project.click.click.ui.components.rememberBottomChromePadding
-import compose.project.click.click.ui.components.rememberFabAboveNavPadding
-import compose.project.click.click.ui.components.rememberUnifiedToastState
+import compose.project.click.click.ui.components.UnifiedToastHost // pragma: allowlist secret
+import compose.project.click.click.ui.components.UnifiedToastTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberFabAboveNavPadding // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberUnifiedToastState // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
 import compose.project.click.click.ui.components.toClusterPin // pragma: allowlist secret
-import compose.project.click.click.ui.sheet.MapBeaconSheetRoot
+import compose.project.click.click.ui.sheet.MapBeaconSheetRoot // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
-import compose.project.click.click.ui.theme.LocalPlatformStyle
+import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
 import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
-import compose.project.click.click.ui.utils.displayDynamicTitle
-import compose.project.click.click.util.oneToOnePeerPairKey
-import compose.project.click.click.utils.LocationService
+import compose.project.click.click.ui.utils.displayDynamicTitle // pragma: allowlist secret
+import compose.project.click.click.util.oneToOnePeerPairKey // pragma: allowlist secret
+import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapSelection // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapState // pragma: allowlist secret
@@ -1231,7 +1232,7 @@ private fun MapLayerFilterDropdown(
             containerColor = menuSurface,
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,
-            border = BorderStroke(2.dp, menuOutline),
+            border = BorderStroke(clickBorderWidth(), menuOutline),
         ) {
             MapLayerFilter.entries.forEach { filter ->
                 val isSelected =
@@ -1411,7 +1412,7 @@ private fun BeaconOwnerOverflowMenu(
     }
 }
 
-/** Functional Clarity overflow: opaque surface, 2dp hard border, zero elevation. */
+/** Owner overflow — shared [ClickDropdownMenu] chrome. */
 @Composable
 private fun BeaconOwnerDropdownMenu(
     expanded: Boolean,
@@ -1419,77 +1420,24 @@ private fun BeaconOwnerDropdownMenu(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    val border = clickBorderColor()
-    val menuSurface = MaterialTheme.colorScheme.surface
-    val onMenu = MaterialTheme.colorScheme.onSurface
-    DropdownMenu(
+    ClickDropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismissRequest,
-        modifier = Modifier.widthIn(min = 180.dp),
-        shape = RoundedCornerShape(12.dp),
-        containerColor = menuSurface,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-        border = BorderStroke(2.dp, border),
-    ) {
-        DropdownMenuItem(
-            text = {
-                Text(
-                    "Edit",
-                    color = onMenu,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            },
-            onClick = {
-                onDismissRequest()
-                onEdit()
-            },
-            leadingIcon = {
-                Icon(
-                    Icons.Filled.Edit,
-                    contentDescription = null,
-                    tint = onMenu,
-                )
-            },
-            colors =
-                MenuDefaults.itemColors(
-                    textColor = onMenu,
-                    leadingIconColor = onMenu,
+        items =
+            listOf(
+                ClickMenuItem(
+                    label = "Edit",
+                    onClick = onEdit,
+                    icon = Icons.Filled.Edit,
                 ),
-        )
-        HorizontalDivider(
-            modifier = Modifier.padding(horizontal = 12.dp),
-            thickness = 1.dp,
-            color = border.copy(alpha = 0.45f),
-        )
-        DropdownMenuItem(
-            text = {
-                Text(
-                    "Delete",
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            },
-            onClick = {
-                onDismissRequest()
-                onDelete()
-            },
-            leadingIcon = {
-                Icon(
-                    Icons.Filled.Delete,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                )
-            },
-            colors =
-                MenuDefaults.itemColors(
-                    textColor = MaterialTheme.colorScheme.error,
-                    leadingIconColor = MaterialTheme.colorScheme.error,
+                ClickMenuItem(
+                    label = "Delete",
+                    onClick = onDelete,
+                    icon = Icons.Filled.Delete,
+                    destructive = true,
                 ),
-        )
-    }
+            ),
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -1583,19 +1531,6 @@ internal fun EventBeaconDetail(
         // Always hydrate missing Posted / Host / creator / schedule — bookmark & proximity rows
         // often already have schedule, so the old schedule-only gate skipped host+posted forever.
         viewModel.ensureEventBeaconDetail(displayBeacon.id, seed = displayBeacon)
-        val hostIncomplete =
-            displayBeacon.creatorDisplayName.isNullOrBlank() ||
-                (displayBeacon.showCreatorName && displayBeacon.createdByUserId.isNullOrBlank())
-        if (hostIncomplete) {
-            val fetched =
-                withContext(Dispatchers.Default) {
-                    MapBeaconRepository().fetchBeacon(displayBeacon.id).getOrNull()
-                }
-            if (fetched != null) {
-                networkDetail = fetched
-                viewModel.ensureEventBeaconDetail(displayBeacon.id, seed = fetched)
-            }
-        }
     }
 
     LaunchedEffect(displayBeacon.id, currentUserSignedUp, checkedIn) {
@@ -1715,7 +1650,7 @@ internal fun EventBeaconDetail(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .border(2.dp, border, RoundedCornerShape(12.dp))
+                        .border(clickBorderWidth(), border, RoundedCornerShape(12.dp))
                         .background(cardSurface, RoundedCornerShape(12.dp))
                         .padding(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1859,7 +1794,7 @@ internal fun EventBeaconDetail(
             enabled = !checkInPending,
             modifier = Modifier.fillMaxWidth(),
             shape = actionShape,
-            border = BorderStroke(2.dp, border),
+            border = BorderStroke(clickBorderWidth(), border),
             colors =
                 ButtonDefaults.buttonColors(
                     containerColor =
@@ -1908,7 +1843,7 @@ internal fun EventBeaconDetail(
             },
             modifier = Modifier.fillMaxWidth(),
             shape = actionShape,
-            border = BorderStroke(2.dp, border),
+            border = BorderStroke(clickBorderWidth(), border),
             colors =
                 ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -1940,7 +1875,7 @@ internal fun EventBeaconDetail(
                 enabled = !rsvpPending,
                 modifier = Modifier.fillMaxWidth(),
                 shape = actionShape,
-                border = BorderStroke(2.dp, MaterialTheme.colorScheme.error),
+                border = BorderStroke(clickBorderWidth(), MaterialTheme.colorScheme.error),
                 colors =
                     ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error,
@@ -1970,7 +1905,7 @@ internal fun EventBeaconDetail(
                 enabled = !rsvpPending,
                 modifier = Modifier.fillMaxWidth(),
                 shape = actionShape,
-                border = BorderStroke(2.dp, border),
+                border = BorderStroke(clickBorderWidth(), border),
                 colors =
                     ButtonDefaults.outlinedButtonColors(
                         contentColor = MaterialTheme.colorScheme.onSurface,
@@ -2050,27 +1985,17 @@ private fun BeaconShareMenuButton(
             contentDescription = contentDescription,
             icon = Icons.Filled.Share,
         )
-        DropdownMenu(
+        ClickDropdownMenu(
             expanded = shareMenuExpanded,
             onDismissRequest = { shareMenuExpanded = false },
-        ) {
-            DropdownMenuItem(
-                text = { Text("Share link") },
-                onClick = {
-                    shareMenuExpanded = false
-                    onShare()
+            items =
+                buildList {
+                    add(ClickMenuItem(label = "Share link", onClick = onShare))
+                    if (onShareToChat != null) {
+                        add(ClickMenuItem(label = "Share to chat", onClick = { onShareToChat.invoke() }))
+                    }
                 },
-            )
-            if (onShareToChat != null) {
-                DropdownMenuItem(
-                    text = { Text("Share to chat") },
-                    onClick = {
-                        shareMenuExpanded = false
-                        onShareToChat()
-                    },
-                )
-            }
-        }
+        )
     }
 }
 
@@ -2137,7 +2062,7 @@ private fun EventHeroIconButton(
         modifier =
             Modifier
                 .size(48.dp)
-                .border(2.dp, border, CircleShape)
+                .border(clickBorderWidth(), border, CircleShape)
                 .clip(CircleShape)
                 .background(
                     if (selected) {
@@ -2199,7 +2124,7 @@ private fun EventBentoCell(
     Column(
         modifier =
             modifier
-                .border(2.dp, border, RoundedCornerShape(12.dp))
+                .border(clickBorderWidth(), border, RoundedCornerShape(12.dp))
                 .background(cardSurface, RoundedCornerShape(12.dp))
                 .padding(16.dp),
     ) {
@@ -2261,7 +2186,7 @@ private fun EventCategoryChips(
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier =
                         Modifier
-                            .border(2.dp, border, RoundedCornerShape(999.dp))
+                            .border(clickBorderWidth(), border, RoundedCornerShape(999.dp))
                             .background(cardSurface, RoundedCornerShape(999.dp))
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                 )
@@ -2282,7 +2207,7 @@ private fun EventHostCard(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .border(2.dp, border, RoundedCornerShape(12.dp))
+                .border(clickBorderWidth(), border, RoundedCornerShape(12.dp))
                 .background(cardSurface, RoundedCornerShape(12.dp))
                 .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -2296,7 +2221,7 @@ private fun EventHostCard(
             modifier =
                 Modifier
                     .size(56.dp)
-                    .border(2.dp, border, CircleShape)
+                    .border(clickBorderWidth(), border, CircleShape)
                     .clip(CircleShape),
         )
         Column(modifier = Modifier.weight(1f)) {
@@ -2352,7 +2277,7 @@ private fun EventAttendeeStack(
                                     .offset(x = (-10 * index).dp)
                                     .zIndex((visible.size - index).toFloat())
                                     .size(48.dp)
-                                    .border(2.dp, border, CircleShape)
+                                    .border(clickBorderWidth(), border, CircleShape)
                                     .clip(CircleShape)
                                     .background(cardSurface),
                         )
@@ -2364,7 +2289,7 @@ private fun EventAttendeeStack(
                                     .offset(x = (-10 * visible.size).dp)
                                     .zIndex(0f)
                                     .size(48.dp)
-                                    .border(2.dp, border, CircleShape)
+                                    .border(clickBorderWidth(), border, CircleShape)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.secondaryContainer),
                             contentAlignment = Alignment.Center,
@@ -2566,7 +2491,7 @@ internal fun CommunityBeaconDetail(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .border(2.dp, border, RoundedCornerShape(12.dp))
+                    .border(clickBorderWidth(), border, RoundedCornerShape(12.dp))
                     .background(cardSurface, RoundedCornerShape(12.dp))
                     .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -2702,7 +2627,7 @@ internal fun SoundtrackBeaconDetail(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(20.dp))
                     .background(cardSurface)
-                    .border(2.dp, border, RoundedCornerShape(20.dp))
+                    .border(clickBorderWidth(), border, RoundedCornerShape(20.dp))
                     .padding(16.dp),
         ) {
             Row(
@@ -2719,7 +2644,7 @@ internal fun SoundtrackBeaconDetail(
                             Modifier
                                 .size(112.dp)
                                 .clip(RoundedCornerShape(16.dp))
-                                .border(2.dp, border, RoundedCornerShape(16.dp)),
+                                .border(clickBorderWidth(), border, RoundedCornerShape(16.dp)),
                     )
                 } else {
                     Box(
@@ -2728,7 +2653,7 @@ internal fun SoundtrackBeaconDetail(
                                 .size(112.dp)
                                 .clip(RoundedCornerShape(16.dp))
                                 .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                                .border(2.dp, border, RoundedCornerShape(16.dp)),
+                                .border(clickBorderWidth(), border, RoundedCornerShape(16.dp)),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
@@ -2796,7 +2721,7 @@ internal fun SoundtrackBeaconDetail(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(20.dp))
                         .background(cardSurface)
-                        .border(2.dp, border, RoundedCornerShape(20.dp))
+                        .border(clickBorderWidth(), border, RoundedCornerShape(20.dp))
                         .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -3296,7 +3221,7 @@ private fun OverlappingMapPinsChooser(
                         .fillMaxWidth()
                         .clip(shape)
                         .background(rowSurface)
-                        .border(2.dp, rowBorder, shape)
+                        .border(clickBorderWidth(), rowBorder, shape)
                         .clickable { onChoose(pin) }
                         .padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -3310,7 +3235,7 @@ private fun OverlappingMapPinsChooser(
                     modifier =
                         Modifier
                             .size(48.dp)
-                            .border(2.dp, rowBorder, CircleShape)
+                            .border(clickBorderWidth(), rowBorder, CircleShape)
                             .clip(CircleShape),
                 )
                 Column(modifier = Modifier.weight(1f)) {
@@ -3424,7 +3349,7 @@ fun ConnectionMarkerSheet(
                             TimeState.RECENT -> MaterialTheme.colorScheme.primaryContainer
                             TimeState.ARCHIVE -> MaterialTheme.colorScheme.surfaceVariant
                         },
-                    ).border(2.dp, clickBorderColor(), CircleShape),
+                    ).border(clickBorderWidth(), clickBorderColor(), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             if (point.shouldPulse) {
@@ -3521,7 +3446,7 @@ private fun MarkerSheetTimeStateBadge(timeState: TimeState) {
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
-        border = BorderStroke(2.dp, color),
+        border = BorderStroke(clickBorderWidth(), color),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),

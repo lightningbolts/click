@@ -6,7 +6,6 @@
 
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -72,7 +71,7 @@ fun OnlineFriendItem(
                     .size(48.dp)
                     .clip(RoundedCornerShape(24.dp))
                     .background(MaterialTheme.colorScheme.primaryContainer)
-                    .border(2.dp, clickBorderColor(), CircleShape),
+                    .border(clickBorderWidth(), clickBorderColor(), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -125,7 +124,7 @@ fun RecentClickCard(
                         .size(48.dp)
                         .clip(RoundedCornerShape(24.dp))
                         .background(MaterialTheme.colorScheme.primaryContainer)
-                        .border(2.dp, clickBorderColor(), CircleShape),
+                        .border(clickBorderWidth(), clickBorderColor(), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -206,7 +205,7 @@ fun HomeSearchPill(
                 .fillMaxWidth()
                 .clip(shape)
                 .background(clickCardSurface())
-                .border(2.dp, clickBorderColor(), shape)
+                .border(clickBorderWidth(), clickBorderColor(), shape)
                 .clickable(onClick = onClick)
                 .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -294,7 +293,7 @@ fun FeaturedEventCard(
                 .fillMaxWidth()
                 .clip(shape)
                 .background(clickCardSurface())
-                .border(2.dp, clickBorderColor(), shape),
+                .border(clickBorderWidth(), clickBorderColor(), shape),
     ) {
         Box(
             modifier =
@@ -317,7 +316,7 @@ fun FeaturedEventCard(
                         .padding(12.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(MaterialTheme.colorScheme.primary)
-                        .border(2.dp, clickBorderColor(), RoundedCornerShape(8.dp))
+                        .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(8.dp))
                         .padding(horizontal = 10.dp, vertical = 6.dp),
             ) {
                 Text(
@@ -522,7 +521,7 @@ fun ActivityRecapSection(
                     .fillMaxWidth()
                     .clip(shape)
                     .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                    .border(2.dp, clickBorderColor(), shape)
+                    .border(clickBorderWidth(), clickBorderColor(), shape)
                     .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -558,7 +557,7 @@ private fun RecapWindowChip(
                     } else {
                         MaterialTheme.colorScheme.surfaceContainerLow
                     },
-                ).border(2.dp, clickBorderColor(), shape)
+                ).border(clickBorderWidth(), clickBorderColor(), shape)
                 .clickable(onClick = onClick)
                 .padding(horizontal = 14.dp, vertical = 8.dp),
     )
@@ -648,7 +647,7 @@ private fun SavedEventCategoryTile(
                 .aspectRatio(1f)
                 .clip(shape)
                 .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                .border(2.dp, clickBorderColor(), shape)
+                .border(clickBorderWidth(), clickBorderColor(), shape)
                 .clickable(onClick = onClick)
                 .padding(16.dp),
         verticalArrangement = Arrangement.SpaceBetween,
@@ -659,7 +658,7 @@ private fun SavedEventCategoryTile(
                     .size(40.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primary)
-                    .border(2.dp, clickBorderColor(), CircleShape),
+                    .border(clickBorderWidth(), clickBorderColor(), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -729,7 +728,7 @@ private fun ExploreBeaconCategoryTile(
                 .aspectRatio(1f)
                 .clip(shape)
                 .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                .border(2.dp, clickBorderColor(), shape)
+                .border(clickBorderWidth(), clickBorderColor(), shape)
                 .clickable(onClick = onClick)
                 .padding(16.dp),
         verticalArrangement = Arrangement.SpaceBetween,
@@ -740,7 +739,7 @@ private fun ExploreBeaconCategoryTile(
                     .size(40.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primary)
-                    .border(2.dp, clickBorderColor(), CircleShape),
+                    .border(clickBorderWidth(), clickBorderColor(), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -795,7 +794,7 @@ fun PollPairCard(
                 .fillMaxWidth()
                 .clip(outerShape)
                 .background(clickCardSurface())
-                .border(2.dp, clickBorderColor(), outerShape)
+                .border(clickBorderWidth(), clickBorderColor(), outerShape)
                 .padding(16.dp),
     ) {
         Row(
@@ -808,7 +807,7 @@ fun PollPairCard(
                         .size(48.dp)
                         .clip(RoundedCornerShape(16.dp))
                         .background(MaterialTheme.colorScheme.primary)
-                        .border(2.dp, clickBorderColor(), RoundedCornerShape(16.dp)),
+                        .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -872,7 +871,7 @@ fun PollPairCard(
                 enabled = icebreakerSendEnabled,
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(2.dp, clickBorderColor()),
+                border = clickBorderStroke(),
                 colors =
                     ButtonDefaults.outlinedButtonColors(
                         contentColor = MaterialTheme.colorScheme.onSurface,
@@ -924,7 +923,7 @@ fun StatCard(
                         .size(48.dp)
                         .clip(RoundedCornerShape(16.dp))
                         .background(MaterialTheme.colorScheme.primary)
-                        .border(2.dp, clickBorderColor(), RoundedCornerShape(16.dp)),
+                        .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(

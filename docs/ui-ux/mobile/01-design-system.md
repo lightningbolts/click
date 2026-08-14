@@ -1,6 +1,6 @@
 # Design System Foundation — Functional Clarity (Target State)
 
-**Visual system:** Neo-brutalist Functional Clarity — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients.  
+**Visual system:** Neo-brutalist Functional Clarity — opaque surfaces, 1dp quiet outline-variant borders, primary `#630ed4`, secondary `#224CFF`, no glass/blur/gradients.  
 **Design tokens:** [../../design-assets/functional_clarity/DESIGN.md](../../design-assets/functional_clarity/DESIGN.md)  
 **Compose source index:** `click/composeApp/src/commonMain/kotlin/compose/project/click/click/ui/` — existing `Glass*` API names may remain for churn; they **render as brutalist cards** in the target theme.
 
@@ -34,7 +34,8 @@
 - **Brand tokens** (Functional Clarity): `primary` `#630ed4`, `on-primary` `#ffffff`, `primary-container` `#7c3aed`, `on-primary-container` `#ede0ff`, `surface-tint` `#732ee4`.
 - **Light mode**: `background` `#f9f9f9`, `surface` `#ffffff`, `surface-container-low` `#f3f3f4`, `surface-container` `#eeeeee`, `on-surface` `#1a1c1c`, `on-surface-variant` `#4a4455`, `outline` `#7b7487`.
 - **Dark mode (inverse)**: `background` `#101212`, `surface` `#1a1c1c`, `surface-container` `#242626`, `surface-variant` `#2a2c2c`, `on-surface` `#f0f1f1`, `on-surface-variant` `#d6d9d9` — **opaque product surfaces + hard borders**; tab bar chrome is **transparent** so content under icons matches content above.
-- **Structural border**: **2dp** hard edge — `#000000` (`BorderHard`) in light mode, `#FFFFFF` (`BorderHardDark`) in dark mode — on cards, sheets, and inputs. Use `clickBorderColor()` / `LocalIsDarkMode`. Tab bar does **not** draw a filled top border band (see known issue `#23`).
+- **Structural border**: **1dp** quiet edge — `#CCC3D8` (`BorderQuiet`) in light mode, `#4A3D5C` (`BorderQuietDark`) in dark mode — on cards, sheets, and inputs. Use `clickBorderColor()` / `clickBorderWidth()` / `clickBorderStroke()`. Keep **2dp** only for selected / focus / primary rings. Tab bar does **not** draw a filled top border band (see known issue `#23`).
+- **Secondary accent**: `#224CFF` (`SecondaryAccent`) for events / map / non-CTA emphasis. Material `secondary` maps to this token.
 - **No glass primitives**: no `GlassWhite` alpha fills, no `GlassBorder` hairlines, no backdrop blur on product chrome.
 - **No gradient text**: headings use solid `on-surface` or `primary`; no `GradientTextStart`/`End` usage.
 - **Material color scheme** (`PlatformTheme.kt` `clickColorScheme`):
@@ -149,8 +150,8 @@
 | `cardCornerRadius` | **16 dp** | **16 dp** |
 | `compactCardCornerRadius` | **8 dp** | **8 dp** |
 | `buttonCornerRadius` | **8 dp** | **8 dp** |
-| `cardBorderWidth` | **2 dp** | **2 dp** |
-| `borderColor` | `#000000` | `#000000` |
+| `cardBorderWidth` | **1 dp** | **1 dp** |
+| `borderColor` | quiet outline-variant | quiet outline-variant |
 | `useShadowElevation` | **false** | **false** |
 | `useRipple` | **false** | **true** |
 | `pressTranslateDp` | **2 dp** | **2 dp** |
@@ -159,8 +160,9 @@ Detection: `getPlatform().name.contains("iOS")`.
 
 ### 3.2 Interactive Elements
 
-- `GlassCard`, `GlassCardCompact`, `GlassSurface` → solid fill + **2dp** `#000` border (API names unchanged).
-- `AdaptiveButton` → solid `primary` fill (iOS) or bordered secondary (Android variant); press = 2dp translate + instant darken.
+- Shared primitives (reuse these; do not invent one-off chrome): `ClickButton` / `ClickButtonVariant`, `ClickOutlinedTextField` / `ClickSearchField` / `ClickFieldTokens`, `ClickDropdownMenu` / `ClickMenuItem`, `AdaptiveCard` / `GlassCard`.
+- `GlassCard`, `GlassCardCompact`, `GlassSurface` → solid fill + **1dp** quiet border (API names unchanged).
+- `ClickButton` / `AdaptiveButton` → solid `primary` fill; secondary variant uses 1dp quiet border; press = 2dp translate + instant darken.
 - Card-level `clickable`: `indication = null` on iOS; Android may show ripple on M3 buttons when `useRipple` true.
 
 ### 3.3 States

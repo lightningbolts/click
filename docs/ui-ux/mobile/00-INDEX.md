@@ -4,7 +4,7 @@
 **Product:** Click — Anti-doomscrolling · Stop scrolling, start living.  
 **Scope:** Kotlin Multiplatform mobile app (`click/`) — Android + iOS Compose UI, App Clip handshake, CallKit/PushKit overlays.  
 **Out of scope:** Web companion (`click-web/`), B2B Insights, Admin, business signup, backend/APIs/Edge Functions/RLS. Network and permission failures appear only as **user-visible** states.  
-**Source of truth:** Functional Clarity target-state Compose UI (neo-brutalist revamp) — opaque surfaces, 2px `#000` borders, primary `#630ed4`; not as-built glass. Design tokens: [../../design-assets/functional_clarity/DESIGN.md](../../design-assets/functional_clarity/DESIGN.md).  
+**Source of truth:** Functional Clarity target-state Compose UI — opaque surfaces, 1dp quiet outline-variant borders, primary `#630ed4`, secondary `#224CFF`. Design tokens: [../../design-assets/functional_clarity/DESIGN.md](../../design-assets/functional_clarity/DESIGN.md).  
 **Date:** 2026-07-17  
 
 **Regression / QA:** After major changes, run [../../regression-testing/00-INDEX.md](../../regression-testing/00-INDEX.md) (full checklist, smoke, known-issues audit). These UI/UX files describe expected behavior; they are not a test plan.
@@ -112,7 +112,7 @@ Search is **not** a tab; it opens as `UnifiedSearchSheet` from headers.
 |------|---------|-----|
 | Tab bar | Material3 `NavigationBar`, 80dp + inset; **solid bordered bar**, 2dp top `#000` border | Native `UITabBar`, 49dp; **solid bordered bar** (not liquid glass); active tab = solid `#630ed4` circle behind icon |
 | Ripple | Enabled on M3 buttons | Disabled |
-| Card border | **2dp** `#000` hard border | **2dp** `#000` hard border |
+| Card border | **1dp** quiet outline-variant | **1dp** quiet outline-variant |
 | Button corners | **8dp** radius, solid primary fill | **8dp** radius, solid primary fill |
 | Press feedback | 2dp translate + instant darken; ripple on buttons | 2dp translate + instant darken only |
 | Modal back | System back / `BackHandler` | Edge swipe (`InteractiveSwipeBackContainer`) |

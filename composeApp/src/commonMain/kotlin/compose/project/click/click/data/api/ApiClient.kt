@@ -2044,6 +2044,10 @@ data class EventBookmarkItemDto(
     val latitude: Double? = null,
     val longitude: Double? = null,
     @SerialName("expires_at") val expiresAt: String? = null,
+    @SerialName("creator_id") val creatorId: String? = null,
+    @SerialName("creator_name") val creatorName: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("show_creator_name") val showCreatorName: Boolean = false,
 )
 
 fun EventBookmarkItemDto.toStoredEventBookmark(): StoredEventBookmark =
@@ -2059,6 +2063,10 @@ fun EventBookmarkItemDto.toStoredEventBookmark(): StoredEventBookmark =
         latitude = latitude,
         longitude = longitude,
         expiresAt = expiresAt,
+        creatorId = creatorId,
+        creatorName = creatorName,
+        createdAt = createdAt,
+        showCreatorName = showCreatorName,
     )
 
 fun StoredEventBookmark.toEventBookmarkItemDto(): EventBookmarkItemDto =
@@ -2074,6 +2082,10 @@ fun StoredEventBookmark.toEventBookmarkItemDto(): EventBookmarkItemDto =
         latitude = latitude,
         longitude = longitude,
         expiresAt = expiresAt,
+        creatorId = creatorId,
+        creatorName = creatorName,
+        createdAt = createdAt,
+        showCreatorName = showCreatorName,
     )
 
 @Serializable

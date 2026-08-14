@@ -1,6 +1,10 @@
-package compose.project.click.click.ui.screens
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
 
-import androidx.compose.animation.AnimatedVisibility
+package compose.project.click.click.ui.screens // pragma: allowlist secret
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.*
@@ -12,7 +16,6 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,10 +25,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material3.*
-import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,42 +38,44 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import compose.project.click.click.PlatformHapticsPolicy
-import compose.project.click.click.data.storage.createTokenStorage
-import compose.project.click.click.proximity.ProximityManager
+import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.calendar.AvailabilityOverlapGap // pragma: allowlist secret
+import compose.project.click.click.calendar.lockAvailabilityIntentForGap // pragma: allowlist secret
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.OpenMeteoWeatherService // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.UserProfile // pragma: allowlist secret
+import compose.project.click.click.data.models.toConnectionPayloadWeatherJson // pragma: allowlist secret
+import compose.project.click.click.data.models.toUserProfile // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.proximity.MockProximityManager // pragma: allowlist secret
+import compose.project.click.click.proximity.ProximityManager // pragma: allowlist secret
+import compose.project.click.click.proximity.isSimulatorOrEmulatorRuntime // pragma: allowlist secret
 import compose.project.click.click.sensors.AmbientNoiseMonitorProvider // pragma: allowlist secret
 import compose.project.click.click.sensors.BarometricHeightMonitorProvider // pragma: allowlist secret
+import compose.project.click.click.sensors.HardwareVibeMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.captureConnectionSensorContext // pragma: allowlist secret
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.data.OpenMeteoWeatherService
-import compose.project.click.click.data.models.toConnectionPayloadWeatherJson
-import compose.project.click.click.data.models.User
-import compose.project.click.click.data.models.UserProfile
-import compose.project.click.click.data.models.toUserProfile
-import compose.project.click.click.proximity.MockProximityManager
-import compose.project.click.click.ui.components.AdaptiveBackground
-import compose.project.click.click.ui.components.ClickTextFieldMinHeight
-import compose.project.click.click.ui.components.bottomChromePadding
-import compose.project.click.click.ui.components.ConnectionContextPresentation
-import compose.project.click.click.ui.components.ConnectionContextSheet
-import compose.project.click.click.calendar.AvailabilityOverlapGap
-import compose.project.click.click.calendar.lockAvailabilityIntentForGap
-import compose.project.click.click.data.repository.SupabaseRepository
-import compose.project.click.click.ui.components.PageHeader
-import compose.project.click.click.ui.components.rememberConnectionHandshakePulse
-import compose.project.click.click.ui.utils.openApplicationSystemSettings
-import compose.project.click.click.proximity.isSimulatorOrEmulatorRuntime
-import compose.project.click.click.ui.theme.*
-import compose.project.click.click.ui.utils.rememberLocationPermissionRequester
-import compose.project.click.click.ui.utils.rememberProximityHardwarePermissionRequester
-import compose.project.click.click.sensors.HardwareVibeMonitor
-import compose.project.click.click.viewmodel.ConnectionState
-import compose.project.click.click.viewmodel.ConnectionViewModel
+import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickTextFieldMinHeight // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionContextPresentation // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionContextSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.PageHeader // pragma: allowlist secret
+import compose.project.click.click.ui.components.bottomChromePadding // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberConnectionHandshakePulse // pragma: allowlist secret
+import compose.project.click.click.ui.theme.* // pragma: allowlist secret
+import compose.project.click.click.ui.utils.openApplicationSystemSettings // pragma: allowlist secret
+import compose.project.click.click.ui.utils.rememberLocationPermissionRequester // pragma: allowlist secret
+import compose.project.click.click.ui.utils.rememberProximityHardwarePermissionRequester // pragma: allowlist secret
+import compose.project.click.click.utils.LocationService // pragma: allowlist secret
+import compose.project.click.click.viewmodel.ConnectionState // pragma: allowlist secret
+import compose.project.click.click.viewmodel.ConnectionViewModel // pragma: allowlist secret
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.delay
 
 @Composable
 fun NfcScreen(
@@ -86,9 +90,10 @@ fun NfcScreen(
 ) {
     val connectionState by connectionViewModel.connectionState.collectAsState()
     val supportsTap = remember(proximityManager) { proximityManager.supportsTapExchange() }
-    val showHowItWorksCard = remember(proximityManager) {
-        proximityManager is MockProximityManager || isSimulatorOrEmulatorRuntime()
-    }
+    val showHowItWorksCard =
+        remember(proximityManager) {
+            proximityManager is MockProximityManager || isSimulatorOrEmulatorRuntime()
+        }
     val capabilityNote = remember(proximityManager) { proximityManager.capabilityNote() }
     val ambientNoiseMonitor = AmbientNoiseMonitorProvider.current
     val barometricHeightMonitor = BarometricHeightMonitorProvider.current
@@ -96,7 +101,10 @@ fun NfcScreen(
     val openMeteoWeather = remember { OpenMeteoWeatherService() }
     val scope = rememberCoroutineScope()
     var ambientNoiseOptIn by remember { mutableStateOf(false) }
-    val locationService = remember { compose.project.click.click.utils.LocationService() }
+    val locationService =
+        remember {
+            LocationService()
+        }
     val requestLocationPermissionThen = rememberLocationPermissionRequester()
     val requestProximityHardwarePermissions = rememberProximityHardwarePermissionRequester()
 
@@ -159,9 +167,10 @@ fun NfcScreen(
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .bottomChromePadding(),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .bottomChromePadding(),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 // Header - consistent with MyQRCodeScreen and QRScannerScreen
@@ -174,7 +183,7 @@ fun NfcScreen(
                                 Icon(
                                     Icons.AutoMirrored.Filled.ArrowBack,
                                     contentDescription = "Back",
-                                    tint = MaterialTheme.colorScheme.onSurface
+                                    tint = MaterialTheme.colorScheme.onSurface,
                                 )
                             }
                         },
@@ -183,45 +192,47 @@ fun NfcScreen(
                                 Icon(
                                     Icons.Default.Settings,
                                     contentDescription = "Bluetooth and audio settings",
-                                    tint = MaterialTheme.colorScheme.onSurface
+                                    tint = MaterialTheme.colorScheme.onSurface,
                                 )
                             }
-                        }
+                        },
                     )
                 }
 
                 // Main content area
                 Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp),
-                    contentAlignment = Alignment.Center
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
                     AnimatedContent(
                         targetState = connectionState,
                         transitionSpec = {
-                            (fadeIn(spring(dampingRatio = 0.82f, stiffness = 420f)) +
-                                scaleIn(
-                                    initialScale = 0.96f,
-                                    animationSpec = spring(dampingRatio = 0.78f, stiffness = 360f),
-                                ))
-                                .togetherWith(
-                                    fadeOut(spring(dampingRatio = 0.9f, stiffness = 520f)) +
-                                        scaleOut(
-                                            targetScale = 0.98f,
-                                            animationSpec = spring(dampingRatio = 0.9f, stiffness = 520f),
-                                        )
-                                )
-                                .using(SizeTransform(clip = false))
+                            (
+                                fadeIn(spring(dampingRatio = 0.82f, stiffness = 420f)) +
+                                    scaleIn(
+                                        initialScale = 0.96f,
+                                        animationSpec = spring(dampingRatio = 0.78f, stiffness = 360f),
+                                    )
+                            ).togetherWith(
+                                fadeOut(spring(dampingRatio = 0.9f, stiffness = 520f)) +
+                                    scaleOut(
+                                        targetScale = 0.98f,
+                                        animationSpec = spring(dampingRatio = 0.9f, stiffness = 520f),
+                                    ),
+                            ).using(SizeTransform(clip = false))
                         },
                         label = "tap_connect_state",
                     ) { state ->
-                        val pulseHandshake = state is ConnectionState.ProximityFetchingLocation ||
-                            state is ConnectionState.ProximityHandshaking ||
-                            state is ConnectionState.ProximityResolving ||
-                            state is ConnectionState.Loading ||
-                            state is ConnectionState.SecuringConnection
+                        val pulseHandshake =
+                            state is ConnectionState.ProximityFetchingLocation ||
+                                state is ConnectionState.ProximityHandshaking ||
+                                state is ConnectionState.ProximityResolving ||
+                                state is ConnectionState.Loading ||
+                                state is ConnectionState.SecuringConnection
                         when (state) {
                             is ConnectionState.Idle -> {
                                 NfcIdleContent(
@@ -252,29 +263,32 @@ fun NfcScreen(
                                         onConfirmAll = {
                                             onProximityFinalizeStart()
                                             scope.launch {
-                                                val vibe = withContext(Dispatchers.Default) {
-                                                    runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
-                                                }
-                                                val (la, lo) = connectionViewModel.lastProximityCoordinates()
-                                                val weatherLabel = withContext(Dispatchers.Default) {
-                                                    if (
-                                                        la != null && lo != null &&
-                                                        la.isFinite() && lo.isFinite() &&
-                                                        !(la == 0.0 && lo == 0.0)
-                                                    ) {
-                                                        openMeteoWeather.fetchWeather(la, lo)?.toConnectionPayloadWeatherJson()
-                                                    } else {
-                                                        null
+                                                val vibe =
+                                                    withContext(Dispatchers.Default) {
+                                                        runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
                                                     }
-                                                }
+                                                val (la, lo) = connectionViewModel.lastProximityCoordinates()
+                                                val weatherLabel =
+                                                    withContext(Dispatchers.Default) {
+                                                        if (
+                                                            la != null && lo != null &&
+                                                            la.isFinite() && lo.isFinite() &&
+                                                            !(la == 0.0 && lo == 0.0)
+                                                        ) {
+                                                            openMeteoWeather.fetchWeather(la, lo)?.toConnectionPayloadWeatherJson()
+                                                        } else {
+                                                            null
+                                                        }
+                                                    }
                                                 val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
                                                 val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
-                                                val sensors = captureConnectionSensorContext(
-                                                    ambientNoiseMonitor = ambientNoiseMonitor,
-                                                    barometricHeightMonitor = barometricHeightMonitor,
-                                                    ambientNoiseOptIn = noiseOptIn,
-                                                    barometricContextOptIn = baroOptIn,
-                                                )
+                                                val sensors =
+                                                    captureConnectionSensorContext(
+                                                        ambientNoiseMonitor = ambientNoiseMonitor,
+                                                        barometricHeightMonitor = barometricHeightMonitor,
+                                                        ambientNoiseOptIn = noiseOptIn,
+                                                        barometricContextOptIn = baroOptIn,
+                                                    )
                                                 connectionViewModel.confirmProximityConnection(
                                                     peerUsers = state.users,
                                                     currentUserId = userId,
@@ -331,7 +345,7 @@ fun NfcScreen(
                                     },
                                     onCreateAnother = {
                                         connectionViewModel.resetConnectionState()
-                                    }
+                                    },
                                 )
                             }
                             is ConnectionState.QrAwaitingContext -> {
@@ -343,7 +357,7 @@ fun NfcScreen(
                                     onRetry = {
                                         startTapAfterHardwarePermissionGate()
                                     },
-                                    onDismiss = { connectionViewModel.resetConnectionState() }
+                                    onDismiss = { connectionViewModel.resetConnectionState() },
                                 )
                             }
                         }
@@ -363,34 +377,44 @@ fun NfcScreen(
                     var calendarLockInProgress by remember { mutableStateOf(false) }
                     val supabaseRepo = remember { SupabaseRepository() }
                     val reconnectConnectionId = tagging.newConnections.firstOrNull()?.id
-                    val reconnectPeerId = tagging.targetUsers.firstOrNull { it.id != userId }?.id
-                        ?: tagging.targetUsers.firstOrNull()?.id
-                    val sheetSelectableUsers = when {
-                        tagging.selectableUsers.size >= 2 -> tagging.selectableUsers
-                        tagging.targetUsers.size >= 2 -> tagging.targetUsers
-                        else -> emptyList()
-                    }
-                    val sheetInitialSelectedIds = tagging.selectedPeerIds
-                        .ifEmpty { sheetSelectableUsers.map { it.id }.toSet() }
+                    val reconnectPeerId =
+                        tagging.targetUsers.firstOrNull { it.id != userId }?.id
+                            ?: tagging.targetUsers.firstOrNull()?.id
+                    val sheetSelectableUsers =
+                        when {
+                            tagging.selectableUsers.size >= 2 -> tagging.selectableUsers
+                            tagging.targetUsers.size >= 2 -> tagging.targetUsers
+                            else -> emptyList()
+                        }
+                    val sheetInitialSelectedIds =
+                        tagging.selectedPeerIds
+                            .ifEmpty { sheetSelectableUsers.map { it.id }.toSet() }
                     // requiresSelection must use Connect → confirmHostProximitySelection (not Save Encounter).
-                    val presentation = if (!tagging.isNewConnection && !tagging.requiresSelection) {
-                        ConnectionContextPresentation.ReconnectEncounter
-                    } else {
-                        ConnectionContextPresentation.NewSpark
-                    }
+                    val presentation =
+                        if (!tagging.isNewConnection && !tagging.requiresSelection) {
+                            ConnectionContextPresentation.ReconnectEncounter
+                        } else {
+                            ConnectionContextPresentation.NewSpark
+                        }
+
                     fun taggingForSelectedPeers(selectedIds: Set<String>): ConnectionState.TaggingContext {
                         if (selectedIds.isEmpty() || sheetSelectableUsers.size < 2) return tagging
-                        val filteredTargets = tagging.targetUsers.filter { it.id in selectedIds }
-                            .ifEmpty { tagging.targetUsers }
-                        val filteredConnections = tagging.newConnections.filter { conn ->
-                            conn.user_ids.any { uid -> uid in selectedIds && uid != userId }
-                        }.ifEmpty { tagging.newConnections }
+                        val filteredTargets =
+                            tagging.targetUsers
+                                .filter { it.id in selectedIds }
+                                .ifEmpty { tagging.targetUsers }
+                        val filteredConnections =
+                            tagging.newConnections
+                                .filter { conn ->
+                                    conn.user_ids.any { uid -> uid in selectedIds && uid != userId }
+                                }.ifEmpty { tagging.newConnections }
                         return tagging.copy(
                             targetUsers = filteredTargets,
                             newConnections = filteredConnections,
-                            memberUserIds = tagging.memberUserIds
-                                .filter { it in selectedIds || it == userId }
-                                .ifEmpty { tagging.memberUserIds },
+                            memberUserIds =
+                                tagging.memberUserIds
+                                    .filter { it in selectedIds || it == userId }
+                                    .ifEmpty { tagging.memberUserIds },
                             selectedPeerIds = selectedIds,
                         )
                     }
@@ -402,12 +426,13 @@ fun NfcScreen(
                             }
                             val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
                             val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
-                            val sensors = captureConnectionSensorContext(
-                                ambientNoiseMonitor = ambientNoiseMonitor,
-                                barometricHeightMonitor = barometricHeightMonitor,
-                                ambientNoiseOptIn = noiseOptIn,
-                                barometricContextOptIn = baroOptIn,
-                            )
+                            val sensors =
+                                captureConnectionSensorContext(
+                                    ambientNoiseMonitor = ambientNoiseMonitor,
+                                    barometricHeightMonitor = barometricHeightMonitor,
+                                    ambientNoiseOptIn = noiseOptIn,
+                                    barometricContextOptIn = baroOptIn,
+                                )
                             connectionViewModel.saveContextTags(
                                 tagging = tagging,
                                 contextTag = null,
@@ -452,13 +477,14 @@ fun NfcScreen(
                         onLockIntent = { gap: AvailabilityOverlapGap ->
                             scope.launch {
                                 calendarLockInProgress = true
-                                val ok = withContext(Dispatchers.Default) {
-                                    lockAvailabilityIntentForGap(
-                                        repository = supabaseRepo,
-                                        userId = userId,
-                                        gap = gap,
-                                    )
-                                }
+                                val ok =
+                                    withContext(Dispatchers.Default) {
+                                        lockAvailabilityIntentForGap(
+                                            repository = supabaseRepo,
+                                            userId = userId,
+                                            gap = gap,
+                                        )
+                                    }
                                 calendarLockInProgress = false
                                 if (ok) {
                                     PlatformHapticsPolicy.successNotification()
@@ -474,12 +500,13 @@ fun NfcScreen(
                                 ambientNoiseOptIn = noiseOptIn
                                 tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
                                 val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
-                                val sensors = captureConnectionSensorContext(
-                                    ambientNoiseMonitor = ambientNoiseMonitor,
-                                    barometricHeightMonitor = barometricHeightMonitor,
-                                    ambientNoiseOptIn = noiseOptIn,
-                                    barometricContextOptIn = baroOptIn,
-                                )
+                                val sensors =
+                                    captureConnectionSensorContext(
+                                        ambientNoiseMonitor = ambientNoiseMonitor,
+                                        barometricHeightMonitor = barometricHeightMonitor,
+                                        ambientNoiseOptIn = noiseOptIn,
+                                        barometricContextOptIn = baroOptIn,
+                                    )
                                 if (tagging.requiresSelection) {
                                     connectionViewModel.confirmHostProximitySelection(
                                         selectedPeerIds = selectedIds.toList(),
@@ -509,23 +536,25 @@ fun NfcScreen(
                 // Instructions at bottom
                 if (connectionState is ConnectionState.ProximityHandshaking) {
                     Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp, vertical = 16.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp, vertical = 16.dp),
                         shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer
-                        )
+                        colors =
+                            CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            ),
                     ) {
                         Column(
                             modifier = Modifier.padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                            horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             Text(
                                 text = "Stay close — broadcasting and listening for nearby taps.",
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.SemiBold,
-                                textAlign = TextAlign.Center
+                                textAlign = TextAlign.Center,
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Button(
@@ -533,9 +562,10 @@ fun NfcScreen(
                                     proximityManager.stopAll()
                                     connectionViewModel.resetConnectionState()
                                 },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.error
-                                )
+                                colors =
+                                    ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.error,
+                                    ),
                             ) {
                                 Text("Cancel")
                             }
@@ -553,20 +583,23 @@ private fun ProximityConfirmConnectionsContent(
     onConfirmAll: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    val headline = if (users.size <= 1) {
-        "Confirm your tap"
-    } else {
-        "Confirm this group"
-    }
-    val subtitle = if (users.size <= 1) {
-        "You'll add optional context next."
-    } else {
-        "You'll connect with everyone listed, then add one shared context tag."
-    }
+    val headline =
+        if (users.size <= 1) {
+            "Confirm your tap"
+        } else {
+            "Confirm this group"
+        }
+    val subtitle =
+        if (users.size <= 1) {
+            "You'll add optional context next."
+        } else {
+            "You'll connect with everyone listed, then add one shared context tag."
+        }
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
@@ -583,17 +616,19 @@ private fun ProximityConfirmConnectionsContent(
         )
         Spacer(modifier = Modifier.height(16.dp))
         LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = 320.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 320.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(users, key = { it.id }) { user ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    ),
+                    colors =
+                        CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        ),
                 ) {
                     Row(
                         modifier = Modifier.padding(16.dp),
@@ -622,9 +657,10 @@ private fun ProximityConfirmConnectionsContent(
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = onConfirmAll,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
             shape = RoundedCornerShape(26.dp),
             colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
         ) {
@@ -646,9 +682,10 @@ private fun ProximityPendingMatchContent(
     onDismiss: () -> Unit,
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 24.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(
@@ -675,9 +712,10 @@ private fun ProximityPendingMatchContent(
         Spacer(modifier = Modifier.height(28.dp))
         Button(
             onClick = onDismiss,
-            modifier = Modifier
-                .fillMaxWidth(0.72f)
-                .height(52.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth(0.72f)
+                    .height(52.dp),
             shape = RoundedCornerShape(26.dp),
             colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
         ) {
@@ -693,9 +731,10 @@ private fun ProximityOfflineCapturedContent(
     onDismiss: () -> Unit,
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 24.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(
@@ -722,9 +761,10 @@ private fun ProximityOfflineCapturedContent(
         Spacer(modifier = Modifier.height(28.dp))
         Button(
             onClick = onTryNow,
-            modifier = Modifier
-                .fillMaxWidth(0.72f)
-                .height(52.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth(0.72f)
+                    .height(52.dp),
             shape = RoundedCornerShape(26.dp),
             colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
         ) {
@@ -740,9 +780,10 @@ private fun ProximityOfflineCapturedContent(
 @Composable
 private fun ProximityAwaitingContextContent(targetUsers: List<UserProfile>) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 24.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -775,33 +816,36 @@ private fun NfcIdleContent(
     supportsTap: Boolean,
     capabilityNote: String,
     showHowItWorksCard: Boolean,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "tap_idle")
     val haloScale by infiniteTransition.animateFloat(
         initialValue = 0.92f,
         targetValue = 1.08f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(1800, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
         label = "tap_idle_halo_scale",
     )
     val haloAlpha by infiniteTransition.animateFloat(
         initialValue = 0.16f,
         targetValue = 0.34f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(1800, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
         label = "tap_idle_halo_alpha",
     )
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .widthIn(max = 430.dp)
-            .verticalScroll(rememberScrollState())
-            .padding(vertical = 12.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .widthIn(max = 430.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -810,11 +854,12 @@ private fun NfcIdleContent(
             contentAlignment = Alignment.Center,
         ) {
             Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .scale(haloScale)
-                    .alpha(if (supportsTap) haloAlpha else 0.12f)
-                    .border(2.dp, PrimaryBlue, CircleShape),
+                modifier =
+                    Modifier
+                        .matchParentSize()
+                        .scale(haloScale)
+                        .alpha(if (supportsTap) haloAlpha else 0.12f)
+                        .border(2.dp, PrimaryBlue, CircleShape),
             )
             Surface(
                 modifier = Modifier.size(128.dp),
@@ -822,21 +867,23 @@ private fun NfcIdleContent(
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp,
-                border = BorderStroke(
-                    2.dp,
-                    if (supportsTap) PrimaryBlue else clickBorderColor(),
-                ),
+                border =
+                    BorderStroke(
+                        clickBorderWidth(),
+                        if (supportsTap) PrimaryBlue else clickBorderColor(),
+                    ),
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         Icons.Default.BluetoothSearching,
                         contentDescription = null,
                         modifier = Modifier.size(58.dp),
-                        tint = if (supportsTap) {
-                            PrimaryBlue
-                        } else {
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                        },
+                        tint =
+                            if (supportsTap) {
+                                PrimaryBlue
+                            } else {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                            },
                     )
                 }
             }
@@ -848,21 +895,22 @@ private fun NfcIdleContent(
             text = if (supportsTap) "Ready to Connect" else "Tap to Connect unavailable",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = if (supportsTap) {
-                "Tap Connect together with someone nearby. Both phones should enable Bluetooth and microphone access for the handshake."
-            } else {
-                capabilityNote
-            },
+            text =
+                if (supportsTap) {
+                    "Tap Connect together with someone nearby. Both phones should enable Bluetooth and microphone access for the handshake."
+                } else {
+                    capabilityNote
+                },
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-            modifier = Modifier.padding(horizontal = 20.dp)
+            modifier = Modifier.padding(horizontal = 20.dp),
         )
 
         // Simulator / emulator only — real devices never show the mock capability card.
@@ -871,24 +919,25 @@ private fun NfcIdleContent(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                ),
-                border = BorderStroke(2.dp, clickBorderColor()),
+                colors =
+                    CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    ),
+                border = BorderStroke(clickBorderWidth(), clickBorderColor()),
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
                         text = "How Tap to Connect works",
                         style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
                     )
                     Text(
                         text = capabilityNote,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f)
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f),
                     )
                 }
             }
@@ -899,19 +948,21 @@ private fun NfcIdleContent(
         if (supportsTap) {
             Button(
                 onClick = onStartScanning,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
                 shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = PrimaryBlue
-                )
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = PrimaryBlue,
+                    ),
             ) {
                 Icon(Icons.Default.BluetoothSearching, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     "Connect",
-                    fontSize = 18.sp
+                    fontSize = 18.sp,
                 )
             }
             Spacer(modifier = Modifier.height(10.dp))
@@ -925,13 +976,15 @@ private fun NfcIdleContent(
         } else {
             Button(
                 onClick = onOpenSettings,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
                 shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = AccentBlue
-                )
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = AccentBlue,
+                    ),
             ) {
                 Icon(Icons.Default.Settings, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
@@ -946,16 +999,17 @@ private fun NfcFetchingLocationContent(pulseActive: Boolean = false) {
     val (pulseScale, pulseAlpha) = rememberConnectionHandshakePulse(pulseActive)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.Center,
     ) {
         Icon(
             Icons.Default.LocationOn,
             contentDescription = null,
-            modifier = Modifier
-                .size(100.dp)
-                .scale(pulseScale)
-                .alpha(pulseAlpha),
-            tint = PrimaryBlue
+            modifier =
+                Modifier
+                    .size(100.dp)
+                    .scale(pulseScale)
+                    .alpha(pulseAlpha),
+            tint = PrimaryBlue,
         )
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -963,7 +1017,7 @@ private fun NfcFetchingLocationContent(pulseActive: Boolean = false) {
         Text(
             text = "Fetching Location...",
             style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -973,7 +1027,7 @@ private fun NfcFetchingLocationContent(pulseActive: Boolean = false) {
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 32.dp)
+            modifier = Modifier.padding(horizontal = 32.dp),
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -981,7 +1035,7 @@ private fun NfcFetchingLocationContent(pulseActive: Boolean = false) {
         AdaptiveCircularProgressIndicator(
             modifier = Modifier.size(32.dp),
             color = PrimaryBlue,
-            strokeWidth = 3.dp
+            strokeWidth = 3.dp,
         )
     }
 }
@@ -991,13 +1045,13 @@ private fun NfcScanningContent(pulseActive: Boolean = false) {
     val (pulseScale, pulseAlpha) = rememberConnectionHandshakePulse(pulseActive)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.Center,
     ) {
         val infiniteTransition = rememberInfiniteTransition(label = "tap_scan_rings")
 
         Box(
             modifier = Modifier.size(200.dp),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.Center,
         ) {
             // Pulsing circles
             repeat(3) { index ->
@@ -1005,43 +1059,47 @@ private fun NfcScanningContent(pulseActive: Boolean = false) {
                 val circleScale by infiniteTransition.animateFloat(
                     initialValue = 0.5f,
                     targetValue = 1.5f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(2000, easing = LinearEasing, delayMillis = delay),
-                        repeatMode = RepeatMode.Restart
-                    ),
+                    animationSpec =
+                        infiniteRepeatable(
+                            animation = tween(2000, easing = LinearEasing, delayMillis = delay),
+                            repeatMode = RepeatMode.Restart,
+                        ),
                     label = "scan_ring_scale_$index",
                 )
 
                 val circleAlpha by infiniteTransition.animateFloat(
                     initialValue = 0.6f,
                     targetValue = 0f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(2000, easing = LinearEasing, delayMillis = delay),
-                        repeatMode = RepeatMode.Restart
-                    ),
+                    animationSpec =
+                        infiniteRepeatable(
+                            animation = tween(2000, easing = LinearEasing, delayMillis = delay),
+                            repeatMode = RepeatMode.Restart,
+                        ),
                     label = "scan_ring_alpha_$index",
                 )
 
                 Box(
-                    modifier = Modifier
-                        .size(200.dp)
-                        .scale(circleScale)
-                        .alpha(circleAlpha)
-                        .background(
-                            color = PrimaryBlue,
-                            shape = CircleShape
-                        )
+                    modifier =
+                        Modifier
+                            .size(200.dp)
+                            .scale(circleScale)
+                            .alpha(circleAlpha)
+                            .background(
+                                color = PrimaryBlue,
+                                shape = CircleShape,
+                            ),
                 )
             }
 
             Icon(
                 Icons.Default.BluetoothSearching,
                 contentDescription = null,
-                modifier = Modifier
-                    .size(80.dp)
-                    .scale(pulseScale)
-                    .alpha(pulseAlpha),
-                tint = PrimaryBlue
+                modifier =
+                    Modifier
+                        .size(80.dp)
+                        .scale(pulseScale)
+                        .alpha(pulseAlpha),
+                tint = PrimaryBlue,
             )
         }
 
@@ -1050,7 +1108,7 @@ private fun NfcScanningContent(pulseActive: Boolean = false) {
         Text(
             text = "Handshaking…",
             style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -1060,7 +1118,7 @@ private fun NfcScanningContent(pulseActive: Boolean = false) {
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 32.dp)
+            modifier = Modifier.padding(horizontal = 32.dp),
         )
     }
 }
@@ -1069,12 +1127,12 @@ private fun NfcScanningContent(pulseActive: Boolean = false) {
 private fun NfcSendingContent() {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.Center,
     ) {
         AdaptiveCircularProgressIndicator(
             modifier = Modifier.size(80.dp),
             color = PrimaryBlue,
-            strokeWidth = 6.dp
+            strokeWidth = 6.dp,
         )
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -1082,7 +1140,7 @@ private fun NfcSendingContent() {
         Text(
             text = "Sharing Info...",
             style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
         )
     }
 }
@@ -1092,18 +1150,18 @@ private fun NfcUserDetectedContent(
     userId: String,
     userName: String?,
     onConfirm: () -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
-        modifier = Modifier.padding(32.dp)
+        modifier = Modifier.padding(32.dp),
     ) {
         Icon(
             Icons.Default.Person,
             contentDescription = null,
             modifier = Modifier.size(100.dp),
-            tint = PrimaryBlue
+            tint = PrimaryBlue,
         )
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -1111,7 +1169,7 @@ private fun NfcUserDetectedContent(
         Text(
             text = "User Detected!",
             style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -1119,23 +1177,24 @@ private fun NfcUserDetectedContent(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            )
+            colors =
+                CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                ),
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
                     text = userName ?: "Unknown User",
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
                 )
                 Text(
                     text = "ID: ${userId.take(8)}...",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
             }
         }
@@ -1144,27 +1203,30 @@ private fun NfcUserDetectedContent(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             OutlinedButton(
                 onClick = onCancel,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(56.dp),
-                shape = RoundedCornerShape(28.dp)
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .height(56.dp),
+                shape = RoundedCornerShape(28.dp),
             ) {
                 Text("Cancel")
             }
 
             Button(
                 onClick = onConfirm,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(56.dp),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .height(56.dp),
                 shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = PrimaryBlue
-                )
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = PrimaryBlue,
+                    ),
             ) {
                 Text("Connect")
             }
@@ -1180,17 +1242,18 @@ private fun NfcCreatingConnectionContent(
     val (pulseScale, pulseAlpha) = rememberConnectionHandshakePulse(pulseActive)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.Center,
     ) {
         Box(
-            modifier = Modifier
-                .scale(pulseScale)
-                .alpha(pulseAlpha),
+            modifier =
+                Modifier
+                    .scale(pulseScale)
+                    .alpha(pulseAlpha),
         ) {
             AdaptiveCircularProgressIndicator(
                 modifier = Modifier.size(80.dp),
                 color = PrimaryBlue,
-                strokeWidth = 6.dp
+                strokeWidth = 6.dp,
             )
         }
 
@@ -1199,7 +1262,7 @@ private fun NfcCreatingConnectionContent(
         Text(
             text = title,
             style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
         )
     }
 }
@@ -1209,17 +1272,18 @@ private fun NfcMatchingPeersContent(pulseActive: Boolean = false) {
     val (pulseScale, pulseAlpha) = rememberConnectionHandshakePulse(pulseActive)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.Center,
     ) {
         Box(
-            modifier = Modifier
-                .scale(pulseScale)
-                .alpha(pulseAlpha),
+            modifier =
+                Modifier
+                    .scale(pulseScale)
+                    .alpha(pulseAlpha),
         ) {
             AdaptiveCircularProgressIndicator(
                 modifier = Modifier.size(80.dp),
                 color = PrimaryBlue,
-                strokeWidth = 6.dp
+                strokeWidth = 6.dp,
             )
         }
 
@@ -1228,7 +1292,7 @@ private fun NfcMatchingPeersContent(pulseActive: Boolean = false) {
         Text(
             text = "Matching nearby taps…",
             style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -1238,7 +1302,7 @@ private fun NfcMatchingPeersContent(pulseActive: Boolean = false) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 32.dp)
+            modifier = Modifier.padding(horizontal = 32.dp),
         )
     }
 }
@@ -1248,7 +1312,7 @@ private fun NfcSuccessContent(
     connection: compose.project.click.click.data.models.Connection,
     connectedUser: compose.project.click.click.data.models.User?,
     onViewConnection: () -> Unit,
-    onCreateAnother: () -> Unit
+    onCreateAnother: () -> Unit,
 ) {
     var showConfetti by remember { mutableStateOf(true) }
     var sayHiMessage by remember { mutableStateOf("") }
@@ -1262,15 +1326,16 @@ private fun NfcSuccessContent(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
-        modifier = Modifier
-            .padding(32.dp)
-            .verticalScroll(rememberScrollState())
+        modifier =
+            Modifier
+                .padding(32.dp)
+                .verticalScroll(rememberScrollState()),
     ) {
         Icon(
             Icons.Default.CheckCircle,
             contentDescription = null,
             modifier = Modifier.size(100.dp),
-            tint = Color(0xFF4CAF50)
+            tint = Color(0xFF4CAF50),
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -1279,7 +1344,7 @@ private fun NfcSuccessContent(
             text = "Connection Created!",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF4CAF50)
+            color = Color(0xFF4CAF50),
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -1291,7 +1356,7 @@ private fun NfcSuccessContent(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(modifier = Modifier.height(4.dp))
         }
@@ -1301,23 +1366,23 @@ private fun NfcSuccessContent(
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant,
-                border = BorderStroke(2.dp, clickBorderColor()),
+                border = BorderStroke(clickBorderWidth(), clickBorderColor()),
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
                         Icons.Default.LocationOn,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
-                        tint = PrimaryBlue
+                        tint = PrimaryBlue,
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = connection.displayLocationLabel ?: "",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -1329,7 +1394,7 @@ private fun NfcSuccessContent(
             text = "Say hi within 48 hours to keep this connection alive",
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -1350,7 +1415,7 @@ private fun NfcSuccessContent(
             ) {
                 Row(
                     modifier = Modifier.padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     androidx.compose.material3.TextField(
                         value = sayHiMessage,
@@ -1358,23 +1423,25 @@ private fun NfcSuccessContent(
                         placeholder = {
                             Text(
                                 "Say hi! 👋",
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                             )
                         },
-                        modifier = Modifier
-                            .weight(1f)
-                            .heightIn(min = ClickTextFieldMinHeight),
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .heightIn(min = ClickTextFieldMinHeight),
                         textStyle = clickTextFieldTextStyle(),
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                            cursorColor = PrimaryBlue
-                        ),
-                        singleLine = true
+                        colors =
+                            TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
+                                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                cursorColor = PrimaryBlue,
+                            ),
+                        singleLine = true,
                     )
                     IconButton(
                         onClick = {
@@ -1384,13 +1451,17 @@ private fun NfcSuccessContent(
                                 onViewConnection()
                             }
                         },
-                        enabled = sayHiMessage.trim().isNotEmpty()
+                        enabled = sayHiMessage.trim().isNotEmpty(),
                     ) {
                         Icon(
                             Icons.Default.Send,
                             contentDescription = "Send",
-                            tint = if (sayHiMessage.trim().isNotEmpty()) PrimaryBlue 
-                                   else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                            tint =
+                                if (sayHiMessage.trim().isNotEmpty()) {
+                                    PrimaryBlue
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                                },
                         )
                     }
                 }
@@ -1399,24 +1470,24 @@ private fun NfcSuccessContent(
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.tertiaryContainer,
-                border = BorderStroke(2.dp, clickBorderColor()),
+                border = BorderStroke(clickBorderWidth(), clickBorderColor()),
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
                         Icons.Default.Check,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
-                        tint = Color(0xFF4CAF50)
+                        tint = Color(0xFF4CAF50),
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         "Message sent!",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF4CAF50)
+                        color = Color(0xFF4CAF50),
                     )
                 }
             }
@@ -1427,17 +1498,19 @@ private fun NfcSuccessContent(
         // Action buttons
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Button(
                 onClick = onViewConnection,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
                 shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = PrimaryBlue
-                )
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = PrimaryBlue,
+                    ),
             ) {
                 Icon(Icons.Default.ChatBubble, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
@@ -1446,10 +1519,11 @@ private fun NfcSuccessContent(
 
             OutlinedButton(
                 onClick = onCreateAnother,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(28.dp)
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                shape = RoundedCornerShape(28.dp),
             ) {
                 Icon(Icons.Default.Add, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
@@ -1468,21 +1542,21 @@ private fun CommonGroundSection(tags: List<String>) {
     if (tags.isEmpty()) return
 
     Column(
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 Icons.Default.Favorite,
                 contentDescription = null,
                 modifier = Modifier.size(16.dp),
-                tint = NeonPurple
+                tint = NeonPurple,
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
                 text = "Common Ground",
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
-                color = NeonPurple
+                color = NeonPurple,
             )
         }
 
@@ -1492,13 +1566,13 @@ private fun CommonGroundSection(tags: List<String>) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             tags.take(3).forEach { tag ->
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.primaryContainer,
-                    border = BorderStroke(2.dp, clickBorderColor()),
+                    border = BorderStroke(clickBorderWidth(), clickBorderColor()),
                 ) {
                     Text(
                         text = tag,
@@ -1517,18 +1591,18 @@ private fun CommonGroundSection(tags: List<String>) {
 private fun NfcErrorContent(
     message: String,
     onRetry: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
-        modifier = Modifier.padding(32.dp)
+        modifier = Modifier.padding(32.dp),
     ) {
         Icon(
             Icons.Default.Error,
             contentDescription = null,
             modifier = Modifier.size(100.dp),
-            tint = MaterialTheme.colorScheme.error
+            tint = MaterialTheme.colorScheme.error,
         )
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -1537,7 +1611,7 @@ private fun NfcErrorContent(
             text = "Oops!",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.error
+            color = MaterialTheme.colorScheme.error,
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -1546,34 +1620,37 @@ private fun NfcErrorContent(
             text = message,
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
         )
 
         Spacer(modifier = Modifier.height(32.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             OutlinedButton(
                 onClick = onDismiss,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(56.dp),
-                shape = RoundedCornerShape(28.dp)
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .height(56.dp),
+                shape = RoundedCornerShape(28.dp),
             ) {
                 Text("Dismiss")
             }
 
             Button(
                 onClick = onRetry,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(56.dp),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .height(56.dp),
                 shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = PrimaryBlue
-                )
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = PrimaryBlue,
+                    ),
             ) {
                 Text("Try Again")
             }

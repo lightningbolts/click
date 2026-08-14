@@ -1,4 +1,9 @@
-package compose.project.click.click.ui.components
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
+
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -16,7 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.*
+import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 
 @Composable
 private fun platformCardShape(): RoundedCornerShape {
@@ -37,7 +42,7 @@ fun GlassCard(
     onClick: (() -> Unit)? = null,
     usePrimaryBorder: Boolean = false,
     contentPadding: Dp = 16.dp,
-    content: @Composable ColumnScope.() -> Unit
+    content: @Composable ColumnScope.() -> Unit,
 ) {
     val style = LocalPlatformStyle.current
     val shape = platformCardShape()
@@ -48,27 +53,28 @@ fun GlassCard(
     val pressed by interactionSource.collectIsPressedAsState()
     val pressOffset = if (onClick != null && pressed) style.pressOffset else 0.dp
 
-    val cardModifier = modifier
-        .offset(x = pressOffset, y = pressOffset)
-        .clip(shape)
-        .background(bg)
-        .border(width = borderWidth, color = borderColor, shape = shape)
-        .then(
-            if (onClick != null) {
-                Modifier.clickable(
-                    interactionSource = interactionSource,
-                    indication = null,
-                    onClick = onClick
-                )
-            } else {
-                Modifier
-            }
-        )
+    val cardModifier =
+        modifier
+            .offset(x = pressOffset, y = pressOffset)
+            .clip(shape)
+            .background(bg)
+            .border(width = borderWidth, color = borderColor, shape = shape)
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(
+                        interactionSource = interactionSource,
+                        indication = null,
+                        onClick = onClick,
+                    )
+                } else {
+                    Modifier
+                },
+            )
 
     Box(modifier = cardModifier) {
         Column(
             modifier = Modifier.padding(contentPadding),
-            content = content
+            content = content,
         )
     }
 }
@@ -79,7 +85,7 @@ fun GlassSurface(
     onClick: (() -> Unit)? = null,
     usePrimaryBorder: Boolean = false,
     contentPadding: Dp = 16.dp,
-    content: @Composable ColumnScope.() -> Unit
+    content: @Composable ColumnScope.() -> Unit,
 ) {
     val shape = platformCardShape()
     val bg = clickCardSurface()
@@ -92,11 +98,11 @@ fun GlassSurface(
         color = bg,
         border = BorderStroke(borderWidth, borderColor),
         shadowElevation = 0.dp,
-        onClick = onClick ?: {}
+        onClick = onClick ?: {},
     ) {
         Column(
             modifier = Modifier.padding(contentPadding),
-            content = content
+            content = content,
         )
     }
 }
@@ -108,7 +114,7 @@ fun Modifier.glassEffect(usePrimaryBorder: Boolean = false): Modifier {
     return this
         .clip(GlassCardShape)
         .background(bg)
-        .border(2.dp, borderColor, GlassCardShape)
+        .border(clickBorderWidth(), borderColor, GlassCardShape)
 }
 
 @Composable
@@ -116,7 +122,7 @@ fun GlassCardCompact(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     contentPadding: Dp = 12.dp,
-    content: @Composable ColumnScope.() -> Unit
+    content: @Composable ColumnScope.() -> Unit,
 ) {
     val style = LocalPlatformStyle.current
     val compactShape = RoundedCornerShape(style.compactCardCornerRadius)
@@ -127,27 +133,28 @@ fun GlassCardCompact(
     val pressed by interactionSource.collectIsPressedAsState()
     val pressOffset = if (onClick != null && pressed) style.pressOffset else 0.dp
 
-    val cardModifier = modifier
-        .offset(x = pressOffset, y = pressOffset)
-        .clip(compactShape)
-        .background(bg)
-        .border(borderWidth, borderColor, compactShape)
-        .then(
-            if (onClick != null) {
-                Modifier.clickable(
-                    interactionSource = interactionSource,
-                    indication = null,
-                    onClick = onClick
-                )
-            } else {
-                Modifier
-            }
-        )
+    val cardModifier =
+        modifier
+            .offset(x = pressOffset, y = pressOffset)
+            .clip(compactShape)
+            .background(bg)
+            .border(borderWidth, borderColor, compactShape)
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(
+                        interactionSource = interactionSource,
+                        indication = null,
+                        onClick = onClick,
+                    )
+                } else {
+                    Modifier
+                },
+            )
 
     Box(modifier = cardModifier) {
         Column(
             modifier = Modifier.padding(contentPadding),
-            content = content
+            content = content,
         )
     }
 }

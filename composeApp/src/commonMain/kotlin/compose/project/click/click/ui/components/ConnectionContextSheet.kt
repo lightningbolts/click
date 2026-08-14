@@ -1,5 +1,13 @@
-package compose.project.click.click.ui.components
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
 
+package compose.project.click.click.ui.components // pragma: allowlist secret
+
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,34 +25,27 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import com.mohamedrejeb.calf.ui.sheet.rememberAdaptiveSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -54,28 +55,27 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.zIndex
-import compose.project.click.click.data.ContextTagTaxonomy
-import compose.project.click.click.PlatformHapticsPolicy
-import compose.project.click.click.data.models.ContextTag
-import compose.project.click.click.data.models.UserProfile
-import compose.project.click.click.data.repository.PROXIMITY_HOST_SELECTION_MAX_PEERS
-import androidx.compose.material3.CircularProgressIndicator
-import compose.project.click.click.calendar.AvailabilityOverlapGap
-import compose.project.click.click.calendar.CalendarAccessStatus
-import compose.project.click.click.calendar.CalendarFreeBusy
-import compose.project.click.click.calendar.CalendarProvider
-import compose.project.click.click.calendar.CalendarSyncSession
-import compose.project.click.click.calendar.calculateAvailabilityOverlaps
-import compose.project.click.click.ui.utils.rememberCalendarPermissionRequester
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.calendar.AvailabilityOverlapGap // pragma: allowlist secret
+import compose.project.click.click.calendar.CalendarAccessStatus // pragma: allowlist secret
+import compose.project.click.click.calendar.CalendarFreeBusy // pragma: allowlist secret
+import compose.project.click.click.calendar.CalendarProvider // pragma: allowlist secret
+import compose.project.click.click.calendar.CalendarSyncSession // pragma: allowlist secret
+import compose.project.click.click.calendar.calculateAvailabilityOverlaps // pragma: allowlist secret
+import compose.project.click.click.data.ContextTagTaxonomy // pragma: allowlist secret
+import compose.project.click.click.data.models.ContextTag // pragma: allowlist secret
+import compose.project.click.click.data.models.UserProfile // pragma: allowlist secret
+import compose.project.click.click.data.repository.PROXIMITY_HOST_SELECTION_MAX_PEERS // pragma: allowlist secret
+import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
+import compose.project.click.click.ui.utils.rememberCalendarPermissionRequester // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import compose.project.click.click.ui.components.sheetBodyScroll
 
 /** Matches DB limits for profile-style short labels (align with interests max length). */
 private const val CUSTOM_CONTEXT_MAX_LENGTH = 25
@@ -83,8 +83,10 @@ private const val CUSTOM_CONTEXT_MAX_LENGTH = 25
 enum class ConnectionContextPresentation {
     /** Proximity new edge — “Sparking…” + tag chips + Connect. */
     NewSpark,
+
     /** QR scan — same tag UX; App layer skips reveal overlay on confirm. */
     QrFlow,
+
     /** Existing edge — encounter POST only. */
     ReconnectEncounter,
 }
@@ -102,9 +104,10 @@ private fun ConnectionContextHeaderAvatars(connectedUsers: List<UserProfile>) {
         }
         else -> {
             FlowRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(116.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(116.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 maxItemsInEachRow = 4,
@@ -132,7 +135,7 @@ private fun ProfileAvatarBubble(
         modifier = modifier.size(size),
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceVariant,
-        border = BorderStroke(2.dp, borderColor),
+        border = BorderStroke(clickBorderWidth(), borderColor),
     ) {
         ConnectionListUserAvatarFace(
             displayName = profile.displayName,
@@ -156,9 +159,10 @@ private fun StackedProfileAvatarRow(
         avatarSize + overlap * (profiles.size - 1).coerceAtLeast(0) +
             if (overflowCount > 0) badgeSize + 6.dp else 0.dp
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(avatarSize + 4.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(avatarSize + 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
@@ -172,23 +176,25 @@ private fun StackedProfileAvatarRow(
                     profile = profile,
                     size = avatarSize,
                     borderColor = borderColor,
-                    modifier = Modifier
-                        .offset(x = overlap * index)
-                        .size(avatarSize)
-                        .zIndex(index.toFloat())
-                        .align(Alignment.CenterStart),
+                    modifier =
+                        Modifier
+                            .offset(x = overlap * index)
+                            .size(avatarSize)
+                            .zIndex(index.toFloat())
+                            .align(Alignment.CenterStart),
                 )
             }
             if (overflowCount > 0) {
                 Surface(
-                    modifier = Modifier
-                        .offset(x = overlap * profiles.size + 4.dp)
-                        .size(badgeSize)
-                        .zIndex(profiles.size + 1f)
-                        .align(Alignment.CenterStart),
+                    modifier =
+                        Modifier
+                            .offset(x = overlap * profiles.size + 4.dp)
+                            .size(badgeSize)
+                            .zIndex(profiles.size + 1f)
+                            .align(Alignment.CenterStart),
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.primaryContainer,
-                    border = BorderStroke(2.dp, MaterialTheme.colorScheme.surfaceContainerHigh),
+                    border = BorderStroke(clickBorderWidth(), MaterialTheme.colorScheme.surfaceContainerHigh),
                 ) {
                     Box(
                         contentAlignment = Alignment.Center,
@@ -214,13 +220,13 @@ private fun ConnectionContextSelectableUserRow(
     onToggle: () -> Unit,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable {
-                PlatformHapticsPolicy.lightImpact()
-                onToggle()
-            }
-            .padding(vertical = 6.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable {
+                    PlatformHapticsPolicy.lightImpact()
+                    onToggle()
+                }.padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Checkbox(
@@ -234,11 +240,12 @@ private fun ConnectionContextSelectableUserRow(
         ProfileAvatarBubble(
             profile = profile,
             size = 40.dp,
-            borderColor = if (selected) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerHigh
-            },
+            borderColor =
+                if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHigh
+                },
         )
         Spacer(modifier = Modifier.width(12.dp))
         Text(
@@ -261,11 +268,11 @@ fun ConnectionContextSheet(
     initialNoiseOptIn: Boolean,
     noisePermissionGranted: Boolean,
     onDismiss: () -> Unit,
-    onConfirm: (ContextTag?, Boolean /* noise */, Set<String> /* selectedIds */) -> Unit,
+    onConfirm: (ContextTag?, Boolean, Set<String>) -> Unit,
     onSkip: (() -> Unit)? = null,
     presentation: ConnectionContextPresentation = ConnectionContextPresentation.NewSpark,
     encounterSaveInProgress: Boolean = false,
-    onSaveEncounter: ((Set<String> /* selectedIds */) -> Unit)? = null,
+    onSaveEncounter: ((Set<String>) -> Unit)? = null,
     connectionId: String? = null,
     peerUserId: String? = null,
     currentUserId: String? = null,
@@ -274,12 +281,17 @@ fun ConnectionContextSheet(
     selectableUsers: List<UserProfile> = emptyList(),
     initialSelectedUserIds: Set<String> = emptySet(),
 ) {
-    val hourOfDay = remember {
-        Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour
-    }
-    val suggestions = remember(locationName, hourOfDay) {
-        ContextTagTaxonomy.suggest(locationName = locationName, hourOfDay = hourOfDay)
-    }
+    val hourOfDay =
+        remember {
+            Clock.System
+                .now()
+                .toLocalDateTime(TimeZone.currentSystemDefault())
+                .hour
+        }
+    val suggestions =
+        remember(locationName, hourOfDay) {
+            ContextTagTaxonomy.suggest(locationName = locationName, hourOfDay = hourOfDay)
+        }
     val allTags = remember { ContextTagTaxonomy.all }
     var selectedTagId by remember { mutableStateOf<String?>(suggestions.firstOrNull()?.id) }
     var customTagText by remember { mutableStateOf("") }
@@ -297,10 +309,11 @@ fun ConnectionContextSheet(
             ).take(PROXIMITY_HOST_SELECTION_MAX_PEERS).toSet(),
         )
     }
-    val resolvedSelectedIds: Set<String> = when {
-        showPeerMultiSelect -> selectedUserIds
-        else -> connectedUsers.map { it.id }.filter { it.isNotBlank() }.toSet()
-    }
+    val resolvedSelectedIds: Set<String> =
+        when {
+            showPeerMultiSelect -> selectedUserIds
+            else -> connectedUsers.map { it.id }.filter { it.isNotBlank() }.toSet()
+        }
     val selectionRequiredAndEmpty = showPeerMultiSelect && selectedUserIds.isEmpty()
     val isCustomSelectionInvalid = selectedTagId == "custom" && customTagText.isBlank()
     val dismissSheet = onSkip ?: onDismiss
@@ -311,10 +324,11 @@ fun ConnectionContextSheet(
     var calendarPermissionDenied by remember { mutableStateOf(false) }
     var bestOverlap by remember { mutableStateOf<AvailabilityOverlapGap?>(null) }
     val peerCalendar by CalendarSyncSession.peerCalendar.collectAsState()
-    val showCalendarSync = presentation == ConnectionContextPresentation.ReconnectEncounter &&
-        !connectionId.isNullOrBlank() &&
-        !peerUserId.isNullOrBlank() &&
-        !currentUserId.isNullOrBlank()
+    val showCalendarSync =
+        presentation == ConnectionContextPresentation.ReconnectEncounter &&
+            !connectionId.isNullOrBlank() &&
+            !peerUserId.isNullOrBlank() &&
+            !currentUserId.isNullOrBlank()
 
     var calendarAccessGranted by remember(showCalendarSync) { mutableStateOf(false) }
 
@@ -346,9 +360,10 @@ fun ConnectionContextSheet(
         val self = currentUserId ?: return@LaunchedEffect
         CalendarSyncSession.start(connId, self, peer)
         val windowStart = Clock.System.now().toEpochMilliseconds()
-        val snapshot = withContext(Dispatchers.Default) {
-            calendarProvider.fetchBusyBlocks(windowStartEpochMs = windowStart, daysAhead = 7)
-        }
+        val snapshot =
+            withContext(Dispatchers.Default) {
+                calendarProvider.fetchBusyBlocks(windowStartEpochMs = windowStart, daysAhead = 7)
+            }
         if (snapshot != null) {
             localCalendar = snapshot
             CalendarSyncSession.publishLocal(connId, self, snapshot)
@@ -358,11 +373,12 @@ fun ConnectionContextSheet(
     LaunchedEffect(localCalendar, peerCalendar) {
         val userCal = localCalendar
         val friendCal = peerCalendar
-        bestOverlap = if (userCal != null && friendCal != null) {
-            calculateAvailabilityOverlaps(userCal, friendCal).firstOrNull()
-        } else {
-            null
-        }
+        bestOverlap =
+            if (userCal != null && friendCal != null) {
+                calculateAvailabilityOverlaps(userCal, friendCal).firstOrNull()
+            } else {
+                null
+            }
     }
 
     DisposableEffect(showCalendarSync, connectionId) {
@@ -373,15 +389,14 @@ fun ConnectionContextSheet(
         }
     }
 
-    fun resolveSelectedTag(): ContextTag? {
-        return if (selectedTagId == "custom") {
+    fun resolveSelectedTag(): ContextTag? =
+        if (selectedTagId == "custom") {
             customTagText.trim().takeIf { it.isNotEmpty() }?.let {
                 ContextTagTaxonomy.formatCustomUserContextTag(it)
             }
         } else {
             allTags.firstOrNull { it.id == selectedTagId }
         }
-    }
 
     val titleText: String
     val subtitleText: String
@@ -391,69 +406,78 @@ fun ConnectionContextSheet(
                 titleText = "Logging this encounter…"
                 subtitleText = "Choose who was there, then save this crossing to your shared history."
             } else {
-                val name = connectedUsers.firstOrNull()?.displayName?.trim()?.takeIf { it.isNotEmpty() } ?: "them"
+                val name =
+                    connectedUsers
+                        .firstOrNull()
+                        ?.displayName
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() } ?: "them"
                 titleText = "Logging encounter with $name…"
                 subtitleText = "Save this crossing to your shared encounter history."
             }
         }
-        ConnectionContextPresentation.QrFlow -> when {
-            showPeerMultiSelect -> {
-                titleText = "Who was in this meetup?"
-                subtitleText = "Select people to connect with, then pick optional context. You can skip and keep going."
+        ConnectionContextPresentation.QrFlow ->
+            when {
+                showPeerMultiSelect -> {
+                    titleText = "Who was in this meetup?"
+                    subtitleText = "Select people to connect with, then pick optional context. You can skip and keep going."
+                }
+                connectedUsers.isEmpty() -> {
+                    titleText = "Sparking a new connection…"
+                    subtitleText = "Pick what best describes this moment. You can skip and keep going."
+                }
+                connectedUsers.size == 1 -> {
+                    titleText = "Sparking a new connection…"
+                    subtitleText = "Pick what best describes this physical encounter. You can leave it blank and keep going."
+                }
+                else -> {
+                    titleText = "Set the context for this group"
+                    subtitleText = "This tag applies to everyone in this meetup. You can leave it blank and keep going."
+                }
             }
-            connectedUsers.isEmpty() -> {
-                titleText = "Sparking a new connection…"
-                subtitleText = "Pick what best describes this moment. You can skip and keep going."
+        ConnectionContextPresentation.NewSpark ->
+            when {
+                showPeerMultiSelect -> {
+                    titleText = "Who was in this tap?"
+                    subtitleText = "Select people to connect with, then pick optional context. You can skip and keep going."
+                }
+                connectedUsers.isEmpty() -> {
+                    titleText = "Sparking a new connection…"
+                    subtitleText = "Pick what best describes this moment. You can skip and keep going."
+                }
+                connectedUsers.size == 1 -> {
+                    titleText = "Sparking a new connection…"
+                    subtitleText = "Pick what best describes this physical encounter. You can leave it blank and keep going."
+                }
+                else -> {
+                    titleText = "Set the context for this group"
+                    subtitleText = "This tag applies to everyone in this meetup. You can leave it blank and keep going."
+                }
             }
-            connectedUsers.size == 1 -> {
-                titleText = "Sparking a new connection…"
-                subtitleText = "Pick what best describes this physical encounter. You can leave it blank and keep going."
-            }
-            else -> {
-                titleText = "Set the context for this group"
-                subtitleText = "This tag applies to everyone in this meetup. You can leave it blank and keep going."
-            }
-        }
-        ConnectionContextPresentation.NewSpark -> when {
-            showPeerMultiSelect -> {
-                titleText = "Who was in this tap?"
-                subtitleText = "Select people to connect with, then pick optional context. You can skip and keep going."
-            }
-            connectedUsers.isEmpty() -> {
-                titleText = "Sparking a new connection…"
-                subtitleText = "Pick what best describes this moment. You can skip and keep going."
-            }
-            connectedUsers.size == 1 -> {
-                titleText = "Sparking a new connection…"
-                subtitleText = "Pick what best describes this physical encounter. You can leave it blank and keep going."
-            }
-            else -> {
-                titleText = "Set the context for this group"
-                subtitleText = "This tag applies to everyone in this meetup. You can leave it blank and keep going."
-            }
-        }
     }
 
     fun toggleSelectableUser(userId: String) {
-        selectedUserIds = if (userId in selectedUserIds) {
-            selectedUserIds - userId
-        } else if (selectedUserIds.size >= PROXIMITY_HOST_SELECTION_MAX_PEERS) {
-            // Server max member set is 12 including host.
-            selectedUserIds
-        } else {
-            selectedUserIds + userId
-        }
+        selectedUserIds =
+            if (userId in selectedUserIds) {
+                selectedUserIds - userId
+            } else if (selectedUserIds.size >= PROXIMITY_HOST_SELECTION_MAX_PEERS) {
+                // Server max member set is 12 including host.
+                selectedUserIds
+            } else {
+                selectedUserIds + userId
+            }
     }
 
     ClickFormBottomSheet(
         onDismissRequest = dismissSheet,
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .sheetBodyScroll()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .sheetBodyScroll()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
                 text = titleText,
@@ -476,30 +500,34 @@ fun ConnectionContextSheet(
                 Text(
                     text = "Location hint: $locationName",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
 
             val showTagPickers = presentation != ConnectionContextPresentation.ReconnectEncounter
             val springBtn by animateFloatAsState(
-                targetValue = if (presentation == ConnectionContextPresentation.ReconnectEncounter && encounterSaveInProgress) {
-                    0.94f
-                } else {
-                    1f
-                },
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessMediumLow,
-                ),
+                targetValue =
+                    if (presentation == ConnectionContextPresentation.ReconnectEncounter && encounterSaveInProgress) {
+                        0.94f
+                    } else {
+                        1f
+                    },
+                animationSpec =
+                    spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMediumLow,
+                    ),
                 label = "connection_ctx_primary",
             )
-            val reconnectPulse = rememberWaitingPulse(
-                active = presentation == ConnectionContextPresentation.ReconnectEncounter &&
-                    encounterSaveInProgress,
-                durationMillis = 900,
-                scaleMax = 1.025f,
-                alphaMin = 0.9f,
-            )
+            val reconnectPulse =
+                rememberWaitingPulse(
+                    active =
+                        presentation == ConnectionContextPresentation.ReconnectEncounter &&
+                            encounterSaveInProgress,
+                    durationMillis = 900,
+                    scaleMax = 1.025f,
+                    alphaMin = 0.9f,
+                )
 
             if (showPeerMultiSelect) {
                 Text(
@@ -509,9 +537,10 @@ fun ConnectionContextSheet(
                     color = GlassSheetTokens.OnOled(),
                 )
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 280.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 280.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     uniqueSelectableUsers.forEach { profile ->
@@ -549,19 +578,19 @@ fun ConnectionContextSheet(
                 Text(
                     text = "Suggested",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
                 )
 
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     suggestions.forEach { tag ->
                         FilterChip(
                             selected = selectedTagId == tag.id,
                             onClick = { selectedTagId = tag.id },
-                            label = { Text("${tag.emoji} ${tag.label}") }
+                            label = { Text("${tag.emoji} ${tag.label}") },
                         )
                     }
                 }
@@ -571,19 +600,19 @@ fun ConnectionContextSheet(
                 Text(
                     text = "All tags",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
                 )
 
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     allTags.forEach { tag ->
                         FilterChip(
                             selected = selectedTagId == tag.id,
                             onClick = { selectedTagId = tag.id },
-                            label = { Text("${tag.emoji} ${tag.label}") }
+                            label = { Text("${tag.emoji} ${tag.label}") },
                         )
                     }
                 }
@@ -593,28 +622,29 @@ fun ConnectionContextSheet(
                 Text(
                     text = "Custom activity",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
                 )
 
                 Text(
                     text = "If none of the presets fit, write what you were doing. Short, natural labels work best.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
                 FilterChip(
                     selected = selectedTagId == "custom",
                     onClick = { selectedTagId = "custom" },
-                    label = { Text("✏️ Write your own") }
+                    label = { Text("✏️ Write your own") },
                 )
 
                 ClickOutlinedTextField(
                     value = customTagText,
                     onValueChange = { input ->
-                        customTagText = input
-                            .replace(Regex("\\s+"), " ")
-                            .trimStart()
-                            .take(CUSTOM_CONTEXT_MAX_LENGTH)
+                        customTagText =
+                            input
+                                .replace(Regex("\\s+"), " ")
+                                .trimStart()
+                                .take(CUSTOM_CONTEXT_MAX_LENGTH)
                         if (customTagText.isNotBlank()) {
                             selectedTagId = "custom"
                         }
@@ -624,19 +654,21 @@ fun ConnectionContextSheet(
                     placeholder = { Text("Dorm lounge, coffee line, hackathon kickoff...") },
                     supportingText = {
                         Text(
-                            text = if (isCustomSelectionInvalid) {
-                                "Add a quick label before continuing."
-                            } else {
-                                "${customTagText.length}/$CUSTOM_CONTEXT_MAX_LENGTH characters"
-                            }
+                            text =
+                                if (isCustomSelectionInvalid) {
+                                    "Add a quick label before continuing."
+                                } else {
+                                    "${customTagText.length}/$CUSTOM_CONTEXT_MAX_LENGTH characters"
+                                },
                         )
                     },
                     isError = isCustomSelectionInvalid,
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.Words,
-                        imeAction = ImeAction.Done
-                    )
+                    keyboardOptions =
+                        KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Words,
+                            imeAction = ImeAction.Done,
+                        ),
                 )
 
                 HorizontalDivider()
@@ -644,20 +676,21 @@ fun ConnectionContextSheet(
                 Text(
                     text = "Ambient noise",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
                 )
 
                 Text(
-                    text = when {
-                        ambientNoiseOptIn && noisePermissionGranted ->
-                            "Ambient sound enrichment is enabled from onboarding. Click stores only a 2-second noise category for this encounter."
-                        ambientNoiseOptIn ->
-                            "Ambient sound enrichment is enabled, but microphone permission is unavailable right now so Click will skip it for this encounter."
-                        else ->
-                            "Ambient sound enrichment is currently off. You can change it later in Settings."
-                    },
+                    text =
+                        when {
+                            ambientNoiseOptIn && noisePermissionGranted ->
+                                "Ambient sound enrichment is enabled from onboarding. Click stores only a 2-second noise category for this encounter."
+                            ambientNoiseOptIn ->
+                                "Ambient sound enrichment is enabled, but microphone permission is unavailable right now so Click will skip it for this encounter."
+                            else ->
+                                "Ambient sound enrichment is currently off. You can change it later in Settings."
+                        },
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -669,11 +702,11 @@ fun ConnectionContextSheet(
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     TextButton(
                         onClick = dismissSheet,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     ) {
                         Text("Skip")
                     }
@@ -683,13 +716,15 @@ fun ConnectionContextSheet(
                                 PlatformHapticsPolicy.lightImpact()
                                 onSaveEncounter?.invoke(resolvedSelectedIds)
                             },
-                            modifier = Modifier
-                                .weight(1f)
-                                .scale(springBtn * reconnectPulse.scale)
-                                .alpha(reconnectPulse.alpha),
-                            enabled = !encounterSaveInProgress &&
-                                onSaveEncounter != null &&
-                                !selectionRequiredAndEmpty,
+                            modifier =
+                                Modifier
+                                    .weight(1f)
+                                    .scale(springBtn * reconnectPulse.scale)
+                                    .alpha(reconnectPulse.alpha),
+                            enabled =
+                                !encounterSaveInProgress &&
+                                    onSaveEncounter != null &&
+                                    !selectionRequiredAndEmpty,
                         ) {
                             if (encounterSaveInProgress) {
                                 CircularProgressIndicator(
@@ -706,9 +741,10 @@ fun ConnectionContextSheet(
                                 PlatformHapticsPolicy.lightImpact()
                                 onConfirm(resolveSelectedTag(), ambientNoiseOptIn, resolvedSelectedIds)
                             },
-                            modifier = Modifier
-                                .weight(1f)
-                                .scale(springBtn),
+                            modifier =
+                                Modifier
+                                    .weight(1f)
+                                    .scale(springBtn),
                             enabled = !isCustomSelectionInvalid && !selectionRequiredAndEmpty,
                         ) {
                             Text("Connect")

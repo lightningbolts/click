@@ -1,10 +1,10 @@
-package compose.project.click.click.calls
+package compose.project.click.click.calls // pragma: allowlist secret
 
-import compose.project.click.click.PlatformHapticsPolicy
-import compose.project.click.click.data.SupabaseConfig
-import compose.project.click.click.data.repository.AuthRepository
-import compose.project.click.click.data.repository.SupabaseChatRepository
-import compose.project.click.click.data.storage.createTokenStorage
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
+import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
+import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import io.github.jan.supabase.realtime.Realtime
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.broadcast
@@ -54,9 +54,7 @@ data class CallInvite(
     val videoEnabled: Boolean,
     val createdAt: Long,
 ) {
-    fun counterpartName(currentUserId: String?): String {
-        return if (currentUserId == callerId) calleeName else callerName
-    }
+    fun counterpartName(currentUserId: String?): String = if (currentUserId == callerId) calleeName else callerName
 }
 
 @Serializable
@@ -85,10 +83,23 @@ private data class CallRoomConnected(
 
 sealed class CallOverlayState {
     data object Idle : CallOverlayState()
-    data class Outgoing(val invite: CallInvite) : CallOverlayState()
-    data class Incoming(val invite: CallInvite) : CallOverlayState()
-    data class Connecting(val invite: CallInvite) : CallOverlayState()
-    data class Ended(val invite: CallInvite?, val reason: String) : CallOverlayState()
+
+    data class Outgoing(
+        val invite: CallInvite,
+    ) : CallOverlayState()
+
+    data class Incoming(
+        val invite: CallInvite,
+    ) : CallOverlayState()
+
+    data class Connecting(
+        val invite: CallInvite,
+    ) : CallOverlayState()
+
+    data class Ended(
+        val invite: CallInvite?,
+        val reason: String,
+    ) : CallOverlayState()
 }
 
 object CallSessionManager {
@@ -233,10 +244,11 @@ object CallSessionManager {
                                     overlayState = overlayBeforeUpdate,
                                 )
                             ) {
-                                _overlayState.value = CallOverlayState.Ended(
-                                    activeInviteValue,
-                                    state.reason ?: "Call ended",
-                                )
+                                _overlayState.value =
+                                    CallOverlayState.Ended(
+                                        activeInviteValue,
+                                        state.reason ?: "Call ended",
+                                    )
                             }
                             resetJoinGuards()
                         }
@@ -265,8 +277,7 @@ object CallSessionManager {
         }
     }
 
-    private fun firstConnectedTransition(previous: CallState): Boolean =
-        previous !is CallState.Connected
+    private fun firstConnectedTransition(previous: CallState): Boolean = previous !is CallState.Connected
 
     private fun resetJoinGuards() {
         joinStartedCallId = null
@@ -300,7 +311,11 @@ object CallSessionManager {
         }
     }
 
-    private fun insertCallChatLogAsync(connectionId: String, callStateKey: String, durationSeconds: Int) {
+    private fun insertCallChatLogAsync(
+        connectionId: String,
+        callStateKey: String,
+        durationSeconds: Int,
+    ) {
         val uid = resolvedCurrentUserId() ?: return
         scope.launch {
             insertCallChatLog(connectionId, uid, callStateKey, durationSeconds)
@@ -313,10 +328,11 @@ object CallSessionManager {
         callStateKey: String,
         durationSeconds: Int,
     ) {
-        val metadata = buildJsonObject {
-            put("call_state", callStateKey)
-            put("duration_seconds", durationSeconds)
-        }
+        val metadata =
+            buildJsonObject {
+                put("call_state", callStateKey)
+                put("duration_seconds", durationSeconds)
+            }
         runCatching {
             chatRepository.sendMessageForConnection(
                 connectionId = connectionId,
@@ -330,7 +346,10 @@ object CallSessionManager {
         }
     }
 
-    fun bindUser(userId: String?, userName: String?) {
+    fun bindUser(
+        userId: String?,
+        userName: String?,
+    ) {
         if (userId.isNullOrBlank()) {
             clearUser()
             return
@@ -374,17 +393,18 @@ object CallSessionManager {
         }
 
         val now = Clock.System.now().toEpochMilliseconds()
-        val invite = CallInvite(
-            callId = "call-$now-${Random.nextInt(1000, 9999)}",
-            connectionId = connectionId,
-            roomName = "click-$connectionId-$now",
-            callerId = userId,
-            callerName = callerName,
-            calleeId = otherUserId,
-            calleeName = otherUserName,
-            videoEnabled = videoEnabled,
-            createdAt = now,
-        )
+        val invite =
+            CallInvite(
+                callId = "call-$now-${Random.nextInt(1000, 9999)}",
+                connectionId = connectionId,
+                roomName = "click-$connectionId-$now",
+                callerId = userId,
+                callerName = callerName,
+                calleeId = otherUserId,
+                calleeName = otherUserName,
+                videoEnabled = videoEnabled,
+                createdAt = now,
+            )
 
         activeInviteValue = invite
         _overlayState.value = CallOverlayState.Outgoing(invite)
@@ -394,7 +414,8 @@ object CallSessionManager {
             sendInvite(invite)
         }
         scope.launch {
-            callPushNotifier.notifyIncomingCall(invite)
+            callPushNotifier
+                .notifyIncomingCall(invite)
                 .onFailure { println("CallSessionManager: Failed to dispatch incoming call push: ${it.message}") }
         }
         // Join LiveKit while ringing so accept does not depend solely on Realtime "response".
@@ -403,14 +424,15 @@ object CallSessionManager {
         }
 
         timeoutJob?.cancel()
-        timeoutJob = scope.launch {
-            delay(30_000)
-            if (activeInviteValue?.callId == invite.callId && _overlayState.value is CallOverlayState.Outgoing) {
-                sendCancel(invite, invite.calleeId, "missed")
-                insertCallChatLogAsync(invite.connectionId, "missed", 0)
-                failCall(invite, "No answer")
+        timeoutJob =
+            scope.launch {
+                delay(30_000)
+                if (activeInviteValue?.callId == invite.callId && _overlayState.value is CallOverlayState.Outgoing) {
+                    sendCancel(invite, invite.calleeId, "missed")
+                    insertCallChatLogAsync(invite.connectionId, "missed", 0)
+                    failCall(invite, "No answer")
+                }
             }
-        }
     }
 
     fun startOutgoingGroupCall(
@@ -445,30 +467,32 @@ object CallSessionManager {
 
         val now = Clock.System.now().toEpochMilliseconds()
         val roomName = "click-group-$groupId-$now"
-        val groupInvite = GroupCallInvite(
-            callId = "call-$now-${Random.nextInt(1000, 9999)}",
-            groupId = groupId,
-            chatId = chatId,
-            roomName = roomName,
-            callerId = userId,
-            callerName = callerName,
-            memberIds = distinctMembers,
-            videoEnabled = videoEnabled,
-            createdAt = now,
-        )
+        val groupInvite =
+            GroupCallInvite(
+                callId = "call-$now-${Random.nextInt(1000, 9999)}",
+                groupId = groupId,
+                chatId = chatId,
+                roomName = roomName,
+                callerId = userId,
+                callerName = callerName,
+                memberIds = distinctMembers,
+                videoEnabled = videoEnabled,
+                createdAt = now,
+            )
 
         val primaryCalleeId = calleeIds.first()
-        val invite = CallInvite(
-            callId = groupInvite.callId,
-            connectionId = groupId,
-            roomName = roomName,
-            callerId = userId,
-            callerName = callerName,
-            calleeId = primaryCalleeId,
-            calleeName = "Group call",
-            videoEnabled = videoEnabled,
-            createdAt = now,
-        )
+        val invite =
+            CallInvite(
+                callId = groupInvite.callId,
+                connectionId = groupId,
+                roomName = roomName,
+                callerId = userId,
+                callerName = callerName,
+                calleeId = primaryCalleeId,
+                calleeName = "Group call",
+                videoEnabled = videoEnabled,
+                createdAt = now,
+            )
 
         activeInviteValue = invite
         _overlayState.value = CallOverlayState.Outgoing(invite)
@@ -478,7 +502,8 @@ object CallSessionManager {
             for (calleeId in calleeIds) {
                 val memberInvite = invite.copy(calleeId = calleeId)
                 sendInvite(memberInvite)
-                callPushNotifier.notifyIncomingCall(memberInvite)
+                callPushNotifier
+                    .notifyIncomingCall(memberInvite)
                     .onFailure {
                         println("CallSessionManager: Failed to dispatch group call push to $calleeId: ${it.message}")
                     }
@@ -489,16 +514,17 @@ object CallSessionManager {
         }
 
         timeoutJob?.cancel()
-        timeoutJob = scope.launch {
-            delay(30_000)
-            if (activeInviteValue?.callId == invite.callId && _overlayState.value is CallOverlayState.Outgoing) {
-                for (calleeId in calleeIds) {
-                    sendCancel(invite.copy(calleeId = calleeId), calleeId, "missed")
+        timeoutJob =
+            scope.launch {
+                delay(30_000)
+                if (activeInviteValue?.callId == invite.callId && _overlayState.value is CallOverlayState.Outgoing) {
+                    for (calleeId in calleeIds) {
+                        sendCancel(invite.copy(calleeId = calleeId), calleeId, "missed")
+                    }
+                    insertCallChatLogAsync(groupInvite.groupId, "missed", 0)
+                    failCall(invite, "No answer")
                 }
-                insertCallChatLogAsync(groupInvite.groupId, "missed", 0)
-                failCall(invite, "No answer")
             }
-        }
     }
 
     fun acceptIncomingCall() {
@@ -547,12 +573,14 @@ object CallSessionManager {
         scope.launch {
             if (notifyPeer && invite != null) {
                 when (overlay) {
-                    is CallOverlayState.Outgoing -> runCatching {
-                        sendCancel(invite, invite.calleeId, "cancelled")
-                    }
-                    is CallOverlayState.Incoming -> runCatching {
-                        sendResponse(invite, accepted = false, busy = false)
-                    }
+                    is CallOverlayState.Outgoing ->
+                        runCatching {
+                            sendCancel(invite, invite.calleeId, "cancelled")
+                        }
+                    is CallOverlayState.Incoming ->
+                        runCatching {
+                            sendResponse(invite, accepted = false, busy = false)
+                        }
                     is CallOverlayState.Connecting -> {
                         peerUserId(invite)?.let { peerId ->
                             runCatching { sendCancel(invite, peerId, "cancelled") }
@@ -576,8 +604,6 @@ object CallSessionManager {
             activeInviteValue = null
             _overlayState.value = CallOverlayState.Idle
         }
-        // Tear down media immediately so video hangup cannot freeze on last TextureView frame.
-        internalCallManager.endCall()
         resetJoinGuards()
         scope.launch {
             if (invite != null) {
@@ -585,6 +611,8 @@ object CallSessionManager {
                     runCatching { sendCancel(invite, peerId, "ended") }
                 }
             }
+            delay(280)
+            internalCallManager.endCall()
             releaseLazyOutboundChannels()
         }
     }
@@ -598,13 +626,18 @@ object CallSessionManager {
         cleanupAfterCall()
     }
 
-    fun receiveIncomingPush(invite: CallInvite, autoAnswer: Boolean = false, autoDecline: Boolean = false) {
+    fun receiveIncomingPush(
+        invite: CallInvite,
+        autoAnswer: Boolean = false,
+        autoDecline: Boolean = false,
+    ) {
         pendingSystemInvite = invite
-        pendingSystemAction = when {
-            autoAnswer -> SystemIncomingCallAction.Accept
-            autoDecline -> SystemIncomingCallAction.Decline
-            else -> pendingSystemAction
-        }
+        pendingSystemAction =
+            when {
+                autoAnswer -> SystemIncomingCallAction.Accept
+                autoDecline -> SystemIncomingCallAction.Decline
+                else -> pendingSystemAction
+            }
 
         val userId = resolvedCurrentUserId()
         if (userId != null && invite.calleeId != userId) {
@@ -669,33 +702,34 @@ object CallSessionManager {
      */
     private fun watchRealtimeConnection(userId: String) {
         realtimeWatchJob?.cancel()
-        realtimeWatchJob = scope.launch {
-            var everConnected = false
-            var lostConnection = false
-            SupabaseConfig.client.realtime.status.collect { status ->
-                when (status) {
-                    Realtime.Status.DISCONNECTED,
-                    Realtime.Status.CONNECTING,
-                    -> {
-                        if (everConnected) lostConnection = true
-                    }
-
-                    Realtime.Status.CONNECTED -> {
-                        if (lostConnection && currentUserId == userId) {
-                            lostConnection = false
-                            // Let the SDK's rejoinChannels attempt finish, then force a clean join.
-                            // Channel status can stay SUBSCRIBED after a drop while the server forgot
-                            // the topic (pushes then fail with "unmatched topic").
-                            delay(750)
-                            if (currentUserId != userId) return@collect
-                            println("CallSessionManager: Realtime reconnected — resubscribing call invites")
-                            resubscribeIncoming(userId)
+        realtimeWatchJob =
+            scope.launch {
+                var everConnected = false
+                var lostConnection = false
+                SupabaseConfig.client.realtime.status.collect { status ->
+                    when (status) {
+                        Realtime.Status.DISCONNECTED,
+                        Realtime.Status.CONNECTING,
+                        -> {
+                            if (everConnected) lostConnection = true
                         }
-                        everConnected = true
+
+                        Realtime.Status.CONNECTED -> {
+                            if (lostConnection && currentUserId == userId) {
+                                lostConnection = false
+                                // Let the SDK's rejoinChannels attempt finish, then force a clean join.
+                                // Channel status can stay SUBSCRIBED after a drop while the server forgot
+                                // the topic (pushes then fail with "unmatched topic").
+                                delay(750)
+                                if (currentUserId != userId) return@collect
+                                println("CallSessionManager: Realtime reconnected — resubscribing call invites")
+                                resubscribeIncoming(userId)
+                            }
+                            everConnected = true
+                        }
                     }
                 }
             }
-        }
     }
 
     private fun resubscribeIncoming(userId: String) {
@@ -724,29 +758,33 @@ object CallSessionManager {
         val channel = SupabaseConfig.client.channel("calls:user:$userId")
         inboundChannel = channel
 
-        inviteJob = scope.launch {
-            channel.broadcastFlow<CallInvite>("invite").collectLatest { invite ->
-                handleInvite(invite)
+        inviteJob =
+            scope.launch {
+                channel.broadcastFlow<CallInvite>("invite").collectLatest { invite ->
+                    handleInvite(invite)
+                }
             }
-        }
 
-        responseJob = scope.launch {
-            channel.broadcastFlow<CallResponse>("response").collectLatest { response ->
-                handleResponse(response)
+        responseJob =
+            scope.launch {
+                channel.broadcastFlow<CallResponse>("response").collectLatest { response ->
+                    handleResponse(response)
+                }
             }
-        }
 
-        cancelJob = scope.launch {
-            channel.broadcastFlow<CallCancel>("cancel").collectLatest { cancel ->
-                handleCancel(cancel)
+        cancelJob =
+            scope.launch {
+                channel.broadcastFlow<CallCancel>("cancel").collectLatest { cancel ->
+                    handleCancel(cancel)
+                }
             }
-        }
 
-        connectedJob = scope.launch {
-            channel.broadcastFlow<CallRoomConnected>("connected").collectLatest { connected ->
-                handleRoomConnected(connected)
+        connectedJob =
+            scope.launch {
+                channel.broadcastFlow<CallRoomConnected>("connected").collectLatest { connected ->
+                    handleRoomConnected(connected)
+                }
             }
-        }
 
         val inbound = channel
         scope.launch {
@@ -900,11 +938,12 @@ object CallSessionManager {
         if (callState.value is CallState.Connected || callState.value is CallState.Connecting) {
             internalCallManager.endCall()
             activeInviteValue = invite
-            _overlayState.value = when (cancel.reason) {
-                "ended" -> CallOverlayState.Ended(invite, "Call ended")
-                "missed" -> CallOverlayState.Ended(invite, "No answer")
-                else -> CallOverlayState.Ended(invite, "Call ended")
-            }
+            _overlayState.value =
+                when (cancel.reason) {
+                    "ended" -> CallOverlayState.Ended(invite, "Call ended")
+                    "missed" -> CallOverlayState.Ended(invite, "No answer")
+                    else -> CallOverlayState.Ended(invite, "Call ended")
+                }
             cleanupAfterCall()
             return
         }
@@ -919,11 +958,12 @@ object CallSessionManager {
                     internalCallManager.endCall()
                 }
                 activeInviteValue = invite
-                _overlayState.value = when (cancel.reason) {
-                    "missed" -> CallOverlayState.Ended(invite, "No answer")
-                    "ended" -> CallOverlayState.Ended(invite, "Call ended")
-                    else -> CallOverlayState.Idle
-                }
+                _overlayState.value =
+                    when (cancel.reason) {
+                        "missed" -> CallOverlayState.Ended(invite, "No answer")
+                        "ended" -> CallOverlayState.Ended(invite, "Call ended")
+                        else -> CallOverlayState.Idle
+                    }
                 cleanupAfterCall()
             }
 
@@ -948,12 +988,13 @@ object CallSessionManager {
 
         val userId = resolvedCurrentUserId() ?: return failCall(invite, "You need to be signed in to start a call")
         val participantName = currentUserName ?: "Click User"
-        val tokenResult = coordinator.fetchCallToken(
-            connectionId = invite.connectionId,
-            roomName = invite.roomName,
-            participantName = participantName,
-            groupId = groupIdFromInvite(invite),
-        )
+        val tokenResult =
+            coordinator.fetchCallToken(
+                connectionId = invite.connectionId,
+                roomName = invite.roomName,
+                participantName = participantName,
+                groupId = groupIdFromInvite(invite),
+            )
 
         tokenResult.fold(
             onSuccess = { response ->
@@ -992,12 +1033,13 @@ object CallSessionManager {
             runCatching { sendResponse(invite, accepted = true, busy = false) }
         }
 
-        val tokenResult = coordinator.fetchCallToken(
-            connectionId = invite.connectionId,
-            roomName = invite.roomName,
-            participantName = participantName,
-            groupId = groupIdFromInvite(invite),
-        )
+        val tokenResult =
+            coordinator.fetchCallToken(
+                connectionId = invite.connectionId,
+                roomName = invite.roomName,
+                participantName = participantName,
+                groupId = groupIdFromInvite(invite),
+            )
 
         tokenResult.fold(
             onSuccess = { response ->
@@ -1029,62 +1071,79 @@ object CallSessionManager {
     private suspend fun sendInvite(invite: CallInvite) {
         outboundChannel(invite.calleeId).broadcast(
             event = "invite",
-            message = buildJsonObject {
-                put("callId", invite.callId)
-                put("connectionId", invite.connectionId)
-                put("roomName", invite.roomName)
-                put("callerId", invite.callerId)
-                put("callerName", invite.callerName)
-                put("calleeId", invite.calleeId)
-                put("calleeName", invite.calleeName)
-                put("videoEnabled", invite.videoEnabled)
-                put("createdAt", invite.createdAt)
-            }
+            message =
+                buildJsonObject {
+                    put("callId", invite.callId)
+                    put("connectionId", invite.connectionId)
+                    put("roomName", invite.roomName)
+                    put("callerId", invite.callerId)
+                    put("callerName", invite.callerName)
+                    put("calleeId", invite.calleeId)
+                    put("calleeName", invite.calleeName)
+                    put("videoEnabled", invite.videoEnabled)
+                    put("createdAt", invite.createdAt)
+                },
         )
     }
 
-    private suspend fun sendResponse(invite: CallInvite, accepted: Boolean, busy: Boolean) {
+    private suspend fun sendResponse(
+        invite: CallInvite,
+        accepted: Boolean,
+        busy: Boolean,
+    ) {
         val responderId = resolvedCurrentUserId() ?: return
         outboundChannel(invite.callerId).broadcast(
             event = "response",
-            message = buildJsonObject {
-                put("callId", invite.callId)
-                put("connectionId", invite.connectionId)
-                put("responderId", responderId)
-                put("accepted", accepted)
-                put("busy", busy)
-            }
+            message =
+                buildJsonObject {
+                    put("callId", invite.callId)
+                    put("connectionId", invite.connectionId)
+                    put("responderId", responderId)
+                    put("accepted", accepted)
+                    put("busy", busy)
+                },
         )
     }
 
-    private suspend fun sendCancel(invite: CallInvite, targetUserId: String, reason: String) {
+    private suspend fun sendCancel(
+        invite: CallInvite,
+        targetUserId: String,
+        reason: String,
+    ) {
         val senderId = resolvedCurrentUserId() ?: return
         outboundChannel(targetUserId).broadcast(
             event = "cancel",
-            message = buildJsonObject {
-                put("callId", invite.callId)
-                put("connectionId", invite.connectionId)
-                put("senderId", senderId)
-                put("reason", reason)
-            }
+            message =
+                buildJsonObject {
+                    put("callId", invite.callId)
+                    put("connectionId", invite.connectionId)
+                    put("senderId", senderId)
+                    put("reason", reason)
+                },
         )
     }
 
-    private suspend fun sendRoomConnected(invite: CallInvite, targetUserId: String, userId: String) {
+    private suspend fun sendRoomConnected(
+        invite: CallInvite,
+        targetUserId: String,
+        userId: String,
+    ) {
         outboundChannel(targetUserId).broadcast(
             event = "connected",
-            message = buildJsonObject {
-                put("callId", invite.callId)
-                put("connectionId", invite.connectionId)
-                put("userId", userId)
-            }
+            message =
+                buildJsonObject {
+                    put("callId", invite.callId)
+                    put("connectionId", invite.connectionId)
+                    put("userId", userId)
+                },
         )
     }
 
     private suspend fun outboundChannel(userId: String): RealtimeChannel {
-        val outbound = outboundChannels.getOrPut(userId) {
-            SupabaseConfig.client.channel("calls:user:$userId")
-        }
+        val outbound =
+            outboundChannels.getOrPut(userId) {
+                SupabaseConfig.client.channel("calls:user:$userId")
+            }
         if (userId !in subscribedOutboundUserIds) {
             try {
                 outbound.subscribe(blockUntilSubscribed = true)
@@ -1098,7 +1157,10 @@ object CallSessionManager {
         return outbound
     }
 
-    private fun failCall(invite: CallInvite?, reason: String) {
+    private fun failCall(
+        invite: CallInvite?,
+        reason: String,
+    ) {
         CallRingtonePlayer.stop()
         invite?.let { PlatformIncomingCallUi.dismissIncomingCall(it.callId, reason) }
         internalCallManager.endCall()
@@ -1107,9 +1169,7 @@ object CallSessionManager {
         cleanupAfterCall()
     }
 
-    private fun resolvedCurrentUserId(): String? {
-        return currentUserId ?: authRepository.getCurrentUser()?.id
-    }
+    private fun resolvedCurrentUserId(): String? = currentUserId ?: authRepository.getCurrentUser()?.id
 
     private fun peerUserId(invite: CallInvite): String? {
         val uid = resolvedCurrentUserId() ?: return null

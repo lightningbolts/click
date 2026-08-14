@@ -1,5 +1,11 @@
-package compose.project.click.click.ui.theme
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
 
+package compose.project.click.click.ui.theme // pragma: allowlist secret
+
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -16,7 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.getPlatform
+import compose.project.click.click.getPlatform // pragma: allowlist secret
 
 /**
  * Platform deltas for Functional Clarity. Visual language is unified;
@@ -39,37 +45,48 @@ data class PlatformStyle(
     val pressOffset: Dp,
 )
 
-val LocalPlatformStyle = staticCompositionLocalOf {
-    PlatformStyle(
-        isIOS = false,
-        cardCornerRadius = 16.dp,
-        compactCardCornerRadius = 8.dp,
-        buttonCornerRadius = 8.dp,
-        cardBorderWidth = 2.dp,
-        glassBackgroundAlpha = 1f,
-        glassBorderAlpha = 1f,
-        glassBorderPrimaryAlpha = 1f,
-        useShadowElevation = false,
-        useRipple = true,
-        pressOffset = 2.dp,
-    )
-}
+val LocalPlatformStyle =
+    staticCompositionLocalOf {
+        PlatformStyle(
+            isIOS = false,
+            cardCornerRadius = 16.dp,
+            compactCardCornerRadius = 8.dp,
+            buttonCornerRadius = 8.dp,
+            cardBorderWidth = 1.dp,
+            glassBackgroundAlpha = 1f,
+            glassBorderAlpha = 1f,
+            glassBorderPrimaryAlpha = 1f,
+            useShadowElevation = false,
+            useRipple = true,
+            pressOffset = 2.dp,
+        )
+    }
 
 /** App dark-mode flag from [PlatformThemeProvider]; defaults false (light-first). */
 val LocalIsDarkMode = compositionLocalOf { false }
 
 /**
- * Structural 2dp border: black on light, white on dark.
+ * Quiet 1dp structural border: outline-variant on light, muted purple-gray on dark.
  * When [usePrimary] is true, returns brand primary instead.
  */
 @Composable
 @ReadOnlyComposable
 fun clickBorderColor(usePrimary: Boolean = false): Color {
     if (usePrimary) return PrimaryBlue
-    val dark = LocalIsDarkMode.current ||
-        MaterialTheme.colorScheme.background.luminance() < 0.5f
-    return if (dark) BorderHardDark else BorderHard
+    val dark =
+        LocalIsDarkMode.current ||
+            MaterialTheme.colorScheme.background.luminance() < 0.5f
+    return if (dark) BorderQuietDark else BorderQuiet
 }
+
+/** Shared chrome hairline — cards, fields, menus, and buttons all read this. */
+@Composable
+@ReadOnlyComposable
+fun clickBorderWidth(): Dp = LocalPlatformStyle.current.cardBorderWidth
+
+@Composable
+@ReadOnlyComposable
+fun clickBorderStroke(usePrimary: Boolean = false): BorderStroke = BorderStroke(clickBorderWidth(), clickBorderColor(usePrimary))
 
 /** Opaque card/sheet fill from the active Material scheme. */
 @Composable
@@ -86,33 +103,35 @@ fun clickSheetOnSurface(): Color = MaterialTheme.colorScheme.onSurface
 @ReadOnlyComposable
 fun clickSheetOnSurfaceMuted(): Color = MaterialTheme.colorScheme.onSurfaceVariant
 
-private val iOSPlatformStyle = PlatformStyle(
-    isIOS = true,
-    cardCornerRadius = 16.dp,
-    compactCardCornerRadius = 8.dp,
-    buttonCornerRadius = 8.dp,
-    cardBorderWidth = 2.dp,
-    glassBackgroundAlpha = 1f,
-    glassBorderAlpha = 1f,
-    glassBorderPrimaryAlpha = 1f,
-    useShadowElevation = false,
-    useRipple = false,
-    pressOffset = 2.dp,
-)
+private val iOSPlatformStyle =
+    PlatformStyle(
+        isIOS = true,
+        cardCornerRadius = 16.dp,
+        compactCardCornerRadius = 8.dp,
+        buttonCornerRadius = 8.dp,
+        cardBorderWidth = 1.dp,
+        glassBackgroundAlpha = 1f,
+        glassBorderAlpha = 1f,
+        glassBorderPrimaryAlpha = 1f,
+        useShadowElevation = false,
+        useRipple = false,
+        pressOffset = 2.dp,
+    )
 
-private val androidPlatformStyle = PlatformStyle(
-    isIOS = false,
-    cardCornerRadius = 16.dp,
-    compactCardCornerRadius = 8.dp,
-    buttonCornerRadius = 8.dp,
-    cardBorderWidth = 2.dp,
-    glassBackgroundAlpha = 1f,
-    glassBorderAlpha = 1f,
-    glassBorderPrimaryAlpha = 1f,
-    useShadowElevation = false,
-    useRipple = true,
-    pressOffset = 2.dp,
-)
+private val androidPlatformStyle =
+    PlatformStyle(
+        isIOS = false,
+        cardCornerRadius = 16.dp,
+        compactCardCornerRadius = 8.dp,
+        buttonCornerRadius = 8.dp,
+        cardBorderWidth = 1.dp,
+        glassBackgroundAlpha = 1f,
+        glassBorderAlpha = 1f,
+        glassBorderPrimaryAlpha = 1f,
+        useShadowElevation = false,
+        useRipple = true,
+        pressOffset = 2.dp,
+    )
 
 @Composable
 fun PlatformStyleProvider(content: @Composable () -> Unit) {
@@ -129,8 +148,10 @@ fun clickColorScheme(isDarkMode: Boolean) =
         darkColorScheme(
             primary = PrimaryBlue,
             onPrimary = Color.White,
-            secondary = Color(0xFF5E5E5E),
+            secondary = SecondaryAccent,
             onSecondary = Color.White,
+            secondaryContainer = SecondaryContainerDark,
+            onSecondaryContainer = OnSecondaryContainerDark,
             background = BackgroundDark,
             onBackground = OnSurfaceDark,
             surface = SurfaceDark,
@@ -146,8 +167,10 @@ fun clickColorScheme(isDarkMode: Boolean) =
         lightColorScheme(
             primary = PrimaryBlue,
             onPrimary = Color.White,
-            secondary = Color(0xFF5E5E5E),
+            secondary = SecondaryAccent,
             onSecondary = Color.White,
+            secondaryContainer = SecondaryContainerLight,
+            onSecondaryContainer = OnSecondaryContainerLight,
             background = BackgroundLight,
             onBackground = OnSurfaceLight,
             surface = SurfaceLight,
@@ -173,9 +196,10 @@ fun PlatformThemeProvider(
         CompositionLocalProvider(LocalIsDarkMode provides isDarkMode) {
             PlatformStyleProvider {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .maestroTestTagsAsResourceId(),
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .maestroTestTagsAsResourceId(),
                 ) {
                     content()
                 }

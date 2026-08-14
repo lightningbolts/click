@@ -1,6 +1,6 @@
 @file:Suppress("ktlint:standard:function-naming")
 
-package compose.project.click.click.ui.screens
+package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
@@ -69,7 +69,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import compose.project.click.click.PlatformHapticsPolicy
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
@@ -101,17 +101,18 @@ import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay //
 import compose.project.click.click.ui.chat.scrollChatTimelineToLatest // pragma: allowlist secret
 import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickOutlinedTextField
+import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
 import compose.project.click.click.ui.components.LocalGlassAlertAnimatedDismiss // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
-import compose.project.click.click.ui.components.sheetPageBackground
+import compose.project.click.click.ui.components.sheetPageBackground // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
 import compose.project.click.click.viewmodel.HubChatNavigationEvent // pragma: allowlist secret
 import compose.project.click.click.viewmodel.HubChatViewModel // pragma: allowlist secret
@@ -340,7 +341,7 @@ fun HubChatScreen(
                             Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 12.dp, vertical = 4.dp)
-                                .border(2.dp, clickBorderColor(), RoundedCornerShape(14.dp)),
+                                .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(14.dp)),
                         color = PrimaryBlue,
                         shape = RoundedCornerShape(14.dp),
                         tonalElevation = 0.dp,
@@ -362,7 +363,7 @@ fun HubChatScreen(
                                 Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 12.dp, vertical = 6.dp)
-                                    .border(2.dp, clickBorderColor(), RoundedCornerShape(16.dp)),
+                                    .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(16.dp)),
                             color = MaterialTheme.colorScheme.primaryContainer,
                             shape = RoundedCornerShape(16.dp),
                             tonalElevation = 0.dp,

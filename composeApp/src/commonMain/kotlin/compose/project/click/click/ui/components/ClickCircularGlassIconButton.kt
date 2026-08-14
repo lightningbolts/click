@@ -1,7 +1,14 @@
-package compose.project.click.click.ui.components
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
 
-import androidx.compose.foundation.clickable
+package compose.project.click.click.ui.components // pragma: allowlist secret
+
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
@@ -13,19 +20,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.LocalPlatformStyle
-import compose.project.click.click.ui.theme.clickBorderColor
+import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 
 /**
  * Circular bordered glass FAB used by map Drop beacon / zoom and inbox Create click.
@@ -52,23 +58,32 @@ fun ClickCircularIconButton(
         label = "circular_icon_press_offset",
     )
     val density = LocalDensity.current
-    val buttonModifier = modifier
-        .size(size)
-        .graphicsLayer {
-            translationY = with(density) { pressOffset.toPx() }
-            alpha = if (!enabled) 0.38f else if (isPressed) 0.92f else 1f
-        }
-        .clip(CircleShape)
-        .then(
-            if (showBorder) Modifier.border(2.dp, clickBorderColor(), CircleShape)
-            else Modifier
-        )
-        .clickable(
-            interactionSource = interactionSource,
-            indication = null,
-            enabled = enabled,
-            onClick = onClick,
-        )
+    val buttonModifier =
+        modifier
+            .size(size)
+            .graphicsLayer {
+                translationY = with(density) { pressOffset.toPx() }
+                alpha =
+                    if (!enabled) {
+                        0.38f
+                    } else if (isPressed) {
+                        0.92f
+                    } else {
+                        1f
+                    }
+            }.clip(CircleShape)
+            .then(
+                if (showBorder) {
+                    Modifier.border(clickBorderWidth(), clickBorderColor(), CircleShape)
+                } else {
+                    Modifier
+                },
+            ).clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled,
+                onClick = onClick,
+            )
 
     val iconContent: @Composable () -> Unit = {
         Box(

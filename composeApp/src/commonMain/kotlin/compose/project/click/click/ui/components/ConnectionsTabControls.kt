@@ -1,4 +1,9 @@
-package compose.project.click.click.ui.components
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
+
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
@@ -18,8 +23,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -37,9 +40,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import compose.project.click.click.ui.theme.LightBlue
-import compose.project.click.click.ui.theme.clickBorderColor
-import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 
 /**
  * Floating connections header: large title + segment bar when expanded;
@@ -96,11 +100,12 @@ fun ConnectionsFloatingHeader(
                     title = title,
                     subtitle = subtitle,
                     collapseFraction = collapseFraction,
-                    actions = if (onOpenSearch != null) {
-                        { HeaderSearchIconButton(onClick = onOpenSearch) }
-                    } else {
-                        null
-                    },
+                    actions =
+                        if (onOpenSearch != null) {
+                            { HeaderSearchIconButton(onClick = onOpenSearch) }
+                        } else {
+                            null
+                        },
                 )
                 if (showTabs) {
                     ConnectionsSegmentBar(
@@ -182,22 +187,24 @@ private fun ConnectionsTabFilterMenuChip(
     archivedCount: Int,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val labels = listOf(
-        "Active ($activeCount)",
-        "Groups ($groupCount)",
-        "Archived ($archivedCount)",
-    )
+    val labels =
+        listOf(
+            "Active ($activeCount)",
+            "Groups ($groupCount)",
+            "Archived ($archivedCount)",
+        )
     val currentLabel = labels.getOrElse(selectedTabIndex) { labels[0] }
     val chipCorner = GlassSheetTokens.BentoExteriorCorner - 6.dp
 
     Box {
         Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(chipCorner))
-                .background(MaterialTheme.colorScheme.surface)
-                .border(2.dp, clickBorderColor(), RoundedCornerShape(chipCorner))
-                .clickable { expanded = true }
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier =
+                Modifier
+                    .clip(RoundedCornerShape(chipCorner))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(chipCorner))
+                    .clickable { expanded = true }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
@@ -215,27 +222,18 @@ private fun ConnectionsTabFilterMenuChip(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        DropdownMenu(
+        ClickDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-        ) {
-            labels.forEachIndexed { index, label ->
-                DropdownMenuItem(
-                    text = { Text(label) },
-                    onClick = {
-                        onTabSelected(index)
-                        expanded = false
-                    },
-                    leadingIcon = if (selectedTabIndex == index) {
-                        {
-                            Icon(Icons.Filled.Check, contentDescription = null, tint = PrimaryBlue)
-                        }
-                    } else {
-                        null
-                    },
-                )
-            }
-        }
+            items =
+                labels.mapIndexed { index, label ->
+                    ClickMenuItem(
+                        label = label,
+                        onClick = { onTabSelected(index) },
+                        icon = if (selectedTabIndex == index) Icons.Filled.Check else null,
+                    )
+                },
+        )
     }
 }
 
@@ -316,21 +314,22 @@ fun DiscoveryFloatingHeader(
                     title = title,
                     subtitle = subtitle,
                     collapseFraction = collapseFraction,
-                    actions = if (onRefresh != null || onOpenSearch != null) {
-                        {
-                            if (onRefresh != null) {
-                                HeaderRefreshIconButton(
-                                    onClick = onRefresh,
-                                    enabled = !isRefreshing,
-                                )
+                    actions =
+                        if (onRefresh != null || onOpenSearch != null) {
+                            {
+                                if (onRefresh != null) {
+                                    HeaderRefreshIconButton(
+                                        onClick = onRefresh,
+                                        enabled = !isRefreshing,
+                                    )
+                                }
+                                if (onOpenSearch != null) {
+                                    HeaderSearchIconButton(onClick = onOpenSearch)
+                                }
                             }
-                            if (onOpenSearch != null) {
-                                HeaderSearchIconButton(onClick = onOpenSearch)
-                            }
-                        }
-                    } else {
-                        null
-                    },
+                        } else {
+                            null
+                        },
                 )
                 DiscoverySortSegmentBar(
                     selectedTabIndex = selectedSortIndex,
@@ -354,12 +353,13 @@ private fun DiscoverySortFilterMenuChip(
 
     Box {
         Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(chipCorner))
-                .background(MaterialTheme.colorScheme.surface)
-                .border(2.dp, clickBorderColor(), RoundedCornerShape(chipCorner))
-                .clickable { expanded = true }
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier =
+                Modifier
+                    .clip(RoundedCornerShape(chipCorner))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(chipCorner))
+                    .clickable { expanded = true }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
@@ -377,28 +377,19 @@ private fun DiscoverySortFilterMenuChip(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        DropdownMenu(
+        ClickDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
             modifier = Modifier.zIndex(20f),
-        ) {
-            labels.forEachIndexed { index, label ->
-                DropdownMenuItem(
-                    text = { Text(label) },
-                    onClick = {
-                        onSortSelected(index)
-                        expanded = false
-                    },
-                    leadingIcon = if (selectedSortIndex == index) {
-                        {
-                            Icon(Icons.Filled.Check, contentDescription = null, tint = PrimaryBlue)
-                        }
-                    } else {
-                        null
-                    },
-                )
-            }
-        }
+            items =
+                labels.mapIndexed { index, label ->
+                    ClickMenuItem(
+                        label = label,
+                        onClick = { onSortSelected(index) },
+                        icon = if (selectedSortIndex == index) Icons.Filled.Check else null,
+                    )
+                },
+        )
     }
 }
 
@@ -416,42 +407,44 @@ fun DiscoverySortSegmentBar(
     val segmentCorner = exterior - trackPadding
 
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .border(2.dp, clickBorderColor(), RoundedCornerShape(exterior))
-            .clip(RoundedCornerShape(exterior))
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(trackPadding),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(exterior))
+                .clip(RoundedCornerShape(exterior))
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(trackPadding),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         listOf("Distance", "Recent").forEachIndexed { index, label ->
             val selected = selectedTabIndex == index
             Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(segmentCorner))
-                    .then(
-                        if (selected) {
-                            Modifier
-                                .background(MaterialTheme.colorScheme.primaryContainer)
-                                .border(2.dp, PrimaryBlue, RoundedCornerShape(segmentCorner))
-                        } else {
-                            Modifier
-                        },
-                    )
-                    .clickable { onTabSelected(index) }
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(segmentCorner))
+                        .then(
+                            if (selected) {
+                                Modifier
+                                    .background(MaterialTheme.colorScheme.primaryContainer)
+                                    .border(2.dp, PrimaryBlue, RoundedCornerShape(segmentCorner))
+                            } else {
+                                Modifier
+                            },
+                        ).clickable { onTabSelected(index) }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = label,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                    color = if (selected) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
+                    color =
+                        if (selected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                 )
             }
         }
@@ -472,12 +465,13 @@ fun ConnectionsSegmentBar(
     val segmentCorner = exterior - trackPadding
 
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .border(2.dp, clickBorderColor(), RoundedCornerShape(exterior))
-            .clip(RoundedCornerShape(exterior))
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(trackPadding),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(exterior))
+                .clip(RoundedCornerShape(exterior))
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(trackPadding),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         listOf(
@@ -487,20 +481,20 @@ fun ConnectionsSegmentBar(
         ).forEach { (index, label, count) ->
             val selected = selectedTabIndex == index
             Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(segmentCorner))
-                    .then(
-                        if (selected) {
-                            Modifier
-                                .background(MaterialTheme.colorScheme.primaryContainer)
-                                .border(2.dp, PrimaryBlue, RoundedCornerShape(segmentCorner))
-                        } else {
-                            Modifier
-                        },
-                    )
-                    .clickable { onTabSelected(index) }
-                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(segmentCorner))
+                        .then(
+                            if (selected) {
+                                Modifier
+                                    .background(MaterialTheme.colorScheme.primaryContainer)
+                                    .border(2.dp, PrimaryBlue, RoundedCornerShape(segmentCorner))
+                            } else {
+                                Modifier
+                            },
+                        ).clickable { onTabSelected(index) }
+                        .padding(horizontal = 8.dp, vertical = 10.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -508,11 +502,12 @@ fun ConnectionsSegmentBar(
                     modifier = Modifier.fillMaxWidth(),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                    color = if (selected) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
+                    color =
+                        if (selected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,

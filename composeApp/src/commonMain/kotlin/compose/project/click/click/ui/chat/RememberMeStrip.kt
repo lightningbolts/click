@@ -1,4 +1,9 @@
-package compose.project.click.click.ui.chat
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
+
+package compose.project.click.click.ui.chat // pragma: allowlist secret
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -27,12 +32,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import compose.project.click.click.data.models.ChatWithDetails
-import compose.project.click.click.ui.components.AvatarWithOnlineIndicator
-import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
-import compose.project.click.click.ui.components.CoreConnectionAvatarFrame
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.ui.theme.clickBorderColor
+import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
+import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
+import compose.project.click.click.ui.components.CoreConnectionAvatarFrame // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 
 /**
  * Horizontal “Remember Me” rail for Core-pinned 1:1 connections.
@@ -93,10 +99,11 @@ private fun RememberMeChip(
 ) {
     val user = chat.otherUser
     val displayName = user.name?.trim()?.takeIf { it.isNotEmpty() }
-    val firstName = user.firstName?.trim()?.takeIf { it.isNotEmpty() }
-        ?: displayName?.substringBefore(' ')?.ifBlank { null }
-        ?: displayName
-        ?: "Friend"
+    val firstName =
+        user.firstName?.trim()?.takeIf { it.isNotEmpty() }
+            ?: displayName?.substringBefore(' ')?.ifBlank { null }
+            ?: displayName
+            ?: "Friend"
     val activityTs = chat.connection.last_message_at ?: chat.lastMessage?.timeCreated
     val badge = formatRememberMeBadge(activityTs)
 
@@ -118,9 +125,10 @@ private fun RememberMeChip(
                         email = user.email,
                         avatarUrl = user.image,
                         userId = user.id,
-                        modifier = Modifier
-                            .size(56.dp)
-                            .border(2.dp, clickBorderColor(), CircleShape),
+                        modifier =
+                            Modifier
+                                .size(56.dp)
+                                .border(clickBorderWidth(), clickBorderColor(), CircleShape),
                         useCompactTypography = true,
                     )
                 }
@@ -132,11 +140,12 @@ private fun RememberMeChip(
                     fontWeight = FontWeight.Bold,
                     fontSize = 10.sp,
                     maxLines = 1,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(PrimaryBlue)
-                        .border(2.dp, MaterialTheme.colorScheme.background, RoundedCornerShape(999.dp))
-                        .padding(horizontal = 4.dp, vertical = 1.dp),
+                    modifier =
+                        Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(PrimaryBlue)
+                            .border(2.dp, MaterialTheme.colorScheme.background, RoundedCornerShape(999.dp))
+                            .padding(horizontal = 4.dp, vertical = 1.dp),
                 )
             }
         }
@@ -147,11 +156,12 @@ private fun RememberMeChip(
             color = MaterialTheme.colorScheme.onBackground,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .widthIn(max = 80.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .clickable(onClick = onClick)
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+            modifier =
+                Modifier
+                    .widthIn(max = 80.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .clickable(onClick = onClick)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
             textAlign = TextAlign.Center,
         )
     }

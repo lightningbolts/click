@@ -1,4 +1,9 @@
-package compose.project.click.click.ui.components
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
+
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -16,9 +21,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.data.api.ConnectionEventRecommendationDto
-import compose.project.click.click.ui.theme.clickBorderColor
-import compose.project.click.click.ui.theme.clickCardSurface
+import compose.project.click.click.data.api.ConnectionEventRecommendationDto // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickCardSurface // pragma: allowlist secret
 
 @Composable
 fun ConnectionEventRecommendationCard(
@@ -29,9 +35,10 @@ fun ConnectionEventRecommendationCard(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .border(2.dp, clickBorderColor(), RoundedCornerShape(16.dp)),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
         color = clickCardSurface(),
     ) {
@@ -50,11 +57,13 @@ fun ConnectionEventRecommendationCard(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
-            val whenWhere = listOfNotNull(
-                recommendation.eventStartAt?.take(16)?.replace('T', ' '),
-                recommendation.locationName?.trim()
-                    ?.takeUnless { it.isEmpty() || it.equals("Current location", ignoreCase = true) },
-            ).joinToString(" · ")
+            val whenWhere =
+                listOfNotNull(
+                    recommendation.eventStartAt?.take(16)?.replace('T', ' '),
+                    recommendation.locationName
+                        ?.trim()
+                        ?.takeUnless { it.isEmpty() || it.equals("Current location", ignoreCase = true) },
+                ).joinToString(" · ")
             if (whenWhere.isNotBlank()) {
                 Text(
                     text = whenWhere,

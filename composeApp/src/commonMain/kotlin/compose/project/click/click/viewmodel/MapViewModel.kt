@@ -3,80 +3,80 @@
     "ktlint:standard:property-naming",
 )
 
-package compose.project.click.click.viewmodel
+package compose.project.click.click.viewmodel // pragma: allowlist secret
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import compose.project.click.click.PlatformHapticsPolicy
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.collaboration.CollaborationSessionManager // pragma: allowlist secret
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.data.ClickWebAuthCoordinator
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.ClickWebAuthCoordinator // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
-import compose.project.click.click.data.api.BeaconAttendeeDto
-import compose.project.click.click.data.api.BeaconEngagementHttpException
-import compose.project.click.click.data.api.EngagementTelemetryBody
-import compose.project.click.click.data.api.MapBeaconPatchBody
+import compose.project.click.click.data.api.BeaconAttendeeDto // pragma: allowlist secret
+import compose.project.click.click.data.api.BeaconEngagementHttpException // pragma: allowlist secret
+import compose.project.click.click.data.api.EngagementTelemetryBody // pragma: allowlist secret
+import compose.project.click.click.data.api.MapBeaconPatchBody // pragma: allowlist secret
 import compose.project.click.click.data.models.BeaconVisibilityAudience // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconInsert // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
-import compose.project.click.click.data.models.parseEpochMs
+import compose.project.click.click.data.models.parseEpochMs // pragma: allowlist secret
 import compose.project.click.click.data.models.parseMapBeaconMetadata // pragma: allowlist secret
 import compose.project.click.click.data.models.visibleMapConnections // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.MapBeaconRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
-import compose.project.click.click.data.storage.BeaconEngagementPersistence
+import compose.project.click.click.data.storage.BeaconEngagementPersistence // pragma: allowlist secret
 import compose.project.click.click.data.storage.BeaconRsvpPersistence // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.events.EVENT_CATEGORIES_METADATA_KEY // pragma: allowlist secret
 import compose.project.click.click.events.EVENT_CATEGORY_OPTIONS // pragma: allowlist secret
-import compose.project.click.click.events.EVENT_CHECK_IN_RADIUS_METADATA_KEY
-import compose.project.click.click.events.EVENT_VENUE_SCALE_METADATA_KEY
-import compose.project.click.click.events.EventReminderCoordinator
-import compose.project.click.click.events.EventSchedule
-import compose.project.click.click.events.EventVenueScale
-import compose.project.click.click.events.beaconCheckInFailureMessage
-import compose.project.click.click.events.eventSchedule
-import compose.project.click.click.events.eventScheduleMetadata
-import compose.project.click.click.events.isVisibleEventBeacon
-import compose.project.click.click.events.mergeEventScheduleIntoRaw
-import compose.project.click.click.events.resolveEventCheckInRadiusMeters
-import compose.project.click.click.events.validateEventSchedule
-import compose.project.click.click.getPlatform
+import compose.project.click.click.events.EVENT_CHECK_IN_RADIUS_METADATA_KEY // pragma: allowlist secret
+import compose.project.click.click.events.EVENT_VENUE_SCALE_METADATA_KEY // pragma: allowlist secret
+import compose.project.click.click.events.EventReminderCoordinator // pragma: allowlist secret
+import compose.project.click.click.events.EventSchedule // pragma: allowlist secret
+import compose.project.click.click.events.EventVenueScale // pragma: allowlist secret
+import compose.project.click.click.events.beaconCheckInFailureMessage // pragma: allowlist secret
+import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
+import compose.project.click.click.events.eventScheduleMetadata // pragma: allowlist secret
+import compose.project.click.click.events.isVisibleEventBeacon // pragma: allowlist secret
+import compose.project.click.click.events.mergeEventScheduleIntoRaw // pragma: allowlist secret
+import compose.project.click.click.events.resolveEventCheckInRadiusMeters // pragma: allowlist secret
+import compose.project.click.click.events.validateEventSchedule // pragma: allowlist secret
+import compose.project.click.click.getPlatform // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPin // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPinKind // pragma: allowlist secret
-import compose.project.click.click.ui.components.mapBeaconKindToLayerFilter
-import compose.project.click.click.ui.utils.BoundingBox
+import compose.project.click.click.ui.components.mapBeaconKindToLayerFilter // pragma: allowlist secret
+import compose.project.click.click.ui.utils.BoundingBox // pragma: allowlist secret
 import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
-import compose.project.click.click.ui.utils.ConnectionMapPoint
-import compose.project.click.click.ui.utils.MapCluster
-import compose.project.click.click.ui.utils.MapRenderData
-import compose.project.click.click.ui.utils.TimeState
-import compose.project.click.click.ui.utils.calculateZoomForBounds
-import compose.project.click.click.ui.utils.determineMapRenderData
-import compose.project.click.click.ui.utils.displayDynamicTitle
-import compose.project.click.click.ui.utils.hasUsableMapCoordinates
-import compose.project.click.click.ui.utils.haversineDistance
-import compose.project.click.click.ui.utils.mapPeerDisplayNameForPin
-import compose.project.click.click.ui.utils.mergeCommunityHubLists
-import compose.project.click.click.ui.utils.mergeMapBeaconLists
-import compose.project.click.click.ui.utils.overlappingMapPins
-import compose.project.click.click.ui.utils.resolveBeaconQuickDistanceMeters
-import compose.project.click.click.ui.utils.toMapPoint
+import compose.project.click.click.ui.utils.ConnectionMapPoint // pragma: allowlist secret
+import compose.project.click.click.ui.utils.MapCluster // pragma: allowlist secret
+import compose.project.click.click.ui.utils.MapRenderData // pragma: allowlist secret
+import compose.project.click.click.ui.utils.TimeState // pragma: allowlist secret
+import compose.project.click.click.ui.utils.calculateZoomForBounds // pragma: allowlist secret
+import compose.project.click.click.ui.utils.determineMapRenderData // pragma: allowlist secret
+import compose.project.click.click.ui.utils.displayDynamicTitle // pragma: allowlist secret
+import compose.project.click.click.ui.utils.hasUsableMapCoordinates // pragma: allowlist secret
+import compose.project.click.click.ui.utils.haversineDistance // pragma: allowlist secret
+import compose.project.click.click.ui.utils.mapPeerDisplayNameForPin // pragma: allowlist secret
+import compose.project.click.click.ui.utils.mergeCommunityHubLists // pragma: allowlist secret
+import compose.project.click.click.ui.utils.mergeMapBeaconLists // pragma: allowlist secret
+import compose.project.click.click.ui.utils.overlappingMapPins // pragma: allowlist secret
+import compose.project.click.click.ui.utils.resolveBeaconQuickDistanceMeters // pragma: allowlist secret
+import compose.project.click.click.ui.utils.toMapPoint // pragma: allowlist secret
 import compose.project.click.click.util.isValidStreamingUrl // pragma: allowlist secret
 import compose.project.click.click.util.teardownBlocking // pragma: allowlist secret
-import compose.project.click.click.utils.EVENT_FORMATTED_ADDRESS_METADATA_KEY
-import compose.project.click.click.utils.EVENT_LOCATION_NAME_METADATA_KEY
-import compose.project.click.click.utils.GeocodedPlace
-import compose.project.click.click.utils.HUB_GATEKEEPER_HIGH_ACCURACY_TIMEOUT_MS
+import compose.project.click.click.utils.EVENT_FORMATTED_ADDRESS_METADATA_KEY // pragma: allowlist secret
+import compose.project.click.click.utils.EVENT_LOCATION_NAME_METADATA_KEY // pragma: allowlist secret
+import compose.project.click.click.utils.GeocodedPlace // pragma: allowlist secret
+import compose.project.click.click.utils.HUB_GATEKEEPER_HIGH_ACCURACY_TIMEOUT_MS // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
-import compose.project.click.click.utils.resolveHubGatekeeperLocation
+import compose.project.click.click.utils.resolveHubGatekeeperLocation // pragma: allowlist secret
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
@@ -1910,6 +1910,15 @@ class MapViewModel : ViewModel() {
                                 .fromEpochMilliseconds(it)
                                 .toString()
                         },
+                    creatorId = beacon?.createdByUserId,
+                    creatorName = beacon?.creatorDisplayName,
+                    createdAt =
+                        beacon?.createdAtEpochMs?.let {
+                            kotlinx.datetime.Instant
+                                .fromEpochMilliseconds(it)
+                                .toString()
+                        },
+                    showCreatorName = beacon?.showCreatorName == true,
                 )
             val merged =
                 (listOf(item) + AppDataManager.cachedEventBookmarks.value.filterNot { it.beaconId == beaconId })

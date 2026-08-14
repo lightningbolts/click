@@ -4,7 +4,7 @@
     "ktlint:standard:no-wildcard-imports",
 )
 
-package compose.project.click.click
+package compose.project.click.click // pragma: allowlist secret
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -53,93 +53,93 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
-import compose.project.click.click.PlatformHapticsPolicy
-import compose.project.click.click.calendar.AvailabilityOverlapGap
-import compose.project.click.click.calendar.lockAvailabilityIntentForGap
-import compose.project.click.click.calls.ActiveCallOverlay
-import compose.project.click.click.calls.CallOverlayState
-import compose.project.click.click.calls.CallOverlayTransitionPolicy
-import compose.project.click.click.calls.CallPreviewOverlay
-import compose.project.click.click.calls.CallSessionManager
-import compose.project.click.click.calls.CallState
-import compose.project.click.click.collaboration.CollaborationSession
-import compose.project.click.click.collaboration.CollaborationSessionManager
-import compose.project.click.click.data.ActiveHubEntry
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.data.OpenMeteoWeatherService
-import compose.project.click.click.data.api.ApiClient
-import compose.project.click.click.data.hub.HubConnectionManager
-import compose.project.click.click.data.hub.HubVerifyResult
-import compose.project.click.click.data.models.ContextTag
-import compose.project.click.click.data.models.HeightCategory
-import compose.project.click.click.data.models.NoiseLevelCategory
-import compose.project.click.click.data.models.ONBOARDING_FLOW_VERSION_COMPLETE
-import compose.project.click.click.data.models.OnboardingState
-import compose.project.click.click.data.models.User
-import compose.project.click.click.data.models.isPendingSync
-import compose.project.click.click.data.models.isPublicUserProfileIncomplete
-import compose.project.click.click.data.models.toConnectionPayloadWeatherJson
-import compose.project.click.click.data.repository.AuthRepository
-import compose.project.click.click.data.storage.createTokenStorage
-import compose.project.click.click.deeplink.ConnectionDeepLinkRouter
-import compose.project.click.click.deeplink.EventDeepLinkRouter
-import compose.project.click.click.encounter.EncounterTetherManager
-import compose.project.click.click.navigation.NavigationItem
-import compose.project.click.click.navigation.bottomNavItems
-import compose.project.click.click.navigation.shouldRenderHomeSwipeUnderlay
-import compose.project.click.click.notifications.ChatDeepLinkManager
-import compose.project.click.click.notifications.ChatNotificationDismisser
-import compose.project.click.click.platform.rememberReduceMotionEnabled
-import compose.project.click.click.proximity.rememberProximityManager
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.calendar.AvailabilityOverlapGap // pragma: allowlist secret
+import compose.project.click.click.calendar.lockAvailabilityIntentForGap // pragma: allowlist secret
+import compose.project.click.click.calls.ActiveCallOverlay // pragma: allowlist secret
+import compose.project.click.click.calls.CallOverlayState // pragma: allowlist secret
+import compose.project.click.click.calls.CallOverlayTransitionPolicy // pragma: allowlist secret
+import compose.project.click.click.calls.CallPreviewOverlay // pragma: allowlist secret
+import compose.project.click.click.calls.CallSessionManager // pragma: allowlist secret
+import compose.project.click.click.calls.CallState // pragma: allowlist secret
+import compose.project.click.click.collaboration.CollaborationSession // pragma: allowlist secret
+import compose.project.click.click.collaboration.CollaborationSessionManager // pragma: allowlist secret
+import compose.project.click.click.data.ActiveHubEntry // pragma: allowlist secret
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.OpenMeteoWeatherService // pragma: allowlist secret
+import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
+import compose.project.click.click.data.hub.HubConnectionManager // pragma: allowlist secret
+import compose.project.click.click.data.hub.HubVerifyResult // pragma: allowlist secret
+import compose.project.click.click.data.models.ContextTag // pragma: allowlist secret
+import compose.project.click.click.data.models.HeightCategory // pragma: allowlist secret
+import compose.project.click.click.data.models.NoiseLevelCategory // pragma: allowlist secret
+import compose.project.click.click.data.models.ONBOARDING_FLOW_VERSION_COMPLETE // pragma: allowlist secret
+import compose.project.click.click.data.models.OnboardingState // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.isPendingSync // pragma: allowlist secret
+import compose.project.click.click.data.models.isPublicUserProfileIncomplete // pragma: allowlist secret
+import compose.project.click.click.data.models.toConnectionPayloadWeatherJson // pragma: allowlist secret
+import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
+import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.deeplink.ConnectionDeepLinkRouter // pragma: allowlist secret
+import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
+import compose.project.click.click.encounter.EncounterTetherManager // pragma: allowlist secret
+import compose.project.click.click.navigation.NavigationItem // pragma: allowlist secret
+import compose.project.click.click.navigation.bottomNavItems // pragma: allowlist secret
+import compose.project.click.click.navigation.shouldRenderHomeSwipeUnderlay // pragma: allowlist secret
+import compose.project.click.click.notifications.ChatDeepLinkManager // pragma: allowlist secret
+import compose.project.click.click.notifications.ChatNotificationDismisser // pragma: allowlist secret
+import compose.project.click.click.platform.rememberReduceMotionEnabled // pragma: allowlist secret
+import compose.project.click.click.proximity.rememberProximityManager // pragma: allowlist secret
 import compose.project.click.click.sensors.AmbientNoiseMonitorProvider // pragma: allowlist secret
 import compose.project.click.click.sensors.BarometricHeightMonitorProvider // pragma: allowlist secret
-import compose.project.click.click.sensors.CalibratedBarometricHeightMonitor
+import compose.project.click.click.sensors.CalibratedBarometricHeightMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.ConnectionSensorMonitorsProvider // pragma: allowlist secret
-import compose.project.click.click.sensors.HardwareVibeMonitor
+import compose.project.click.click.sensors.HardwareVibeMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.captureConnectionSensorContext // pragma: allowlist secret
-import compose.project.click.click.sensors.rememberAmbientNoiseMonitor
-import compose.project.click.click.sensors.rememberBarometricHeightMonitor
-import compose.project.click.click.ui.camera.DisposableCameraView
-import compose.project.click.click.ui.chat.ChatAmbientMeshBackground
-import compose.project.click.click.ui.components.AppScreenDefaults
-import compose.project.click.click.ui.components.AppShimmerScreen
-import compose.project.click.click.ui.components.ConnectionContextPresentation
-import compose.project.click.click.ui.components.ConnectionContextSheet
-import compose.project.click.click.ui.components.ConnectionRevealOverlay
-import compose.project.click.click.ui.components.ConnectionRevealPhase
-import compose.project.click.click.ui.components.ConnectionRevealUiState
-import compose.project.click.click.ui.components.GlobalTetherOverlay
-import compose.project.click.click.ui.components.INTEREST_ONBOARDING_MIN_TAGS
-import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
-import compose.project.click.click.ui.components.InteractiveSwipeBackParallaxPeekRatio
-import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
-import compose.project.click.click.ui.components.OfflineStatusBanner
-import compose.project.click.click.ui.components.PlatformBackHandler
-import compose.project.click.click.ui.components.PlatformBottomBar
-import compose.project.click.click.ui.components.UnifiedToastHost
-import compose.project.click.click.ui.components.UnifiedToastTokens
-import compose.project.click.click.ui.components.rememberBottomChromePadding
-import compose.project.click.click.ui.components.rememberUnifiedToastState
-import compose.project.click.click.ui.screens.*
-import compose.project.click.click.ui.theme.*
-import compose.project.click.click.ui.utils.PermissionCoordinatorHost
-import compose.project.click.click.ui.utils.rememberLocationPermissionRequester
-import compose.project.click.click.ui.utils.rememberMicrophonePermissionRequester
-import compose.project.click.click.util.redactedRestMessage
-import compose.project.click.click.utils.HUB_GATEKEEPER_HIGH_ACCURACY_TIMEOUT_MS
-import compose.project.click.click.utils.hasUsableHubLocation
-import compose.project.click.click.utils.resolveHubGatekeeperLocation
-import compose.project.click.click.viewmodel.AuthState
-import compose.project.click.click.viewmodel.AuthViewModel
-import compose.project.click.click.viewmodel.ChatViewModel
-import compose.project.click.click.viewmodel.ConnectionState
-import compose.project.click.click.viewmodel.ConnectionViewModel
-import compose.project.click.click.viewmodel.ConnectivityViewModel
-import compose.project.click.click.viewmodel.HomeViewModel
-import compose.project.click.click.viewmodel.MapLayerFilter
-import compose.project.click.click.viewmodel.MapViewModel
-import compose.project.click.click.viewmodel.OnboardingViewModel
-import compose.project.click.click.viewmodel.VerifiedCliqueProximityIntent
+import compose.project.click.click.sensors.rememberAmbientNoiseMonitor // pragma: allowlist secret
+import compose.project.click.click.sensors.rememberBarometricHeightMonitor // pragma: allowlist secret
+import compose.project.click.click.ui.camera.DisposableCameraView // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
+import compose.project.click.click.ui.components.AppScreenDefaults // pragma: allowlist secret
+import compose.project.click.click.ui.components.AppShimmerScreen // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionContextPresentation // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionContextSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionRevealOverlay // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionRevealPhase // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionRevealUiState // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlobalTetherOverlay // pragma: allowlist secret
+import compose.project.click.click.ui.components.INTEREST_ONBOARDING_MIN_TAGS // pragma: allowlist secret
+import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
+import compose.project.click.click.ui.components.InteractiveSwipeBackParallaxPeekRatio // pragma: allowlist secret
+import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
+import compose.project.click.click.ui.components.OfflineStatusBanner // pragma: allowlist secret
+import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
+import compose.project.click.click.ui.components.PlatformBottomBar // pragma: allowlist secret
+import compose.project.click.click.ui.components.UnifiedToastHost // pragma: allowlist secret
+import compose.project.click.click.ui.components.UnifiedToastTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberUnifiedToastState // pragma: allowlist secret
+import compose.project.click.click.ui.screens.* // pragma: allowlist secret
+import compose.project.click.click.ui.theme.* // pragma: allowlist secret
+import compose.project.click.click.ui.utils.PermissionCoordinatorHost // pragma: allowlist secret
+import compose.project.click.click.ui.utils.rememberLocationPermissionRequester // pragma: allowlist secret
+import compose.project.click.click.ui.utils.rememberMicrophonePermissionRequester // pragma: allowlist secret
+import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
+import compose.project.click.click.utils.HUB_GATEKEEPER_HIGH_ACCURACY_TIMEOUT_MS // pragma: allowlist secret
+import compose.project.click.click.utils.hasUsableHubLocation // pragma: allowlist secret
+import compose.project.click.click.utils.resolveHubGatekeeperLocation // pragma: allowlist secret
+import compose.project.click.click.viewmodel.AuthState // pragma: allowlist secret
+import compose.project.click.click.viewmodel.AuthViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.ConnectionState // pragma: allowlist secret
+import compose.project.click.click.viewmodel.ConnectionViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.ConnectivityViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.HomeViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
+import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.OnboardingViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.VerifiedCliqueProximityIntent // pragma: allowlist secret
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
@@ -1081,6 +1081,7 @@ fun App() {
                         var pendingBeaconId by remember { mutableStateOf<String?>(null) }
                         var pendingMapLayerFilter by remember { mutableStateOf<MapLayerFilter?>(null) }
                         var isConnectionsChatOpen by remember { mutableStateOf(false) }
+                        var isSettingsSubpageOpen by remember { mutableStateOf(false) }
                         // Separate from session-open: true while chat owns the bottom edge.
                         var connectionsChatSuppressesTabBar by remember { mutableStateOf(false) }
                         var verifiedCliqueProximityAutofillIntent by remember { mutableStateOf<VerifiedCliqueProximityIntent?>(null) }
@@ -1094,6 +1095,9 @@ fun App() {
                                 if (route != NavigationItem.Connections.route) {
                                     isConnectionsChatOpen = false
                                     connectionsChatSuppressesTabBar = false
+                                }
+                                if (route != NavigationItem.Settings.route) {
+                                    isSettingsSubpageOpen = false
                                 }
                             }
                         }
@@ -1195,12 +1199,14 @@ fun App() {
                                 currentRoute != NavigationItem.Home.route &&
                                 addClickOverlayKey == null &&
                                 !isConnectionsChatOpen &&
+                                !(currentRoute == NavigationItem.Settings.route && isSettingsSubpageOpen) &&
                                 hubChatArgs == null
                         val iOSSwipeOwnsBack =
                             isIOS &&
                                 (
                                     addClickOverlayKey != null ||
                                         (currentRoute == NavigationItem.Connections.route && isConnectionsChatOpen) ||
+                                        (currentRoute == NavigationItem.Settings.route && isSettingsSubpageOpen) ||
                                         hubChatArgs != null ||
                                         canSwipeBackMainRoute
                                 )
@@ -1763,6 +1769,7 @@ fun App() {
                                                             SettingsScreen(
                                                                 isDarkMode = isDarkMode,
                                                                 onOpenSearch = { showUnifiedSearchSheet = true },
+                                                                onSubpageOpenChanged = { isSettingsSubpageOpen = it },
                                                                 onToggleDarkMode = {
                                                                     val next = !isDarkMode
                                                                     isDarkMode = next
@@ -1783,7 +1790,8 @@ fun App() {
                                                     isPrimaryNavRoute(animatedScreen) &&
                                                     animatedScreen != NavigationItem.Connections.route &&
                                                     previousKey != animatedScreen &&
-                                                    !(animatedScreen == NavigationItem.Connections.route && isConnectionsChatOpen)
+                                                    !(animatedScreen == NavigationItem.Connections.route && isConnectionsChatOpen) &&
+                                                    !(animatedScreen == NavigationItem.Settings.route && isSettingsSubpageOpen)
 
                                             if (interactivePrimary) {
                                                 InteractiveSwipeBackContainer(

@@ -1,13 +1,17 @@
-package compose.project.click.click.ui.screens
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
+
+package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.BluetoothSearching
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
@@ -18,15 +22,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.*
-import compose.project.click.click.utils.LocationService // pragma: allowlist secret
-import compose.project.click.click.ui.components.AdaptiveBackground
-import compose.project.click.click.ui.components.AdaptiveButton
-import compose.project.click.click.ui.components.AdaptiveCard
+import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
+import compose.project.click.click.ui.components.AdaptiveButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
+import compose.project.click.click.ui.components.AppScreenWithFloatingHeader // pragma: allowlist secret
 import compose.project.click.click.ui.components.CreateHubModal // pragma: allowlist secret
 import compose.project.click.click.ui.components.JoinCommunityHubSheet // pragma: allowlist secret
-import compose.project.click.click.ui.components.AppScreenWithFloatingHeader
-import compose.project.click.click.ui.components.SuccessBeat
+import compose.project.click.click.ui.components.SuccessBeat // pragma: allowlist secret
+import compose.project.click.click.ui.theme.* // pragma: allowlist secret
+import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 
 @Composable
 fun AddClickScreen(
@@ -70,13 +74,12 @@ fun AddClickScreen(
                 ClickedSuccessContent(
                     modifier = contentModifier.fillMaxWidth(),
                     userName = clickedUserName,
-                    onStartChatting = onStartChatting
+                    onStartChatting = onStartChatting,
                 )
             }
         }
     }
 }
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -114,32 +117,33 @@ fun AddClickContent(
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(24.dp)
+        verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         // Tap to Connect (BLE + audio + GPS) — full width card first
         AdaptiveCard(
             modifier = Modifier.fillMaxWidth(),
-            onClick = onNavigateToNfc
+            onClick = onNavigateToNfc,
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                verticalArrangement = Arrangement.Center,
             ) {
                 Icon(
                     Icons.Filled.BluetoothSearching,
                     contentDescription = "Tap to Connect",
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(64.dp)
+                    modifier = Modifier.size(64.dp),
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     "Tap to Connect",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -155,68 +159,70 @@ fun AddClickContent(
         // QR Code Section - Two cards side by side
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             AdaptiveCard(
-                modifier = Modifier
-                    .weight(1f)
-                    .aspectRatio(0.85f),
-                onClick = onShowMyQRCode
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .aspectRatio(0.85f),
+                onClick = onShowMyQRCode,
             ) {
                 Column(
                     modifier = Modifier.fillMaxSize(),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                    verticalArrangement = Arrangement.Center,
                 ) {
                     Icon(
                         Icons.Filled.QrCode,
                         contentDescription = "My QR Code",
                         modifier = Modifier.size(72.dp),
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = MaterialTheme.colorScheme.primary,
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         "My Code",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         "Share your QR",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
 
             AdaptiveCard(
-                modifier = Modifier
-                    .weight(1f)
-                    .aspectRatio(0.85f),
-                onClick = onScanQRCode
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .aspectRatio(0.85f),
+                onClick = onScanQRCode,
             ) {
                 Column(
                     modifier = Modifier.fillMaxSize(),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                    verticalArrangement = Arrangement.Center,
                 ) {
                     Icon(
                         Icons.Filled.QrCodeScanner,
                         contentDescription = "Scan QR",
                         modifier = Modifier.size(72.dp),
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = MaterialTheme.colorScheme.primary,
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         "Scan Code",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         "Friend or hub QR",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -236,12 +242,11 @@ fun AddClickContent(
     }
 }
 
-
 @Composable
 fun ClickedSuccessContent(
     modifier: Modifier = Modifier,
     userName: String,
-    onStartChatting: () -> Unit
+    onStartChatting: () -> Unit,
 ) {
     SuccessBeat(
         trigger = userName,
@@ -253,41 +258,42 @@ fun ClickedSuccessContent(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-        Box(
-            modifier = Modifier
-                .size(120.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                .border(2.dp, clickBorderColor(), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                Icons.Filled.Check,
-                contentDescription = "Success",
-                modifier = Modifier.size(80.dp),
-                tint = MaterialTheme.colorScheme.primary
+            Box(
+                modifier =
+                    Modifier
+                        .size(120.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .border(clickBorderWidth(), clickBorderColor(), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.Check,
+                    contentDescription = "Success",
+                    modifier = Modifier.size(80.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                "Clicked with $userName!",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
             )
-        }
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-        Text(
-            "Clicked with $userName!",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
+            Text(
+                "You're now connected and can start chatting.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            "You're now connected and can start chatting.",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             AdaptiveButton(onClick = onStartChatting) {
                 Text("Start Chatting")
