@@ -174,7 +174,7 @@ Shared components: `PileCluster`, `PhotoCard`, `CardVisualHero`, `SectionHeader`
 **Drag physics.** While a finger is down, the top card tracks **1:1** (`liveX`/`liveY` written in the pointer coroutine and read inside `graphicsLayer` — no `scope.launch` snap, no grid). Tilt is proportional to travel (`pileDragTiltDeg`). On release:
 
 - Swipe **up** or **right** past `GlassGestureCommitFraction` (or a flick at `GlassGestureFlickVelocityPxPerSec`) → velocity-aware spring exit (`pileCardExitTargetPx`) and the card is removed from the top of the stack.
-- Swipe **left** or **down** past the same threshold → the most recently dismissed card is recalled, springs in from off-screen (`pileRecallEnterFromPx`), and can be grabbed mid-flight because a new down event `stop()`s the `Animatable`.
+- Swipe **left** or **down** past the same threshold → the most recently dismissed card is recalled, springs in from off-screen (`pileRecallEnterFromPx`), and can be grabbed mid-flight: a new down event copies the current `Animatable` value into `liveX`/`liveY` (pointerInput cannot call `Animatable.stop()` — Compose's restricted pointer scope).
 - Below threshold → spring back to center.
 
 A committed throw/recall fires `PlatformHapticsPolicy.lightImpact()`.

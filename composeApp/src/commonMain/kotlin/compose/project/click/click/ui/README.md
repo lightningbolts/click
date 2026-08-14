@@ -252,7 +252,7 @@ Home and connections surfaces show pending match / proximity-sync states; push n
 `ConnectionActionSheet` — Report and Block actions route to repository APIs; blocked users disappear from discovery.
 
 ### Profile & interests
-`ProfileBottomSheet`, `TabbedUserProfileSheet`, `InterestEditor`, `SettingsInterestsCard`, `InterestTaggingScreen`.
+`ProfileBottomSheet`, `TabbedUserProfileSheet` (map pins and the Clicks list both open this wrapper so Timeline / Beacons / Media / Links cannot drift), `InterestEditor`, `SettingsInterestsCard`, `InterestTaggingScreen`. Saved-event taps on Home and Settings share `SavedEventDetailSheet`.
 
 ### Onboarding
 `WelcomeScreen` → auth → `PermissionsOnboardingScreen` → `LocationOnboardingScreen` → `ProfileBasicsGateScreen` → interests.

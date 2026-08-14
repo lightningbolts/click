@@ -137,7 +137,8 @@ fun pileSwipeAction(
     canDismiss: Boolean,
     canRecall: Boolean,
 ): PileSwipeAction {
-    if (offsetXPx == 0f && offsetYPx == 0f &&
+    if (offsetXPx == 0f &&
+        offsetYPx == 0f &&
         abs(velocityXPxPerSec) < GlassGestureFlickVelocityPxPerSec &&
         abs(velocityYPxPerSec) < GlassGestureFlickVelocityPxPerSec
     ) {
@@ -148,8 +149,9 @@ fun pileSwipeAction(
     val offset = if (horizontal) offsetXPx else offsetYPx
     val velocity = if (horizontal) velocityXPxPerSec else velocityYPxPerSec
     val dismissDirection = if (horizontal) offset > 0f else offset < 0f
-    val flickedInSwipeDirection = velocity * offset > 0f ||
-        (offset == 0f && if (horizontal) velocity > 0f else velocity < 0f)
+    val flickedInSwipeDirection =
+        velocity * offset > 0f ||
+            (offset == 0f && if (horizontal) velocity > 0f else velocity < 0f)
     val pastDistance = abs(offset) >= size * GlassGestureCommitFraction
     val flicked = flickedInSwipeDirection && abs(velocity) >= GlassGestureFlickVelocityPxPerSec
     if (!pastDistance && !flicked) return PileSwipeAction.SpringBack

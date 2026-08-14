@@ -92,7 +92,9 @@ fun PileCluster(
 ) {
     if (photos.isEmpty()) return
     val density = LocalDensity.current
-    val screenHeightPx = LocalWindowInfo.current.containerSize.height.coerceAtLeast(1)
+    val screenHeightPx =
+        LocalWindowInfo.current.containerSize.height
+            .coerceAtLeast(1)
     val screenHeightDp = with(density) { screenHeightPx.toDp().value }
     val sized = pileCardSizeDp(screenHeightDp).dp
     val width = photoWidth ?: sized
@@ -183,8 +185,6 @@ private fun PileCollapsedStack(
                             if (!dragging) onExpand()
                             return@awaitEachGesture
                         }
-                        animX.stop()
-                        animY.stop()
                         liveX = animX.value
                         liveY = animY.value
                         dragging = true
