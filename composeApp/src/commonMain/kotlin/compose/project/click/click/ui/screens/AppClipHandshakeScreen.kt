@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.screens
+package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -29,19 +29,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.ui.theme.clickBorderColor
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
-import compose.project.click.click.data.api.ApiClient
-import compose.project.click.click.data.models.UserProfile
-import compose.project.click.click.deeplink.ConnectionDeepLinkRouter
-import compose.project.click.click.qr.CLICK_IOS_APP_STORE_URL
-import compose.project.click.click.ui.components.ConnectionContextPresentation
-import compose.project.click.click.ui.components.ConnectionContextSheet
+import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
+import compose.project.click.click.data.models.UserProfile // pragma: allowlist secret
+import compose.project.click.click.deeplink.ConnectionDeepLinkRouter // pragma: allowlist secret
+import compose.project.click.click.qr.CLICK_IOS_APP_STORE_URL // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionContextPresentation // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionContextSheet // pragma: allowlist secret
 
 /**
  * Stripped-down handshake surface for the iOS App Clip target.
@@ -140,7 +141,7 @@ private fun AppClipDownloadCta() {
                 .size(72.dp)
                 .clip(RoundedCornerShape(20.dp))
                 .background(PrimaryBlue)
-                .border(2.dp, clickBorderColor(), RoundedCornerShape(20.dp)),
+                .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(20.dp)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(

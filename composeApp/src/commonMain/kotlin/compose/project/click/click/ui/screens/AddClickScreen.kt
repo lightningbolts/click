@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.screens
+package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,15 +18,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.*
+import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
-import compose.project.click.click.ui.components.AdaptiveBackground
-import compose.project.click.click.ui.components.AdaptiveButton
-import compose.project.click.click.ui.components.AdaptiveCard
+import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
+import compose.project.click.click.ui.components.AdaptiveButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.CreateHubModal // pragma: allowlist secret
 import compose.project.click.click.ui.components.JoinCommunityHubSheet // pragma: allowlist secret
-import compose.project.click.click.ui.components.AppScreenWithFloatingHeader
-import compose.project.click.click.ui.components.SuccessBeat
+import compose.project.click.click.ui.components.AppScreenWithFloatingHeader // pragma: allowlist secret
+import compose.project.click.click.ui.components.SuccessBeat // pragma: allowlist secret
 
 @Composable
 fun AddClickScreen(
@@ -258,7 +258,7 @@ fun ClickedSuccessContent(
                 .size(120.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primaryContainer)
-                .border(2.dp, clickBorderColor(), CircleShape),
+                .border(clickBorderWidth(), clickBorderColor(), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Icon(

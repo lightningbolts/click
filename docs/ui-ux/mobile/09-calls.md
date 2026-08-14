@@ -4,7 +4,7 @@
 **Source:** `calls/CallOverlays.kt`, `calls/CallActiveLayouts.kt`, `calls/CallParticipant.kt`, `calls/CallState.kt`, `calls/CallSessionManager.kt`, `calls/PlatformIncomingCallUi.kt`, `App.kt` global overlay host  
 **Out of scope:** Backend signaling internals, chat thread UI (see [08-chat.md](08-chat.md)). Web call UI lives in `click-web/components/chat/CallOverlay.tsx` (parity layouts).
 
-**Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px hard borders, primary `#630ed4`, no glass/blur/gradients.
+**Visual system:** Functional Clarity — opaque surfaces, 1dp quiet borders, primary `#630ed4`, secondary `#224CFF`, no glass/blur/gradients.
 
 ---
 
@@ -77,8 +77,9 @@ Group calls remain capped at **8** participants (`MAX_GROUP_CALL_MEMBERS`).
 |----------|-------|
 | Shell | Full-screen `BackgroundDark` for video / multi-party; compact bordered card for 1:1 voice |
 | Header | Title, live purple status dot, `MM:SS · N active`, layout toggle (grid ↔ speaker) |
-| Grid | 2-column `LazyVerticalGrid`, ~18dp tile corners, 12dp gutters |
-| Speaker | Top row active + one peer; large self tile below with `"You (Name)"`; optional PiP remote |
+| Grid | FaceTime-style `CallLayoutPolicy.gridRowSizes` rows that fill the stage (1 / 2 / 1+2 / 2×2 / 2+3 / 3×2 / 3+2+2 / 3+3+2) |
+| Speaker | Large primary remote; other remotes in a strip; local as bottom-end PiP (never a giant self tile) |
+| Hang-up | Keep last connected roster while chrome fades; do not blank video surfaces or jump to the ended preview card |
 | Tile | Video via `CallVideoSurface(participantId)` or purple initials avatar; name scrim; mic badge |
 | Active speaker | 2dp `PrimaryBlue` hard border (no glow) |
 | Controls | Floating capsule: Mic, Camera, Speaker, End (error red) |

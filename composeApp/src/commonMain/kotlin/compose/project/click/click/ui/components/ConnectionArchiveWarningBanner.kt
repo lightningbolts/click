@@ -34,8 +34,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.ConnectionArchiveNotice // pragma: allowlist secret
-import compose.project.click.click.ui.theme.clickBorderColor
-import compose.project.click.click.ui.theme.clickCardSurface
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickCardSurface // pragma: allowlist secret
 
 /**
  * Opaque surface card matching [PollPairCard]; archive / idle window reminder with actions.
@@ -61,7 +62,7 @@ fun ConnectionArchiveWarningBanner(
             }
             .clip(outerShape)
             .background(clickCardSurface())
-            .border(2.dp, clickBorderColor(), outerShape)
+            .border(clickBorderWidth(), clickBorderColor(), outerShape)
             .padding(16.dp),
     ) {
         Row(
@@ -73,7 +74,7 @@ fun ConnectionArchiveWarningBanner(
                     .size(48.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(MaterialTheme.colorScheme.primary)
-                    .border(2.dp, clickBorderColor(), RoundedCornerShape(16.dp)),
+                    .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -136,7 +137,7 @@ fun ConnectionArchiveWarningBanner(
                 enabled = icebreakerSendEnabled,
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(2.dp, clickBorderColor()),
+                border = clickBorderStroke(),
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = MaterialTheme.colorScheme.onSurface,
                 ),

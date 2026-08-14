@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.components
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -36,13 +36,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.PlatformHapticsPolicy
-import compose.project.click.click.data.models.ChatWithDetails
-import compose.project.click.click.data.models.MapBeacon
-import compose.project.click.click.ui.theme.clickBorderColor
-import compose.project.click.click.ui.theme.clickCardSurface
-import compose.project.click.click.ui.utils.displayDynamicTitle
-import compose.project.click.click.ui.utils.displayTypeTitle
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickCardSurface // pragma: allowlist secret
+import compose.project.click.click.ui.utils.displayDynamicTitle // pragma: allowlist secret
+import compose.project.click.click.ui.utils.displayTypeTitle // pragma: allowlist secret
 
 private data class PendingShareAction(
     val chatIds: List<String>,
@@ -107,7 +108,7 @@ fun BeaconShareToChatDialog(
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = surface,
-            border = BorderStroke(2.dp, border),
+            border = BorderStroke(clickBorderWidth(), border),
             modifier = Modifier
                 .fillMaxWidth(0.94f)
                 .fillMaxHeight(0.78f),
@@ -127,7 +128,7 @@ fun BeaconShareToChatDialog(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(2.dp, border, RoundedCornerShape(12.dp))
+                        .border(clickBorderWidth(), border, RoundedCornerShape(12.dp))
                         .background(
                             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
                             RoundedCornerShape(12.dp),
@@ -212,9 +213,7 @@ fun BeaconShareToChatDialog(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .border(
-                                        2.dp,
-                                        if (selected) MaterialTheme.colorScheme.primary else border,
+                                    .border(clickBorderWidth(), if (selected) MaterialTheme.colorScheme.primary else border,
                                         RoundedCornerShape(12.dp),
                                     )
                                     .background(surface, RoundedCornerShape(12.dp))
@@ -235,7 +234,7 @@ fun BeaconShareToChatDialog(
                                     modifier = Modifier
                                         .size(44.dp)
                                         .clip(CircleShape)
-                                        .border(2.dp, border, CircleShape),
+                                        .border(clickBorderWidth(), border, CircleShape),
                                 )
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
@@ -279,7 +278,7 @@ fun BeaconShareToChatDialog(
                     enabled = canShare,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(2.dp, border),
+                    border = BorderStroke(clickBorderWidth(), border),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -295,7 +294,7 @@ fun BeaconShareToChatDialog(
                     onClick = { requestAnimatedDismiss() },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(2.dp, border),
+                    border = BorderStroke(clickBorderWidth(), border),
                     contentPadding = PaddingValues(vertical = 14.dp),
                 ) {
                     Text("Cancel", fontWeight = FontWeight.SemiBold, color = onSurface)

@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.screens
+package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
@@ -18,14 +18,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import compose.project.click.click.ui.theme.LocalPlatformStyle
+import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.ui.theme.clickBorderColor
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 
 /**
  * Full-screen explainer shown before the OS location permission dialog.
@@ -76,7 +77,7 @@ fun LocationOnboardingScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(200.dp)
-                    .border(2.dp, clickBorderColor(), RoundedCornerShape(20.dp)),
+                    .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(20.dp)),
                 shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.surface,
             ) {

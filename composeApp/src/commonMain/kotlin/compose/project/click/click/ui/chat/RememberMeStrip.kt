@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.chat
+package compose.project.click.click.ui.chat // pragma: allowlist secret
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -27,12 +27,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import compose.project.click.click.data.models.ChatWithDetails
-import compose.project.click.click.ui.components.AvatarWithOnlineIndicator
-import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
-import compose.project.click.click.ui.components.CoreConnectionAvatarFrame
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.ui.theme.clickBorderColor
+import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
+import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
+import compose.project.click.click.ui.components.CoreConnectionAvatarFrame // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 
 /**
  * Horizontal “Remember Me” rail for Core-pinned 1:1 connections.
@@ -120,7 +121,7 @@ private fun RememberMeChip(
                         userId = user.id,
                         modifier = Modifier
                             .size(56.dp)
-                            .border(2.dp, clickBorderColor(), CircleShape),
+                            .border(clickBorderWidth(), clickBorderColor(), CircleShape),
                         useCompactTypography = true,
                     )
                 }

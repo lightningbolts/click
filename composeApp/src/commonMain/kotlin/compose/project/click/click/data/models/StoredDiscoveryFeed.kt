@@ -1,7 +1,7 @@
-package compose.project.click.click.data.models
+package compose.project.click.click.data.models // pragma: allowlist secret
 
-import compose.project.click.click.events.eventSchedule
-import compose.project.click.click.ui.utils.CommunityHubPin
+import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
+import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
@@ -294,4 +294,8 @@ data class StoredEventBookmark(
     val latitude: Double? = null,
     val longitude: Double? = null,
     val expiresAt: String? = null,
+    val creatorId: String? = null,
+    val creatorName: String? = null,
+    val createdAt: String? = null,
+    val showCreatorName: Boolean = false,
 )

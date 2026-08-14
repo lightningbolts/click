@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.components
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -11,7 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.*
+import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 
 @Composable
 fun AdaptiveCard(
@@ -19,13 +19,10 @@ fun AdaptiveCard(
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val style = LocalPlatformStyle.current
     val radius = getAdaptiveCornerRadius()
     val shape = RoundedCornerShape(radius)
-    val borderWidth = style.cardBorderWidth
-
     val cardModifier = modifier.border(
-        width = borderWidth,
+        width = clickBorderWidth(),
         color = clickBorderColor(),
         shape = shape
     )
@@ -64,7 +61,7 @@ fun AdaptiveSurface(
         modifier = modifier
             .fillMaxWidth()
             .border(
-                width = LocalPlatformStyle.current.cardBorderWidth,
+                width = clickBorderWidth(),
                 color = clickBorderColor(),
                 shape = RoundedCornerShape(bottomStart = radius, bottomEnd = radius),
             ),
@@ -88,32 +85,80 @@ fun AdaptiveBackground(
     )
 }
 
+enum class ClickButtonVariant {
+    Primary,
+    Secondary,
+    Destructive,
+}
+
+/**
+ * Canonical action button. Screens must use this instead of one-off [Button] styling.
+ * [AdaptiveButton] remains as the primary-variant alias.
+ */
 @Composable
-fun AdaptiveButton(
+fun ClickButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    content: @Composable RowScope.() -> Unit
+    variant: ClickButtonVariant = ClickButtonVariant.Primary,
+    content: @Composable RowScope.() -> Unit,
 ) {
     val style = LocalPlatformStyle.current
+    val colors = when (variant) {
+        ClickButtonVariant.Primary -> ButtonDefaults.buttonColors(
+            containerColor = PrimaryBlue,
+            contentColor = Color.White,
+            disabledContainerColor = SurfaceContainerHigh,
+            disabledContentColor = OnSurfaceVariant,
+        )
+        ClickButtonVariant.Secondary -> ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            disabledContainerColor = SurfaceContainerHigh,
+            disabledContentColor = OnSurfaceVariant,
+        )
+        ClickButtonVariant.Destructive -> ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.error,
+            contentColor = MaterialTheme.colorScheme.onError,
+            disabledContainerColor = SurfaceContainerHigh,
+            disabledContentColor = OnSurfaceVariant,
+        )
+    }
+    val border = when (variant) {
+        ClickButtonVariant.Primary -> null
+        ClickButtonVariant.Secondary -> clickBorderStroke()
+        ClickButtonVariant.Destructive -> null
+    }
     Button(
         onClick = onClick,
         modifier = modifier,
         enabled = enabled,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = PrimaryBlue,
-            contentColor = Color.White,
-            disabledContainerColor = SurfaceContainerHigh,
-            disabledContentColor = OnSurfaceVariant
-        ),
+        colors = colors,
         elevation = ButtonDefaults.buttonElevation(
             defaultElevation = 0.dp,
             pressedElevation = 0.dp,
             focusedElevation = 0.dp,
         ),
-        border = BorderStroke(style.cardBorderWidth, clickBorderColor()),
+        border = border,
         shape = RoundedCornerShape(style.buttonCornerRadius),
-        content = content
+        content = content,
+    )
+}
+
+@Composable
+fun AdaptiveButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    variant: ClickButtonVariant = ClickButtonVariant.Primary,
+    content: @Composable RowScope.() -> Unit,
+) {
+    ClickButton(
+        onClick = onClick,
+        modifier = modifier,
+        enabled = enabled,
+        variant = variant,
+        content = content,
     )
 }
 

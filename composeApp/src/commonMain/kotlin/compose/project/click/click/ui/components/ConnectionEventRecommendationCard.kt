@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.components
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -16,9 +16,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.data.api.ConnectionEventRecommendationDto
-import compose.project.click.click.ui.theme.clickBorderColor
-import compose.project.click.click.ui.theme.clickCardSurface
+import compose.project.click.click.data.api.ConnectionEventRecommendationDto // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickCardSurface // pragma: allowlist secret
 
 @Composable
 fun ConnectionEventRecommendationCard(
@@ -31,7 +32,7 @@ fun ConnectionEventRecommendationCard(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .border(2.dp, clickBorderColor(), RoundedCornerShape(16.dp)),
+            .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
         color = clickCardSurface(),
     ) {

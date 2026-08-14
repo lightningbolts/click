@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.components
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
@@ -31,18 +31,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.data.models.User
-import compose.project.click.click.data.models.UserPublicProfile
-import compose.project.click.click.data.repository.SupabaseRepository
-import compose.project.click.click.events.AttendeeRelationship
-import compose.project.click.click.events.DirectoryAttendee
-import compose.project.click.click.events.allowsDirectoryConnectActions
-import compose.project.click.click.events.relationshipSubtitle
-import compose.project.click.click.ui.theme.clickBorderColor
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.events.AttendeeRelationship // pragma: allowlist secret
+import compose.project.click.click.events.DirectoryAttendee // pragma: allowlist secret
+import compose.project.click.click.events.allowsDirectoryConnectActions // pragma: allowlist secret
+import compose.project.click.click.events.relationshipSubtitle // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import compose.project.click.click.ui.components.sheetBodyScroll
+import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
 
 /**
  * Lightweight profile sheet opened from the event people directory.
@@ -129,7 +130,7 @@ fun EventDirectoryUserProfileSheet(
                     modifier = Modifier
                         .size(68.dp)
                         .clip(CircleShape)
-                        .border(2.dp, border, CircleShape),
+                        .border(clickBorderWidth(), border, CircleShape),
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -154,7 +155,7 @@ fun EventDirectoryUserProfileSheet(
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(2.dp, border),
+                    border = BorderStroke(clickBorderWidth(), border),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary,

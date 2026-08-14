@@ -32,8 +32,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
-import compose.project.click.click.ui.components.sheetImePadding
-import compose.project.click.click.ui.components.ClickSheetDefaults
+import compose.project.click.click.ui.components.sheetImePadding // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -56,8 +56,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import compose.project.click.click.ui.components.ClickFormBottomSheet
-import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
+import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -72,19 +72,21 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.PlatformHapticsPolicy
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
-import compose.project.click.click.ui.theme.clickTextFieldTextStyle
+import compose.project.click.click.ui.theme.clickTextFieldTextStyle // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickSearchField // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
-import compose.project.click.click.ui.components.ProvideSheetSwipeDismiss
-import compose.project.click.click.ui.components.rememberSheetScrollAtTop
-import compose.project.click.click.ui.components.sheetBodyScroll
-import compose.project.click.click.ui.components.sheetPageBackground
+import compose.project.click.click.ui.components.ProvideSheetSwipeDismiss // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberSheetScrollAtTop // pragma: allowlist secret
+import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
+import compose.project.click.click.ui.components.sheetPageBackground // pragma: allowlist secret
 
 private val PickerSelectionPurple = Color(0xFF9D4EDD)
 private val PickerSelectionRingWidth = 2.5.dp
@@ -109,59 +111,17 @@ internal fun ConnectionPickerSearchBar(
     modifier: Modifier = Modifier,
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
-    val hideKeyboard = { keyboardController?.hide() }
-    val shape = RoundedCornerShape(14.dp)
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(PickerSearchBarHeight)
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Icon(
-            Icons.Filled.Search,
-            contentDescription = null,
-            tint = GlassSheetTokens.OnOledMuted(),
-            modifier = Modifier.size(20.dp),
-        )
-        BasicTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            singleLine = true,
-            textStyle = clickTextFieldTextStyle().copy(
-                color = GlassSheetTokens.OnOled(),
-            ),
-            cursorBrush = SolidColor(PrimaryBlue),
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight(),
-            decorationBox = { innerTextField ->
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.CenterStart,
-                ) {
-                    if (query.isEmpty()) {
-                        Text(
-                            text = placeholder,
-                            style = clickTextFieldTextStyle(),
-                            color = GlassSheetTokens.OnOledMuted(),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    innerTextField()
-                }
-            },
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(
-                onSearch = { hideKeyboard() },
-                onDone = { hideKeyboard() },
-            ),
-        )
-    }
+    ClickSearchField(
+        value = query,
+        onValueChange = onQueryChange,
+        placeholder = placeholder,
+        modifier = modifier,
+        onSearch = { keyboardController?.hide() },
+        textColor = GlassSheetTokens.OnOled(),
+        placeholderColor = GlassSheetTokens.OnOledMuted(),
+        iconTint = GlassSheetTokens.OnOledMuted(),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+    )
 }
 
 @Composable

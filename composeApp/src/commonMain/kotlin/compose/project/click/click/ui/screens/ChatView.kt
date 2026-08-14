@@ -118,7 +118,9 @@ import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx // pr
 import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay // pragma: allowlist secret
 import compose.project.click.click.ui.chat.scrollChatTimelineToLatest // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickOutlinedTextField
+import compose.project.click.click.ui.components.ClickDropdownMenu // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickMenuItem // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.CoreConnectionAvatarFrame // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
@@ -929,35 +931,28 @@ fun ChatView(
                                                 }
                                             }
                                         } else {
-                                            DropdownMenu(
+                                            ClickDropdownMenu(
                                                 expanded = showCallMenu,
                                                 onDismissRequest = { showCallMenu = false },
-                                                shape = RoundedCornerShape(22.dp),
-                                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                                tonalElevation = 8.dp,
-                                                shadowElevation = 16.dp,
-                                            ) {
-                                                DropdownMenuItem(
-                                                    text = { Text(if (isGroupChat) "Group voice call" else "Voice call") },
-                                                    leadingIcon = {
-                                                        Icon(Icons.Filled.Call, contentDescription = null)
-                                                    },
-                                                    onClick = {
-                                                        PlatformHapticsPolicy.lightImpact()
-                                                        startVoiceCall()
-                                                    },
-                                                )
-                                                DropdownMenuItem(
-                                                    text = { Text(if (isGroupChat) "Group video call" else "Video call") },
-                                                    leadingIcon = {
-                                                        Icon(Icons.Filled.Videocam, contentDescription = null)
-                                                    },
-                                                    onClick = {
-                                                        PlatformHapticsPolicy.lightImpact()
-                                                        startVideoCall()
-                                                    },
-                                                )
-                                            }
+                                                items = listOf(
+                                                    ClickMenuItem(
+                                                        label = if (isGroupChat) "Group voice call" else "Voice call",
+                                                        onClick = {
+                                                            PlatformHapticsPolicy.lightImpact()
+                                                            startVoiceCall()
+                                                        },
+                                                        icon = Icons.Filled.Call,
+                                                    ),
+                                                    ClickMenuItem(
+                                                        label = if (isGroupChat) "Group video call" else "Video call",
+                                                        onClick = {
+                                                            PlatformHapticsPolicy.lightImpact()
+                                                            startVideoCall()
+                                                        },
+                                                        icon = Icons.Filled.Videocam,
+                                                    ),
+                                                ),
+                                            )
                                         }
                                     }
                                     // Overflow / connection options

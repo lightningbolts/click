@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.components
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -16,7 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.*
+import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 
 @Composable
 private fun platformCardShape(): RoundedCornerShape {
@@ -108,7 +108,7 @@ fun Modifier.glassEffect(usePrimaryBorder: Boolean = false): Modifier {
     return this
         .clip(GlassCardShape)
         .background(bg)
-        .border(2.dp, borderColor, GlassCardShape)
+        .border(clickBorderWidth(), borderColor, GlassCardShape)
 }
 
 @Composable

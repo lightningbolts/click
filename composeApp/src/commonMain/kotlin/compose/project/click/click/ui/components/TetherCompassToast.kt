@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.components
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -26,8 +26,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.ui.theme.clickBorderColor
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 import kotlinx.coroutines.delay
 
 private const val TETHER_TOAST_VISIBLE_MS = 30_000L
@@ -73,9 +74,7 @@ fun TetherCompassToast(
                         PrimaryBlue,
                         RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
                     )
-                    .border(
-                        2.dp,
-                        clickBorderColor(),
+                    .border(clickBorderWidth(), clickBorderColor(),
                         RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
                     )
                     .padding(horizontal = 18.dp, vertical = 16.dp),

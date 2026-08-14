@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.chat
+package compose.project.click.click.ui.chat // pragma: allowlist secret
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
@@ -47,10 +47,11 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import compose.project.click.click.PlatformHapticsPolicy
-import compose.project.click.click.ui.theme.LocalPlatformStyle
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.ui.theme.clickBorderColor
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 import kotlinx.coroutines.launch
 
 internal fun chatComposerCanSubmit(
@@ -202,7 +203,7 @@ internal fun ChatComposerStrip(
                         .fillMaxSize()
                         .clip(CircleShape)
                         .background(attachBackground)
-                        .border(2.dp, clickBorderColor(), CircleShape)
+                        .border(clickBorderWidth(), clickBorderColor(), CircleShape)
                         .chatSpringPressScale(attachInteraction),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -231,7 +232,7 @@ internal fun ChatComposerStrip(
                 .chatSpringPressScale(sendInteraction)
                 .clip(sendShape)
                 .background(if (canSend) PrimaryBlue else MaterialTheme.colorScheme.surfaceVariant)
-                .border(2.dp, clickBorderColor(), sendShape)
+                .border(clickBorderWidth(), clickBorderColor(), sendShape)
                 .clickable(
                     interactionSource = sendInteraction,
                     indication = null,

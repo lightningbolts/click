@@ -1,48 +1,81 @@
-package compose.project.click.click.ui.components
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.clickTextFieldTextStyle
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickCardSurface // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickTextFieldTextStyle // pragma: allowlist secret
 
-/** Minimum height so single-line outlined fields fit label + typed text on Android. */
-val ClickTextFieldMinHeight = 72.dp
+/** Shared radii / heights so search, form, and drop fields match. */
+object ClickFieldTokens {
+    val CornerRadius = 16.dp
+    val CompactCornerRadius = 14.dp
+    val SearchHeight = 56.dp
+    val SingleLineMinHeight = 56.dp
+    val MultilineMinHeight = 112.dp
+    val Shape = RoundedCornerShape(CornerRadius)
+}
 
 private val ClickTextFieldContentPadding = PaddingValues(
     start = 16.dp,
-    top = 18.dp,
+    top = 14.dp,
     end = 16.dp,
-    bottom = 18.dp,
+    bottom = 14.dp,
 )
 
-private val ClickTextFieldContentPaddingWithLabel = PaddingValues(
+private val ClickMultilineContentPadding = PaddingValues(
     start = 16.dp,
-    top = 16.dp,
+    top = 12.dp,
     end = 16.dp,
-    bottom = 16.dp,
+    bottom = 12.dp,
 )
 
 /**
- * App outlined text field with field-safe typography and balanced vertical padding.
- * Prefer this over bare Material fields so input text is not clipped or baseline-shifted.
+ * App outlined text field with field-safe typography, 16dp corners, and quiet 1dp borders.
+ * Single-line text is vertically centered; multiline text and the caret stay on the first line.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,10 +99,11 @@ fun ClickOutlinedTextField(
     keyboardActions: KeyboardActions = KeyboardActions.Default,
     singleLine: Boolean = false,
     maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
-    minLines: Int = 1,
+    minLines: Int = if (singleLine) 1 else 3,
     interactionSource: MutableInteractionSource? = null,
-    shape: Shape = OutlinedTextFieldDefaults.shape,
-    colors: TextFieldColors = OutlinedTextFieldDefaults.colors(),
+    shape: Shape = ClickFieldTokens.Shape,
+    colors: TextFieldColors = clickFieldColors(),
+    minHeight: Dp = if (singleLine) ClickFieldTokens.SingleLineMinHeight else ClickFieldTokens.MultilineMinHeight,
 ) {
     val fieldInteraction = interactionSource ?: remember { MutableInteractionSource() }
     val textColor = textStyle.color.takeOrElse {
@@ -78,8 +112,10 @@ fun ClickOutlinedTextField(
     val mergedTextStyle = LocalTextStyle.current.merge(textStyle).merge(
         TextStyle(color = textColor),
     )
-    val contentPadding = if (label != null) {
-        ClickTextFieldContentPaddingWithLabel
+    val contentPadding = if (singleLine && label == null) {
+        ClickTextFieldContentPadding
+    } else if (!singleLine) {
+        ClickMultilineContentPadding
     } else {
         ClickTextFieldContentPadding
     }
@@ -88,10 +124,10 @@ fun ClickOutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier
-            .heightIn(min = ClickTextFieldMinHeight)
+            .heightIn(min = minHeight)
             .defaultMinSize(
                 minWidth = OutlinedTextFieldDefaults.MinWidth,
-                minHeight = ClickTextFieldMinHeight,
+                minHeight = minHeight,
             ),
         enabled = enabled,
         readOnly = readOnly,
@@ -110,7 +146,14 @@ fun ClickOutlinedTextField(
             OutlinedTextFieldDefaults.DecorationBox(
                 value = value,
                 visualTransformation = visualTransformation,
-                innerTextField = innerTextField,
+                innerTextField = {
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = if (singleLine) Alignment.CenterStart else Alignment.TopStart,
+                    ) {
+                        innerTextField()
+                    }
+                },
                 placeholder = placeholder,
                 label = label,
                 leadingIcon = leadingIcon,
@@ -136,4 +179,96 @@ fun ClickOutlinedTextField(
             )
         },
     )
+}
+
+@Composable
+fun clickFieldColors(): TextFieldColors = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+    focusedBorderColor = MaterialTheme.colorScheme.primary,
+    unfocusedBorderColor = clickBorderColor(),
+    cursorColor = MaterialTheme.colorScheme.primary,
+    focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    focusedContainerColor = clickCardSurface(),
+    unfocusedContainerColor = clickCardSurface(),
+    disabledContainerColor = clickCardSurface(),
+)
+
+/**
+ * Rounded search field used by global search, map nearby search, and connection pickers.
+ */
+@Composable
+fun ClickSearchField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onSearch: (() -> Unit)? = null,
+    trailingIcon: @Composable (() -> Unit)? = null,
+    textColor: Color = MaterialTheme.colorScheme.onSurface,
+    placeholderColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    iconTint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    containerColor: Color = clickCardSurface(),
+    height: Dp = ClickFieldTokens.SearchHeight,
+    focusRequester: FocusRequester? = null,
+) {
+    val shape = ClickFieldTokens.Shape
+    val borderWidth = clickBorderWidth()
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height)
+            .clip(shape)
+            .background(containerColor)
+            .border(borderWidth, clickBorderColor(), shape)
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Filled.Search,
+            contentDescription = null,
+            tint = iconTint,
+            modifier = Modifier.size(22.dp),
+        )
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            enabled = enabled,
+            singleLine = true,
+            textStyle = clickTextFieldTextStyle().copy(color = textColor),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .padding(start = 10.dp)
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
+            decorationBox = { innerTextField ->
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    if (value.isEmpty()) {
+                        Text(
+                            text = placeholder,
+                            style = clickTextFieldTextStyle(),
+                            color = placeholderColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    innerTextField()
+                }
+            },
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(
+                onSearch = { onSearch?.invoke() },
+                onDone = { onSearch?.invoke() },
+            ),
+        )
+        if (trailingIcon != null) {
+            trailingIcon()
+        }
+    }
 }

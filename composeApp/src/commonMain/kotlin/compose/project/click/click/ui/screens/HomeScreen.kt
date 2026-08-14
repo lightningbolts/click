@@ -44,6 +44,7 @@ import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: 
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.ConnectionInsights // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
+import compose.project.click.click.data.models.parseEpochMs // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconMetadata // pragma: allowlist secret
 import compose.project.click.click.data.models.ReconnectReminder // pragma: allowlist secret
@@ -842,7 +843,7 @@ private fun LocationGroupCard(
                     modifier =
                         Modifier
                             .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
-                            .border(2.dp, clickBorderColor(), RoundedCornerShape(12.dp))
+                            .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(12.dp))
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                 ) {
                     Text(
@@ -938,7 +939,7 @@ private fun ConnectionRowItem(
                 .clip(rowShape)
                 .clickable { onNavigate() }
                 .background(MaterialTheme.colorScheme.surface)
-                .border(2.dp, clickBorderColor(), rowShape)
+                .border(clickBorderWidth(), clickBorderColor(), rowShape)
                 .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -949,7 +950,7 @@ private fun ConnectionRowItem(
                     .size(36.dp)
                     .clip(RoundedCornerShape(18.dp))
                     .background(MaterialTheme.colorScheme.primary)
-                    .border(2.dp, clickBorderColor(), CircleShape),
+                    .border(clickBorderWidth(), clickBorderColor(), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -1044,7 +1045,7 @@ private fun ConnectionCard(
                         .size(56.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primaryContainer)
-                        .border(2.dp, clickBorderColor(), CircleShape),
+                        .border(clickBorderWidth(), clickBorderColor(), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -1152,6 +1153,10 @@ private fun MapBeacon.withBookmarkScheduleOverlay(bookmark: EventBookmarkItemDto
     return copy(
         latitude = if (adoptBookmarkCoords) bookmarkLat!! else latitude,
         longitude = if (adoptBookmarkCoords) bookmarkLon!! else longitude,
+        createdByUserId = createdByUserId ?: bookmark.creatorId?.trim()?.takeIf { it.isNotEmpty() },
+        creatorDisplayName = creatorDisplayName ?: bookmark.creatorName?.trim()?.takeIf { it.isNotEmpty() },
+        createdAtEpochMs = createdAtEpochMs ?: bookmark.createdAt?.trim()?.takeIf { it.isNotEmpty() }?.let { parseEpochMs(it) },
+        showCreatorName = showCreatorName || bookmark.showCreatorName,
         metadata =
             metadata.copy(
                 title = metadata.title ?: bookmark.title?.trim()?.takeIf { it.isNotEmpty() },
@@ -1202,9 +1207,12 @@ private fun EventBookmarkItemDto.toSyntheticMapBeacon(): MapBeacon {
                 eventCategories = categories,
                 raw = raw,
             ),
-        createdAtEpochMs = null,
+        createdByUserId = creatorId?.trim()?.takeIf { it.isNotEmpty() },
+        createdAtEpochMs = createdAt?.trim()?.takeIf { it.isNotEmpty() }?.let { parseEpochMs(it) },
         expiresAtEpochMs = expiresMs,
         sourceBeaconType = "event",
+        showCreatorName = showCreatorName,
+        creatorDisplayName = creatorName?.trim()?.takeIf { it.isNotEmpty() },
     )
 }
 
@@ -1287,7 +1295,7 @@ fun ReconnectReminderCard(
                     modifier =
                         Modifier
                             .size(44.dp)
-                            .border(2.dp, clickBorderColor(), CircleShape),
+                            .border(clickBorderWidth(), clickBorderColor(), CircleShape),
                     useCompactTypography = true,
                 )
                 Spacer(modifier = Modifier.width(12.dp))
@@ -1317,7 +1325,7 @@ fun ReconnectReminderCard(
                             .weight(1f)
                             .height(44.dp),
                     shape = actionShape,
-                    border = BorderStroke(2.dp, clickBorderColor()),
+                    border = BorderStroke(clickBorderWidth(), clickBorderColor()),
                     colors =
                         ButtonDefaults.outlinedButtonColors(
                             contentColor = MaterialTheme.colorScheme.onSurface,
@@ -1588,7 +1596,7 @@ private fun HomeAvailabilityIntentsRow(
                         }
                     },
                     shape = RoundedCornerShape(22.dp),
-                    border = BorderStroke(2.dp, clickBorderColor()),
+                    border = BorderStroke(clickBorderWidth(), clickBorderColor()),
                     colors =
                         AssistChipDefaults.assistChipColors(
                             containerColor = MaterialTheme.colorScheme.surface,
@@ -1609,7 +1617,7 @@ private fun HomeAvailabilityIntentsRow(
                     Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                 },
                 shape = RoundedCornerShape(22.dp),
-                border = BorderStroke(2.dp, clickBorderColor()),
+                border = BorderStroke(clickBorderWidth(), clickBorderColor()),
                 colors =
                     AssistChipDefaults.assistChipColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant,

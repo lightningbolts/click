@@ -21,7 +21,7 @@ colors:
   primary-container: '#7c3aed'
   on-primary-container: '#ede0ff'
   inverse-primary: '#d2bbff'
-  secondary: '#5e5e5e'
+  secondary: '#224CFF'
   on-secondary: '#ffffff'
   secondary-container: '#e2e2e2'
   on-secondary-container: '#646464'

@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.components
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
@@ -24,8 +24,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.LocalPlatformStyle
-import compose.project.click.click.ui.theme.clickBorderColor
+import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 
 /**
  * Circular bordered glass FAB used by map Drop beacon / zoom and inbox Create click.
@@ -60,7 +61,7 @@ fun ClickCircularIconButton(
         }
         .clip(CircleShape)
         .then(
-            if (showBorder) Modifier.border(2.dp, clickBorderColor(), CircleShape)
+            if (showBorder) Modifier.border(clickBorderWidth(), clickBorderColor(), CircleShape)
             else Modifier
         )
         .clickable(

@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.chat
+package compose.project.click.click.ui.chat // pragma: allowlist secret
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -50,27 +50,28 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
-import compose.project.click.click.PlatformHapticsPolicy
-import compose.project.click.click.data.models.MapBeacon
-import compose.project.click.click.data.models.MapBeaconKind
-import compose.project.click.click.data.models.Message
-import compose.project.click.click.data.models.beaconIdFromMetadata
-import compose.project.click.click.data.models.beaconShareUrlFromMetadata
-import compose.project.click.click.data.models.beaconTitleFromMetadata
-import compose.project.click.click.data.models.beaconTypeFromMetadata
-import compose.project.click.click.events.buildEventShareUrl
-import compose.project.click.click.events.eventSchedule
-import compose.project.click.click.events.formatEventScheduleRange
-import compose.project.click.click.ui.components.ClickFormBottomSheet
-import compose.project.click.click.ui.components.ClickSheetChrome
-import compose.project.click.click.ui.components.ClickSheetDefaults
-import compose.project.click.click.ui.components.sheetBodyScroll
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.ui.theme.clickBorderColor
-import compose.project.click.click.ui.theme.clickCardSurface
-import compose.project.click.click.ui.utils.beaconTypeDisplayLabel
-import compose.project.click.click.ui.utils.displayDynamicTitle
-import compose.project.click.click.ui.utils.displayTypeTitle
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.data.models.Message // pragma: allowlist secret
+import compose.project.click.click.data.models.beaconIdFromMetadata // pragma: allowlist secret
+import compose.project.click.click.data.models.beaconShareUrlFromMetadata // pragma: allowlist secret
+import compose.project.click.click.data.models.beaconTitleFromMetadata // pragma: allowlist secret
+import compose.project.click.click.data.models.beaconTypeFromMetadata // pragma: allowlist secret
+import compose.project.click.click.events.buildEventShareUrl // pragma: allowlist secret
+import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
+import compose.project.click.click.events.formatEventScheduleRange // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickSheetChrome // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
+import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickCardSurface // pragma: allowlist secret
+import compose.project.click.click.ui.utils.beaconTypeDisplayLabel // pragma: allowlist secret
+import compose.project.click.click.ui.utils.displayDynamicTitle // pragma: allowlist secret
+import compose.project.click.click.ui.utils.displayTypeTitle // pragma: allowlist secret
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
@@ -141,7 +142,7 @@ internal fun ShareBeaconBottomSheet(
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = actionShape,
-                    border = BorderStroke(2.dp, border),
+                    border = BorderStroke(clickBorderWidth(), border),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -157,7 +158,7 @@ internal fun ShareBeaconBottomSheet(
                 onClick = onDismissRequest,
                 modifier = Modifier.fillMaxWidth(),
                 shape = actionShape,
-                border = BorderStroke(2.dp, border),
+                border = BorderStroke(clickBorderWidth(), border),
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = MaterialTheme.colorScheme.onSurface,
                 ),
@@ -286,7 +287,7 @@ internal fun BeaconPreviewCard(
             .fillMaxWidth()
             .clip(shape)
             .background(clickCardSurface())
-            .border(2.dp, borderColor, shape)
+            .border(clickBorderWidth(), borderColor, shape)
             .then(
                 if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
             ),
@@ -319,7 +320,7 @@ internal fun BeaconPreviewCard(
                     .padding(10.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.primary)
-                    .border(2.dp, clickBorderColor(), RoundedCornerShape(8.dp))
+                    .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(8.dp))
                     .padding(horizontal = 8.dp, vertical = 4.dp),
             ) {
                 Text(

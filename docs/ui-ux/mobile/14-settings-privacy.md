@@ -4,7 +4,7 @@
 **Source:** `ui/screens/SettingsScreen.kt`, `ui/screens/SettingsInterestsCard.kt`, `ui/screens/SettingsPersonalityCard.kt`, `ui/screens/PermissionDisplayState.kt`, `ui/components/AvailabilitySheet.kt`, `ui/components/InterestEditor.kt`, `ui/components/InterestTaxonomy.kt`, `ui/components/PersonalityEditor.kt`, `ui/components/PersonalityTaxonomy.kt`, `viewmodel/AvailabilityViewModel.kt`  
 **Out of scope:** Web, backend APIs, onboarding permission screens (`PermissionsOnboardingScreen`, `LocationOnboardingScreen`), redesign proposals.
 
-**Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: `click/docs/design-assets/settings/`.
+**Visual system:** Functional Clarity — opaque surfaces, 1dp quiet borders, primary `#630ed4`, secondary `#224CFF`. Design-asset mock: `click/docs/design-assets/settings/`.
 
 ---
 
@@ -23,7 +23,7 @@ SettingsScreen (tab route "settings")
 └── Local SnackbarHost (avatar, interests, personality, media errors)
 ```
 
-**Navigation:** Bottom tab `"Settings"` → route `NavigationItem.Settings.route` (`"settings"`). Global snackbar (app `Scaffold`) handles name-update and notification-save errors via `AppDataManager.transientUserMessages`.
+**Navigation:** Bottom tab `"Settings"` → route `NavigationItem.Settings.route` (`"settings"`). Hub stays mounted; subpages overlay with a horizontal slide + `InteractiveSwipeBackContainer`. System / edge back pops the hub, not Home (`onSubpageOpenChanged` disables tab-level swipe). Global snackbar (app `Scaffold`) handles name-update and notification-save errors via `AppDataManager.transientUserMessages`.
 
 ---
 

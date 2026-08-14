@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.components
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -56,26 +56,26 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.zIndex
-import compose.project.click.click.data.ContextTagTaxonomy
-import compose.project.click.click.PlatformHapticsPolicy
-import compose.project.click.click.data.models.ContextTag
-import compose.project.click.click.data.models.UserProfile
-import compose.project.click.click.data.repository.PROXIMITY_HOST_SELECTION_MAX_PEERS
+import compose.project.click.click.data.ContextTagTaxonomy // pragma: allowlist secret
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.data.models.ContextTag // pragma: allowlist secret
+import compose.project.click.click.data.models.UserProfile // pragma: allowlist secret
+import compose.project.click.click.data.repository.PROXIMITY_HOST_SELECTION_MAX_PEERS // pragma: allowlist secret
 import androidx.compose.material3.CircularProgressIndicator
-import compose.project.click.click.calendar.AvailabilityOverlapGap
-import compose.project.click.click.calendar.CalendarAccessStatus
-import compose.project.click.click.calendar.CalendarFreeBusy
-import compose.project.click.click.calendar.CalendarProvider
-import compose.project.click.click.calendar.CalendarSyncSession
-import compose.project.click.click.calendar.calculateAvailabilityOverlaps
-import compose.project.click.click.ui.utils.rememberCalendarPermissionRequester
+import compose.project.click.click.calendar.AvailabilityOverlapGap // pragma: allowlist secret
+import compose.project.click.click.calendar.CalendarAccessStatus // pragma: allowlist secret
+import compose.project.click.click.calendar.CalendarFreeBusy // pragma: allowlist secret
+import compose.project.click.click.calendar.CalendarProvider // pragma: allowlist secret
+import compose.project.click.click.calendar.CalendarSyncSession // pragma: allowlist secret
+import compose.project.click.click.calendar.calculateAvailabilityOverlaps // pragma: allowlist secret
+import compose.project.click.click.ui.utils.rememberCalendarPermissionRequester // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import compose.project.click.click.ui.components.sheetBodyScroll
+import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
 
 /** Matches DB limits for profile-style short labels (align with interests max length). */
 private const val CUSTOM_CONTEXT_MAX_LENGTH = 25
@@ -132,7 +132,7 @@ private fun ProfileAvatarBubble(
         modifier = modifier.size(size),
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceVariant,
-        border = BorderStroke(2.dp, borderColor),
+        border = BorderStroke(clickBorderWidth(), borderColor),
     ) {
         ConnectionListUserAvatarFace(
             displayName = profile.displayName,
@@ -188,7 +188,7 @@ private fun StackedProfileAvatarRow(
                         .align(Alignment.CenterStart),
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.primaryContainer,
-                    border = BorderStroke(2.dp, MaterialTheme.colorScheme.surfaceContainerHigh),
+                    border = BorderStroke(clickBorderWidth(), MaterialTheme.colorScheme.surfaceContainerHigh),
                 ) {
                     Box(
                         contentAlignment = Alignment.Center,

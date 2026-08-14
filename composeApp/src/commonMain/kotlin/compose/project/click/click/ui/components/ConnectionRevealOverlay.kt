@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.components
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -28,9 +28,10 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.BackgroundDark
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.ui.theme.clickBorderColor
+import compose.project.click.click.ui.theme.BackgroundDark // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 
 enum class ConnectionRevealPhase {
     Connecting,
@@ -76,7 +77,7 @@ fun ConnectionRevealOverlay(
                 Surface(
                     modifier = Modifier
                         .widthIn(max = 340.dp)
-                        .border(2.dp, clickBorderColor(), RoundedCornerShape(32.dp)),
+                        .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(32.dp)),
                     shape = RoundedCornerShape(32.dp),
                     color = MaterialTheme.colorScheme.surface,
                     tonalElevation = 0.dp,

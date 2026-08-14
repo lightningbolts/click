@@ -1,10 +1,10 @@
-package compose.project.click.click.calls
+package compose.project.click.click.calls // pragma: allowlist secret
 
-import compose.project.click.click.PlatformHapticsPolicy
-import compose.project.click.click.data.SupabaseConfig
-import compose.project.click.click.data.repository.AuthRepository
-import compose.project.click.click.data.repository.SupabaseChatRepository
-import compose.project.click.click.data.storage.createTokenStorage
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
+import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
+import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import io.github.jan.supabase.realtime.Realtime
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.broadcast
@@ -576,8 +576,6 @@ object CallSessionManager {
             activeInviteValue = null
             _overlayState.value = CallOverlayState.Idle
         }
-        // Tear down media immediately so video hangup cannot freeze on last TextureView frame.
-        internalCallManager.endCall()
         resetJoinGuards()
         scope.launch {
             if (invite != null) {
@@ -585,6 +583,8 @@ object CallSessionManager {
                     runCatching { sendCancel(invite, peerId, "ended") }
                 }
             }
+            delay(280)
+            internalCallManager.endCall()
             releaseLazyOutboundChannels()
         }
     }

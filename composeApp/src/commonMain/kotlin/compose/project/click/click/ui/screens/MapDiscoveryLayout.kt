@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.screens
+package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -72,32 +72,34 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import compose.project.click.click.PlatformHapticsPolicy
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.data.models.MapBeacon
-import compose.project.click.click.data.models.MapBeaconKind
-import compose.project.click.click.events.eventSchedule
-import compose.project.click.click.events.formatEventScheduleRange
-import compose.project.click.click.events.isActiveForDiscoveryFeed
-import compose.project.click.click.ui.components.AppScreenScaffold
-import compose.project.click.click.ui.components.AppEmptyState
-import compose.project.click.click.ui.components.ClickLogoPulse
-import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
-import compose.project.click.click.ui.components.DiscoverySortSegmentBar
-import compose.project.click.click.ui.components.GlassSheetTokens
-import compose.project.click.click.ui.components.HeaderRefreshIconButton
-import compose.project.click.click.ui.components.rememberFabAboveNavPadding
-import compose.project.click.click.ui.theme.clickBorderColor
-import compose.project.click.click.ui.theme.clickCardSurface
-import compose.project.click.click.ui.theme.clickTextFieldTextStyle
-import compose.project.click.click.ui.utils.CommunityHubPin
-import compose.project.click.click.ui.utils.ConnectionMapPoint
-import compose.project.click.click.ui.utils.MapRenderData
-import compose.project.click.click.ui.utils.displayDynamicTitle
-import compose.project.click.click.ui.utils.discoveryFeedSubtitle
-import compose.project.click.click.ui.utils.haversineDistance
-import compose.project.click.click.viewmodel.MapLayerFilter
-import compose.project.click.click.viewmodel.MapViewModel
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
+import compose.project.click.click.events.formatEventScheduleRange // pragma: allowlist secret
+import compose.project.click.click.events.isActiveForDiscoveryFeed // pragma: allowlist secret
+import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickSearchField // pragma: allowlist secret
+import compose.project.click.click.ui.components.AppEmptyState // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickLogoPulse // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
+import compose.project.click.click.ui.components.DiscoverySortSegmentBar // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.HeaderRefreshIconButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberFabAboveNavPadding // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickCardSurface // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickTextFieldTextStyle // pragma: allowlist secret
+import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
+import compose.project.click.click.ui.utils.ConnectionMapPoint // pragma: allowlist secret
+import compose.project.click.click.ui.utils.MapRenderData // pragma: allowlist secret
+import compose.project.click.click.ui.utils.displayDynamicTitle // pragma: allowlist secret
+import compose.project.click.click.ui.utils.discoveryFeedSubtitle // pragma: allowlist secret
+import compose.project.click.click.ui.utils.haversineDistance // pragma: allowlist secret
+import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
+import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
 import kotlinx.datetime.Clock
 
 internal enum class DiscoverySortMode {
@@ -316,7 +318,7 @@ internal fun EventsReopenChip(
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
-            .border(2.dp, clickBorderColor(), shape)
+            .border(clickBorderWidth(), clickBorderColor(), shape)
             .background(clickCardSurface())
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
@@ -558,54 +560,12 @@ private fun EventsSheetSearchField(
     onQueryChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(16.dp)
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(56.dp)
-            .clip(shape)
-            .background(clickCardSurface())
-            .border(2.dp, clickBorderColor(), shape)
-            .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Icon(
-            Icons.Filled.Search,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(22.dp),
-        )
-        BasicTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            singleLine = true,
-            textStyle = clickTextFieldTextStyle().copy(
-                color = MaterialTheme.colorScheme.onSurface,
-            ),
-            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight(),
-            decorationBox = { inner ->
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.CenterStart,
-                ) {
-                    if (query.isEmpty()) {
-                        Text(
-                            text = "Search nearby…",
-                            style = clickTextFieldTextStyle(),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    inner()
-                }
-            },
-        )
-    }
+    ClickSearchField(
+        value = query,
+        onValueChange = onQueryChange,
+        placeholder = "Search nearby…",
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -670,7 +630,7 @@ private fun FilterChipPill(
         maxLines = 1,
         modifier = Modifier
             .clip(shape)
-            .border(2.dp, outline, shape)
+            .border(clickBorderWidth(), outline, shape)
             .background(bg)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -691,7 +651,7 @@ private fun DiscoveryHubCard(item: DiscoveryFeedItem.Hub) {
             .fillMaxWidth()
             .clip(shape)
             .background(clickCardSurface())
-            .border(2.dp, clickBorderColor(), shape)
+            .border(clickBorderWidth(), clickBorderColor(), shape)
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -796,7 +756,7 @@ private fun DiscoveryEventCard(
             .fillMaxWidth()
             .clip(shape)
             .background(clickCardSurface())
-            .border(2.dp, clickBorderColor(), shape)
+            .border(clickBorderWidth(), clickBorderColor(), shape)
             .clickable(onClick = onOpen),
     ) {
         Box(
@@ -830,7 +790,7 @@ private fun DiscoveryEventCard(
                     .padding(10.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.primary)
-                    .border(2.dp, clickBorderColor(), RoundedCornerShape(8.dp))
+                    .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(8.dp))
                     .padding(horizontal = 8.dp, vertical = 4.dp),
             ) {
                 Text(
@@ -962,7 +922,7 @@ private fun DiscoveryEventCard(
                         enabled = !rsvpPending && !rsvpLoading,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(2.dp, clickBorderColor()),
+                        border = BorderStroke(clickBorderWidth(), clickBorderColor()),
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = MaterialTheme.colorScheme.onSurface,
                         ),

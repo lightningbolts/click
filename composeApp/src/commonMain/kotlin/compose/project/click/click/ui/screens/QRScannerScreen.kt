@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.screens
+package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -32,21 +32,22 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import compose.project.click.click.ui.theme.clickBorderColor
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.qr.QrParseResult
-import compose.project.click.click.qr.parseQrCode
-import compose.project.click.click.ui.components.AdaptiveBackground
-import compose.project.click.click.ui.components.PageHeader
-import compose.project.click.click.ui.components.bottomChromePadding
-import compose.project.click.click.ui.components.QRScanner
-import compose.project.click.click.ui.components.QrScannerDetection
-import compose.project.click.click.ui.components.rememberConnectionHandshakePulse
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.utils.LocationService
+import compose.project.click.click.qr.QrParseResult // pragma: allowlist secret
+import compose.project.click.click.qr.parseQrCode // pragma: allowlist secret
+import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
+import compose.project.click.click.ui.components.PageHeader // pragma: allowlist secret
+import compose.project.click.click.ui.components.bottomChromePadding // pragma: allowlist secret
+import compose.project.click.click.ui.components.QRScanner // pragma: allowlist secret
+import compose.project.click.click.ui.components.QrScannerDetection // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberConnectionHandshakePulse // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -98,13 +99,13 @@ fun QRScannerScreen(
             runCatching { locationService.getHighAccuracyLocation(4000L) }
         }
     }
-    
+
     var showError by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
     var lastScannedRaw by remember { mutableStateOf<String?>(null) }
     var liveDetection by remember { mutableStateOf<QrScannerDetection?>(null) }
     var isProcessingResult by remember { mutableStateOf(false) }
-    
+
     LaunchedEffect(showError) {
         if (showError) {
             delay(4000)
@@ -131,7 +132,7 @@ fun QRScannerScreen(
             onContinue()
         }
     }
-    
+
     fun handleQRResult(qrData: String) {
         if (isProcessingResult) return
         if (qrData == lastScannedRaw && showError) return
@@ -254,7 +255,7 @@ fun QRScannerScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp)
-                        .border(2.dp, clickBorderColor(), RoundedCornerShape(24.dp)),
+                        .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(24.dp)),
                     shape = RoundedCornerShape(24.dp),
                     color = MaterialTheme.colorScheme.surface,
                     tonalElevation = 0.dp,
@@ -528,7 +529,7 @@ private fun ScannerLensOverlay(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = badgeTopPadding)
-                    .border(2.dp, clickBorderColor(), RoundedCornerShape(999.dp)),
+                    .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(999.dp)),
                 shape = RoundedCornerShape(999.dp),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 0.dp,

@@ -1,6 +1,6 @@
 @file:Suppress("ktlint:standard:function-naming")
 
-package compose.project.click.click.ui.screens
+package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -53,9 +53,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
-import compose.project.click.click.ui.chat.rememberChatMediaPickers
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.ui.theme.clickBorderColor
+import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 import kotlinx.coroutines.launch
 
 /**
@@ -307,7 +308,7 @@ private fun AvatarSourceButton(
             modifier
                 .clip(RoundedCornerShape(16.dp))
                 .background(MaterialTheme.colorScheme.surface)
-                .border(2.dp, clickBorderColor(), RoundedCornerShape(16.dp))
+                .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(16.dp))
                 .clickable(enabled = enabled) { onClick() }
                 .padding(vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

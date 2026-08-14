@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.components
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -29,17 +29,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import compose.project.click.click.events.AttendeeRelationship
-import compose.project.click.click.events.DirectoryAttendee
-import compose.project.click.click.events.EventAttendeeSortMode
-import compose.project.click.click.events.allowsDirectoryConnectActions
-import compose.project.click.click.events.directorySortMetricSubtitle
-import compose.project.click.click.events.everyoneExcludingMutualsSection
-import compose.project.click.click.events.mutualsAtEvent
-import compose.project.click.click.events.sortEventAttendees
-import compose.project.click.click.ui.theme.clickBorderColor
-import compose.project.click.click.ui.theme.clickCardSurface
-import compose.project.click.click.ui.components.sheetBodyScroll
+import compose.project.click.click.events.AttendeeRelationship // pragma: allowlist secret
+import compose.project.click.click.events.DirectoryAttendee // pragma: allowlist secret
+import compose.project.click.click.events.EventAttendeeSortMode // pragma: allowlist secret
+import compose.project.click.click.events.allowsDirectoryConnectActions // pragma: allowlist secret
+import compose.project.click.click.events.directorySortMetricSubtitle // pragma: allowlist secret
+import compose.project.click.click.events.everyoneExcludingMutualsSection // pragma: allowlist secret
+import compose.project.click.click.events.mutualsAtEvent // pragma: allowlist secret
+import compose.project.click.click.events.sortEventAttendees // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickCardSurface // pragma: allowlist secret
+import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
 
 @Composable
 fun EventPeopleDirectorySection(
@@ -100,7 +101,7 @@ fun EventPeopleDirectorySection(
                                 .offset(x = (-10 * index).dp)
                                 .zIndex((preview.size - index).toFloat())
                                 .size(48.dp)
-                                .border(2.dp, border, CircleShape)
+                                .border(clickBorderWidth(), border, CircleShape)
                                 .clip(CircleShape)
                                 .background(cardSurface),
                         )
@@ -111,7 +112,7 @@ fun EventPeopleDirectorySection(
                                 .offset(x = (-10 * preview.size).dp)
                                 .zIndex(0f)
                                 .size(48.dp)
-                                .border(2.dp, border, CircleShape)
+                                .border(clickBorderWidth(), border, CircleShape)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.secondaryContainer),
                             contentAlignment = Alignment.Center,
@@ -288,7 +289,7 @@ private fun SortChip(label: String, selected: Boolean, onClick: () -> Unit) {
     val stroke = if (selected) MaterialTheme.colorScheme.primary else border
     Box(
         modifier = Modifier
-            .border(2.dp, stroke, RoundedCornerShape(20.dp))
+            .border(clickBorderWidth(), stroke, RoundedCornerShape(20.dp))
             .background(bg, RoundedCornerShape(20.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -321,7 +322,7 @@ private fun DirectoryAttendeeRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .border(2.dp, accentBorder, RoundedCornerShape(12.dp))
+            .border(clickBorderWidth(), accentBorder, RoundedCornerShape(12.dp))
             .background(clickCardSurface(), RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -335,7 +336,7 @@ private fun DirectoryAttendeeRow(
             userId = attendee.userId,
             modifier = Modifier
                 .size(44.dp)
-                .border(2.dp, accentBorder, CircleShape)
+                .border(clickBorderWidth(), accentBorder, CircleShape)
                 .clip(CircleShape),
         )
         Column(modifier = Modifier.weight(1f)) {

@@ -17,11 +17,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import compose.project.click.click.ui.components.LocalSheetOnDismissRequest
-import compose.project.click.click.ui.components.ProvideSheetSwipeDismiss
-import compose.project.click.click.ui.components.ClickSheetDefaults
-import compose.project.click.click.ui.components.rememberSheetScrollAtTop
-import compose.project.click.click.ui.components.sheetImePadding
+import compose.project.click.click.ui.components.LocalSheetOnDismissRequest // pragma: allowlist secret
+import compose.project.click.click.ui.components.ProvideSheetSwipeDismiss // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberSheetScrollAtTop // pragma: allowlist secret
+import compose.project.click.click.ui.components.sheetImePadding // pragma: allowlist secret
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.foundation.layout.Row
@@ -56,21 +56,22 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.verticalScroll
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.data.models.BeaconVisibilityAudience
-import compose.project.click.click.data.models.MapBeaconKind
-import compose.project.click.click.events.EventSchedule
-import compose.project.click.click.events.EventScheduleValidationError
-import compose.project.click.click.events.EVENT_CATEGORY_OPTIONS
-import compose.project.click.click.events.EventVenueScale
-import compose.project.click.click.events.defaultEventSchedule
-import compose.project.click.click.events.validateEventSchedule
-import compose.project.click.click.ui.components.EventDateTimePicker
-import compose.project.click.click.ui.components.EventSchedulePickerDialogs
-import compose.project.click.click.ui.components.rememberEventSchedulePickerUiState
-import compose.project.click.click.ui.components.ClickOutlinedTextField
-import compose.project.click.click.utils.GeocodedPlace
-import compose.project.click.click.utils.GeocodingService
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.models.BeaconVisibilityAudience // pragma: allowlist secret
+import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.events.EventSchedule // pragma: allowlist secret
+import compose.project.click.click.events.EventScheduleValidationError // pragma: allowlist secret
+import compose.project.click.click.events.EVENT_CATEGORY_OPTIONS // pragma: allowlist secret
+import compose.project.click.click.events.EventVenueScale // pragma: allowlist secret
+import compose.project.click.click.events.defaultEventSchedule // pragma: allowlist secret
+import compose.project.click.click.events.validateEventSchedule // pragma: allowlist secret
+import compose.project.click.click.ui.components.EventDateTimePicker // pragma: allowlist secret
+import compose.project.click.click.ui.components.EventSchedulePickerDialogs // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberEventSchedulePickerUiState // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickFieldTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
+import compose.project.click.click.utils.GeocodedPlace // pragma: allowlist secret
+import compose.project.click.click.utils.GeocodingService // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -118,7 +119,6 @@ private val hubCategoryOptions = listOf(
     "gaming", "tech", "art", "fitness", "networking", "party",
 )
 
-private val BeaconMultilineFieldHeight = 128.dp
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -837,15 +837,12 @@ private fun BeaconDropOutlinedField(
     ClickOutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(
-                if (singleLine) Modifier else Modifier.height(BeaconMultilineFieldHeight),
-            ),
+        modifier = Modifier.fillMaxWidth(),
         placeholder = { Text(placeholder) },
         singleLine = singleLine,
         minLines = lineCount,
-        maxLines = lineCount,
+        maxLines = if (singleLine) 1 else 6,
+        minHeight = if (singleLine) ClickFieldTokens.SingleLineMinHeight else ClickFieldTokens.MultilineMinHeight,
         keyboardOptions = if (singleLine) {
             KeyboardOptions(
                 keyboardType = keyboardType,
@@ -857,5 +854,6 @@ private fun BeaconDropOutlinedField(
         keyboardActions = KeyboardActions(onDone = { onDismissKeyboard() }),
         trailingIcon = trailingIcon,
         colors = colors,
+        shape = ClickFieldTokens.Shape,
     )
 }

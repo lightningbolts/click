@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.screens
+package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -52,22 +52,23 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import compose.project.click.click.ui.components.ClickLogoPulse
-import compose.project.click.click.ui.components.ClickSheetDefaults
-import compose.project.click.click.ui.components.GlassSheetTokens
-import compose.project.click.click.ui.components.LocalSheetOnDismissRequest
-import compose.project.click.click.ui.components.ProvideSheetSwipeDismiss
-import compose.project.click.click.ui.components.rememberSheetScrollAtTop
-import compose.project.click.click.ui.components.sheetImePadding
-import compose.project.click.click.ui.components.sheetPageBackground
-import compose.project.click.click.ui.sheet.MapBeaconSheetRoot
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.ui.theme.clickBorderColor
-import compose.project.click.click.ui.theme.clickCardSurface
-import compose.project.click.click.ui.theme.clickTextFieldTextStyle
-import compose.project.click.click.viewmodel.GlobalSearchViewModel
-import compose.project.click.click.viewmodel.SearchResult
-import compose.project.click.click.viewmodel.SearchResultCategory
+import compose.project.click.click.ui.components.ClickLogoPulse // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickSearchField // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.LocalSheetOnDismissRequest // pragma: allowlist secret
+import compose.project.click.click.ui.components.ProvideSheetSwipeDismiss // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberSheetScrollAtTop // pragma: allowlist secret
+import compose.project.click.click.ui.components.sheetImePadding // pragma: allowlist secret
+import compose.project.click.click.ui.components.sheetPageBackground // pragma: allowlist secret
+import compose.project.click.click.ui.sheet.MapBeaconSheetRoot // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickCardSurface // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickTextFieldTextStyle // pragma: allowlist secret
+import compose.project.click.click.viewmodel.GlobalSearchViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.SearchResult // pragma: allowlist secret
+import compose.project.click.click.viewmodel.SearchResultCategory // pragma: allowlist secret
 import kotlinx.coroutines.delay
 
 /**
@@ -164,60 +165,13 @@ private fun UnifiedSearchSheetContent(
             ),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            color = clickCardSurface(),
-            border = BorderStroke(1.dp, clickBorderColor()),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .padding(horizontal = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Icon(
-                    Icons.Default.Search,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(22.dp),
-                )
-                BasicTextField(
-                    value = query,
-                    onValueChange = { viewModel.search(it, userId) },
-                    singleLine = true,
-                    textStyle = clickTextFieldTextStyle().copy(
-                        color = MaterialTheme.colorScheme.onSurface,
-                    ),
-                    cursorBrush = SolidColor(PrimaryBlue),
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .focusRequester(focusRequester),
-                    decorationBox = { innerTextField ->
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.CenterStart,
-                        ) {
-                            if (query.isEmpty()) {
-                                Text(
-                                    text = "Search people, places, beacons…",
-                                    style = clickTextFieldTextStyle(),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                            innerTextField()
-                        }
-                    },
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-                )
-            }
-        }
+        ClickSearchField(
+            value = query,
+            onValueChange = { viewModel.search(it, userId) },
+            placeholder = "Search people, places, beacons…",
+            onSearch = { focusManager.clearFocus() },
+            focusRequester = focusRequester,
+        )
 
         Row(
             modifier = Modifier

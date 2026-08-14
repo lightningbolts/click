@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.screens
+package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
@@ -36,37 +36,37 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import compose.project.click.click.PlatformHapticsPolicy
-import compose.project.click.click.data.storage.createTokenStorage
-import compose.project.click.click.proximity.ProximityManager
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.proximity.ProximityManager // pragma: allowlist secret
 import compose.project.click.click.sensors.AmbientNoiseMonitorProvider // pragma: allowlist secret
 import compose.project.click.click.sensors.BarometricHeightMonitorProvider // pragma: allowlist secret
 import compose.project.click.click.sensors.captureConnectionSensorContext // pragma: allowlist secret
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.data.OpenMeteoWeatherService
-import compose.project.click.click.data.models.toConnectionPayloadWeatherJson
-import compose.project.click.click.data.models.User
-import compose.project.click.click.data.models.UserProfile
-import compose.project.click.click.data.models.toUserProfile
-import compose.project.click.click.proximity.MockProximityManager
-import compose.project.click.click.ui.components.AdaptiveBackground
-import compose.project.click.click.ui.components.ClickTextFieldMinHeight
-import compose.project.click.click.ui.components.bottomChromePadding
-import compose.project.click.click.ui.components.ConnectionContextPresentation
-import compose.project.click.click.ui.components.ConnectionContextSheet
-import compose.project.click.click.calendar.AvailabilityOverlapGap
-import compose.project.click.click.calendar.lockAvailabilityIntentForGap
-import compose.project.click.click.data.repository.SupabaseRepository
-import compose.project.click.click.ui.components.PageHeader
-import compose.project.click.click.ui.components.rememberConnectionHandshakePulse
-import compose.project.click.click.ui.utils.openApplicationSystemSettings
-import compose.project.click.click.proximity.isSimulatorOrEmulatorRuntime
-import compose.project.click.click.ui.theme.*
-import compose.project.click.click.ui.utils.rememberLocationPermissionRequester
-import compose.project.click.click.ui.utils.rememberProximityHardwarePermissionRequester
-import compose.project.click.click.sensors.HardwareVibeMonitor
-import compose.project.click.click.viewmodel.ConnectionState
-import compose.project.click.click.viewmodel.ConnectionViewModel
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.OpenMeteoWeatherService // pragma: allowlist secret
+import compose.project.click.click.data.models.toConnectionPayloadWeatherJson // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.UserProfile // pragma: allowlist secret
+import compose.project.click.click.data.models.toUserProfile // pragma: allowlist secret
+import compose.project.click.click.proximity.MockProximityManager // pragma: allowlist secret
+import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickTextFieldMinHeight // pragma: allowlist secret
+import compose.project.click.click.ui.components.bottomChromePadding // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionContextPresentation // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionContextSheet // pragma: allowlist secret
+import compose.project.click.click.calendar.AvailabilityOverlapGap // pragma: allowlist secret
+import compose.project.click.click.calendar.lockAvailabilityIntentForGap // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.ui.components.PageHeader // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberConnectionHandshakePulse // pragma: allowlist secret
+import compose.project.click.click.ui.utils.openApplicationSystemSettings // pragma: allowlist secret
+import compose.project.click.click.proximity.isSimulatorOrEmulatorRuntime // pragma: allowlist secret
+import compose.project.click.click.ui.theme.* // pragma: allowlist secret
+import compose.project.click.click.ui.utils.rememberLocationPermissionRequester // pragma: allowlist secret
+import compose.project.click.click.ui.utils.rememberProximityHardwarePermissionRequester // pragma: allowlist secret
+import compose.project.click.click.sensors.HardwareVibeMonitor // pragma: allowlist secret
+import compose.project.click.click.viewmodel.ConnectionState // pragma: allowlist secret
+import compose.project.click.click.viewmodel.ConnectionViewModel // pragma: allowlist secret
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -822,9 +822,7 @@ private fun NfcIdleContent(
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp,
-                border = BorderStroke(
-                    2.dp,
-                    if (supportsTap) PrimaryBlue else clickBorderColor(),
+                border = BorderStroke(clickBorderWidth(), if (supportsTap) PrimaryBlue else clickBorderColor(),
                 ),
             ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -874,7 +872,7 @@ private fun NfcIdleContent(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant,
                 ),
-                border = BorderStroke(2.dp, clickBorderColor()),
+                border = BorderStroke(clickBorderWidth(), clickBorderColor()),
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
@@ -1301,7 +1299,7 @@ private fun NfcSuccessContent(
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant,
-                border = BorderStroke(2.dp, clickBorderColor()),
+                border = BorderStroke(clickBorderWidth(), clickBorderColor()),
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -1389,7 +1387,7 @@ private fun NfcSuccessContent(
                         Icon(
                             Icons.Default.Send,
                             contentDescription = "Send",
-                            tint = if (sayHiMessage.trim().isNotEmpty()) PrimaryBlue 
+                            tint = if (sayHiMessage.trim().isNotEmpty()) PrimaryBlue
                                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
                         )
                     }
@@ -1399,7 +1397,7 @@ private fun NfcSuccessContent(
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.tertiaryContainer,
-                border = BorderStroke(2.dp, clickBorderColor()),
+                border = BorderStroke(clickBorderWidth(), clickBorderColor()),
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
@@ -1498,7 +1496,7 @@ private fun CommonGroundSection(tags: List<String>) {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.primaryContainer,
-                    border = BorderStroke(2.dp, clickBorderColor()),
+                    border = BorderStroke(clickBorderWidth(), clickBorderColor()),
                 ) {
                     Text(
                         text = tag,

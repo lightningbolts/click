@@ -1,4 +1,4 @@
-package compose.project.click.click.calls
+package compose.project.click.click.calls // pragma: allowlist secret
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -41,14 +41,14 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.PlatformHapticsPolicy
-import compose.project.click.click.ui.components.StateCardTransition
-import compose.project.click.click.ui.components.rememberWaitingPulse
-import compose.project.click.click.ui.theme.BackgroundDark
-import compose.project.click.click.ui.theme.BorderHardDark
-import compose.project.click.click.ui.theme.LightBlue
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.ui.theme.SurfaceDark
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.ui.components.StateCardTransition // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberWaitingPulse // pragma: allowlist secret
+import compose.project.click.click.ui.theme.BackgroundDark // pragma: allowlist secret
+import compose.project.click.click.ui.theme.BorderHardDark // pragma: allowlist secret
+import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.SurfaceDark // pragma: allowlist secret
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 
 @Composable
@@ -257,25 +257,27 @@ fun ActiveCallOverlay(
     chromeAlpha: Float = 1f,
     connectedAtMs: Long? = null,
 ) {
-    val isMuted = (state as? CallState.Connected)?.microphoneEnabled == false
-    val isSpeakerEnabled = (state as? CallState.Connected)?.speakerEnabled == true
-    val isVideoEnabled = (state as? CallState.Connected)?.cameraEnabled == true
     var heldVideoLayout by remember { androidx.compose.runtime.mutableStateOf(false) }
+    var heldConnected by remember { androidx.compose.runtime.mutableStateOf<CallState.Connected?>(null) }
     if (state is CallState.Connecting) {
         heldVideoLayout = state.videoRequested
     } else if (state is CallState.Connected) {
         heldVideoLayout = state.videoRequested
+        heldConnected = state
     }
+    val connected = (state as? CallState.Connected) ?: heldConnected
+    val isMuted = connected?.microphoneEnabled == false
+    val isSpeakerEnabled = connected?.speakerEnabled == true
+    val isVideoEnabled = connected?.cameraEnabled == true
     val isVideoCall = when (state) {
         is CallState.Connecting -> state.videoRequested
         is CallState.Connected -> state.videoRequested
         is CallState.Ended -> heldVideoLayout
-        else -> false
+        else -> heldVideoLayout
     }
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val blankVideoSurfaces = state is CallState.Ended
-    val connected = state as? CallState.Connected
+    val blankVideoSurfaces = false
     val participants = connected?.participants.orEmpty()
     val roster = if (participants.isNotEmpty()) {
         participants

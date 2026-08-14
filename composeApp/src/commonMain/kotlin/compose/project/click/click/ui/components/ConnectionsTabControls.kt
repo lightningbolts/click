@@ -1,4 +1,4 @@
-package compose.project.click.click.ui.components
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
@@ -37,9 +37,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import compose.project.click.click.ui.theme.LightBlue
-import compose.project.click.click.ui.theme.clickBorderColor
-import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 
 /**
  * Floating connections header: large title + segment bar when expanded;
@@ -195,7 +196,7 @@ private fun ConnectionsTabFilterMenuChip(
             modifier = Modifier
                 .clip(RoundedCornerShape(chipCorner))
                 .background(MaterialTheme.colorScheme.surface)
-                .border(2.dp, clickBorderColor(), RoundedCornerShape(chipCorner))
+                .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(chipCorner))
                 .clickable { expanded = true }
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -215,27 +216,17 @@ private fun ConnectionsTabFilterMenuChip(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        DropdownMenu(
+        ClickDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-        ) {
-            labels.forEachIndexed { index, label ->
-                DropdownMenuItem(
-                    text = { Text(label) },
-                    onClick = {
-                        onTabSelected(index)
-                        expanded = false
-                    },
-                    leadingIcon = if (selectedTabIndex == index) {
-                        {
-                            Icon(Icons.Filled.Check, contentDescription = null, tint = PrimaryBlue)
-                        }
-                    } else {
-                        null
-                    },
+            items = labels.mapIndexed { index, label ->
+                ClickMenuItem(
+                    label = label,
+                    onClick = { onTabSelected(index) },
+                    icon = if (selectedTabIndex == index) Icons.Filled.Check else null,
                 )
-            }
-        }
+            },
+        )
     }
 }
 
@@ -357,7 +348,7 @@ private fun DiscoverySortFilterMenuChip(
             modifier = Modifier
                 .clip(RoundedCornerShape(chipCorner))
                 .background(MaterialTheme.colorScheme.surface)
-                .border(2.dp, clickBorderColor(), RoundedCornerShape(chipCorner))
+                .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(chipCorner))
                 .clickable { expanded = true }
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -377,28 +368,18 @@ private fun DiscoverySortFilterMenuChip(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        DropdownMenu(
+        ClickDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
             modifier = Modifier.zIndex(20f),
-        ) {
-            labels.forEachIndexed { index, label ->
-                DropdownMenuItem(
-                    text = { Text(label) },
-                    onClick = {
-                        onSortSelected(index)
-                        expanded = false
-                    },
-                    leadingIcon = if (selectedSortIndex == index) {
-                        {
-                            Icon(Icons.Filled.Check, contentDescription = null, tint = PrimaryBlue)
-                        }
-                    } else {
-                        null
-                    },
+            items = labels.mapIndexed { index, label ->
+                ClickMenuItem(
+                    label = label,
+                    onClick = { onSortSelected(index) },
+                    icon = if (selectedSortIndex == index) Icons.Filled.Check else null,
                 )
-            }
-        }
+            },
+        )
     }
 }
 
@@ -418,7 +399,7 @@ fun DiscoverySortSegmentBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .border(2.dp, clickBorderColor(), RoundedCornerShape(exterior))
+            .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(exterior))
             .clip(RoundedCornerShape(exterior))
             .background(MaterialTheme.colorScheme.surface)
             .padding(trackPadding),
@@ -474,7 +455,7 @@ fun ConnectionsSegmentBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .border(2.dp, clickBorderColor(), RoundedCornerShape(exterior))
+            .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(exterior))
             .clip(RoundedCornerShape(exterior))
             .background(MaterialTheme.colorScheme.surface)
             .padding(trackPadding),

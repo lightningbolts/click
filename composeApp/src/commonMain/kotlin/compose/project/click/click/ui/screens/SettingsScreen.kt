@@ -2,11 +2,19 @@
     "ktlint:standard:function-naming",
     "ktlint:standard:no-wildcard-imports",
     "ktlint:standard:max-line-length",
+    "ktlint:standard:indent",
 )
 
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -76,6 +84,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.mohamedrejeb.calf.ui.toggle.AdaptiveSwitch
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.getPlatform // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
@@ -87,12 +96,15 @@ import compose.project.click.click.sensors.rememberAmbientNoiseMonitor // pragma
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickButtonVariant // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvailabilitySheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
+import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
 import compose.project.click.click.ui.components.SavedEventsSection // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastHost // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
@@ -132,12 +144,15 @@ private fun SettingsPage.title(): String =
         SettingsPage.Appearance -> "Appearance"
     }
 
+private enum class SettingsTransitionMode { Tap, Gesture }
+
 @Composable
 fun SettingsScreen(
     isDarkMode: Boolean,
     onToggleDarkMode: () -> Unit,
     onSignOut: () -> Unit = {},
     onOpenSearch: (() -> Unit)? = null,
+    onSubpageOpenChanged: (Boolean) -> Unit = {},
     availabilityViewModel: AvailabilityViewModel = viewModel { AvailabilityViewModel() },
 ) {
     val currentAvailability by availabilityViewModel.currentAvailability.collectAsState()
@@ -237,37 +252,33 @@ fun SettingsScreen(
     var pendingDeleteAvailabilityIntent by remember { mutableStateOf<AvailabilityIntentRow?>(null) }
     var showPermissionsHub by remember { mutableStateOf(false) }
     var settingsPage by remember { mutableStateOf(SettingsPage.Hub) }
+    var settingsTransitionMode by remember { mutableStateOf(SettingsTransitionMode.Tap) }
     val savedEventBookmarks by AppDataManager.cachedEventBookmarks.collectAsState()
+    val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
 
-    PlatformBackHandler(enabled = settingsPage != SettingsPage.Hub) {
-        // pragma: allowlist secret
+    fun closeSettingsSubpage(mode: SettingsTransitionMode) {
+        settingsTransitionMode = mode
         settingsPage = SettingsPage.Hub
+    }
+
+    LaunchedEffect(settingsPage) {
+        onSubpageOpenChanged(settingsPage != SettingsPage.Hub)
+    }
+
+    PlatformBackHandler(enabled = settingsPage != SettingsPage.Hub && !isIOS) {
+        // pragma: allowlist secret
+        closeSettingsSubpage(SettingsTransitionMode.Tap)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
-            AppScreenScaffold(
-                title = settingsPage.title(),
-                onOpenSearch = if (settingsPage == SettingsPage.Hub) onOpenSearch else null,
-                navigationIcon =
-                    if (settingsPage != SettingsPage.Hub) {
-                        {
-                            IconButton(onClick = { settingsPage = SettingsPage.Hub }) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back to settings",
-                                    tint = MaterialTheme.colorScheme.onSurface,
-                                )
-                            }
-                        }
-                    } else {
-                        null
-                    },
-                verticalArrangement = Arrangement.spacedBy(24.dp),
-            ) {
-                when (settingsPage) {
-                    SettingsPage.Hub -> {
-                        item {
+            Box(modifier = Modifier.fillMaxSize()) {
+                AppScreenScaffold(
+                    title = "Settings",
+                    onOpenSearch = onOpenSearch,
+                    verticalArrangement = Arrangement.spacedBy(24.dp),
+                ) {
+                    item {
                             SettingsProfileHeader(
                                 user = currentUser,
                                 avatarUploading = avatarUploading,
@@ -282,15 +293,57 @@ fun SettingsScreen(
                         }
 
                         item {
-                            SettingsHubNavCard(onOpen = { settingsPage = it })
+                            SettingsHubNavCard(
+                                onOpen = {
+                                    settingsTransitionMode = SettingsTransitionMode.Tap
+                                    settingsPage = it
+                                },
+                            )
                         }
 
                         item {
                             SettingsSignOutButton(onSignOut = onSignOut)
                         }
-                    }
+                }
 
-                    SettingsPage.Availability -> {
+                val slideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
+                val fadeSpec = tween<Float>(220, easing = LinearOutSlowInEasing)
+                AnimatedVisibility(
+                    visible = settingsPage != SettingsPage.Hub,
+                    modifier = Modifier.fillMaxSize(),
+                    enter = slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it }) +
+                        fadeIn(animationSpec = fadeSpec),
+                    exit = if (settingsTransitionMode == SettingsTransitionMode.Tap) {
+                        slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { it }) +
+                            fadeOut(animationSpec = fadeSpec)
+                    } else {
+                        ExitTransition.None
+                    },
+                    label = "settings_subpage",
+                ) {
+                    InteractiveSwipeBackContainer(
+                        enabled = true,
+                        opaquePreviousBackground = false,
+                        previousContent = {},
+                        onBack = { closeSettingsSubpage(SettingsTransitionMode.Gesture) },
+                        currentContent = {
+                            AppScreenScaffold(
+                                title = settingsPage.title(),
+                                onOpenSearch = null,
+                                navigationIcon = {
+                                    IconButton(onClick = { closeSettingsSubpage(SettingsTransitionMode.Tap) }) {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.ArrowBack,
+                                            contentDescription = "Back to settings",
+                                            tint = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                    }
+                                },
+                                verticalArrangement = Arrangement.spacedBy(24.dp),
+                            ) {
+                                when (settingsPage) {
+                                    SettingsPage.Hub -> Unit
+                                    SettingsPage.Availability -> {
                         item {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 SettingsSectionHeader("Availability")
@@ -309,7 +362,7 @@ fun SettingsScreen(
                                             onCheckedChange = { availabilityViewModel.toggleFreeThisWeek() },
                                         )
                                         SettingsDivider()
-                                        Button(
+                                        ClickButton(
                                             onClick = {
                                                 availabilityViewModel.resetAvailabilityIntentSheet()
                                                 seedAvailabilityIntent = null
@@ -319,7 +372,6 @@ fun SettingsScreen(
                                                 Modifier
                                                     .fillMaxWidth()
                                                     .padding(horizontal = 12.dp, vertical = 8.dp),
-                                            shape = RoundedCornerShape(12.dp),
                                         ) {
                                             Text("Share intent & timeframe")
                                         }
@@ -655,6 +707,11 @@ fun SettingsScreen(
                             }
                         }
                     }
+
+                                }
+                            }
+                        },
+                    )
                 }
             }
         }
@@ -836,15 +893,10 @@ private fun InlinePermissionsPanel(
         )
 
         Spacer(modifier = Modifier.height(10.dp))
-        Button(
+        ClickButton(
             onClick = onOpenSystemSettings,
             modifier = Modifier.fillMaxWidth().height(48.dp),
-            shape = RoundedCornerShape(14.dp),
-            colors =
-                ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                ),
+            variant = ClickButtonVariant.Secondary,
         ) {
             Icon(
                 Icons.Default.OpenInNew,

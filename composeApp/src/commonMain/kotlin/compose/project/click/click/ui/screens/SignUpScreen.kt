@@ -4,7 +4,7 @@
     "ktlint:standard:property-naming",
 )
 
-package compose.project.click.click.ui.screens
+package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -42,16 +42,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
-import compose.project.click.click.ui.chat.rememberChatMediaPickers
-import compose.project.click.click.ui.components.ClickOutlinedTextField
+import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
-import compose.project.click.click.ui.components.birthdayIsoToUtcMidnightMillis
-import compose.project.click.click.ui.components.formatBirthdayDigitsInput
-import compose.project.click.click.ui.components.parseBirthdayIsoLocalDate
-import compose.project.click.click.ui.components.utcMidnightMillisToBirthdayIso
-import compose.project.click.click.ui.theme.*
-import compose.project.click.click.ui.theme.LocalPlatformStyle
-import compose.project.click.click.utils.toImageBitmap
+import compose.project.click.click.ui.components.birthdayIsoToUtcMidnightMillis // pragma: allowlist secret
+import compose.project.click.click.ui.components.formatBirthdayDigitsInput // pragma: allowlist secret
+import compose.project.click.click.ui.components.parseBirthdayIsoLocalDate // pragma: allowlist secret
+import compose.project.click.click.ui.components.utcMidnightMillisToBirthdayIso // pragma: allowlist secret
+import compose.project.click.click.ui.theme.* // pragma: allowlist secret
+import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
+import compose.project.click.click.utils.toImageBitmap // pragma: allowlist secret
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
@@ -222,7 +222,7 @@ fun SignUpScreen(
                     Modifier
                         .size(112.dp)
                         .clip(CircleShape)
-                        .border(2.dp, clickBorderColor(), CircleShape)
+                        .border(clickBorderWidth(), clickBorderColor(), CircleShape)
                         .background(MaterialTheme.colorScheme.surface)
                         .clickable(enabled = !isLoading) { mediaPickers.openPhotoLibrary() },
                 contentAlignment = Alignment.Center,

@@ -1,4 +1,4 @@
-package compose.project.click.click.calls
+package compose.project.click.click.calls // pragma: allowlist secret
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -140,5 +140,18 @@ class CallLayoutPolicyTest {
         assertEquals("00:00", CallLayoutPolicy.formatDuration(0))
         assertEquals("00:45", CallLayoutPolicy.formatDuration(45_000))
         assertEquals("12:46", CallLayoutPolicy.formatDuration(12 * 60_000L + 46_000L))
+    }
+
+    @Test
+    fun gridRowSizes_faceTimeStyleRows() {
+        assertEquals(emptyList<Int>(), CallLayoutPolicy.gridRowSizes(0))
+        assertEquals(listOf(1), CallLayoutPolicy.gridRowSizes(1))
+        assertEquals(listOf(2), CallLayoutPolicy.gridRowSizes(2))
+        assertEquals(listOf(1, 2), CallLayoutPolicy.gridRowSizes(3))
+        assertEquals(listOf(2, 2), CallLayoutPolicy.gridRowSizes(4))
+        assertEquals(listOf(2, 3), CallLayoutPolicy.gridRowSizes(5))
+        assertEquals(listOf(3, 3), CallLayoutPolicy.gridRowSizes(6))
+        assertEquals(listOf(3, 2, 2), CallLayoutPolicy.gridRowSizes(7))
+        assertEquals(listOf(3, 3, 2), CallLayoutPolicy.gridRowSizes(8))
     }
 }
