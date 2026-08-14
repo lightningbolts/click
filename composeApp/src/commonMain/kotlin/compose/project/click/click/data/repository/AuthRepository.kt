@@ -636,7 +636,8 @@ class AuthRepository(
         if (
             normalized.contains("canceled") ||
             normalized.contains("cancelled") ||
-            normalized.contains("asauthorizationerror") && normalized.contains("1001")
+            normalized.contains("asauthorizationerror") &&
+            normalized.contains("1001")
         ) {
             return "Apple sign-in was canceled."
         }

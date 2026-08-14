@@ -131,6 +131,7 @@ import compose.project.click.click.ui.utils.rememberLocationPermissionRequester 
 import compose.project.click.click.ui.utils.rememberMicrophonePermissionRequester // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import compose.project.click.click.utils.HUB_GATEKEEPER_HIGH_ACCURACY_TIMEOUT_MS // pragma: allowlist secret
+import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
 import compose.project.click.click.utils.hasUsableHubLocation // pragma: allowlist secret
 import compose.project.click.click.utils.resolveHubGatekeeperLocation // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AuthState // pragma: allowlist secret
@@ -383,15 +384,13 @@ fun App() {
     // Coroutine scope for location-aware connection
     val connectionScope = rememberCoroutineScope()
 
-    fun hasUsableLocation(location: compose.project.click.click.utils.LocationResult?): Boolean = // pragma: allowlist secret
+    fun hasUsableLocation(location: LocationResult?): Boolean =
         location != null &&
             location.latitude.isFinite() &&
             location.longitude.isFinite() &&
             !(location.latitude == 0.0 && location.longitude == 0.0)
 
-    suspend fun resolveConnectionLocation(
-        initialLocation: compose.project.click.click.utils.LocationResult? = null, // pragma: allowlist secret
-    ): compose.project.click.click.utils.LocationResult? { // pragma: allowlist secret
+    suspend fun resolveConnectionLocation(initialLocation: LocationResult? = null): LocationResult? {
         if (hasUsableLocation(initialLocation)) return initialLocation
 
         return try {
@@ -430,12 +429,10 @@ fun App() {
     }
 
     var lastHubGatekeeperFix by remember {
-        mutableStateOf<compose.project.click.click.utils.LocationResult?>(null) // pragma: allowlist secret
+        mutableStateOf<LocationResult?>(null)
     }
 
-    suspend fun resolveHubGatekeeperLocationForChat(
-        seed: compose.project.click.click.utils.LocationResult? = null, // pragma: allowlist secret
-    ): compose.project.click.click.utils.LocationResult? { // pragma: allowlist secret
+    suspend fun resolveHubGatekeeperLocationForChat(seed: LocationResult? = null): LocationResult? {
         lastHubGatekeeperFix?.takeIf(::hasUsableHubLocation)?.let { return it }
         seed?.takeIf(::hasUsableHubLocation)?.let { return it }
 
@@ -464,7 +461,7 @@ fun App() {
         tokenAgeMs: Long? = null,
         venueId: String? = null,
         contextTagObject: ContextTag? = null,
-        capturedLocation: compose.project.click.click.utils.LocationResult? = null, // pragma: allowlist secret
+        capturedLocation: LocationResult? = null,
         heightCategory: HeightCategory? = null,
         exactBarometricElevationMeters: Double? = null,
         exactBarometricPressureHpa: Double? = null,

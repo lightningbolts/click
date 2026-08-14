@@ -204,7 +204,7 @@ fun LiquidGlassPageHeader(
     }
 }
 
-/** Magnifying-glass action for tab headers — opens [compose.project.click.click.ui.screens.UnifiedSearchSheet]. */ // pragma: allowlist secret
+/** Magnifying-glass action for tab headers — opens [UnifiedSearchSheet]. */
 @Composable
 fun HeaderSearchIconButton(
     onClick: () -> Unit,
