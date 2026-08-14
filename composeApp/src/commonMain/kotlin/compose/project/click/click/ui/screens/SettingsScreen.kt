@@ -11,15 +11,14 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -79,32 +78,33 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.mohamedrejeb.calf.ui.toggle.AdaptiveSwitch
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
-import compose.project.click.click.getPlatform // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.getPlatform // pragma: allowlist secret
 import compose.project.click.click.platformForegroundTickFlow // pragma: allowlist secret
 import compose.project.click.click.sensors.rememberAmbientNoiseMonitor // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickButtonVariant // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvailabilitySheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickButtonVariant // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
-import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
+import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
 import compose.project.click.click.ui.components.SavedEventsSection // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastHost // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
@@ -311,15 +311,17 @@ fun SettingsScreen(
                 AnimatedVisibility(
                     visible = settingsPage != SettingsPage.Hub,
                     modifier = Modifier.fillMaxSize(),
-                    enter = slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it }) +
+                    enter =
+                        slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it }) +
                         fadeIn(animationSpec = fadeSpec),
-                    exit = if (settingsTransitionMode == SettingsTransitionMode.Tap) {
+                        exit =
+                            if (settingsTransitionMode == SettingsTransitionMode.Tap) {
                         slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { it }) +
                             fadeOut(animationSpec = fadeSpec)
                     } else {
                         ExitTransition.None
                     },
-                    label = "settings_subpage",
+                            label = "settings_subpage",
                 ) {
                     InteractiveSwipeBackContainer(
                         enabled = true,
@@ -707,7 +709,6 @@ fun SettingsScreen(
                             }
                         }
                     }
-
                                 }
                             }
                         },

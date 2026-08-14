@@ -1,6 +1,10 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
+
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -35,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.ConnectionArchiveNotice // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderStroke // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickCardSurface // pragma: allowlist secret
 
@@ -55,26 +60,27 @@ fun ConnectionArchiveWarningBanner(
     val outerShape = RoundedCornerShape(16.dp)
 
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .semantics(mergeDescendants = true) {
-                contentDescription = summary
-            }
-            .clip(outerShape)
-            .background(clickCardSurface())
-            .border(clickBorderWidth(), clickBorderColor(), outerShape)
-            .padding(16.dp),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .semantics(mergeDescendants = true) {
+                    contentDescription = summary
+                }.clip(outerShape)
+                .background(clickCardSurface())
+                .border(clickBorderWidth(), clickBorderColor(), outerShape)
+                .padding(16.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.primary)
-                    .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(16.dp)),
+                modifier =
+                    Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.primary)
+                        .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -118,10 +124,11 @@ fun ConnectionArchiveWarningBanner(
                 onClick = onOpenChat,
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                ),
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
                 contentPadding = PaddingValues(vertical = 12.dp),
             ) {
                 Icon(
@@ -138,20 +145,22 @@ fun ConnectionArchiveWarningBanner(
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(8.dp),
                 border = clickBorderStroke(),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                ),
+                colors =
+                    ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    ),
                 contentPadding = PaddingValues(vertical = 12.dp),
             ) {
                 Icon(
                     Icons.Filled.Lightbulb,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
-                    tint = if (icebreakerSendEnabled) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
+                    tint =
+                        if (icebreakerSendEnabled) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(

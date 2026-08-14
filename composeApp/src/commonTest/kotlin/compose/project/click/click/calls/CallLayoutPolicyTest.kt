@@ -5,7 +5,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class CallLayoutPolicyTest {
-
     private fun participant(
         id: String,
         name: String = id,

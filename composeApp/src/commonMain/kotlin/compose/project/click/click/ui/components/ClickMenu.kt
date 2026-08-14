@@ -1,3 +1,8 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
+
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.layout.widthIn
@@ -66,15 +71,17 @@ fun ClickDropdownMenu(
                     onDismissRequest()
                     item.onClick()
                 },
-                leadingIcon = item.icon?.let { icon ->
-                    {
-                        Icon(icon, contentDescription = null, tint = color)
-                    }
-                },
-                colors = MenuDefaults.itemColors(
-                    textColor = color,
-                    leadingIconColor = color,
-                ),
+                leadingIcon =
+                    item.icon?.let { icon ->
+                        {
+                            Icon(icon, contentDescription = null, tint = color)
+                        }
+                    },
+                colors =
+                    MenuDefaults.itemColors(
+                        textColor = color,
+                        leadingIconColor = color,
+                    ),
             )
         }
     }

@@ -1,3 +1,8 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
+
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.background
@@ -37,10 +42,10 @@ import compose.project.click.click.events.directorySortMetricSubtitle // pragma:
 import compose.project.click.click.events.everyoneExcludingMutualsSection // pragma: allowlist secret
 import compose.project.click.click.events.mutualsAtEvent // pragma: allowlist secret
 import compose.project.click.click.events.sortEventAttendees // pragma: allowlist secret
+import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickCardSurface // pragma: allowlist secret
-import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
 
 @Composable
 fun EventPeopleDirectorySection(
@@ -96,25 +101,27 @@ fun EventPeopleDirectorySection(
                             email = null,
                             avatarUrl = attendee.avatarUrl,
                             userId = attendee.userId,
-                            modifier = Modifier
-                                // Overlap via offset — negative padding crashes on iOS/KMP.
-                                .offset(x = (-10 * index).dp)
-                                .zIndex((preview.size - index).toFloat())
-                                .size(48.dp)
-                                .border(clickBorderWidth(), border, CircleShape)
-                                .clip(CircleShape)
-                                .background(cardSurface),
+                            modifier =
+                                Modifier
+                                    // Overlap via offset — negative padding crashes on iOS/KMP.
+                                    .offset(x = (-10 * index).dp)
+                                    .zIndex((preview.size - index).toFloat())
+                                    .size(48.dp)
+                                    .border(clickBorderWidth(), border, CircleShape)
+                                    .clip(CircleShape)
+                                    .background(cardSurface),
                         )
                     }
                     if (overflow > 0) {
                         Box(
-                            modifier = Modifier
-                                .offset(x = (-10 * preview.size).dp)
-                                .zIndex(0f)
-                                .size(48.dp)
-                                .border(clickBorderWidth(), border, CircleShape)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.secondaryContainer),
+                            modifier =
+                                Modifier
+                                    .offset(x = (-10 * preview.size).dp)
+                                    .zIndex(0f)
+                                    .size(48.dp)
+                                    .border(clickBorderWidth(), border, CircleShape)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.secondaryContainer),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
@@ -158,12 +165,14 @@ fun EventPeopleDirectorySheetContent(
 ) {
     var sortMode by remember { mutableStateOf(EventAttendeeSortMode.Alphabetical) }
     val sorted = remember(attendees, sortMode) { sortEventAttendees(attendees, sortMode) }
-    val mutuals = remember(attendees, mutualsSectionUnlocked) {
-        if (mutualsSectionUnlocked) mutualsAtEvent(attendees) else emptyList()
-    }
-    val sortedMutuals = remember(mutuals, sortMode) {
-        sortEventAttendees(mutuals, sortMode)
-    }
+    val mutuals =
+        remember(attendees, mutualsSectionUnlocked) {
+            if (mutualsSectionUnlocked) mutualsAtEvent(attendees) else emptyList()
+        }
+    val sortedMutuals =
+        remember(mutuals, sortMode) {
+            sortEventAttendees(mutuals, sortMode)
+        }
     val border = clickBorderColor()
     val onSurface = MaterialTheme.colorScheme.onSurface
     val onVariant = MaterialTheme.colorScheme.onSurfaceVariant
@@ -172,16 +181,18 @@ fun EventPeopleDirectorySheetContent(
         mutualsSectionUnlocked &&
             mutuals.isNotEmpty() &&
             sortMode != EventAttendeeSortMode.MutualConnections
-    val everyone = remember(sorted, showMutualsSection) {
-        if (showMutualsSection) everyoneExcludingMutualsSection(sorted) else sorted
-    }
+    val everyone =
+        remember(sorted, showMutualsSection) {
+            if (showMutualsSection) everyoneExcludingMutualsSection(sorted) else sorted
+        }
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .sheetBodyScroll()
-            .padding(horizontal = 20.dp, vertical = 8.dp)
-            .padding(bottom = 28.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .sheetBodyScroll()
+                .padding(horizontal = 20.dp, vertical = 8.dp)
+                .padding(bottom = 28.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
@@ -221,9 +232,10 @@ fun EventPeopleDirectorySheetContent(
         when {
             loading && sorted.isEmpty() -> {
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 48.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 48.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     CircularProgressIndicator(strokeWidth = 2.dp)
@@ -259,10 +271,11 @@ fun EventPeopleDirectorySheetContent(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = onSurface,
-                    modifier = Modifier.padding(
-                        bottom = 4.dp,
-                        top = if (showMutualsSection) 12.dp else 4.dp,
-                    ),
+                    modifier =
+                        Modifier.padding(
+                            bottom = 4.dp,
+                            top = if (showMutualsSection) 12.dp else 4.dp,
+                        ),
                 )
                 everyone.forEach { attendee ->
                     DirectoryAttendeeRow(
@@ -278,21 +291,27 @@ fun EventPeopleDirectorySheetContent(
 }
 
 @Composable
-private fun SortChip(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun SortChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
     val border = clickBorderColor()
     val onSurface = MaterialTheme.colorScheme.onSurface
-    val bg = if (selected) {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
-    } else {
-        clickCardSurface()
-    }
+    val bg =
+        if (selected) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+        } else {
+            clickCardSurface()
+        }
     val stroke = if (selected) MaterialTheme.colorScheme.primary else border
     Box(
-        modifier = Modifier
-            .border(clickBorderWidth(), stroke, RoundedCornerShape(20.dp))
-            .background(bg, RoundedCornerShape(20.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+        modifier =
+            Modifier
+                .border(clickBorderWidth(), stroke, RoundedCornerShape(20.dp))
+                .background(bg, RoundedCornerShape(20.dp))
+                .clickable(onClick = onClick)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -311,21 +330,23 @@ private fun DirectoryAttendeeRow(
     border: androidx.compose.ui.graphics.Color,
     onClick: () -> Unit,
 ) {
-    val accentBorder = when (attendee.relationship) {
-        AttendeeRelationship.Connection -> MaterialTheme.colorScheme.primary
-        AttendeeRelationship.Mutual -> MaterialTheme.colorScheme.outline
-        else -> border
-    }
+    val accentBorder =
+        when (attendee.relationship) {
+            AttendeeRelationship.Connection -> MaterialTheme.colorScheme.primary
+            AttendeeRelationship.Mutual -> MaterialTheme.colorScheme.outline
+            else -> border
+        }
     val subtitle = directorySortMetricSubtitle(attendee, sortMode)
     val onSurface = MaterialTheme.colorScheme.onSurface
     val onVariant = MaterialTheme.colorScheme.onSurfaceVariant
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(clickBorderWidth(), accentBorder, RoundedCornerShape(12.dp))
-            .background(clickCardSurface(), RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .border(clickBorderWidth(), accentBorder, RoundedCornerShape(12.dp))
+                .background(clickCardSurface(), RoundedCornerShape(12.dp))
+                .clickable(onClick = onClick)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -334,10 +355,11 @@ private fun DirectoryAttendeeRow(
             email = null,
             avatarUrl = attendee.avatarUrl,
             userId = attendee.userId,
-            modifier = Modifier
-                .size(44.dp)
-                .border(clickBorderWidth(), accentBorder, CircleShape)
-                .clip(CircleShape),
+            modifier =
+                Modifier
+                    .size(44.dp)
+                    .border(clickBorderWidth(), accentBorder, CircleShape)
+                    .clip(CircleShape),
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -352,13 +374,14 @@ private fun DirectoryAttendeeRow(
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (sortMode == EventAttendeeSortMode.InterestOverlap &&
-                        attendee.sharedInterestCount > 0
-                    ) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        onVariant
-                    },
+                    color =
+                        if (sortMode == EventAttendeeSortMode.InterestOverlap &&
+                            attendee.sharedInterestCount > 0
+                        ) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            onVariant
+                        },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

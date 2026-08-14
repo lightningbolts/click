@@ -1,3 +1,8 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
+
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.background
@@ -59,19 +64,24 @@ object ClickFieldTokens {
     val Shape = RoundedCornerShape(CornerRadius)
 }
 
-private val ClickTextFieldContentPadding = PaddingValues(
-    start = 16.dp,
-    top = 14.dp,
-    end = 16.dp,
-    bottom = 14.dp,
-)
+/** Alias of [ClickFieldTokens.SingleLineMinHeight] for existing search/NFC call sites. */
+val ClickTextFieldMinHeight: Dp = ClickFieldTokens.SingleLineMinHeight
 
-private val ClickMultilineContentPadding = PaddingValues(
-    start = 16.dp,
-    top = 12.dp,
-    end = 16.dp,
-    bottom = 12.dp,
-)
+private val ClickTextFieldContentPadding =
+    PaddingValues(
+        start = 16.dp,
+        top = 14.dp,
+        end = 16.dp,
+        bottom = 14.dp,
+    )
+
+private val ClickMultilineContentPadding =
+    PaddingValues(
+        start = 16.dp,
+        top = 12.dp,
+        end = 16.dp,
+        bottom = 12.dp,
+    )
 
 /**
  * App outlined text field with field-safe typography, 16dp corners, and quiet 1dp borders.
@@ -106,29 +116,33 @@ fun ClickOutlinedTextField(
     minHeight: Dp = if (singleLine) ClickFieldTokens.SingleLineMinHeight else ClickFieldTokens.MultilineMinHeight,
 ) {
     val fieldInteraction = interactionSource ?: remember { MutableInteractionSource() }
-    val textColor = textStyle.color.takeOrElse {
-        MaterialTheme.colorScheme.onSurface
-    }
-    val mergedTextStyle = LocalTextStyle.current.merge(textStyle).merge(
-        TextStyle(color = textColor),
-    )
-    val contentPadding = if (singleLine && label == null) {
-        ClickTextFieldContentPadding
-    } else if (!singleLine) {
-        ClickMultilineContentPadding
-    } else {
-        ClickTextFieldContentPadding
-    }
+    val textColor =
+        textStyle.color.takeOrElse {
+            MaterialTheme.colorScheme.onSurface
+        }
+    val mergedTextStyle =
+        LocalTextStyle.current.merge(textStyle).merge(
+            TextStyle(color = textColor),
+        )
+    val contentPadding =
+        if (singleLine && label == null) {
+            ClickTextFieldContentPadding
+        } else if (!singleLine) {
+            ClickMultilineContentPadding
+        } else {
+            ClickTextFieldContentPadding
+        }
 
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier
-            .heightIn(min = minHeight)
-            .defaultMinSize(
-                minWidth = OutlinedTextFieldDefaults.MinWidth,
-                minHeight = minHeight,
-            ),
+        modifier =
+            modifier
+                .heightIn(min = minHeight)
+                .defaultMinSize(
+                    minWidth = OutlinedTextFieldDefaults.MinWidth,
+                    minHeight = minHeight,
+                ),
         enabled = enabled,
         readOnly = readOnly,
         textStyle = mergedTextStyle,
@@ -139,9 +153,10 @@ fun ClickOutlinedTextField(
         minLines = minLines,
         visualTransformation = visualTransformation,
         interactionSource = fieldInteraction,
-        cursorBrush = SolidColor(
-            if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-        ),
+        cursorBrush =
+            SolidColor(
+                if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+            ),
         decorationBox = { innerTextField ->
             OutlinedTextFieldDefaults.DecorationBox(
                 value = value,
@@ -182,18 +197,19 @@ fun ClickOutlinedTextField(
 }
 
 @Composable
-fun clickFieldColors(): TextFieldColors = OutlinedTextFieldDefaults.colors(
-    focusedTextColor = MaterialTheme.colorScheme.onSurface,
-    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-    focusedBorderColor = MaterialTheme.colorScheme.primary,
-    unfocusedBorderColor = clickBorderColor(),
-    cursorColor = MaterialTheme.colorScheme.primary,
-    focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    focusedContainerColor = clickCardSurface(),
-    unfocusedContainerColor = clickCardSurface(),
-    disabledContainerColor = clickCardSurface(),
-)
+fun clickFieldColors(): TextFieldColors =
+    OutlinedTextFieldDefaults.colors(
+        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+        focusedBorderColor = MaterialTheme.colorScheme.primary,
+        unfocusedBorderColor = clickBorderColor(),
+        cursorColor = MaterialTheme.colorScheme.primary,
+        focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        focusedContainerColor = clickCardSurface(),
+        unfocusedContainerColor = clickCardSurface(),
+        disabledContainerColor = clickCardSurface(),
+    )
 
 /**
  * Rounded search field used by global search, map nearby search, and connection pickers.
@@ -217,13 +233,14 @@ fun ClickSearchField(
     val shape = ClickFieldTokens.Shape
     val borderWidth = clickBorderWidth()
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(height)
-            .clip(shape)
-            .background(containerColor)
-            .border(borderWidth, clickBorderColor(), shape)
-            .padding(horizontal = 14.dp),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .height(height)
+                .clip(shape)
+                .background(containerColor)
+                .border(borderWidth, clickBorderColor(), shape)
+                .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
@@ -239,11 +256,12 @@ fun ClickSearchField(
             singleLine = true,
             textStyle = clickTextFieldTextStyle().copy(color = textColor),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .padding(start = 10.dp)
-                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(start = 10.dp)
+                    .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
             decorationBox = { innerTextField ->
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -262,10 +280,11 @@ fun ClickSearchField(
                 }
             },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(
-                onSearch = { onSearch?.invoke() },
-                onDone = { onSearch?.invoke() },
-            ),
+            keyboardActions =
+                KeyboardActions(
+                    onSearch = { onSearch?.invoke() },
+                    onDone = { onSearch?.invoke() },
+                ),
         )
         if (trailingIcon != null) {
             trailingIcon()

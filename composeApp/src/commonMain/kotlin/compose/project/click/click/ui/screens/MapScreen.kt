@@ -50,7 +50,6 @@ import compose.project.click.click.data.models.MapBeacon // pragma: allowlist se
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.withPreservedEventScheduleFrom // pragma: allowlist secret
-import compose.project.click.click.data.repository.MapBeaconRepository // pragma: allowlist secret
 import compose.project.click.click.events.EventReminderCoordinator // pragma: allowlist secret
 import compose.project.click.click.events.EventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.buildEventShareText // pragma: allowlist secret
@@ -1424,19 +1423,20 @@ private fun BeaconOwnerDropdownMenu(
     ClickDropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismissRequest,
-        items = listOf(
-            ClickMenuItem(
-                label = "Edit",
-                onClick = onEdit,
-                icon = Icons.Filled.Edit,
+        items =
+            listOf(
+                ClickMenuItem(
+                    label = "Edit",
+                    onClick = onEdit,
+                    icon = Icons.Filled.Edit,
+                ),
+                ClickMenuItem(
+                    label = "Delete",
+                    onClick = onDelete,
+                    icon = Icons.Filled.Delete,
+                    destructive = true,
+                ),
             ),
-            ClickMenuItem(
-                label = "Delete",
-                onClick = onDelete,
-                icon = Icons.Filled.Delete,
-                destructive = true,
-            ),
-        ),
     )
 }
 
@@ -1988,12 +1988,13 @@ private fun BeaconShareMenuButton(
         ClickDropdownMenu(
             expanded = shareMenuExpanded,
             onDismissRequest = { shareMenuExpanded = false },
-            items = buildList {
-                add(ClickMenuItem(label = "Share link", onClick = onShare))
-                if (onShareToChat != null) {
-                    add(ClickMenuItem(label = "Share to chat", onClick = { onShareToChat.invoke() }))
-                }
-            },
+            items =
+                buildList {
+                    add(ClickMenuItem(label = "Share link", onClick = onShare))
+                    if (onShareToChat != null) {
+                        add(ClickMenuItem(label = "Share to chat", onClick = { onShareToChat.invoke() }))
+                    }
+                },
         )
     }
 }

@@ -112,11 +112,12 @@ object CallLayoutPolicy {
                 val rows = mutableListOf<Int>()
                 var remaining = n
                 while (remaining > 0) {
-                    val take = when {
-                        remaining == 4 -> 2
-                        remaining >= 3 -> 3
-                        else -> remaining
-                    }
+                    val take =
+                        when {
+                            remaining == 4 -> 2
+                            remaining >= 3 -> 3
+                            else -> remaining
+                        }
                     rows += take
                     remaining -= take
                 }

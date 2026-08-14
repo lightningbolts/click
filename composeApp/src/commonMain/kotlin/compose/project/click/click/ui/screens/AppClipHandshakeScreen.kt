@@ -1,3 +1,8 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
+
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.foundation.background
@@ -26,12 +31,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
-import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
-import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -43,6 +45,9 @@ import compose.project.click.click.deeplink.ConnectionDeepLinkRouter // pragma: 
 import compose.project.click.click.qr.CLICK_IOS_APP_STORE_URL // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionContextPresentation // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionContextSheet // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 
 /**
  * Stripped-down handshake surface for the iOS App Clip target.
@@ -71,11 +76,12 @@ fun AppClipHandshakeScreen(invocationUrl: String?) {
         val result = api.getPublicProfileUnauthenticated(userId)
         result.fold(
             onSuccess = { body ->
-                profile = UserProfile(
-                    id = userId,
-                    displayName = body.displayName,
-                    avatarUrl = body.avatarUrl,
-                )
+                profile =
+                    UserProfile(
+                        id = userId,
+                        displayName = body.displayName,
+                        avatarUrl = body.avatarUrl,
+                    )
                 loading = false
             },
             onFailure = {
@@ -86,9 +92,10 @@ fun AppClipHandshakeScreen(invocationUrl: String?) {
     }
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF0A0A0A)),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(Color(0xFF0A0A0A)),
         contentAlignment = Alignment.Center,
     ) {
         when {
@@ -130,18 +137,20 @@ fun AppClipHandshakeScreen(invocationUrl: String?) {
 private fun AppClipDownloadCta() {
     val uriHandler = LocalUriHandler.current
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(24.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Box(
-            modifier = Modifier
-                .size(72.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(PrimaryBlue)
-                .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(20.dp)),
+            modifier =
+                Modifier
+                    .size(72.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(PrimaryBlue)
+                    .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(20.dp)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -169,10 +178,11 @@ private fun AppClipDownloadCta() {
             onClick = { uriHandler.openUri(CLICK_IOS_APP_STORE_URL) },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(14.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.White,
-                contentColor = Color.Black,
-            ),
+            colors =
+                ButtonDefaults.buttonColors(
+                    containerColor = Color.White,
+                    contentColor = Color.Black,
+                ),
         ) {
             Text(
                 text = "Download Full App to Save Connection",

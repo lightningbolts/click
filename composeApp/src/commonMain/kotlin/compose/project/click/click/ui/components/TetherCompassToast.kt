@@ -1,3 +1,8 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
+
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.animation.AnimatedVisibility
@@ -57,9 +62,10 @@ fun TetherCompassToast(
 
     AnimatedVisibility(
         visible = visible && displayMessage != null,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
         enter = fadeIn(animationSpec = tween(UnifiedToastTokens.EnterMillis)),
         exit = fadeOut(animationSpec = tween(UnifiedToastTokens.ExitMillis)),
     ) {
@@ -68,20 +74,23 @@ fun TetherCompassToast(
             contentAlignment = Alignment.Center,
         ) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        PrimaryBlue,
-                        RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
-                    )
-                    .border(clickBorderWidth(), clickBorderColor(),
-                        RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
-                    )
-                    .padding(horizontal = 18.dp, vertical = 16.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(
+                            PrimaryBlue,
+                            RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
+                        ).border(
+                            clickBorderWidth(),
+                            clickBorderColor(),
+                            RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
+                        ).padding(horizontal = 18.dp, vertical = 16.dp),
             ) {
                 androidx.compose.foundation.layout.Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+                    horizontalArrangement =
+                        androidx.compose.foundation.layout.Arrangement
+                            .spacedBy(12.dp),
                 ) {
                     Icon(
                         Icons.Filled.Explore,

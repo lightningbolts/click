@@ -1,3 +1,8 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
+
 package compose.project.click.click.ui.chat // pragma: allowlist secret
 
 import androidx.compose.animation.core.Animatable
@@ -110,44 +115,50 @@ internal fun ChatComposerStrip(
         }
     }
 
-    val canSend = chatComposerCanSubmit(
-        value = value,
-        enabled = enabled,
-        submitGuarded = submitGuarded,
-    )
-    val textStyle = MaterialTheme.typography.bodyMedium.merge(
-        TextStyle(
-            lineHeightStyle = LineHeightStyle(
-                alignment = LineHeightStyle.Alignment.Center,
-                trim = LineHeightStyle.Trim.Both,
+    val canSend =
+        chatComposerCanSubmit(
+            value = value,
+            enabled = enabled,
+            submitGuarded = submitGuarded,
+        )
+    val textStyle =
+        MaterialTheme.typography.bodyMedium.merge(
+            TextStyle(
+                lineHeightStyle =
+                    LineHeightStyle(
+                        alignment = LineHeightStyle.Alignment.Center,
+                        trim = LineHeightStyle.Trim.Both,
+                    ),
             ),
-        ),
-    )
+        )
     val fieldColors = rememberChatComposerFieldColors()
     val innerVerticalPad = ((auxButtonSize - 24.dp) / 2).coerceIn(6.dp, 12.dp)
     val attachDimmed = !enabled || externallySending
 
     Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = auxButtonSize),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .heightIn(min = auxButtonSize),
     ) {
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = fieldSideInset, end = fieldSideInset)
-                .heightIn(min = auxButtonSize)
-                .align(Alignment.BottomCenter)
-                .focusRequester(focusRequester),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = fieldSideInset, end = fieldSideInset)
+                    .heightIn(min = auxButtonSize)
+                    .align(Alignment.BottomCenter)
+                    .focusRequester(focusRequester),
             enabled = enabled,
             textStyle = textStyle.merge(TextStyle(color = MaterialTheme.colorScheme.onSurface)),
-            keyboardOptions = KeyboardOptions(
-                capitalization = KeyboardCapitalization.Sentences,
-                keyboardType = KeyboardType.Text,
-                imeAction = ImeAction.None,
-            ),
+            keyboardOptions =
+                KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Sentences,
+                    keyboardType = KeyboardType.Text,
+                    imeAction = ImeAction.None,
+                ),
             singleLine = false,
             minLines = 1,
             maxLines = 10,
@@ -169,10 +180,11 @@ internal fun ChatComposerStrip(
                         )
                     },
                     colors = fieldColors,
-                    contentPadding = PaddingValues(
-                        horizontal = 12.dp,
-                        vertical = innerVerticalPad,
-                    ),
+                    contentPadding =
+                        PaddingValues(
+                            horizontal = 12.dp,
+                            vertical = innerVerticalPad,
+                        ),
                     container = {
                         OutlinedTextFieldDefaults.Container(
                             enabled = enabled,
@@ -193,18 +205,20 @@ internal fun ChatComposerStrip(
             anchorSize = auxButtonSize,
             anchorInteraction = attachInteraction,
             anchorEnabled = !attachDimmed,
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .zIndex(4f)
-                .focusProperties { canFocus = false },
+            modifier =
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .zIndex(4f)
+                    .focusProperties { canFocus = false },
             anchor = {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(CircleShape)
-                        .background(attachBackground)
-                        .border(clickBorderWidth(), clickBorderColor(), CircleShape)
-                        .chatSpringPressScale(attachInteraction),
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape)
+                            .background(attachBackground)
+                            .border(clickBorderWidth(), clickBorderColor(), CircleShape)
+                            .chatSpringPressScale(attachInteraction),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -219,50 +233,52 @@ internal fun ChatComposerStrip(
         )
 
         Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .size(auxButtonSize)
-                .zIndex(4f)
-                .focusProperties { canFocus = false }
-                .graphicsLayer {
-                    val s = sendPress.value
-                    scaleX = s
-                    scaleY = s
-                }
-                .chatSpringPressScale(sendInteraction)
-                .clip(sendShape)
-                .background(if (canSend) PrimaryBlue else MaterialTheme.colorScheme.surfaceVariant)
-                .border(clickBorderWidth(), clickBorderColor(), sendShape)
-                .clickable(
-                    interactionSource = sendInteraction,
-                    indication = null,
-                    enabled = canSend,
-                    onClick = {
-                        submitGuarded = true
-                        PlatformHapticsPolicy.lightImpact()
-                        onSend()
-                        scope.launch {
-                            sendPress.snapTo(0.88f)
-                            sendPress.animateTo(
-                                targetValue = 1f,
-                                animationSpec = spring(
-                                    dampingRatio = 0.62f,
-                                    stiffness = 900f,
-                                ),
-                            )
-                        }
-                    },
-                ),
+            modifier =
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(auxButtonSize)
+                    .zIndex(4f)
+                    .focusProperties { canFocus = false }
+                    .graphicsLayer {
+                        val s = sendPress.value
+                        scaleX = s
+                        scaleY = s
+                    }.chatSpringPressScale(sendInteraction)
+                    .clip(sendShape)
+                    .background(if (canSend) PrimaryBlue else MaterialTheme.colorScheme.surfaceVariant)
+                    .border(clickBorderWidth(), clickBorderColor(), sendShape)
+                    .clickable(
+                        interactionSource = sendInteraction,
+                        indication = null,
+                        enabled = canSend,
+                        onClick = {
+                            submitGuarded = true
+                            PlatformHapticsPolicy.lightImpact()
+                            onSend()
+                            scope.launch {
+                                sendPress.snapTo(0.88f)
+                                sendPress.animateTo(
+                                    targetValue = 1f,
+                                    animationSpec =
+                                        spring(
+                                            dampingRatio = 0.62f,
+                                            stiffness = 900f,
+                                        ),
+                                )
+                            }
+                        },
+                    ),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 sendIcon,
                 contentDescription = sendContentDescription,
-                tint = if (canSend) {
-                    Color.White
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-                },
+                tint =
+                    if (canSend) {
+                        Color.White
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+                    },
                 modifier = Modifier.size(sendIconSize),
             )
         }

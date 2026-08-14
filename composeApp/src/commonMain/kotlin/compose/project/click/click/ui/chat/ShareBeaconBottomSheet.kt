@@ -1,3 +1,8 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
+
 package compose.project.click.click.ui.chat // pragma: allowlist secret
 
 import androidx.compose.foundation.BorderStroke
@@ -10,15 +15,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
@@ -95,10 +97,11 @@ internal fun ShareBeaconBottomSheet(
     ClickFormBottomSheet(onDismissRequest = onDismissRequest) {
         ClickSheetChrome(
             title = "Share a beacon",
-            modifier = Modifier
-                .fillMaxWidth()
-                .sheetBodyScroll()
-                .padding(horizontal = ClickSheetDefaults.ContentHorizontalPadding),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .sheetBodyScroll()
+                    .padding(horizontal = ClickSheetDefaults.ContentHorizontalPadding),
         ) {
             Text(
                 text = "Pick a nearby beacon, then add it to the chat.",
@@ -143,10 +146,11 @@ internal fun ShareBeaconBottomSheet(
                     modifier = Modifier.fillMaxWidth(),
                     shape = actionShape,
                     border = BorderStroke(clickBorderWidth(), border),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                    ),
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                        ),
                     contentPadding = PaddingValues(vertical = 14.dp),
                 ) {
                     Text("Add to chat", fontWeight = FontWeight.SemiBold)
@@ -159,9 +163,10 @@ internal fun ShareBeaconBottomSheet(
                 modifier = Modifier.fillMaxWidth(),
                 shape = actionShape,
                 border = BorderStroke(clickBorderWidth(), border),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                ),
+                colors =
+                    ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    ),
                 contentPadding = PaddingValues(vertical = 14.dp),
             ) {
                 Text("Cancel", fontWeight = FontWeight.SemiBold)
@@ -187,12 +192,20 @@ internal data class BeaconPreviewModel(
     companion object {
         fun fromMapBeacon(beacon: MapBeacon): BeaconPreviewModel {
             val title = beacon.displayDynamicTitle()
-            val rawDescription = beacon.metadata.description?.trim()?.takeIf { it.isNotEmpty() }
-                ?: listOfNotNull(beacon.metadata.artistName, beacon.metadata.trackName)
-                    .joinToString(" · ")
-                    .takeIf { it.isNotBlank() && it != title }
-            val location = beacon.metadata.locationName?.trim()?.takeIf { it.isNotEmpty() }
-                ?: beacon.metadata.formattedAddress?.trim()?.takeIf { it.isNotEmpty() }
+            val rawDescription =
+                beacon.metadata.description
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?: listOfNotNull(beacon.metadata.artistName, beacon.metadata.trackName)
+                        .joinToString(" · ")
+                        .takeIf { it.isNotBlank() && it != title }
+            val location =
+                beacon.metadata.locationName
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?: beacon.metadata.formattedAddress
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() }
             return BeaconPreviewModel(
                 beaconId = beacon.id,
                 title = title,
@@ -201,9 +214,10 @@ internal data class BeaconPreviewModel(
                 description = rawDescription?.takeIf { it != title },
                 scheduleLabel = beacon.eventSchedule()?.let { formatEventScheduleRange(it) },
                 shareUrl = buildEventShareUrl(beacon.id),
-                albumArtUrl = beacon.metadata.albumArtUrl?.takeIf {
-                    beacon.kind == MapBeaconKind.SOUNDTRACK && it.isNotBlank()
-                },
+                albumArtUrl =
+                    beacon.metadata.albumArtUrl?.takeIf {
+                        beacon.kind == MapBeaconKind.SOUNDTRACK && it.isNotBlank()
+                    },
                 locationLabel = location,
             )
         }
@@ -217,30 +231,56 @@ internal data class BeaconPreviewModel(
         ): BeaconPreviewModel {
             val fromKnown = knownBeacon?.let { fromMapBeacon(it) }
             val root = message.metadata as? JsonObject
-            val title = fromKnown?.title
-                ?: beaconTitleFromMetadata(message.metadata)
-                ?: message.content.removePrefix("Beacon:").trim().ifBlank { "Beacon" }
+            val title =
+                fromKnown?.title
+                    ?: beaconTitleFromMetadata(message.metadata)
+                    ?: message.content
+                        .removePrefix("Beacon:")
+                        .trim()
+                        .ifBlank { "Beacon" }
             val typeRaw = beaconTypeFromMetadata(message.metadata)
             val kind = fromKnown?.kind ?: MapBeaconKind.fromRaw(typeRaw)
-            val shareUrl = fromKnown?.shareUrl
-                ?: beaconShareUrlFromMetadata(message.metadata)
-                ?: beaconIdFromMetadata(message.metadata)?.let { buildEventShareUrl(it) }
-                ?: ""
-            val description = fromKnown?.description
-                ?: root?.get("description")?.jsonPrimitive?.contentOrNull
-                    ?.trim()?.takeIf { it.isNotEmpty() && it != title }
-            val schedule = fromKnown?.scheduleLabel
-                ?: root?.get("schedule_label")?.jsonPrimitive?.contentOrNull
-                    ?.trim()?.takeIf { it.isNotEmpty() }
-            val albumArt = fromKnown?.albumArtUrl
-                ?: root?.get("album_art_url")?.jsonPrimitive?.contentOrNull
-                    ?.trim()?.takeIf { it.isNotEmpty() }
-            val location = fromKnown?.locationLabel
-                ?: root?.get("location_name")?.jsonPrimitive?.contentOrNull
-                    ?.trim()?.takeIf { it.isNotEmpty() }
+            val shareUrl =
+                fromKnown?.shareUrl
+                    ?: beaconShareUrlFromMetadata(message.metadata)
+                    ?: beaconIdFromMetadata(message.metadata)?.let { buildEventShareUrl(it) }
+                    ?: ""
+            val description =
+                fromKnown?.description
+                    ?: root
+                        ?.get("description")
+                        ?.jsonPrimitive
+                        ?.contentOrNull
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() && it != title }
+            val schedule =
+                fromKnown?.scheduleLabel
+                    ?: root
+                        ?.get("schedule_label")
+                        ?.jsonPrimitive
+                        ?.contentOrNull
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() }
+            val albumArt =
+                fromKnown?.albumArtUrl
+                    ?: root
+                        ?.get("album_art_url")
+                        ?.jsonPrimitive
+                        ?.contentOrNull
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() }
+            val location =
+                fromKnown?.locationLabel
+                    ?: root
+                        ?.get("location_name")
+                        ?.jsonPrimitive
+                        ?.contentOrNull
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() }
             return BeaconPreviewModel(
-                beaconId = knownBeacon?.id
-                    ?: beaconIdFromMetadata(message.metadata).orEmpty(),
+                beaconId =
+                    knownBeacon?.id
+                        ?: beaconIdFromMetadata(message.metadata).orEmpty(),
                 title = title,
                 kindLabel = fromKnown?.kindLabel ?: beaconTypeDisplayLabel(typeRaw, kind),
                 kind = kind,
@@ -257,16 +297,17 @@ internal data class BeaconPreviewModel(
     }
 }
 
-private fun MapBeaconKind.previewIcon(): ImageVector = when (this) {
-    MapBeaconKind.SOUNDTRACK -> Icons.Filled.MusicNote
-    MapBeaconKind.SOS -> Icons.Filled.Campaign
-    MapBeaconKind.HAZARD -> Icons.Filled.Warning
-    MapBeaconKind.UTILITY -> Icons.Filled.Build
-    MapBeaconKind.STUDY -> Icons.Filled.School
-    MapBeaconKind.SOCIAL_VIBE -> Icons.Filled.Celebration
-    MapBeaconKind.EVENT -> Icons.Filled.Event
-    MapBeaconKind.OTHER -> Icons.Filled.Place
-}
+private fun MapBeaconKind.previewIcon(): ImageVector =
+    when (this) {
+        MapBeaconKind.SOUNDTRACK -> Icons.Filled.MusicNote
+        MapBeaconKind.SOS -> Icons.Filled.Campaign
+        MapBeaconKind.HAZARD -> Icons.Filled.Warning
+        MapBeaconKind.UTILITY -> Icons.Filled.Build
+        MapBeaconKind.STUDY -> Icons.Filled.School
+        MapBeaconKind.SOCIAL_VIBE -> Icons.Filled.Celebration
+        MapBeaconKind.EVENT -> Icons.Filled.Event
+        MapBeaconKind.OTHER -> Icons.Filled.Place
+    }
 
 /**
  * Discovery-style beacon card used in the share sheet, composer staging, and chat timeline.
@@ -283,20 +324,22 @@ internal fun BeaconPreviewCard(
     val heroHeight = if (compact) 72.dp else 96.dp
     val borderColor = if (selected) MaterialTheme.colorScheme.primary else clickBorderColor()
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(clickCardSurface())
-            .border(clickBorderWidth(), borderColor, shape)
-            .then(
-                if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
-            ),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(clickCardSurface())
+                .border(clickBorderWidth(), borderColor, shape)
+                .then(
+                    if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
+                ),
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(heroHeight)
-                .background(MaterialTheme.colorScheme.surfaceContainerLow),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(heroHeight)
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow),
             contentAlignment = Alignment.Center,
         ) {
             if (model.albumArtUrl != null) {
@@ -315,13 +358,14 @@ internal fun BeaconPreviewCard(
                 )
             }
             Box(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(10.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.primary)
-                    .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                modifier =
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .padding(10.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.primary)
+                        .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
             ) {
                 Text(
                     text = model.kindLabel,
@@ -332,9 +376,10 @@ internal fun BeaconPreviewCard(
             }
         }
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
@@ -373,11 +418,12 @@ internal fun BeaconPreviewCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            val engagementBits = buildList {
-                if (model.signedUp) add("Going")
-                if (model.bookmarked) add("Saved")
-                if (model.checkedIn) add("Checked in")
-            }
+            val engagementBits =
+                buildList {
+                    if (model.signedUp) add("Going")
+                    if (model.bookmarked) add("Saved")
+                    if (model.checkedIn) add("Checked in")
+                }
             if (engagementBits.isNotEmpty()) {
                 Text(
                     text = engagementBits.joinToString(" · "),

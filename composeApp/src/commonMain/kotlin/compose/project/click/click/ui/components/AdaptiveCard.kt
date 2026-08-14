@@ -1,6 +1,10 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
+
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -17,15 +21,16 @@ import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 fun AdaptiveCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
-    content: @Composable ColumnScope.() -> Unit
+    content: @Composable ColumnScope.() -> Unit,
 ) {
     val radius = getAdaptiveCornerRadius()
     val shape = RoundedCornerShape(radius)
-    val cardModifier = modifier.border(
-        width = clickBorderWidth(),
-        color = clickBorderColor(),
-        shape = shape
-    )
+    val cardModifier =
+        modifier.border(
+            width = clickBorderWidth(),
+            color = clickBorderColor(),
+            shape = shape,
+        )
 
     if (onClick != null) {
         Surface(
@@ -36,7 +41,7 @@ fun AdaptiveCard(
             onClick = onClick,
             content = {
                 Column(modifier = Modifier.padding(getAdaptivePadding()), content = content)
-            }
+            },
         )
     } else {
         Surface(
@@ -46,7 +51,7 @@ fun AdaptiveCard(
             shadowElevation = 0.dp,
             content = {
                 Column(modifier = Modifier.padding(getAdaptivePadding()), content = content)
-            }
+            },
         )
     }
 }
@@ -54,21 +59,22 @@ fun AdaptiveCard(
 @Composable
 fun AdaptiveSurface(
     modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.() -> Unit
+    content: @Composable ColumnScope.() -> Unit,
 ) {
     val radius = getAdaptiveCornerRadius()
     Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .border(
-                width = clickBorderWidth(),
-                color = clickBorderColor(),
-                shape = RoundedCornerShape(bottomStart = radius, bottomEnd = radius),
-            ),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .border(
+                    width = clickBorderWidth(),
+                    color = clickBorderColor(),
+                    shape = RoundedCornerShape(bottomStart = radius, bottomEnd = radius),
+                ),
         shape = RoundedCornerShape(bottomStart = radius, bottomEnd = radius),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
-        shadowElevation = 0.dp
+        shadowElevation = 0.dp,
     ) {
         Column(content = content)
     }
@@ -77,11 +83,11 @@ fun AdaptiveSurface(
 @Composable
 fun AdaptiveBackground(
     modifier: Modifier = Modifier,
-    content: @Composable BoxScope.() -> Unit
+    content: @Composable BoxScope.() -> Unit,
 ) {
     Box(
         modifier = modifier.background(MaterialTheme.colorScheme.background),
-        content = content
+        content = content,
     )
 }
 
@@ -104,41 +110,47 @@ fun ClickButton(
     content: @Composable RowScope.() -> Unit,
 ) {
     val style = LocalPlatformStyle.current
-    val colors = when (variant) {
-        ClickButtonVariant.Primary -> ButtonDefaults.buttonColors(
-            containerColor = PrimaryBlue,
-            contentColor = Color.White,
-            disabledContainerColor = SurfaceContainerHigh,
-            disabledContentColor = OnSurfaceVariant,
-        )
-        ClickButtonVariant.Secondary -> ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            disabledContainerColor = SurfaceContainerHigh,
-            disabledContentColor = OnSurfaceVariant,
-        )
-        ClickButtonVariant.Destructive -> ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.error,
-            contentColor = MaterialTheme.colorScheme.onError,
-            disabledContainerColor = SurfaceContainerHigh,
-            disabledContentColor = OnSurfaceVariant,
-        )
-    }
-    val border = when (variant) {
-        ClickButtonVariant.Primary -> null
-        ClickButtonVariant.Secondary -> clickBorderStroke()
-        ClickButtonVariant.Destructive -> null
-    }
+    val colors =
+        when (variant) {
+            ClickButtonVariant.Primary ->
+                ButtonDefaults.buttonColors(
+                    containerColor = PrimaryBlue,
+                    contentColor = Color.White,
+                    disabledContainerColor = SurfaceContainerHigh,
+                    disabledContentColor = OnSurfaceVariant,
+                )
+            ClickButtonVariant.Secondary ->
+                ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    disabledContainerColor = SurfaceContainerHigh,
+                    disabledContentColor = OnSurfaceVariant,
+                )
+            ClickButtonVariant.Destructive ->
+                ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                    disabledContainerColor = SurfaceContainerHigh,
+                    disabledContentColor = OnSurfaceVariant,
+                )
+        }
+    val border =
+        when (variant) {
+            ClickButtonVariant.Primary -> null
+            ClickButtonVariant.Secondary -> clickBorderStroke()
+            ClickButtonVariant.Destructive -> null
+        }
     Button(
         onClick = onClick,
         modifier = modifier,
         enabled = enabled,
         colors = colors,
-        elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = 0.dp,
-            pressedElevation = 0.dp,
-            focusedElevation = 0.dp,
-        ),
+        elevation =
+            ButtonDefaults.buttonElevation(
+                defaultElevation = 0.dp,
+                pressedElevation = 0.dp,
+                focusedElevation = 0.dp,
+            ),
         border = border,
         shape = RoundedCornerShape(style.buttonCornerRadius),
         content = content,
@@ -163,11 +175,7 @@ fun AdaptiveButton(
 }
 
 @Composable
-fun getAdaptiveCornerRadius(): Dp {
-    return LocalPlatformStyle.current.cardCornerRadius
-}
+fun getAdaptiveCornerRadius(): Dp = LocalPlatformStyle.current.cardCornerRadius
 
 @Composable
-fun getAdaptivePadding(): Dp {
-    return 16.dp
-}
+fun getAdaptivePadding(): Dp = 16.dp

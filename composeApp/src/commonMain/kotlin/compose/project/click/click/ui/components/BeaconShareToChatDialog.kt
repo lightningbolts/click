@@ -1,3 +1,8 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
+
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.BorderStroke
@@ -51,14 +56,15 @@ private data class PendingShareAction(
 )
 
 /** Softer than default popup motion so share-to-chat doesn't snap open/closed. */
-private val ShareToChatMotion = UnifiedPopupMotion(
-    fadeInMillis = 340,
-    fadeOutMillis = 280,
-    scaleInInitial = 0.94f,
-    scaleOutTarget = 0.96f,
-    slideEnterFraction = 0.08f,
-    slideExitFraction = 0.06f,
-)
+private val ShareToChatMotion =
+    UnifiedPopupMotion(
+        fadeInMillis = 340,
+        fadeOutMillis = 280,
+        scaleInInitial = 0.94f,
+        scaleOutTarget = 0.96f,
+        slideEnterFraction = 0.08f,
+        slideExitFraction = 0.06f,
+    )
 
 /**
  * Multiselect share-to-chat picker for map beacons.
@@ -83,11 +89,12 @@ fun BeaconShareToChatDialog(
     val surface = clickCardSurface()
     val onSurface = MaterialTheme.colorScheme.onSurface
     val onVariant = MaterialTheme.colorScheme.onSurfaceVariant
-    val eligible = remember(chats) {
-        chats.filter { row ->
-            !row.chat.id.isNullOrBlank()
+    val eligible =
+        remember(chats) {
+            chats.filter { row ->
+                !row.chat.id.isNullOrBlank()
+            }
         }
-    }
 
     UnifiedPopupOverlay(
         visible = true,
@@ -109,14 +116,16 @@ fun BeaconShareToChatDialog(
             shape = RoundedCornerShape(16.dp),
             color = surface,
             border = BorderStroke(clickBorderWidth(), border),
-            modifier = Modifier
-                .fillMaxWidth(0.94f)
-                .fillMaxHeight(0.78f),
+            modifier =
+                Modifier
+                    .fillMaxWidth(0.94f)
+                    .fillMaxHeight(0.78f),
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
@@ -126,14 +135,14 @@ fun BeaconShareToChatDialog(
                     color = onSurface,
                 )
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(clickBorderWidth(), border, RoundedCornerShape(12.dp))
-                        .background(
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                            RoundedCornerShape(12.dp),
-                        )
-                        .padding(12.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .border(clickBorderWidth(), border, RoundedCornerShape(12.dp))
+                            .background(
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                RoundedCornerShape(12.dp),
+                            ).padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Text(
@@ -171,9 +180,10 @@ fun BeaconShareToChatDialog(
 
                 if (eligible.isEmpty()) {
                     Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
@@ -184,9 +194,10 @@ fun BeaconShareToChatDialog(
                     }
                 } else {
                     LazyColumn(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                         contentPadding = PaddingValues(bottom = 8.dp),
                     ) {
@@ -194,35 +205,45 @@ fun BeaconShareToChatDialog(
                             val chatId = row.chat.id!!.trim()
                             val selected = chatId in selectedIds
                             val isGroup = row.groupClique != null
-                            val label = row.groupClique?.name?.trim()?.takeIf { it.isNotEmpty() }
-                                ?: row.otherUser.name?.trim()?.takeIf { it.isNotEmpty() }
-                                ?: if (isGroup) "Group chat" else "Chat"
-                            val subtitle = if (isGroup) {
-                                val n = row.groupMemberUsers.size.coerceAtLeast(
-                                    (row.groupClique?.memberUserIds?.size ?: 1) - 1,
-                                )
-                                if (n > 0) "$n members" else "Group"
-                            } else {
-                                "Direct"
-                            }
-                            val avatarUser = if (isGroup) {
-                                row.groupMemberUsers.firstOrNull() ?: row.otherUser
-                            } else {
-                                row.otherUser
-                            }
+                            val label =
+                                row.groupClique
+                                    ?.name
+                                    ?.trim()
+                                    ?.takeIf { it.isNotEmpty() }
+                                    ?: row.otherUser.name
+                                        ?.trim()
+                                        ?.takeIf { it.isNotEmpty() }
+                                    ?: if (isGroup) "Group chat" else "Chat"
+                            val subtitle =
+                                if (isGroup) {
+                                    val n =
+                                        row.groupMemberUsers.size.coerceAtLeast(
+                                            (row.groupClique?.memberUserIds?.size ?: 1) - 1,
+                                        )
+                                    if (n > 0) "$n members" else "Group"
+                                } else {
+                                    "Direct"
+                                }
+                            val avatarUser =
+                                if (isGroup) {
+                                    row.groupMemberUsers.firstOrNull() ?: row.otherUser
+                                } else {
+                                    row.otherUser
+                                }
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .border(clickBorderWidth(), if (selected) MaterialTheme.colorScheme.primary else border,
-                                        RoundedCornerShape(12.dp),
-                                    )
-                                    .background(surface, RoundedCornerShape(12.dp))
-                                    .clickable {
-                                        PlatformHapticsPolicy.lightImpact()
-                                        selectedIds =
-                                            if (selected) selectedIds - chatId else selectedIds + chatId
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 10.dp),
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .border(
+                                            clickBorderWidth(),
+                                            if (selected) MaterialTheme.colorScheme.primary else border,
+                                            RoundedCornerShape(12.dp),
+                                        ).background(surface, RoundedCornerShape(12.dp))
+                                        .clickable {
+                                            PlatformHapticsPolicy.lightImpact()
+                                            selectedIds =
+                                                if (selected) selectedIds - chatId else selectedIds + chatId
+                                        }.padding(horizontal = 10.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
@@ -231,10 +252,11 @@ fun BeaconShareToChatDialog(
                                     email = avatarUser.email,
                                     avatarUrl = avatarUser.image,
                                     userId = avatarUser.id,
-                                    modifier = Modifier
-                                        .size(44.dp)
-                                        .clip(CircleShape)
-                                        .border(clickBorderWidth(), border, CircleShape),
+                                    modifier =
+                                        Modifier
+                                            .size(44.dp)
+                                            .clip(CircleShape)
+                                            .border(clickBorderWidth(), border, CircleShape),
                                 )
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
@@ -269,20 +291,22 @@ fun BeaconShareToChatDialog(
                         PlatformHapticsPolicy.successNotification()
                         val ordered = eligible.filter { it.chat.id?.trim() in selectedIds }
                         val openConn = ordered.firstOrNull()?.connection?.id
-                        pendingShare = PendingShareAction(
-                            chatIds = selectedIds.toList(),
-                            openChatConnectionId = openConn,
-                        )
+                        pendingShare =
+                            PendingShareAction(
+                                chatIds = selectedIds.toList(),
+                                openChatConnectionId = openConn,
+                            )
                         requestAnimatedDismiss()
                     },
                     enabled = canShare,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     border = BorderStroke(clickBorderWidth(), border),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                    ),
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                        ),
                     contentPadding = PaddingValues(vertical = 14.dp),
                 ) {
                     Text(

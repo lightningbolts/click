@@ -1,3 +1,8 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
+
 package compose.project.click.click.calls // pragma: allowlist secret
 
 import androidx.compose.foundation.background
@@ -7,14 +12,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -41,6 +46,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.ui.components.StateCardTransition // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberWaitingPulse // pragma: allowlist secret
@@ -49,7 +55,6 @@ import compose.project.click.click.ui.theme.BorderHardDark // pragma: allowlist 
 import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.SurfaceDark // pragma: allowlist secret
-import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 
 @Composable
 fun CallPreviewOverlay(
@@ -60,36 +65,40 @@ fun CallPreviewOverlay(
     onCancel: () -> Unit,
     onDismissEnded: () -> Unit,
 ) {
-    val invite = when (overlayState) {
-        is CallOverlayState.Outgoing -> overlayState.invite
-        is CallOverlayState.Incoming -> overlayState.invite
-        is CallOverlayState.Connecting -> overlayState.invite
-        is CallOverlayState.Ended -> overlayState.invite
-        CallOverlayState.Idle -> null
-    }
+    val invite =
+        when (overlayState) {
+            is CallOverlayState.Outgoing -> overlayState.invite
+            is CallOverlayState.Incoming -> overlayState.invite
+            is CallOverlayState.Connecting -> overlayState.invite
+            is CallOverlayState.Ended -> overlayState.invite
+            CallOverlayState.Idle -> null
+        }
     val otherUserName = invite?.counterpartName(currentUserId) ?: "Connection"
     val isVideoCall = invite?.videoEnabled == true
 
     val pulseActive = overlayState !is CallOverlayState.Ended
-    val pulse = rememberWaitingPulse(
-        active = pulseActive,
-        durationMillis = 1_200,
-        scaleMax = 1.08f,
-        alphaMin = 0.94f,
-    )
+    val pulse =
+        rememberWaitingPulse(
+            active = pulseActive,
+            durationMillis = 1_200,
+            scaleMax = 1.08f,
+            alphaMin = 0.94f,
+        )
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(start = 16.dp, end = 16.dp, top = topInset + 10.dp, bottom = 20.dp),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(start = 16.dp, end = 16.dp, top = topInset + 10.dp, bottom = 20.dp),
         contentAlignment = Alignment.TopCenter,
     ) {
         StateCardTransition(visible = true) {
             Surface(
-                modifier = Modifier
-                    .widthIn(max = 324.dp)
-                    .fillMaxWidth(),
+                modifier =
+                    Modifier
+                        .widthIn(max = 324.dp)
+                        .fillMaxWidth(),
                 shape = RoundedCornerShape(28.dp),
                 color = BackgroundDark,
                 border = androidx.compose.foundation.BorderStroke(1.dp, BorderHardDark),
@@ -101,32 +110,35 @@ fun CallPreviewOverlay(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        text = when (overlayState) {
-                            is CallOverlayState.Outgoing -> if (isVideoCall) "Starting video ring" else "Starting voice ring"
-                            is CallOverlayState.Incoming -> if (isVideoCall) "Incoming video call" else "Incoming voice call"
-                            is CallOverlayState.Connecting -> if (isVideoCall) "Joining video call" else "Joining voice call"
-                            is CallOverlayState.Ended -> overlayState.reason
-                            CallOverlayState.Idle -> ""
-                        },
+                        text =
+                            when (overlayState) {
+                                is CallOverlayState.Outgoing -> if (isVideoCall) "Starting video ring" else "Starting voice ring"
+                                is CallOverlayState.Incoming -> if (isVideoCall) "Incoming video call" else "Incoming voice call"
+                                is CallOverlayState.Connecting -> if (isVideoCall) "Joining video call" else "Joining voice call"
+                                is CallOverlayState.Ended -> overlayState.reason
+                                CallOverlayState.Idle -> ""
+                            },
                         style = MaterialTheme.typography.labelLarge,
                         color = Color.White.copy(alpha = 0.72f),
                         textAlign = TextAlign.Center,
                     )
                     Box(
-                        modifier = Modifier
-                            .padding(top = 14.dp)
-                            .size(72.dp)
-                            .clip(RoundedCornerShape(36.dp))
-                            .background(PrimaryBlue)
-                            .border(1.dp, BorderHardDark, RoundedCornerShape(36.dp))
-                            .alpha(pulse.alpha),
+                        modifier =
+                            Modifier
+                                .padding(top = 14.dp)
+                                .size(72.dp)
+                                .clip(RoundedCornerShape(36.dp))
+                                .background(PrimaryBlue)
+                                .border(1.dp, BorderHardDark, RoundedCornerShape(36.dp))
+                                .alpha(pulse.alpha),
                         contentAlignment = Alignment.Center,
                     ) {
                         Box(
-                            modifier = Modifier
-                                .size((92.dp * pulse.scale))
-                                .clip(RoundedCornerShape(46.dp))
-                                .background(PrimaryBlue.copy(alpha = 0.08f))
+                            modifier =
+                                Modifier
+                                    .size((92.dp * pulse.scale))
+                                    .clip(RoundedCornerShape(46.dp))
+                                    .background(PrimaryBlue.copy(alpha = 0.08f)),
                         )
                         Text(
                             text = otherUserName.firstOrNull()?.uppercase() ?: "?",
@@ -167,10 +179,11 @@ fun CallPreviewOverlay(
                                     PlatformHapticsPolicy.heavyImpact()
                                     onCancel()
                                 },
-                                modifier = Modifier
-                                    .size(52.dp)
-                                    .clip(RoundedCornerShape(26.dp))
-                                    .background(MaterialTheme.colorScheme.error)
+                                modifier =
+                                    Modifier
+                                        .size(52.dp)
+                                        .clip(RoundedCornerShape(26.dp))
+                                        .background(MaterialTheme.colorScheme.error),
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.CallEnd,
@@ -190,10 +203,11 @@ fun CallPreviewOverlay(
                                         PlatformHapticsPolicy.heavyImpact()
                                         onDecline()
                                     },
-                                    modifier = Modifier
-                                        .size(52.dp)
-                                        .clip(RoundedCornerShape(26.dp))
-                                        .background(MaterialTheme.colorScheme.error)
+                                    modifier =
+                                        Modifier
+                                            .size(52.dp)
+                                            .clip(RoundedCornerShape(26.dp))
+                                            .background(MaterialTheme.colorScheme.error),
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.CallEnd,
@@ -206,10 +220,11 @@ fun CallPreviewOverlay(
                                         PlatformHapticsPolicy.lightImpact()
                                         onAccept()
                                     },
-                                    modifier = Modifier
-                                        .size(52.dp)
-                                        .clip(RoundedCornerShape(26.dp))
-                                        .background(PrimaryBlue)
+                                    modifier =
+                                        Modifier
+                                            .size(52.dp)
+                                            .clip(RoundedCornerShape(26.dp))
+                                            .background(PrimaryBlue),
                                 ) {
                                     Icon(
                                         imageVector = if (isVideoCall) Icons.Filled.Videocam else Icons.Filled.Call,
@@ -226,10 +241,11 @@ fun CallPreviewOverlay(
                                     PlatformHapticsPolicy.lightImpact()
                                     onDismissEnded()
                                 },
-                                modifier = Modifier
-                                    .size(52.dp)
-                                    .clip(RoundedCornerShape(26.dp))
-                                    .background(PrimaryBlue)
+                                modifier =
+                                    Modifier
+                                        .size(52.dp)
+                                        .clip(RoundedCornerShape(26.dp))
+                                        .background(PrimaryBlue),
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Check,
@@ -269,55 +285,59 @@ fun ActiveCallOverlay(
     val isMuted = connected?.microphoneEnabled == false
     val isSpeakerEnabled = connected?.speakerEnabled == true
     val isVideoEnabled = connected?.cameraEnabled == true
-    val isVideoCall = when (state) {
-        is CallState.Connecting -> state.videoRequested
-        is CallState.Connected -> state.videoRequested
-        is CallState.Ended -> heldVideoLayout
-        else -> heldVideoLayout
-    }
+    val isVideoCall =
+        when (state) {
+            is CallState.Connecting -> state.videoRequested
+            is CallState.Connected -> state.videoRequested
+            is CallState.Ended -> heldVideoLayout
+            else -> heldVideoLayout
+        }
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val blankVideoSurfaces = false
     val participants = connected?.participants.orEmpty()
-    val roster = if (participants.isNotEmpty()) {
-        participants
-    } else {
-        listOf(
-            CallParticipant(
-                identity = "local",
-                displayName = "You",
-                isLocal = true,
-                isMuted = isMuted,
-                isSpeaking = false,
-                cameraEnabled = isVideoEnabled,
-                hasVideo = connected?.localVideoAvailable == true,
-            ),
-            CallParticipant(
-                identity = "remote",
-                displayName = otherUserName,
-                isLocal = false,
-                isMuted = false,
-                isSpeaking = false,
-                cameraEnabled = connected?.remoteVideoAvailable == true,
-                hasVideo = connected?.remoteVideoAvailable == true,
-            ),
-        )
-    }
+    val roster =
+        if (participants.isNotEmpty()) {
+            participants
+        } else {
+            listOf(
+                CallParticipant(
+                    identity = "local",
+                    displayName = "You",
+                    isLocal = true,
+                    isMuted = isMuted,
+                    isSpeaking = false,
+                    cameraEnabled = isVideoEnabled,
+                    hasVideo = connected?.localVideoAvailable == true,
+                ),
+                CallParticipant(
+                    identity = "remote",
+                    displayName = otherUserName,
+                    isLocal = false,
+                    isMuted = false,
+                    isSpeaking = false,
+                    cameraEnabled = connected?.remoteVideoAvailable == true,
+                    hasVideo = connected?.remoteVideoAvailable == true,
+                ),
+            )
+        }
     val activeSpeaker = CallLayoutPolicy.pickActiveSpeaker(roster)
     var manualOverride by remember(connectedAtMs) { androidx.compose.runtime.mutableStateOf<CallLayoutMode?>(null) }
     var overrideAtCount by remember(connectedAtMs) { androidx.compose.runtime.mutableStateOf(0) }
-    val layoutMode = CallLayoutPolicy.resolveMode(
-        participantCount = roster.size,
-        manualOverride = manualOverride,
-        overrideAtCount = overrideAtCount,
-    )
+    val layoutMode =
+        CallLayoutPolicy.resolveMode(
+            participantCount = roster.size,
+            manualOverride = manualOverride,
+            overrideAtCount = overrideAtCount,
+        )
     val useMultiLayout = isVideoCall || roster.size > 2
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(BackgroundDark)
-            .padding(top = topInset),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(BackgroundDark)
+                .padding(top = topInset),
     ) {
         if (useMultiLayout) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -327,37 +347,41 @@ fun ActiveCallOverlay(
                     participantCount = roster.size,
                     layoutMode = layoutMode,
                     onToggleLayout = {
-                        val next = if (layoutMode == CallLayoutMode.Grid) {
-                            CallLayoutMode.Speaker
-                        } else {
-                            CallLayoutMode.Grid
-                        }
+                        val next =
+                            if (layoutMode == CallLayoutMode.Grid) {
+                                CallLayoutMode.Speaker
+                            } else {
+                                CallLayoutMode.Grid
+                            }
                         manualOverride = next
                         overrideAtCount = roster.size
                     },
                     chromeAlpha = chromeAlpha,
                 )
                 Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .padding(bottom = 96.dp),
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(bottom = 96.dp),
                 ) {
                     when (layoutMode) {
-                        CallLayoutMode.Grid -> CallGridLayout(
-                            callManager = callManager,
-                            participants = roster,
-                            activeSpeakerId = activeSpeaker?.identity,
-                            blankVideo = blankVideoSurfaces,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                        CallLayoutMode.Speaker -> CallSpeakerLayout(
-                            callManager = callManager,
-                            participants = roster,
-                            activeSpeaker = activeSpeaker,
-                            blankVideo = blankVideoSurfaces,
-                            modifier = Modifier.fillMaxSize(),
-                        )
+                        CallLayoutMode.Grid ->
+                            CallGridLayout(
+                                callManager = callManager,
+                                participants = roster,
+                                activeSpeakerId = activeSpeaker?.identity,
+                                blankVideo = blankVideoSurfaces,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        CallLayoutMode.Speaker ->
+                            CallSpeakerLayout(
+                                callManager = callManager,
+                                participants = roster,
+                                activeSpeaker = activeSpeaker,
+                                blankVideo = blankVideoSurfaces,
+                                modifier = Modifier.fillMaxSize(),
+                            )
                     }
                 }
             }
@@ -366,9 +390,10 @@ fun ActiveCallOverlay(
                 otherUserName = otherUserName,
                 state = state,
                 chromeAlpha = chromeAlpha,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                modifier =
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
             )
         }
 
@@ -381,9 +406,10 @@ fun ActiveCallOverlay(
             onToggleCamera = { callManager.setCameraEnabled(!isVideoEnabled) },
             onEndCall = onEndCall,
             chromeAlpha = chromeAlpha,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 28.dp + bottomInset),
+            modifier =
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 28.dp + bottomInset),
         )
     }
 }
@@ -396,25 +422,28 @@ private fun CompactVoiceCallBody(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier
-            .widthIn(max = 380.dp)
-            .fillMaxWidth(0.94f)
-            .background(BackgroundDark, RoundedCornerShape(28.dp))
-            .border(1.dp, BorderHardDark, RoundedCornerShape(28.dp))
-            .padding(horizontal = 18.dp, vertical = 16.dp)
-            .graphicsLayer { alpha = chromeAlpha },
+        modifier =
+            modifier
+                .widthIn(max = 380.dp)
+                .fillMaxWidth(0.94f)
+                .background(BackgroundDark, RoundedCornerShape(28.dp))
+                .border(1.dp, BorderHardDark, RoundedCornerShape(28.dp))
+                .padding(horizontal = 18.dp, vertical = 16.dp)
+                .graphicsLayer { alpha = chromeAlpha },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = when (state) {
-                is CallState.Connecting -> when {
-                    state.reconnecting -> "Reconnecting…"
-                    else -> "Connecting…"
-                }
-                is CallState.Connected -> "Voice call"
-                is CallState.Ended -> state.reason ?: "Call ended"
-                CallState.Idle -> ""
-            },
+            text =
+                when (state) {
+                    is CallState.Connecting ->
+                        when {
+                            state.reconnecting -> "Reconnecting…"
+                            else -> "Connecting…"
+                        }
+                    is CallState.Connected -> "Voice call"
+                    is CallState.Ended -> state.reason ?: "Call ended"
+                    CallState.Idle -> ""
+                },
             style = MaterialTheme.typography.labelLarge,
             color = Color.White.copy(alpha = 0.75f),
         )
@@ -427,20 +456,22 @@ private fun CompactVoiceCallBody(
         )
         Spacer(modifier = Modifier.height(14.dp))
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
-                .background(SurfaceDark)
-                .border(1.dp, BorderHardDark, RoundedCornerShape(24.dp))
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(SurfaceDark)
+                    .border(1.dp, BorderHardDark, RoundedCornerShape(24.dp))
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(PrimaryBlue),
+                modifier =
+                    Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(PrimaryBlue),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -451,11 +482,12 @@ private fun CompactVoiceCallBody(
                 )
             }
             Text(
-                text = when (state) {
-                    is CallState.Connecting -> if (state.reconnecting) "Reconnecting…" else "Connecting audio…"
-                    is CallState.Ended -> state.reason ?: "Call ended"
-                    else -> "Voice call in progress"
-                },
+                text =
+                    when (state) {
+                        is CallState.Connecting -> if (state.reconnecting) "Reconnecting…" else "Connecting audio…"
+                        is CallState.Ended -> state.reason ?: "Call ended"
+                        else -> "Voice call in progress"
+                    },
                 color = Color.White.copy(alpha = 0.72f),
                 style = MaterialTheme.typography.bodyMedium,
             )

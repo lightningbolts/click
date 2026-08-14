@@ -1,3 +1,8 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
+
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.BorderStroke
@@ -10,10 +15,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,11 +42,11 @@ import compose.project.click.click.events.AttendeeRelationship // pragma: allowl
 import compose.project.click.click.events.DirectoryAttendee // pragma: allowlist secret
 import compose.project.click.click.events.allowsDirectoryConnectActions // pragma: allowlist secret
 import compose.project.click.click.events.relationshipSubtitle // pragma: allowlist secret
+import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
 
 /**
  * Lightweight profile sheet opened from the event people directory.
@@ -77,30 +80,33 @@ fun EventDirectoryUserProfileSheet(
         cached?.let { resolved = it }
         legacyLoading = true
         legacyError = null
-        val profile = runCatching {
-            withContext(Dispatchers.Default) {
-                SupabaseRepository().fetchUserPublicProfile(viewerUserId, attendee.userId)
+        val profile =
+            runCatching {
+                withContext(Dispatchers.Default) {
+                    SupabaseRepository().fetchUserPublicProfile(viewerUserId, attendee.userId)
+                }
+            }.getOrElse {
+                legacyError = it.message
+                null
             }
-        }.getOrElse {
-            legacyError = it.message
-            null
-        }
         legacyProfile = profile
         profile?.user?.let { resolved = it }
         legacyLoading = false
     }
 
-    val displayName = resolved?.name?.takeIf { it.isNotBlank() }
-        ?: attendee.name.takeIf { it.isNotBlank() }
-        ?: "Attendee"
+    val displayName =
+        resolved?.name?.takeIf { it.isNotBlank() }
+            ?: attendee.name.takeIf { it.isNotBlank() }
+            ?: "Attendee"
     val canMessage = onMessage != null && allowsDirectoryConnectActions(attendee.relationship)
-    val subtitle = relationshipSubtitle(attendee)
-        ?: when (attendee.relationship) {
-            AttendeeRelationship.Self -> "You"
-            AttendeeRelationship.Connection -> "Connection"
-            AttendeeRelationship.Mutual -> "Mutual"
-            else -> "At this event"
-        }
+    val subtitle =
+        relationshipSubtitle(attendee)
+            ?: when (attendee.relationship) {
+                AttendeeRelationship.Self -> "You"
+                AttendeeRelationship.Connection -> "Connection"
+                AttendeeRelationship.Mutual -> "Mutual"
+                else -> "At this event"
+            }
     val border = clickBorderColor()
     val onSurface = MaterialTheme.colorScheme.onSurface
     val onVariant = MaterialTheme.colorScheme.onSurfaceVariant
@@ -111,10 +117,11 @@ fun EventDirectoryUserProfileSheet(
         useUiKitScrollHost = true,
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .sheetBodyScroll()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .sheetBodyScroll()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(
@@ -127,10 +134,11 @@ fun EventDirectoryUserProfileSheet(
                     email = resolved?.email,
                     avatarUrl = resolved?.image ?: attendee.avatarUrl,
                     userId = attendee.userId,
-                    modifier = Modifier
-                        .size(68.dp)
-                        .clip(CircleShape)
-                        .border(clickBorderWidth(), border, CircleShape),
+                    modifier =
+                        Modifier
+                            .size(68.dp)
+                            .clip(CircleShape)
+                            .border(clickBorderWidth(), border, CircleShape),
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -156,10 +164,11 @@ fun EventDirectoryUserProfileSheet(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     border = BorderStroke(clickBorderWidth(), border),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                    ),
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                        ),
                 ) {
                     Text("Message", fontWeight = FontWeight.SemiBold)
                 }

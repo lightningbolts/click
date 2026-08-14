@@ -934,24 +934,25 @@ fun ChatView(
                                             ClickDropdownMenu(
                                                 expanded = showCallMenu,
                                                 onDismissRequest = { showCallMenu = false },
-                                                items = listOf(
-                                                    ClickMenuItem(
-                                                        label = if (isGroupChat) "Group voice call" else "Voice call",
-                                                        onClick = {
-                                                            PlatformHapticsPolicy.lightImpact()
-                                                            startVoiceCall()
-                                                        },
-                                                        icon = Icons.Filled.Call,
+                                                items =
+                                                    listOf(
+                                                        ClickMenuItem(
+                                                            label = if (isGroupChat) "Group voice call" else "Voice call",
+                                                            onClick = {
+                                                                PlatformHapticsPolicy.lightImpact()
+                                                                startVoiceCall()
+                                                            },
+                                                            icon = Icons.Filled.Call,
+                                                        ),
+                                                        ClickMenuItem(
+                                                            label = if (isGroupChat) "Group video call" else "Video call",
+                                                            onClick = {
+                                                                PlatformHapticsPolicy.lightImpact()
+                                                                startVideoCall()
+                                                            },
+                                                            icon = Icons.Filled.Videocam,
+                                                        ),
                                                     ),
-                                                    ClickMenuItem(
-                                                        label = if (isGroupChat) "Group video call" else "Video call",
-                                                        onClick = {
-                                                            PlatformHapticsPolicy.lightImpact()
-                                                            startVideoCall()
-                                                        },
-                                                        icon = Icons.Filled.Videocam,
-                                                    ),
-                                                ),
                                             )
                                         }
                                     }

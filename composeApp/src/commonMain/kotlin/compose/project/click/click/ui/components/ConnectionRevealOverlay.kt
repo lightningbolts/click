@@ -1,3 +1,8 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
+
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.background
@@ -35,13 +40,13 @@ import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlis
 
 enum class ConnectionRevealPhase {
     Connecting,
-    Success
+    Success,
 }
 
 data class ConnectionRevealUiState(
     val methodLabel: String,
     val phase: ConnectionRevealPhase,
-    val connectedName: String? = null
+    val connectedName: String? = null,
 )
 
 @Composable
@@ -53,31 +58,35 @@ fun ConnectionRevealOverlay(
     val waitingPulse = rememberWaitingPulse(active = pulseActive)
 
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(BackgroundDark),
-        contentAlignment = Alignment.Center
+        modifier =
+            modifier
+                .fillMaxSize()
+                .background(BackgroundDark),
+        contentAlignment = Alignment.Center,
     ) {
         Box(
-            modifier = Modifier
-                .size(260.dp)
-                .scale(waitingPulse.scale)
-                .alpha(if (pulseActive) waitingPulse.alpha * 0.45f else 0.28f)
-                .border(2.dp, PrimaryBlue, CircleShape)
+            modifier =
+                Modifier
+                    .size(260.dp)
+                    .scale(waitingPulse.scale)
+                    .alpha(if (pulseActive) waitingPulse.alpha * 0.45f else 0.28f)
+                    .border(2.dp, PrimaryBlue, CircleShape),
         )
 
         StateCardTransition(visible = true) {
             SuccessBeat(
-                trigger = if (state.phase == ConnectionRevealPhase.Success) {
-                    state.connectedName ?: state.phase
-                } else {
-                    null
-                },
+                trigger =
+                    if (state.phase == ConnectionRevealPhase.Success) {
+                        state.connectedName ?: state.phase
+                    } else {
+                        null
+                    },
             ) {
                 Surface(
-                    modifier = Modifier
-                        .widthIn(max = 340.dp)
-                        .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(32.dp)),
+                    modifier =
+                        Modifier
+                            .widthIn(max = 340.dp)
+                            .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(32.dp)),
                     shape = RoundedCornerShape(32.dp),
                     color = MaterialTheme.colorScheme.surface,
                     tonalElevation = 0.dp,
@@ -99,29 +108,32 @@ private fun ConnectionRevealCardContent(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
-        modifier = Modifier
-            .widthIn(min = 280.dp)
-            .padding(horizontal = 28.dp, vertical = 34.dp)
+        modifier =
+            Modifier
+                .widthIn(min = 280.dp)
+                .padding(horizontal = 28.dp, vertical = 34.dp),
     ) {
         Surface(
-            modifier = Modifier
-                .size(72.dp)
-                .scale(if (pulseActive) waitingPulse.scale else 1f)
-                .alpha(if (pulseActive) waitingPulse.alpha else 1f)
-                .border(2.dp, PrimaryBlue, CircleShape),
+            modifier =
+                Modifier
+                    .size(72.dp)
+                    .scale(if (pulseActive) waitingPulse.scale else 1f)
+                    .alpha(if (pulseActive) waitingPulse.alpha else 1f)
+                    .border(2.dp, PrimaryBlue, CircleShape),
             shape = CircleShape,
             color = MaterialTheme.colorScheme.primaryContainer,
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
-                    imageVector = if (state.phase == ConnectionRevealPhase.Success) {
-                        Icons.Filled.CheckCircle
-                    } else {
-                        Icons.Filled.QrCodeScanner
-                    },
+                    imageVector =
+                        if (state.phase == ConnectionRevealPhase.Success) {
+                            Icons.Filled.CheckCircle
+                        } else {
+                            Icons.Filled.QrCodeScanner
+                        },
                     contentDescription = null,
                     tint = PrimaryBlue,
-                    modifier = Modifier.size(34.dp)
+                    modifier = Modifier.size(34.dp),
                 )
             }
         }
@@ -129,28 +141,30 @@ private fun ConnectionRevealCardContent(
         Spacer(modifier = Modifier.height(18.dp))
 
         Text(
-            text = if (state.phase == ConnectionRevealPhase.Success) {
-                state.connectedName?.let { "You and $it are connected" } ?: "Connection created"
-            } else {
-                "Sparking a new connection…"
-            },
+            text =
+                if (state.phase == ConnectionRevealPhase.Success) {
+                    state.connectedName?.let { "You and $it are connected" } ?: "Connection created"
+                } else {
+                    "Sparking a new connection…"
+                },
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
         )
 
         Spacer(modifier = Modifier.height(10.dp))
 
         Text(
-            text = if (state.phase == ConnectionRevealPhase.Success) {
-                "Opening your connections so the new reveal lands in context."
-            } else {
-                "Hold for a beat while Click turns the scan into a real connection."
-            },
+            text =
+                if (state.phase == ConnectionRevealPhase.Success) {
+                    "Opening your connections so the new reveal lands in context."
+                } else {
+                    "Hold for a beat while Click turns the scan into a real connection."
+                },
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
         )
     }
 }

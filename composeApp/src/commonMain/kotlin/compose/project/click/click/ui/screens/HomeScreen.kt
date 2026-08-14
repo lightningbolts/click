@@ -44,13 +44,13 @@ import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: 
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.ConnectionInsights // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
-import compose.project.click.click.data.models.parseEpochMs // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconMetadata // pragma: allowlist secret
 import compose.project.click.click.data.models.ReconnectReminder // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.mostUrgentArchiveNotice // pragma: allowlist secret
+import compose.project.click.click.data.models.parseEpochMs // pragma: allowlist secret
 import compose.project.click.click.data.models.withPreservedEventScheduleFrom // pragma: allowlist secret
 import compose.project.click.click.events.EventReminderCoordinator // pragma: allowlist secret
 import compose.project.click.click.events.HomeEventReminder // pragma: allowlist secret
@@ -1155,7 +1155,11 @@ private fun MapBeacon.withBookmarkScheduleOverlay(bookmark: EventBookmarkItemDto
         longitude = if (adoptBookmarkCoords) bookmarkLon!! else longitude,
         createdByUserId = createdByUserId ?: bookmark.creatorId?.trim()?.takeIf { it.isNotEmpty() },
         creatorDisplayName = creatorDisplayName ?: bookmark.creatorName?.trim()?.takeIf { it.isNotEmpty() },
-        createdAtEpochMs = createdAtEpochMs ?: bookmark.createdAt?.trim()?.takeIf { it.isNotEmpty() }?.let { parseEpochMs(it) },
+        createdAtEpochMs =
+            createdAtEpochMs ?: bookmark.createdAt
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { parseEpochMs(it) },
         showCreatorName = showCreatorName || bookmark.showCreatorName,
         metadata =
             metadata.copy(

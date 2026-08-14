@@ -80,39 +80,41 @@ fun MapBeacon.toStoredMapBeacon(): StoredMapBeacon {
 }
 
 fun StoredMapBeacon.toMapBeacon(): MapBeacon {
-    val scheduleRaw = storedEventScheduleRaw(
-        title = title,
-        description = description,
-        eventStartAtEpochMs = eventStartAtEpochMs,
-        eventEndAtEpochMs = eventEndAtEpochMs,
-        trackName = trackName,
-        artistName = artistName,
-        previewUrl = previewUrl,
-        albumArtUrl = albumArtUrl,
-        musicUrl = musicUrl,
-        originalUrl = originalUrl,
-        locationName = locationName,
-        formattedAddress = formattedAddress,
-    )
-    return MapBeacon(
-        id = id,
-        kind = MapBeaconKind.fromRaw(kind),
-        latitude = latitude,
-        longitude = longitude,
-        metadata = MapBeaconMetadata(
+    val scheduleRaw =
+        storedEventScheduleRaw(
             title = title,
             description = description,
+            eventStartAtEpochMs = eventStartAtEpochMs,
+            eventEndAtEpochMs = eventEndAtEpochMs,
             trackName = trackName,
             artistName = artistName,
-            artist = artistName,
             previewUrl = previewUrl,
             albumArtUrl = albumArtUrl,
             musicUrl = musicUrl,
             originalUrl = originalUrl,
             locationName = locationName,
             formattedAddress = formattedAddress,
-            raw = scheduleRaw,
-        ),
+        )
+    return MapBeacon(
+        id = id,
+        kind = MapBeaconKind.fromRaw(kind),
+        latitude = latitude,
+        longitude = longitude,
+        metadata =
+            MapBeaconMetadata(
+                title = title,
+                description = description,
+                trackName = trackName,
+                artistName = artistName,
+                artist = artistName,
+                previewUrl = previewUrl,
+                albumArtUrl = albumArtUrl,
+                musicUrl = musicUrl,
+                originalUrl = originalUrl,
+                locationName = locationName,
+                formattedAddress = formattedAddress,
+                raw = scheduleRaw,
+            ),
         createdByUserId = createdByUserId,
         createdAtEpochMs = createdAtEpochMs,
         expiresAtEpochMs = expiresAtEpochMs,
@@ -137,8 +139,9 @@ private fun storedEventScheduleRaw(
     locationName: String? = null,
     formattedAddress: String? = null,
 ): JsonObject? {
-    val hasSoundtrack = listOf(trackName, artistName, previewUrl, albumArtUrl, musicUrl, originalUrl)
-        .any { !it.isNullOrBlank() }
+    val hasSoundtrack =
+        listOf(trackName, artistName, previewUrl, albumArtUrl, musicUrl, originalUrl)
+            .any { !it.isNullOrBlank() }
     val hasVenue = !locationName.isNullOrBlank() || !formattedAddress.isNullOrBlank()
     if (title == null && description == null && !hasSoundtrack && !hasVenue &&
         (eventStartAtEpochMs == null || eventEndAtEpochMs == null)
@@ -195,59 +198,74 @@ internal fun MapBeacon.withPreservedEventScheduleFrom(existing: MapBeacon?): Map
     val rescuedLng = if (needsCoordRescue) existing.longitude else longitude
 
     val schedule = eventSchedule() ?: existing.eventSchedule()
-    val mergedRaw = if (schedule != null && eventSchedule() == null) {
-        buildJsonObject {
-            metadata.raw?.forEach { (k, v) -> put(k, v) }
-            put("event_start_at", JsonPrimitive(Instant.fromEpochMilliseconds(schedule.startEpochMs).toString()))
-            put("event_end_at", JsonPrimitive(Instant.fromEpochMilliseconds(schedule.endEpochMs).toString()))
+    val mergedRaw =
+        if (schedule != null && eventSchedule() == null) {
+            buildJsonObject {
+                metadata.raw?.forEach { (k, v) -> put(k, v) }
+                put("event_start_at", JsonPrimitive(Instant.fromEpochMilliseconds(schedule.startEpochMs).toString()))
+                put("event_end_at", JsonPrimitive(Instant.fromEpochMilliseconds(schedule.endEpochMs).toString()))
+            }
+        } else {
+            // Prefer richer soundtrack metadata when either side has preview/art/track fields.
+            mergeSoundtrackRaw(metadata.raw, existing.metadata.raw)
         }
-    } else {
-        // Prefer richer soundtrack metadata when either side has preview/art/track fields.
-        mergeSoundtrackRaw(metadata.raw, existing.metadata.raw)
-    }
 
     return copy(
         latitude = rescuedLat,
         longitude = rescuedLng,
-        metadata = metadata.copy(
-            title = metadata.title ?: existing.metadata.title,
-            description = metadata.description ?: existing.metadata.description,
-            trackName = metadata.trackName ?: existing.metadata.trackName,
-            artistName = metadata.artistName ?: existing.metadata.artistName,
-            artist = metadata.artist ?: existing.metadata.artist,
-            previewUrl = metadata.previewUrl ?: existing.metadata.previewUrl,
-            albumArtUrl = metadata.albumArtUrl ?: existing.metadata.albumArtUrl,
-            musicUrl = metadata.musicUrl ?: existing.metadata.musicUrl,
-            originalUrl = metadata.originalUrl ?: existing.metadata.originalUrl,
-            locationName = metadata.locationName ?: existing.metadata.locationName,
-            formattedAddress = metadata.formattedAddress ?: existing.metadata.formattedAddress,
-            eventCategories = metadata.eventCategories.ifEmpty { existing.metadata.eventCategories },
-            raw = mergedRaw ?: existing.metadata.raw,
-        ),
+        metadata =
+            metadata.copy(
+                title = metadata.title ?: existing.metadata.title,
+                description = metadata.description ?: existing.metadata.description,
+                trackName = metadata.trackName ?: existing.metadata.trackName,
+                artistName = metadata.artistName ?: existing.metadata.artistName,
+                artist = metadata.artist ?: existing.metadata.artist,
+                previewUrl = metadata.previewUrl ?: existing.metadata.previewUrl,
+                albumArtUrl = metadata.albumArtUrl ?: existing.metadata.albumArtUrl,
+                musicUrl = metadata.musicUrl ?: existing.metadata.musicUrl,
+                originalUrl = metadata.originalUrl ?: existing.metadata.originalUrl,
+                locationName = metadata.locationName ?: existing.metadata.locationName,
+                formattedAddress = metadata.formattedAddress ?: existing.metadata.formattedAddress,
+                eventCategories = metadata.eventCategories.ifEmpty { existing.metadata.eventCategories },
+                raw = mergedRaw ?: existing.metadata.raw,
+            ),
         createdByUserId = createdByUserId ?: existing.createdByUserId,
         createdAtEpochMs = createdAtEpochMs ?: existing.createdAtEpochMs,
         expiresAtEpochMs = expiresAtEpochMs ?: existing.expiresAtEpochMs,
         sourceBeaconType = sourceBeaconType ?: existing.sourceBeaconType,
         showCreatorName = showCreatorName || existing.showCreatorName,
         creatorDisplayName = creatorDisplayName ?: existing.creatorDisplayName,
-        visibilityAudience = if (
-            visibilityAudience == BeaconVisibilityAudience.EVERYONE &&
-            existing.visibilityAudience != BeaconVisibilityAudience.EVERYONE
-        ) {
-            existing.visibilityAudience
-        } else {
-            visibilityAudience
-        },
+        visibilityAudience =
+            if (
+                visibilityAudience == BeaconVisibilityAudience.EVERYONE &&
+                existing.visibilityAudience != BeaconVisibilityAudience.EVERYONE
+            ) {
+                existing.visibilityAudience
+            } else {
+                visibilityAudience
+            },
     )
 }
 
-private fun mergeSoundtrackRaw(primary: JsonObject?, fallback: JsonObject?): JsonObject? {
+private fun mergeSoundtrackRaw(
+    primary: JsonObject?,
+    fallback: JsonObject?,
+): JsonObject? {
     if (primary == null) return fallback
     if (fallback == null) return primary
-    val keys = listOf(
-        "preview_url", "album_art_url", "track_name", "artist_name", "artist",
-        "music_url", "original_url", "title", "location_name", "formatted_address",
-    )
+    val keys =
+        listOf(
+            "preview_url",
+            "album_art_url",
+            "track_name",
+            "artist_name",
+            "artist",
+            "music_url",
+            "original_url",
+            "title",
+            "location_name",
+            "formatted_address",
+        )
     return buildJsonObject {
         primary.forEach { (k, v) -> put(k, v) }
         for (k in keys) {
@@ -260,25 +278,27 @@ private fun mergeSoundtrackRaw(primary: JsonObject?, fallback: JsonObject?): Jso
     }
 }
 
-fun CommunityHubPin.toStoredCommunityHubPin(): StoredCommunityHubPin = StoredCommunityHubPin(
-    hubId = hubId,
-    name = name,
-    latitude = latitude,
-    longitude = longitude,
-    radiusMeters = radiusMeters,
-    activeUserCount = activeUserCount,
-    reportedDistanceMeters = reportedDistanceMeters,
-)
+fun CommunityHubPin.toStoredCommunityHubPin(): StoredCommunityHubPin =
+    StoredCommunityHubPin(
+        hubId = hubId,
+        name = name,
+        latitude = latitude,
+        longitude = longitude,
+        radiusMeters = radiusMeters,
+        activeUserCount = activeUserCount,
+        reportedDistanceMeters = reportedDistanceMeters,
+    )
 
-fun StoredCommunityHubPin.toCommunityHubPin(): CommunityHubPin = CommunityHubPin(
-    hubId = hubId,
-    name = name,
-    latitude = latitude,
-    longitude = longitude,
-    radiusMeters = radiusMeters,
-    activeUserCount = activeUserCount,
-    reportedDistanceMeters = reportedDistanceMeters,
-)
+fun StoredCommunityHubPin.toCommunityHubPin(): CommunityHubPin =
+    CommunityHubPin(
+        hubId = hubId,
+        name = name,
+        latitude = latitude,
+        longitude = longitude,
+        radiusMeters = radiusMeters,
+        activeUserCount = activeUserCount,
+        reportedDistanceMeters = reportedDistanceMeters,
+    )
 
 /** Disk-safe Home saved-event row (mirrors [compose.project.click.click.data.api.EventBookmarkItemDto]). */
 @Serializable

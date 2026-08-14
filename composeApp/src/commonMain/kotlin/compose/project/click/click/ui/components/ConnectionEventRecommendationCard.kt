@@ -1,3 +1,8 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
+
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.border
@@ -30,9 +35,10 @@ fun ConnectionEventRecommendationCard(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(16.dp)),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
         color = clickCardSurface(),
     ) {
@@ -51,11 +57,13 @@ fun ConnectionEventRecommendationCard(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
-            val whenWhere = listOfNotNull(
-                recommendation.eventStartAt?.take(16)?.replace('T', ' '),
-                recommendation.locationName?.trim()
-                    ?.takeUnless { it.isEmpty() || it.equals("Current location", ignoreCase = true) },
-            ).joinToString(" · ")
+            val whenWhere =
+                listOfNotNull(
+                    recommendation.eventStartAt?.take(16)?.replace('T', ' '),
+                    recommendation.locationName
+                        ?.trim()
+                        ?.takeUnless { it.isEmpty() || it.equals("Current location", ignoreCase = true) },
+                ).joinToString(" · ")
             if (whenWhere.isNotBlank()) {
                 Text(
                     text = whenWhere,
