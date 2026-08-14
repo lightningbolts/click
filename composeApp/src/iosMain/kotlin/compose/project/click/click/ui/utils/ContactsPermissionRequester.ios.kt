@@ -15,8 +15,8 @@ import platform.Contacts.CNEntityType
 import kotlin.coroutines.resume
 
 @Composable
-actual fun rememberPlatformContactsPermissionRequester(): ((onComplete: () -> Unit) -> Unit) {
-    return remember {
+actual fun rememberPlatformContactsPermissionRequester(): ((onComplete: () -> Unit) -> Unit) =
+    remember {
         { onComplete ->
             val status =
                 CNContactStore.authorizationStatusForEntityType(CNEntityType.CNEntityTypeContacts)
@@ -42,4 +42,3 @@ actual fun rememberPlatformContactsPermissionRequester(): ((onComplete: () -> Un
             }
         }
     }
-}

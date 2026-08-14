@@ -63,13 +63,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.ContextTagTaxonomy // pragma: allowlist secret
+import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
+import compose.project.click.click.data.contacts.ContactDiscoveryHelper // pragma: allowlist secret
+import compose.project.click.click.data.contacts.KnownSinceBucket // pragma: allowlist secret
 import compose.project.click.click.data.models.ConnectionEncounter // pragma: allowlist secret
 import compose.project.click.click.data.models.HeightCategory // pragma: allowlist secret
 import compose.project.click.click.data.models.NoiseLevelCategory // pragma: allowlist secret
 import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
-import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
-import compose.project.click.click.data.contacts.ContactDiscoveryHelper // pragma: allowlist secret
-import compose.project.click.click.data.contacts.KnownSinceBucket // pragma: allowlist secret
 import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
@@ -506,7 +506,11 @@ fun ProfileLegacyTimelineContent(
         val p = profile
         val conn = p.sharedConnection
         val isPrior = conn?.isPriorConnection() == true
-        val viewerId = AppDataManager.currentUser.collectAsState().value?.id
+        val viewerId =
+            AppDataManager.currentUser
+                .collectAsState()
+                .value
+                ?.id
         val scope = rememberCoroutineScope()
         var priorBusy by remember { mutableStateOf(false) }
         var priorError by remember { mutableStateOf<String?>(null) }

@@ -1,11 +1,13 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click // pragma: allowlist secret
 
-import android.content.pm.ApplicationInfo
-import android.content.pm.ActivityInfo
-import android.os.Build
-import android.os.Bundle
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
+import android.content.pm.ApplicationInfo
+import android.os.Build
+import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -13,34 +15,35 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
-import compose.project.click.click.data.storage.initTokenStorage // pragma: allowlist secret
+import com.google.android.gms.maps.MapsInitializer
+import compose.project.click.click.calendar.initCalendarProvider // pragma: allowlist secret
 import compose.project.click.click.calls.AndroidCallRuntime // pragma: allowlist secret
-import compose.project.click.click.calls.initCallManager // pragma: allowlist secret
 import compose.project.click.click.calls.CallInvite // pragma: allowlist secret
 import compose.project.click.click.calls.CallSessionManager // pragma: allowlist secret
-import compose.project.click.click.notifications.ChatDeepLinkManager // pragma: allowlist secret
-import compose.project.click.click.notifications.ChatNotificationDismisser // pragma: allowlist secret
+import compose.project.click.click.calls.initCallManager // pragma: allowlist secret
+import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
+import compose.project.click.click.data.contacts.initContactBook // pragma: allowlist secret
+import compose.project.click.click.data.storage.initTokenStorage // pragma: allowlist secret
 import compose.project.click.click.deeplink.ConnectionDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
-import compose.project.click.click.qr.toHubIdFromClickHubUrl // pragma: allowlist secret
-import compose.project.click.click.notifications.initPushNotificationService // pragma: allowlist secret
-import compose.project.click.click.utils.initLocationService // pragma: allowlist secret
-import compose.project.click.click.calendar.initCalendarProvider // pragma: allowlist secret
-import compose.project.click.click.data.contacts.initContactBook // pragma: allowlist secret
 import compose.project.click.click.encounter.initEncounterTetherWidgetBridge // pragma: allowlist secret
+import compose.project.click.click.notifications.ChatDeepLinkManager // pragma: allowlist secret
+import compose.project.click.click.notifications.ChatNotificationDismisser // pragma: allowlist secret
+import compose.project.click.click.notifications.initPushNotificationService // pragma: allowlist secret
+import compose.project.click.click.qr.toHubIdFromClickHubUrl // pragma: allowlist secret
+import compose.project.click.click.ui.chat.AndroidChatImageSaveContext // pragma: allowlist secret
 import compose.project.click.click.ui.utils.AppSystemSettings // pragma: allowlist secret
 import compose.project.click.click.ui.utils.initAppSystemSettings // pragma: allowlist secret
-import compose.project.click.click.ui.chat.AndroidChatImageSaveContext // pragma: allowlist secret
-import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
-import com.google.android.gms.maps.MapsInitializer
+import compose.project.click.click.utils.initLocationService // pragma: allowlist secret
 import io.github.jan.supabase.auth.handleDeeplinks
 
 class MainActivity : ComponentActivity() {
-    private val callPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions(),
-    ) { results ->
-        AndroidCallRuntime.handlePermissionResult(results.isNotEmpty() && results.values.all { it })
-    }
+    private val callPermissionLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions(),
+        ) { results ->
+            AndroidCallRuntime.handlePermissionResult(results.isNotEmpty() && results.values.all { it })
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -92,12 +95,14 @@ class MainActivity : ComponentActivity() {
             callPermissionLauncher.launch(permissions)
         }
         initCallManager(applicationContext, this)
-        compose.project.click.click.notifications.AndroidPushNotificationRuntime.setAppInForeground(true)
+        compose.project.click.click.notifications.AndroidPushNotificationRuntime // pragma: allowlist secret
+            .setAppInForeground(true)
         onApplicationDidBecomeActive()
     }
 
     override fun onPause() {
-        compose.project.click.click.notifications.AndroidPushNotificationRuntime.setAppInForeground(false)
+        compose.project.click.click.notifications.AndroidPushNotificationRuntime // pragma: allowlist secret
+            .setAppInForeground(false)
         onApplicationDidEnterBackground()
         super.onPause()
     }
@@ -169,7 +174,7 @@ class MainActivity : ComponentActivity() {
             @Suppress("DEPRECATION")
             window.addFlags(
                 WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON,
             )
         }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -193,23 +198,25 @@ class MainActivity : ComponentActivity() {
      */
     private fun unlockHighestRefreshRate() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
-        val display = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            display
-        } else {
-            @Suppress("DEPRECATION")
-            windowManager.defaultDisplay
-        } ?: return
+        val display =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                display
+            } else {
+                @Suppress("DEPRECATION")
+                windowManager.defaultDisplay
+            } ?: return
         val best = display.supportedModes.maxByOrNull { it.refreshRate } ?: return
-        window.attributes = window.attributes.apply {
-            preferredDisplayModeId = best.modeId
-        }
+        window.attributes =
+            window.attributes.apply {
+                preferredDisplayModeId = best.modeId
+            }
     }
 
     companion object {
-        const val ACTION_VIEW_CALL = "compose.project.click.click.action.VIEW_CALL"
-        const val ACTION_ACCEPT_CALL = "compose.project.click.click.action.ACCEPT_CALL"
-        const val ACTION_DECLINE_CALL = "compose.project.click.click.action.DECLINE_CALL"
-        const val ACTION_VIEW_CHAT = "compose.project.click.click.action.VIEW_CHAT"
+        const val ACTION_VIEW_CALL = "compose.project.click.click.action.VIEW_CALL" // pragma: allowlist secret
+        const val ACTION_ACCEPT_CALL = "compose.project.click.click.action.ACCEPT_CALL" // pragma: allowlist secret
+        const val ACTION_DECLINE_CALL = "compose.project.click.click.action.DECLINE_CALL" // pragma: allowlist secret
+        const val ACTION_VIEW_CHAT = "compose.project.click.click.action.VIEW_CHAT" // pragma: allowlist secret
 
         private const val EXTRA_CHAT_ID = "extra_chat_id"
         private const val EXTRA_CHAT_CONNECTION_ID = "extra_chat_connection_id"
@@ -223,8 +230,12 @@ class MainActivity : ComponentActivity() {
         private const val EXTRA_VIDEO_ENABLED = "extra_video_enabled"
         private const val EXTRA_CREATED_AT = "extra_created_at"
 
-        fun createIncomingCallIntent(context: Context, action: String, invite: CallInvite): Intent {
-            return Intent(context, MainActivity::class.java).apply {
+        fun createIncomingCallIntent(
+            context: Context,
+            action: String,
+            invite: CallInvite,
+        ): Intent =
+            Intent(context, MainActivity::class.java).apply {
                 this.action = action
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 putExtra(EXTRA_CALL_ID, invite.callId)
@@ -237,20 +248,18 @@ class MainActivity : ComponentActivity() {
                 putExtra(EXTRA_VIDEO_ENABLED, invite.videoEnabled)
                 putExtra(EXTRA_CREATED_AT, invite.createdAt)
             }
-        }
 
         fun createChatDeepLinkIntent(
             context: Context,
             chatId: String = "",
             connectionId: String = "",
-        ): Intent {
-            return Intent(context, MainActivity::class.java).apply {
+        ): Intent =
+            Intent(context, MainActivity::class.java).apply {
                 action = ACTION_VIEW_CHAT
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 putExtra(EXTRA_CHAT_ID, chatId)
                 putExtra(EXTRA_CHAT_CONNECTION_ID, connectionId)
             }
-        }
 
         private fun Intent.toCallInvite(): CallInvite? {
             val callId = getStringExtra(EXTRA_CALL_ID) ?: return null
