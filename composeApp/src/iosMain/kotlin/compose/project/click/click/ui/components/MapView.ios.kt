@@ -1,3 +1,8 @@
+@file:Suppress(
+    "ktlint:standard:no-wildcard-imports",
+    "ktlint:standard:function-naming",
+)
+
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.runtime.*
@@ -5,11 +10,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.UIKitInteropProperties
 import androidx.compose.ui.viewinterop.UIKitView
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
-import compose.project.click.click.ui.theme.LocalIsDarkMode
+import compose.project.click.click.ui.theme.BeaconPinShape // pragma: allowlist secret
+import compose.project.click.click.ui.theme.LocalIsDarkMode // pragma: allowlist secret
 import compose.project.click.click.ui.utils.TimeState // pragma: allowlist secret
-import kotlinx.datetime.Clock
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
+import kotlinx.datetime.Clock
+import platform.CoreGraphics.CGPointMake
 import platform.CoreGraphics.CGRectMake
 import platform.CoreGraphics.CGSizeMake
 import platform.CoreLocation.CLLocationCoordinate2DMake
@@ -18,18 +25,17 @@ import platform.Foundation.NSURL
 import platform.Foundation.dataWithContentsOfURL
 import platform.MapKit.MKAnnotationProtocol
 import platform.MapKit.MKAnnotationView
-import platform.MapKit.MKCircle
 import platform.MapKit.MKCoordinateRegionMakeWithDistance
+import platform.MapKit.MKFeatureDisplayPriorityRequired
+import platform.MapKit.MKMapElevationStyleFlat
 import platform.MapKit.MKMapView
 import platform.MapKit.MKMapViewDelegateProtocol
 import platform.MapKit.MKMarkerAnnotationView
 import platform.MapKit.MKPointAnnotation
+import platform.MapKit.MKStandardMapConfiguration
+import platform.MapKit.MKStandardMapEmphasisStyleMuted
 import platform.MapKit.MKUserLocation
 import platform.MapKit.MKUserTrackingModeNone
-import platform.MapKit.MKStandardMapConfiguration
-import platform.MapKit.MKMapElevationStyleFlat
-import platform.MapKit.MKFeatureDisplayPriorityRequired
-import platform.MapKit.MKStandardMapEmphasisStyleMuted
 import platform.UIKit.NSTextAlignmentCenter
 import platform.UIKit.UIBezierPath
 import platform.UIKit.UIColor
@@ -47,9 +53,12 @@ import platform.darwin.dispatch_async
 import platform.darwin.dispatch_get_global_queue
 import platform.darwin.dispatch_get_main_queue
 import kotlin.collections.filterIsInstance
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.ln
 import kotlin.math.pow
+import kotlin.math.sin
 
 @OptIn(ExperimentalForeignApi::class)
 @Composable
@@ -93,10 +102,11 @@ actual fun PlatformMap(
 
     UIKitView(
         modifier = modifier,
-        properties = UIKitInteropProperties(
-            isInteractive = mapGesturesEnabled,
-            isNativeAccessibilityEnabled = true,
-        ),
+        properties =
+            UIKitInteropProperties(
+                isInteractive = mapGesturesEnabled,
+                isNativeAccessibilityEnabled = true,
+            ),
         factory = {
             MKMapView().apply {
                 delegate = pinTapDelegate
@@ -107,9 +117,10 @@ actual fun PlatformMap(
                 userInteractionEnabled = mapGesturesEnabled
                 showsUserLocation = !ghostMode
                 userTrackingMode = MKUserTrackingModeNone
-                preferredConfiguration = MKStandardMapConfiguration().apply {
-                    elevationStyle = MKMapElevationStyleFlat
-                }
+                preferredConfiguration =
+                    MKStandardMapConfiguration().apply {
+                        elevationStyle = MKMapElevationStyleFlat
+                    }
             }
         },
         update = { map ->
@@ -120,17 +131,19 @@ actual fun PlatformMap(
             // Update user location visibility based on ghost mode
             map.showsUserLocation = !ghostMode
             // Basemap: ghost → muted; dark app → dark UI style; light → default color map.
-            map.overrideUserInterfaceStyle = when {
-                ghostMode -> UIUserInterfaceStyle.UIUserInterfaceStyleLight
-                isDarkMode -> UIUserInterfaceStyle.UIUserInterfaceStyleDark
-                else -> UIUserInterfaceStyle.UIUserInterfaceStyleLight
-            }
-            map.preferredConfiguration = MKStandardMapConfiguration().apply {
-                elevationStyle = MKMapElevationStyleFlat
-                if (ghostMode) {
-                    emphasisStyle = MKStandardMapEmphasisStyleMuted
+            map.overrideUserInterfaceStyle =
+                when {
+                    ghostMode -> UIUserInterfaceStyle.UIUserInterfaceStyleLight
+                    isDarkMode -> UIUserInterfaceStyle.UIUserInterfaceStyleDark
+                    else -> UIUserInterfaceStyle.UIUserInterfaceStyleLight
                 }
-            }
+            map.preferredConfiguration =
+                MKStandardMapConfiguration().apply {
+                    elevationStyle = MKMapElevationStyleFlat
+                    if (ghostMode) {
+                        emphasisStyle = MKStandardMapEmphasisStyleMuted
+                    }
+                }
             if (map.delegate !== pinTapDelegate) {
                 map.delegate = pinTapDelegate
             }
@@ -141,10 +154,11 @@ actual fun PlatformMap(
                 val url = pin.imageUrl?.trim()?.takeIf { it.isNotEmpty() } ?: return@forEach
                 if (pinTapDelegate.avatarImages.containsKey(url)) return@forEach
                 if (!pinTapDelegate.avatarLoadInFlight.add(url)) return@forEach
-                val nsUrl = NSURL.URLWithString(url) ?: run {
-                    pinTapDelegate.avatarLoadInFlight.remove(url)
-                    return@forEach
-                }
+                val nsUrl =
+                    NSURL.URLWithString(url) ?: run {
+                        pinTapDelegate.avatarLoadInFlight.remove(url)
+                        return@forEach
+                    }
                 dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(), 0u)) {
                     val data = NSData.dataWithContentsOfURL(nsUrl)
                     val image = data?.let { UIImage.imageWithData(it) }
@@ -153,46 +167,52 @@ actual fun PlatformMap(
                         if (image != null) {
                             pinTapDelegate.avatarImages[url] = image
                             // Drop cached glyphs that used this URL so they rebuild with the photo.
-                            val staleKeys = pinTapDelegate.avatarPinImageCache.keys.filter { key ->
-                                key.contains(url)
-                            }
+                            val staleKeys =
+                                pinTapDelegate.avatarPinImageCache.keys.filter { key ->
+                                    key.contains(url)
+                                }
                             staleKeys.forEach { pinTapDelegate.avatarPinImageCache.remove(it) }
                             val mapRef = pinTapDelegate.mapViewRef ?: return@dispatch_async
                             // Update only pins that use this URL — avoid remove-all/re-add flicker.
                             pinTapDelegate.pinEntries.forEach { (ann, pin) ->
                                 if (pin.imageUrl?.trim() != url) return@forEach
-                                val view = mapRef.viewForAnnotation(ann) as? MKAnnotationView
-                                    ?: return@forEach
+                                val view =
+                                    mapRef.viewForAnnotation(ann) as? MKAnnotationView
+                                        ?: return@forEach
                                 val initials = pin.avatarInitials.take(2).ifEmpty { "?" }
                                 val cacheKey =
-                                    "${pin.id}|${pin.imageUrl.orEmpty()}|true|$initials|${pin.avatarFillArgb}"
-                                val glyph = pinTapDelegate.avatarPinImageCache.getOrPut(cacheKey) {
-                                    circularMapPinUIImage(
-                                        sizePts = 44.0,
-                                        fill = pin.markerTintUIColor(),
-                                        initials = initials,
-                                        photo = image,
-                                    )
-                                }
+                                    "${pin.id}|${pin.imageUrl.orEmpty()}|true|$initials|${pin.avatarFillArgb}|${pin.pinShape}|${pin.visualFillArgb2}"
+                                val glyph =
+                                    pinTapDelegate.avatarPinImageCache.getOrPut(cacheKey) {
+                                        shapedMapPinUIImage(
+                                            sizePts = 44.0,
+                                            shape = pin.pinShape,
+                                            fill = pin.markerTintUIColor(),
+                                            fillSecondary = pin.visualFillArgb2?.let { argbToUIColor(it) },
+                                            initials = initials,
+                                            photo = image,
+                                        )
+                                    }
                                 view.image = glyph
                             }
                         }
                     }
                 }
             }
-            
+
             val currentSnapshot = mapAnnotationSnapshot(pins, clusters)
-            
+
             // Handle Pins and Clusters — incremental sync avoids remove-all/re-add flicker when
             // beacons arrive after connections are already on the map.
             if (currentSnapshot != lastAnnotationSnapshot || !hasCentered) {
                 // Replacing all annotations can reset the visible region on some MapKit versions;
                 // preserve the user's viewport when we are not in the middle of a VM-driven camera target.
-                val savedRegion = if (hasCentered && centerLat == null && centerLon == null) {
-                    map.region
-                } else {
-                    null
-                }
+                val savedRegion =
+                    if (hasCentered && centerLat == null && centerLon == null) {
+                        map.region
+                    } else {
+                        null
+                    }
                 syncMapAnnotations(map, pins, clusters, pinTapDelegate)
 
                 if (savedRegion != null && centerLat == null && centerLon == null) {
@@ -201,10 +221,11 @@ actual fun PlatformMap(
 
                 // Initial centering
                 if (!hasCentered) {
-                    val initialTarget = when {
-                        centerLat != null && centerLon != null -> Pair(centerLat, centerLon)
-                        else -> computeDataCenter(pins, clusters)
-                    }
+                    val initialTarget =
+                        when {
+                            centerLat != null && centerLon != null -> Pair(centerLat, centerLon)
+                            else -> computeDataCenter(pins, clusters)
+                        }
 
                     if (initialTarget != null) {
                         val (targetLat, targetLon) = initialTarget
@@ -225,8 +246,8 @@ actual fun PlatformMap(
             if (centerLat != null && centerLon != null) {
                 val centerChanged =
                     !approximatelyEqual(lastAppliedTargetLat, centerLat, epsilon = 0.000001) ||
-                    !approximatelyEqual(lastAppliedTargetLon, centerLon, epsilon = 0.000001) ||
-                    !approximatelyEqual(lastAppliedTargetZoom, zoom, epsilon = 0.01)
+                        !approximatelyEqual(lastAppliedTargetLon, centerLon, epsilon = 0.000001) ||
+                        !approximatelyEqual(lastAppliedTargetZoom, zoom, epsilon = 0.01)
 
                 if (centerChanged) {
                     pinTapDelegate.pendingProgrammaticCamera =
@@ -246,65 +267,71 @@ actual fun PlatformMap(
             // setRegion from ViewModel zoom here created a feedback loop with regionDidChange →
             // onZoomChanged → _zoomLevel → update → setRegion, and bogus span reads produced
             // continent-scale jumps. Programmatic zoom (buttons, cluster) always supplies a target center.
-        }
+        },
     )
+}
+
+private fun argbToUIColor(argb: Int): UIColor {
+    val a = ((argb ushr 24) and 0xFF) / 255.0
+    val r = ((argb ushr 16) and 0xFF) / 255.0
+    val g = ((argb ushr 8) and 0xFF) / 255.0
+    val b = (argb and 0xFF) / 255.0
+    return UIColor(red = r, green = g, blue = b, alpha = a)
 }
 
 @OptIn(ExperimentalForeignApi::class)
 private fun MapPin.markerTintUIColor(): UIColor {
-    avatarFillArgb?.let { argb ->
-        val a = ((argb ushr 24) and 0xFF) / 255.0
-        val r = ((argb ushr 16) and 0xFF) / 255.0
-        val g = ((argb ushr 8) and 0xFF) / 255.0
-        val b = (argb and 0xFF) / 255.0
-        return UIColor(red = r, green = g, blue = b, alpha = a)
-    }
+    avatarFillArgb?.let { return argbToUIColor(it) }
     val key = beaconTypeKey?.lowercase()
     return when {
-        key != null -> when (key) {
-            "soundtrack" -> UIColor(red = 0.58, green = 0.29, blue = 0.98, alpha = 1.0)
-            "sos" -> UIColor.redColor
-            "study" -> UIColor(red = 0.20, green = 0.45, blue = 0.95, alpha = 1.0)
-            "hazard" -> UIColor.orangeColor
-            "utility" -> UIColor(red = 0.20, green = 0.55, blue = 1.0, alpha = 1.0)
-            "hazard_utility" -> UIColor(red = 0.98, green = 0.45, blue = 0.12, alpha = 1.0)
-            "transit" -> UIColor(red = 0.0, green = 0.72, blue = 0.83, alpha = 1.0)
-            "recreation" -> UIColor(red = 0.18, green = 0.75, blue = 0.38, alpha = 1.0)
-            "hobby" -> UIColor(red = 0.35, green = 0.68, blue = 0.40, alpha = 1.0)
-            "swag" -> UIColor(red = 0.72, green = 0.33, blue = 0.82, alpha = 1.0)
-            "capacity" -> UIColor(red = 0.94, green = 0.32, blue = 0.62, alpha = 1.0)
-            "scavenger" -> UIColor(red = 0.96, green = 0.76, blue = 0.22, alpha = 1.0)
-            else -> UIColor(red = 0.85, green = 0.75, blue = 0.18, alpha = 1.0)
-        }
+        key != null ->
+            when (key) {
+                "soundtrack" -> UIColor(red = 0.58, green = 0.29, blue = 0.98, alpha = 1.0)
+                "sos" -> UIColor.redColor
+                "study" -> UIColor(red = 0.20, green = 0.45, blue = 0.95, alpha = 1.0)
+                "hazard" -> UIColor.orangeColor
+                "utility" -> UIColor(red = 0.20, green = 0.55, blue = 1.0, alpha = 1.0)
+                "hazard_utility" -> UIColor(red = 0.98, green = 0.45, blue = 0.12, alpha = 1.0)
+                "transit" -> UIColor(red = 0.0, green = 0.72, blue = 0.83, alpha = 1.0)
+                "recreation" -> UIColor(red = 0.18, green = 0.75, blue = 0.38, alpha = 1.0)
+                "hobby" -> UIColor(red = 0.35, green = 0.68, blue = 0.40, alpha = 1.0)
+                "swag" -> UIColor(red = 0.72, green = 0.33, blue = 0.82, alpha = 1.0)
+                "capacity" -> UIColor(red = 0.94, green = 0.32, blue = 0.62, alpha = 1.0)
+                "scavenger" -> UIColor(red = 0.96, green = 0.76, blue = 0.22, alpha = 1.0)
+                else -> UIColor(red = 0.85, green = 0.75, blue = 0.18, alpha = 1.0)
+            }
         kind == MapPinKind.CONNECTION -> UIColor.magentaColor
-        beaconKind != null -> when (beaconKind!!) {
-            MapBeaconKind.SOUNDTRACK -> UIColor(red = 0.58, green = 0.29, blue = 0.98, alpha = 1.0)
-            MapBeaconKind.SOS -> UIColor.redColor
-            MapBeaconKind.HAZARD -> UIColor.orangeColor
-            MapBeaconKind.UTILITY -> UIColor(red = 0.20, green = 0.55, blue = 1.0, alpha = 1.0)
-            MapBeaconKind.STUDY -> UIColor.blueColor
-            MapBeaconKind.SOCIAL_VIBE -> UIColor.magentaColor
-            MapBeaconKind.EVENT -> UIColor(red = 0.20, green = 0.78, blue = 0.55, alpha = 1.0)
-            MapBeaconKind.OTHER -> UIColor.yellowColor
-        }
-        else -> when (kind) {
-            MapPinKind.BEACON_SOUNDTRACK -> UIColor(red = 0.58, green = 0.29, blue = 0.98, alpha = 1.0)
-            MapPinKind.BEACON_ALERT -> UIColor.redColor
-            MapPinKind.BEACON_SOCIAL -> UIColor.magentaColor
-            MapPinKind.BEACON_OTHER -> UIColor.yellowColor
-            MapPinKind.COMMUNITY_HUB -> UIColor(red = 0.18, green = 0.0, blue = 0.45, alpha = 1.0)
-            MapPinKind.CONNECTION -> UIColor.magentaColor
-        }
+        beaconKind != null ->
+            when (beaconKind!!) {
+                MapBeaconKind.SOUNDTRACK -> UIColor(red = 0.58, green = 0.29, blue = 0.98, alpha = 1.0)
+                MapBeaconKind.SOS -> UIColor.redColor
+                MapBeaconKind.HAZARD -> UIColor.orangeColor
+                MapBeaconKind.UTILITY -> UIColor(red = 0.20, green = 0.55, blue = 1.0, alpha = 1.0)
+                MapBeaconKind.STUDY -> UIColor.blueColor
+                MapBeaconKind.SOCIAL_VIBE -> UIColor.magentaColor
+                MapBeaconKind.EVENT -> UIColor(red = 0.20, green = 0.78, blue = 0.55, alpha = 1.0)
+                MapBeaconKind.OTHER -> UIColor.yellowColor
+            }
+        else ->
+            when (kind) {
+                MapPinKind.BEACON_SOUNDTRACK -> UIColor(red = 0.58, green = 0.29, blue = 0.98, alpha = 1.0)
+                MapPinKind.BEACON_ALERT -> UIColor.redColor
+                MapPinKind.BEACON_SOCIAL -> UIColor.magentaColor
+                MapPinKind.BEACON_OTHER -> UIColor.yellowColor
+                MapPinKind.COMMUNITY_HUB -> UIColor(red = 0.18, green = 0.0, blue = 0.45, alpha = 1.0)
+                MapPinKind.CONNECTION -> UIColor.magentaColor
+            }
     }
 }
 
 private fun mapPinDisplayTitle(pin: MapPin): String =
     when (pin.kind) {
-        MapPinKind.CONNECTION -> when (pin.timeState) {
-            TimeState.LIVE -> "🔵 ${pin.title}"
-            TimeState.RECENT -> "💠 ${pin.title}"
-            TimeState.ARCHIVE -> "⚪ ${pin.title}"
-        }
+        MapPinKind.CONNECTION ->
+            when (pin.timeState) {
+                TimeState.LIVE -> "🔵 ${pin.title}"
+                TimeState.RECENT -> "💠 ${pin.title}"
+                TimeState.ARCHIVE -> "⚪ ${pin.title}"
+            }
         MapPinKind.BEACON_SOUNDTRACK -> "🎵 ${pin.title}"
         MapPinKind.BEACON_ALERT -> "⚠️ ${pin.title}"
         MapPinKind.BEACON_SOCIAL -> "✨ ${pin.title}"
@@ -313,13 +340,18 @@ private fun mapPinDisplayTitle(pin: MapPin): String =
     }
 
 /** Stable fingerprint so we only touch MapKit annotations when pin/cluster data actually changes. */
-private fun mapAnnotationSnapshot(pins: List<MapPin>, clusters: List<MapClusterPin>): String {
-    val pinPart = pins.sortedBy { it.id }.joinToString("|") { pin ->
-        "${pin.id}:${pin.latitude},${pin.longitude}:${pin.title}:${pin.kind}:${pin.timeState}:${pin.avatarInitials}:${pin.imageUrl.orEmpty()}:${pin.avatarFillArgb}"
-    }
-    val clusterPart = clusters.sortedBy { it.id }.joinToString("|") { cluster ->
-        "${cluster.id}:${cluster.latitude},${cluster.longitude}:${cluster.count}"
-    }
+private fun mapAnnotationSnapshot(
+    pins: List<MapPin>,
+    clusters: List<MapClusterPin>,
+): String {
+    val pinPart =
+        pins.sortedBy { it.id }.joinToString("|") { pin ->
+            "${pin.id}:${pin.latitude},${pin.longitude}:${pin.title}:${pin.kind}:${pin.timeState}:${pin.avatarInitials}:${pin.imageUrl.orEmpty()}:${pin.avatarFillArgb}:${pin.pinShape}:${pin.visualFillArgb2}"
+        }
+    val clusterPart =
+        clusters.sortedBy { it.id }.joinToString("|") { cluster ->
+            "${cluster.id}:${cluster.latitude},${cluster.longitude}:${cluster.count}"
+        }
     return "$pinPart#$clusterPart"
 }
 
@@ -334,17 +366,18 @@ private fun syncMapAnnotations(
     val desiredClusterIds = clusters.associateBy { it.id }
 
     val existingAnnotations = map.annotations.filterIsInstance<MKPointAnnotation>()
-    val stale = existingAnnotations.filter { ann ->
-        val sub = (ann.subtitle as? String)?.trim().orEmpty()
-        when {
-            sub.startsWith("cluster:") -> {
-                val id = sub.removePrefix("cluster:").trim()
-                id !in desiredClusterIds
+    val stale =
+        existingAnnotations.filter { ann ->
+            val sub = (ann.subtitle as? String)?.trim().orEmpty()
+            when {
+                sub.startsWith("cluster:") -> {
+                    val id = sub.removePrefix("cluster:").trim()
+                    id !in desiredClusterIds
+                }
+                sub.isNotEmpty() -> sub !in desiredPinIds
+                else -> true
             }
-            sub.isNotEmpty() -> sub !in desiredPinIds
-            else -> true
         }
-    }
     if (stale.isNotEmpty()) {
         map.removeAnnotations(stale)
     }
@@ -369,19 +402,25 @@ private fun syncMapAnnotations(
             // Refresh glyph in place when metadata changed (no remove/re-add).
             val view = map.viewForAnnotation(existing) as? MKAnnotationView
             if (view != null) {
-                val photo = pin.imageUrl?.trim()?.takeIf { it.isNotEmpty() }
-                    ?.let { pinTapDelegate.avatarImages[it] }
+                val photo =
+                    pin.imageUrl
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() }
+                        ?.let { pinTapDelegate.avatarImages[it] }
                 val initials = pin.avatarInitials.take(2).ifEmpty { "?" }
                 val cacheKey =
-                    "${pin.id}|${pin.imageUrl.orEmpty()}|${photo != null}|$initials|${pin.avatarFillArgb}"
-                view.image = pinTapDelegate.avatarPinImageCache.getOrPut(cacheKey) {
-                    circularMapPinUIImage(
-                        sizePts = 44.0,
-                        fill = pin.markerTintUIColor(),
-                        initials = initials,
-                        photo = photo,
-                    )
-                }
+                    "${pin.id}|${pin.imageUrl.orEmpty()}|${photo != null}|$initials|${pin.avatarFillArgb}|${pin.pinShape}|${pin.visualFillArgb2}"
+                view.image =
+                    pinTapDelegate.avatarPinImageCache.getOrPut(cacheKey) {
+                        shapedMapPinUIImage(
+                            sizePts = 44.0,
+                            shape = pin.pinShape,
+                            fill = pin.markerTintUIColor(),
+                            fillSecondary = pin.visualFillArgb2?.let { argbToUIColor(it) },
+                            initials = initials,
+                            photo = photo,
+                        )
+                    }
                 view.zPriority = pin.zIndex
             }
             return@forEach
@@ -408,20 +447,22 @@ private fun syncMapAnnotations(
             val view = map.viewForAnnotation(existing) as? MKAnnotationView
             if (view != null) {
                 val label = if (cluster.count > 99) "99+" else cluster.count.toString()
-                val fill = when {
-                    cluster.isConnectionOnly -> UIColor.magentaColor
-                    cluster.hasLiveConnections -> UIColor.blueColor
-                    else -> UIColor.orangeColor
-                }
+                val fill =
+                    when {
+                        cluster.isConnectionOnly -> UIColor.magentaColor
+                        cluster.hasLiveConnections -> UIColor.blueColor
+                        else -> UIColor.orangeColor
+                    }
                 val cacheKey = "cluster|$label|${cluster.isConnectionOnly}|${cluster.hasLiveConnections}"
-                view.image = pinTapDelegate.avatarPinImageCache.getOrPut(cacheKey) {
-                    circularMapPinUIImage(
-                        sizePts = 44.0,
-                        fill = fill,
-                        initials = label,
-                        photo = null,
-                    )
-                }
+                view.image =
+                    pinTapDelegate.avatarPinImageCache.getOrPut(cacheKey) {
+                        circularMapPinUIImage(
+                            sizePts = 44.0,
+                            fill = fill,
+                            initials = label,
+                            photo = null,
+                        )
+                    }
                 view.zPriority = cluster.zIndex
             }
             return@forEach
@@ -449,7 +490,10 @@ private fun syncMapAnnotations(
     pinTapDelegate.clusterEntries = clusterEntries
 }
 
-private fun computeDataCenter(pins: List<MapPin>, clusters: List<MapClusterPin>): Pair<Double, Double>? {
+private fun computeDataCenter(
+    pins: List<MapPin>,
+    clusters: List<MapClusterPin>,
+): Pair<Double, Double>? {
     if (pins.isNotEmpty()) {
         val minLat = pins.minOf { it.latitude }
         val maxLat = pins.maxOf { it.latitude }
@@ -467,7 +511,10 @@ private fun computeDataCenter(pins: List<MapPin>, clusters: List<MapClusterPin>)
     return null
 }
 
-private fun approximateZoomLevel(latitudeDelta: Double, longitudeDelta: Double): Double {
+private fun approximateZoomLevel(
+    latitudeDelta: Double,
+    longitudeDelta: Double,
+): Double {
     val zoomCandidates = mutableListOf<Double>()
 
     val safeLon = longitudeDelta.takeIf { it.isFinite() && it > 0.0 && it <= 180.0 }
@@ -480,17 +527,20 @@ private fun approximateZoomLevel(latitudeDelta: Double, longitudeDelta: Double):
         zoomCandidates += ln(180.0 / safeLat) / ln(2.0)
     }
 
-    val raw = when {
-        zoomCandidates.isEmpty() -> 10.0
-        else -> zoomCandidates.average()
-    }.coerceIn(2.0, 20.0)
+    val raw =
+        when {
+            zoomCandidates.isEmpty() -> 10.0
+            else -> zoomCandidates.average()
+        }.coerceIn(2.0, 20.0)
 
     return ((raw * 100.0).toInt()) / 100.0
 }
 
-private fun approximatelyEqual(previous: Double?, current: Double, epsilon: Double = 0.00001): Boolean {
-    return previous != null && kotlin.math.abs(previous - current) <= epsilon
-}
+private fun approximatelyEqual(
+    previous: Double?,
+    current: Double,
+    epsilon: Double = 0.00001,
+): Boolean = previous != null && kotlin.math.abs(previous - current) <= epsilon
 
 private data class ProgrammaticCameraTarget(
     val latitude: Double,
@@ -504,11 +554,12 @@ private fun mapRegionMatchesProgrammaticTarget(
     target: ProgrammaticCameraTarget,
     startedAtMs: Long,
 ): Boolean {
-    val elapsedMs = if (startedAtMs > 0L) {
-        Clock.System.now().toEpochMilliseconds() - startedAtMs
-    } else {
-        0L
-    }
+    val elapsedMs =
+        if (startedAtMs > 0L) {
+            Clock.System.now().toEpochMilliseconds() - startedAtMs
+        } else {
+            0L
+        }
     val relaxZoomMatch = elapsedMs > 900L
     return map.region.useContents {
         val z = approximateZoomLevel(span.latitudeDelta, span.longitudeDelta)
@@ -525,11 +576,16 @@ private fun mapRegionLooksUsable(map: MKMapView): Boolean =
     map.region.useContents {
         val latD = span.latitudeDelta
         val lonD = span.longitudeDelta
-        center.latitude.isFinite() && center.longitude.isFinite() &&
-            latD.isFinite() && lonD.isFinite() &&
-            latD > 1e-8 && lonD > 1e-8 &&
-            latD <= 160.0 && lonD <= 340.0 &&
-            abs(center.latitude) <= 90.0 && abs(center.longitude) <= 180.0
+        center.latitude.isFinite() &&
+            center.longitude.isFinite() &&
+            latD.isFinite() &&
+            lonD.isFinite() &&
+            latD > 1e-8 &&
+            lonD > 1e-8 &&
+            latD <= 160.0 &&
+            lonD <= 340.0 &&
+            abs(center.latitude) <= 90.0 &&
+            abs(center.longitude) <= 180.0
     }
 
 /**
@@ -554,13 +610,18 @@ private fun mapRegionLooksUsable(map: MKMapView): Boolean =
  *    of the deployment target MapKit settled on.
  */
 @OptIn(ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)
-private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
+private class MapPinTapDelegate :
+    NSObject(),
+    MKMapViewDelegateProtocol {
     var pinEntries: List<Pair<MKPointAnnotation, MapPin>> = emptyList()
     var clusterEntries: List<Pair<MKPointAnnotation, MapClusterPin>> = emptyList()
+
     /** Loaded connection/event avatar photos keyed by image URL. */
     val avatarImages: MutableMap<String, UIImage> = mutableMapOf()
+
     /** URLs currently downloading — avoids duplicate prefetch storms. */
     val avatarLoadInFlight: MutableSet<String> = mutableSetOf()
+
     /** Rendered circular pin bitmaps keyed by pin id + photo/initials signature. */
     val avatarPinImageCache: MutableMap<String, UIImage> = mutableMapOf()
     var onPin: (MapPin) -> Unit = {}
@@ -572,6 +633,7 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
         { _, _, _, _ -> }
     var onZoomChanged: (Double) -> Unit = {}
     var onMapGesture: () -> Unit = {}
+
     /** Weak map handle so avatar loads can refresh annotation views. */
     var mapViewRef: MKMapView? = null
 
@@ -583,23 +645,25 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
 
     private fun dispatchViewportIfChanged(mapView: MKMapView) {
         if (!mapRegionLooksUsable(mapView)) return
-        val (minLat, maxLat, minLon, maxLon, zoomLevel) = mapView.region.useContents {
-            val minLatValue = center.latitude - (span.latitudeDelta / 2.0)
-            val maxLatValue = center.latitude + (span.latitudeDelta / 2.0)
-            val minLonValue = center.longitude - (span.longitudeDelta / 2.0)
-            val maxLonValue = center.longitude + (span.longitudeDelta / 2.0)
-            val zoomValue = approximateZoomLevel(
-                latitudeDelta = span.latitudeDelta,
-                longitudeDelta = span.longitudeDelta,
-            )
-            listOf(minLatValue, maxLatValue, minLonValue, maxLonValue, zoomValue)
-        }
+        val (minLat, maxLat, minLon, maxLon, zoomLevel) =
+            mapView.region.useContents {
+                val minLatValue = center.latitude - (span.latitudeDelta / 2.0)
+                val maxLatValue = center.latitude + (span.latitudeDelta / 2.0)
+                val minLonValue = center.longitude - (span.longitudeDelta / 2.0)
+                val maxLonValue = center.longitude + (span.longitudeDelta / 2.0)
+                val zoomValue =
+                    approximateZoomLevel(
+                        latitudeDelta = span.latitudeDelta,
+                        longitudeDelta = span.longitudeDelta,
+                    )
+                listOf(minLatValue, maxLatValue, minLonValue, maxLonValue, zoomValue)
+            }
 
         val boundsChanged =
             !approximatelyEqual(lastViewportMinLat, minLat) ||
-            !approximatelyEqual(lastViewportMaxLat, maxLat) ||
-            !approximatelyEqual(lastViewportMinLon, minLon) ||
-            !approximatelyEqual(lastViewportMaxLon, maxLon)
+                !approximatelyEqual(lastViewportMaxLat, maxLat) ||
+                !approximatelyEqual(lastViewportMinLon, minLon) ||
+                !approximatelyEqual(lastViewportMaxLon, maxLon)
         if (boundsChanged) {
             onVisibleBoundsChanged(minLat, maxLat, minLon, maxLon)
             lastViewportMinLat = minLat
@@ -645,9 +709,10 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
         return ann.coordinate.useContents {
             val aLat = latitude
             val aLon = longitude
-            clusterEntries.firstOrNull { (_, c) ->
-                abs(c.latitude - aLat) < 1.2e-4 && abs(c.longitude - aLon) < 1.2e-4
-            }?.second
+            clusterEntries
+                .firstOrNull { (_, c) ->
+                    abs(c.latitude - aLat) < 1.2e-4 && abs(c.longitude - aLon) < 1.2e-4
+                }?.second
         }
     }
 
@@ -662,13 +727,17 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
         return ann.coordinate.useContents {
             val aLat = latitude
             val aLon = longitude
-            pinEntries.firstOrNull { (_, p) ->
-                abs(p.latitude - aLat) < 1.2e-4 && abs(p.longitude - aLon) < 1.2e-4
-            }?.second
+            pinEntries
+                .firstOrNull { (_, p) ->
+                    abs(p.latitude - aLat) < 1.2e-4 && abs(p.longitude - aLon) < 1.2e-4
+                }?.second
         }
     }
 
-    private fun dispatchByIdentifier(rawIdentifier: String?, mapView: MKMapView?): Boolean {
+    private fun dispatchByIdentifier(
+        rawIdentifier: String?,
+        mapView: MKMapView?,
+    ): Boolean {
         val identifier = rawIdentifier?.trim().orEmpty()
         if (identifier.isEmpty()) return false
 
@@ -693,16 +762,21 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
             return true
         }
 
-        val selected = mapView?.selectedAnnotations
-            ?.filterIsInstance<MKPointAnnotation>()
-            ?.firstOrNull { it.subtitle == rawIdentifier || it.title == rawIdentifier }
+        val selected =
+            mapView
+                ?.selectedAnnotations
+                ?.filterIsInstance<MKPointAnnotation>()
+                ?.firstOrNull { it.subtitle == rawIdentifier || it.title == rawIdentifier }
         if (selected != null) {
             mapView.deselectAnnotation(selected, animated = true)
         }
         return false
     }
 
-    private fun dispatch(annotation: Any?, mapView: MKMapView?) {
+    private fun dispatch(
+        annotation: Any?,
+        mapView: MKMapView?,
+    ) {
         if (annotation is MKUserLocation) return
         val pointAnnotation = annotation as? MKPointAnnotation ?: return
         val cluster = findMapCluster(pointAnnotation)
@@ -722,7 +796,10 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
      * MapKit fires `mapView:didSelectAnnotationView:` on tap (still supported on iOS 13+).
      * This is the canonical pathway that runs `onPinTapped` per the C12 directive.
      */
-    override fun mapView(mapView: MKMapView, didSelectAnnotationView: MKAnnotationView) {
+    override fun mapView(
+        mapView: MKMapView,
+        didSelectAnnotationView: MKAnnotationView,
+    ) {
         val annotation = didSelectAnnotationView.annotation as? MKPointAnnotation
         val identifier = annotation?.subtitle ?: annotation?.title
         if (dispatchByIdentifier(identifier, mapView)) {
@@ -741,7 +818,10 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
      * both selectors collapse to the same Kotlin name `mapView(MKMapView, ...)`.
      */
     @kotlinx.cinterop.ObjCSignatureOverride
-    override fun mapView(mapView: MKMapView, didSelectAnnotation: MKAnnotationProtocol) {
+    override fun mapView(
+        mapView: MKMapView,
+        didSelectAnnotation: MKAnnotationProtocol,
+    ) {
         dispatch(didSelectAnnotation, mapView)
     }
 
@@ -753,18 +833,22 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
      * shares the same Kotlin name `mapView(MKMapView, MKAnnotationProtocol)`.
      */
     @kotlinx.cinterop.ObjCSignatureOverride
-    override fun mapView(mapView: MKMapView, viewForAnnotation: MKAnnotationProtocol): MKAnnotationView? {
+    override fun mapView(
+        mapView: MKMapView,
+        viewForAnnotation: MKAnnotationProtocol,
+    ): MKAnnotationView? {
         if (viewForAnnotation is MKUserLocation) return null
         val pointAnn = viewForAnnotation as? MKPointAnnotation ?: return null
         // MapKit often hands a *different* MKPointAnnotation instance than the one we added, so
         // pointer identity fails. Resolve by subtitle (pin id) and then by coordinate.
         val cluster = findMapCluster(pointAnn)
         val pin = if (cluster == null) findMapPin(pointAnn) else null
-        val identifier = when {
-            cluster != null -> "C|${cluster.id}"
-            pin != null -> "P|${pin.id}"
-            else -> "X|orphan"
-        }
+        val identifier =
+            when {
+                cluster != null -> "C|${cluster.id}"
+                pin != null -> "P|${pin.id}"
+                else -> "X|orphan"
+            }
         when {
             cluster != null -> {
                 val reused = mapView.dequeueReusableAnnotationViewWithIdentifier(identifier)
@@ -774,20 +858,22 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
                 view.setEnabled(true)
                 view.setSelected(false, animated = false)
                 val label = if (cluster.count > 99) "99+" else cluster.count.toString()
-                val fill = when {
-                    cluster.isConnectionOnly -> UIColor.magentaColor
-                    cluster.hasLiveConnections -> UIColor.blueColor
-                    else -> UIColor.orangeColor
-                }
+                val fill =
+                    when {
+                        cluster.isConnectionOnly -> UIColor.magentaColor
+                        cluster.hasLiveConnections -> UIColor.blueColor
+                        else -> UIColor.orangeColor
+                    }
                 val cacheKey = "cluster|$label|${cluster.isConnectionOnly}|${cluster.hasLiveConnections}"
-                val image = avatarPinImageCache.getOrPut(cacheKey) {
-                    circularMapPinUIImage(
-                        sizePts = 44.0,
-                        fill = fill,
-                        initials = label,
-                        photo = null,
-                    )
-                }
+                val image =
+                    avatarPinImageCache.getOrPut(cacheKey) {
+                        circularMapPinUIImage(
+                            sizePts = 44.0,
+                            fill = fill,
+                            initials = label,
+                            photo = null,
+                        )
+                    }
                 view.image = image
                 view.centerOffset = platform.CoreGraphics.CGPointMake(0.0, 0.0)
                 view.zPriority = cluster.zIndex
@@ -800,19 +886,26 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
                 view.canShowCallout = false
                 view.setEnabled(true)
                 view.setSelected(false, animated = false)
-                val photo = pin.imageUrl?.trim()?.takeIf { it.isNotEmpty() }?.let { avatarImages[it] }
+                val photo =
+                    pin.imageUrl
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() }
+                        ?.let { avatarImages[it] }
                 val initials = pin.avatarInitials.take(2).ifEmpty { "?" }
                 val cacheKey =
-                    "${pin.id}|${pin.imageUrl.orEmpty()}|${photo != null}|$initials|${pin.avatarFillArgb}"
-                val image = avatarPinImageCache.getOrPut(cacheKey) {
-                    // Fixed 44pt for all pins so scrunched markers match cluster hubs.
-                    circularMapPinUIImage(
-                        sizePts = 44.0,
-                        fill = pin.markerTintUIColor(),
-                        initials = initials,
-                        photo = photo,
-                    )
-                }
+                    "${pin.id}|${pin.imageUrl.orEmpty()}|${photo != null}|$initials|${pin.avatarFillArgb}|${pin.pinShape}|${pin.visualFillArgb2}"
+                val image =
+                    avatarPinImageCache.getOrPut(cacheKey) {
+                        // Fixed 44pt for all pins so scrunched markers match cluster hubs.
+                        shapedMapPinUIImage(
+                            sizePts = 44.0,
+                            shape = pin.pinShape,
+                            fill = pin.markerTintUIColor(),
+                            fillSecondary = pin.visualFillArgb2?.let { argbToUIColor(it) },
+                            initials = initials,
+                            photo = photo,
+                        )
+                    }
                 view.image = image
                 view.centerOffset = platform.CoreGraphics.CGPointMake(0.0, 0.0)
                 view.zPriority = pin.zIndex
@@ -823,8 +916,9 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
             }
             else -> {
                 val reused = mapView.dequeueReusableAnnotationViewWithIdentifier(identifier)
-                val view = (reused as? MKMarkerAnnotationView)
-                    ?: MKMarkerAnnotationView(annotation = viewForAnnotation, reuseIdentifier = identifier)
+                val view =
+                    (reused as? MKMarkerAnnotationView)
+                        ?: MKMarkerAnnotationView(annotation = viewForAnnotation, reuseIdentifier = identifier)
                 view.annotation = viewForAnnotation
                 view.canShowCallout = false
                 view.glyphText = ""
@@ -840,7 +934,10 @@ private class MapPinTapDelegate : NSObject(), MKMapViewDelegateProtocol {
     }
 
     @kotlinx.cinterop.ObjCSignatureOverride
-    override fun mapView(mapView: MKMapView, regionDidChangeAnimated: Boolean) {
+    override fun mapView(
+        mapView: MKMapView,
+        regionDidChangeAnimated: Boolean,
+    ) {
         dispatchViewportIfChanged(mapView)
         maybeFinishProgrammaticCamera(mapView)
         if (pendingProgrammaticCamera == null) {
@@ -865,15 +962,32 @@ private fun circularMapPinUIImage(
     fill: UIColor,
     initials: String,
     photo: UIImage?,
+): UIImage =
+    shapedMapPinUIImage(
+        sizePts = sizePts,
+        shape = BeaconPinShape.CIRCLE,
+        fill = fill,
+        fillSecondary = null,
+        initials = initials,
+        photo = photo,
+    )
+
+@OptIn(ExperimentalForeignApi::class)
+private fun shapedMapPinUIImage(
+    sizePts: Double,
+    shape: BeaconPinShape,
+    fill: UIColor,
+    fillSecondary: UIColor?,
+    initials: String,
+    photo: UIImage?,
 ): UIImage {
     val size = sizePts.coerceAtLeast(36.0)
+    val pad = size * 0.08
     UIGraphicsBeginImageContextWithOptions(CGSizeMake(size, size), false, 0.0)
     try {
-        val rect = CGRectMake(0.0, 0.0, size, size)
-        val path = UIBezierPath.bezierPathWithOvalInRect(rect)
+        val path = beaconShapeBezierPath(shape, size, pad)
         path.addClip()
         if (photo != null) {
-            // Aspect-fill into the circle.
             val pw = photo.size.useContents { width }.coerceAtLeast(1.0)
             val ph = photo.size.useContents { height }.coerceAtLeast(1.0)
             val scale = maxOf(size / pw, size / ph)
@@ -885,8 +999,13 @@ private fun circularMapPinUIImage(
         } else {
             fill.setFill()
             path.fill()
+            fillSecondary?.colorWithAlphaComponent(0.4)?.let { overlay ->
+                overlay.setFill()
+                val overlayRect = CGRectMake(size / 2.0, 0.0, size / 2.0, size)
+                UIBezierPath.bezierPathWithRect(overlayRect).fill()
+            }
             val glyph = initials.take(2).ifEmpty { "?" }
-            val fontSize = size * 0.34
+            val fontSize = size * 0.30
             val label = UILabel(frame = CGRectMake(0.0, 0.0, size, size))
             label.text = glyph
             label.textColor = UIColor.whiteColor
@@ -895,16 +1014,59 @@ private fun circularMapPinUIImage(
             label.backgroundColor = UIColor.clearColor
             label.drawTextInRect(CGRectMake(0.0, 0.0, size, size))
         }
-        // Black border ring.
         UIColor.blackColor.setStroke()
-        val border = UIBezierPath.bezierPathWithOvalInRect(
-            CGRectMake(1.0, 1.0, size - 2.0, size - 2.0),
-        )
-        border.lineWidth = 2.0
-        border.stroke()
-        return UIGraphicsGetImageFromCurrentImageContext()
-            ?: UIImage()
+        path.lineWidth = 2.0
+        path.stroke()
+        return UIGraphicsGetImageFromCurrentImageContext() ?: UIImage()
     } finally {
         UIGraphicsEndImageContext()
+    }
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun beaconShapeBezierPath(
+    shape: BeaconPinShape,
+    size: Double,
+    pad: Double,
+): UIBezierPath {
+    val rect = CGRectMake(pad, pad, size - pad * 2.0, size - pad * 2.0)
+    val cx = size / 2.0
+    val cy = size / 2.0
+    return when (shape) {
+        BeaconPinShape.CIRCLE -> UIBezierPath.bezierPathWithOvalInRect(rect)
+        BeaconPinShape.ROUNDED_SQUARE, BeaconPinShape.SQUIRCLE ->
+            UIBezierPath.bezierPathWithRoundedRect(rect, cornerRadius = size * 0.22)
+        BeaconPinShape.ROUNDED_RECT ->
+            UIBezierPath.bezierPathWithRoundedRect(rect, cornerRadius = size * 0.12)
+        BeaconPinShape.TRIANGLE -> {
+            val path = UIBezierPath()
+            path.moveToPoint(CGPointMake(cx, pad))
+            path.addLineToPoint(CGPointMake(size - pad, size - pad))
+            path.addLineToPoint(CGPointMake(pad, size - pad))
+            path.closePath()
+            path
+        }
+        BeaconPinShape.DIAMOND -> {
+            val path = UIBezierPath()
+            path.moveToPoint(CGPointMake(cx, pad))
+            path.addLineToPoint(CGPointMake(size - pad, cy))
+            path.addLineToPoint(CGPointMake(cx, size - pad))
+            path.addLineToPoint(CGPointMake(pad, cy))
+            path.closePath()
+            path
+        }
+        BeaconPinShape.HEXAGON, BeaconPinShape.PENTAGON -> {
+            val sides = if (shape == BeaconPinShape.HEXAGON) 6 else 5
+            val r = (size / 2.0) - pad
+            val path = UIBezierPath()
+            for (i in 0 until sides) {
+                val angle = -PI / 2.0 + i * (2.0 * PI / sides)
+                val x = cx + r * cos(angle)
+                val y = cy + r * sin(angle)
+                if (i == 0) path.moveToPoint(CGPointMake(x, y)) else path.addLineToPoint(CGPointMake(x, y))
+            }
+            path.closePath()
+            path
+        }
     }
 }

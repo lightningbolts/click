@@ -63,6 +63,7 @@ import compose.project.click.click.events.EventScheduleValidationError // pragma
 import compose.project.click.click.events.EventVenueScale // pragma: allowlist secret
 import compose.project.click.click.events.defaultEventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.validateEventSchedule // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickFieldTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
@@ -153,6 +154,8 @@ fun BeaconDropSheetContent(
         eventCategories: List<String>,
         venueScale: compose.project.click.click.events.EventVenueScale,
         eventLocation: GeocodedPlace?,
+        imageBytes: ByteArray?,
+        imageMime: String?,
         onRejectedEarly: () -> Unit,
     ) -> Unit,
     onCreateHub: (name: String, category: String) -> Unit = { _, _ -> },
@@ -189,6 +192,17 @@ fun BeaconDropSheetContent(
     var hubCategory by remember { mutableStateOf(hubCategoryOptions.first()) }
     var showCreatorName by remember { mutableStateOf(false) }
     var visibilityAudience by remember { mutableStateOf(BeaconVisibilityAudience.EVERYONE) }
+    var beaconImageBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var beaconImageMime by remember { mutableStateOf<String?>(null) }
+    val mediaPickers =
+        rememberChatMediaPickers(
+            onImagePicked = { bytes, mime ->
+                beaconImageBytes = bytes
+                beaconImageMime = mime
+                submitValidationError = null
+            },
+            onAudioPicked = { _, _, _ -> },
+        )
 
     val isSoundtrack = category.value == BeaconDropCategory.SOUNDTRACK
     val isEvent = category.value == BeaconDropCategory.EVENT
@@ -686,6 +700,41 @@ fun BeaconDropSheetContent(
                     )
                 }
 
+                if (!isHubMode && !isSoundtrack) {
+                    Text(
+                        text = "Photo (required)",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text =
+                            if (beaconImageBytes != null) {
+                                "Photo attached"
+                            } else {
+                                "Choose one photo from your library or take one now. Soundtrack beacons can skip this."
+                            },
+                        style = MaterialTheme.typography.bodySmall,
+                        color =
+                            if (beaconImageBytes != null) {
+                                MaterialTheme.colorScheme.secondary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        TextButton(onClick = { mediaPickers.openPhotoLibrary() }) {
+                            Text("Photo library")
+                        }
+                        TextButton(onClick = { mediaPickers.openCamera() }) {
+                            Text("Take photo")
+                        }
+                    }
+                }
+
                 if (!isHubMode) {
                     Text(
                         text = "Who can see this",
@@ -808,6 +857,12 @@ fun BeaconDropSheetContent(
                                 isSubmitting = false
                                 return@Button
                             }
+                            if (!isSoundtrack && beaconImageBytes == null) {
+                                submitValidationError =
+                                    "Add a photo from your library or camera. Soundtrack beacons can skip this."
+                                isSubmitting = false
+                                return@Button
+                            }
                             onSubmit(
                                 kind,
                                 title,
@@ -820,6 +875,8 @@ fun BeaconDropSheetContent(
                                 if (isEvent) eventCategories.toList() else emptyList(),
                                 if (isEvent) venueScale else EventVenueScale.DEFAULT,
                                 if (isEvent) selectedEventLocation else null,
+                                beaconImageBytes,
+                                beaconImageMime,
                             ) {
                                 isSubmitting = false
                             }

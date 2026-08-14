@@ -1515,6 +1515,9 @@ fun App() {
                                 connectionState is ConnectionState.QrAwaitingContext && !showNfcScreen ->
                                     connectionViewModel.resetConnectionState()
                                 pendingChatId != null -> pendingChatId = null // close open chat first
+                                currentRoute == NavigationItem.Settings.route && isSettingsSubpageOpen -> {
+                                    // SettingsScreen's own back handler pops hub; never jump to Home.
+                                }
                                 else -> navigateBack(NavigationTransitionMode.GestureBack)
                             }
                         }
@@ -1790,12 +1793,15 @@ fun App() {
                                                     isPrimaryNavRoute(animatedScreen) &&
                                                     animatedScreen != NavigationItem.Connections.route &&
                                                     previousKey != animatedScreen &&
-                                                    !(animatedScreen == NavigationItem.Connections.route && isConnectionsChatOpen) &&
-                                                    !(animatedScreen == NavigationItem.Settings.route && isSettingsSubpageOpen)
+                                                    !(animatedScreen == NavigationItem.Connections.route && isConnectionsChatOpen)
 
                                             if (interactivePrimary) {
                                                 InteractiveSwipeBackContainer(
-                                                    enabled = true,
+                                                    enabled =
+                                                        !(
+                                                            animatedScreen == NavigationItem.Settings.route &&
+                                                                isSettingsSubpageOpen
+                                                        ),
                                                     edgeSwipeWidth = 44.dp,
                                                     onBack = { navigatePrimaryRouteBackHome(NavigationTransitionMode.GestureBack) },
                                                     previousContent = {

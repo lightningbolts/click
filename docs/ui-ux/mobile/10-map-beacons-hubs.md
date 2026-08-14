@@ -60,7 +60,7 @@ CreateHubModal — also reachable from BeaconDropSheet Hub category
 | Event cards | Title, host, schedule, description, distance, attendees, RSVP. Card tap → `EventBeaconDetail` |
 | Back | Swipe / back / system back → map + peek. Map stays mounted (no marker preview wipe) |
 
-**Pins:** Circular avatar markers (**44dp** Android / **44pt** iOS) for connections, beacons, hubs, **and cluster hubs**. All use the same diameter when scrunched — no squad size scaling on the circle (squad still raises z-index / pulse). Cluster hubs show count glyphs on the same circular chrome (not teardrop `MKMarker` / oversized hubs). Tap cluster → zoom into members (unchanged). **Reconnect:** map connections collapse to a **single pin per peer** (`collapseOneToOneConnectionsByPeer`) — no duplicate pins after Bluetooth re-tap.
+**Pins:** Connection / hub / cluster markers stay **circular** (**44dp** Android / **44pt** iOS). **Community beacons use a distinct silhouette per type** from `beaconPinShapeFor` / `generateCardVisual` (soundtrack circle, event rounded square, hazard triangle, SOS diamond, utility hexagon, study rounded rect, social squircle, other pentagon), with a deterministic gradient fill that matches the detail-sheet identity banner. Cluster hubs remain circular count glyphs. Tap cluster → zoom into members (unchanged). **Reconnect:** map connections collapse to a **single pin per peer** (`collapseOneToOneConnectionsByPeer`) — no duplicate pins after Bluetooth re-tap.
 
 ### Events feed (full screen)
 
@@ -87,6 +87,7 @@ Other beacon/hub kinds remain on the **map** via layer filters.
 | Category chips | Horizontal `LazyRow` |
 | Hub mode | Name field + category `FlowRow` |
 | Non-hub | Title / soundtrack URL / event picker / duration chips / description |
+| Photo | **Required** for every type except Soundtrack — one image from photo library or in-app camera, auto-compressed to ≤ 2 MB (`compressOutgoingChatImageForUpload` + `POST /api/beacons/image`). Unencrypted public URL stored in metadata `image_url`. |
 | Event extras | Start/end picker + multi-select **Categories** (`Promotional` / `Social` / `School Event`) + **Check-in area** venue scale (`Intimate` / `Neighborhood` / `Venue` / `Campus`) + **Event location** (address search via Nominatim **or** “Use my location”) → metadata `event_categories`, `venue_scale`, `check_in_radius_meters`, `location_name`, `formatted_address` |
 | Visibility | `"Who can see this"` chip row + `"Display my name"` switch |
 | CTA | Full-width `Button` — `"Create hub"` or `"Drop pin"` |

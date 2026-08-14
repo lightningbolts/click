@@ -1,22 +1,31 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+)
+
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.ui.components.stableAvatarPlaceholderColor // pragma: allowlist secret
+import compose.project.click.click.ui.theme.BeaconPinShape // pragma: allowlist secret
+import compose.project.click.click.ui.theme.generateCardVisual // pragma: allowlist secret
 import compose.project.click.click.ui.utils.BeaconPinMetrics // pragma: allowlist secret
 import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
 import compose.project.click.click.ui.utils.ConnectionMapPoint // pragma: allowlist secret
 import compose.project.click.click.ui.utils.MapCluster // pragma: allowlist secret
 import compose.project.click.click.ui.utils.TimeState // pragma: allowlist secret
 import compose.project.click.click.ui.utils.beaconZIndex // pragma: allowlist secret
-import compose.project.click.click.ui.components.stableAvatarPlaceholderColor
-import androidx.compose.ui.graphics.Color
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
 /** Short on-map caption (beacon context or truncated connection name). */
-internal fun truncateMapPinCaption(text: String, maxChars: Int): String {
+internal fun truncateMapPinCaption(
+    text: String,
+    maxChars: Int,
+): String {
     val t = text.trim()
     if (t.isEmpty()) return ""
     if (t.length <= maxChars) return t
@@ -90,6 +99,8 @@ data class MapPin(
     val avatarFillArgb: Int? = null,
     /** Peer / entity id for [ConnectionListUserAvatarFace] color seed (not the connection row id). */
     val avatarUserId: String? = null,
+    val pinShape: BeaconPinShape = BeaconPinShape.CIRCLE,
+    val visualFillArgb2: Int? = null,
 ) {
     companion object {
         /**
@@ -124,85 +135,105 @@ data class MapPin(
         }
 
         fun fromBeacon(beacon: MapBeacon): MapPin {
-            val kind = when (beacon.kind) {
-                MapBeaconKind.SOUNDTRACK -> MapPinKind.BEACON_SOUNDTRACK
-                MapBeaconKind.HAZARD, MapBeaconKind.SOS, MapBeaconKind.UTILITY, MapBeaconKind.STUDY ->
-                    MapPinKind.BEACON_ALERT
-                MapBeaconKind.SOCIAL_VIBE, MapBeaconKind.EVENT -> MapPinKind.BEACON_SOCIAL
-                MapBeaconKind.OTHER -> MapPinKind.BEACON_OTHER
-            }
-            val label = beacon.metadata.title
-                ?: beacon.metadata.trackName
-                ?: beacon.metadata.description?.take(24)
-                ?: when (beacon.kind) {
-                    MapBeaconKind.SOUNDTRACK -> "Soundtrack"
-                    MapBeaconKind.SOS -> "SOS"
-                    MapBeaconKind.HAZARD -> "Hazard"
-                    MapBeaconKind.UTILITY -> "Utility"
-                    MapBeaconKind.STUDY -> "Study"
-                    MapBeaconKind.SOCIAL_VIBE -> "Social"
-                    MapBeaconKind.EVENT -> "Event"
-                    MapBeaconKind.OTHER -> "Beacon"
+            val kind =
+                when (beacon.kind) {
+                    MapBeaconKind.SOUNDTRACK -> MapPinKind.BEACON_SOUNDTRACK
+                    MapBeaconKind.HAZARD, MapBeaconKind.SOS, MapBeaconKind.UTILITY, MapBeaconKind.STUDY ->
+                        MapPinKind.BEACON_ALERT
+                    MapBeaconKind.SOCIAL_VIBE, MapBeaconKind.EVENT -> MapPinKind.BEACON_SOCIAL
+                    MapBeaconKind.OTHER -> MapPinKind.BEACON_OTHER
                 }
-            val caption = when (beacon.kind) {
-                MapBeaconKind.SOUNDTRACK -> {
-                    val raw = beacon.metadata.trackName
-                        ?: beacon.metadata.title
-                        ?: beacon.metadata.musicUrl
-                        ?: label
-                    truncateMapPinCaption(raw, 12).takeIf { it.isNotEmpty() }
-                }
-                MapBeaconKind.HAZARD, MapBeaconKind.SOS -> {
-                    val creatorCaption = beacon.creatorDisplayName
-                        ?.takeIf { beacon.showCreatorName && it.isNotBlank() }
-                        ?.let { truncateMapPinCaption(it, 12) }
-                    creatorCaption
-                        ?: beacon.metadata.description?.let { truncateMapPinCaption(it, 12) }
+            val label =
+                beacon.metadata.title
+                    ?: beacon.metadata.trackName
+                    ?: beacon.metadata.description?.take(24)
+                    ?: when (beacon.kind) {
+                        MapBeaconKind.SOUNDTRACK -> "Soundtrack"
+                        MapBeaconKind.SOS -> "SOS"
+                        MapBeaconKind.HAZARD -> "Hazard"
+                        MapBeaconKind.UTILITY -> "Utility"
+                        MapBeaconKind.STUDY -> "Study"
+                        MapBeaconKind.SOCIAL_VIBE -> "Social"
+                        MapBeaconKind.EVENT -> "Event"
+                        MapBeaconKind.OTHER -> "Beacon"
+                    }
+            val caption =
+                when (beacon.kind) {
+                    MapBeaconKind.SOUNDTRACK -> {
+                        val raw =
+                            beacon.metadata.trackName
+                                ?: beacon.metadata.title
+                                ?: beacon.metadata.musicUrl
+                                ?: label
+                        truncateMapPinCaption(raw, 12).takeIf { it.isNotEmpty() }
+                    }
+                    MapBeaconKind.HAZARD, MapBeaconKind.SOS -> {
+                        val creatorCaption =
+                            beacon.creatorDisplayName
+                                ?.takeIf { beacon.showCreatorName && it.isNotBlank() }
+                                ?.let { truncateMapPinCaption(it, 12) }
+                        creatorCaption
+                            ?: beacon.metadata.description
+                                ?.let { truncateMapPinCaption(it, 12) }
+                                ?.takeIf { it.isNotEmpty() }
+                            ?: BeaconPinMetrics.AlertGlyph
+                    }
+                    MapBeaconKind.UTILITY, MapBeaconKind.STUDY,
+                    MapBeaconKind.EVENT,
+                    -> {
+                        val creatorCaption =
+                            beacon.creatorDisplayName
+                                ?.takeIf { beacon.showCreatorName && it.isNotBlank() }
+                                ?.let { truncateMapPinCaption(it, 12) }
+                        creatorCaption
+                            ?: beacon.metadata.description
+                                ?.let { truncateMapPinCaption(it, 12) }
+                                ?.takeIf { it.isNotEmpty() }
+                    }
+                    MapBeaconKind.SOCIAL_VIBE, MapBeaconKind.OTHER -> {
+                        beacon.metadata.description
+                            ?.let { truncateMapPinCaption(it, 12) }
                             ?.takeIf { it.isNotEmpty() }
-                        ?: BeaconPinMetrics.AlertGlyph
+                    }
                 }
-                MapBeaconKind.UTILITY, MapBeaconKind.STUDY,
-                MapBeaconKind.EVENT -> {
-                    val creatorCaption = beacon.creatorDisplayName
-                        ?.takeIf { beacon.showCreatorName && it.isNotBlank() }
-                        ?.let { truncateMapPinCaption(it, 12) }
-                    creatorCaption
-                        ?: beacon.metadata.description?.let { truncateMapPinCaption(it, 12) }
-                            ?.takeIf { it.isNotEmpty() }
-                }
-                MapBeaconKind.SOCIAL_VIBE, MapBeaconKind.OTHER -> {
-                    beacon.metadata.description?.let { truncateMapPinCaption(it, 12) }
-                        ?.takeIf { it.isNotEmpty() }
-                }
-            }
-            val squadMultiplier = beacon.metadata.raw
-                ?.get("squad_multiplier")
-                ?.jsonPrimitive
-                ?.contentOrNull
-                ?.toFloatOrNull()
-                ?.takeIf { it > 1f }
-                ?: 1f
+            val squadMultiplier =
+                beacon.metadata.raw
+                    ?.get("squad_multiplier")
+                    ?.jsonPrimitive
+                    ?.contentOrNull
+                    ?.toFloatOrNull()
+                    ?.takeIf { it > 1f }
+                    ?: 1f
             // Prefer cover/image from metadata when present; otherwise platform generates initials.
             // Soundtrack pins must use album art (same source as discovery/event cover cards).
-            val coverUrl = beacon.metadata.albumArtUrl?.trim()?.takeIf { it.isNotEmpty() }
-                ?: beacon.metadata.raw
-                    ?.get("image_url")
-                    ?.jsonPrimitive
-                    ?.contentOrNull
+            val coverUrl =
+                beacon.metadata.albumArtUrl
                     ?.trim()
                     ?.takeIf { it.isNotEmpty() }
-                ?: beacon.metadata.raw
-                    ?.get("cover_url")
-                    ?.jsonPrimitive
-                    ?.contentOrNull
-                    ?.trim()
-                    ?.takeIf { it.isNotEmpty() }
-                ?: beacon.metadata.raw
-                    ?.get("album_art_url")
-                    ?.jsonPrimitive
-                    ?.contentOrNull
-                    ?.trim()
-                    ?.takeIf { it.isNotEmpty() }
+                    ?: beacon.metadata.raw
+                        ?.get("image_url")
+                        ?.jsonPrimitive
+                        ?.contentOrNull
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() }
+                    ?: beacon.metadata.raw
+                        ?.get("cover_url")
+                        ?.jsonPrimitive
+                        ?.contentOrNull
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() }
+                    ?: beacon.metadata.raw
+                        ?.get("album_art_url")
+                        ?.jsonPrimitive
+                        ?.contentOrNull
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() }
+            val visual =
+                generateCardVisual(
+                    beacon.id,
+                    beacon.kind,
+                    beacon.sourceBeaconType,
+                )
             return MapPin(
                 id = "beacon:${beacon.id}",
                 title = label,
@@ -211,9 +242,10 @@ data class MapPin(
                 isNearby = false,
                 timeState = TimeState.RECENT,
                 opacity = 1f,
-                shouldPulse = squadMultiplier > 1f ||
-                    beacon.kind == MapBeaconKind.SOS ||
-                    beacon.kind == MapBeaconKind.HAZARD,
+                shouldPulse =
+                    squadMultiplier > 1f ||
+                        beacon.kind == MapBeaconKind.SOS ||
+                        beacon.kind == MapBeaconKind.HAZARD,
                 squadMultiplier = squadMultiplier,
                 imageUrl = coverUrl,
                 kind = kind,
@@ -222,7 +254,9 @@ data class MapPin(
                 zIndex = beaconZIndex(beacon),
                 caption = caption,
                 avatarInitials = mapPinAvatarInitials(label),
-                avatarFillArgb = composeColorToArgb(stableAvatarPlaceholderColor(beacon.id)),
+                avatarFillArgb = visual.fillArgb,
+                pinShape = visual.pinShape,
+                visualFillArgb2 = visual.fillArgbSecondary,
             )
         }
 
@@ -271,13 +305,18 @@ data class MapClusterPin(
  * Sealed class for map markers (either individual pins or clusters)
  */
 sealed class MapMarker {
-    data class Pin(val pin: MapPin) : MapMarker()
-    data class Cluster(val cluster: MapClusterPin) : MapMarker()
+    data class Pin(
+        val pin: MapPin,
+    ) : MapMarker()
+
+    data class Cluster(
+        val cluster: MapClusterPin,
+    ) : MapMarker()
 }
 
 /**
  * Platform-specific map implementation
- * 
+ *
  * Supports two rendering modes:
  * - Individual pins (when zoomed in)
  * - Cluster hubs (when zoomed out)
@@ -324,20 +363,22 @@ fun MapCluster.toClusterPin(): MapClusterPin {
 /**
  * Google Maps default-marker hue (0–360°) — keep in sync with iOS tint in MapView.ios.kt.
  */
-fun MapPin.markerHueDegrees(): Float = when {
-    beaconTypeKey != null -> hueForRawBeaconType(beaconTypeKey!!)
-    // Unified connection accent (magenta) — matches cluster hubs for connection-only groups.
-    kind == MapPinKind.CONNECTION -> 300f
-    beaconKind != null -> hueForMapBeaconKind(beaconKind!!)
-    else -> when (kind) {
-        MapPinKind.BEACON_SOUNDTRACK -> 275f
-        MapPinKind.BEACON_ALERT -> 0f
-        MapPinKind.BEACON_SOCIAL -> 310f
-        MapPinKind.BEACON_OTHER -> 55f
-        MapPinKind.COMMUNITY_HUB -> 260f
-        MapPinKind.CONNECTION -> 300f
+fun MapPin.markerHueDegrees(): Float =
+    when {
+        beaconTypeKey != null -> hueForRawBeaconType(beaconTypeKey!!)
+        // Unified connection accent (magenta) — matches cluster hubs for connection-only groups.
+        kind == MapPinKind.CONNECTION -> 300f
+        beaconKind != null -> hueForMapBeaconKind(beaconKind!!)
+        else ->
+            when (kind) {
+                MapPinKind.BEACON_SOUNDTRACK -> 275f
+                MapPinKind.BEACON_ALERT -> 0f
+                MapPinKind.BEACON_SOCIAL -> 310f
+                MapPinKind.BEACON_OTHER -> 55f
+                MapPinKind.COMMUNITY_HUB -> 260f
+                MapPinKind.CONNECTION -> 300f
+            }
     }
-}
 
 private fun hueForRawBeaconType(raw: String): Float =
     when (raw.lowercase()) {

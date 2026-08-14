@@ -1,10 +1,12 @@
 # 05 — Home
 
 **Scope:** Kotlin Multiplatform mobile — `HomeScreen`, `HomeComponents`, `ConnectionArchiveWarningBanner`, `AvailabilitySheet` entry from Home.  
-**Source:** `ui/screens/HomeScreen.kt`, `ui/components/HomeComponents.kt`, `ui/components/ConnectionArchiveWarningBanner.kt`, `ui/components/AppScreenScaffold.kt`, `viewmodel/HomeViewModel.kt`  
+**Source:** `ui/screens/HomeScreen.kt`, `ui/components/HomeComponents.kt`, `ui/components/HomePhotoPile.kt`, `ui/components/PileCluster.kt`, `ui/components/PhotoCard.kt`, `ui/components/ConnectionArchiveWarningBanner.kt`, `ui/components/AppScreenScaffold.kt`, `ui/theme/CardVisual.kt`, `viewmodel/HomeViewModel.kt`  
 **Out of scope:** Web, backend APIs.
 
-**Visual system:** Functional Clarity — opaque surfaces, 2dp `clickBorderColor()`, scheme primary, no glass/blur/gradients. Design-asset mock (hierarchy only): `click/docs/design-assets/home/` — see that folder’s README; product truth is this doc.
+**Visual system:** Functional Clarity chrome (opaque surfaces, 1dp quiet borders, primary `#630ed4`, secondary `#224CFF`). **Exception:** photo-pile Polaroids and beacon identity banners use deterministic `generateCardVisual` gradients + patterns with a contrast scrim (`CardVisual.contentScrim`) so body text stays readable.
+
+**Home layout:** Default is **photo pile** (`HomeLayoutMode.PILE`) — corkboard clusters of Polaroids. Header greeting + search stay pinned (not in the pile). Toggle in the header (list / pile icons) and **Settings → Appearance → Photo pile home**. Linear list is the accessibility fallback (TalkBack / VoiceOver). Persistence: `TokenStorage` key `home_layout_mode`.
 
 **Track C (2026-07-17):** Discovery-first IA — greeting + search pill + Featured Event + dynamic nearby explore; availability + reconnect remain first-class above Explore. Greeting uses the same floating `LiquidGlassPageHeader` overlay as other tab roots (not an in-feed item).
 
@@ -23,7 +25,17 @@ HomeScreen (organism)
 └── AppScreenScaffold (showFloatingHeader = true)   [Success]
     ├── FloatingHeaderOverlay → LiquidGlassPageHeader
     │   ├── title: homeGreetingTitle(firstName)  // "Good morning|afternoon|evening|Hello, {name}."
-    │   └── subtitle: HomeGreetingSubtitle       // "Ready to connect today?"
+    │   ├── subtitle: HomeGreetingSubtitle       // "Ready to connect today?"
+    │   └── layout toggle (pile ↔ linear)
+    └── LazyColumn
+        ├── HomeSearchPill              // pinned; not part of the pile
+        ├── [PILE default] HomePhotoPileBoard
+        │   ├── PileCluster "I'm down for…" (z-priority 40; always present)
+        │   ├── Featured / Recap / Saved events / Explore nearby
+        │   ├── Stay in touch (archive + Poll-Pair in one stack)
+        │   ├── Reconnect / Event reminders / Recent Connections
+        │   └── Insights + Your Stats (one photo each)
+        └── [LINEAR fallback] same sections as a vertical list (FeaturedEventSection, …)
     └── LazyColumn (24dp spacing, 20dp horizontal; top inset clears floating header)
         ├── HomeSearchPill              // → onOpenSearch / UnifiedSearchSheet
         ├── FeaturedEventSection (conditional)  // first HomeEventReminder
@@ -150,6 +162,10 @@ Triggered from `HomeAvailabilityIntentsRow` chip taps. See [13-availability.md](
 | Recent Connections | Empty bordered card | Location groups |
 | Insights | Hidden if no connections | Collapsed/expanded |
 | Stats | Always | Two stat cards |
+
+### Photo pile (`HomePhotoPileBoard`)
+
+Shared components: `PileCluster`, `PhotoCard`, `generateCardVisual(id)`. Visuals are hashed (FNV-1a) so the same event/person/location always gets the same gradient + one of five patterns (dots, diagonals, grain, grid, chevron), 5/8 purple-dominant and 3/8 blue-dominant. Tap a cluster to fan into a horizontal strip; tap a photo to reuse the existing sheet (availability, saved event, chat, location drill-in). Tap outside / back collapses the fan. Long-press on stay-in-touch photos sends icebreaker; long-press reconnect dismisses.
 
 ---
 

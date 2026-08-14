@@ -11,6 +11,7 @@ import compose.project.click.click.data.models.CachedChatThread // pragma: allow
 import compose.project.click.click.data.models.CachedHubThread // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
+import compose.project.click.click.data.models.HomeLayoutMode // pragma: allowlist secret
 import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
@@ -519,6 +520,23 @@ object AppDataManager {
     private val _ghostModeEnabled = MutableStateFlow(false)
     val ghostModeEnabled: StateFlow<Boolean> = _ghostModeEnabled.asStateFlow()
 
+    private val _homeLayoutMode = MutableStateFlow(HomeLayoutMode.PILE)
+    val homeLayoutMode: StateFlow<HomeLayoutMode> = _homeLayoutMode.asStateFlow()
+
+    fun setHomeLayoutMode(mode: HomeLayoutMode) {
+        if (_homeLayoutMode.value == mode) return
+        _homeLayoutMode.value = mode
+        scope.launch {
+            tokenStorage.saveHomeLayoutMode(mode.name)
+        }
+    }
+
+    private fun restoreHomeLayoutMode() {
+        scope.launch {
+            _homeLayoutMode.value = HomeLayoutMode.fromStored(tokenStorage.getHomeLayoutMode())
+        }
+    }
+
     private val _notificationPreferences = MutableStateFlow(NotificationPreferences())
     val notificationPreferences: StateFlow<NotificationPreferences> = _notificationPreferences.asStateFlow()
 
@@ -980,6 +998,7 @@ object AppDataManager {
      * pending sync, network reconnect observers, or the first network-backed [loadAllData].
      */
     fun initializeData() {
+        restoreHomeLayoutMode()
         scope.launch {
             refreshPendingConnectionCount()
         }

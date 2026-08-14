@@ -12,7 +12,7 @@ The `ui/` module is the **presentation layer** of the Click KMP mobile app. It c
 - **Full-screen destinations** (`screens/`) — Connections, Chat, Map, Home, Settings, onboarding, search, QR/NFC, hubs, and App Clip handshake.
 - **Reusable glass UI primitives** (`components/`) — bottom sheets, cards, scaffolds, map wrappers, availability editors, QR views.
 - **Chat-specific UI** (`chat/`) — message bubbles, composer, media pickers, vibe check, delivery receipts, swipe gestures.
-- **Theme & tokens** (`theme/`) — colors, typography, platform-adaptive styling.
+- **Theme & tokens** (`theme/`) — colors, typography, platform-adaptive styling, `ClickAccent`, `generateCardVisual`.
 - **Platform permission bridges** (`utils/`) — location, calendar, microphone, proximity hardware requesters.
 
 `ui/` is deliberately **stateless at the leaf level**: screens collect `StateFlow` from ViewModels and `AppDataManager`, emit user intents upward, and never own long-lived business logic or network I/O.
@@ -26,7 +26,7 @@ App.kt (navigation shell)
     │
     ├── screens/ConnectionsScreen ──► ChatView (inline push)
     ├── screens/MapScreen ──────────► MapView + beacon sheets
-    ├── screens/HomeScreen ─────────► availability, reminders, quick actions
+    ├── screens/HomeScreen ─────────► photo pile (default) or linear list, availability, reminders
     ├── screens/SettingsScreen ─────► profile, privacy, ghost mode, interests
     ├── screens/GlobalSearchScreen ─► unified search chips + results
     ├── screens/HubChatScreen ──────► community hub ephemeral chat
@@ -46,8 +46,9 @@ App.kt (navigation shell)
 | `screens/` | Route-level layout, navigation callbacks, ViewModel wiring | `ConnectionsScreen`, `ChatView`, `MapScreen` |
 | `components/` | Cross-screen glass primitives | `GlassCard`, `ClickPlatformSheet`, `AppScreenScaffold` |
 | `chat/` | Chat-only composables (keeps `ChatView` readable) | `ChatMessageBubble`, `ConnectionChatMessageComposer` |
-| `theme/` | Design tokens | `Color.kt`, `Typography.kt`, `PlatformTheme.kt` |
+| `theme/` | Design tokens | `Color.kt`, `Typography.kt`, `PlatformTheme.kt`, `ClickAccent.kt`, `CardVisual.kt` |
 | `utils/` | Composable-side platform hooks | `LocationPermissionRequester`, `MapUtils` |
+| Home pile | Corkboard Polaroids | `PileCluster`, `PhotoCard`, `HomePhotoPileBoard` |
 
 ### Glass UI system
 
