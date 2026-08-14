@@ -85,15 +85,16 @@ App-level haptics **outside** Compose `LocalHapticFeedback`:
 3. initTokenStorage(applicationContext)
 4. initLocationService(applicationContext)
 5. initCalendarProvider(applicationContext)
-6. initEncounterTetherWidgetBridge(applicationContext)
-7. initAppSystemSettings(applicationContext)
-8. initCallManager(applicationContext, this)
-9. initPushNotificationService(applicationContext, this)
-10. handleIncomingCallIntent(intent)
-11. handleChatDeepLinkIntent(intent)
-12. handleCommunityHubViewIntent(intent)   → click://hub
-13. handleConnectionUniversalLinkIntent(intent)
-14. setContent { App() }
+6. initContactBook(applicationContext)
+7. initEncounterTetherWidgetBridge(applicationContext)
+8. initAppSystemSettings(applicationContext)
+9. initCallManager(applicationContext, this)
+10. initPushNotificationService(applicationContext, this)
+11. handleIncomingCallIntent(intent)
+12. handleChatDeepLinkIntent(intent)
+13. handleCommunityHubViewIntent(intent)   → click://hub
+14. handleConnectionUniversalLinkIntent(intent)
+15. setContent { App() }
 ```
 
 `onNewIntent` repeats deep-link and call intent handlers for `singleTask` re-entry.

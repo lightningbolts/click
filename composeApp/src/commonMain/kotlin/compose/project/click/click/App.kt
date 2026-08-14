@@ -754,7 +754,7 @@ fun App() {
                     // Phase 2 (C8): drive onboarding through OnboardingViewModel rather than the legacy
                     // permissions-first gate. Permissions now live in the Settings Permissions Hub (C9)
                     // and are requested contextually; the gate is Loading → Welcome → Interests → Personality
-                    // → Avatar → Complete. Existing users skip Personality via legacyComplete.
+                    // → Avatar → PriorConnections → Complete. Existing users skip Personality via legacyComplete.
                     // We rebuild the VM whenever the persisted state changes so step() stays
                     // in sync without having to hoist the whole thing into AppDataManager.
                     val onboardingStateSnapshot = onboardingState
@@ -792,6 +792,7 @@ fun App() {
                             vmStep == OnboardingViewModel.Step.Interests -> "interests"
                             vmStep == OnboardingViewModel.Step.Personality -> "personality"
                             vmStep == OnboardingViewModel.Step.Avatar -> "avatar"
+                            vmStep == OnboardingViewModel.Step.PriorConnections -> "prior_connections"
                             else -> "complete"
                         }
 
@@ -942,6 +943,12 @@ fun App() {
                                                 }
                                             },
                                             onSkip = { onboardingVm.onAvatarSetOrSkipped() },
+                                        )
+                                    }
+
+                                    "prior_connections" -> {
+                                        PriorConnectionsScreen(
+                                            onSkip = { onboardingVm.onPriorConnectionsSetOrSkipped() },
                                         )
                                     }
 

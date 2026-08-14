@@ -1,6 +1,6 @@
 @file:Suppress("ktlint:standard:function-naming")
 
-package compose.project.click.click.ui.components
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -89,6 +89,7 @@ import compose.project.click.click.data.AppDataManager // pragma: allowlist secr
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
 import compose.project.click.click.data.api.ConnectionEventRecommendationDto // pragma: allowlist secret
 import compose.project.click.click.data.api.ConnectionTabMessage // pragma: allowlist secret
+import compose.project.click.click.data.contacts.ContactDiscoveryHelper // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.GroupSharedInterest // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
@@ -3316,6 +3317,16 @@ fun TabbedUserProfileSheet(
             ?: cached?.name?.takeIf { it.isNotBlank() }
             ?: hintedUser?.name?.takeIf { it.isNotBlank() }
             ?: "Connection"
+    val priorConnection =
+        remember(connections, profileConnectionId) {
+            connections.firstOrNull { it.id == profileConnectionId && it.isPriorConnection() }
+        }
+    val resolvedBadge =
+        if (priorConnection != null) {
+            ProfileSheetBadge(ContactDiscoveryHelper.PRIOR_BADGE_LABEL, Color(0xFFF59E0B))
+        } else {
+            statusBadge
+        }
     val state =
         remember(
             userId,
@@ -3328,7 +3339,7 @@ fun TabbedUserProfileSheet(
             localMessages,
             profileConnectionId,
             onMessage,
-            statusBadge,
+            resolvedBadge,
         ) {
             ProfileSheetState(
                 displayName = displayName,
@@ -3336,7 +3347,7 @@ fun TabbedUserProfileSheet(
                     resolved?.email?.takeIf { it.isNotBlank() }
                         ?: hintedUser?.email?.takeIf { it.isNotBlank() },
                 avatarUrl = resolved?.image ?: hintedUser?.image,
-                statusBadge = statusBadge,
+                statusBadge = resolvedBadge,
                 canNudge = onMessage != null && !profileConnectionId.isNullOrBlank(),
                 timeline = emptyList(),
                 media = emptyList(),

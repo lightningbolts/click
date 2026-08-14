@@ -1,4 +1,4 @@
-package compose.project.click.click
+package compose.project.click.click // pragma: allowlist secret
 
 import android.content.pm.ApplicationInfo
 import android.content.pm.ActivityInfo
@@ -13,24 +13,25 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
-import compose.project.click.click.data.storage.initTokenStorage
-import compose.project.click.click.calls.AndroidCallRuntime
-import compose.project.click.click.calls.initCallManager
-import compose.project.click.click.calls.CallInvite
-import compose.project.click.click.calls.CallSessionManager
-import compose.project.click.click.notifications.ChatDeepLinkManager
-import compose.project.click.click.notifications.ChatNotificationDismisser
-import compose.project.click.click.deeplink.ConnectionDeepLinkRouter
-import compose.project.click.click.deeplink.EventDeepLinkRouter
-import compose.project.click.click.qr.toHubIdFromClickHubUrl
-import compose.project.click.click.notifications.initPushNotificationService
-import compose.project.click.click.utils.initLocationService
-import compose.project.click.click.calendar.initCalendarProvider
-import compose.project.click.click.encounter.initEncounterTetherWidgetBridge
-import compose.project.click.click.ui.utils.AppSystemSettings
-import compose.project.click.click.ui.utils.initAppSystemSettings
-import compose.project.click.click.ui.chat.AndroidChatImageSaveContext
-import compose.project.click.click.data.SupabaseConfig
+import compose.project.click.click.data.storage.initTokenStorage // pragma: allowlist secret
+import compose.project.click.click.calls.AndroidCallRuntime // pragma: allowlist secret
+import compose.project.click.click.calls.initCallManager // pragma: allowlist secret
+import compose.project.click.click.calls.CallInvite // pragma: allowlist secret
+import compose.project.click.click.calls.CallSessionManager // pragma: allowlist secret
+import compose.project.click.click.notifications.ChatDeepLinkManager // pragma: allowlist secret
+import compose.project.click.click.notifications.ChatNotificationDismisser // pragma: allowlist secret
+import compose.project.click.click.deeplink.ConnectionDeepLinkRouter // pragma: allowlist secret
+import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
+import compose.project.click.click.qr.toHubIdFromClickHubUrl // pragma: allowlist secret
+import compose.project.click.click.notifications.initPushNotificationService // pragma: allowlist secret
+import compose.project.click.click.utils.initLocationService // pragma: allowlist secret
+import compose.project.click.click.calendar.initCalendarProvider // pragma: allowlist secret
+import compose.project.click.click.data.contacts.initContactBook // pragma: allowlist secret
+import compose.project.click.click.encounter.initEncounterTetherWidgetBridge // pragma: allowlist secret
+import compose.project.click.click.ui.utils.AppSystemSettings // pragma: allowlist secret
+import compose.project.click.click.ui.utils.initAppSystemSettings // pragma: allowlist secret
+import compose.project.click.click.ui.chat.AndroidChatImageSaveContext // pragma: allowlist secret
+import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import com.google.android.gms.maps.MapsInitializer
 import io.github.jan.supabase.auth.handleDeeplinks
 
@@ -61,6 +62,7 @@ class MainActivity : ComponentActivity() {
         // Initialize location service with application context
         initLocationService(applicationContext)
         initCalendarProvider(applicationContext)
+        initContactBook(applicationContext)
         initEncounterTetherWidgetBridge(applicationContext)
         initAppSystemSettings(applicationContext)
         AppSystemSettings.isDebugMode =

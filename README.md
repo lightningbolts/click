@@ -61,7 +61,8 @@ There is **no “hard lock”** or forced expiry that deletes relationships by t
 - **Voice & video calls (LiveKit)** — `CallSessionManager`, `CallCoordinator`, `CallApiClient` fetch a JWT and `wsUrl` from `{CLICK_WEB_BASE_URL}/api/livekit/token`. **Android:** `livekit-android` in `CallManager.android.kt`. **iOS:** native room in **Swift** (`ClickLiveKitBridge.swift`) with Compose driving state from shared Kotlin.  
 - **Presence** — Realtime subscriptions in home/chat/map-related ViewModels for online status and activity signals.  
 - **Maps** — Map screens and Realtime channels (e.g. connection discovery) backed by Supabase-backed repositories.  
-- **Memory Capsules (opt-in)** — `rememberAmbientNoiseMonitor`, `rememberBarometricHeightMonitor`, and subjective tagging flows when the user opts in (settings + connection sheets).
+- **Memory Capsules (opt-in)** — `rememberAmbientNoiseMonitor`, `rememberBarometricHeightMonitor`, and subjective tagging flows when the user opts in (settings + connection sheets).  
+- **Prior Connections** — Optional, skippable onboarding step. Contacts are hashed on-device (SHA-256 of E.164 / email) and matched via `POST /api/contacts/discover`. Self-reported edges use `source=prior` and never mint `connection_encounters` or handshake vanity metrics.
 
 ---
 
