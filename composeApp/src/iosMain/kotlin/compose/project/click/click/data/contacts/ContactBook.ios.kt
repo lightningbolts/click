@@ -51,14 +51,15 @@ private fun collectContact(
     if (contact == null) return
     val emailValues = contact.emailAddresses
     for (i in 0 until emailValues.size.toInt()) {
-        val labeled = emailValues[i] as? CNLabeledValue<*>
-        val text = (labeled?.value as? NSString)?.toString() ?: labeled?.value?.toString()
+        val labeled = emailValues[i] as? CNLabeledValue ?: continue
+        val raw = labeled.value
+        val text = (raw as? NSString)?.toString() ?: raw?.toString()
         if (!text.isNullOrBlank()) emails.add(text)
     }
     val phoneValues = contact.phoneNumbers
     for (i in 0 until phoneValues.size.toInt()) {
-        val labeled = phoneValues[i] as? CNLabeledValue<*>
-        val text = (labeled?.value as? CNPhoneNumber)?.stringValue
+        val labeled = phoneValues[i] as? CNLabeledValue ?: continue
+        val text = (labeled.value as? CNPhoneNumber)?.stringValue
         if (!text.isNullOrBlank()) phones.add(text)
     }
 }
