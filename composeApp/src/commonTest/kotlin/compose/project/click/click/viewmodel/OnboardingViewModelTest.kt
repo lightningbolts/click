@@ -1,6 +1,7 @@
 package compose.project.click.click.viewmodel // pragma: allowlist secret
 
 import compose.project.click.click.data.models.OnboardingState // pragma: allowlist secret
+import compose.project.click.click.data.models.existingHydratedOnboardingState // pragma: allowlist secret
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -107,7 +108,18 @@ class OnboardingViewModelTest {
     }
 
     @Test
-    fun legacyAccount_withoutWelcomeFlag_stillSeesWelcome() {
+    fun existingHydratedOnboardingState_skipsWelcome() {
+        val vm =
+            OnboardingViewModel(
+                initialState = existingHydratedOnboardingState(),
+                userHasAvatar = { true },
+            )
+        assertEquals(OnboardingViewModel.Step.Complete, vm.step.value)
+        assertFalse(vm.needsPhase2Onboarding())
+    }
+
+    @Test
+    fun legacyAccount_withoutWelcomeFlag_skipsWelcomeWhenInterestsComplete() {
         val vm =
             OnboardingViewModel(
                 initialState =
@@ -118,7 +130,7 @@ class OnboardingViewModelTest {
                     ),
                 userHasAvatar = { true },
             )
-        assertEquals(OnboardingViewModel.Step.Welcome, vm.step.value)
+        assertEquals(OnboardingViewModel.Step.Complete, vm.step.value)
     }
 
     @Test

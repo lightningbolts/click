@@ -84,13 +84,12 @@ Other beacon/hub kinds remain on the **map** via layer filters.
 |----------|-------|
 | Container | `MapBeaconSheetRoot` + `ClickSheetDialogChrome`, opaque `surface` + 2dp border |
 | Padding | 20dp horizontal, 12dp vertical |
-| Category chips | Horizontal `LazyRow` |
-| Hub mode | Name field + category `FlowRow` |
+| Category chips | Horizontal `LazyRow`; **Hub** chip opens `CreateHubModal` directly (no in-sheet hub form) |
 | Non-hub | Title / soundtrack URL / event picker / duration chips / description |
-| Photo | **Optional for every type, encouraged in the sheet.** One image from photo library or in-app camera, auto-compressed to ≤ 2 MB (`compressOutgoingChatImageForUpload` + `POST /api/beacons/image`). Unencrypted public URL stored in metadata `image_url`. Offered via two shared `MediaSourceButton` tiles (`"Take photo"` / `"Photo library"`) plus a thumbnail with Replace / Remove once attached — not `TextButton` labels, which read as highlighted text. A beacon without a photo renders with its generated `CardVisual` gradient everywhere it appears, so there is no submit gate (`beaconDropValidationError` covers title, music link, and event location only). |
+| Photo | **Optional for every type, encouraged in the sheet.** One image from photo library or in-app camera, auto-compressed to ≤ 2 MB (`compressOutgoingChatImageForUpload` + `POST /api/beacons/image`). Unencrypted public URL stored in metadata `image_url`. Offered via two shared `MediaSourceButton` tiles (`"Take photo"` / `"Photo library"`) plus a thumbnail with `ActionChipButton` **Replace** / **Remove** once attached — not `TextButton` labels, which read as highlighted text. **Replace** opens the camera; **Take photo** / **Photo library** stay visible. iOS camera captures stage on the main queue (`dispatch_async(dispatch_get_main_queue())`) so Compose state updates reliably. A beacon without a photo renders with its generated `CardVisual` gradient everywhere it appears, so there is no submit gate (`beaconDropValidationError` covers title, music link, and event location only). |
 | Event extras | Start/end picker + multi-select **Categories** (`Promotional` / `Social` / `School Event`) + **Check-in area** venue scale (`Intimate` / `Neighborhood` / `Venue` / `Campus`) + **Event location** (address search via Nominatim **or** “Use my location”) → metadata `event_categories`, `venue_scale`, `check_in_radius_meters`, `location_name`, `formatted_address` |
 | Visibility | `"Who can see this"` chip row + `"Display my name"` switch |
-| CTA | Full-width `Button` — `"Create hub"` or `"Drop pin"` |
+| CTA | Full-width `Button` — `"Drop pin"` |
 
 ### CreateHubModal / JoinCommunityHubSheet
 
@@ -165,12 +164,11 @@ Soundtrack / community kinds (hazard, SOS, utility, study): same bordered hero; 
 
 | Control | Action |
 |---------|--------|
-| Category chip | Switches form mode (including `"Hub"` → hub fields) |
+| Category chip | Switches form mode; **Hub** closes drop sheet → `CreateHubModal` (one sheet, then `HubChatScreen` on success) |
 | Event category chips | Multi-select → `event_categories` metadata |
 | Check-in area chips | Single-select venue scale → `venue_scale` + `check_in_radius_meters` |
 | Event location | Address search + “Use my location”; required for events; stores `location_name` / `formatted_address`; results ranked by word relevance + proximity to last-known GPS |
 | Non-event (hazard/SOS/utility/study) | Section intro + category-specific title placeholder + FlowRow duration chips (same section hierarchy as events) |
-| `"Create hub"` (hub mode) | Closes drop sheet → `CreateHubModal` with prefilled name/category |
 | `"Drop pin"` | `MapViewModel.submitBeaconDrop(..., eventLocation = …)` |
 | Paste icon (soundtrack) | Paste clipboard into URL field |
 | Visibility chips | Sets `BeaconVisibilityAudience` |
@@ -318,18 +316,16 @@ All user-visible strings quoted below.
 ### BeaconDropSheet
 
 - `"Drop a community beacon"`
-- Categories: `"Soundtrack"`, `"Hazard"`, `"Utility"`, `"SOS"`, `"Study"`, `"Event"`, `"Hub"`
-- `"Hub name"` (placeholder)
-- Hub categories (chips): `"General"`, `"Music"`, `"Study"`, `"Sports"`, `"Food"`, `"Nightlife"`, `"Gaming"`, `"Tech"`, `"Art"`, `"Fitness"`, `"Networking"`, `"Party"`
+- Categories: `"Soundtrack"`, `"Hazard"`, `"Utility"`, `"SOS"`, `"Study"`, `"Event"`, `"Hub"` (opens `CreateHubModal` directly)
 - `"Spotify, Apple Music, or YouTube link"` (placeholder — passed as `placeholderText` so it ellipsizes on one line instead of wrapping the field to two rows; the paste icon button is 36dp to leave it room)
 - `"Paste link"` (content description)
-- `"Photo"` + `"Add a photo so people recognize this at a glance."` / `"Photo attached"`; `MediaSourceButton` labels `"Take photo"` / `"Photo library"`; thumbnail actions `"Replace"` / `"Remove"`
+- `"Photo"` + `"Add a photo so people recognize this at a glance."` / `"Photo attached"`; `MediaSourceButton` labels `"Take photo"` / `"Photo library"`; thumbnail actions `ActionChipButton` **Replace** (camera) / **Remove**
 - `"Title (max 80)"`, `"Description (optional, max 500)"`
 - `"Visible for"` + duration chips: `"15 min"`, `"30 min"`, `"45 min"`, `"1 hour"`, `"90 min"`, `"2 hours"`, `"3 hours"`, `"6 hours"`, `"24 hours"`, `"2 days"` … `"7 days"`
 - `"Who can see this"`: `"Everyone"`, `"Connections only"`, `"Core connections only"`
 - `"Display my name"` / `"Show your name on the map pin for others nearby."`
 - Validation: `"Please add a title."`, `"Please add a music link."`, `"Set an event location (search an address or use my location)."` — no photo requirement
-- CTAs: `"Create hub"`, `"Drop pin"`
+- CTA: `"Drop pin"`
 
 ### CreateHubModal
 
@@ -394,7 +390,7 @@ flowchart TD
     B -->|Success| E[Discovery feed + PiP]
     E --> F[Tap FAB / empty row]
     F --> G[BeaconDropSheet]
-    G -->|Hub category| H[CreateHubModal]
+    G -->|Hub chip| H[CreateHubModal]
     G -->|Other| I[Drop pin → map refresh]
     H --> J[onJoinCommunityHub]
     E --> K[Tap hub row / pin]

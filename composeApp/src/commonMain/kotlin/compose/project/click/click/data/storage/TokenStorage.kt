@@ -1,4 +1,4 @@
-package compose.project.click.click.data.storage
+package compose.project.click.click.data.storage // pragma: allowlist secret
 
 /**
  * Encrypted / platform-backed session + lightweight prefs shared by Android and iOS.
@@ -18,6 +18,8 @@ interface TokenStorage {
     suspend fun getExpiresAt(): Long?
 
     suspend fun getTokenType(): String?
+
+    suspend fun getUserId(): String?
 
     suspend fun clearTokens()
 

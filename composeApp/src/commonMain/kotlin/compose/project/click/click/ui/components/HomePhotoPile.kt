@@ -85,6 +85,7 @@ fun LazyListScope.homePhotoPileItems(
                         title = spec.title,
                         subtitle = spec.subtitle,
                         imageUrl = spec.imageUrl,
+                        categoryBadge = spec.categoryBadge,
                         onClick = {
                             if (expanded) spec.onOpen() else onExpandedClusterChange(cluster.id)
                         },
@@ -138,6 +139,7 @@ internal data class HomePilePhotoSpec(
     val title: String,
     val subtitle: String?,
     val imageUrl: String? = null,
+    val categoryBadge: String? = null,
     val onOpen: () -> Unit,
     val onLongOpen: (() -> Unit)? = null,
 )
@@ -155,45 +157,6 @@ internal fun buildHomePileClusters(
     actions: HomePileActions,
 ): List<HomePileClusterSpec> {
     val out = mutableListOf<HomePileClusterSpec>()
-    val availabilityPhotos =
-        if (data.intents.isEmpty()) {
-            listOf(
-                HomePilePhotoSpec(
-                    id = "availability-create",
-                    title = "I'm down for…",
-                    subtitle = "Set what you're down for",
-                    onOpen = actions.onCreateIntent,
-                ),
-            )
-        } else {
-            listOf(
-                HomePilePhotoSpec(
-                    id = "availability-add",
-                    title = "I'm down for…",
-                    subtitle = "Add intent",
-                    onOpen = actions.onCreateIntent,
-                ),
-            ) +
-                data.intents.map { row ->
-                    HomePilePhotoSpec(
-                        id = row.id ?: "intent-${row.intentTag}",
-                        title =
-                            row.intentTag
-                                ?.trim()
-                                .orEmpty()
-                                .ifEmpty { "Intent" },
-                        subtitle = "Tap to edit",
-                        onOpen = { actions.onEditIntent(row) },
-                    )
-                }
-        }
-    out +=
-        HomePileClusterSpec(
-            id = "availability",
-            label = "I'm down for…",
-            zPriority = 40f,
-            photos = availabilityPhotos,
-        )
     data.featuredEvent?.let { featured ->
         out +=
             HomePileClusterSpec(
@@ -216,23 +179,6 @@ internal fun buildHomePileClusters(
                     ),
             )
     }
-    data.recap?.let { recap ->
-        out +=
-            HomePileClusterSpec(
-                id = "recap",
-                label = "Recap",
-                zPriority = 12f,
-                photos =
-                    listOf(
-                        HomePilePhotoSpec(
-                            id = "recap-card",
-                            title = "Activity recap",
-                            subtitle = "${recap.connectionsFormed} clicks · ${recap.messagesSent} messages",
-                            onOpen = {},
-                        ),
-                    ),
-            )
-    }
     if (data.savedBookmarks.isNotEmpty()) {
         out +=
             HomePileClusterSpec(
@@ -240,7 +186,7 @@ internal fun buildHomePileClusters(
                 label = "Saved events",
                 zPriority = 16f,
                 photos =
-                    data.savedBookmarks.map { bookmark ->
+                    data.savedBookmarks.take(5).map { bookmark ->
                         HomePilePhotoSpec(
                             id = "saved-${bookmark.beaconId}",
                             visualId = bookmark.beaconId,
@@ -262,7 +208,7 @@ internal fun buildHomePileClusters(
                 label = "Explore nearby",
                 zPriority = 15f,
                 photos =
-                    data.exploreTiles.map { tile ->
+                    data.exploreTiles.take(10).map { tile ->
                         HomePilePhotoSpec(
                             id = tile.id,
                             title = tile.label,
@@ -280,6 +226,7 @@ internal fun buildHomePileClusters(
                 visualId = notice.connectionId,
                 title = notice.headline,
                 subtitle = notice.body,
+                categoryBadge = "Stay in touch",
                 onOpen = { actions.onArchiveOpenChat(notice) },
                 onLongOpen = { actions.onArchiveIcebreaker(notice) },
             )
@@ -291,37 +238,38 @@ internal fun buildHomePileClusters(
                 visualId = suggestion.connectionId,
                 title = "Poll-Pair",
                 subtitle = suggestion.otherUserName ?: "Reconnect",
+                categoryBadge = "Stay in touch",
                 onOpen = { actions.onPollPairOpenChat(suggestion) },
                 onLongOpen = { actions.onPollPairIcebreaker(suggestion) },
             )
     }
-    if (stayPhotos.isNotEmpty()) {
+    val reconnectPhotos =
+        data.reconnectReminders.map { reminder ->
+            HomePilePhotoSpec(
+                id = "reconnect-${reminder.connectionId}",
+                visualId = reminder.connectionId,
+                title = reminder.userName ?: "Someone",
+                subtitle = "${reminder.daysSinceContact} days since last chat",
+                imageUrl = data.connectedUsers[reminder.userId]?.image,
+                categoryBadge = "Reconnect",
+                onOpen = { actions.onReconnect(reminder) },
+                onLongOpen = { actions.onDismissReconnect(reminder) },
+            )
+        }
+    val mixedStayInTouch = stayPhotos.isNotEmpty() && reconnectPhotos.isNotEmpty()
+    val stayInTouchPhotos =
+        (stayPhotos + reconnectPhotos)
+            .take(10)
+            .map { photo ->
+                if (mixedStayInTouch) photo else photo.copy(categoryBadge = null)
+            }
+    if (stayInTouchPhotos.isNotEmpty()) {
         out +=
             HomePileClusterSpec(
                 id = "stay",
                 label = "Stay in touch",
                 zPriority = 22f,
-                photos = stayPhotos,
-            )
-    }
-    if (data.reconnectReminders.isNotEmpty()) {
-        out +=
-            HomePileClusterSpec(
-                id = "reconnect",
-                label = "Reconnect",
-                zPriority = 14f,
-                photos =
-                    data.reconnectReminders.map { reminder ->
-                        HomePilePhotoSpec(
-                            id = "reconnect-${reminder.connectionId}",
-                            visualId = reminder.connectionId,
-                            title = reminder.userName ?: "Someone",
-                            subtitle = "${reminder.daysSinceContact} days since last chat",
-                            imageUrl = data.connectedUsers[reminder.userId]?.image,
-                            onOpen = { actions.onReconnect(reminder) },
-                            onLongOpen = { actions.onDismissReconnect(reminder) },
-                        )
-                    },
+                photos = stayInTouchPhotos,
             )
     }
     if (data.eventReminders.isNotEmpty()) {
@@ -353,7 +301,7 @@ internal fun buildHomePileClusters(
                 label = "Recent Connections",
                 zPriority = 10f,
                 photos =
-                    data.locationGroups.entries.map { (location, connections) ->
+                    data.locationGroups.entries.take(10).map { (location, connections) ->
                         HomePilePhotoSpec(
                             id = "loc-$location",
                             title = location.ifBlank { "Somewhere" },
@@ -379,50 +327,13 @@ internal fun buildHomePileClusters(
                     ),
             )
     }
-    data.insights?.let { insights ->
-        out +=
-            HomePileClusterSpec(
-                id = "insights",
-                label = "Connection Insights",
-                zPriority = 8f,
-                photos =
-                    listOf(
-                        HomePilePhotoSpec(
-                            id = "insights-card",
-                            title = "Connection Insights",
-                            subtitle =
-                                "Keep ${insights.keepRate.toInt()}% · Active ${insights.activeConnections} · Need attention ${insights.dormantConnections}",
-                            onOpen = {},
-                        ),
-                    ),
-            )
-    }
-    out +=
-        HomePileClusterSpec(
-            id = "stats",
-            label = "Your Stats",
-            zPriority = 6f,
-            photos =
-                listOf(
-                    HomePilePhotoSpec(
-                        id = "stats-card",
-                        title = "Your Stats",
-                        subtitle = "${data.stats.totalConnections} clicks · ${data.stats.uniqueLocations} locations",
-                        onOpen = {},
-                    ),
-                ),
-        )
-    return out
+    return out.sortedByDescending { it.zPriority }
 }
 
 fun homePileRequiredClusterIds(): Set<String> =
     setOf(
-        "availability",
         "saved",
         "explore",
         "stay",
-        "reconnect",
         "recent",
-        "insights",
-        "stats",
     )

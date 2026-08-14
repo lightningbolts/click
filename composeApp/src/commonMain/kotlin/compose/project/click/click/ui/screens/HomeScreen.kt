@@ -384,6 +384,41 @@ fun HomeScreen(
                     }
 
                     if (homeLayoutMode == HomeLayoutMode.PILE) {
+                        item(key = "availability_intents_strip") {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                HomeAvailabilityIntentsRow(
+                                    intents = homeAvailabilityIntents,
+                                    onCreateIntent = {
+                                        availabilityViewModel.resetAvailabilityIntentSheet()
+                                        seedAvailabilityIntent = null
+                                        showAvailabilityIntentSheet = true
+                                    },
+                                    onEditIntent = { row ->
+                                        availabilityViewModel.beginEditAvailabilityIntent(row)
+                                        seedAvailabilityIntent = row
+                                        showAvailabilityIntentSheet = true
+                                    },
+                                )
+                                if (homeAvailabilityOverlapMessages.isNotEmpty()) {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        homeAvailabilityOverlapMessages.forEach { line ->
+                                            Text(
+                                                text = line,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Medium,
+                                                color = MaterialTheme.colorScheme.tertiary,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         homePhotoPileItems(
                             data =
                                 HomePileBoardData(
@@ -450,6 +485,47 @@ fun HomeScreen(
                             expandedClusterId = expandedPileClusterId,
                             onExpandedClusterChange = { expandedPileClusterId = it },
                         )
+                        activityRecap?.let { recap ->
+                            item(key = "activity_recap") {
+                                ActivityRecapSection(
+                                    recap = recap,
+                                    window = recapWindow,
+                                    onWindowChange = { homeViewModel.setRecapWindow(it) },
+                                )
+                            }
+                        }
+                        if (connectionInsights != null && state.stats.totalConnections > 0) {
+                            item(key = "connection_insights") {
+                                ConnectionInsightsCard(
+                                    insights = connectionInsights!!,
+                                    expanded = showInsightsPanel,
+                                    onToggle = { homeViewModel.toggleInsightsPanel() },
+                                )
+                            }
+                        }
+                        item(key = "stats_header") {
+                            SectionHeader(text = "Your Stats")
+                        }
+                        item(key = "stats_row") {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                HomeStatCard(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Filled.Check,
+                                    value = state.stats.totalConnections.toString(),
+                                    label = "Total Clicks",
+                                )
+                                HomeStatCard(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Filled.LocationOn,
+                                    value = state.stats.uniqueLocations.toString(),
+                                    label = "Locations",
+                                    iconTint = accentColor(AccentRole.Emphasis),
+                                )
+                            }
+                        }
                     } else {
                         featuredEvent?.let { reminder ->
                             item(key = "featured_event") {
@@ -1491,7 +1567,7 @@ private fun InsightRow(
 }
 
 @Composable
-private fun HomeAvailabilityIntentsRow(
+internal fun HomeAvailabilityIntentsRow(
     intents: List<AvailabilityIntentRow>,
     onCreateIntent: () -> Unit,
     onEditIntent: (AvailabilityIntentRow) -> Unit,

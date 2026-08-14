@@ -1,4 +1,4 @@
-package compose.project.click.click.data.storage
+package compose.project.click.click.data.storage // pragma: allowlist secret
 
 /**
  * In-memory [TokenStorage] for tests (avoids Android [createTokenStorage] init requirements).
@@ -7,6 +7,7 @@ class FakeTokenStorage(
     private val jwt: String? = null,
     private val refreshToken: String? = "test-refresh-token",
     private val expiresAtEpochMs: Long? = null,
+    private val userId: String? = null,
 ) : TokenStorage {
     private var activeHubsJson: String? = null
     private var pendingEncounterQueueJson: String? = null
@@ -27,6 +28,8 @@ class FakeTokenStorage(
     override suspend fun getExpiresAt(): Long? = expiresAtEpochMs
 
     override suspend fun getTokenType(): String? = "bearer"
+
+    override suspend fun getUserId(): String? = userId
 
     override suspend fun clearTokens() {}
 

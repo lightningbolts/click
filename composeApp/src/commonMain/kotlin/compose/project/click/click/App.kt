@@ -68,6 +68,7 @@ import compose.project.click.click.data.ActiveHubEntry // pragma: allowlist secr
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.OpenMeteoWeatherService // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
+import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.hub.HubConnectionManager // pragma: allowlist secret
 import compose.project.click.click.data.hub.HubVerifyResult // pragma: allowlist secret
 import compose.project.click.click.data.models.ContextTag // pragma: allowlist secret
@@ -78,6 +79,8 @@ import compose.project.click.click.data.models.OnboardingState // pragma: allowl
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.isPendingSync // pragma: allowlist secret
 import compose.project.click.click.data.models.isPublicUserProfileIncomplete // pragma: allowlist secret
+import compose.project.click.click.data.models.resolveOnboardingAfterRemoteResolution // pragma: allowlist secret
+import compose.project.click.click.data.models.resolveOnboardingInitialState // pragma: allowlist secret
 import compose.project.click.click.data.models.toConnectionPayloadWeatherJson // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
@@ -201,7 +204,7 @@ fun App() {
     // Location service for capturing GPS during QR scans
     val locationService =
         remember {
-            compose.project.click.click.utils
+            compose.project.click.click.utils // pragma: allowlist secret
                 .LocationService()
         }
     val requestLocationPermissionThen = rememberLocationPermissionRequester()
@@ -294,63 +297,84 @@ fun App() {
                 }
             }
 
-        when {
-            normalizedSavedState != null && normalizedSavedState.isComplete -> {
-                onboardingState = normalizedSavedState
+        val initialState =
+            resolveOnboardingInitialState(
+                savedState = normalizedSavedState,
+                hasCompletedOnboarding = effectiveHasCompletedOnboarding,
+            )
+        if (initialState != null) {
+            onboardingState = initialState
+            if (initialState != normalizedSavedState) {
+                tokenStorage.saveOnboardingState(onboardingJson.encodeToString(initialState))
             }
-            normalizedSavedState != null -> {
-                onboardingState = normalizedSavedState
-            }
-            else -> {
-                val shell = OnboardingState(flowVersion = 0)
-                onboardingState = shell
-                tokenStorage.saveOnboardingState(onboardingJson.encodeToString(shell))
-            }
+        } else {
+            onboardingState = null
         }
 
         val supabaseRepo =
-            compose.project.click.click.data.repository
+            compose.project.click.click.data.repository // pragma: allowlist secret
                 .SupabaseRepository()
         // Already-onboarded sessions must not wait on network — blocking here left the home
         // reveal half-finished (black content + nav only) when the fetch raced the entrance.
         val localOnboardingReady =
             normalizedSavedState?.interestsCompleted == true ||
                 normalizedSavedState?.isComplete == true ||
-                effectiveHasCompletedOnboarding
+                effectiveHasCompletedOnboarding ||
+                initialState?.isComplete == true
         interestsRemoteResolved = localOnboardingReady
         launch(Dispatchers.IO) {
             try {
                 kotlinx.coroutines.withTimeoutOrNull(2_500L) {
                     supabaseRepo.fetchUserInterests(currentUser.id).fold(
                         onSuccess = { row ->
-                            // Fast-forward Interests only when the account already has a real set
-                            // (completed on web). An empty `user_interests` row from web "skip"
-                            // must still run mobile interests onboarding (min tags).
-                            // Leave welcomeSeen alone so first mobile open still gets Welcome.
                             val tagCount = row?.tags?.size ?: 0
-                            val interestsSatisfied = tagCount >= INTEREST_ONBOARDING_MIN_TAGS
-                            if (!interestsSatisfied) return@fold
-
-                            val base = onboardingState ?: OnboardingState()
-                            if (base.interestsCompleted) {
-                                tokenStorage.saveTagsInitialized(true)
-                                return@fold
-                            }
-                            val merged =
-                                base.copy(
-                                    interestsCompleted = true,
-                                    flowVersion = base.flowVersion.coerceAtLeast(ONBOARDING_FLOW_VERSION_COMPLETE),
+                            val resolved =
+                                resolveOnboardingAfterRemoteResolution(
+                                    currentState = onboardingState,
+                                    tagCount = tagCount,
+                                    userFirstName = AppDataManager.currentUser.value?.firstName,
+                                    userBirthday = AppDataManager.currentUser.value?.birthday,
+                                    userAvatarUrl = AppDataManager.currentUser.value?.image,
+                                    minInterestTags = INTEREST_ONBOARDING_MIN_TAGS,
                                 )
-                            onboardingState = merged
-                            tokenStorage.saveTagsInitialized(true)
-                            tokenStorage.saveOnboardingState(onboardingJson.encodeToString(merged))
+                            onboardingState = resolved
+                            if (tagCount >= INTEREST_ONBOARDING_MIN_TAGS) {
+                                tokenStorage.saveTagsInitialized(true)
+                            }
+                            tokenStorage.saveOnboardingState(onboardingJson.encodeToString(resolved))
                         },
                         onFailure = { err ->
                             println("App: user_interests fetch failed, using local onboarding only: ${err.message}")
+                            if (onboardingState == null) {
+                                val fallback =
+                                    resolveOnboardingAfterRemoteResolution(
+                                        currentState = null,
+                                        tagCount = 0,
+                                        userFirstName = AppDataManager.currentUser.value?.firstName,
+                                        userBirthday = AppDataManager.currentUser.value?.birthday,
+                                        userAvatarUrl = AppDataManager.currentUser.value?.image,
+                                        minInterestTags = INTEREST_ONBOARDING_MIN_TAGS,
+                                    )
+                                onboardingState = fallback
+                                tokenStorage.saveOnboardingState(onboardingJson.encodeToString(fallback))
+                            }
                         },
                     )
                 }
             } finally {
+                if (onboardingState == null) {
+                    val fallback =
+                        resolveOnboardingAfterRemoteResolution(
+                            currentState = null,
+                            tagCount = 0,
+                            userFirstName = AppDataManager.currentUser.value?.firstName,
+                            userBirthday = AppDataManager.currentUser.value?.birthday,
+                            userAvatarUrl = AppDataManager.currentUser.value?.image,
+                            minInterestTags = INTEREST_ONBOARDING_MIN_TAGS,
+                        )
+                    onboardingState = fallback
+                    tokenStorage.saveOnboardingState(onboardingJson.encodeToString(fallback))
+                }
                 interestsRemoteResolved = true
             }
         }
@@ -359,15 +383,15 @@ fun App() {
     // Coroutine scope for location-aware connection
     val connectionScope = rememberCoroutineScope()
 
-    fun hasUsableLocation(location: compose.project.click.click.utils.LocationResult?): Boolean =
+    fun hasUsableLocation(location: compose.project.click.click.utils.LocationResult?): Boolean = // pragma: allowlist secret
         location != null &&
             location.latitude.isFinite() &&
             location.longitude.isFinite() &&
             !(location.latitude == 0.0 && location.longitude == 0.0)
 
     suspend fun resolveConnectionLocation(
-        initialLocation: compose.project.click.click.utils.LocationResult? = null,
-    ): compose.project.click.click.utils.LocationResult? {
+        initialLocation: compose.project.click.click.utils.LocationResult? = null, // pragma: allowlist secret
+    ): compose.project.click.click.utils.LocationResult? { // pragma: allowlist secret
         if (hasUsableLocation(initialLocation)) return initialLocation
 
         return try {
@@ -378,7 +402,7 @@ fun App() {
             if (!locationService.hasLocationPermission()) {
                 return AppDataManager.lastKnownDeviceLocation.value
                     ?.let { (lat, lon) ->
-                        compose.project.click.click.utils
+                        compose.project.click.click.utils // pragma: allowlist secret
                             .LocationResult(latitude = lat, longitude = lon)
                     }?.takeIf(::hasUsableLocation)
             }
@@ -391,7 +415,7 @@ fun App() {
 
             AppDataManager.lastKnownDeviceLocation.value
                 ?.let { (lat, lon) ->
-                    compose.project.click.click.utils
+                    compose.project.click.click.utils // pragma: allowlist secret
                         .LocationResult(latitude = lat, longitude = lon)
                 }?.takeIf(::hasUsableLocation)
         } catch (e: Exception) {
@@ -399,19 +423,19 @@ fun App() {
             initialLocation.takeIf(::hasUsableLocation)
                 ?: AppDataManager.lastKnownDeviceLocation.value
                     ?.let { (lat, lon) ->
-                        compose.project.click.click.utils
+                        compose.project.click.click.utils // pragma: allowlist secret
                             .LocationResult(latitude = lat, longitude = lon)
                     }?.takeIf(::hasUsableLocation)
         }
     }
 
     var lastHubGatekeeperFix by remember {
-        mutableStateOf<compose.project.click.click.utils.LocationResult?>(null)
+        mutableStateOf<compose.project.click.click.utils.LocationResult?>(null) // pragma: allowlist secret
     }
 
     suspend fun resolveHubGatekeeperLocationForChat(
-        seed: compose.project.click.click.utils.LocationResult? = null,
-    ): compose.project.click.click.utils.LocationResult? {
+        seed: compose.project.click.click.utils.LocationResult? = null, // pragma: allowlist secret
+    ): compose.project.click.click.utils.LocationResult? { // pragma: allowlist secret
         lastHubGatekeeperFix?.takeIf(::hasUsableHubLocation)?.let { return it }
         seed?.takeIf(::hasUsableHubLocation)?.let { return it }
 
@@ -440,13 +464,13 @@ fun App() {
         tokenAgeMs: Long? = null,
         venueId: String? = null,
         contextTagObject: ContextTag? = null,
-        capturedLocation: compose.project.click.click.utils.LocationResult? = null,
+        capturedLocation: compose.project.click.click.utils.LocationResult? = null, // pragma: allowlist secret
         heightCategory: HeightCategory? = null,
         exactBarometricElevationMeters: Double? = null,
         exactBarometricPressureHpa: Double? = null,
         noiseLevelCategory: NoiseLevelCategory? = null,
         exactNoiseLevelDb: Double? = null,
-        hardwareVibeOverride: compose.project.click.click.sensors.HardwareVibeSnapshot? = null,
+        hardwareVibeOverride: compose.project.click.click.sensors.HardwareVibeSnapshot? = null, // pragma: allowlist secret
         weatherSnapshotLabel: String? = null,
     ) {
         if (currentUser.id.isNotEmpty()) {
@@ -746,7 +770,7 @@ fun App() {
 
                     val supabaseRepo =
                         remember {
-                            compose.project.click.click.data.repository
+                            compose.project.click.click.data.repository // pragma: allowlist secret
                                 .SupabaseRepository()
                         }
                     val onboardingScope = rememberCoroutineScope()
@@ -1294,7 +1318,11 @@ fun App() {
                                         return@launch
                                     }
                                     lastHubGatekeeperFix = loc
-                                    val jwt = tokenStorage.getJwt()
+                                    val jwt =
+                                        EnsureFreshAccessToken
+                                            .get(tokenStorage)
+                                            ?.trim()
+                                            ?.takeIf { it.isNotEmpty() }
                                     if (jwt.isNullOrBlank()) {
                                         toastState.show(connectionScope, "Please sign in again to join the hub.")
                                         return@launch
@@ -1487,7 +1515,7 @@ fun App() {
                         }
 
                         // Platform back handler — intercepts Android back gesture/button
-                        compose.project.click.click.ui.components.PlatformBackHandler(
+                        compose.project.click.click.ui.components.PlatformBackHandler( // pragma: allowlist secret
                             enabled =
                                 (
                                     eventsSheetExpanded ||

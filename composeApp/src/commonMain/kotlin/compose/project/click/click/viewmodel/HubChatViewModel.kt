@@ -1,38 +1,39 @@
-package compose.project.click.click.viewmodel
+package compose.project.click.click.viewmodel // pragma: allowlist secret
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import compose.project.click.click.crypto.MessageCrypto
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.data.CHAT_MEDIA_BUCKET
-import compose.project.click.click.data.SupabaseConfig
-import compose.project.click.click.data.api.ChatApiClient
-import compose.project.click.click.data.models.ChatMessageType
-import compose.project.click.click.data.models.Message
-import compose.project.click.click.data.models.MessageDeliveryState
-import compose.project.click.click.data.models.MessageWithUser
-import compose.project.click.click.data.models.User
-import compose.project.click.click.data.models.audioCacheFileExtension
-import compose.project.click.click.data.models.hasLocalMediaUri
-import compose.project.click.click.data.models.isEncryptedMedia
-import compose.project.click.click.data.models.mediaUrlOrNull
-import compose.project.click.click.data.repository.SupabaseRepository
-import compose.project.click.click.data.repository.normalizeEncryptedMediaPayload
-import compose.project.click.click.data.storage.TokenStorage
-import compose.project.click.click.data.storage.createTokenStorage
-import compose.project.click.click.ui.chat.deleteSecureChatAudioTempFile
-import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile
-import compose.project.click.click.util.LruMemoryCache
-import compose.project.click.click.util.chatMediaDispatcher
-import compose.project.click.click.util.chatMediaVaultExtensionForMessage
-import compose.project.click.click.util.fileUriToLocalPath
-import compose.project.click.click.util.isChatMediaVaultLocalPath
-import compose.project.click.click.util.readChatMediaVaultLocalPathForMessage
-import compose.project.click.click.util.redactedRestMessage
-import compose.project.click.click.util.teardownBlocking
-import compose.project.click.click.util.writeChatMediaVaultFile
-import compose.project.click.click.utils.HUB_GATEKEEPER_LOCATION_CACHE_TTL_MS
-import compose.project.click.click.utils.LocationResult
+import compose.project.click.click.crypto.MessageCrypto // pragma: allowlist secret
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.CHAT_MEDIA_BUCKET // pragma: allowlist secret
+import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
+import compose.project.click.click.data.api.ChatApiClient // pragma: allowlist secret
+import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
+import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
+import compose.project.click.click.data.models.Message // pragma: allowlist secret
+import compose.project.click.click.data.models.MessageDeliveryState // pragma: allowlist secret
+import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.audioCacheFileExtension // pragma: allowlist secret
+import compose.project.click.click.data.models.hasLocalMediaUri // pragma: allowlist secret
+import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
+import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.normalizeEncryptedMediaPayload // pragma: allowlist secret
+import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
+import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.ui.chat.deleteSecureChatAudioTempFile // pragma: allowlist secret
+import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile // pragma: allowlist secret
+import compose.project.click.click.util.LruMemoryCache // pragma: allowlist secret
+import compose.project.click.click.util.chatMediaDispatcher // pragma: allowlist secret
+import compose.project.click.click.util.chatMediaVaultExtensionForMessage // pragma: allowlist secret
+import compose.project.click.click.util.fileUriToLocalPath // pragma: allowlist secret
+import compose.project.click.click.util.isChatMediaVaultLocalPath // pragma: allowlist secret
+import compose.project.click.click.util.readChatMediaVaultLocalPathForMessage // pragma: allowlist secret
+import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
+import compose.project.click.click.util.teardownBlocking // pragma: allowlist secret
+import compose.project.click.click.util.writeChatMediaVaultFile // pragma: allowlist secret
+import compose.project.click.click.utils.HUB_GATEKEEPER_LOCATION_CACHE_TTL_MS // pragma: allowlist secret
+import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.realtime.PostgresAction
@@ -190,6 +191,18 @@ private fun randomHubMediaLeaf(): String =
     }
 
 private const val HUB_INITIAL_MESSAGE_LIMIT = 120L
+
+private suspend fun TokenStorage.requireFreshHubJwt(): String {
+    val fresh =
+        runCatching { EnsureFreshAccessToken.get(this) }
+            .getOrNull()
+            ?.trim()
+            .orEmpty()
+    if (fresh.isNotEmpty()) return fresh
+    val stored = getJwt()?.trim().orEmpty()
+    if (stored.isNotEmpty()) return stored
+    throw IllegalStateException("Please sign in again.")
+}
 
 class HubChatViewModel(
     private val hubId: String,
@@ -857,8 +870,7 @@ class HubChatViewModel(
             try {
                 val loc = resolveGatekeeperLocationOrThrow()
                 val jwt =
-                    tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
-                        ?: throw IllegalStateException("Please sign in again.")
+                    tokenStorage.requireFreshHubJwt()
                 val dto =
                     chatApi
                         .sendHubMessage(
@@ -923,8 +935,7 @@ class HubChatViewModel(
             try {
                 val loc = resolveGatekeeperLocationOrThrow()
                 val jwt =
-                    tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
-                        ?: throw IllegalStateException("Please sign in again.")
+                    tokenStorage.requireFreshHubJwt()
                 val keys = MessageCrypto.deriveKeysForHub(hubId)
                 val cipher = MessageCrypto.encryptMediaBytes(imageBytes, keys)
                 val leaf = randomHubMediaLeaf()
@@ -1130,8 +1141,7 @@ class HubChatViewModel(
         viewModelScope.launch(mutationDispatcher) {
             try {
                 val jwt =
-                    tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
-                        ?: throw IllegalStateException("Please sign in again.")
+                    tokenStorage.requireFreshHubJwt()
                 hubLifecycleGateway
                     .updateHub(
                         hubId = hubId,
@@ -1152,8 +1162,7 @@ class HubChatViewModel(
         viewModelScope.launch(mutationDispatcher) {
             try {
                 val jwt =
-                    tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
-                        ?: throw IllegalStateException("Please sign in again.")
+                    tokenStorage.requireFreshHubJwt()
                 hubLifecycleGateway
                     .leaveHub(
                         hubId = hubId,
@@ -1173,8 +1182,7 @@ class HubChatViewModel(
         viewModelScope.launch(mutationDispatcher) {
             try {
                 val jwt =
-                    tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
-                        ?: throw IllegalStateException("Please sign in again.")
+                    tokenStorage.requireFreshHubJwt()
                 hubLifecycleGateway
                     .deleteHub(
                         hubId = hubId,

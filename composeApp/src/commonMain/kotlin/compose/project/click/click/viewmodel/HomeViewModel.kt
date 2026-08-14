@@ -354,7 +354,7 @@ class HomeViewModel(
                         val recentConnections =
                             activeConnections
                                 .sortedByDescending { it.created }
-                                .take(5)
+                                .take(10)
 
                         val uniqueLocations =
                             activeConnections
@@ -372,7 +372,7 @@ class HomeViewModel(
                         val grouped =
                             activeConnections
                                 .sortedByDescending { it.created }
-                                .take(5)
+                                .take(10)
                                 .groupBy { it.semanticLocation ?: "Somewhere New" }
                         _locationGroupedConnections.value = grouped
 
@@ -505,7 +505,7 @@ class HomeViewModel(
                     connections = connectionsWithLastMessage,
                     users = usersMap,
                     currentUserId = userId,
-                    limit = 3,
+                    limit = 10,
                 )
 
             _reconnectReminders.value = reminders

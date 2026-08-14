@@ -29,7 +29,7 @@ App()
 
 **AuthState gate:** `authViewModel.authState` must be `AuthState.Success` before any post-login surface renders.
 
-**OnboardingState gate:** `OnboardingViewModel.step` drives `onboardingStep` (`loading` → `welcome` → `interests` → `avatar` → `complete`). Persisted `OnboardingState` in `TokenStorage` survives process death.
+**OnboardingState gate:** `OnboardingViewModel.step` drives `onboardingStep` (`loading` → `welcome` → `interests` → `avatar` → `complete`). Persisted `OnboardingState` in `TokenStorage` survives process death. Returning accounts are hydrated with `welcomeSeen = true` (via `existingHydratedOnboardingState()` / remote profile+interests resolution) so Welcome does not flash on cold start; only brand-new installs with no profile signals see Welcome.
 
 ### Manual route stack
 

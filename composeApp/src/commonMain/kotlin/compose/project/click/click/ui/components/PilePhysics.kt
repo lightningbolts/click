@@ -9,11 +9,11 @@ import kotlin.math.hypot
 //
 // Gesture *thresholds* are not re-invented here — they defer to GlassGestureCommitFraction and
 // GlassGestureFlickVelocityPxPerSec, the app's single gesture-physics authority. What this file
-// owns is the 2D interaction model: 1:1 drag tracking, directional dismiss vs recall, depth by
+// owns is the 2D interaction model: 1:1 drag tracking, omnidirectional dismiss vs recall, depth by
 // layer, and the staggered fan timing.
 
-/** Top card plus three peeking layers. More than that reads as noise at row height. */
-const val PILE_MAX_VISIBLE_LAYERS = 4
+/** Top card plus two peeking layers. More than that reads as noise at row height. */
+const val PILE_MAX_VISIBLE_LAYERS = 3
 
 /** Cluster row occupies roughly half the phone screen. */
 const val PILE_CLUSTER_SCREEN_FRACTION = 0.5f
@@ -21,8 +21,7 @@ const val PILE_CLUSTER_SCREEN_FRACTION = 0.5f
 /** Leave a little room for peek + breathing so the square card still dominates the row. */
 const val PILE_CARD_SCREEN_FRACTION = 0.44f
 
-/** Peek step per layer. Large enough to signal depth, small enough to never cover a title. */
-private const val PILE_PEEK_STEP_X_DP = 18f
+/** Vertical peek step per layer (0 / 12 / 24 dp). Titles stay visible because x never shifts. */
 private const val PILE_PEEK_STEP_Y_DP = 12f
 
 private const val PILE_REST_TILT_MAX_DEG = 4f
@@ -41,6 +40,13 @@ private const val PILE_FRONT_ELEVATION_DP = 18f
 private const val PILE_LAYER_ELEVATION_STEP_DP = 4f
 private const val PILE_BACK_ELEVATION_DP = 4f
 
+/** Playful tap feedback before fan-out. */
+const val PILE_TAP_JIGGLE_SCALE = 1.02f
+const val PILE_TAP_JIGGLE_WOBBLE_DEG = 2f
+
+/** Rubber-band tension begins past this fraction of card size. */
+private const val PILE_RUBBER_BAND_START_FRACTION = 0.85f
+
 enum class PileSwipeAction {
     SpringBack,
     Dismiss,
@@ -50,12 +56,12 @@ enum class PileSwipeAction {
 /**
  * Offset in dp of the card at [layer] behind the top card, as (x, y).
  *
- * Always right and down, never left or up: the title block sits at the bottom-start of each card, so
- * peeking in the other direction is what previously buried labels under their neighbours.
+ * Vertical-only peek (x = 0): the title block sits at the bottom-start of each card, so horizontal
+ * peek previously buried labels under their neighbours.
  */
 fun pilePeekOffsetDp(layer: Int): Pair<Float, Float> {
     val clamped = layer.coerceIn(0, PILE_MAX_VISIBLE_LAYERS - 1)
-    return (clamped * PILE_PEEK_STEP_X_DP) to (clamped * PILE_PEEK_STEP_Y_DP)
+    return 0f to (clamped * PILE_PEEK_STEP_Y_DP)
 }
 
 /**
@@ -83,7 +89,6 @@ fun pileCardTiltDeg(
     id: String,
     layer: Int,
 ): Float {
-    if (layer <= 0) return 0f
     val unsigned = fnv1a32("$id#$layer").toUInt()
     val steps = (unsigned % 17u).toInt() - 8
     return (steps / 8f) * PILE_REST_TILT_MAX_DEG
@@ -124,9 +129,10 @@ fun pileLayerElevationDp(layer: Int): Float {
 }
 
 /**
- * Directional swipe-to-dismiss/recall. Up or right past the shared commit threshold dismisses;
- * left or down recalls the most recently dismissed card. Below threshold (or when that action is
- * impossible) springs back. A fast flick in the swipe direction commits even short of half size.
+ * Omnidirectional swipe-to-dismiss/recall. Any fling/swipe past the shared commit threshold
+ * dismisses when possible; recall when the gesture opposes the last throw or enters the lower-left
+ * quadrant. Below threshold (or when that action is impossible) springs back. A fast flick in the
+ * swipe direction commits even short of half size.
  */
 fun pileSwipeAction(
     offsetXPx: Float,
@@ -136,6 +142,8 @@ fun pileSwipeAction(
     sizePx: Float,
     canDismiss: Boolean,
     canRecall: Boolean,
+    lastExitXPx: Float = 0f,
+    lastExitYPx: Float = 0f,
 ): PileSwipeAction {
     if (offsetXPx == 0f &&
         offsetYPx == 0f &&
@@ -145,66 +153,63 @@ fun pileSwipeAction(
         return PileSwipeAction.SpringBack
     }
     val size = sizePx.coerceAtLeast(1f)
-    val horizontal = isPileSwipeHorizontal(offsetXPx, offsetYPx, velocityXPxPerSec, velocityYPxPerSec)
-    val offset = if (horizontal) offsetXPx else offsetYPx
-    val velocity = if (horizontal) velocityXPxPerSec else velocityYPxPerSec
-    val dismissDirection = if (horizontal) offset > 0f else offset < 0f
+    val distance = pileDragDistancePx(offsetXPx, offsetYPx)
+    val pastDistance = distance >= size * GlassGestureCommitFraction
+    val velocityMag = hypot(velocityXPxPerSec, velocityYPxPerSec)
     val flickedInSwipeDirection =
-        velocity * offset > 0f ||
-            (offset == 0f && if (horizontal) velocity > 0f else velocity < 0f)
-    val pastDistance = abs(offset) >= size * GlassGestureCommitFraction
-    val flicked = flickedInSwipeDirection && abs(velocity) >= GlassGestureFlickVelocityPxPerSec
+        offsetXPx * velocityXPxPerSec + offsetYPx * velocityYPxPerSec > 0f ||
+            (offsetXPx == 0f && offsetYPx == 0f && velocityMag >= GlassGestureFlickVelocityPxPerSec)
+    val flicked = flickedInSwipeDirection && velocityMag >= GlassGestureFlickVelocityPxPerSec
     if (!pastDistance && !flicked) return PileSwipeAction.SpringBack
-    return if (dismissDirection) {
-        if (canDismiss) PileSwipeAction.Dismiss else PileSwipeAction.SpringBack
-    } else {
-        if (canRecall) PileSwipeAction.Recall else PileSwipeAction.SpringBack
+
+    val lowerLeftRecall = offsetXPx < 0f && offsetYPx >= 0f
+    val hasLastExit = lastExitXPx != 0f || lastExitYPx != 0f
+    val oppositeLastThrow =
+        hasLastExit &&
+            offsetXPx * lastExitXPx + offsetYPx * lastExitYPx < 0f
+    if (canRecall && (lowerLeftRecall || oppositeLastThrow)) {
+        return PileSwipeAction.Recall
     }
+    return if (canDismiss) PileSwipeAction.Dismiss else PileSwipeAction.SpringBack
 }
 
-internal fun isPileSwipeHorizontal(
-    offsetXPx: Float,
-    offsetYPx: Float,
-    velocityXPxPerSec: Float,
-    velocityYPxPerSec: Float,
-): Boolean {
-    val offsetMag = hypot(offsetXPx, offsetYPx)
-    if (offsetMag >= 1f) return abs(offsetXPx) >= abs(offsetYPx)
-    return abs(velocityXPxPerSec) >= abs(velocityYPxPerSec)
-}
-
-/** Where a dismissed card animates to, just past the edge in the thrown direction. */
+/** Where a dismissed card animates to, just past the edge along the actual 2D throw vector. */
 fun pileCardExitTargetPx(
     offsetXPx: Float,
     offsetYPx: Float,
     sizePx: Float,
 ): Pair<Float, Float> {
     val size = sizePx.coerceAtLeast(1f)
-    val horizontal = abs(offsetXPx) >= abs(offsetYPx)
-    return if (horizontal) {
-        val x = (if (offsetXPx >= 0f) 1f else -1f) * size * 1.35f
-        x to offsetYPx * 1.15f
-    } else {
-        val y = (if (offsetYPx >= 0f) 1f else -1f) * size * 1.35f
-        offsetXPx * 1.15f to y
-    }
+    val mag = hypot(offsetXPx, offsetYPx).coerceAtLeast(1f)
+    val scale = size * 1.35f / mag
+    return offsetXPx * scale to offsetYPx * scale
 }
 
-/**
- * Off-screen start for a recalled card: left if the swipe was left, below if the swipe was down.
- */
+/** Off-screen start for a recalled card: reverse of the exit trajectory. */
 fun pileRecallEnterFromPx(
     offsetXPx: Float,
     offsetYPx: Float,
     sizePx: Float,
 ): Pair<Float, Float> {
-    val size = sizePx.coerceAtLeast(1f)
-    val horizontal = abs(offsetXPx) >= abs(offsetYPx)
-    return if (horizontal) {
-        -size * 1.15f to 0f
-    } else {
-        0f to size * 1.15f
-    }
+    val (exitX, exitY) = pileCardExitTargetPx(offsetXPx, offsetYPx, sizePx)
+    return -exitX to -exitY
+}
+
+/**
+ * Rubber-band drag past ~85% of [range]: linear inside, diminishing stretch beyond.
+ */
+fun pileRubberBandOffset(
+    offset: Float,
+    range: Float,
+): Float {
+    val limit = range.coerceAtLeast(1f)
+    val threshold = limit * PILE_RUBBER_BAND_START_FRACTION
+    val absOffset = abs(offset)
+    if (absOffset <= threshold) return offset
+    val sign = if (offset >= 0f) 1f else -1f
+    val excess = absOffset - threshold
+    val stretched = threshold + excess * 0.35f
+    return sign * stretched.coerceAtMost(absOffset)
 }
 
 /** Per-card delay so a fan-out (and matching collapse) reads as a staggered deal. */

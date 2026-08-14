@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -51,6 +52,7 @@ fun PhotoCard(
     elevation: Dp = 6.dp,
     /** 0–1 black scrim used by stacked pile layers so back cards read as further away. */
     dimming: Float = 0f,
+    categoryBadge: String? = null,
     onClick: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
     content: @Composable (BoxScope.() -> Unit)? = null,
@@ -89,6 +91,26 @@ fun PhotoCard(
                         .fillMaxSize()
                         .background(Color.Black.copy(alpha = dimming.coerceIn(0f, 1f))),
             )
+        }
+        if (!categoryBadge.isNullOrBlank()) {
+            Surface(
+                modifier =
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .padding(12.dp),
+                shape = RoundedCornerShape(8.dp),
+                color = visual.onContent.copy(alpha = 0.18f),
+            ) {
+                Text(
+                    text = categoryBadge,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = visual.onContent,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         Column(
             modifier =

@@ -26,8 +26,9 @@ import kotlinx.coroutines.flow.update
  *   If [OnboardingState.interestsCompleted] is already true *and* the caller reports that the user
  *   has an avatar URL, we fast-forward past Avatar **and Personality** so existing accounts do not
  *   re-onboard. Personality is required only for new signups (`legacyComplete` is false).
- *   Welcome is shown for accounts with `welcomeSeen = false` regardless of legacy completion —
- *   it is a short copy screen and gives us a place to announce B2.
+ *   Welcome is shown only for known-new accounts (`welcomeSeen = false` and
+ *   `interestsCompleted = false`). Returning users hydrated with
+ *   [existingHydratedOnboardingState] or remote profile/interests signals skip Welcome.
  *
  * [userHasAvatar] is tri-state: `true` / `false` / `null` (unknown). Unknown must not show Avatar.
  */
@@ -188,7 +189,7 @@ class OnboardingViewModel(
         val legacyComplete = s.interestsCompleted && (s.avatarSetOrSkipped || hasAvatar)
 
         return when {
-            !s.welcomeSeen -> Step.Welcome
+            !s.welcomeSeen && !s.interestsCompleted -> Step.Welcome
             !s.interestsCompleted -> Step.Interests
             !s.personalityCompleted && !legacyComplete -> Step.Personality
             !s.avatarSetOrSkipped && !hasAvatar -> Step.Avatar
