@@ -87,7 +87,7 @@ Other beacon/hub kinds remain on the **map** via layer filters.
 | Category chips | Horizontal `LazyRow` |
 | Hub mode | Name field + category `FlowRow` |
 | Non-hub | Title / soundtrack URL / event picker / duration chips / description |
-| Photo | **Required** for every type except Soundtrack — one image from photo library or in-app camera, auto-compressed to ≤ 2 MB (`compressOutgoingChatImageForUpload` + `POST /api/beacons/image`). Unencrypted public URL stored in metadata `image_url`. |
+| Photo | **Optional for every type, encouraged in the sheet.** One image from photo library or in-app camera, auto-compressed to ≤ 2 MB (`compressOutgoingChatImageForUpload` + `POST /api/beacons/image`). Unencrypted public URL stored in metadata `image_url`. Offered via two shared `MediaSourceButton` tiles (`"Take photo"` / `"Photo library"`) plus a thumbnail with Replace / Remove once attached — not `TextButton` labels, which read as highlighted text. A beacon without a photo renders with its generated `CardVisual` gradient everywhere it appears, so there is no submit gate (`beaconDropValidationError` covers title, music link, and event location only). |
 | Event extras | Start/end picker + multi-select **Categories** (`Promotional` / `Social` / `School Event`) + **Check-in area** venue scale (`Intimate` / `Neighborhood` / `Venue` / `Campus`) + **Event location** (address search via Nominatim **or** “Use my location”) → metadata `event_categories`, `venue_scale`, `check_in_radius_meters`, `location_name`, `formatted_address` |
 | Visibility | `"Who can see this"` chip row + `"Display my name"` switch |
 | CTA | Full-width `Button` — `"Create hub"` or `"Drop pin"` |
@@ -249,6 +249,8 @@ Soundtrack / community kinds (hazard, SOS, utility, study): same bordered hero; 
 |---------|------------------------|
 | Missing title | `"Please add a title."` |
 | Missing music URL | `"Please add a music link."` |
+| Missing event location | `"Set an event location (search an address or use my location)."` |
+| Missing photo | **Nothing — photos are optional for every category.** Enforced by omission in `beaconDropValidationError`, covered by `BeaconDropValidationTest` so the gate cannot creep back. |
 | No GPS | `"Location is required to drop a community beacon. Enable location in Settings and try again."` |
 | Invalid music URL | `"Enter a valid Spotify, Apple Music, or YouTube link."` |
 | Title too long | `"Title must be 80 characters or less."` |
@@ -319,13 +321,14 @@ All user-visible strings quoted below.
 - Categories: `"Soundtrack"`, `"Hazard"`, `"Utility"`, `"SOS"`, `"Study"`, `"Event"`, `"Hub"`
 - `"Hub name"` (placeholder)
 - Hub categories (chips): `"General"`, `"Music"`, `"Study"`, `"Sports"`, `"Food"`, `"Nightlife"`, `"Gaming"`, `"Tech"`, `"Art"`, `"Fitness"`, `"Networking"`, `"Party"`
-- `"Spotify, Apple Music, or YouTube link"` (placeholder)
+- `"Spotify, Apple Music, or YouTube link"` (placeholder — passed as `placeholderText` so it ellipsizes on one line instead of wrapping the field to two rows; the paste icon button is 36dp to leave it room)
 - `"Paste link"` (content description)
+- `"Photo"` + `"Add a photo so people recognize this at a glance."` / `"Photo attached"`; `MediaSourceButton` labels `"Take photo"` / `"Photo library"`; thumbnail actions `"Replace"` / `"Remove"`
 - `"Title (max 80)"`, `"Description (optional, max 500)"`
 - `"Visible for"` + duration chips: `"15 min"`, `"30 min"`, `"45 min"`, `"1 hour"`, `"90 min"`, `"2 hours"`, `"3 hours"`, `"6 hours"`, `"24 hours"`, `"2 days"` … `"7 days"`
 - `"Who can see this"`: `"Everyone"`, `"Connections only"`, `"Core connections only"`
 - `"Display my name"` / `"Show your name on the map pin for others nearby."`
-- Validation: `"Please add a title."`, `"Please add a music link."`
+- Validation: `"Please add a title."`, `"Please add a music link."`, `"Set an event location (search an address or use my location)."` — no photo requirement
 - CTAs: `"Create hub"`, `"Drop pin"`
 
 ### CreateHubModal

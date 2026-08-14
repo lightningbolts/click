@@ -72,6 +72,7 @@ import compose.project.click.click.telemetry.TelemetryBatcher // pragma: allowli
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.AnimatedClickDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.BeaconShareToChatDialog // pragma: allowlist secret
+import compose.project.click.click.ui.components.CardVisualHero // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickCircularGlassIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickDropdownMenu // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
@@ -87,12 +88,10 @@ import compose.project.click.click.ui.components.EventPeopleDirectorySheetConten
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassmorphicOverlay // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
-import compose.project.click.click.ui.components.InteractiveSwipeBackParallaxPeekRatio // pragma: allowlist secret
 import compose.project.click.click.ui.components.LiquidGlassPill // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapClusterPin // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPin // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPinKind // pragma: allowlist secret
-import compose.project.click.click.ui.components.PhotoCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformMap // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProfileBottomSheet // pragma: allowlist secret
@@ -100,8 +99,10 @@ import compose.project.click.click.ui.components.ProfileSheetBadge // pragma: al
 import compose.project.click.click.ui.components.ProfileSheetState // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastHost // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.interactiveSwipeBackUnderlay // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberInteractiveBackHostState // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberUnifiedToastState // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
 import compose.project.click.click.ui.components.toClusterPin // pragma: allowlist secret
@@ -249,8 +250,8 @@ fun MapScreen(
     }
 
     var eventsListTransitionMode by remember { mutableStateOf(EventsListTransitionMode.Tap) }
-    val eventsSwipeDragPx = remember { mutableFloatStateOf(0f) }
-    var eventsSwipeBehindLayers by remember { mutableStateOf(false) }
+    val eventsBackHost = rememberInteractiveBackHostState()
+    val eventsSwipeDragPx = eventsBackHost.dragOffsetPx
     // Keep events UI composed after first open so swipe-back does not remount the list.
     var eventsOverlayMounted by remember { mutableStateOf(false) }
     var eventsCloseJob by remember { mutableStateOf<Job?>(null) }
@@ -259,8 +260,7 @@ fun MapScreen(
     val eventsVerticalReveal = remember { Animatable(0f) }
 
     fun finalizeEventsClose() {
-        eventsSwipeDragPx.floatValue = 0f
-        eventsSwipeBehindLayers = false
+        eventsBackHost.reset()
         eventsListTransitionMode = EventsListTransitionMode.Tap
         eventsCloseJob = null
     }
@@ -298,8 +298,7 @@ fun MapScreen(
             eventsCloseJob?.cancel()
             eventsCloseJob = null
             eventsOverlayMounted = true
-            eventsSwipeDragPx.floatValue = 0f
-            eventsSwipeBehindLayers = false
+            eventsBackHost.reset()
             if (eventsVerticalReveal.value < 0.99f) {
                 eventsVerticalReveal.snapTo(0f)
                 eventsVerticalReveal.animateTo(
@@ -515,17 +514,7 @@ fun MapScreen(
                                     Modifier
                                         .fillMaxSize()
                                         .zIndex(10f)
-                                        .graphicsLayer {
-                                            if (!eventsSwipeBehindLayers) {
-                                                translationX = 0f
-                                                return@graphicsLayer
-                                            }
-                                            val w = size.width.coerceAtLeast(1f)
-                                            val o = eventsSwipeDragPx.floatValue.coerceIn(0f, w)
-                                            val progress = (o / w).coerceIn(0f, 1f)
-                                            translationX =
-                                                -(size.width * InteractiveSwipeBackParallaxPeekRatio) * (1f - progress)
-                                        },
+                                        .interactiveSwipeBackUnderlay(eventsBackHost),
                             )
 
                             EventsReopenChip(
@@ -533,8 +522,7 @@ fun MapScreen(
                                 onClick = {
                                     eventsCloseJob?.cancel()
                                     eventsCloseJob = null
-                                    eventsSwipeDragPx.floatValue = 0f
-                                    eventsSwipeBehindLayers = false
+                                    eventsBackHost.reset()
                                     eventsListTransitionMode = EventsListTransitionMode.Tap
                                     eventsOverlayMounted = true
                                     onEventsSheetExpandedChanged(true)
@@ -544,17 +532,8 @@ fun MapScreen(
                                     Modifier
                                         .align(Alignment.BottomCenter)
                                         .zIndex(15f)
-                                        .graphicsLayer {
-                                            if (!eventsSwipeBehindLayers) {
-                                                translationX = 0f
-                                                return@graphicsLayer
-                                            }
-                                            val w = size.width.coerceAtLeast(1f)
-                                            val o = eventsSwipeDragPx.floatValue.coerceIn(0f, w)
-                                            val progress = (o / w).coerceIn(0f, 1f)
-                                            translationX =
-                                                -(size.width * InteractiveSwipeBackParallaxPeekRatio) * (1f - progress)
-                                        }.padding(
+                                        .interactiveSwipeBackUnderlay(eventsBackHost)
+                                        .padding(
                                             start = 16.dp,
                                             end = 16.dp,
                                             bottom = mapFabAboveNav,
@@ -575,7 +554,7 @@ fun MapScreen(
                             if (eventsOverlayMounted) {
                                 val eventsClosed =
                                     !eventsSheetExpanded &&
-                                        !eventsSwipeBehindLayers &&
+                                        !eventsBackHost.behindLayersVisible &&
                                         eventsVerticalReveal.value < 0.01f
                                 BoxWithConstraints(
                                     modifier =
@@ -591,7 +570,7 @@ fun MapScreen(
                                                 .graphicsLayer {
                                                     // During interactive back, Y stays put — container owns X.
                                                     val swiping =
-                                                        eventsSwipeBehindLayers ||
+                                                        eventsBackHost.behindLayersVisible ||
                                                             eventsSwipeDragPx.floatValue > 0.5f
                                                     translationY =
                                                         if (swiping) {
@@ -612,7 +591,9 @@ fun MapScreen(
                                             enabled = eventsSheetExpanded,
                                             opaquePreviousBackground = false,
                                             externalDragOffsetPx = eventsSwipeDragPx,
-                                            onBehindLayersVisibleChanged = { eventsSwipeBehindLayers = it },
+                                            onBehindLayersVisibleChanged = {
+                                                eventsBackHost.behindLayersVisible = it
+                                            },
                                             onBack = {
                                                 closeEventsList(EventsListTransitionMode.Gesture)
                                             },
@@ -1276,25 +1257,29 @@ private fun MapLayerFilterDropdown(
     }
 }
 
+/**
+ * Purely decorative header for a beacon detail sheet.
+ *
+ * It takes no title or subtitle on purpose. The structured content directly below is the single
+ * source of the beacon's title, schedule, and location — repeating them in the banner meant every
+ * detail sheet showed the same name and dates twice on one screen.
+ */
 @Composable
 private fun BeaconIdentityBanner(
     beacon: MapBeacon,
-    subtitle: String? = null,
+    showTypeChip: Boolean = true,
 ) {
-    val visual =
-        remember(beacon.id, beacon.kind, beacon.sourceBeaconType) {
-            generateCardVisual(beacon.id, beacon.kind, beacon.sourceBeaconType)
-        }
-    PhotoCard(
+    CardVisualHero(
         id = beacon.id,
-        title = beacon.displayDynamicTitle(),
-        subtitle = subtitle,
+        kind = beacon.kind,
+        typeKey = beacon.sourceBeaconType,
         imageUrl = beacon.metadata.albumArtUrl,
-        visual = visual,
+        chipLabel = beacon.displayTypeTitle().takeIf { showTypeChip },
         modifier =
             Modifier
                 .fillMaxWidth()
-                .height(132.dp),
+                .height(132.dp)
+                .clip(RoundedCornerShape(12.dp)),
     )
 }
 
@@ -1588,10 +1573,7 @@ internal fun EventBeaconDetail(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        BeaconIdentityBanner(
-            beacon = displayBeacon,
-            subtitle = scheduleRange,
-        )
+        BeaconIdentityBanner(beacon = displayBeacon)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -2406,10 +2388,8 @@ internal fun CommunityBeaconDetail(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        BeaconIdentityBanner(
-            beacon = beacon,
-            subtitle = kindLabel,
-        )
+        // No chip here: the structured section below already leads with an icon + kind chip.
+        BeaconIdentityBanner(beacon = beacon, showTypeChip = false)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -2600,10 +2580,7 @@ internal fun SoundtrackBeaconDetail(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        BeaconIdentityBanner(
-            beacon = displayBeacon,
-            subtitle = artistLine,
-        )
+        BeaconIdentityBanner(beacon = displayBeacon)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),

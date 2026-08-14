@@ -5,15 +5,14 @@
 
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.zIndex
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.api.ActivityRecapDto // pragma: allowlist secret
 import compose.project.click.click.data.api.EventBookmarkItemDto // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
@@ -58,67 +57,84 @@ data class HomePileActions(
     val onLocationClick: (String) -> Unit,
 )
 
-@Composable
-fun HomePhotoPileBoard(
+/**
+ * Emits one full-width row per pile cluster into the Home [LazyColumn]: a [SectionHeader] label with
+ * its own [PileCluster] stack underneath.
+ *
+ * Rows are deliberately stacked vertically instead of scattered across a shared canvas. The previous
+ * free-floating board positioned every cluster absolutely inside one viewport-sized box, so clusters
+ * overlapped and sliced each other's labels in half.
+ *
+ * [expandedClusterId] is hoisted so the caller can own system back and cross-cluster exclusivity.
+ */
+fun LazyListScope.homePhotoPileItems(
     data: HomePileBoardData,
     actions: HomePileActions,
-    modifier: Modifier = Modifier,
+    expandedClusterId: String?,
+    onExpandedClusterChange: (String?) -> Unit,
 ) {
-    var expandedId by remember { mutableStateOf<String?>(null) }
-    PlatformBackHandler(enabled = expandedId != null) {
-        expandedId = null
-    }
-    val clusters = remember(data, actions) { buildHomePileClusters(data, actions) }
-    Box(modifier = modifier.fillMaxSize()) {
-        PileBoardScrim(
-            visible = expandedId != null,
-            onDismiss = { expandedId = null },
-            modifier = Modifier.zIndex(1f),
-        )
-        clusters.forEachIndexed { index, cluster ->
+    val clusters = buildHomePileClusters(data, actions)
+    clusters.forEach { cluster ->
+        item(key = "pile_${cluster.id}", contentType = "pile_cluster") {
+            val expanded = expandedClusterId == cluster.id
             val photos =
                 cluster.photos.map { spec ->
                     PilePhoto(
                         id = spec.id,
+                        visualId = spec.visualId,
                         title = spec.title,
                         subtitle = spec.subtitle,
                         imageUrl = spec.imageUrl,
                         onClick = {
-                            if (expandedId == cluster.id) {
-                                spec.onOpen()
-                            } else {
-                                expandedId = cluster.id
-                            }
+                            if (expanded) spec.onOpen() else onExpandedClusterChange(cluster.id)
                         },
                         onLongClick =
                             spec.onLongOpen?.let { longOpen ->
-                                {
-                                    if (expandedId == cluster.id) longOpen()
-                                }
+                                { if (expanded) longOpen() }
                             },
                     )
                 }
-            PileCluster(
-                clusterId = cluster.id,
-                label = cluster.label,
-                photos = photos,
-                expanded = expandedId == cluster.id,
-                onExpand = { expandedId = cluster.id },
-                onCollapse = { expandedId = null },
-                index = index,
-                totalClusters = clusters.size,
-                zPriority = cluster.zPriority,
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .zIndex(if (expandedId == cluster.id) 20f else cluster.zPriority),
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionHeader(
+                    text = cluster.label,
+                    trailing =
+                        if (expanded) {
+                            {
+                                TextButton(onClick = { onExpandedClusterChange(null) }) {
+                                    Text(
+                                        text = "Show less",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            }
+                        } else {
+                            null
+                        },
+                )
+                PileCluster(
+                    clusterId = cluster.id,
+                    label = cluster.label,
+                    photos = photos,
+                    expanded = expanded,
+                    onExpand = { onExpandedClusterChange(cluster.id) },
+                    onCollapse = { onExpandedClusterChange(null) },
+                )
+            }
         }
     }
 }
 
 internal data class HomePilePhotoSpec(
+    /** Unique within the cluster, used as an animation / list identity. */
     val id: String,
+    /**
+     * Seed for the shared card-visual generator. Must be the raw entity id (`beacon.id`) where one
+     * exists, so a beacon keeps the same gradient on the pile, in the Events list, on its map pin,
+     * and in its detail sheet. Defaults to [id] for synthetic cards with no entity behind them.
+     */
+    val visualId: String = id,
     val title: String,
     val subtitle: String?,
     val imageUrl: String? = null,
@@ -129,6 +145,7 @@ internal data class HomePilePhotoSpec(
 internal data class HomePileClusterSpec(
     val id: String,
     val label: String,
+    /** Order weight: higher clusters appear nearer the top of the page. */
     val zPriority: Float,
     val photos: List<HomePilePhotoSpec>,
 )
@@ -187,6 +204,7 @@ internal fun buildHomePileClusters(
                     listOf(
                         HomePilePhotoSpec(
                             id = "featured-${featured.beaconId}",
+                            visualId = featured.beaconId,
                             title =
                                 featured.title
                                     ?.trim()
@@ -225,6 +243,7 @@ internal fun buildHomePileClusters(
                     data.savedBookmarks.map { bookmark ->
                         HomePilePhotoSpec(
                             id = "saved-${bookmark.beaconId}",
+                            visualId = bookmark.beaconId,
                             title =
                                 bookmark.title
                                     ?.trim()
@@ -258,6 +277,7 @@ internal fun buildHomePileClusters(
         stayPhotos +=
             HomePilePhotoSpec(
                 id = "stay-${notice.connectionId}",
+                visualId = notice.connectionId,
                 title = notice.headline,
                 subtitle = notice.body,
                 onOpen = { actions.onArchiveOpenChat(notice) },
@@ -268,6 +288,7 @@ internal fun buildHomePileClusters(
         stayPhotos +=
             HomePilePhotoSpec(
                 id = "poll-${suggestion.connectionId}",
+                visualId = suggestion.connectionId,
                 title = "Poll-Pair",
                 subtitle = suggestion.otherUserName ?: "Reconnect",
                 onOpen = { actions.onPollPairOpenChat(suggestion) },
@@ -293,6 +314,7 @@ internal fun buildHomePileClusters(
                     data.reconnectReminders.map { reminder ->
                         HomePilePhotoSpec(
                             id = "reconnect-${reminder.connectionId}",
+                            visualId = reminder.connectionId,
                             title = reminder.userName ?: "Someone",
                             subtitle = "${reminder.daysSinceContact} days since last chat",
                             imageUrl = data.connectedUsers[reminder.userId]?.image,
@@ -312,6 +334,7 @@ internal fun buildHomePileClusters(
                     data.eventReminders.map { reminder ->
                         HomePilePhotoSpec(
                             id = "reminder-${reminder.beaconId}-${reminder.kind.name}",
+                            visualId = reminder.beaconId,
                             title =
                                 reminder.title
                                     ?.trim()

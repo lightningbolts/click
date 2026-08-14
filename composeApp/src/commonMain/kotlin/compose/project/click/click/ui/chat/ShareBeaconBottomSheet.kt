@@ -10,12 +10,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -47,11 +45,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
@@ -63,9 +59,11 @@ import compose.project.click.click.data.models.beaconTypeFromMetadata // pragma:
 import compose.project.click.click.events.buildEventShareUrl // pragma: allowlist secret
 import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.formatEventScheduleRange // pragma: allowlist secret
+import compose.project.click.click.ui.components.CardVisualHero // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetChrome // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberCardVisual // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
@@ -334,44 +332,25 @@ internal fun BeaconPreviewCard(
                     if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
                 ),
     ) {
-        Box(
+        // Shared generated hero: the same beacon looks identical here, on the pile, in lists, and on
+        // its map pin. Previously a flat surfaceContainerLow band made every share preview identical.
+        val visual = rememberCardVisual(model.beaconId, model.kind)
+        CardVisualHero(
+            id = model.beaconId,
+            visual = visual,
+            imageUrl = model.albumArtUrl,
+            chipLabel = model.kindLabel,
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .height(heroHeight)
-                    .background(MaterialTheme.colorScheme.surfaceContainerLow),
-            contentAlignment = Alignment.Center,
+                    .height(heroHeight),
         ) {
-            if (model.albumArtUrl != null) {
-                AsyncImage(
-                    model = model.albumArtUrl,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
+            if (model.albumArtUrl == null) {
                 Icon(
                     model.kind.previewIcon(),
                     contentDescription = null,
                     modifier = Modifier.size(if (compact) 28.dp else 36.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            }
-            Box(
-                modifier =
-                    Modifier
-                        .align(Alignment.TopStart)
-                        .padding(10.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.primary)
-                        .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-            ) {
-                Text(
-                    text = model.kindLabel,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimary,
+                    tint = visual.onContent,
                 )
             }
         }

@@ -37,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -240,17 +241,7 @@ fun FeaturedEventSection(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "Featured Event",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
+        SectionHeader(text = "Featured Event") {
             TextButton(onClick = onViewMap) {
                 Text(
                     text = "View Map",
@@ -295,19 +286,20 @@ fun FeaturedEventCard(
                 .background(clickCardSurface())
                 .border(clickBorderWidth(), clickBorderColor(), shape),
     ) {
-        Box(
+        val visual = rememberCardVisual(reminder.beaconId, MapBeaconKind.EVENT)
+        CardVisualHero(
+            id = reminder.beaconId,
+            visual = visual,
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .height(160.dp)
-                    .background(MaterialTheme.colorScheme.surfaceContainerLow),
-            contentAlignment = Alignment.Center,
+                    .height(160.dp),
         ) {
             Icon(
                 Icons.Filled.Event,
                 contentDescription = null,
                 modifier = Modifier.size(56.dp),
-                tint = MaterialTheme.colorScheme.primary,
+                tint = visual.onContent,
             )
             Box(
                 modifier =
@@ -455,12 +447,7 @@ fun ExploreNearbyBeaconsSection(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(
-            text = "Explore nearby",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+        SectionHeader(text = "Explore nearby")
         val rows = tiles.chunked(2)
         rows.forEach { rowTiles ->
             Row(
@@ -497,12 +484,7 @@ fun ActivityRecapSection(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(
-            text = "Your recap",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+        SectionHeader(text = "Your recap")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             RecapWindowChip(
                 label = "Day",
@@ -601,12 +583,7 @@ fun SavedEventsSection(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(
-            text = "Saved events",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+        SectionHeader(text = "Saved events")
         val rows = bookmarks.chunked(2)
         rows.forEach { rowBookmarks ->
             Row(
@@ -634,56 +611,92 @@ private fun SavedEventCategoryTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    CardVisualCategoryTile(
+        visualId = bookmark.beaconId,
+        kind = MapBeaconKind.EVENT,
+        icon = Icons.Filled.Event,
+        title = bookmark.title?.takeIf { it.isNotBlank() } ?: "Saved event",
+        caption =
+            bookmark.eventStartAt
+                ?.let { iso -> runCatching { Instant.parse(iso).toEpochMilliseconds() }.getOrNull() }
+                ?.let { formatHomeSavedEventTimeBadge(it) }
+                ?: "Bookmarked",
+        onClick = onClick,
+        modifier = modifier,
+    )
+}
+
+/**
+ * Square Home tile painted with the shared generated visual.
+ *
+ * Saved events and Explore-nearby categories used to be flat `surfaceContainerLow` squares, which
+ * made a grid of them indistinguishable at a glance; both now inherit the same per-id gradient the
+ * item carries everywhere else.
+ */
+@Composable
+private fun CardVisualCategoryTile(
+    visualId: String,
+    icon: ImageVector,
+    title: String,
+    caption: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    kind: MapBeaconKind? = null,
+    titleMaxLines: Int = 2,
+) {
     val shape = RoundedCornerShape(16.dp)
-    val title = bookmark.title?.takeIf { it.isNotBlank() } ?: "Saved event"
-    val timeBadge =
-        bookmark.eventStartAt
-            ?.let { iso -> runCatching { Instant.parse(iso).toEpochMilliseconds() }.getOrNull() }
-            ?.let { formatHomeSavedEventTimeBadge(it) }
-            ?: "Bookmarked"
-    Column(
+    val visual = rememberCardVisual(visualId, kind)
+    CardVisualHero(
+        id = visualId,
+        visual = visual,
         modifier =
             modifier
                 .aspectRatio(1f)
                 .clip(shape)
-                .background(MaterialTheme.colorScheme.surfaceContainerLow)
                 .border(clickBorderWidth(), clickBorderColor(), shape)
-                .clickable(onClick = onClick)
-                .padding(16.dp),
-        verticalArrangement = Arrangement.SpaceBetween,
+                .clickable(onClick = onClick),
+        contentAlignment = Alignment.TopStart,
     ) {
-        Box(
+        Column(
             modifier =
                 Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary)
-                    .border(clickBorderWidth(), clickBorderColor(), CircleShape),
-            contentAlignment = Alignment.Center,
+                    .fillMaxSize()
+                    .padding(16.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            Icon(
-                Icons.Filled.Event,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(22.dp),
-            )
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = timeBadge,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Box(
+                modifier =
+                    Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.22f))
+                        .border(clickBorderWidth(), clickBorderColor(), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = visual.onContent,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = visual.onContent,
+                    maxLines = titleMaxLines,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = caption,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = visual.onContent.copy(alpha = 0.88f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
@@ -720,51 +733,15 @@ private fun ExploreBeaconCategoryTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(16.dp)
-    val countLabel = if (tile.count == 1) "1 nearby" else "${tile.count} nearby"
-    Column(
-        modifier =
-            modifier
-                .aspectRatio(1f)
-                .clip(shape)
-                .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                .border(clickBorderWidth(), clickBorderColor(), shape)
-                .clickable(onClick = onClick)
-                .padding(16.dp),
-        verticalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Box(
-            modifier =
-                Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(ClickAccent.colorForStableId(tile.id))
-                    .border(clickBorderWidth(), clickBorderColor(), CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                tile.icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(22.dp),
-            )
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = tile.label,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = countLabel,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
+    CardVisualCategoryTile(
+        visualId = tile.id,
+        icon = tile.icon,
+        title = tile.label,
+        caption = if (tile.count == 1) "1 nearby" else "${tile.count} nearby",
+        onClick = onClick,
+        modifier = modifier,
+        titleMaxLines = 1,
+    )
 }
 
 /**

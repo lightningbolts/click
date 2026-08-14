@@ -598,7 +598,14 @@ Prefer the dedicated smoke doc for a timed pass: [02-smoke-10min.md](02-smoke-10
 - [ ] Saved events detail: location/address visible on first open (no Map navigation required); Share shows Share link / Share to chat
 - [ ] Non-event beacon detail (soundtrack / community): Share link / Share to chat available; soundtrack create persists track/artist/preview/art
 - [ ] Nearby search field: typing does not compress the text box
-- [ ] Beacon drop soundtrack URL: placeholder + paste icon vertically centered
+- [ ] Beacon drop soundtrack URL: field stays **one row tall** and the caret is vertically centered in it. Root cause both prior times was the placeholder wrapping to two lines, which grows the decoration box past its 56dp single-line height and leaves the centered caret floating mid-field — plain hints must be passed as `ClickOutlinedTextField(placeholderText = …)`, not a `placeholder = { Text(...) }` slot
+- [ ] Beacon drop photo is **optional for every category** (soundtrack, event, community, hazard, SOS, utility, study, social): submit with no photo succeeds and the beacon renders with its generated gradient on the pin, in lists, and in its detail sheet
+- [ ] Beacon drop photo section shows two real bordered buttons (`Take photo` / `Photo library`), not highlighted text links; attaching one shows a thumbnail with Replace / Remove
+- [ ] Home photo pile: one full-width stack per section, labels never clipped or overlapped; drag the top card and it tilts + lifts and springs back; flick or drag past half width throws it off with a light haptic and promotes the next card; tap fans the cluster out with a staggered deal; tap-outside / system back collapses it; Reduce Motion replaces tilt/spring/stagger with a plain fade
+- [ ] Settings subcategory → back (both header button tap **and** edge swipe): the hub parallaxes in behind the departing subpage, identical for both, matching Connections chat and the Map events overlay
+- [ ] Settings → My personality helper reads exactly `Pick exactly 5 traits.` (no login-gate sentence), on mobile and web
+- [ ] Generated visuals: the same beacon shows the same gradient + pattern on its map pin, home pile card, Events/Explore tile, share-to-chat card, search row, profile Beacons row, and detail header — and the same on click-web
+- [ ] Detail sheet headers show no duplicated text: the gradient band carries only a category chip, with title / schedule / location appearing exactly once in the section below
 - [ ] Event schedule picker: opening date/time popup does not shift form layout; hour/minute tumblers snap to nearest option after scroll
 - [ ] Birthday onboarding: typing digits auto-inserts dashes; calendar picker syncs with typed date
 - [ ] Bottom sheets: from scroll top, slow drag follows the finger then springs back or commits; flick dismisses; mid-list downward drag scrolls first without same-gesture dismiss

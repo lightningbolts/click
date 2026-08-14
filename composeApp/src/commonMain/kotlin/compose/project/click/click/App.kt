@@ -111,14 +111,15 @@ import compose.project.click.click.ui.components.ConnectionRevealUiState // prag
 import compose.project.click.click.ui.components.GlobalTetherOverlay // pragma: allowlist secret
 import compose.project.click.click.ui.components.INTEREST_ONBOARDING_MIN_TAGS // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
-import compose.project.click.click.ui.components.InteractiveSwipeBackParallaxPeekRatio // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
 import compose.project.click.click.ui.components.OfflineStatusBanner // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBottomBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastHost // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.interactiveSwipeBackUnderlay // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberInteractiveBackHostState // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberUnifiedToastState // pragma: allowlist secret
 import compose.project.click.click.ui.screens.* // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
@@ -1568,8 +1569,8 @@ fun App() {
                                         color = MaterialTheme.colorScheme.background,
                                     ) {
                                         val screenKey = activeScreenKey
-                                        val addClickSwipeDragPx = remember { mutableFloatStateOf(0f) }
-                                        var addClickSwipeBehindLayers by remember { mutableStateOf(false) }
+                                        val addClickBackHost = rememberInteractiveBackHostState()
+                                        val addClickSwipeDragPx = addClickBackHost.dragOffsetPx
                                         var lastAddClickOverlayKey by remember { mutableStateOf<String?>(null) }
                                         var addClickOverlayTransitionMode by remember {
                                             mutableStateOf(NavigationTransitionMode.Tap)
@@ -1578,8 +1579,7 @@ fun App() {
                                             if (addClickOverlayKey != null) {
                                                 lastAddClickOverlayKey = addClickOverlayKey
                                             } else {
-                                                addClickSwipeBehindLayers = false
-                                                addClickSwipeDragPx.floatValue = 0f
+                                                addClickBackHost.reset()
                                             }
                                         }
 
@@ -1837,17 +1837,7 @@ fun App() {
                                                 modifier =
                                                     Modifier
                                                         .fillMaxSize()
-                                                        .graphicsLayer {
-                                                            if (!addClickSwipeBehindLayers) {
-                                                                translationX = 0f
-                                                                return@graphicsLayer
-                                                            }
-                                                            val w = size.width.coerceAtLeast(1f)
-                                                            val o = addClickSwipeDragPx.floatValue.coerceIn(0f, w)
-                                                            val progress = (o / w).coerceIn(0f, 1f)
-                                                            translationX =
-                                                                -(size.width * InteractiveSwipeBackParallaxPeekRatio) * (1f - progress)
-                                                        },
+                                                        .interactiveSwipeBackUnderlay(addClickBackHost),
                                             ) {
                                                 AnimatedContent(
                                                     // Primary tabs (Home/AddClick/Connections/Map/Settings) all go through
@@ -1994,7 +1984,9 @@ fun App() {
                                                         onBack = { dismissAddClickOverlay(NavigationTransitionMode.GestureBack) },
                                                         opaquePreviousBackground = false,
                                                         externalDragOffsetPx = addClickSwipeDragPx,
-                                                        onBehindLayersVisibleChanged = { addClickSwipeBehindLayers = it },
+                                                        onBehindLayersVisibleChanged = {
+                                                            addClickBackHost.behindLayersVisible = it
+                                                        },
                                                         previousContent = {},
                                                         currentContent = {
                                                             when (overlayKey) {

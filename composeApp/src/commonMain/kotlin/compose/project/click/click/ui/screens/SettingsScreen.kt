@@ -18,7 +18,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -111,7 +110,9 @@ import compose.project.click.click.ui.components.InteractiveSwipeBackContainer /
 import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
 import compose.project.click.click.ui.components.SavedEventsSection // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastHost // pragma: allowlist secret
+import compose.project.click.click.ui.components.interactiveSwipeBackUnderlay // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberInteractiveBackHostState // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberUnifiedToastState // pragma: allowlist secret
 import compose.project.click.click.ui.theme.ClickAccent // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
@@ -148,8 +149,6 @@ private fun SettingsPage.title(): String =
         SettingsPage.Saved -> "Saved events"
         SettingsPage.Appearance -> "Appearance"
     }
-
-private enum class SettingsTransitionMode { Tap, Gesture }
 
 @Composable
 fun SettingsScreen(
@@ -258,16 +257,26 @@ fun SettingsScreen(
     var pendingDeleteAvailabilityIntent by remember { mutableStateOf<AvailabilityIntentRow?>(null) }
     var showPermissionsHub by remember { mutableStateOf(false) }
     var settingsPage by remember { mutableStateOf(SettingsPage.Hub) }
-    var settingsTransitionMode by remember { mutableStateOf(SettingsTransitionMode.Tap) }
     val savedEventBookmarks by AppDataManager.cachedEventBookmarks.collectAsState()
     val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
+    // One host state means tap-back and swipe-back share a single animation and the hub behind gets
+    // the same parallax either way, instead of tap-back using a separate slide-out with no underlay.
+    val backHost = rememberInteractiveBackHostState()
+    val backScope = rememberCoroutineScope()
+    var subpageClosing by remember { mutableStateOf(false) }
 
-    fun closeSettingsSubpage(mode: SettingsTransitionMode) {
-        settingsTransitionMode = mode
-        settingsPage = SettingsPage.Hub
+    fun closeSettingsSubpage() {
+        if (subpageClosing) return
+        subpageClosing = true
+        backScope.launch {
+            backHost.dismiss()
+            settingsPage = SettingsPage.Hub
+            subpageClosing = false
+        }
     }
 
     LaunchedEffect(settingsPage) {
+        if (settingsPage == SettingsPage.Hub) backHost.reset()
         onSubpageOpenChanged(settingsPage != SettingsPage.Hub)
         if (settingsPage != SettingsPage.Availability && showAvailabilityIntentSheet) {
             showAvailabilityIntentSheet = false
@@ -285,7 +294,7 @@ fun SettingsScreen(
 
     PlatformBackHandler(enabled = settingsPage != SettingsPage.Hub && !isIOS) {
         // pragma: allowlist secret
-        closeSettingsSubpage(SettingsTransitionMode.Tap)
+        closeSettingsSubpage()
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -295,6 +304,8 @@ fun SettingsScreen(
                     title = "Settings",
                     onOpenSearch = onOpenSearch,
                     verticalArrangement = Arrangement.spacedBy(24.dp),
+                    // The hub stays mounted under the subpage and parallaxes as it is pushed away.
+                    modifier = Modifier.interactiveSwipeBackUnderlay(backHost),
                 ) {
                     item {
                             SettingsProfileHeader(
@@ -311,12 +322,7 @@ fun SettingsScreen(
                         }
 
                         item {
-                            SettingsHubNavCard(
-                                onOpen = {
-                                    settingsTransitionMode = SettingsTransitionMode.Tap
-                                    settingsPage = it
-                                },
-                            )
+                            SettingsHubNavCard(onOpen = { settingsPage = it })
                         }
 
                         item {
@@ -331,21 +337,19 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxSize().zIndex(8f),
                     enter =
                         slideInHorizontally(animationSpec = slideSpec, initialOffsetX = { it }) +
-                        fadeIn(animationSpec = fadeSpec),
-                        exit =
-                            if (settingsTransitionMode == SettingsTransitionMode.Tap) {
-                        slideOutHorizontally(animationSpec = slideSpec, targetOffsetX = { it }) +
-                            fadeOut(animationSpec = fadeSpec)
-                    } else {
-                        ExitTransition.None
-                    },
-                            label = "settings_subpage",
+                            fadeIn(animationSpec = fadeSpec),
+                    // Both back paths animate through the shared host offset, so this must not run a
+                    // second competing exit transition.
+                    exit = ExitTransition.None,
+                    label = "settings_subpage",
                 ) {
                     InteractiveSwipeBackContainer(
                         enabled = true,
                         opaquePreviousBackground = false,
+                        externalDragOffsetPx = backHost.dragOffsetPx,
+                        onBehindLayersVisibleChanged = { backHost.behindLayersVisible = it },
                         previousContent = {},
-                        onBack = { closeSettingsSubpage(SettingsTransitionMode.Gesture) },
+                        onBack = { settingsPage = SettingsPage.Hub },
                         currentContent = {
                             Box(
                                 modifier =
@@ -357,7 +361,7 @@ fun SettingsScreen(
                                 title = settingsPage.title(),
                                 onOpenSearch = null,
                                 navigationIcon = {
-                                    IconButton(onClick = { closeSettingsSubpage(SettingsTransitionMode.Tap) }) {
+                                    IconButton(onClick = { closeSettingsSubpage() }) {
                                         Icon(
                                             Icons.AutoMirrored.Filled.ArrowBack,
                                             contentDescription = "Back to settings",
@@ -735,7 +739,7 @@ fun SettingsScreen(
                                     SettingsToggleRow(
                                         icon = Icons.Default.Star,
                                         title = "Photo pile home",
-                                        subtitle = "Scatter home cards on a corkboard. Turn off for a linear list (better with TalkBack / VoiceOver).",
+                                        subtitle = "Show each home section as a swipeable stack of photos. Turn off for a linear list (better with TalkBack / VoiceOver).",
                                         checked = pileMode == HomeLayoutMode.PILE,
                                         onCheckedChange = { enabled ->
                                             AppDataManager.setHomeLayoutMode(

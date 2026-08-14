@@ -329,7 +329,7 @@ fun SignUpScreen(
                 value = birthdayIso,
                 onValueChange = { birthdayIso = formatBirthdayDigitsInput(it) },
                 label = { Text("Birthday") },
-                placeholder = { Text("YYYY-MM-DD") },
+                placeholderText = "YYYY-MM-DD",
                 leadingIcon = {
                     Icon(Icons.Filled.CalendarMonth, contentDescription = null)
                 },

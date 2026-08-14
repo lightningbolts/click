@@ -46,9 +46,20 @@ App.kt (navigation shell)
 | `screens/` | Route-level layout, navigation callbacks, ViewModel wiring | `ConnectionsScreen`, `ChatView`, `MapScreen` |
 | `components/` | Cross-screen glass primitives | `GlassCard`, `ClickPlatformSheet`, `AppScreenScaffold` |
 | `chat/` | Chat-only composables (keeps `ChatView` readable) | `ChatMessageBubble`, `ConnectionChatMessageComposer` |
-| `theme/` | Design tokens | `Color.kt`, `Typography.kt`, `PlatformTheme.kt`, `ClickAccent.kt`, `CardVisual.kt` |
+| `theme/` | Design tokens | `Color.kt`, `Typography.kt`, `PlatformTheme.kt`, `ClickAccent.kt`, `CardVisual.kt`, `Contrast.kt` |
 | `utils/` | Composable-side platform hooks | `LocationPermissionRequester`, `MapUtils` |
-| Home pile | Corkboard Polaroids | `PileCluster`, `PhotoCard`, `HomePhotoPileBoard` |
+| Home pile | One full-width Polaroid stack per section | `homePhotoPileItems`, `PileCluster`, `PhotoCard`, `PilePhysics.kt` (Compose-free math) |
+
+### Shared surfaces worth knowing before you write a new one
+
+| Component | Use it for | Instead of |
+|-----------|-----------|-----------|
+| `CardVisualSurface.kt` — `Modifier.cardVisualBackground(visual)`, `CardVisualHero(...)` | Any surface showing an entity's generated identity (pile photos, event/explore tiles, share pickers, chat beacon cards, detail-sheet headers) | A hand-rolled `Brush.linearGradient` + scrim + pattern |
+| `SectionHeader.kt` | Every list section title (bold title, optional caption, optional trailing action) | A local `Row` with a `titleMedium` `Text` |
+| `MediaSourceButton.kt` | "Take photo" / "Photo library" pickers | A `TextButton` label, which reads as highlighted body text |
+| `InteractiveBackPersonality.kt` — `rememberInteractiveBackHostState()`, `Modifier.interactiveSwipeBackUnderlay(host)`, `host.dismiss()` | Parallaxing the screen behind an interactive back gesture *and* making tap-back animate identically | A per-screen `MutableFloatState` + bespoke `graphicsLayer` |
+| `PilePhysics.kt` | Peek offsets, tilt, drag commit thresholds, fan stagger | Inline magic numbers; commit thresholds must defer to `GlassGestureCommitFraction` / `GlassGestureFlickVelocityPxPerSec` |
+| `ClickOutlinedTextField(placeholderText = …)` | Plain single-line hints | A `placeholder = { Text(...) }` slot, which can wrap and strand the caret mid-field |
 
 ### Glass UI system
 

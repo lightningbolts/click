@@ -134,42 +134,43 @@ fun BeaconShareToChatDialog(
                     fontWeight = FontWeight.Bold,
                     color = onSurface,
                 )
-                Column(
+                val visual = rememberCardVisual(beacon.id, beacon.kind, beacon.sourceBeaconType)
+                CardVisualHero(
+                    id = beacon.id,
+                    visual = visual,
+                    chipLabel = beacon.displayTypeTitle(),
+                    contentAlignment = Alignment.BottomStart,
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .border(clickBorderWidth(), border, RoundedCornerShape(12.dp))
-                            .background(
-                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                                RoundedCornerShape(12.dp),
-                            ).padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(clickBorderWidth(), border, RoundedCornerShape(12.dp)),
                 ) {
-                    Text(
-                        text = beacon.displayTypeTitle(),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = beacon.displayDynamicTitle(),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = onSurface,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    beacon.metadata.locationName
-                        ?.takeUnless { it.equals("Current location", ignoreCase = true) }
-                        ?.let { loc ->
-                            Text(
-                                text = loc,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = onVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
+                    Column(
+                        // Leaves room for the category chip the hero draws at the top-start.
+                        modifier = Modifier.padding(start = 12.dp, top = 44.dp, end = 12.dp, bottom = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = beacon.displayDynamicTitle(),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = visual.onContent,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        beacon.metadata.locationName
+                            ?.takeUnless { it.equals("Current location", ignoreCase = true) }
+                            ?.let { loc ->
+                                Text(
+                                    text = loc,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = visual.onContent.copy(alpha = 0.88f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                    }
                 }
 
                 Text(

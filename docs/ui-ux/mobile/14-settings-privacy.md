@@ -23,7 +23,7 @@ SettingsScreen (tab route "settings")
 └── Local SnackbarHost (avatar, interests, personality, media errors)
 ```
 
-**Navigation:** Bottom tab `"Settings"` → route `NavigationItem.Settings.route` (`"settings"`). Hub stays mounted; subpages overlay with a horizontal slide + `InteractiveSwipeBackContainer` (same shared swipe-back as the rest of the app). Hub rows use `ClickNavRow` so press/ripple clips to compact rounded corners. System / edge / hardware back pops **one level** (subpage → hub, then hub → Home) — never skips the hub (`onSubpageOpenChanged` disables tab-level swipe while a subpage is open). Availability uses a dedicated `AvailabilityViewModel` key (`settings-availability`) so visiting Settings does not leak sheet state into Home.
+**Navigation:** Bottom tab `"Settings"` → route `NavigationItem.Settings.route` (`"settings"`). Hub stays mounted; subpages overlay with a horizontal slide + `InteractiveSwipeBackContainer` (same shared swipe-back as the rest of the app). **The hub parallaxes as a subpage is pushed away**, via the shared `InteractiveBackHostState` + `Modifier.interactiveSwipeBackUnderlay` (`ui/components/InteractiveBackPersonality.kt`) — the one parallax implementation in the app, also used by Connections chat, the Map events overlay, and the Add-Click overlay in `App.kt`. Tapping the header back button drives the *same* offset animation through `backHost.dismiss()` rather than a separate `slideOutHorizontally` exit, so tap-back and gesture-back look identical (subpage `exit` is `ExitTransition.None` for both). Hub rows use `ClickNavRow` so press/ripple clips to compact rounded corners. System / edge / hardware back pops **one level** (subpage → hub, then hub → Home) — never skips the hub (`onSubpageOpenChanged` disables tab-level swipe while a subpage is open). Availability uses a dedicated `AvailabilityViewModel` key (`settings-availability`) so visiting Settings does not leak sheet state into Home.
 
 ---
 
@@ -124,13 +124,20 @@ Bottom button: `"System Settings"`.
 | Section header | `"Interests"` — always shown |
 | Card | `SettingsInterestsCard` — rendered only when `userId` non-blank; if no user, header appears with no card |
 
+### Cluster: Personality
+
+| Element | String |
+|---------|--------|
+| Card title | `"My personality"` |
+| Helper | `"Pick exactly 5 traits."` — nothing else. The old `"Existing accounts can skip this — it is not a login gate."` carve-out is gone; it described gate mechanics the user does not need at edit time. Mirrored in click-web `SettingsView.tsx`. |
+
 ### Cluster: Appearance
 
 | Element | String |
 |---------|--------|
 | Section header | `"Appearance"` |
 | Toggle 1 | `"Dark mode"` |
-| Toggle 2 | `"Photo pile home"` — scatter Polaroids on Home; off = linear list (better with TalkBack / VoiceOver) |
+| Toggle 2 | `"Photo pile home"` — one draggable stack of Polaroids per Home section; off = linear list (better with TalkBack / VoiceOver) |
 
 ### Sign out
 
