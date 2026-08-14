@@ -23,6 +23,7 @@ fun PermissionCoordinatorHost() {
     val requestCamera = rememberPlatformCameraPermissionRequester()
     val requestProximity = rememberPlatformProximityHardwarePermissionRequester()
     val requestCalendar = rememberPlatformCalendarPermissionRequester()
+    val requestContacts = rememberPlatformContactsPermissionRequester()
     var launchingOs by remember { mutableStateOf(false) }
 
     LaunchedEffect(pending) {
@@ -53,6 +54,8 @@ fun PermissionCoordinatorHost() {
                     requestProximity { granted -> PermissionRequestQueue.completeCurrent(granted) }
                 PermissionKind.Calendar ->
                     requestCalendar { PermissionRequestQueue.completeCurrent() }
+                PermissionKind.Contacts ->
+                    requestContacts { PermissionRequestQueue.completeCurrent() }
             }
         },
         dismissLabel = "Not now",

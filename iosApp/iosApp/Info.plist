@@ -12,6 +12,8 @@
 	<string>Click reads your calendar to find mutual free time when you reconnect with a friend.</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>Click reads your calendar to find mutual free time when you reconnect with a friend.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Click hashes phone numbers and emails on this device to find people you already know. Your address book never leaves your phone.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Click uses your location for tether pings and nearby connection features.</string>
 	<key>UIBackgroundModes</key>

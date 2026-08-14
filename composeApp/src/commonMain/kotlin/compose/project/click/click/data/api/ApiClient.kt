@@ -183,6 +183,45 @@ private data class SafetyReportPostBody(
 )
 
 @Serializable
+private data class ContactsDiscoverBody(
+    @SerialName("hashed_contacts") val hashedContacts: List<String>,
+)
+
+@Serializable
+data class DiscoverProfileCard(
+    val id: String,
+    val name: String,
+    @SerialName("avatar_url") val avatarUrl: String? = null,
+    val tags: List<String> = emptyList(),
+)
+
+@Serializable
+private data class ContactsDiscoverResponse(
+    val matches: List<DiscoverProfileCard> = emptyList(),
+)
+
+@Serializable
+private data class PriorConnectionRequestBody(
+    @SerialName("target_user_id") val targetUserId: String,
+    @SerialName("known_since") val knownSince: String,
+    @SerialName("context_tag") val contextTag: String? = null,
+)
+
+@Serializable
+data class PriorConnectionMutationResponse(
+    @SerialName("connection_id") val connectionId: String,
+    val status: String,
+    val source: String? = null,
+    val action: String? = null,
+)
+
+@Serializable
+private data class PriorConnectionRespondBody(
+    @SerialName("connection_id") val connectionId: String,
+    val action: String,
+)
+
+@Serializable
 private data class SignAttachmentPostBody(
     val path: String,
 )
@@ -1066,6 +1105,78 @@ class ApiClient {
                 }
             if (response.status.value in 200..299) {
                 Result.success(Unit)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** POST `/api/contacts/discover` — SHA-256 hashes only. */
+    suspend fun discoverContacts(hashedContacts: List<String>): Result<List<DiscoverProfileCard>> {
+        if (hashedContacts.isEmpty()) return Result.success(emptyList())
+        return try {
+            val response =
+                clickWebClient.post("$clickWebAuthOrigin/api/contacts/discover") {
+                    contentType(ContentType.Application.Json)
+                    setBody(ContactsDiscoverBody(hashedContacts = hashedContacts))
+                }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<ContactsDiscoverResponse>().matches)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** POST `/api/connections/prior/request`. */
+    suspend fun requestPriorConnection(
+        targetUserId: String,
+        knownSince: String = "unspecified",
+        contextTag: String? = null,
+    ): Result<PriorConnectionMutationResponse> {
+        val id = targetUserId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("target_user_id is required"))
+        return try {
+            val response =
+                clickWebClient.post("$clickWebAuthOrigin/api/connections/prior/request") {
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        PriorConnectionRequestBody(
+                            targetUserId = id,
+                            knownSince = knownSince,
+                            contextTag = contextTag,
+                        ),
+                    )
+                }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<PriorConnectionMutationResponse>())
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** POST `/api/connections/prior/respond` — accept or decline. */
+    suspend fun respondPriorConnection(
+        connectionId: String,
+        action: String,
+    ): Result<PriorConnectionMutationResponse> {
+        val id = connectionId.trim()
+        if (id.isEmpty()) return Result.failure(IllegalArgumentException("connection_id is required"))
+        return try {
+            val response =
+                clickWebClient.post("$clickWebAuthOrigin/api/connections/prior/respond") {
+                    contentType(ContentType.Application.Json)
+                    setBody(PriorConnectionRespondBody(connectionId = id, action = action))
+                }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<PriorConnectionMutationResponse>())
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }

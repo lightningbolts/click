@@ -10,6 +10,7 @@ enum class PermissionKind {
     Camera,
     ProximityHardware,
     Calendar,
+    Contacts,
 }
 
 data class PendingPermissionRequest(
@@ -82,4 +83,7 @@ fun permissionPrimeCopy(kind: PermissionKind): Pair<String, String> =
         PermissionKind.Calendar ->
             "Calendar" to
                 "Click can add events you save to your device calendar."
+        PermissionKind.Contacts ->
+            "Contacts" to
+                "Click hashes phone numbers and emails on this device to find people you already know. Your address book never leaves your phone."
     }

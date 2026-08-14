@@ -26,6 +26,8 @@ tags:
     id: "nav-home"
 - assertNotVisible:
     id: "onboarding-avatar"
+- assertNotVisible:
+    id: "onboarding-prior-connections"
 - assertNotVisible: "Let's get started"
 - tapOn:
     id: "nav-map"

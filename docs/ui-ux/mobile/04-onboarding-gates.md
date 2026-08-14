@@ -27,13 +27,13 @@ Authenticated
  onboardingStep == "loading"? ──yes──► AppShimmerScreen
       │ no
       ▼
- onboardingStep != "complete"? ──yes──► Welcome → Interests → Personality → Avatar
+ onboardingStep != "complete"? ──yes──► Welcome → Interests → Personality → Avatar → Prior Connections
       │ no
       ▼
  onboardingHandoff shimmer (600ms) → Home reveal overlay → Main shell (Home)
 ```
 
-**OnboardingViewModel step order:** `Loading → Welcome → Interests → Personality → Avatar → Complete`
+**OnboardingViewModel step order:** `Loading → Welcome → Interests → Personality → Avatar → PriorConnections → Complete`
 
 Personality is shown only for **new** signups (`personalityCompleted == false` and the account is not legacy-complete). Existing users with interests + avatar skip it and edit traits in Settings.
 
@@ -108,6 +108,13 @@ Permissions (`PermissionsOnboardingScreen`, `LocationOnboardingScreen`) are **le
     └───────┬───────┘   │
             │ upload/skip
             └─────┬─────┘
+                  │
+         ┌────────▼────────────┐
+         │ Prior Connections   │
+         │ (skippable; hashes  │
+         │  contacts on-device)│
+         └────────┬────────────┘
+                  │ skip / done
                   │
          ┌────────▼────────┐
          │ Handoff shimmer │

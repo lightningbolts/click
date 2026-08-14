@@ -40,6 +40,11 @@ data class OnboardingState(
      * Defaults false; [OnboardingViewModel] skips the step for legacy-complete accounts.
      */
     val personalityCompleted: Boolean = false,
+    /**
+     * New signups may optionally hash contacts after avatar. Defaults false;
+     * [OnboardingViewModel] skips the step for legacy-complete accounts.
+     */
+    val priorConnectionsSetOrSkipped: Boolean = false,
 ) {
     /**
      * Completion predicate for cold-start / restore.

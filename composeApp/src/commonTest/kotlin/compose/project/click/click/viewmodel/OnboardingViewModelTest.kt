@@ -1,6 +1,6 @@
-package compose.project.click.click.viewmodel
+package compose.project.click.click.viewmodel // pragma: allowlist secret
 
-import compose.project.click.click.data.models.OnboardingState
+import compose.project.click.click.data.models.OnboardingState // pragma: allowlist secret
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -42,11 +42,15 @@ class OnboardingViewModelTest {
         assertTrue(vm.state.value.personalityCompleted)
 
         vm.onAvatarSetOrSkipped()
-        assertEquals(OnboardingViewModel.Step.Complete, vm.step.value)
+        assertEquals(OnboardingViewModel.Step.PriorConnections, vm.step.value)
         assertTrue(vm.state.value.avatarSetOrSkipped)
+
+        vm.onPriorConnectionsSetOrSkipped()
+        assertEquals(OnboardingViewModel.Step.Complete, vm.step.value)
+        assertTrue(vm.state.value.priorConnectionsSetOrSkipped)
         assertEquals(1_700_000_000_000L, vm.state.value.completedAt)
 
-        assertEquals(4, recorder.snapshots.size)
+        assertEquals(5, recorder.snapshots.size)
     }
 
     @Test
@@ -58,6 +62,8 @@ class OnboardingViewModelTest {
         assertEquals(OnboardingViewModel.Step.Personality, vm.step.value)
         vm.advance()
         assertEquals(OnboardingViewModel.Step.Avatar, vm.step.value)
+        vm.advance()
+        assertEquals(OnboardingViewModel.Step.PriorConnections, vm.step.value)
         vm.advance()
         assertEquals(OnboardingViewModel.Step.Complete, vm.step.value)
     }
@@ -171,6 +177,7 @@ class OnboardingViewModelTest {
         vm.onInterestsSaved()
         vm.onPersonalitySaved()
         vm.onAvatarSetOrSkipped()
+        vm.onPriorConnectionsSetOrSkipped()
 
         assertEquals(true, recorder.snapshots[0].welcomeSeen)
         assertEquals(false, recorder.snapshots[0].interestsCompleted)
@@ -183,6 +190,9 @@ class OnboardingViewModelTest {
         assertEquals(false, recorder.snapshots[2].avatarSetOrSkipped)
 
         assertEquals(true, recorder.snapshots[3].avatarSetOrSkipped)
+        assertEquals(false, recorder.snapshots[3].priorConnectionsSetOrSkipped)
+
+        assertEquals(true, recorder.snapshots[4].priorConnectionsSetOrSkipped)
     }
 
     @Test
@@ -228,6 +238,25 @@ class OnboardingViewModelTest {
                     ),
                 userHasAvatar = { false },
             )
+        assertEquals(OnboardingViewModel.Step.Avatar, vm.step.value)
+    }
+
+    @Test
+    fun personalityAndAvatarDone_showsPriorConnections() {
+        val vm =
+            OnboardingViewModel(
+                initialState =
+                    OnboardingState(
+                        welcomeSeen = true,
+                        interestsCompleted = true,
+                        personalityCompleted = true,
+                        avatarSetOrSkipped = true,
+                    ),
+                userHasAvatar = { false },
+            )
+        assertEquals(OnboardingViewModel.Step.PriorConnections, vm.step.value)
+        assertTrue(vm.canGoBack())
+        vm.goBack()
         assertEquals(OnboardingViewModel.Step.Avatar, vm.step.value)
     }
 
@@ -290,7 +319,7 @@ class OnboardingViewModelTest {
         assertEquals(OnboardingViewModel.Step.Welcome, vm.step.value)
         assertFalse(vm.canGoBack())
         assertEquals(0, vm.visibleStepIndex())
-        assertEquals(4, vm.visibleStepCount())
+        assertEquals(5, vm.visibleStepCount())
     }
 
     @Test

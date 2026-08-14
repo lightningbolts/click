@@ -450,6 +450,16 @@ data class Connection(
     val include_in_business_insights: Boolean = true,
     @SerialName("is_group")
     val isGroup: Boolean = false,
+    @SerialName("source")
+    val source: String = "handshake",
+    @SerialName("confirmed_by_a")
+    val confirmedByA: Boolean = true,
+    @SerialName("confirmed_by_b")
+    val confirmedByB: Boolean = true,
+    @SerialName("known_since")
+    val knownSince: String? = null,
+    @SerialName("context_tag")
+    val priorContextTag: String? = null,
 ) {
     companion object {
         // 30 minutes in milliseconds for the Vibe Check timer
@@ -488,6 +498,7 @@ data class Connection(
                 ?: originMemoryCapsule()?.contextTag?.label
                 ?: contextTagId
                 ?: originEncounter?.contextTags?.firstOrNull()
+                ?: priorContextTag
 
     /** Latest crossing place label (shim for removed `semantic_location` column). */
     val semanticLocation: String?
@@ -580,6 +591,10 @@ data class Connection(
 
     /** Connection permanently kept via mutual opt-in. */
     fun isKept(): Boolean = normalizedConnectionStatus() == "kept"
+
+    fun isPriorConnection(): Boolean = source.equals("prior", ignoreCase = true)
+
+    fun isPriorConfirmedByBoth(): Boolean = confirmedByA && confirmedByB
 
     fun isArchivedOrRemoved(): Boolean {
         val s = normalizedConnectionStatus()

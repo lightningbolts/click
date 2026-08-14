@@ -63,6 +63,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.ContextTagTaxonomy // pragma: allowlist secret
+import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
+import compose.project.click.click.data.contacts.ContactDiscoveryHelper // pragma: allowlist secret
+import compose.project.click.click.data.contacts.KnownSinceBucket // pragma: allowlist secret
 import compose.project.click.click.data.models.ConnectionEncounter // pragma: allowlist secret
 import compose.project.click.click.data.models.HeightCategory // pragma: allowlist secret
 import compose.project.click.click.data.models.NoiseLevelCategory // pragma: allowlist secret
@@ -82,6 +85,7 @@ import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allo
 import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
@@ -281,10 +285,13 @@ private fun TimelineMetricPill(
 }
 
 @Composable
-internal fun OurTimelineSection(encounters: List<ConnectionEncounter>) {
+internal fun OurTimelineSection(
+    encounters: List<ConnectionEncounter>,
+    emptyCopy: String = "No crossing history on file yet.",
+) {
     if (encounters.isEmpty()) {
         Text(
-            text = "No crossing history on file yet.",
+            text = emptyCopy,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -498,6 +505,20 @@ fun ProfileLegacyTimelineContent(
     Column(modifier = modifier.fillMaxWidth()) {
         val p = profile
         val conn = p.sharedConnection
+        val isPrior = conn?.isPriorConnection() == true
+        val viewerId =
+            AppDataManager.currentUser
+                .collectAsState()
+                .value
+                ?.id
+        val scope = rememberCoroutineScope()
+        var priorBusy by remember { mutableStateOf(false) }
+        var priorError by remember { mutableStateOf<String?>(null) }
+        val canRespondPrior =
+            isPrior &&
+                conn?.isPending() == true &&
+                !viewerId.isNullOrBlank() &&
+                (conn.responderId == viewerId || (conn.initiatorId != viewerId && viewerId in conn.user_ids))
         val hasMoment =
             conn != null &&
                 listOfNotNull(
@@ -510,7 +531,111 @@ fun ProfileLegacyTimelineContent(
                     conn.profileBarometricLine(),
                 ).isNotEmpty()
 
-        if (hasMoment && conn != null) {
+        if (canRespondPrior && conn != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ClickButton(
+                    onClick = {
+                        scope.launch {
+                            priorBusy = true
+                            priorError = null
+                            ApiClient().respondPriorConnection(conn.id, "accept").fold(
+                                onSuccess = { AppDataManager.refresh(force = true) },
+                                onFailure = { priorError = it.message },
+                            )
+                            priorBusy = false
+                        }
+                    },
+                    enabled = !priorBusy,
+                    variant = ClickButtonVariant.Primary,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Accept") }
+                ClickButton(
+                    onClick = {
+                        scope.launch {
+                            priorBusy = true
+                            priorError = null
+                            ApiClient().respondPriorConnection(conn.id, "decline").fold(
+                                onSuccess = { AppDataManager.refresh(force = true) },
+                                onFailure = { priorError = it.message },
+                            )
+                            priorBusy = false
+                        }
+                    },
+                    enabled = !priorBusy,
+                    variant = ClickButtonVariant.Secondary,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Decline") }
+            }
+            if (priorError != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(priorError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        if (isPrior && conn != null) {
+            Text(
+                text = "How you know them",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            val muted = MaterialTheme.colorScheme.onSurfaceVariant
+            val body = MaterialTheme.colorScheme.onSurface
+            val cardBorder = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)
+            val cardBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                LegacyMomentCard(
+                    icon = Icons.Filled.AutoAwesome,
+                    iconTint = Color(0xFFF59E0B),
+                    label = "Source",
+                    value =
+                        if (conn.connection_method == "prior" || conn.connection_method == "contacts") {
+                            "Added from Contacts"
+                        } else {
+                            "Added by Search"
+                        },
+                    cardBorder = cardBorder,
+                    cardBg = cardBg,
+                    muted = muted,
+                    body = body,
+                )
+                LegacyMomentCard(
+                    icon = Icons.Outlined.Schedule,
+                    iconTint = Color(0xFFF59E0B),
+                    label = "Status",
+                    value = if (conn.isPriorConfirmedByBoth()) "Confirmed by both" else "Waiting for confirmation",
+                    cardBorder = cardBorder,
+                    cardBg = cardBg,
+                    muted = muted,
+                    body = body,
+                )
+                LegacyMomentCard(
+                    icon = Icons.Outlined.Schedule,
+                    iconTint = Color(0xFFF59E0B),
+                    label = "Known since",
+                    value = KnownSinceBucket.fromApi(conn.knownSince).label,
+                    cardBorder = cardBorder,
+                    cardBg = cardBg,
+                    muted = muted,
+                    body = body,
+                )
+                conn.priorContextTag?.trim()?.takeIf { it.isNotEmpty() }?.let { tag ->
+                    FilterChip(
+                        selected = false,
+                        onClick = {},
+                        label = { Text(tag) },
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+            Spacer(modifier = Modifier.height(12.dp))
+        } else if (hasMoment && conn != null) {
             Text(
                 text = "When you connected",
                 style = MaterialTheme.typography.titleSmall,
@@ -773,7 +898,15 @@ fun ProfileLegacyTimelineContent(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(modifier = Modifier.height(12.dp))
-            OurTimelineSection(conn.connectionEncounters)
+            OurTimelineSection(
+                encounters = conn.connectionEncounters,
+                emptyCopy =
+                    if (isPrior) {
+                        ContactDiscoveryHelper.TIMELINE_EMPTY_COPY
+                    } else {
+                        "No crossing history on file yet."
+                    },
+            )
         }
     }
 }
