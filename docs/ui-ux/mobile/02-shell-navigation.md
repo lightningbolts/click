@@ -309,7 +309,7 @@ See §6 Screen Transitions.
 ### 5.2 Interactive Elements
 
 - `HeaderSearchIconButton` when `onOpenSearch` provided → opens `UnifiedSearchSheet`.
-- Header collapses over `HeaderCollapseScrollThreshold` (96 px); hides with 32 px hysteresis.
+- Header collapses over `HeaderCollapseScrollThreshold` (20 dp, converted to px); hides with 32 px hysteresis.
 
 ### 5.3 States
 

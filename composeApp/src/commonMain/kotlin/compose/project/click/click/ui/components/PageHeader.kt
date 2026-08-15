@@ -109,7 +109,7 @@ fun LiquidGlassPageHeader(
         animationSpec = tween(180),
         label = "header_collapse",
     )
-    val titleSize = (34f - 14f * animatedCollapse).sp
+    val titleSize = 34.sp
     val verticalPad = (12f - 4f * animatedCollapse).dp
 
     val displayMode =
@@ -124,8 +124,9 @@ fun LiquidGlassPageHeader(
             Modifier
                 .fillMaxWidth()
                 .graphicsLayer {
-                    scaleX = 1f - 0.02f * animatedCollapse
-                    scaleY = 1f - 0.02f * animatedCollapse
+                    val titleScale = 1f - 0.2f * animatedCollapse
+                    scaleX = titleScale
+                    scaleY = titleScale
                 }.padding(vertical = verticalPad),
     ) {
         when (displayMode) {
