@@ -8,10 +8,8 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.runtime.Composable
 
 /**
- * Shared tab-root header: borderless large title at rest, native glass once scroll exceeds 20 dp.
- *
- * Used by Home, Add Click, Chats, Map/Discovery, and Settings via [AppScreenScaffold] /
- * [AppScreenWithFloatingHeader] / [ConnectionsFloatingHeader].
+ * Header chrome is platform-native ([NativeCollapsingScaffold]). This Compose title is only a
+ * fallback for surfaces that have not migrated yet — do not fold tab-root chrome back into it.
  */
 @Composable
 fun CollapsibleGlassTopBar(

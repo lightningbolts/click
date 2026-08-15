@@ -12,6 +12,7 @@ import compose.project.click.click.viewmodel.UserStats // pragma: allowlist secr
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class HomePhotoPileTest {
@@ -290,5 +291,48 @@ class HomePhotoPileTest {
                 .first()
         assertEquals("reconnect-conn-77", photo.id)
         assertEquals("conn-77", photo.visualId)
+    }
+
+    @Test
+    fun recentLocationCardsUseSharedAvatarSlotAndMemberPhoto() {
+        val peer =
+            User(
+                id = "peer-1",
+                name = "Alex",
+                email = "alex@example.com",
+                image = "https://cdn.example/alex.jpg",
+            )
+        val data =
+            HomePileBoardData(
+                intents = emptyList(),
+                featuredEvent = null,
+                recap = null,
+                savedBookmarks = emptyList(),
+                exploreTiles = emptyList(),
+                archiveNotice = null,
+                pollPair = null,
+                reconnectReminders = emptyList(),
+                eventReminders = emptyList(),
+                locationGroups =
+                    mapOf(
+                        "Cafe" to
+                            listOf(
+                                Connection(
+                                    id = "conn-1",
+                                    created = 1L,
+                                    expiry = 9_999_999_999L,
+                                    user_ids = listOf("me", "peer-1"),
+                                    semantic_location = "Cafe",
+                                ),
+                            ),
+                    ),
+                insights = null,
+                stats = UserStats(0, emptyList(), 0),
+                connectedUsers = mapOf("peer-1" to peer),
+                currentUserId = "me",
+            )
+        val recent = buildHomePileQueueSpecs(data, emptyActions()).first { it.id == "loc-Cafe" }
+        assertEquals("https://cdn.example/alex.jpg", recent.imageUrl)
+        assertNotNull(recent.content)
     }
 }

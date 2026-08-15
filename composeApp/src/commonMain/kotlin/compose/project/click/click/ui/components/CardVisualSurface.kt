@@ -13,7 +13,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -80,16 +83,26 @@ fun CardVisualHero(
     contentAlignment: Alignment = Alignment.Center,
     content: @Composable (BoxScope.() -> Unit)? = null,
 ) {
+    val trimmedImage = imageUrl?.trim()?.takeIf { it.isNotEmpty() }
+    var imageFailed by remember(trimmedImage) { mutableStateOf(false) }
+    val useGenerated = trimmedImage == null || imageFailed
     Box(
-        modifier = modifier.cardVisualBackground(visual),
+        modifier =
+            if (useGenerated) {
+                modifier.cardVisualBackground(visual)
+            } else {
+                modifier.background(visual.gradient.first())
+            },
         contentAlignment = contentAlignment,
     ) {
-        if (!imageUrl.isNullOrBlank()) {
+        if (trimmedImage != null) {
             AsyncImage(
-                model = imageUrl,
+                model = trimmedImage,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
+                onError = { imageFailed = true },
+                onSuccess = { imageFailed = false },
             )
         }
         if (scrim) {

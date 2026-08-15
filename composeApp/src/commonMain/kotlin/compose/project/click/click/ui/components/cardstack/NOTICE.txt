@@ -1,0 +1,8 @@
+Vendored and adapted from Hukumister LazyCardStack
+https://github.com/Hukumister/LazyCardStack
+
+Apache License 2.0
+
+Updated for Compose Multiplatform 1.11. Pointer handling (PointerEventPass.Initial and a
+nested-scroll connection) is Click-specific so a parent LazyColumn cannot steal the first
+drag delta on the Home photo pile.

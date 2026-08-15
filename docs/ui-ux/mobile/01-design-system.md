@@ -144,7 +144,7 @@
 ### 2.6 A11y & Responsive
 
 - Manrope scales with system font size (M3 default).
-- `AppScreenScaffold` floating header measures expanded body height under accessibility scaling before locking scroll inset.
+- `AppScreenScaffold` uses platform-native collapsing chrome (`NativeCollapsingScaffold`); large fonts scale inside `LargeTopAppBar` / iOS large titles.
 
 ---
 
@@ -245,7 +245,7 @@ Helpers: `rememberTabBarOverlayHeight()`, `rememberBottomChromePadding()`, `reme
 | **Error** | N/A |
 | **Success** | N/A |
 
-**Header hide hysteresis**: 32 px slack before re-showing hidden floating header.
+**Native collapsing headers**: compact app bar remains visible. Do not hide the header on scroll.
 
 ### 4.4 Micro-copy
 
@@ -255,7 +255,7 @@ Helpers: `rememberTabBarOverlayHeight()`, `rememberBottomChromePadding()`, `reme
 
 1. `PlatformBottomBar` measures and calls `AppScreenChromeState.updateBottomChromeHeight`.
 2. Tab-root screens use `bottomChromePadding()` or scaffold content padding.
-3. Collapsing header screens use `rememberFloatingHeaderTopPadding`.
+3. Collapsing header screens use `NativeCollapsingScaffold` (Material 3 LargeTopAppBar / iOS large titles).
 
 ### 4.6 A11y & Responsive
 

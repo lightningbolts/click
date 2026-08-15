@@ -15,8 +15,6 @@ import androidx.compose.ui.viewinterop.UIKitView
 import compose.project.click.click.platform.rememberReduceTransparencyEnabled // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalIsDarkMode // pragma: allowlist secret
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.useContents
-import platform.Foundation.NSProcessInfo
 import platform.UIKit.UIBlurEffect
 import platform.UIKit.UIBlurEffectStyle
 import platform.UIKit.UIColor
@@ -31,10 +29,6 @@ actual fun HeaderGlassBackdrop(
     val fraction = collapseFraction.coerceIn(0f, 1f)
     val isDarkMode = LocalIsDarkMode.current
     val reduceTransparency = rememberReduceTransparencyEnabled()
-    val usesNativeLiquidGlass =
-        remember {
-            NSProcessInfo.processInfo.operatingSystemVersion.useContents { majorVersion >= 26 }
-        }
     val backdropAlpha = 0.55f + 0.3f * fraction
     val accessibleMaterial =
         remember(isDarkMode) {
@@ -59,16 +53,8 @@ actual fun HeaderGlassBackdrop(
         return
     }
 
-    if (usesNativeLiquidGlass) {
-        Box(
-            modifier =
-                modifier
-                    .alpha(backdropAlpha)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.78f)),
-        )
-        return
-    }
-
+    // Always use a system UIVisualEffectView — including iOS 26 Liquid Glass. An opaque Compose
+    // Box here was the flat Clicks header.
     UIKitView(
         factory = {
             UIVisualEffectView(effect = UIBlurEffect.effectWithStyle(blurStyle)).apply {

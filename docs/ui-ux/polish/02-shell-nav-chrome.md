@@ -1,7 +1,7 @@
 # 02 — Shell, Navigation & Chrome
 
 **Role:** App-level continuity and the always-visible chrome users judge subconsciously.  
-**Code hotspots:** `App.kt`, tab/navigation items, platform tab bar actuals, `AppScreenScaffold`, `LiquidGlassPageHeader` / `PageHeader`, `InteractiveSwipeBackContainer`, global overlays (search, calls, toasts), `UnifiedSearchSheet`.
+**Code hotspots:** `App.kt`, tab/navigation items, platform tab bar actuals, `AppScreenScaffold` / `NativeCollapsingScaffold`, `InteractiveSwipeBackContainer`, global overlays (search, calls, toasts), `UnifiedSearchSheet`.
 
 ---
 
@@ -114,9 +114,7 @@ Secondary chrome (chat/events headers) may use `Modifier.interactiveBackPersonal
 
 ### 6.1 Required outcomes
 
-- Floating headers (`LiquidGlassPageHeader` / scaffold flags) share vertical alignment with status bar across Home / Clicks / Map / Settings.  
-- Header material: either stay FC-solid or adopt a **subtle** glass treatment consistent with tab bar — pick one rule in the plan; no random mix per tab.  
-- Title/subtitle changes (`AnimatedContent` online status, greetings) should crossfade without layout jump.  
+- Native collapsing headers (`NativeCollapsingScaffold`) on Home / Add Click / Nearby / Settings / Clicks. Android `LargeTopAppBar` + `exitUntilCollapsed`; iOS `UINavigationController` large titles + companion `UIScrollView`. Compact chrome stays visible — never hide. iOS status-bar / Dynamic Island uses a system `UIVisualEffectView`, not a Compose gradient or opaque iOS 26 shortcut.  
 
 ---
 

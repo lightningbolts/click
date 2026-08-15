@@ -1207,7 +1207,7 @@ private fun BeaconIdentityBanner(
         id = beacon.id,
         kind = beacon.kind,
         typeKey = beacon.sourceBeaconType,
-        imageUrl = beacon.metadata.albumArtUrl,
+        imageUrl = beacon.metadata.heroImageUrl(),
         chipLabel = beacon.displayTypeTitle().takeIf { showTypeChip },
         modifier =
             Modifier

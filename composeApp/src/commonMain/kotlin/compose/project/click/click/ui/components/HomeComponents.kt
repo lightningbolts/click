@@ -45,7 +45,9 @@ import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.api.ActivityRecapDto // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.PollPairSuggestion // pragma: allowlist secret
+import compose.project.click.click.events.EventReminderCoordinator // pragma: allowlist secret
 import compose.project.click.click.events.HomeEventReminder // pragma: allowlist secret
+import compose.project.click.click.data.models.heroImageUrl // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.utils.userFacingLabel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
@@ -287,20 +289,24 @@ fun FeaturedEventCard(
                 .border(clickBorderWidth(), clickBorderColor(), shape),
     ) {
         val visual = rememberCardVisual(reminder.beaconId, MapBeaconKind.EVENT)
+        val heroImage = EventReminderCoordinator.beaconById(reminder.beaconId)?.metadata?.heroImageUrl()
         CardVisualHero(
             id = reminder.beaconId,
             visual = visual,
+            imageUrl = heroImage,
             modifier =
                 Modifier
                     .fillMaxWidth()
                     .height(160.dp),
         ) {
-            Icon(
-                Icons.Filled.Event,
-                contentDescription = null,
-                modifier = Modifier.size(56.dp),
-                tint = visual.onContent,
-            )
+            if (heroImage == null) {
+                Icon(
+                    Icons.Filled.Event,
+                    contentDescription = null,
+                    modifier = Modifier.size(56.dp),
+                    tint = visual.onContent,
+                )
+            }
             Box(
                 modifier =
                     Modifier

@@ -38,10 +38,6 @@ private const val PILE_FRONT_ELEVATION_DP = 16f
 private const val PILE_SECOND_ELEVATION_DP = 8f
 private const val PILE_BACK_ELEVATION_DP = 4f
 
-/** Playful tap feedback. Fan/carousel open is intentionally disabled. */
-const val PILE_TAP_JIGGLE_SCALE = 1.05f
-const val PILE_TAP_JIGGLE_WOBBLE_DEG = 5f
-
 /** Rubber-band tension begins past this fraction of card size. */
 private const val PILE_RUBBER_BAND_START_FRACTION = 0.85f
 

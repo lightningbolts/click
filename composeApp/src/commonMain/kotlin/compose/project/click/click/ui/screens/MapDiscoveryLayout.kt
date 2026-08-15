@@ -813,10 +813,7 @@ private fun DiscoveryEventCard(
                 .border(clickBorderWidth(), clickBorderColor(), shape)
                 .clickable(onClick = onOpen),
     ) {
-        val soundtrackArt =
-            beacon.metadata.albumArtUrl?.takeIf {
-                beacon.kind == MapBeaconKind.SOUNDTRACK && it.isNotBlank()
-            }
+        val soundtrackArt = beacon.metadata.heroImageUrl()
         val visual = rememberCardVisual(beacon.id, beacon.kind, beacon.sourceBeaconType)
         CardVisualHero(
             id = beacon.id,

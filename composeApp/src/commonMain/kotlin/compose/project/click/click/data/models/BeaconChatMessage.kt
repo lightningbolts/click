@@ -26,9 +26,7 @@ fun MapBeacon.toBeaconChatMetadata(): JsonObject {
             .joinToString(" · ")
             .takeIf { it.isNotBlank() && it != title }
     val scheduleLabel = eventSchedule()?.let { formatEventScheduleRange(it) }
-    val albumArt = metadata.albumArtUrl?.trim()?.takeIf {
-        kind == MapBeaconKind.SOUNDTRACK && it.isNotEmpty()
-    }
+    val albumArt = metadata.heroImageUrl()
     val locationLabel = metadata.formattedAddress?.trim()?.takeUnless {
         it.isEmpty() || it.equals("Current location", ignoreCase = true)
     } ?: metadata.locationName?.trim()?.takeUnless {

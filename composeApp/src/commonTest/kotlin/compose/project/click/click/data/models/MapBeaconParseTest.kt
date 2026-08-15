@@ -95,6 +95,26 @@ class MapBeaconParseTest {
     }
 
     @Test
+    fun parseMapBeaconMetadata_heroImageUrlPrefersAlbumArtThenRawKeys() {
+        val fromAlbum =
+            parseMapBeaconMetadata(
+                Json.parseToJsonElement(
+                    """{"album_art_url":"https://cdn.example/art.jpg","image_url":"https://cdn.example/upload.jpg"}""",
+                ),
+            )
+        assertEquals("https://cdn.example/art.jpg", fromAlbum.heroImageUrl())
+
+        val fromUpload =
+            parseMapBeaconMetadata(
+                Json.parseToJsonElement(
+                    """{"image_url":"https://cdn.example/upload.jpg"}""",
+                ),
+            )
+        assertEquals("https://cdn.example/upload.jpg", fromUpload.heroImageUrl())
+        assertEquals(fromUpload.heroImageUrl(), beaconHeroImageUrl(fromUpload))
+    }
+
+    @Test
     fun parseMapBeaconMetadata_preservesLocationAddressFields() {
         val json = Json.parseToJsonElement(
             """

@@ -212,10 +212,7 @@ internal data class BeaconPreviewModel(
                 description = rawDescription?.takeIf { it != title },
                 scheduleLabel = beacon.eventSchedule()?.let { formatEventScheduleRange(it) },
                 shareUrl = buildEventShareUrl(beacon.id),
-                albumArtUrl =
-                    beacon.metadata.albumArtUrl?.takeIf {
-                        beacon.kind == MapBeaconKind.SOUNDTRACK && it.isNotBlank()
-                    },
+                albumArtUrl = beacon.metadata.heroImageUrl(),
                 locationLabel = location,
             )
         }

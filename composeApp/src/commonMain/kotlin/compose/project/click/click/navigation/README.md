@@ -100,15 +100,18 @@ Each item carries a Material `ImageVector` for Android/Compose and an `sfSymbol`
 
 ### AppScreenScaffold chrome
 
-`ui/components/AppScreenScaffold.kt` is the standard layout for tab-root screens:
+`ui/components/AppScreenScaffold.kt` is the standard layout for tab-root screens. It delegates to `NativeCollapsingScaffold`:
 
-- **Floating collapsible glass header** (`CollapsibleGlassTopBar`) — borderless large title at rest; native glass after 20 dp scroll (`headerCollapseFraction`)
+- **Android:** Material 3 `LargeTopAppBar` + `exitUntilCollapsedScrollBehavior` (compact bar, never hidden)
+- **iOS:** `UINavigationController` large titles + companion `UIScrollView` mirrored from `LazyListState`; system `UIVisualEffectView` on the status-bar / Dynamic Island band
 - **LazyColumn body** — extends under bottom nav with `rememberBottomChromePadding()`
 - **Optional search action** — `onOpenSearch` opens unified search sheet
 - **Encounter tether banner** — `EncounterTetherManager` compass message when active
 - **Presence indicator** — `presenceOnline` dot on header
 
-Used by `HomeScreen`, `ConnectionsScreen` list mode, `MapScreen`, `SettingsScreen`.
+Do **not** fold this back into a shared `CollapsibleGlassTopBar` (that hid the header and painted fake iOS 26 glass).
+
+Used by `HomeScreen`, `ConnectionsListView`, `MapDiscoveryLayout` Nearby, `SettingsScreen`, Add Click / My QR.
 
 `ScreenChrome.kt` / `PageHeader.kt` provide secondary header patterns with `AnimatedContent` title transitions.
 

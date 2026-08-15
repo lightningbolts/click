@@ -138,6 +138,7 @@ fun BeaconShareToChatDialog(
                 CardVisualHero(
                     id = beacon.id,
                     visual = visual,
+                    imageUrl = beacon.metadata.heroImageUrl(),
                     chipLabel = beacon.displayTypeTitle(),
                     contentAlignment = Alignment.BottomStart,
                     modifier =
