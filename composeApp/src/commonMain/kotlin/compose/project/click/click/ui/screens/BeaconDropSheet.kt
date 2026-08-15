@@ -460,7 +460,8 @@ fun BeaconDropSheetContent(
                         BeaconDropOutlinedField(
                             value = form.addressQuery,
                             onValueChange = { next ->
-                                viewModel.setAddressQuery(next.take(200))
+                                val query = next.take(200)
+                                viewModel.setAddressQuery(query)
                                 viewModel.setSelectedEventLocation(null)
                                 viewModel.setSubmitValidationError(null)
                                 onDismissError()
@@ -468,10 +469,14 @@ fun BeaconDropSheetContent(
                                 addressSearchJob =
                                     scope.launch {
                                         delay(220)
-                                        val q = form.addressQuery.trim()
+                                        val q = query.trim()
                                         if (q.length < 2) {
-                                            viewModel.setAddressSuggestions(emptyList())
-                                            viewModel.setAddressSearching(false)
+                                            if (viewModel.uiState.value.addressQuery
+                                                    .trim() == q
+                                            ) {
+                                                viewModel.setAddressSuggestions(emptyList())
+                                                viewModel.setAddressSearching(false)
+                                            }
                                             return@launch
                                         }
                                         viewModel.setAddressSearching(true)
@@ -485,10 +490,12 @@ fun BeaconDropSheetContent(
                                                     nearLon = near?.second,
                                                 )
                                             }
-                                        if (form.addressQuery.trim() == q) {
+                                        if (viewModel.uiState.value.addressQuery
+                                                .trim() == q
+                                        ) {
                                             viewModel.setAddressSuggestions(results)
+                                            viewModel.setAddressSearching(false)
                                         }
-                                        viewModel.setAddressSearching(false)
                                     }
                             },
                             placeholder = "Search address or place",

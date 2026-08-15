@@ -170,8 +170,7 @@ fun pileSwipeAction(
 ): PileSwipeAction {
     if (offsetXPx == 0f &&
         offsetYPx == 0f &&
-        abs(velocityXPxPerSec) < flingVelocityPxPerSec &&
-        abs(velocityYPxPerSec) < flingVelocityPxPerSec
+        hypot(velocityXPxPerSec, velocityYPxPerSec) < flingVelocityPxPerSec
     ) {
         return PileSwipeAction.SpringBack
     }
@@ -196,8 +195,8 @@ fun pileSwipeAction(
 }
 
 /**
- * Where a dismissed card animates to. Radial travel is `√2 × size` so a 45° throw clears both
- * card axes instead of leaving a corner on-screen.
+ * Where a dismissed card animates to. Radial travel is `1.15 × √2 × size` so a 45° throw
+ * clears both card axes instead of leaving a corner on-screen.
  */
 fun pileCardExitTargetPx(
     offsetXPx: Float,

@@ -23,18 +23,19 @@ HomeScreen (organism)
 │   ├── state.message (dynamic)
 │   └── Button "Retry"
 └── AppScreenScaffold (showFloatingHeader = true)   [Success]
-    ├── FloatingHeaderOverlay → LiquidGlassPageHeader
+    ├── FloatingHeaderOverlay → CollapsibleGlassTopBar
     │   ├── title: homeGreetingTitle(firstName)  // "Good morning|afternoon|evening|Hello, {name}."
     │   ├── subtitle: HomeGreetingSubtitle       // "Ready to connect today?"
     │   └── layout toggle (pile ↔ linear)
     └── LazyColumn
         ├── HomeSearchPill              // pinned; not part of the pile
         ├── [PILE default] HomeAvailabilityIntentsRow (pill strip; not a pile cluster)
-        ├── homePhotoPileItems — one SectionHeader + PileCluster row per cluster
-        │   ├── Featured / Saved events / Explore nearby
-        │   ├── Stay in touch (archive + Poll-Pair + reconnect, capped at 10)
-        │   ├── Event reminders / Recent Connections
-        │   └── (availability, recap, insights, stats are NOT pile clusters)
+        ├── homePhotoPileItems — one PhotoPileStack (category marker cards interleaved)
+        │   ├── Saved events (max 5, featured first)
+        │   ├── marker "Explore Nearby" + tiles (max 10)
+        │   ├── marker "Stay in Touch" + archive/poll/reconnect (max 10)
+        │   ├── marker "Recent Connections" + location groups (max 10)
+        │   └── (availability, recap, insights, stats are NOT pile cards)
         ├── ActivityRecapSection / ConnectionInsightsCard / Your Stats row (telemetry; not Polaroids)
         └── [LINEAR fallback] same sections as a vertical list (FeaturedEventSection, …)
     └── LazyColumn (24dp spacing, 20dp horizontal; top inset clears floating header)
@@ -176,7 +177,7 @@ Shared components: `PhotoPileStack`, `PhotoCard`, `CardVisualHero`, `generateCar
 
 **Drag physics.** While a finger is down, the top card tracks **1:1**. Rotation is `ΔX × 0.05` around the touch anchor. Alpha fades after 150 dp of travel: `clamp(1 − (D − 150) / 250, 0, 1)`. On release:
 
-- Travel past 200 dp or a fling at 800 dp/s away → velocity-aware spring exit (`pileCardExitTargetPx` along the 2D vector, radial travel `√2 × size` so a 45° throw clears both axes) and the card is pushed onto a LIFO `dismissedHistory` stack.
+- Travel past 200 dp or a fling at 800 dp/s away → velocity-aware spring exit (`pileCardExitTargetPx` along the 2D vector, radial travel `1.15 × √2 × size` so a 45° throw clears both axes) and the card is pushed onto a LIFO `dismissedHistory` stack.
 - Swipe **down** (or a gesture opposing the last throw) → recall the most recently dismissed card, which springs in from the reverse trajectory.
 - Below threshold → bouncy spring back (`DampingRatioMediumBouncy`, `StiffnessLow`).
 - Tap without crossing touch slop → playful jiggle (`PILE_TAP_JIGGLE_SCALE` 1.05, ±5° wobble). Tap-to-open carousel / "Show more" is disabled.

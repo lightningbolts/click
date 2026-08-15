@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -49,6 +50,14 @@ enum class HeaderDisplayMode {
     Large,
     Inline,
 }
+
+private fun Modifier.collapsingTitleScale(collapse: Float): Modifier =
+    graphicsLayer {
+        val titleScale = 1f - 0.2f * collapse
+        scaleX = titleScale
+        scaleY = titleScale
+        transformOrigin = TransformOrigin(0f, 0.5f)
+    }
 
 @Composable
 private fun PresenceSubtitleRow(online: Boolean) {
@@ -123,11 +132,7 @@ fun LiquidGlassPageHeader(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .graphicsLayer {
-                    val titleScale = 1f - 0.2f * animatedCollapse
-                    scaleX = titleScale
-                    scaleY = titleScale
-                }.padding(vertical = verticalPad),
+                .padding(vertical = verticalPad),
     ) {
         when (displayMode) {
             HeaderDisplayMode.Inline -> {
@@ -146,6 +151,7 @@ fun LiquidGlassPageHeader(
                             fontWeight = FontWeight.SemiBold,
                             fontSize = titleSize,
                             color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.collapsingTitleScale(animatedCollapse),
                         )
                         if (subtitle != null && animatedCollapse < 0.85f) {
                             Text(
@@ -178,6 +184,7 @@ fun LiquidGlassPageHeader(
                             fontWeight = FontWeight.Bold,
                             fontSize = titleSize,
                             color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.collapsingTitleScale(animatedCollapse),
                         )
                         if (subtitle != null) {
                             Spacer(modifier = Modifier.height(2.dp))

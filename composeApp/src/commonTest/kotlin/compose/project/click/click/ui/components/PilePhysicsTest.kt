@@ -169,6 +169,12 @@ class PilePhysicsTest {
             pileSwipeAction(short, 0f, -flick, 0f, size, canDismiss = true, canRecall = true),
             "a flick back toward rest should spring back, not commit",
         )
+        val diagonal = PILE_FLING_VELOCITY_DP_PER_SEC * 0.75f
+        assertEquals(
+            PileSwipeAction.Dismiss,
+            pileSwipeAction(0f, 0f, diagonal, -diagonal, size, canDismiss = true, canRecall = true),
+            "a diagonal flick at rest should use hypot velocity, not per-axis abs",
+        )
     }
 
     @Test

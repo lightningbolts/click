@@ -42,7 +42,6 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage // pragma: allowlist secret
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
@@ -125,6 +124,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModel
 
 /**
  * Map screen — Phase 2 refactor (B1, C10, C11):
@@ -141,7 +141,7 @@ import kotlinx.datetime.toLocalDateTime
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapScreen(
-    viewModel: MapViewModel = viewModel { MapViewModel() },
+    viewModel: MapViewModel = composeViewModel { MapViewModel() },
     onNavigateToChat: ((String) -> Unit)? = null,
     /**
      * Called after the in-sheet share picker confirms destinations.
@@ -387,7 +387,7 @@ fun MapScreen(
     var showBeaconDropSheet by remember { mutableStateOf(false) }
     var showCreateHubModal by remember { mutableStateOf(false) }
     val createBeaconViewModel: CreateBeaconViewModel =
-        viewModel(key = "create-beacon") { CreateBeaconViewModel() }
+        composeViewModel(key = "create-beacon") { CreateBeaconViewModel() }
 
     LaunchedEffect(showBeaconDropSheet) {
         if (showBeaconDropSheet) {

@@ -38,6 +38,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 
 @Composable
 actual fun rememberChatMediaPickers(
@@ -92,15 +93,23 @@ actual fun rememberChatMediaPickers(
                 return@rememberLauncherForActivityResult
             }
             scope.launch {
-                val bytes = withContext(Dispatchers.IO) { file.readBytes() }
-                withContext(Dispatchers.Main.immediate) {
-                    if (bytes.isNotEmpty()) {
-                        onImagePickedState(bytes, "image/jpeg")
-                    } else {
-                        onMediaAccessBlockedState("Couldn't read that photo. Please try again.")
+                try {
+                    val bytes =
+                        try {
+                            withContext(Dispatchers.IO) { file.readBytes() }
+                        } catch (_: IOException) {
+                            null
+                        }
+                    withContext(Dispatchers.Main.immediate) {
+                        if (bytes != null && bytes.isNotEmpty()) {
+                            onImagePickedState(bytes, "image/jpeg")
+                        } else {
+                            onMediaAccessBlockedState("Couldn't read that photo. Please try again.")
+                        }
                     }
+                } finally {
+                    file.delete()
                 }
-                file.delete()
             }
         }
 
