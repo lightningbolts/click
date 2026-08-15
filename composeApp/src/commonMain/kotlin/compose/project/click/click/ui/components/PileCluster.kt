@@ -176,7 +176,7 @@ private fun PileCollapsedStack(
             modifier
                 .width(stackWidth)
                 .height(photoHeight + pilePeekOffsetDp(PILE_MAX_VISIBLE_LAYERS - 1).second.dp)
-                .pointerInput(clusterId, stackIds, dismissedIds, cardSizePx, reduceMotion) {
+                .pointerInput(clusterId, stackIds, dismissedIds, cardSizePx, reduceMotion, photoById) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         val velocityTracker = VelocityTracker()
@@ -203,7 +203,8 @@ private fun PileCollapsedStack(
                                         jiggleScale.animateTo(1f, MotionTokens.pileSnapSpec())
                                     }
                                     PlatformHapticsPolicy.lightImpact()
-                                    // Tap-to-open carousel / fan-out is disabled. Tap is jiggle-only.
+                                    // Fan/carousel stays disabled. Tap still opens the top card.
+                                    photoById[stackIds.firstOrNull()]?.onClick?.invoke()
                                 }
                             }
                             return@awaitEachGesture
@@ -236,7 +237,7 @@ private fun PileCollapsedStack(
                                 velocityXPxPerSec = velocity.x,
                                 velocityYPxPerSec = velocity.y,
                                 sizePx = cardSizePx,
-                                canDismiss = stackIds.isNotEmpty(),
+                                canDismiss = stackIds.size > 1,
                                 canRecall = dismissedIds.isNotEmpty(),
                                 lastExitXPx = lastExitX,
                                 lastExitYPx = lastExitY,

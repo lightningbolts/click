@@ -180,7 +180,7 @@ Shared components: `PhotoPileStack`, `PhotoCard`, `CardVisualHero`, `generateCar
 - Travel past 200 dp or a fling at 800 dp/s away → velocity-aware spring exit (`pileCardExitTargetPx` along the 2D vector, radial travel `1.15 × √2 × size` so a 45° throw clears both axes) and the card is pushed onto a LIFO `dismissedHistory` stack.
 - Swipe **down** (or a gesture opposing the last throw) → recall the most recently dismissed card, which springs in from the reverse trajectory.
 - Below threshold → bouncy spring back (`DampingRatioMediumBouncy`, `StiffnessLow`).
-- Tap without crossing touch slop → playful jiggle (`PILE_TAP_JIGGLE_SCALE` 1.05, ±5° wobble). Tap-to-open carousel / "Show more" is disabled.
+- Tap without crossing touch slop → playful jiggle (`PILE_TAP_JIGGLE_SCALE` 1.05, ±5° wobble), then the top card's `onClick` (open event, chat, map, etc.). Tap-to-open carousel / "Show more" is disabled. Category marker cards have a no-op click.
 
 A committed throw/recall fires `PlatformHapticsPolicy.lightImpact()`.
 
