@@ -69,7 +69,6 @@ import compose.project.click.click.data.AppDataManager // pragma: allowlist secr
 import compose.project.click.click.data.models.BeaconVisibilityAudience // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.events.EVENT_CATEGORY_OPTIONS // pragma: allowlist secret
-import compose.project.click.click.events.EventScheduleValidationError // pragma: allowlist secret
 import compose.project.click.click.events.EventVenueScale // pragma: allowlist secret
 import compose.project.click.click.events.validateEventSchedule // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
@@ -777,7 +776,7 @@ fun BeaconDropSheetContent(
                         )
                     }
                     Switch(
-                        checked = form.form.showCreatorName,
+                        checked = form.showCreatorName,
                         onCheckedChange = { viewModel.setShowCreatorName(it) },
                     )
                 }

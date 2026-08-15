@@ -264,6 +264,7 @@ internal fun buildHomePileClusters(
     actions: HomePileActions,
 ): List<HomePileClusterSpec> {
     val specs = buildHomePileQueueSpecs(data, actions)
+
     fun section(
         id: String,
         label: String,
@@ -292,4 +293,3 @@ fun homePileRequiredClusterIds(): Set<String> =
         "stay",
         "recent",
     )
-

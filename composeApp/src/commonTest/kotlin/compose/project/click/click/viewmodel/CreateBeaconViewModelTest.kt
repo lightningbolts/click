@@ -29,7 +29,10 @@ class CreateBeaconViewModelTest {
         vm.setTitle("Icy sidewalk")
         vm.setStagedPhoto(byteArrayOf(9), "image/jpeg")
         vm.setStagedPhoto(byteArrayOf(8, 8), "image/jpeg")
-        assertEquals(listOf<Byte>(8, 8), vm.uiState.value.stagedPhotoBytes?.toList())
+        assertEquals(
+            listOf<Byte>(8, 8),
+            vm.uiState.value.stagedPhotoBytes?.toList(),
+        )
         assertEquals(BeaconDropCategory.HAZARD, vm.uiState.value.category)
 
         vm.clearStagedPhoto()

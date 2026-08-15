@@ -114,9 +114,7 @@ fun pileDragTiltDeg(
     dragXPx: Float,
     dragYPx: Float = 0f,
     sizePx: Float = 1f,
-): Float {
-    return dragXPx * PILE_DRAG_TILT_PER_PX
-}
+): Float = dragXPx * PILE_DRAG_TILT_PER_PX
 
 fun pileLayerScale(layer: Int): Float {
     val clamped = layer.coerceAtLeast(0)
