@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -48,6 +49,9 @@ actual fun rememberChatMediaPickers(
     )
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val onImagePickedState by rememberUpdatedState(onImagePicked)
+    val onAudioPickedState by rememberUpdatedState(onAudioPicked)
+    val onMediaAccessBlockedState by rememberUpdatedState(onMediaAccessBlocked)
 
     var showVoiceDialog by remember { mutableStateOf(false) }
     var pendingCameraFile by remember { mutableStateOf<File?>(null) }
@@ -60,13 +64,13 @@ actual fun rememberChatMediaPickers(
             for (uri in uris) {
                 val read = readUriBytes(context, uri)
                 if (read == null) {
-                    onMediaAccessBlocked(
+                    onMediaAccessBlockedState(
                         "Couldn't read that photo. If access was denied, enable Photos & videos permission for Click in Settings.",
                     )
                     continue
                 }
                 val (bytes, mime) = read
-                onImagePicked(bytes, mime)
+                onImagePickedState(bytes, mime)
             }
         }
     }
@@ -83,8 +87,14 @@ actual fun rememberChatMediaPickers(
         }
         scope.launch {
             val bytes = withContext(Dispatchers.IO) { file.readBytes() }
+            withContext(Dispatchers.Main.immediate) {
+                if (bytes.isNotEmpty()) {
+                    onImagePickedState(bytes, "image/jpeg")
+                } else {
+                    onMediaAccessBlockedState("Couldn't read that photo. Please try again.")
+                }
+            }
             file.delete()
-            onImagePicked(bytes, "image/jpeg")
         }
     }
 
@@ -101,7 +111,7 @@ actual fun rememberChatMediaPickers(
             pendingCameraFile = file
             takePictureLauncher.launch(uri)
         } else {
-            onMediaAccessBlocked(
+            onMediaAccessBlockedState(
                 "Camera permission is off. To take photos in chat, enable Camera for Click in Settings.",
             )
         }
@@ -113,7 +123,7 @@ actual fun rememberChatMediaPickers(
         if (granted) {
             showVoiceDialog = true
         } else {
-            onMediaAccessBlocked(
+            onMediaAccessBlockedState(
                 "Microphone permission is off. To send voice clips, enable Microphone for Click in Settings.",
             )
         }
@@ -139,7 +149,7 @@ actual fun rememberChatMediaPickers(
     fun openVoiceRecorder() {
         val activeCall = CallSessionManager.callState.value
         if (activeCall is CallState.Connecting || activeCall is CallState.Connected) {
-            onMediaAccessBlocked(
+            onMediaAccessBlockedState(
                 "Microphone is in use for a call. End the call before recording a voice message.",
             )
             return
@@ -158,10 +168,10 @@ actual fun rememberChatMediaPickers(
             onDismiss = { showVoiceDialog = false },
             onFinished = { bytes, durationSec ->
                 showVoiceDialog = false
-                onAudioPicked(bytes, "audio/mp4", durationSec)
+                onAudioPickedState(bytes, "audio/mp4", durationSec)
             },
             onRecordBlocked = { message ->
-                onMediaAccessBlocked(message)
+                onMediaAccessBlockedState(message)
             },
         )
     }

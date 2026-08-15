@@ -112,6 +112,7 @@ import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist
 import compose.project.click.click.ui.utils.displayDynamicTitle // pragma: allowlist secret
 import compose.project.click.click.util.oneToOnePeerPairKey // pragma: allowlist secret
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
+import compose.project.click.click.viewmodel.CreateBeaconViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapSelection // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapState // pragma: allowlist secret
@@ -385,6 +386,8 @@ fun MapScreen(
     var selectedProfileId by remember { mutableStateOf<String?>(null) }
     var showBeaconDropSheet by remember { mutableStateOf(false) }
     var showCreateHubModal by remember { mutableStateOf(false) }
+    val createBeaconViewModel: CreateBeaconViewModel =
+        viewModel(key = "create-beacon") { CreateBeaconViewModel() }
 
     LaunchedEffect(showBeaconDropSheet) {
         if (showBeaconDropSheet) {
@@ -631,7 +634,10 @@ fun MapScreen(
         // ClickFormBottomSheet owns chrome + scroll-at-top holder. IME is handled inside
         // BeaconDropSheetContent via sheetImePadding (WindowInsets.ime is 0 in UIKit sheets).
         ClickFormBottomSheet(
-            onDismissRequest = { showBeaconDropSheet = false },
+            onDismissRequest = {
+                showBeaconDropSheet = false
+                createBeaconViewModel.reset()
+            },
             contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
             expandable = true,
             // Same as search: fill viewport + sheetImePadding + rubber-band dismiss.
@@ -647,6 +653,7 @@ fun MapScreen(
                 errorMessage = beaconInsertError,
                 onDismissError = { viewModel.clearBeaconInsertError() },
                 submitLocked = beaconSubmitInFlight,
+                viewModel = createBeaconViewModel,
                 onResolveCurrentLocation = {
                     if (!viewModel.hasLocationPermission()) {
                         null
@@ -706,13 +713,17 @@ fun MapScreen(
                         eventLocation = eventLocation,
                         imageBytes = imageBytes,
                         imageMime = imageMime,
-                        onAcceptedLocally = { showBeaconDropSheet = false },
+                        onAcceptedLocally = {
+                            showBeaconDropSheet = false
+                            createBeaconViewModel.reset()
+                        },
                         onRejectedEarly = onRejectedEarly,
                         onRemoteFinished = { },
                     )
                 },
                 onCreateHub = {
                     showBeaconDropSheet = false
+                    createBeaconViewModel.reset()
                     showCreateHubModal = true
                 },
             )

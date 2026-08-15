@@ -27,10 +27,11 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material3.Button
@@ -46,6 +47,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,15 +63,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.BeaconVisibilityAudience // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.events.EVENT_CATEGORY_OPTIONS // pragma: allowlist secret
-import compose.project.click.click.events.EventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.EventScheduleValidationError // pragma: allowlist secret
 import compose.project.click.click.events.EventVenueScale // pragma: allowlist secret
-import compose.project.click.click.events.defaultEventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.validateEventSchedule // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 import compose.project.click.click.ui.components.ActionChipButton // pragma: allowlist secret
@@ -88,6 +89,7 @@ import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlis
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 import compose.project.click.click.utils.GeocodedPlace // pragma: allowlist secret
 import compose.project.click.click.utils.GeocodingService // pragma: allowlist secret
+import compose.project.click.click.viewmodel.CreateBeaconViewModel // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -181,6 +183,7 @@ fun BeaconDropSheetContent(
     onResolveCurrentLocation: suspend () -> GeocodedPlace? = { null },
     submitLocked: Boolean = false,
     modifier: Modifier = Modifier,
+    viewModel: CreateBeaconViewModel = viewModel(key = "create-beacon") { CreateBeaconViewModel() },
 ) {
     val clipboardManager = LocalClipboardManager.current
     val focusManager = LocalFocusManager.current
@@ -189,43 +192,22 @@ fun BeaconDropSheetContent(
         remember(focusManager) {
             { focusManager.clearFocus() }
         }
-    var isSubmitting by remember { mutableStateOf(false) }
-    val category = remember { mutableStateOf(BeaconDropCategory.SOUNDTRACK) }
-    var beaconTitleDraft by remember { mutableStateOf("") }
-    var beaconDescriptionDraft by remember { mutableStateOf("") }
-    var soundtrackUrlDraft by remember { mutableStateOf("") }
-    val expiration = remember { mutableStateOf(BeaconDuration.THREE_HOURS) }
-    var eventSchedule by remember { mutableStateOf(defaultEventSchedule()) }
-    var eventScheduleError by remember { mutableStateOf<EventScheduleValidationError?>(null) }
-    var eventCategories by remember { mutableStateOf(setOf<String>()) }
-    var venueScale by remember { mutableStateOf(EventVenueScale.DEFAULT) }
-    var submitValidationError by remember { mutableStateOf<String?>(null) }
-    var addressQuery by remember { mutableStateOf("") }
-    var addressSuggestions by remember { mutableStateOf<List<GeocodedPlace>>(emptyList()) }
-    var selectedEventLocation by remember { mutableStateOf<GeocodedPlace?>(null) }
-    var addressSearching by remember { mutableStateOf(false) }
-    var resolvingCurrentLocation by remember { mutableStateOf(false) }
+    val form by viewModel.uiState.collectAsState()
     var addressSearchJob by remember { mutableStateOf<Job?>(null) }
 
-    var showCreatorName by remember { mutableStateOf(false) }
-    var visibilityAudience by remember { mutableStateOf(BeaconVisibilityAudience.EVERYONE) }
-    var beaconImageBytes by remember { mutableStateOf<ByteArray?>(null) }
-    var beaconImageMime by remember { mutableStateOf<String?>(null) }
     val mediaPickers =
         rememberChatMediaPickers(
             onImagePicked = { bytes, mime ->
-                beaconImageBytes = bytes
-                beaconImageMime = mime
-                submitValidationError = null
+                viewModel.setStagedPhoto(bytes, mime)
             },
             onAudioPicked = { _, _, _ -> },
         )
 
-    val isSoundtrack = category.value == BeaconDropCategory.SOUNDTRACK
-    val isEvent = category.value == BeaconDropCategory.EVENT
+    val isSoundtrack = form.category == BeaconDropCategory.SOUNDTRACK
+    val isEvent = form.category == BeaconDropCategory.EVENT
 
     val kind =
-        when (category.value) {
+        when (form.category) {
             BeaconDropCategory.SOUNDTRACK -> MapBeaconKind.SOUNDTRACK
             BeaconDropCategory.HAZARD -> MapBeaconKind.HAZARD
             BeaconDropCategory.UTILITY -> MapBeaconKind.UTILITY
@@ -291,20 +273,20 @@ fun BeaconDropSheetContent(
                         key = { it.name },
                     ) { cat ->
                         FilterChip(
-                            selected = category.value == cat,
+                            selected = form.category == cat,
                             onClick = {
                                 if (cat == BeaconDropCategory.COMMUNITY_HUB) {
                                     focusManager.clearFocus(force = true)
                                     onCreateHub()
                                     return@FilterChip
                                 }
-                                if (category.value == cat) return@FilterChip
+                                if (form.category == cat) return@FilterChip
                                 // Dismiss IME before swapping Event forms to avoid sheet height thrash.
                                 focusManager.clearFocus(force = true)
                                 scope.launch {
                                     delay(40)
-                                    category.value = cat
-                                    submitValidationError = null
+                                    viewModel.setCategory(cat)
+                                    viewModel.setSubmitValidationError(null)
                                     onDismissError()
                                 }
                             },
@@ -334,10 +316,10 @@ fun BeaconDropSheetContent(
 
                 if (isSoundtrack) {
                     BeaconDropOutlinedField(
-                        value = soundtrackUrlDraft,
+                        value = form.soundtrackUrl,
                         onValueChange = {
                             if (it.length <= 2000) {
-                                soundtrackUrlDraft = it
+                                viewModel.setSoundtrackUrl(it)
                                 onDismissError()
                             }
                         },
@@ -347,7 +329,7 @@ fun BeaconDropSheetContent(
                             IconButton(
                                 onClick = {
                                     clipboardManager.getText()?.text?.let { pasted ->
-                                        soundtrackUrlDraft = pasted.trim()
+                                        viewModel.setSoundtrackUrl(pasted.trim())
                                         onDismissError()
                                     }
                                 },
@@ -367,15 +349,15 @@ fun BeaconDropSheetContent(
                     )
                 } else {
                     BeaconDropOutlinedField(
-                        value = beaconTitleDraft,
+                        value = form.title,
                         onValueChange = {
                             if (it.length <= 80) {
-                                beaconTitleDraft = it
+                                viewModel.setTitle(it)
                                 onDismissError()
                             }
                         },
                         placeholder =
-                            when (category.value) {
+                            when (form.category) {
                                 BeaconDropCategory.HAZARD -> "What’s the hazard?"
                                 BeaconDropCategory.SOS -> "What do you need help with?"
                                 BeaconDropCategory.UTILITY -> "What did you find?"
@@ -390,13 +372,15 @@ fun BeaconDropSheetContent(
                     )
                     if (isEvent) {
                         EventDateTimePicker(
-                            schedule = eventSchedule,
+                            schedule = form.eventSchedule,
                             onScheduleChange = { next ->
-                                eventSchedule = next
-                                eventScheduleError = validateEventSchedule(next.startEpochMs, next.endEpochMs)
+                                viewModel.setEventSchedule(
+                                    next,
+                                    validateEventSchedule(next.startEpochMs, next.endEpochMs),
+                                )
                                 onDismissError()
                             },
-                            validationError = eventScheduleError,
+                            validationError = form.eventScheduleError,
                             uiState = schedulePickerUi,
                             includeDialogs = false,
                         )
@@ -412,14 +396,15 @@ fun BeaconDropSheetContent(
                         ) {
                             EVENT_CATEGORY_OPTIONS.forEach { option ->
                                 FilterChip(
-                                    selected = option in eventCategories,
+                                    selected = option in form.eventCategories,
                                     onClick = {
-                                        eventCategories =
-                                            if (option in eventCategories) {
-                                                eventCategories - option
+                                        val next =
+                                            if (option in form.eventCategories) {
+                                                form.eventCategories - option
                                             } else {
-                                                eventCategories + option
+                                                form.eventCategories + option
                                             }
+                                        viewModel.setEventCategories(next)
                                     },
                                     label = { Text(option) },
                                     colors =
@@ -449,8 +434,8 @@ fun BeaconDropSheetContent(
                         ) {
                             EventVenueScale.entries.forEach { option ->
                                 FilterChip(
-                                    selected = venueScale == option,
-                                    onClick = { venueScale = option },
+                                    selected = form.venueScale == option,
+                                    onClick = { viewModel.setVenueScale(option) },
                                     label = { Text(option.label) },
                                     colors =
                                         FilterChipDefaults.filterChipColors(
@@ -474,23 +459,23 @@ fun BeaconDropSheetContent(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         BeaconDropOutlinedField(
-                            value = addressQuery,
+                            value = form.addressQuery,
                             onValueChange = { next ->
-                                addressQuery = next.take(200)
-                                selectedEventLocation = null
-                                submitValidationError = null
+                                viewModel.setAddressQuery(next.take(200))
+                                viewModel.setSelectedEventLocation(null)
+                                viewModel.setSubmitValidationError(null)
                                 onDismissError()
                                 addressSearchJob?.cancel()
                                 addressSearchJob =
                                     scope.launch {
                                         delay(220)
-                                        val q = addressQuery.trim()
+                                        val q = form.addressQuery.trim()
                                         if (q.length < 2) {
-                                            addressSuggestions = emptyList()
-                                            addressSearching = false
+                                            viewModel.setAddressSuggestions(emptyList())
+                                            viewModel.setAddressSearching(false)
                                             return@launch
                                         }
-                                        addressSearching = true
+                                        viewModel.setAddressSearching(true)
                                         val near = AppDataManager.lastKnownDeviceLocation.value
                                         val results =
                                             withContext(Dispatchers.Default) {
@@ -501,16 +486,16 @@ fun BeaconDropSheetContent(
                                                     nearLon = near?.second,
                                                 )
                                             }
-                                        if (addressQuery.trim() == q) {
-                                            addressSuggestions = results
+                                        if (form.addressQuery.trim() == q) {
+                                            viewModel.setAddressSuggestions(results)
                                         }
-                                        addressSearching = false
+                                        viewModel.setAddressSearching(false)
                                     }
                             },
                             placeholder = "Search address or place",
                             singleLine = true,
                             trailingIcon = {
-                                if (addressSearching) {
+                                if (form.addressSearching) {
                                     CircularProgressIndicator(
                                         modifier = Modifier.size(18.dp),
                                         strokeWidth = 2.dp,
@@ -527,29 +512,30 @@ fun BeaconDropSheetContent(
                         )
                         TextButton(
                             onClick = {
-                                if (resolvingCurrentLocation) return@TextButton
+                                if (form.resolvingCurrentLocation) return@TextButton
                                 scope.launch {
-                                    resolvingCurrentLocation = true
-                                    submitValidationError = null
+                                    viewModel.setResolvingCurrentLocation(true)
+                                    viewModel.setSubmitValidationError(null)
                                     onDismissError()
                                     val place =
                                         withContext(Dispatchers.Default) {
                                             onResolveCurrentLocation()
                                         }
                                     if (place != null) {
-                                        selectedEventLocation = place
-                                        addressQuery = place.shortLabel
-                                        addressSuggestions = emptyList()
+                                        viewModel.setSelectedEventLocation(place)
+                                        viewModel.setAddressQuery(place.shortLabel)
+                                        viewModel.setAddressSuggestions(emptyList())
                                     } else {
-                                        submitValidationError =
-                                            "Could not read your location. Enable GPS or search an address."
+                                        viewModel.setSubmitValidationError(
+                                            "Could not read your location. Enable GPS or search an address.",
+                                        )
                                     }
-                                    resolvingCurrentLocation = false
+                                    viewModel.setResolvingCurrentLocation(false)
                                 }
                             },
-                            enabled = !resolvingCurrentLocation && !submitLocked,
+                            enabled = !form.resolvingCurrentLocation && !submitLocked,
                         ) {
-                            if (resolvingCurrentLocation) {
+                            if (form.resolvingCurrentLocation) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(16.dp),
                                     strokeWidth = 2.dp,
@@ -563,26 +549,26 @@ fun BeaconDropSheetContent(
                                 )
                                 Spacer(modifier = Modifier.size(8.dp))
                             }
-                            Text(if (resolvingCurrentLocation) "Getting location…" else "Use my location")
+                            Text(if (form.resolvingCurrentLocation) "Getting location…" else "Use my location")
                         }
-                        selectedEventLocation?.let { place ->
+                        form.selectedEventLocation?.let { place ->
                             Text(
                                 text = place.displayName,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.primary,
                             )
                         }
-                        if (addressSuggestions.isNotEmpty() && selectedEventLocation == null) {
+                        if (form.addressSuggestions.isNotEmpty() && form.selectedEventLocation == null) {
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                addressSuggestions.forEach { suggestion ->
+                                form.addressSuggestions.forEach { suggestion ->
                                     Column(
                                         modifier =
                                             Modifier
                                                 .fillMaxWidth()
                                                 .clickable {
-                                                    selectedEventLocation = suggestion
-                                                    addressQuery = suggestion.shortLabel
-                                                    addressSuggestions = emptyList()
+                                                    viewModel.setSelectedEventLocation(suggestion)
+                                                    viewModel.setAddressQuery(suggestion.shortLabel)
+                                                    viewModel.setAddressSuggestions(emptyList())
                                                     dismissKeyboard()
                                                     onDismissError()
                                                 }.padding(vertical = 8.dp),
@@ -608,7 +594,7 @@ fun BeaconDropSheetContent(
                     } else {
                         Text(
                             text =
-                                when (category.value) {
+                                when (form.category) {
                                     BeaconDropCategory.HAZARD -> "Hazard details"
                                     BeaconDropCategory.SOS -> "SOS details"
                                     BeaconDropCategory.UTILITY -> "Utility details"
@@ -621,7 +607,7 @@ fun BeaconDropSheetContent(
                         )
                         Text(
                             text =
-                                when (category.value) {
+                                when (form.category) {
                                     BeaconDropCategory.HAZARD ->
                                         "Warn people nearby about something to avoid. Pin drops at your current location."
                                     BeaconDropCategory.SOS ->
@@ -653,9 +639,9 @@ fun BeaconDropSheetContent(
                         ) {
                             BeaconDuration.entries.forEach { opt ->
                                 FilterChip(
-                                    selected = expiration.value == opt,
+                                    selected = form.expiration == opt,
                                     onClick = {
-                                        expiration.value = opt
+                                        viewModel.setExpiration(opt)
                                         onDismissError()
                                     },
                                     label = { Text(opt.label) },
@@ -671,10 +657,10 @@ fun BeaconDropSheetContent(
                         }
                     }
                     BeaconDropOutlinedField(
-                        value = beaconDescriptionDraft,
+                        value = form.description,
                         onValueChange = {
                             if (it.length <= 500) {
-                                beaconDescriptionDraft = it
+                                viewModel.setDescription(it)
                                 onDismissError()
                             }
                         },
@@ -696,14 +682,14 @@ fun BeaconDropSheetContent(
                 )
                 Text(
                     text =
-                        if (beaconImageBytes != null) {
+                        if (form.stagedPhotoBytes != null) {
                             "Photo attached"
                         } else {
                             "Add a photo so people recognize this at a glance."
                         },
                     style = MaterialTheme.typography.bodySmall,
                     color =
-                        if (beaconImageBytes != null) {
+                        if (form.stagedPhotoBytes != null) {
                             MaterialTheme.colorScheme.secondary
                         } else {
                             MaterialTheme.colorScheme.onSurfaceVariant
@@ -726,13 +712,12 @@ fun BeaconDropSheetContent(
                         onClick = { mediaPickers.openPhotoLibrary() },
                     )
                 }
-                beaconImageBytes?.let { bytes ->
+                form.stagedPhotoBytes?.let { bytes ->
                     BeaconAttachedPhotoThumbnail(
                         bytes = bytes,
                         onReplace = { mediaPickers.openCamera() },
                         onRemove = {
-                            beaconImageBytes = null
-                            beaconImageMime = null
+                            viewModel.clearStagedPhoto()
                         },
                     )
                 }
@@ -752,8 +737,8 @@ fun BeaconDropSheetContent(
                         key = { it.name },
                     ) { option ->
                         FilterChip(
-                            selected = visibilityAudience == option,
-                            onClick = { visibilityAudience = option },
+                            selected = form.visibilityAudience == option,
+                            onClick = { viewModel.setVisibilityAudience(option) },
                             label = {
                                 Text(
                                     when (option) {
@@ -792,13 +777,13 @@ fun BeaconDropSheetContent(
                         )
                     }
                     Switch(
-                        checked = showCreatorName,
-                        onCheckedChange = { showCreatorName = it },
+                        checked = form.form.showCreatorName,
+                        onCheckedChange = { viewModel.setShowCreatorName(it) },
                     )
                 }
 
                 listOfNotNull(
-                    submitValidationError?.takeIf { it.isNotBlank() },
+                    form.submitValidationError?.takeIf { it.isNotBlank() },
                     errorMessage?.takeIf { it.isNotBlank() },
                 ).firstOrNull()?.let { err ->
                     Text(
@@ -809,43 +794,44 @@ fun BeaconDropSheetContent(
                 }
                 Button(
                     onClick = {
-                        if (isSubmitting) return@Button
+                        if (form.isSubmitting) return@Button
                         dismissKeyboard()
-                        submitValidationError = null
-                        isSubmitting = true
+                        viewModel.setSubmitValidationError(null)
+                        viewModel.setSubmitting(true)
                         val ttl =
                             if (isSoundtrack || isEvent) {
                                 null
                             } else {
-                                expiration.value.durationMs
+                                form.expiration.durationMs
                             }
-                        val title = beaconTitleDraft.trim()
-                        val description = beaconDescriptionDraft.trim().ifBlank { null }
-                        val url = if (isSoundtrack) soundtrackUrlDraft.trim().ifBlank { null } else null
+                        val title = form.title.trim()
+                        val description = form.description.trim().ifBlank { null }
+                        val url = if (isSoundtrack) form.soundtrackUrl.trim().ifBlank { null } else null
                         val fieldError =
                             beaconDropValidationError(
-                                category = category.value,
+                                category = form.category,
                                 title = title,
                                 soundtrackUrl = url,
-                                hasEventLocation = selectedEventLocation != null,
+                                hasEventLocation = form.selectedEventLocation != null,
                             )
                         if (fieldError != null) {
-                            submitValidationError = fieldError
-                            isSubmitting = false
+                            viewModel.setSubmitValidationError(fieldError)
+                            viewModel.setSubmitting(false)
                             return@Button
                         }
                         val schedule =
                             if (isEvent) {
-                                eventScheduleError =
+                                val scheduleError =
                                     validateEventSchedule(
-                                        eventSchedule.startEpochMs,
-                                        eventSchedule.endEpochMs,
+                                        form.eventSchedule.startEpochMs,
+                                        form.eventSchedule.endEpochMs,
                                     )
-                                if (eventScheduleError != null) {
-                                    isSubmitting = false
+                                viewModel.setEventSchedule(form.eventSchedule, scheduleError)
+                                if (scheduleError != null) {
+                                    viewModel.setSubmitting(false)
                                     return@Button
                                 }
-                                eventSchedule
+                                form.eventSchedule
                             } else {
                                 null
                             }
@@ -855,26 +841,26 @@ fun BeaconDropSheetContent(
                             description,
                             url,
                             ttl,
-                            showCreatorName,
-                            visibilityAudience,
+                            form.showCreatorName,
+                            form.visibilityAudience,
                             schedule,
-                            if (isEvent) eventCategories.toList() else emptyList(),
-                            if (isEvent) venueScale else EventVenueScale.DEFAULT,
-                            if (isEvent) selectedEventLocation else null,
-                            beaconImageBytes,
-                            beaconImageMime,
+                            if (isEvent) form.eventCategories.toList() else emptyList(),
+                            if (isEvent) form.venueScale else EventVenueScale.DEFAULT,
+                            if (isEvent) form.selectedEventLocation else null,
+                            form.stagedPhotoBytes,
+                            form.stagedPhotoMime,
                         ) {
-                            isSubmitting = false
+                            viewModel.setSubmitting(false)
                         }
                     },
-                    enabled = !isSubmitting && !submitLocked,
+                    enabled = !form.isSubmitting && !submitLocked,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (isSubmitting) {
+                        if (form.isSubmitting) {
                             CircularProgressIndicator(
                                 strokeWidth = 2.dp,
                                 modifier = Modifier.size(18.dp),
@@ -887,10 +873,12 @@ fun BeaconDropSheetContent(
             }
             if (isEvent) {
                 EventSchedulePickerDialogs(
-                    schedule = eventSchedule,
+                    schedule = form.eventSchedule,
                     onScheduleChange = { next ->
-                        eventSchedule = next
-                        eventScheduleError = validateEventSchedule(next.startEpochMs, next.endEpochMs)
+                        viewModel.setEventSchedule(
+                            next,
+                            validateEventSchedule(next.startEpochMs, next.endEpochMs),
+                        )
                         onDismissError()
                     },
                     uiState = schedulePickerUi,
@@ -928,12 +916,16 @@ private fun BeaconAttachedPhotoThumbnail(
         ActionChipButton(
             label = "Replace",
             onClick = onReplace,
+            leadingIcon = Icons.Filled.Refresh,
+            contentDescription = "Replace photo",
+            filled = true,
         )
         ActionChipButton(
             label = "Remove",
             onClick = onRemove,
-            leadingIcon = Icons.Filled.Close,
-            contentDescription = null,
+            leadingIcon = Icons.Filled.Delete,
+            contentDescription = "Remove photo",
+            filled = true,
         )
     }
 }

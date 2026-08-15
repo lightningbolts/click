@@ -39,14 +39,33 @@ fun ActionChipButton(
     enabled: Boolean = true,
     leadingIcon: ImageVector? = null,
     contentDescription: String? = null,
+    filled: Boolean = false,
 ) {
+    val shape = RoundedCornerShape(12.dp)
+    val background =
+        if (filled) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surface
+        }
+    val foreground =
+        if (filled) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        }
     Row(
         modifier =
             modifier
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(12.dp))
-                .clickable(enabled = enabled) { onClick() }
+                .clip(shape)
+                .background(background)
+                .then(
+                    if (filled) {
+                        Modifier
+                    } else {
+                        Modifier.border(clickBorderWidth(), clickBorderColor(), shape)
+                    },
+                ).clickable(enabled = enabled) { onClick() }
                 .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -56,14 +75,14 @@ fun ActionChipButton(
                 imageVector = icon,
                 contentDescription = contentDescription,
                 modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onSurface,
+                tint = foreground,
             )
         }
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = foreground,
         )
     }
 }
