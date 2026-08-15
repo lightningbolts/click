@@ -56,6 +56,7 @@ import compose.project.click.click.data.models.beaconIdFromMetadata // pragma: a
 import compose.project.click.click.data.models.beaconShareUrlFromMetadata // pragma: allowlist secret
 import compose.project.click.click.data.models.beaconTitleFromMetadata // pragma: allowlist secret
 import compose.project.click.click.data.models.beaconTypeFromMetadata // pragma: allowlist secret
+import compose.project.click.click.data.models.heroImageUrl // pragma: allowlist secret
 import compose.project.click.click.events.buildEventShareUrl // pragma: allowlist secret
 import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.formatEventScheduleRange // pragma: allowlist secret

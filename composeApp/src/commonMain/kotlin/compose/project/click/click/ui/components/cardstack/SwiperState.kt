@@ -11,12 +11,12 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import kotlinx.coroutines.CancellationException
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.pow
 import kotlin.math.sign
 import kotlin.math.sqrt
-import kotlinx.coroutines.CancellationException
 
 /**
  * Vendored from Hukumister LazyCardStack [SwiperState], with velocity-aware fling so a flick

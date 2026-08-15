@@ -64,6 +64,15 @@ fun Modifier.cardVisualBackground(visual: CardVisual): Modifier =
     }
 
 /**
+ * True when [CardVisualHero] should paint the generated gradient/pattern instead of a cover photo.
+ * A non-blank [imageUrl] wins until Coil reports an error.
+ */
+fun cardVisualHeroUsesGeneratedPattern(
+    imageUrl: String?,
+    imageFailed: Boolean = false,
+): Boolean = imageUrl?.trim().isNullOrEmpty() || imageFailed
+
+/**
  * Decorative gradient/pattern band used as a card hero or detail-sheet header.
  *
  * Deliberately has no title/subtitle parameters: detail sheets render title, date, and location in
@@ -85,7 +94,7 @@ fun CardVisualHero(
 ) {
     val trimmedImage = imageUrl?.trim()?.takeIf { it.isNotEmpty() }
     var imageFailed by remember(trimmedImage) { mutableStateOf(false) }
-    val useGenerated = trimmedImage == null || imageFailed
+    val useGenerated = cardVisualHeroUsesGeneratedPattern(trimmedImage, imageFailed)
     Box(
         modifier =
             if (useGenerated) {

@@ -29,8 +29,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.zIndex
-import kotlin.math.hypot
 import kotlinx.coroutines.launch
+import kotlin.math.hypot
 
 /**
  * Vendored LazyCardStack renderer adapted for Compose Multiplatform 1.11.
@@ -91,8 +91,7 @@ fun LazyCardStack(
                     source: NestedScrollSource,
                 ): Offset = if (dragging) available else Offset.Zero
 
-                override suspend fun onPreFling(available: Velocity): Velocity =
-                    if (dragging) available else Velocity.Zero
+                override suspend fun onPreFling(available: Velocity): Velocity = if (dragging) available else Velocity.Zero
             }
         }
 
@@ -121,7 +120,7 @@ fun LazyCardStack(
                             val event = awaitPointerEvent(PointerEventPass.Initial)
                             val change =
                                 event.changes.firstOrNull { it.id == pointerId } ?: break
-                            if (change.changedToUpIgnoreConsumed()) {
+                            if (!change.pressed) {
                                 change.consume()
                                 break
                             }

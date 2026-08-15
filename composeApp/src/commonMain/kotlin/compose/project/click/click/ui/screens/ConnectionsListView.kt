@@ -14,14 +14,12 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
@@ -39,7 +37,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -70,7 +67,6 @@ import compose.project.click.click.ui.chat.connectionRowPressGestures // pragma:
 import compose.project.click.click.ui.chat.connectionRowPressHighlight // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppEmptyState // pragma: allowlist secret
-import compose.project.click.click.ui.components.AppScreenDefaults // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
 import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
@@ -82,7 +78,6 @@ import compose.project.click.click.ui.components.GlassSheetTokens // pragma: all
 import compose.project.click.click.ui.components.GlassToastHost // pragma: allowlist secret
 import compose.project.click.click.ui.components.LocalGlassAlertAnimatedDismiss // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
-import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberGlassToastState // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetPageBackground // pragma: allowlist secret
@@ -696,7 +691,6 @@ fun ConnectionsListView(
                         }
                     }
                 }
-
             }
         }
 

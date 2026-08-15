@@ -19,8 +19,7 @@ interface SwiperDragScope {
     fun dragBy(offset: Offset)
 }
 
-fun SwiperDraggableState(onDelta: (Offset) -> Unit): SwiperDraggableState =
-    DefaultSwiperDraggableState(onDelta)
+fun SwiperDraggableState(onDelta: (Offset) -> Unit): SwiperDraggableState = DefaultSwiperDraggableState(onDelta)
 
 private class DefaultSwiperDraggableState(
     val onDelta: (Offset) -> Unit,

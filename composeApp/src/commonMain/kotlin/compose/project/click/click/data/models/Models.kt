@@ -947,6 +947,7 @@ data class MapBeaconMetadata(
 fun MapBeaconMetadata.heroImageUrl(): String? {
     albumArtUrl?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
     val obj = raw ?: return null
+
     fun key(vararg names: String): String? {
         for (name in names) {
             val s = (obj[name] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
@@ -958,7 +959,6 @@ fun MapBeaconMetadata.heroImageUrl(): String? {
 }
 
 fun beaconHeroImageUrl(metadata: MapBeaconMetadata): String? = metadata.heroImageUrl()
-
 
 private val beaconMetadataJson =
     Json {

@@ -32,10 +32,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
+import androidx.compose.ui.viewinterop.UIKitInteropProperties
 import androidx.compose.ui.viewinterop.UIKitView
 import androidx.compose.ui.viewinterop.UIKitViewController
 import androidx.compose.ui.zIndex
@@ -45,12 +45,12 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
 import platform.CoreGraphics.CGPointMake
 import platform.CoreGraphics.CGSizeMake
+import platform.UIKit.NSLayoutConstraint
 import platform.UIKit.UIBlurEffect
 import platform.UIKit.UIBlurEffectStyle
 import platform.UIKit.UIColor
 import platform.UIKit.UINavigationBarAppearance
 import platform.UIKit.UINavigationController
-import platform.UIKit.UINavigationItemLargeTitleDisplayModeAlways
 import platform.UIKit.UIScrollView
 import platform.UIKit.UIViewController
 import platform.UIKit.UIVisualEffectView
@@ -242,8 +242,11 @@ private fun IosNativeNavigationChrome(
             chrome.setTitle(displayTitle)
             chrome.applyScroll(scrollOffsetPx.toDouble())
         },
-        background = Color.Transparent,
-        interactive = false,
+        properties =
+            UIKitInteropProperties(
+                isInteractive = false,
+                isNativeAccessibilityEnabled = false,
+            ),
     )
 }
 
@@ -259,12 +262,27 @@ private class IosLargeTitleChrome(
             bounces = true
             backgroundColor = UIColor.clearColor
             scrollsToTop = false
+            translatesAutoresizingMaskIntoConstraints = false
         }
     private val rootController =
-        UIViewController(nibName = null, bundle = null).apply {
-            view = dummyScroll
-            navigationItem.title = initialTitle
-            navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeAlways
+        object : UIViewController(nibName = null, bundle = null) {
+            override fun viewDidLoad() {
+                super.viewDidLoad()
+                view.backgroundColor = UIColor.clearColor
+                if (dummyScroll.superview == null) {
+                    view.addSubview(dummyScroll)
+                    NSLayoutConstraint.activateConstraints(
+                        listOf(
+                            dummyScroll.topAnchor.constraintEqualToAnchor(view.topAnchor),
+                            dummyScroll.leadingAnchor.constraintEqualToAnchor(view.leadingAnchor),
+                            dummyScroll.trailingAnchor.constraintEqualToAnchor(view.trailingAnchor),
+                            dummyScroll.bottomAnchor.constraintEqualToAnchor(view.bottomAnchor),
+                        ),
+                    )
+                }
+            }
+        }.apply {
+            title = initialTitle
         }
     val navController =
         UINavigationController(rootViewController = rootController).apply {
@@ -281,11 +299,11 @@ private class IosLargeTitleChrome(
             navigationBar.standardAppearance = standard
             navigationBar.scrollEdgeAppearance = scrollEdge
             navigationBar.compactAppearance = standard
-            navigationBar.translucent = true
+            navigationBar.setTranslucent(true)
         }
 
     fun setTitle(title: String) {
-        rootController.navigationItem.title = title
+        rootController.title = title
         navController.navigationBar.prefersLargeTitles = true
     }
 
@@ -293,7 +311,7 @@ private class IosLargeTitleChrome(
         val bounds = dummyScroll.bounds
         val width = bounds.useContents { size.width }.coerceAtLeast(1.0)
         val height = bounds.useContents { size.height }.coerceAtLeast(1.0)
-        dummyScroll.contentSize = CGSizeMake(width, height + 4_000.0)
+        dummyScroll.setContentSize(CGSizeMake(width, height + 4_000.0))
         dummyScroll.setContentOffset(CGPointMake(0.0, offsetY.coerceAtLeast(0.0)), animated = false)
     }
 }
@@ -340,6 +358,10 @@ private fun IosStatusBarSystemBlur(modifier: Modifier = Modifier) {
             effectView.effect = UIBlurEffect.effectWithStyle(blurStyle)
             effectView.backgroundColor = UIColor.clearColor
         },
-        interactive = false,
+        properties =
+            UIKitInteropProperties(
+                isInteractive = false,
+                isNativeAccessibilityEnabled = false,
+            ),
     )
 }

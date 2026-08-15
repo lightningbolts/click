@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
+import compose.project.click.click.data.models.heroImageUrl // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickCardSurface // pragma: allowlist secret
