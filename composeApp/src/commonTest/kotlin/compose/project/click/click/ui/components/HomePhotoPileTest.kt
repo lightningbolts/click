@@ -181,6 +181,81 @@ class HomePhotoPileTest {
      * the same connection gets one gradient on the pile and a different one everywhere else.
      */
     @Test
+    fun unifiedQueueInterleavesCategoryMarkersAndCaps() {
+        val saved =
+            List(8) { index ->
+                EventBookmarkItemDto(beaconId = "saved-$index", title = "Saved $index")
+            }
+        val explore =
+            List(12) { index ->
+                HomeExploreTile(
+                    id = "tile-$index",
+                    label = "Tile $index",
+                    count = index + 1,
+                    layerFilter = MapLayerFilter.EVENTS,
+                    icon = Icons.Filled.Event,
+                )
+            }
+        val reconnect =
+            List(12) { index ->
+                ReconnectReminder(
+                    connectionId = "c$index",
+                    userId = "u$index",
+                    userName = "User $index",
+                    lastMessageTime = 0L,
+                    daysSinceContact = index,
+                    activityStatus = ConnectionActivityStatus.DORMANT,
+                    suggestedMessage = "Hey",
+                )
+            }
+        val locations =
+            List(12) { index ->
+                "Loc $index" to
+                    listOf(
+                        Connection(
+                            id = "conn-$index",
+                            created = index.toLong(),
+                            expiry = 9_999_999_999L,
+                            user_ids = listOf("me", "peer-$index"),
+                            semantic_location = "Loc $index",
+                        ),
+                    )
+            }.toMap()
+        val data =
+            HomePileBoardData(
+                intents = emptyList(),
+                featuredEvent = null,
+                recap = null,
+                savedBookmarks = saved,
+                exploreTiles = explore,
+                archiveNotice = null,
+                pollPair = null,
+                reconnectReminders = reconnect,
+                eventReminders = emptyList(),
+                locationGroups = locations,
+                insights = null,
+                stats = UserStats(0, emptyList(), 0),
+                connectedUsers = emptyMap(),
+            )
+        val specs = buildHomePileQueueSpecs(data, emptyActions())
+        val ids = specs.map { it.id }
+        assertEquals(5, specs.count { it.id.startsWith("saved-") })
+        assertTrue("marker-explore" in ids)
+        assertEquals(10, specs.count { it.id.startsWith("tile-") })
+        assertTrue("marker-stay" in ids)
+        assertEquals(10, specs.count { it.id.startsWith("reconnect-") })
+        assertTrue("marker-recent" in ids)
+        assertEquals(10, specs.count { it.id.startsWith("loc-") })
+        assertTrue(ids.indexOf("marker-explore") < ids.indexOf("tile-0"))
+        assertTrue(ids.indexOf("marker-stay") < ids.indexOf("reconnect-c0"))
+        assertTrue(ids.indexOf("marker-recent") < ids.indexOf("loc-Loc 0"))
+    }
+
+    /**
+     * List keys stay prefixed and unique, but the visual seed must be the raw entity id — otherwise
+     * the same connection gets one gradient on the pile and a different one everywhere else.
+     */
+    @Test
     fun visualIdCarriesTheRawEntityId() {
         val reminder =
             ReconnectReminder(

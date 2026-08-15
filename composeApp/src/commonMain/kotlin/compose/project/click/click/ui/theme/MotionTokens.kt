@@ -73,4 +73,14 @@ object MotionTokens {
         dampingRatio = Destructive.DampingRatio,
         stiffness = Destructive.Stiffness,
     )
+
+    object PileSnap {
+        const val DampingRatio = Spring.DampingRatioMediumBouncy
+        const val Stiffness = Spring.StiffnessLow
+    }
+
+    fun <T> pileSnapSpec(): SpringSpec<T> = spring(
+        dampingRatio = PileSnap.DampingRatio,
+        stiffness = PileSnap.Stiffness,
+    )
 }

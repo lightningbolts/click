@@ -166,26 +166,24 @@ Triggered from `HomeAvailabilityIntentsRow` chip taps. See [13-availability.md](
 
 ### Photo pile (`homePhotoPileItems`)
 
-**One cluster per full-width row.** `LazyListScope.homePhotoPileItems` emits a `SectionHeader` label plus its own `PileCluster` per cluster, stacked vertically below the availability pill and above the telemetry section (recap, insights, stats). Availability, recap, insights, and stats are **not** pile clusters — they render as the same linear composables used in list mode.
+**One unified Polaroid stack.** `LazyListScope.homePhotoPileItems` emits a single `PhotoPileStack` below the availability pill and above telemetry (recap, insights, stats). Category marker cards ("Explore Nearby", "Stay in Touch", "Recent Connections") are interleaved in the queue. Availability, recap, insights, and stats are **not** pile cards.
 
-Shared components: `PileCluster`, `PhotoCard`, `CardVisualHero`, `SectionHeader`, `generateCardVisual(id)`, and the Compose-free `PilePhysics.kt`. Visuals are hashed (FNV-1a) so the same event/person/location always gets the same gradient plus one of five patterns (dots, diagonals, grain, grid, chevron), drawn from the full `CardHueFamily` palette with purple as the weighted anchor. Photos seed on `visualId` (the raw `beaconId` / `connectionId`) while `id` stays list-key unique, so a beacon looks identical on the pile, in the Events list, on its map pin, and in its detail sheet. Mixed stay/reconnect stacks may show a small category chip on the top card.
+Shared components: `PhotoPileStack`, `PhotoCard`, `CardVisualHero`, `generateCardVisual(id)`, and Compose-free `PilePhysics.kt`. Visuals are hashed (FNV-1a) so the same event/person/location always gets the same gradient. Photos seed on `visualId` (the raw `beaconId` / `connectionId`) while `id` stays list-key unique.
 
-**Cluster caps:** saved bookmarks `.take(5)`, explore `.take(10)`, stay+reconnect combined `.take(10)`, recent connections `.take(10)`. Clusters sort by `zPriority` descending.
+**Queue order and caps:** saved events `.take(5)` (featured first), marker + explore `.take(10)`, marker + stay/reconnect `.take(10)`, marker + recent connections `.take(10)`.
 
-**Collapsed stack.** The top card plus up to two peeking layers (`PILE_MAX_VISIBLE_LAYERS = 3`; scales 1.0 / 0.95 / 0.90). Each cluster occupies roughly half the screen height with a **roughly-square** Polaroid (`pileCardSizeDp`). Peek offsets are **vertical only** (`pilePeekOffsetDp`: 0 / 12 / 24 dp, x = 0) so the top card's bottom-start title block is never covered; titles ellipsize rather than wrap unbounded. Every layer, including the top card, gets a deterministic ±4° resting tilt (`pileCardTiltDeg`) plus scale-down, dimming, and lower elevation on back layers (`pileLayerScale` / `pileLayerDim` / `pileLayerElevationDp`) so the pile reads as physically stacked.
+**Collapsed stack.** The top card plus up to two peeking layers (`PILE_MAX_VISIBLE_LAYERS = 3`; scales 1.0 / 0.95 / 0.90, elevations 16 / 8 / 4 dp). Peek offsets are **vertical only** (`pilePeekOffsetDp`: 0 / 12 / 24 dp). Every layer gets a deterministic ±15° resting tilt (`hash(id) mod 31 − 15`).
 
-**Drag physics.** While a finger is down, the top card tracks **1:1** (`liveX`/`liveY` with rubber-band past ~85% of card size via `pileRubberBandOffset`). Rotation pivots around the initial touch anchor (`transformOrigin`). Tilt is proportional to travel (`pileDragTiltDeg`). On release:
+**Drag physics.** While a finger is down, the top card tracks **1:1**. Rotation is `ΔX × 0.05` around the touch anchor. Alpha fades after 150 dp of travel: `clamp(1 − (D − 150) / 250, 0, 1)`. On release:
 
-- Any swipe past `GlassGestureCommitFraction` (or a flick at `GlassGestureFlickVelocityPxPerSec`) in the throw direction → omnidirectional velocity-aware spring exit (`pileCardExitTargetPx` along the actual 2D vector) and the card is removed from the top of the stack.
-- Lower-left swipe (`offsetX < 0 && offsetY >= 0`) or a gesture opposing the last throw → recall the most recently dismissed card, which springs in from the reverse trajectory (`pileRecallEnterFromPx`) and can be grabbed mid-flight.
-- Below threshold → spring back to center.
-- Tap without crossing touch slop → playful jiggle (`PILE_TAP_JIGGLE_SCALE` 1.02, ±2° wobble) then fan-out.
+- Travel past 200 dp or a fling at 800 dp/s away → velocity-aware spring exit (`pileCardExitTargetPx` along the 2D vector, radial travel `√2 × size` so a 45° throw clears both axes) and the card is pushed onto a LIFO `dismissedHistory` stack.
+- Swipe **down** (or a gesture opposing the last throw) → recall the most recently dismissed card, which springs in from the reverse trajectory.
+- Below threshold → bouncy spring back (`DampingRatioMediumBouncy`, `StiffnessLow`).
+- Tap without crossing touch slop → playful jiggle (`PILE_TAP_JIGGLE_SCALE` 1.05, ±5° wobble). Tap-to-open carousel / "Show more" is disabled.
 
 A committed throw/recall fires `PlatformHapticsPolicy.lightImpact()`.
 
-**Fan-out / collapse.** Tapping a cluster fans it into a horizontal strip where each card animates in on its own `Animatable` after `pileFanStaggerMillis(index)` (40ms steps, capped at 240ms). Collapse plays the **same stagger in reverse** plus spring settle (`pileFanCollapseDurationMillis`) rather than swapping layouts instantly. Tap a photo to reuse the existing sheet (availability, saved event, chat, location drill-in). "Show less" in the section header, a tap past the trailing card, or system back collapses the fan (state and `PlatformBackHandler` are hoisted into `HomeScreen`). Long-press on stay-in-touch photos sends an icebreaker; long-press reconnect dismisses.
-
-**Reduce Motion** (`rememberReduceMotionEnabled`) replaces tilt, spring, and stagger with a plain fade. `HomeLayoutMode.LINEAR` remains the TalkBack / VoiceOver fallback.
+**Reduce Motion** (`rememberReduceMotionEnabled`) replaces tilt, spring, and fade with a plain rest pose. `HomeLayoutMode.LINEAR` remains the TalkBack / VoiceOver fallback.
 
 ---
 
