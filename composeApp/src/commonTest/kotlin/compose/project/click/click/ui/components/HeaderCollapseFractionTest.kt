@@ -29,7 +29,8 @@ class HeaderCollapseFractionTest {
     }
 
     @Test
-    fun computeHeaderCollapseFraction_pastFirstItem_isFullyCollapsed() {
+    fun computeHeaderCollapseFraction_pastFirstItem_isFullyCollapsedNotHidden() {
+        // Collapse is compact chrome. Native scaffolds must never treat this as "hide the bar".
         assertEquals(
             1f,
             computeHeaderCollapseFraction(

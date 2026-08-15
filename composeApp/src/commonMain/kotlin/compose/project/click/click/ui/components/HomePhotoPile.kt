@@ -5,7 +5,14 @@
 
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.api.ActivityRecapDto // pragma: allowlist secret
 import compose.project.click.click.data.api.EventBookmarkItemDto // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
@@ -15,6 +22,8 @@ import compose.project.click.click.data.models.ConnectionInsights // pragma: all
 import compose.project.click.click.data.models.PollPairSuggestion // pragma: allowlist secret
 import compose.project.click.click.data.models.ReconnectReminder // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.heroImageUrl // pragma: allowlist secret
+import compose.project.click.click.events.EventReminderCoordinator // pragma: allowlist secret
 import compose.project.click.click.events.HomeEventReminder // pragma: allowlist secret
 import compose.project.click.click.viewmodel.UserStats // pragma: allowlist secret
 
@@ -32,6 +41,7 @@ data class HomePileBoardData(
     val insights: ConnectionInsights?,
     val stats: UserStats,
     val connectedUsers: Map<String, User>,
+    val currentUserId: String = "",
 )
 
 data class HomePileActions(
@@ -85,6 +95,7 @@ internal data class HomePilePhotoSpec(
     val categoryBadge: String? = null,
     val onOpen: () -> Unit,
     val onLongOpen: (() -> Unit)? = null,
+    val content: (@Composable BoxScope.() -> Unit)? = null,
 )
 
 internal data class HomePileClusterSpec(
@@ -105,6 +116,7 @@ private fun HomePilePhotoSpec.toPilePhoto(): PilePhoto =
         categoryBadge = categoryBadge,
         onClick = onOpen,
         onLongClick = onLongOpen,
+        content = content,
     )
 
 private fun categoryMarker(
@@ -150,6 +162,7 @@ internal fun buildHomePileQueueSpecs(
                         .orEmpty()
                         .ifEmpty { featured.description },
                 subtitle = "View on map",
+                imageUrl = EventReminderCoordinator.beaconById(featured.beaconId)?.metadata?.heroImageUrl(),
                 categoryBadge = "Saved",
                 onOpen = { actions.onFeaturedMap(featured) },
             )
@@ -166,6 +179,7 @@ internal fun buildHomePileQueueSpecs(
                         .orEmpty()
                         .ifEmpty { "Saved event" },
                 subtitle = bookmark.locationName,
+                imageUrl = EventReminderCoordinator.beaconById(bookmark.beaconId)?.metadata?.heroImageUrl(),
                 categoryBadge = "Saved",
                 onOpen = { actions.onSavedEventClick(bookmark) },
             )
@@ -234,12 +248,28 @@ internal fun buildHomePileQueueSpecs(
     val recent =
         if (data.locationGroups.isNotEmpty()) {
             data.locationGroups.entries.take(10).map { (location, connections) ->
+                val members =
+                    connections.mapNotNull { conn ->
+                        val otherId = conn.user_ids.firstOrNull { it != data.currentUserId }
+                        otherId?.let { data.connectedUsers[it] }
+                    }
                 HomePilePhotoSpec(
                     id = "loc-$location",
                     title = location.ifBlank { "Somewhere" },
                     subtitle = "${connections.size} connections",
+                    imageUrl = members.singleOrNull()?.image,
                     categoryBadge = "Recent Connections",
                     onOpen = { actions.onLocationClick(location) },
+                    content = {
+                        if (members.isNotEmpty()) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                GroupAvatar(members = members, avatarSize = 56.dp)
+                            }
+                        }
+                    },
                 )
             }
         } else {

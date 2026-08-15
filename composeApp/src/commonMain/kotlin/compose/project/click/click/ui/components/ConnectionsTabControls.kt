@@ -27,7 +27,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,8 +45,8 @@ import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlis
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 
 /**
- * Floating connections header: large title + segment bar when expanded;
- * compact single-row title + filter menu when scrolled.
+ * Clicks tab header: large native title lives in [AppScreenScaffold]; this is kept as a
+ * compatibility wrapper that always shows the segment bar (never a compact fake pill).
  */
 @Composable
 fun ConnectionsFloatingHeader(
@@ -62,184 +61,30 @@ fun ConnectionsFloatingHeader(
     showTabs: Boolean,
     onOpenSearch: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
-    /**
-     * When true, hold the current expanded/compact chrome so [AnimatedContent] does not run
-     * mid-fling (layout swaps during coast kill LazyColumn velocity).
-     */
-    isScrollInProgress: Boolean = false,
+    @Suppress("UNUSED_PARAMETER") isScrollInProgress: Boolean = false,
 ) {
-    val wantCompact = showTabs && collapseFraction > 0.42f
-    var compact by remember { mutableStateOf(wantCompact) }
-    LaunchedEffect(wantCompact, isScrollInProgress) {
-        if (!isScrollInProgress) {
-            compact = wantCompact
-        }
-    }
-    val showGlass = collapseFraction > 0.01f
-    Box(modifier = modifier.fillMaxWidth()) {
-        if (showGlass) {
-            HeaderGlassBackdrop(
-                modifier = Modifier.matchParentSize(),
-                collapseFraction = collapseFraction,
-            )
-        }
-        AnimatedContent(
-            targetState = compact,
-            modifier = Modifier.fillMaxWidth(),
-            transitionSpec = {
-                fadeIn(tween(160)) togetherWith fadeOut(tween(120))
-            },
-            label = "connections_header_mode",
-        ) { isCompact ->
-            if (isCompact) {
-                ConnectionsCompactHeaderRow(
-                    title = title,
-                    subtitle = subtitle,
-                    selectedTabIndex = selectedTabIndex,
-                    onTabSelected = onTabSelected,
-                    activeCount = activeCount,
-                    groupCount = groupCount,
-                    archivedCount = archivedCount,
-                    onOpenSearch = onOpenSearch,
-                )
-            } else {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    CollapsibleGlassTopBar(
-                        title = title,
-                        subtitle = subtitle,
-                        collapseFraction = collapseFraction,
-                        actions =
-                            if (onOpenSearch != null) {
-                                { HeaderSearchIconButton(onClick = onOpenSearch) }
-                            } else {
-                                null
-                            },
-                    )
-                    if (showTabs) {
-                        ConnectionsSegmentBar(
-                            selectedTabIndex = selectedTabIndex,
-                            onTabSelected = onTabSelected,
-                            activeCount = activeCount,
-                            groupCount = groupCount,
-                            archivedCount = archivedCount,
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ConnectionsCompactHeaderRow(
-    title: String,
-    subtitle: String?,
-    selectedTabIndex: Int,
-    onTabSelected: (Int) -> Unit,
-    activeCount: Int,
-    groupCount: Int,
-    archivedCount: Int,
-    onOpenSearch: (() -> Unit)? = null,
-) {
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Column(
-            modifier = Modifier.weight(1f),
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (!subtitle.isNullOrBlank()) {
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        if (onOpenSearch != null) {
-            HeaderSearchIconButton(onClick = onOpenSearch)
-        }
-        ConnectionsTabFilterMenuChip(
-            selectedTabIndex = selectedTabIndex,
-            onTabSelected = onTabSelected,
-            activeCount = activeCount,
-            groupCount = groupCount,
-            archivedCount = archivedCount,
-        )
-    }
-}
-
-@Composable
-private fun ConnectionsTabFilterMenuChip(
-    selectedTabIndex: Int,
-    onTabSelected: (Int) -> Unit,
-    activeCount: Int,
-    groupCount: Int,
-    archivedCount: Int,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val labels =
-        listOf(
-            "Active ($activeCount)",
-            "Groups ($groupCount)",
-            "Archived ($archivedCount)",
-        )
-    val currentLabel = labels.getOrElse(selectedTabIndex) { labels[0] }
-    val chipCorner = GlassSheetTokens.BentoExteriorCorner - 6.dp
-
-    Box {
-        Row(
-            modifier =
-                Modifier
-                    .clip(RoundedCornerShape(chipCorner))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(chipCorner))
-                    .clickable { expanded = true }
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                text = currentLabel,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = LightBlue,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Icon(
-                Icons.Filled.ArrowDropDown,
-                contentDescription = "Change filter",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        ClickDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            items =
-                labels.mapIndexed { index, label ->
-                    ClickMenuItem(
-                        label = label,
-                        onClick = { onTabSelected(index) },
-                        icon = if (selectedTabIndex == index) Icons.Filled.Check else null,
-                    )
+    Column(modifier = modifier.fillMaxWidth()) {
+        CollapsibleGlassTopBar(
+            title = title,
+            subtitle = subtitle,
+            collapseFraction = collapseFraction,
+            actions =
+                if (onOpenSearch != null) {
+                    { HeaderSearchIconButton(onClick = onOpenSearch) }
+                } else {
+                    null
                 },
         )
+        if (showTabs) {
+            ConnectionsSegmentBar(
+                selectedTabIndex = selectedTabIndex,
+                onTabSelected = onTabSelected,
+                activeCount = activeCount,
+                groupCount = groupCount,
+                archivedCount = archivedCount,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
     }
 }
 

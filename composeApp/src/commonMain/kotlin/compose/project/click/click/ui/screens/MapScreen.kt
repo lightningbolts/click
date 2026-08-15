@@ -48,6 +48,7 @@ import compose.project.click.click.data.AppDataManager // pragma: allowlist secr
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.heroImageUrl // pragma: allowlist secret
 import compose.project.click.click.data.models.withPreservedEventScheduleFrom // pragma: allowlist secret
 import compose.project.click.click.events.EventReminderCoordinator // pragma: allowlist secret
 import compose.project.click.click.events.EventSchedule // pragma: allowlist secret
@@ -1207,7 +1208,7 @@ private fun BeaconIdentityBanner(
         id = beacon.id,
         kind = beacon.kind,
         typeKey = beacon.sourceBeaconType,
-        imageUrl = beacon.metadata.albumArtUrl,
+        imageUrl = beacon.metadata.heroImageUrl(),
         chipLabel = beacon.displayTypeTitle().takeIf { showTypeChip },
         modifier =
             Modifier

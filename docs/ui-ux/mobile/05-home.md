@@ -8,7 +8,7 @@
 
 **Home layout:** Default is **photo pile** (`HomeLayoutMode.PILE`) — one full-width, draggable stack of Polaroids per section, stacked vertically. Header greeting + search stay pinned (not in the pile). Toggle in the header (list / pile icons) and **Settings → Appearance → Photo pile home**. Linear list is the accessibility fallback (TalkBack / VoiceOver). Persistence: `TokenStorage` key `home_layout_mode`.
 
-**Track C (2026-07-17):** Discovery-first IA — greeting + search pill + Featured Event + dynamic nearby explore; availability + reconnect remain first-class above Explore. Greeting uses the same floating `LiquidGlassPageHeader` overlay as other tab roots: **borderless large title at scroll rest**, collapsing to a **semi-translucent glass bar** after ~20 dp scroll (not an in-feed item).
+**Track C (2026-07-17):** Discovery-first IA — greeting + search pill + Featured Event + dynamic nearby explore; availability + reconnect remain first-class above Explore. Greeting uses **native collapsing chrome** (`NativeCollapsingScaffold`): Android `LargeTopAppBar` + `exitUntilCollapsedScrollBehavior`, iOS `UINavigationController` large titles. Collapse is compact chrome, never hide.
 
 ---
 
@@ -22,8 +22,8 @@ HomeScreen (organism)
 │   ├── "Error loading home data"
 │   ├── state.message (dynamic)
 │   └── Button "Retry"
-└── AppScreenScaffold (showFloatingHeader = true)   [Success]
-    ├── FloatingHeaderOverlay → CollapsibleGlassTopBar
+└── AppScreenScaffold → NativeCollapsingScaffold   [Success]
+    ├── Native collapsing header (never hidden)
     │   ├── title: homeGreetingTitle(firstName)  // "Good morning|afternoon|evening|Hello, {name}."
     │   ├── subtitle: HomeGreetingSubtitle       // "Ready to connect today?"
     │   └── layout toggle (pile ↔ linear)
@@ -173,14 +173,16 @@ Shared components: `PhotoPileStack`, `PhotoCard`, `CardVisualHero`, `generateCar
 
 **Queue order and caps:** saved events `.take(5)` (featured first), marker + explore `.take(10)`, marker + stay/reconnect `.take(10)`, marker + recent connections `.take(10)`.
 
-**Collapsed stack.** The top card plus up to two peeking layers (`PILE_MAX_VISIBLE_LAYERS = 3`; scales 1.0 / 0.95 / 0.90, elevations 16 / 8 / 4 dp). Peek offsets are **vertical only** (`pilePeekOffsetDp`: 0 / 12 / 24 dp). Every layer gets a deterministic ±15° resting tilt (`hash(id) mod 31 − 15`).
+**Collapsed stack.** Vendored LazyCardStack lineage (`ui/components/cardstack/`): the top card plus up to two peeking layers (`PILE_MAX_VISIBLE_LAYERS = 3`; scales 1.0 / 0.95 / 0.90, elevations 16 / 8 / 4 dp). Peek offsets are **vertical only** (`pilePeekOffsetDp`: 0 / 12 / 24 dp). Every layer gets a deterministic ±15° resting tilt (`hash(id) mod 31 − 15`). Pointer events are taken on `PointerEventPass.Initial` so Home `LazyColumn` cannot steal the first drag delta.
 
 **Drag physics.** While a finger is down, the top card tracks **1:1**. Rotation is `ΔX × 0.05` around the touch anchor. Alpha fades after 150 dp of travel: `clamp(1 − (D − 150) / 250, 0, 1)`. On release:
 
-- Travel past 200 dp or a fling at 800 dp/s away → velocity-aware spring exit (`pileCardExitTargetPx` along the 2D vector, radial travel `1.15 × √2 × size` so a 45° throw clears both axes) and the card is pushed onto a LIFO `dismissedHistory` stack.
-- Swipe **down** (or a gesture opposing the last throw) → recall the most recently dismissed card, which springs in from the reverse trajectory.
+- Travel past 200 dp or a fling at 800 dp/s away → velocity-aware dismiss (`animateToNext`); stacked layers were already in position (no `drop(1)` snap).
+- Swipe **down** (or left when history exists) → `animateToBack` rewind; the recalled card is immediately the draggable top item.
 - Below threshold → bouncy spring back (`DampingRatioMediumBouncy`, `StiffnessLow`).
-- Tap without crossing touch slop → playful jiggle (`PILE_TAP_JIGGLE_SCALE` 1.05, ±5° wobble), then the top card's `onClick` (open event, chat, map, etc.). Tap-to-open carousel / "Show more" is disabled. Category marker cards have a no-op click.
+- Tap without crossing touch slop → **opens detail** (`photo.onClick`). No jiggle animation.
+
+A committed throw/recall fires `PlatformHapticsPolicy.lightImpact()`. Recent Connections Polaroids use `GroupAvatar` / `ConnectionListUserAvatarFace`. Uploaded `imageUrl` on `CardVisualHero` skips the generated pattern.
 
 A committed throw/recall fires `PlatformHapticsPolicy.lightImpact()`.
 

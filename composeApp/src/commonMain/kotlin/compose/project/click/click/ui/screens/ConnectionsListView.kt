@@ -14,14 +14,12 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
@@ -39,7 +37,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -70,24 +67,19 @@ import compose.project.click.click.ui.chat.connectionRowPressGestures // pragma:
 import compose.project.click.click.ui.chat.connectionRowPressHighlight // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppEmptyState // pragma: allowlist secret
-import compose.project.click.click.ui.components.AppScreenDefaults // pragma: allowlist secret
+import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
 import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickCircularGlassIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
-import compose.project.click.click.ui.components.ConnectionsFloatingHeader // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionsSegmentBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassToastHost // pragma: allowlist secret
 import compose.project.click.click.ui.components.LocalGlassAlertAnimatedDismiss // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
-import compose.project.click.click.ui.components.floatingHeaderStatusBarPadding // pragma: allowlist secret
-import compose.project.click.click.ui.components.headerCollapseFraction // pragma: allowlist secret
-import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding // pragma: allowlist secret
-import compose.project.click.click.ui.components.rememberFloatingHeaderTopPadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberGlassToastState // pragma: allowlist secret
-import compose.project.click.click.ui.components.rememberStatusBarTopPadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetPageBackground // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.util.ViewerAvailabilityBubblesCache // pragma: allowlist secret
@@ -130,8 +122,6 @@ fun ConnectionsListView(
     val onlineUsers by AppDataManager.onlineUsers.collectAsState()
     val currentUserId by viewModel.currentUserId.collectAsState()
     val activeHubs by AppDataManager.activeHubs.collectAsState()
-    val statusBarTop = rememberStatusBarTopPadding()
-    val bottomChrome = rememberBottomChromePadding()
     val fabAboveNav = rememberFabAboveNavPadding()
     val nudgeResult by viewModel.nudgeResult.collectAsState()
     val toastState = rememberGlassToastState()
@@ -221,15 +211,7 @@ fun ConnectionsListView(
         }
     LaunchedEffect(listRevealEpoch) {
         if (listRevealEpoch <= 0) return@LaunchedEffect
-        // Snap to top so floating-header measure can lock expanded height again.
         connectionsLazyListState.scrollToItem(0)
-    }
-    val thresholdPx =
-        with(LocalDensity.current) {
-            AppScreenDefaults.HeaderCollapseScrollThreshold.roundToPx()
-        }
-    val collapseFraction by remember(connectionsLazyListState, thresholdPx) {
-        derivedStateOf { connectionsLazyListState.headerCollapseFraction(thresholdPx) }
     }
 
     // Render only the unified inbox payload emitted by ChatViewModel.
@@ -543,32 +525,52 @@ fun ConnectionsListView(
                 }
             }
         }
-    val (headerContentPadding, headerMeasureModifier) =
-        rememberFloatingHeaderTopPadding(
-            collapseFraction = collapseFraction,
-            statusBarTop = statusBarTop,
-            minimumExpandedBodyHeight = 168.dp,
-        )
-    val listTopPadding = headerContentPadding
-
     Box(modifier = Modifier.fillMaxSize()) {
         AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.fillMaxSize()) {
-                Column(modifier = Modifier.fillMaxSize()) {
+                AppScreenScaffold(
+                    title = "Clicks",
+                    subtitle = headerSubtitle.takeIf { it.isNotBlank() },
+                    onOpenSearch = onOpenSearch,
+                    lazyListState = connectionsLazyListState,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    headerBelowContent = {
+                        if (effectiveChats.isNotEmpty() || activeHubs.isNotEmpty()) {
+                            ConnectionsSegmentBar(
+                                selectedTabIndex = selectedTabIndex,
+                                onTabSelected = { selectedTabIndex = it },
+                                activeCount = activeCount,
+                                groupCount = groupCount,
+                                archivedCount = archivedCount,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
+                    },
+                    modifier =
+                        Modifier.graphicsLayer {
+                            translationX = tabContentOffsetX.value
+                            alpha = tabContentAlpha.value
+                        },
+                ) {
                     if (effectiveChats.isEmpty() && chatListState is ChatListState.Loading) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            AdaptiveCircularProgressIndicator()
+                        item(key = "clicks_loading") {
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 360.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                AdaptiveCircularProgressIndicator()
+                            }
                         }
                     } else if (effectiveChats.isEmpty() && chatListState is ChatListState.Error) {
                         val errorMsg = (chatListState as ChatListState.Error).message
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        item(key = "clicks_error") {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
                                 Text(
                                     "Error loading chats",
                                     style = MaterialTheme.typography.bodyLarge,
@@ -586,171 +588,107 @@ fun ConnectionsListView(
                                 }
                             }
                         }
-                    } else {
-                        Box(
-                            modifier =
-                                Modifier
-                                    .fillMaxSize()
-                                    .graphicsLayer {
-                                        translationX = tabContentOffsetX.value
-                                        alpha = tabContentAlpha.value
-                                    },
-                        ) {
-                            if (filteredChats.isEmpty() &&
-                                !(selectedTabIndex == 1 && activeHubs.isNotEmpty())
+                    } else if (
+                        filteredChats.isEmpty() &&
+                        !(selectedTabIndex == 1 && activeHubs.isNotEmpty())
+                    ) {
+                        item(key = "clicks_empty") {
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 360.dp),
+                                contentAlignment = Alignment.Center,
                             ) {
-                                val emptyScroll = rememberScrollState()
-                                Column(
-                                    modifier =
-                                        Modifier
-                                            .fillMaxSize()
-                                            .verticalScroll(emptyScroll)
-                                            .padding(top = listTopPadding),
-                                ) {
-                                    Box(
-                                        modifier =
-                                            Modifier
-                                                .fillMaxWidth()
-                                                .heightIn(min = 360.dp)
-                                                .padding(horizontal = 20.dp),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        AppEmptyState(
-                                            icon =
-                                                if (searchQuery.isNotBlank()) {
-                                                    Icons.Filled.SearchOff
-                                                } else {
-                                                    Icons.Filled.ChatBubbleOutline
-                                                },
-                                            title =
-                                                if (searchQuery.isNotBlank()) {
-                                                    "No matches found"
-                                                } else if (selectedTabIndex == 1) {
-                                                    "No group chats"
-                                                } else if (selectedTabIndex == 2) {
-                                                    "No archived connections"
-                                                } else {
-                                                    "No connections yet"
-                                                },
-                                            body =
-                                                if (searchQuery.isNotBlank()) {
-                                                    "Try a different search term"
-                                                } else if (selectedTabIndex == 1) {
-                                                    "Group clicks will appear here"
-                                                } else if (selectedTabIndex == 2) {
-                                                    "Archived chats will appear here"
-                                                } else {
-                                                    "Start clicking with people nearby!"
-                                                },
-                                        )
-                                    }
-                                }
-                            } else {
-                                LazyColumn(
-                                    state = connectionsLazyListState,
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentPadding =
-                                        PaddingValues(
-                                            start = 20.dp,
-                                            end = 20.dp,
-                                            top = listTopPadding,
-                                            bottom = bottomChrome,
-                                        ),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                                ) {
-                                    if (showRememberMeStrip) {
-                                        item(key = "remember_me_strip", contentType = "remember_me") {
-                                            RememberMeStrip(
-                                                chats = rememberMeChats,
-                                                onChatSelected = onChatSelected,
-                                                onlineUserIds = onlineUsers,
-                                                modifier = Modifier.padding(bottom = 4.dp),
-                                            )
-                                        }
-                                    }
-                                    // ── Active community hubs (shown in Groups tab) ─────
-                                    if (selectedTabIndex == 1 && activeHubs.isNotEmpty()) {
-                                        items(
-                                            activeHubs.filter { hub ->
-                                                searchQuery.isBlank() || hub.name.contains(searchQuery, ignoreCase = true)
-                                            },
-                                            key = { "hub_${it.hubId}" },
-                                            contentType = { "hub" },
-                                        ) { hub ->
-                                            ActiveHubFeedRow(
-                                                hub = hub,
-                                                onClick = { onHubSelected?.invoke(hub) },
-                                                onOpenMenu = { pendingHubMenu = hub },
-                                                onLongPress = { pendingHubMenu = hub },
-                                            )
-                                        }
-                                    }
-                                    items(
-                                        displayedChats,
-                                        key = { it.connection.id },
-                                        contentType = { "connection" },
-                                    ) { chatDetails ->
-                                        val connectionId = chatDetails.connection.id
-                                        val cachedThread = cachedChatThreads[connectionId]
-                                        val cachedPreviewLabel = cachedThread?.messages?.lastOrNull()?.previewLabel()
-                                        ConnectionItem(
-                                            chatDetails = chatDetails,
-                                            viewerUserId = currentUserId,
-                                            overlapPrefetchGeneration = overlapPrefetchGeneration,
-                                            isCore = connectionId in coreConnectionIds,
-                                            showOnlineIndicator =
-                                                chatDetails.groupClique == null &&
-                                                    chatDetails.otherUser.id in onlineUsers,
-                                            decryptedPreview = decryptedPreviews[connectionId] ?: cachedPreviewLabel,
-                                            hasCachedThreadPreview = !cachedThread?.messages.isNullOrEmpty(),
-                                            onAvatarClick = {
-                                                if (chatDetails.groupClique == null) {
-                                                    onUserProfileClick(chatDetails.otherUser.id)
-                                                }
-                                            },
-                                            onGroupMembersPicker = onGroupMembersPicker,
-                                            onClick = {
-                                                onChatSelected(
-                                                    chatDetails.chat.id ?: chatDetails.connection.id,
-                                                )
-                                            },
-                                            onLongPress = { pendingMenuChat = chatDetails },
-                                        )
-                                    }
-                                }
+                                AppEmptyState(
+                                    icon =
+                                        if (searchQuery.isNotBlank()) {
+                                            Icons.Filled.SearchOff
+                                        } else {
+                                            Icons.Filled.ChatBubbleOutline
+                                        },
+                                    title =
+                                        if (searchQuery.isNotBlank()) {
+                                            "No matches found"
+                                        } else if (selectedTabIndex == 1) {
+                                            "No group chats"
+                                        } else if (selectedTabIndex == 2) {
+                                            "No archived connections"
+                                        } else {
+                                            "No connections yet"
+                                        },
+                                    body =
+                                        if (searchQuery.isNotBlank()) {
+                                            "Try a different search term"
+                                        } else if (selectedTabIndex == 1) {
+                                            "Group clicks will appear here"
+                                        } else if (selectedTabIndex == 2) {
+                                            "Archived chats will appear here"
+                                        } else {
+                                            "Start clicking with people nearby!"
+                                        },
+                                )
                             }
                         }
-                    }
-                }
-
-                Box(
-                    modifier =
-                        Modifier
-                            .align(Alignment.TopCenter)
-                            .zIndex(1f)
-                            .fillMaxWidth()
-                            .floatingHeaderStatusBarPadding()
-                            .padding(start = 20.dp, end = 20.dp),
-                ) {
-                    Box(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .then(headerMeasureModifier),
-                    ) {
-                        ConnectionsFloatingHeader(
-                            collapseFraction = collapseFraction,
-                            title = "Clicks",
-                            subtitle = headerSubtitle.takeIf { it.isNotBlank() },
-                            selectedTabIndex = selectedTabIndex,
-                            onTabSelected = { selectedTabIndex = it },
-                            activeCount = activeCount,
-                            groupCount = groupCount,
-                            archivedCount = archivedCount,
-                            showTabs = effectiveChats.isNotEmpty(),
-                            onOpenSearch = onOpenSearch,
-                            isScrollInProgress = connectionsLazyListState.isScrollInProgress,
-                        )
+                    } else {
+                        if (showRememberMeStrip) {
+                            item(key = "remember_me_strip", contentType = "remember_me") {
+                                RememberMeStrip(
+                                    chats = rememberMeChats,
+                                    onChatSelected = onChatSelected,
+                                    onlineUserIds = onlineUsers,
+                                    modifier = Modifier.padding(bottom = 4.dp),
+                                )
+                            }
+                        }
+                        if (selectedTabIndex == 1 && activeHubs.isNotEmpty()) {
+                            items(
+                                activeHubs.filter { hub ->
+                                    searchQuery.isBlank() || hub.name.contains(searchQuery, ignoreCase = true)
+                                },
+                                key = { "hub_${it.hubId}" },
+                                contentType = { "hub" },
+                            ) { hub ->
+                                ActiveHubFeedRow(
+                                    hub = hub,
+                                    onClick = { onHubSelected?.invoke(hub) },
+                                    onOpenMenu = { pendingHubMenu = hub },
+                                    onLongPress = { pendingHubMenu = hub },
+                                )
+                            }
+                        }
+                        items(
+                            displayedChats,
+                            key = { it.connection.id },
+                            contentType = { "connection" },
+                        ) { chatDetails ->
+                            val connectionId = chatDetails.connection.id
+                            val cachedThread = cachedChatThreads[connectionId]
+                            val cachedPreviewLabel = cachedThread?.messages?.lastOrNull()?.previewLabel()
+                            ConnectionItem(
+                                chatDetails = chatDetails,
+                                viewerUserId = currentUserId,
+                                overlapPrefetchGeneration = overlapPrefetchGeneration,
+                                isCore = connectionId in coreConnectionIds,
+                                showOnlineIndicator =
+                                    chatDetails.groupClique == null &&
+                                        chatDetails.otherUser.id in onlineUsers,
+                                decryptedPreview = decryptedPreviews[connectionId] ?: cachedPreviewLabel,
+                                hasCachedThreadPreview = !cachedThread?.messages.isNullOrEmpty(),
+                                onAvatarClick = {
+                                    if (chatDetails.groupClique == null) {
+                                        onUserProfileClick(chatDetails.otherUser.id)
+                                    }
+                                },
+                                onGroupMembersPicker = onGroupMembersPicker,
+                                onClick = {
+                                    onChatSelected(
+                                        chatDetails.chat.id ?: chatDetails.connection.id,
+                                    )
+                                },
+                                onLongPress = { pendingMenuChat = chatDetails },
+                            )
+                        }
                     }
                 }
             }

@@ -24,6 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.api.ConnectionEventRecommendationDto // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.data.models.heroImageUrl // pragma: allowlist secret
+import compose.project.click.click.events.EventReminderCoordinator // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickCardSurface // pragma: allowlist secret
@@ -49,6 +51,7 @@ fun ConnectionEventRecommendationCard(
             CardVisualHero(
                 id = recommendation.beaconId,
                 kind = MapBeaconKind.EVENT,
+                imageUrl = EventReminderCoordinator.beaconById(recommendation.beaconId)?.metadata?.heroImageUrl(),
                 chipLabel = "Go together?",
                 modifier =
                     Modifier

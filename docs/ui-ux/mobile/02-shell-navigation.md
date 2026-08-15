@@ -303,21 +303,20 @@ See §6 Screen Transitions.
 
 - `LazyColumn` / `verticalScroll` with horizontal padding `AppScreenDefaults.HorizontalPadding` (20 dp).
 - Bottom `contentPadding` = `rememberBottomChromePadding()` (tab overlay + 16 dp).
-- Top spacer item = `rememberFloatingHeaderTopPadding` (status bar + measured header + 24 dp section spacing).
-- `FloatingHeaderOverlay` z-index 1: `CollapsibleGlassTopBar` (borderless large title at rest; `HeaderGlassBackdrop` glass after 20 dp of scroll; title scales 1.0→0.8) + optional search icon.
+- Native collapsing top bar (`NativeCollapsingScaffold`): Android `LargeTopAppBar` + `exitUntilCollapsed`; iOS `UINavigationController` large titles + companion `UIScrollView`. Compact chrome stays visible. iOS status-bar / Dynamic Island uses a system `UIVisualEffectView`.
 
 ### 5.2 Interactive Elements
 
 - `HeaderSearchIconButton` when `onOpenSearch` provided → opens `UnifiedSearchSheet`.
-- Header collapses over `HeaderCollapseScrollThreshold` (20 dp, converted to px); hides with 32 px hysteresis.
+- Header collapses over `HeaderCollapseScrollThreshold` (20 dp, converted to px). Compact chrome stays visible.
 
 ### 5.3 States
 
 | State | Header |
 |-------|--------|
-| **Default** | Expanded borderless large title, no glass |
-| **Active scroll** | `collapseFraction` 0→1 |
-| **Hidden** | `collapseFraction >= 1` and scroll past slack |
+| **Default** | Expanded large title (platform native) |
+| **Active scroll** | Large → inline / collapsed app bar |
+| **Scrolled past first item** | Fully collapsed compact bar (not hidden) |
 
 ### 5.4 Micro-copy
 
@@ -325,7 +324,7 @@ See §6 Screen Transitions.
 
 ### 5.5 Flow Sequence
 
-Scroll → collapse fraction → optional hide → content scrolls under floating header.
+Scroll → native collapse → compact bar remains; content scrolls under translucent chrome.
 
 ### 5.6 A11y & Responsive
 

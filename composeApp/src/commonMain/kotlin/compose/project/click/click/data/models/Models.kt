@@ -940,6 +940,26 @@ data class MapBeaconMetadata(
     val raw: JsonObject? = null,
 )
 
+/**
+ * Cover/hero photo for a beacon card. User-uploaded `image_url` is parsed into [albumArtUrl]
+ * alongside soundtrack art; raw keys are a safety net for unsanitized payloads.
+ */
+fun MapBeaconMetadata.heroImageUrl(): String? {
+    albumArtUrl?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+    val obj = raw ?: return null
+
+    fun key(vararg names: String): String? {
+        for (name in names) {
+            val s = (obj[name] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+            if (s != null) return s
+        }
+        return null
+    }
+    return key("image_url", "cover_url", "album_art_url", "artworkUrl100", "artwork_url")
+}
+
+fun beaconHeroImageUrl(metadata: MapBeaconMetadata): String? = metadata.heroImageUrl()
+
 private val beaconMetadataJson =
     Json {
         ignoreUnknownKeys = true

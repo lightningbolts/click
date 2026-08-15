@@ -64,6 +64,7 @@ import compose.project.click.click.ui.components.ExploreNearbyBeaconsSection // 
 import compose.project.click.click.ui.components.FeaturedEventSection // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeExploreTile // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeGreetingSubtitle // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomePileActions // pragma: allowlist secret
@@ -434,6 +435,7 @@ fun HomeScreen(
                                         },
                                     stats = state.stats,
                                     connectedUsers = connectedUsers,
+                                    currentUserId = state.user.id,
                                 ),
                             actions =
                                 HomePileActions(
@@ -945,6 +947,18 @@ private fun LocationGroupCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                val memberUsers =
+                    connections.mapNotNull { conn ->
+                        val otherId = conn.user_ids.firstOrNull { it != currentUserId }
+                        otherId?.let { connectedUsers[it] }
+                    }
+                if (memberUsers.isNotEmpty()) {
+                    GroupAvatar(
+                        members = memberUsers,
+                        avatarSize = 36.dp,
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         location,
@@ -1064,23 +1078,13 @@ private fun ConnectionRowItem(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Avatar circle
-        Box(
-            modifier =
-                Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(MaterialTheme.colorScheme.primary)
-                    .border(clickBorderWidth(), clickBorderColor(), CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                displayName.firstOrNull()?.uppercase() ?: "?",
-                color = MaterialTheme.colorScheme.onPrimary,
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.labelMedium,
-            )
-        }
+        ConnectionListUserAvatarFace(
+            displayName = displayName,
+            email = otherUser?.email,
+            avatarUrl = otherUser?.image,
+            userId = otherUser?.id.orEmpty(),
+            modifier = Modifier.size(36.dp),
+        )
 
         Spacer(modifier = Modifier.width(10.dp))
 

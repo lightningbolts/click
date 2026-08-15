@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.data.models.heroImageUrl // pragma: allowlist secret
 import compose.project.click.click.ui.components.stableAvatarPlaceholderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.BeaconPinShape // pragma: allowlist secret
 import compose.project.click.click.ui.theme.composeColorToArgb // pragma: allowlist secret
@@ -198,28 +199,7 @@ data class MapPin(
                     ?: 1f
             // Prefer cover/image from metadata when present; otherwise platform generates initials.
             // Soundtrack pins must use album art (same source as discovery/event cover cards).
-            val coverUrl =
-                beacon.metadata.albumArtUrl
-                    ?.trim()
-                    ?.takeIf { it.isNotEmpty() }
-                    ?: beacon.metadata.raw
-                        ?.get("image_url")
-                        ?.jsonPrimitive
-                        ?.contentOrNull
-                        ?.trim()
-                        ?.takeIf { it.isNotEmpty() }
-                    ?: beacon.metadata.raw
-                        ?.get("cover_url")
-                        ?.jsonPrimitive
-                        ?.contentOrNull
-                        ?.trim()
-                        ?.takeIf { it.isNotEmpty() }
-                    ?: beacon.metadata.raw
-                        ?.get("album_art_url")
-                        ?.jsonPrimitive
-                        ?.contentOrNull
-                        ?.trim()
-                        ?.takeIf { it.isNotEmpty() }
+            val coverUrl = beacon.metadata.heroImageUrl()
             val visual =
                 generateCardVisual(
                     beacon.id,
