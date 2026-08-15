@@ -31,7 +31,8 @@ class CreateBeaconViewModelTest {
         vm.setStagedPhoto(byteArrayOf(8, 8), "image/jpeg")
         assertEquals(
             listOf<Byte>(8, 8),
-            vm.uiState.value.stagedPhotoBytes?.toList(),
+            vm.uiState.value.stagedPhotoBytes
+                ?.toList(),
         )
         assertEquals(BeaconDropCategory.HAZARD, vm.uiState.value.category)
 
