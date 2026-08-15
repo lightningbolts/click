@@ -304,18 +304,18 @@ See §6 Screen Transitions.
 - `LazyColumn` / `verticalScroll` with horizontal padding `AppScreenDefaults.HorizontalPadding` (20 dp).
 - Bottom `contentPadding` = `rememberBottomChromePadding()` (tab overlay + 16 dp).
 - Top spacer item = `rememberFloatingHeaderTopPadding` (status bar + measured header + 24 dp section spacing).
-- `FloatingHeaderOverlay` z-index 1: `LiquidGlassPageHeader` (renders as **solid header bar**, 2dp bottom `#000` border) + optional search icon.
+- `FloatingHeaderOverlay` z-index 1: `CollapsibleGlassTopBar` (borderless large title at rest; `HeaderGlassBackdrop` glass after 20 dp of scroll; title scales 1.0→0.8) + optional search icon.
 
 ### 5.2 Interactive Elements
 
 - `HeaderSearchIconButton` when `onOpenSearch` provided → opens `UnifiedSearchSheet`.
-- Header collapses over `HeaderCollapseScrollThreshold` (96 px); hides with 32 px hysteresis.
+- Header collapses over `HeaderCollapseScrollThreshold` (20 dp, converted to px); hides with 32 px hysteresis.
 
 ### 5.3 States
 
 | State | Header |
 |-------|--------|
-| **Default** | Expanded solid header bar with title/subtitle |
+| **Default** | Expanded borderless large title, no glass |
 | **Active scroll** | `collapseFraction` 0→1 |
 | **Hidden** | `collapseFraction >= 1` and scroll past slack |
 

@@ -46,9 +46,9 @@ actual fun HeaderGlassBackdrop(
         }
     val blurStyle =
         if (isDarkMode) {
-            UIBlurEffectStyle.UIBlurEffectStyleSystemMaterialDark
+            UIBlurEffectStyle.UIBlurEffectStyleSystemThinMaterialDark
         } else {
-            UIBlurEffectStyle.UIBlurEffectStyleSystemMaterialLight
+            UIBlurEffectStyle.UIBlurEffectStyleSystemThinMaterialLight
         }
 
     if (reduceTransparency) {

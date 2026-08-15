@@ -42,46 +42,42 @@ class PilePhysicsTest {
     }
 
     @Test
-    fun topCardHasDeterministicTiltWithinFourDegrees() {
+    fun topCardHasDeterministicTiltWithinFifteenDegrees() {
         val tilt = pileCardTiltDeg("saved-1", layer = 0)
         assertEquals(tilt, pileCardTiltDeg("saved-1", layer = 0))
-        assertTrue(abs(tilt) <= 4f, "tilt $tilt exceeded the 4 degree cap")
+        assertTrue(abs(tilt) <= 15f, "tilt $tilt exceeded the 15 degree cap")
     }
 
     @Test
-    fun restTiltIsDeterministicAndClamped() {
+    fun restTiltIsHashMod31Minus15() {
         val a = pileCardTiltDeg("saved-1", layer = 2)
         assertEquals(a, pileCardTiltDeg("saved-1", layer = 2))
-        assertTrue(abs(a) <= 4f, "tilt $a exceeded the 4 degree cap")
+        assertTrue(a in -15f..15f, "tilt $a outside ±15")
         val other = pileCardTiltDeg("reconnect-1", layer = 2)
-        assertTrue(a != other || abs(other) <= 4f)
+        assertTrue(a != other || abs(other) <= 15f)
     }
 
     @Test
-    fun dragTiltFollowsTravelAndSaturates() {
+    fun dragTiltIsFiveHundredthsOfTranslationX() {
         assertEquals(0f, pileDragTiltDeg(0f, 0f, 300f))
-        assertTrue(pileDragTiltDeg(150f, 0f, 300f) > 0f)
-        assertTrue(pileDragTiltDeg(-150f, 0f, 300f) < 0f)
-        assertTrue(pileDragTiltDeg(0f, -150f, 300f) > 0f, "upward drag should tilt like a rightward throw")
-        assertEquals(pileDragTiltDeg(300f, 0f, 300f), pileDragTiltDeg(900f, 0f, 300f))
+        assertEquals(5f, pileDragTiltDeg(100f, 0f, 300f), 0.01f)
+        assertEquals(-5f, pileDragTiltDeg(-100f, 40f, 300f), 0.01f)
     }
 
     @Test
     fun depthIncreasesAwayFromTheFront() {
         assertEquals(1f, pileLayerScale(0))
-        assertEquals(1f, pileLayerAlpha(0))
-        assertEquals(0f, pileLayerDim(0))
-        assertTrue(pileLayerScale(2) < pileLayerScale(1))
-        assertTrue(pileLayerAlpha(2) < pileLayerAlpha(1))
-        assertTrue(pileLayerDim(2) > pileLayerDim(1))
-        assertTrue(pileLayerElevationDp(0) > pileLayerElevationDp(2))
-        assertEquals(pileLayerScale(PILE_MAX_VISIBLE_LAYERS), pileLayerScale(PILE_MAX_VISIBLE_LAYERS + 8))
+        assertEquals(0.95f, pileLayerScale(1))
+        assertEquals(0.90f, pileLayerScale(2))
+        assertEquals(16f, pileLayerElevationDp(0))
+        assertEquals(8f, pileLayerElevationDp(1))
+        assertEquals(4f, pileLayerElevationDp(2))
     }
 
     @Test
     fun omnidirectionalSwipePastThresholdDismisses() {
         val size = 300f
-        val justOver = size * GlassGestureCommitFraction + 1f
+        val justOver = PILE_DISMISS_DISTANCE_DP + 1f
         assertEquals(
             PileSwipeAction.Dismiss,
             pileSwipeAction(justOver, 0f, 0f, 0f, size, canDismiss = true, canRecall = true),
@@ -92,7 +88,7 @@ class PilePhysicsTest {
         )
         assertEquals(
             PileSwipeAction.Dismiss,
-            pileSwipeAction(justOver, justOver, 0f, 0f, size, canDismiss = true, canRecall = true),
+            pileSwipeAction(justOver, -justOver, 0f, 0f, size, canDismiss = true, canRecall = true),
             "diagonal up-right should dismiss",
         )
         assertEquals(
@@ -102,28 +98,24 @@ class PilePhysicsTest {
     }
 
     @Test
-    fun lowerLeftSwipeRecallsPastSharedCommitFraction() {
+    fun swipeDownRecallsPastDismissDistance() {
         val size = 300f
-        val justOver = size * GlassGestureCommitFraction + 1f
+        val justOver = PILE_DISMISS_DISTANCE_DP + 1f
         assertEquals(
             PileSwipeAction.Recall,
-            pileSwipeAction(-justOver, 0f, 0f, 0f, size, canDismiss = true, canRecall = true),
-        )
-        assertEquals(
-            PileSwipeAction.Recall,
-            pileSwipeAction(-justOver, justOver, 0f, 0f, size, canDismiss = true, canRecall = true),
+            pileSwipeAction(0f, justOver, 0f, 0f, size, canDismiss = true, canRecall = true),
         )
         assertEquals(
             PileSwipeAction.Dismiss,
-            pileSwipeAction(-justOver, 0f, 0f, 0f, size, canDismiss = true, canRecall = false),
-            "left swipe without a card to recall still dismisses",
+            pileSwipeAction(0f, justOver, 0f, 0f, size, canDismiss = true, canRecall = false),
+            "down swipe without history still dismisses",
         )
     }
 
     @Test
     fun swipeOppositeLastThrowRecalls() {
         val size = 300f
-        val justOver = size * GlassGestureCommitFraction + 1f
+        val justOver = PILE_DISMISS_DISTANCE_DP + 1f
         assertEquals(
             PileSwipeAction.Recall,
             pileSwipeAction(
@@ -143,7 +135,7 @@ class PilePhysicsTest {
     @Test
     fun belowThresholdSpringsBackEvenWithADirection() {
         val size = 300f
-        val short = size * GlassGestureCommitFraction - 8f
+        val short = PILE_DISMISS_DISTANCE_DP - 8f
         assertEquals(
             PileSwipeAction.SpringBack,
             pileSwipeAction(short, 0f, 0f, 0f, size, canDismiss = true, canRecall = true),
@@ -158,14 +150,15 @@ class PilePhysicsTest {
     fun fastFlickCommitsEvenShortOfTheThreshold() {
         val size = 300f
         val short = 20f
-        val flick = GlassGestureFlickVelocityPxPerSec + 10f
+        val flick = PILE_FLING_VELOCITY_DP_PER_SEC + 10f
         assertEquals(
             PileSwipeAction.Dismiss,
             pileSwipeAction(short, 0f, flick, 0f, size, canDismiss = true, canRecall = true),
         )
         assertEquals(
             PileSwipeAction.Recall,
-            pileSwipeAction(-short, 0f, -flick, 0f, size, canDismiss = true, canRecall = true),
+            pileSwipeAction(0f, short, 0f, flick, size, canDismiss = true, canRecall = true),
+            "downward flick recalls",
         )
         assertEquals(
             PileSwipeAction.Dismiss,
@@ -176,10 +169,25 @@ class PilePhysicsTest {
             pileSwipeAction(short, 0f, -flick, 0f, size, canDismiss = true, canRecall = true),
             "a flick back toward rest should spring back, not commit",
         )
+        val diagonal = PILE_FLING_VELOCITY_DP_PER_SEC * 0.75f
+        assertEquals(
+            PileSwipeAction.Dismiss,
+            pileSwipeAction(0f, 0f, diagonal, -diagonal, size, canDismiss = true, canRecall = true),
+            "a diagonal flick at rest should use hypot velocity, not per-axis abs",
+        )
     }
 
     @Test
-    fun exitTargetLeavesTheScreenAlongTheThrownVector() {
+    fun dragAlphaDecaysAfter150dp() {
+        assertEquals(1f, pileDragAlpha(0f))
+        assertEquals(1f, pileDragAlpha(150f))
+        assertEquals(0.6f, pileDragAlpha(250f), 0.01f)
+        assertEquals(0f, pileDragAlpha(400f))
+        assertEquals(0f, pileDragAlpha(900f))
+    }
+
+    @Test
+    fun exitTargetClearsBothAxesOnEqualDiagonal() {
         val size = 300f
         val diagonal = pileCardExitTargetPx(40f, 40f, size)
         assertTrue(diagonal.first > size && diagonal.second > size)

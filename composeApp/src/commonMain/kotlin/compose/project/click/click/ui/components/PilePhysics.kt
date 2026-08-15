@@ -4,13 +4,11 @@ import compose.project.click.click.ui.theme.fnv1a32 // pragma: allowlist secret
 import kotlin.math.abs
 import kotlin.math.hypot
 
-// Pure geometry and threshold math for the Home pile stacks. Kept Compose-free so the feel of the
-// gesture is unit-testable: only PileCluster turns these numbers into animations.
+// Pure geometry and threshold math for the Home photo pile. Kept Compose-free so the feel of
+// the gesture is unit-testable: only PhotoPileStack turns these numbers into animations.
 //
-// Gesture *thresholds* are not re-invented here — they defer to GlassGestureCommitFraction and
-// GlassGestureFlickVelocityPxPerSec, the app's single gesture-physics authority. What this file
-// owns is the 2D interaction model: 1:1 drag tracking, omnidirectional dismiss vs recall, depth by
-// layer, and the staggered fan timing.
+// Dismiss commits at 200 dp of travel or 800 dp/s of fling. Swipe-down recalls the LIFO
+// history stack. Resting tilt is a seeded ±15° hash of the card id.
 
 /** Top card plus two peeking layers. More than that reads as noise at row height. */
 const val PILE_MAX_VISIBLE_LAYERS = 3
@@ -24,28 +22,44 @@ const val PILE_CARD_SCREEN_FRACTION = 0.44f
 /** Vertical peek step per layer (0 / 12 / 24 dp). Titles stay visible because x never shifts. */
 private const val PILE_PEEK_STEP_Y_DP = 12f
 
-private const val PILE_REST_TILT_MAX_DEG = 4f
-private const val PILE_DRAG_TILT_MAX_DEG = 10f
-private const val PILE_FAN_STAGGER_STEP_MILLIS = 40
-private const val PILE_FAN_STAGGER_MAX_MILLIS = 240
-private const val PILE_FAN_SPRING_SETTLE_MILLIS = 420
+/** Seeded rest tilt: hash(id) % 31 − 15, inclusive ±15°. */
+const val PILE_REST_TILT_MAX_DEG = 15f
+
+/** Active drag tilt: translationX × this factor (degrees per px at mdpi). */
+const val PILE_DRAG_TILT_PER_PX = 0.05f
 
 private const val PILE_LAYER_SCALE_STEP = 0.05f
-private const val PILE_LAYER_SCALE_MIN = 0.85f
+private const val PILE_LAYER_SCALE_MIN = 0.90f
 private const val PILE_LAYER_ALPHA_STEP = 0.1f
 private const val PILE_LAYER_ALPHA_MIN = 0.7f
 private const val PILE_LAYER_DIM_STEP = 0.12f
 private const val PILE_LAYER_DIM_MAX = 0.36f
-private const val PILE_FRONT_ELEVATION_DP = 18f
-private const val PILE_LAYER_ELEVATION_STEP_DP = 4f
+private const val PILE_FRONT_ELEVATION_DP = 16f
+private const val PILE_SECOND_ELEVATION_DP = 8f
 private const val PILE_BACK_ELEVATION_DP = 4f
 
-/** Playful tap feedback before fan-out. */
-const val PILE_TAP_JIGGLE_SCALE = 1.02f
-const val PILE_TAP_JIGGLE_WOBBLE_DEG = 2f
+/** Playful tap feedback. Fan/carousel open is intentionally disabled. */
+const val PILE_TAP_JIGGLE_SCALE = 1.05f
+const val PILE_TAP_JIGGLE_WOBBLE_DEG = 5f
 
 /** Rubber-band tension begins past this fraction of card size. */
 private const val PILE_RUBBER_BAND_START_FRACTION = 0.85f
+
+/** Alpha starts decaying once Euclidean drag exceeds this (dp). */
+const val PILE_ALPHA_FADE_START_DP = 150f
+
+/** Fade completes over this additional distance (dp). */
+const val PILE_ALPHA_FADE_RANGE_DP = 250f
+
+/** Commit a dismiss when travel exceeds this (dp), independent of card size. */
+const val PILE_DISMISS_DISTANCE_DP = 200f
+
+/** Commit a dismiss when fling speed exceeds this (dp/s). Matches the shared 800 flick. */
+const val PILE_FLING_VELOCITY_DP_PER_SEC = 800f
+
+private const val PILE_FAN_STAGGER_STEP_MILLIS = 40
+private const val PILE_FAN_STAGGER_MAX_MILLIS = 240
+private const val PILE_FAN_SPRING_SETTLE_MILLIS = 420
 
 enum class PileSwipeAction {
     SpringBack,
@@ -82,29 +96,25 @@ fun pileClusterHeightDp(cardSizeDp: Float): Float {
 }
 
 /**
- * Deterministic resting tilt for a card so a stack looks hand-dropped rather than machine-aligned.
- * Seeded from the card id, so it never changes across recompositions or process restarts.
+ * Deterministic resting tilt so a stack looks hand-dropped rather than machine-aligned.
+ *
+ * `rotation = (hash(id) mod 31) − 15`, giving a stable angle in [−15°, +15°].
  */
 fun pileCardTiltDeg(
     id: String,
-    layer: Int,
+    layer: Int = 0,
 ): Float {
     val unsigned = fnv1a32("$id#$layer").toUInt()
-    val steps = (unsigned % 17u).toInt() - 8
-    return (steps / 8f) * PILE_REST_TILT_MAX_DEG
+    return (unsigned % 31u).toInt() - PILE_REST_TILT_MAX_DEG.toInt().toFloat()
 }
 
-/** Tilt while dragging, proportional to how far the card has travelled on the dominant axis. */
+/** Tilt while dragging: 1:1 translation, `ΔX × 0.05` degrees around the touch anchor. */
+@Suppress("UNUSED_PARAMETER")
 fun pileDragTiltDeg(
     dragXPx: Float,
-    dragYPx: Float,
-    sizePx: Float,
-): Float {
-    val size = sizePx.coerceAtLeast(1f)
-    val dominant = if (abs(dragXPx) >= abs(dragYPx)) dragXPx else -dragYPx
-    val fraction = (dominant / size).coerceIn(-1f, 1f)
-    return fraction * PILE_DRAG_TILT_MAX_DEG
-}
+    dragYPx: Float = 0f,
+    sizePx: Float = 1f,
+): Float = dragXPx * PILE_DRAG_TILT_PER_PX
 
 fun pileLayerScale(layer: Int): Float {
     val clamped = layer.coerceAtLeast(0)
@@ -122,18 +132,29 @@ fun pileLayerDim(layer: Int): Float {
     return (clamped * PILE_LAYER_DIM_STEP).coerceAtMost(PILE_LAYER_DIM_MAX)
 }
 
-fun pileLayerElevationDp(layer: Int): Float {
-    val clamped = layer.coerceAtLeast(0)
-    return (PILE_FRONT_ELEVATION_DP - clamped * PILE_LAYER_ELEVATION_STEP_DP)
-        .coerceAtLeast(PILE_BACK_ELEVATION_DP)
+fun pileLayerElevationDp(layer: Int): Float =
+    when (layer.coerceAtLeast(0)) {
+        0 -> PILE_FRONT_ELEVATION_DP
+        1 -> PILE_SECOND_ELEVATION_DP
+        else -> PILE_BACK_ELEVATION_DP
+    }
+
+/**
+ * Distance-based fade for the active card.
+ *
+ * `α = clamp(1 − (D − 150) / 250, 0, 1)` with D in dp.
+ */
+fun pileDragAlpha(distanceDp: Float): Float {
+    val excess = distanceDp - PILE_ALPHA_FADE_START_DP
+    if (excess <= 0f) return 1f
+    return (1f - excess / PILE_ALPHA_FADE_RANGE_DP).coerceIn(0f, 1f)
 }
 
 /**
- * Omnidirectional swipe-to-dismiss/recall. Any fling/swipe past the shared commit threshold
- * dismisses when possible; recall when the gesture opposes the last throw or enters the lower-left
- * quadrant. Below threshold (or when that action is impossible) springs back. A fast flick in the
- * swipe direction commits even short of half size.
+ * Swipe-up / away dismisses; swipe-down recalls the LIFO history. Commits when travel exceeds
+ * [dismissDistancePx] or fling speed exceeds [flingVelocityPxPerSec] in the swipe direction.
  */
+@Suppress("UNUSED_PARAMETER")
 fun pileSwipeAction(
     offsetXPx: Float,
     offsetYPx: Float,
@@ -144,36 +165,39 @@ fun pileSwipeAction(
     canRecall: Boolean,
     lastExitXPx: Float = 0f,
     lastExitYPx: Float = 0f,
+    dismissDistancePx: Float = PILE_DISMISS_DISTANCE_DP,
+    flingVelocityPxPerSec: Float = PILE_FLING_VELOCITY_DP_PER_SEC,
 ): PileSwipeAction {
     if (offsetXPx == 0f &&
         offsetYPx == 0f &&
-        abs(velocityXPxPerSec) < GlassGestureFlickVelocityPxPerSec &&
-        abs(velocityYPxPerSec) < GlassGestureFlickVelocityPxPerSec
+        hypot(velocityXPxPerSec, velocityYPxPerSec) < flingVelocityPxPerSec
     ) {
         return PileSwipeAction.SpringBack
     }
-    val size = sizePx.coerceAtLeast(1f)
     val distance = pileDragDistancePx(offsetXPx, offsetYPx)
-    val pastDistance = distance >= size * GlassGestureCommitFraction
+    val pastDistance = distance >= dismissDistancePx
     val velocityMag = hypot(velocityXPxPerSec, velocityYPxPerSec)
     val flickedInSwipeDirection =
         offsetXPx * velocityXPxPerSec + offsetYPx * velocityYPxPerSec > 0f ||
-            (offsetXPx == 0f && offsetYPx == 0f && velocityMag >= GlassGestureFlickVelocityPxPerSec)
-    val flicked = flickedInSwipeDirection && velocityMag >= GlassGestureFlickVelocityPxPerSec
+            (offsetXPx == 0f && offsetYPx == 0f && velocityMag >= flingVelocityPxPerSec)
+    val flicked = flickedInSwipeDirection && velocityMag >= flingVelocityPxPerSec
     if (!pastDistance && !flicked) return PileSwipeAction.SpringBack
 
-    val lowerLeftRecall = offsetXPx < 0f && offsetYPx >= 0f
+    val downward = offsetYPx > abs(offsetXPx) && offsetYPx > 0f
     val hasLastExit = lastExitXPx != 0f || lastExitYPx != 0f
     val oppositeLastThrow =
         hasLastExit &&
             offsetXPx * lastExitXPx + offsetYPx * lastExitYPx < 0f
-    if (canRecall && (lowerLeftRecall || oppositeLastThrow)) {
+    if (canRecall && (downward || oppositeLastThrow)) {
         return PileSwipeAction.Recall
     }
     return if (canDismiss) PileSwipeAction.Dismiss else PileSwipeAction.SpringBack
 }
 
-/** Where a dismissed card animates to, just past the edge along the actual 2D throw vector. */
+/**
+ * Where a dismissed card animates to. Radial travel is `1.15 × √2 × size` so a 45° throw
+ * clears both card axes instead of leaving a corner on-screen.
+ */
 fun pileCardExitTargetPx(
     offsetXPx: Float,
     offsetYPx: Float,
@@ -181,7 +205,8 @@ fun pileCardExitTargetPx(
 ): Pair<Float, Float> {
     val size = sizePx.coerceAtLeast(1f)
     val mag = hypot(offsetXPx, offsetYPx).coerceAtLeast(1f)
-    val scale = size * 1.5f / mag
+    val travel = hypot(size, size) * 1.15f
+    val scale = travel / mag
     return offsetXPx * scale to offsetYPx * scale
 }
 
@@ -212,7 +237,7 @@ fun pileRubberBandOffset(
     return sign * stretched.coerceAtMost(absOffset)
 }
 
-/** Per-card delay so a fan-out (and matching collapse) reads as a staggered deal. */
+/** Per-card delay so a fan-out (kept for Reduce-Motion-safe collapse timing) reads as a deal. */
 fun pileFanStaggerMillis(index: Int): Int =
     (index.coerceAtLeast(0) * PILE_FAN_STAGGER_STEP_MILLIS).coerceAtMost(PILE_FAN_STAGGER_MAX_MILLIS)
 

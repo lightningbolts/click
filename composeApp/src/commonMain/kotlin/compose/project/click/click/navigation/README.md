@@ -102,7 +102,7 @@ Each item carries a Material `ImageVector` for Android/Compose and an `sfSymbol`
 
 `ui/components/AppScreenScaffold.kt` is the standard layout for tab-root screens:
 
-- **Floating liquid-glass header** — collapses on scroll (`headerCollapseFraction`)
+- **Floating collapsible glass header** (`CollapsibleGlassTopBar`) — borderless large title at rest; native glass after 20 dp scroll (`headerCollapseFraction`)
 - **LazyColumn body** — extends under bottom nav with `rememberBottomChromePadding()`
 - **Optional search action** — `onOpenSearch` opens unified search sheet
 - **Encounter tether banner** — `EncounterTetherManager` compass message when active

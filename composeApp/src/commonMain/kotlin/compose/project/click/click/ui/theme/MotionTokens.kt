@@ -1,3 +1,7 @@
+@file:Suppress(
+    "ktlint:standard:property-naming",
+)
+
 package compose.project.click.click.ui.theme
 
 import androidx.compose.animation.core.Spring
@@ -49,28 +53,44 @@ object MotionTokens {
         const val Stiffness = Spring.StiffnessHigh
     }
 
-    fun pressScaleSpec(): SpringSpec<Float> = spring(
-        dampingRatio = PressScale.DampingRatio,
-        stiffness = PressScale.Stiffness,
-    )
+    fun pressScaleSpec(): SpringSpec<Float> =
+        spring(
+            dampingRatio = PressScale.DampingRatio,
+            stiffness = PressScale.Stiffness,
+        )
 
-    fun <T> softEnterSpec(): SpringSpec<T> = spring(
-        dampingRatio = SoftEnter.DampingRatio,
-        stiffness = SoftEnter.Stiffness,
-    )
+    fun <T> softEnterSpec(): SpringSpec<T> =
+        spring(
+            dampingRatio = SoftEnter.DampingRatio,
+            stiffness = SoftEnter.Stiffness,
+        )
 
-    fun <T> softExitSpec(): SpringSpec<T> = spring(
-        dampingRatio = SoftExit.DampingRatio,
-        stiffness = SoftExit.Stiffness,
-    )
+    fun <T> softExitSpec(): SpringSpec<T> =
+        spring(
+            dampingRatio = SoftExit.DampingRatio,
+            stiffness = SoftExit.Stiffness,
+        )
 
-    fun <T> emphasizedSuccessSpec(): SpringSpec<T> = spring(
-        dampingRatio = EmphasizedSuccess.DampingRatio,
-        stiffness = EmphasizedSuccess.Stiffness,
-    )
+    fun <T> emphasizedSuccessSpec(): SpringSpec<T> =
+        spring(
+            dampingRatio = EmphasizedSuccess.DampingRatio,
+            stiffness = EmphasizedSuccess.Stiffness,
+        )
 
-    fun <T> destructiveSpec(): SpringSpec<T> = spring(
-        dampingRatio = Destructive.DampingRatio,
-        stiffness = Destructive.Stiffness,
-    )
+    fun <T> destructiveSpec(): SpringSpec<T> =
+        spring(
+            dampingRatio = Destructive.DampingRatio,
+            stiffness = Destructive.Stiffness,
+        )
+
+    object PileSnap {
+        const val DampingRatio = Spring.DampingRatioMediumBouncy
+        const val Stiffness = Spring.StiffnessLow
+    }
+
+    fun <T> pileSnapSpec(): SpringSpec<T> =
+        spring(
+            dampingRatio = PileSnap.DampingRatio,
+            stiffness = PileSnap.Stiffness,
+        )
 }

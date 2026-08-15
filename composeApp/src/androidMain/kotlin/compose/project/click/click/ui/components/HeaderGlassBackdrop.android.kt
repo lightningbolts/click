@@ -26,7 +26,7 @@ actual fun HeaderGlassBackdrop(
     val fraction = collapseFraction.coerceIn(0f, 1f)
     val surfaceColor = MaterialTheme.colorScheme.surface
     val alpha = if (reduceTransparency) 0.96f else 0.55f + 0.3f * fraction
-    val blurRadiusPx = with(LocalDensity.current) { 24.dp.toPx() }
+    val blurRadiusPx = with(LocalDensity.current) { 20.dp.toPx() }
 
     Box(
         modifier =

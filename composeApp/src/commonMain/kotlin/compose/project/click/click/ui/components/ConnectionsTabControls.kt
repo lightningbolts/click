@@ -104,7 +104,7 @@ fun ConnectionsFloatingHeader(
                 )
             } else {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    LiquidGlassPageHeader(
+                    CollapsibleGlassTopBar(
                         title = title,
                         subtitle = subtitle,
                         collapseFraction = collapseFraction,
@@ -321,7 +321,7 @@ fun DiscoveryFloatingHeader(
                 }
             } else {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    LiquidGlassPageHeader(
+                    CollapsibleGlassTopBar(
                         title = title,
                         subtitle = subtitle,
                         collapseFraction = collapseFraction,

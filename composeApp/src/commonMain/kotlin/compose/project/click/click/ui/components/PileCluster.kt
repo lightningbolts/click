@@ -49,6 +49,7 @@ import compose.project.click.click.ui.theme.MotionTokens // pragma: allowlist se
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.hypot
 
 data class PilePhoto(
     /** Unique within its cluster; used for list keys and animation identity. */
@@ -71,24 +72,14 @@ data class PilePhoto(
 private val PileFanSpacing = 10.dp
 
 /**
- * One pile cluster as a full-width row: a peeking stack of roughly-square Polaroids that fans out
- * in place. The row occupies about half the screen height so the cluster is the dominant visual.
- *
- * Collapsed, the top card tracks the finger 1:1 (no spring lag, no grid). Swipe past the shared
- * commit threshold in any direction flies it off with the swipe velocity; a lower-left swipe (or
- * one opposing the last throw) recalls the most recently dismissed card. Back layers scale down,
- * dim, and drop elevation so the pile reads as physically stacked.
- * Expanded, cards deal out — and collapse back — on the same staggered spring.
+ * Unified Home photo pile: a single peeking Polaroid stack. Tap jiggles; swipe away dismisses;
+ * swipe down recalls. Fan/carousel expand is intentionally disabled.
  */
 @Composable
-fun PileCluster(
-    clusterId: String,
-    label: String,
+fun PhotoPileStack(
     photos: List<PilePhoto>,
-    expanded: Boolean,
-    onExpand: () -> Unit,
-    onCollapse: () -> Unit,
     modifier: Modifier = Modifier,
+    label: String = "I'm down for…",
     photoWidth: Dp? = null,
     photoHeight: Dp? = null,
 ) {
@@ -103,16 +94,6 @@ fun PileCluster(
     val height = photoHeight ?: sized
     val deepestPeekY = pilePeekOffsetDp(PILE_MAX_VISIBLE_LAYERS - 1).second
     val rowHeight = height + deepestPeekY.dp + 8.dp
-    var renderFan by remember(clusterId) { mutableStateOf(expanded) }
-
-    LaunchedEffect(clusterId, expanded, photos.size) {
-        if (expanded) {
-            renderFan = true
-        } else if (renderFan) {
-            delay(pileFanCollapseDurationMillis(photos.size).toLong())
-            renderFan = false
-        }
-    }
 
     Box(
         modifier =
@@ -121,27 +102,41 @@ fun PileCluster(
                 .height(rowHeight)
                 .semantics { contentDescription = label },
     ) {
-        if (renderFan) {
-            PileFanStrip(
-                photos = photos,
-                photoWidth = width,
-                photoHeight = height,
-                expanded = expanded,
-                onCollapse = onCollapse,
-                modifier = Modifier.align(Alignment.TopStart),
-            )
-        } else {
-            PileCollapsedStack(
-                clusterId = clusterId,
-                photos = photos,
-                photoWidth = width,
-                photoHeight = height,
-                stackWidth = width,
-                onExpand = onExpand,
-                modifier = Modifier.align(Alignment.TopStart),
-            )
-        }
+        PileCollapsedStack(
+            clusterId = "home-unified",
+            photos = photos,
+            photoWidth = width,
+            photoHeight = height,
+            stackWidth = width,
+            modifier = Modifier.align(Alignment.TopStart),
+        )
     }
+}
+
+/**
+ * @deprecated Fan/carousel expand is disabled. Prefer [PhotoPileStack].
+ */
+@Suppress("UNUSED_PARAMETER")
+@Composable
+fun PileCluster(
+    clusterId: String,
+    label: String,
+    photos: List<PilePhoto>,
+    expanded: Boolean,
+    onExpand: () -> Unit,
+    onCollapse: () -> Unit,
+    modifier: Modifier = Modifier,
+    photoWidth: Dp? = null,
+    photoHeight: Dp? = null,
+) {
+    // Tap-to-open carousel / fan-out is disabled. The unified stack is the only interaction.
+    PhotoPileStack(
+        photos = photos,
+        modifier = modifier,
+        label = label,
+        photoWidth = photoWidth,
+        photoHeight = photoHeight,
+    )
 }
 
 @Composable
@@ -151,7 +146,6 @@ private fun PileCollapsedStack(
     photoWidth: Dp,
     photoHeight: Dp,
     stackWidth: Dp,
-    onExpand: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val reduceMotion = rememberReduceMotionEnabled()
@@ -174,13 +168,15 @@ private fun PileCollapsedStack(
     val jiggleScale = remember(clusterId) { Animatable(1f) }
     val jiggleRot = remember(clusterId) { Animatable(0f) }
     val cardSizePx = with(density) { minOf(photoWidth, photoHeight).toPx() }
+    val dismissDistancePx = with(density) { PILE_DISMISS_DISTANCE_DP.dp.toPx() }
+    val flingVelocityPx = with(density) { PILE_FLING_VELOCITY_DP_PER_SEC.dp.toPx() }
 
     Box(
         modifier =
             modifier
                 .width(stackWidth)
                 .height(photoHeight + pilePeekOffsetDp(PILE_MAX_VISIBLE_LAYERS - 1).second.dp)
-                .pointerInput(clusterId, stackIds, dismissedIds, cardSizePx, reduceMotion) {
+                .pointerInput(clusterId, stackIds, dismissedIds, cardSizePx, reduceMotion, photoById) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         val velocityTracker = VelocityTracker()
@@ -202,12 +198,13 @@ private fun PileCollapsedStack(
                                                 PILE_TAP_JIGGLE_WOBBLE_DEG
                                             }
                                         jiggleRot.snapTo(wobble)
-                                        jiggleScale.animateTo(PILE_TAP_JIGGLE_SCALE, MotionTokens.softEnterSpec())
-                                        jiggleRot.animateTo(0f, MotionTokens.softEnterSpec())
-                                        jiggleScale.animateTo(1f, MotionTokens.softEnterSpec())
+                                        jiggleScale.animateTo(PILE_TAP_JIGGLE_SCALE, MotionTokens.pileSnapSpec())
+                                        jiggleRot.animateTo(0f, MotionTokens.pileSnapSpec())
+                                        jiggleScale.animateTo(1f, MotionTokens.pileSnapSpec())
                                     }
                                     PlatformHapticsPolicy.lightImpact()
-                                    onExpand()
+                                    // Fan/carousel stays disabled. Tap still opens the top card.
+                                    photoById[stackIds.firstOrNull()]?.onClick?.invoke()
                                 }
                             }
                             return@awaitEachGesture
@@ -244,13 +241,15 @@ private fun PileCollapsedStack(
                                 canRecall = dismissedIds.isNotEmpty(),
                                 lastExitXPx = lastExitX,
                                 lastExitYPx = lastExitY,
+                                dismissDistancePx = dismissDistancePx,
+                                flingVelocityPxPerSec = flingVelocityPx,
                             )
                         if (!completed) {
                             scope.launch {
                                 animX.snapTo(releaseX)
                                 animY.snapTo(releaseY)
-                                launch { animX.animateTo(0f, MotionTokens.softEnterSpec()) }
-                                launch { animY.animateTo(0f, MotionTokens.softEnterSpec()) }
+                                launch { animX.animateTo(0f, MotionTokens.pileSnapSpec()) }
+                                launch { animY.animateTo(0f, MotionTokens.pileSnapSpec()) }
                             }
                             return@awaitEachGesture
                         }
@@ -297,14 +296,14 @@ private fun PileCollapsedStack(
                                         launch {
                                             animX.animateTo(
                                                 0f,
-                                                MotionTokens.softEnterSpec(),
+                                                MotionTokens.pileSnapSpec(),
                                                 initialVelocity = velocity.x,
                                             )
                                         }
                                         launch {
                                             animY.animateTo(
                                                 0f,
-                                                MotionTokens.softEnterSpec(),
+                                                MotionTokens.pileSnapSpec(),
                                                 initialVelocity = velocity.y,
                                             )
                                         }
@@ -316,8 +315,8 @@ private fun PileCollapsedStack(
                                         animY.snapTo(0f)
                                     } else {
                                         coroutineScope {
-                                            launch { animX.animateTo(0f, MotionTokens.softEnterSpec()) }
-                                            launch { animY.animateTo(0f, MotionTokens.softEnterSpec()) }
+                                            launch { animX.animateTo(0f, MotionTokens.pileSnapSpec()) }
+                                            launch { animY.animateTo(0f, MotionTokens.pileSnapSpec()) }
                                         }
                                     }
                                 }
@@ -328,6 +327,10 @@ private fun PileCollapsedStack(
     ) {
         val visibleIds = stackIds.take(PILE_MAX_VISIBLE_LAYERS)
         val visibleLayers = visibleIds.size
+        val topDx = if (dragging) liveX else animX.value
+        val topDy = if (dragging) liveY else animY.value
+        val topDistanceDp = with(density) { hypot(topDx, topDy).toDp().value }
+        val topDragAlpha = if (reduceMotion) 1f else pileDragAlpha(topDistanceDp)
         for (reverseLayer in 0 until visibleLayers) {
             val layer = visibleLayers - 1 - reverseLayer
             val photo = photoById[visibleIds[layer]] ?: continue
@@ -352,20 +355,25 @@ private fun PileCollapsedStack(
                         .graphicsLayer {
                             scaleX = scale * if (isTop) jiggleScale.value else 1f
                             scaleY = scale * if (isTop) jiggleScale.value else 1f
-                            alpha = if (reduceMotion) 1f else pileLayerAlpha(layer)
+                            alpha =
+                                if (reduceMotion) {
+                                    1f
+                                } else if (isTop) {
+                                    pileLayerAlpha(layer) * topDragAlpha
+                                } else {
+                                    pileLayerAlpha(layer)
+                                }
                             if (isTop) {
                                 transformOrigin = TransformOrigin(touchAnchorX, touchAnchorY)
-                                translationX = if (dragging) liveX else animX.value
-                                translationY = if (dragging) liveY else animY.value
+                                translationX = topDx
+                                translationY = topDy
                                 rotationZ =
                                     if (reduceMotion) {
                                         0f
                                     } else {
-                                        pileDragTiltDeg(
-                                            if (dragging) liveX else animX.value,
-                                            if (dragging) liveY else animY.value,
-                                            size.width,
-                                        ) + jiggleRot.value
+                                        restTilt +
+                                            pileDragTiltDeg(topDx, topDy, size.width) +
+                                            jiggleRot.value
                                     }
                             } else {
                                 rotationZ = restTilt
@@ -378,6 +386,8 @@ private fun PileCollapsedStack(
     }
 }
 
+/** Fan strip kept for reference; tap-to-open carousel is disabled. */
+@Suppress("unused")
 @Composable
 private fun PileFanStrip(
     photos: List<PilePhoto>,

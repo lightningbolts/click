@@ -69,7 +69,6 @@ import compose.project.click.click.ui.components.HomeGreetingSubtitle // pragma:
 import compose.project.click.click.ui.components.HomePileActions // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomePileBoardData // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeSearchPill // pragma: allowlist secret
-import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
 import compose.project.click.click.ui.components.PollPairCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.SavedEventsSection // pragma: allowlist secret
 import compose.project.click.click.ui.components.SectionHeader // pragma: allowlist secret
@@ -160,8 +159,6 @@ fun HomeScreen(
     val homeLayoutMode by AppDataManager.homeLayoutMode.collectAsState()
     var selectedSavedEventBeacon by remember { mutableStateOf<MapBeacon?>(null) }
     var selectedPileLocation by remember { mutableStateOf<String?>(null) }
-    // Hoisted here so system back collapses a fanned-out cluster, and only one cluster fans at a time.
-    var expandedPileClusterId by remember { mutableStateOf<String?>(null) }
     var archiveBannerNow by remember { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
 
     // Use the same auth-aware refresh path as Settings so intents aren't empty after fast boot.
@@ -336,9 +333,6 @@ fun HomeScreen(
                         ?.firstOrNull()
                         ?.takeIf { it.isNotBlank() }
                         ?: "there"
-                PlatformBackHandler(enabled = expandedPileClusterId != null) {
-                    expandedPileClusterId = null
-                }
                 AppScreenScaffold(
                     title = homeGreetingTitle(firstName),
                     subtitle = HomeGreetingSubtitle,
@@ -482,8 +476,6 @@ fun HomeScreen(
                                         selectedPileLocation = location
                                     },
                                 ),
-                            expandedClusterId = expandedPileClusterId,
-                            onExpandedClusterChange = { expandedPileClusterId = it },
                         )
                         activityRecap?.let { recap ->
                             item(key = "activity_recap") {

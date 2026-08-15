@@ -141,7 +141,7 @@ fun AppScreenScaffold(
                 headerMeasureModifier = headerMeasureModifier,
                 collapseFraction = collapseFraction,
             ) {
-                LiquidGlassPageHeader(
+                CollapsibleGlassTopBar(
                     title = title,
                     subtitle = subtitle,
                     presenceOnline = presenceOnline,
@@ -230,7 +230,7 @@ fun AppScreenScaffoldScroll(
             headerMeasureModifier = headerMeasureModifier,
             collapseFraction = collapseFraction,
         ) {
-            LiquidGlassPageHeader(
+            CollapsibleGlassTopBar(
                 title = title,
                 subtitle = subtitle,
                 presenceOnline = presenceOnline,
@@ -453,7 +453,7 @@ fun AppScreenWithFloatingHeader(
             headerMeasureModifier = headerMeasureModifier,
             collapseFraction = collapseFraction,
         ) {
-            LiquidGlassPageHeader(
+            CollapsibleGlassTopBar(
                 title = title,
                 subtitle = subtitle,
                 presenceOnline = presenceOnline,
