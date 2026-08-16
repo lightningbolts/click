@@ -15,8 +15,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
@@ -61,8 +59,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
@@ -80,7 +76,7 @@ import compose.project.click.click.platform.KeyboardHeightProvider // pragma: al
 import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatBeaconDetailSheet // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatCallOptionsIosSurface // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatCallOptionsPopup // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatChromeHorizontalPadding // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatChromeMotion // pragma: allowlist secret
@@ -147,7 +143,6 @@ import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist 
 import kotlinx.coroutines.Dispatchers // pragma: allowlist secret
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext // pragma: allowlist secret
 import kotlinx.serialization.json.JsonObject
 
@@ -725,6 +720,55 @@ fun ChatView(
                             .weight(1f)
                             .fillMaxWidth()
 
+                    val groupCallMemberIds =
+                        remember(chatDetails.groupClique) {
+                            chatDetails.groupClique?.memberUserIds.orEmpty()
+                        }
+                    val startVoiceCall = {
+                        showCallMenu = false
+                        if (isGroupChat) {
+                            val groupId = chatDetails.groupClique?.groupId
+                            val threadId = chatDetails.chat.id
+                            if (!groupId.isNullOrBlank() && !threadId.isNullOrBlank()) {
+                                CallSessionManager.startOutgoingGroupCall(
+                                    groupId = groupId,
+                                    chatId = threadId,
+                                    memberIds = groupCallMemberIds,
+                                    videoEnabled = false,
+                                )
+                            }
+                        } else {
+                            CallSessionManager.startOutgoingCall(
+                                connectionId = chatDetails.connection.id,
+                                otherUserId = chatDetails.otherUser.id,
+                                otherUserName = chatDetails.otherUser.name ?: "Connection",
+                                videoEnabled = false,
+                            )
+                        }
+                    }
+                    val startVideoCall = {
+                        showCallMenu = false
+                        if (isGroupChat) {
+                            val groupId = chatDetails.groupClique?.groupId
+                            val threadId = chatDetails.chat.id
+                            if (!groupId.isNullOrBlank() && !threadId.isNullOrBlank()) {
+                                CallSessionManager.startOutgoingGroupCall(
+                                    groupId = groupId,
+                                    chatId = threadId,
+                                    memberIds = groupCallMemberIds,
+                                    videoEnabled = true,
+                                )
+                            }
+                        } else {
+                            CallSessionManager.startOutgoingCall(
+                                connectionId = chatDetails.connection.id,
+                                otherUserId = chatDetails.otherUser.id,
+                                otherUserName = chatDetails.otherUser.name ?: "Connection",
+                                videoEnabled = true,
+                            )
+                        }
+                    }
+
                     Box(
                         modifier = Modifier.fillMaxSize(),
                     ) {
@@ -737,67 +781,6 @@ fun ChatView(
                                             .height(topInset + 44.dp)
                                             .testTag(ChatGlassHeaderPlateTestTag),
                                 )
-                                Box(modifier = Modifier.fillMaxWidth()) {
-                                    val groupCallMemberIds =
-                                        remember(chatDetails.groupClique) {
-                                            chatDetails.groupClique?.memberUserIds.orEmpty()
-                                        }
-                                    androidx.compose.material3.DropdownMenu(
-                                        expanded = showCallMenu,
-                                        onDismissRequest = { showCallMenu = false },
-                                    ) {
-                                        androidx.compose.material3.DropdownMenuItem(
-                                            text = { Text("Voice") },
-                                            onClick = {
-                                                showCallMenu = false
-                                                if (isGroupChat) {
-                                                    val groupId = chatDetails.groupClique?.groupId
-                                                    val threadId = chatDetails.chat.id
-                                                    if (!groupId.isNullOrBlank() && !threadId.isNullOrBlank()) {
-                                                        CallSessionManager.startOutgoingGroupCall(
-                                                            groupId = groupId,
-                                                            chatId = threadId,
-                                                            memberIds = groupCallMemberIds,
-                                                            videoEnabled = false,
-                                                        )
-                                                    }
-                                                } else {
-                                                    CallSessionManager.startOutgoingCall(
-                                                        connectionId = chatDetails.connection.id,
-                                                        otherUserId = chatDetails.otherUser.id,
-                                                        otherUserName = chatDetails.otherUser.name ?: "Connection",
-                                                        videoEnabled = false,
-                                                    )
-                                                }
-                                            },
-                                        )
-                                        androidx.compose.material3.DropdownMenuItem(
-                                            text = { Text("Video") },
-                                            onClick = {
-                                                showCallMenu = false
-                                                if (isGroupChat) {
-                                                    val groupId = chatDetails.groupClique?.groupId
-                                                    val threadId = chatDetails.chat.id
-                                                    if (!groupId.isNullOrBlank() && !threadId.isNullOrBlank()) {
-                                                        CallSessionManager.startOutgoingGroupCall(
-                                                            groupId = groupId,
-                                                            chatId = threadId,
-                                                            memberIds = groupCallMemberIds,
-                                                            videoEnabled = true,
-                                                        )
-                                                    }
-                                                } else {
-                                                    CallSessionManager.startOutgoingCall(
-                                                        connectionId = chatDetails.connection.id,
-                                                        otherUserId = chatDetails.otherUser.id,
-                                                        otherUserName = chatDetails.otherUser.name ?: "Connection",
-                                                        videoEnabled = true,
-                                                    )
-                                                }
-                                            },
-                                        )
-                                    }
-                                }
                             } else {
                                 Column(
                                     modifier =
@@ -986,137 +969,29 @@ fun ChatView(
                                                 onClick = { showCallMenu = true },
                                                 tint = PrimaryBlue.copy(alpha = 0.85f),
                                             )
-                                            val menuStyle = LocalPlatformStyle.current
-                                            val density = LocalDensity.current
-                                            val callMenuSpring =
-                                                spring<Float>(
-                                                    dampingRatio = Spring.DampingRatioNoBouncy,
-                                                    stiffness = Spring.StiffnessMedium,
-                                                )
-                                            val callMenuEnter =
-                                                fadeIn(animationSpec = callMenuSpring) +
-                                                    scaleIn(
-                                                        initialScale = 0.92f,
-                                                        animationSpec = callMenuSpring,
-                                                    )
-                                            val callMenuExit =
-                                                fadeOut(animationSpec = callMenuSpring) +
-                                                    scaleOut(
-                                                        targetScale = 0.96f,
-                                                        animationSpec = callMenuSpring,
-                                                    )
-                                            var keepIosCallMenuMounted by remember { mutableStateOf(false) }
-                                            var iosCallMenuContentVisible by remember { mutableStateOf(false) }
-                                            LaunchedEffect(showCallMenu) {
-                                                if (showCallMenu) {
-                                                    keepIosCallMenuMounted = true
-                                                    iosCallMenuContentVisible = false
-                                                    withFrameNanos { }
-                                                    iosCallMenuContentVisible = true
-                                                } else {
-                                                    iosCallMenuContentVisible = false
-                                                    delay(150)
-                                                    keepIosCallMenuMounted = false
-                                                }
-                                            }
-                                            val groupCallMemberIds =
-                                                remember(chatDetails.groupClique) {
-                                                    chatDetails.groupClique?.memberUserIds.orEmpty()
-                                                }
-                                            val startVoiceCall = {
-                                                showCallMenu = false
-                                                if (isGroupChat) {
-                                                    val groupId = chatDetails.groupClique?.groupId
-                                                    val chatId = chatDetails.chat.id
-                                                    if (!groupId.isNullOrBlank() && !chatId.isNullOrBlank()) {
-                                                        CallSessionManager.startOutgoingGroupCall(
-                                                            groupId = groupId,
-                                                            chatId = chatId,
-                                                            memberIds = groupCallMemberIds,
-                                                            videoEnabled = false,
-                                                        )
-                                                    }
-                                                } else {
-                                                    CallSessionManager.startOutgoingCall(
-                                                        connectionId = chatDetails.connection.id,
-                                                        otherUserId = chatDetails.otherUser.id,
-                                                        otherUserName = chatDetails.otherUser.name ?: "Connection",
-                                                        videoEnabled = false,
-                                                    )
-                                                }
-                                            }
-                                            val startVideoCall = {
-                                                showCallMenu = false
-                                                if (isGroupChat) {
-                                                    val groupId = chatDetails.groupClique?.groupId
-                                                    val chatId = chatDetails.chat.id
-                                                    if (!groupId.isNullOrBlank() && !chatId.isNullOrBlank()) {
-                                                        CallSessionManager.startOutgoingGroupCall(
-                                                            groupId = groupId,
-                                                            chatId = chatId,
-                                                            memberIds = groupCallMemberIds,
-                                                            videoEnabled = true,
-                                                        )
-                                                    }
-                                                } else {
-                                                    CallSessionManager.startOutgoingCall(
-                                                        connectionId = chatDetails.connection.id,
-                                                        otherUserId = chatDetails.otherUser.id,
-                                                        otherUserName = chatDetails.otherUser.name ?: "Connection",
-                                                        videoEnabled = true,
-                                                    )
-                                                }
-                                            }
-                                            if (menuStyle.isIOS) {
-                                                if (keepIosCallMenuMounted) {
-                                                    Popup(
-                                                        alignment = Alignment.TopStart,
-                                                        offset = IntOffset(0, with(density) { 48.dp.roundToPx() }),
-                                                        onDismissRequest = { showCallMenu = false },
-                                                        properties =
-                                                            PopupProperties(
-                                                                focusable = true,
-                                                                dismissOnBackPress = true,
-                                                                dismissOnClickOutside = true,
-                                                            ),
-                                                    ) {
-                                                        androidx.compose.animation.AnimatedVisibility(
-                                                            visible = iosCallMenuContentVisible,
-                                                            enter = callMenuEnter,
-                                                            exit = callMenuExit,
-                                                        ) {
-                                                            ChatCallOptionsIosSurface(
-                                                                onVoice = startVoiceCall,
-                                                                onVideo = startVideoCall,
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                            } else {
-                                                ClickDropdownMenu(
-                                                    expanded = showCallMenu,
-                                                    onDismissRequest = { showCallMenu = false },
-                                                    items =
-                                                        listOf(
-                                                            ClickMenuItem(
-                                                                label = if (isGroupChat) "Group voice call" else "Voice call",
-                                                                onClick = {
-                                                                    PlatformHapticsPolicy.lightImpact()
-                                                                    startVoiceCall()
-                                                                },
-                                                                icon = Icons.Filled.Call,
-                                                            ),
-                                                            ClickMenuItem(
-                                                                label = if (isGroupChat) "Group video call" else "Video call",
-                                                                onClick = {
-                                                                    PlatformHapticsPolicy.lightImpact()
-                                                                    startVideoCall()
-                                                                },
-                                                                icon = Icons.Filled.Videocam,
-                                                            ),
+                                            ClickDropdownMenu(
+                                                expanded = showCallMenu,
+                                                onDismissRequest = { showCallMenu = false },
+                                                items =
+                                                    listOf(
+                                                        ClickMenuItem(
+                                                            label = if (isGroupChat) "Group voice call" else "Voice call",
+                                                            onClick = {
+                                                                PlatformHapticsPolicy.lightImpact()
+                                                                startVoiceCall()
+                                                            },
+                                                            icon = Icons.Filled.Call,
                                                         ),
-                                                )
-                                            }
+                                                        ClickMenuItem(
+                                                            label = if (isGroupChat) "Group video call" else "Video call",
+                                                            onClick = {
+                                                                PlatformHapticsPolicy.lightImpact()
+                                                                startVideoCall()
+                                                            },
+                                                            icon = Icons.Filled.Videocam,
+                                                        ),
+                                                    ),
+                                            )
                                         }
                                         // Overflow / connection options
                                         ChatHeaderIconButton(
@@ -1569,6 +1444,22 @@ fun ChatView(
                                         forwardMessageId = null
                                     },
                                     onDismiss = { forwardMessageId = null },
+                                )
+                            }
+                            if (nativeNavChrome) {
+                                ChatCallOptionsPopup(
+                                    expanded = showCallMenu,
+                                    onDismiss = { showCallMenu = false },
+                                    onVoice = startVoiceCall,
+                                    onVideo = startVideoCall,
+                                    voiceLabel = if (isGroupChat) "Group voice call" else "Voice call",
+                                    videoLabel = if (isGroupChat) "Group video call" else "Video call",
+                                    alignment = Alignment.TopEnd,
+                                    offset =
+                                        IntOffset(
+                                            x = with(density) { (-ChatChromeHorizontalPadding).roundToPx() },
+                                            y = with(density) { (topInset + 44.dp).roundToPx() },
+                                        ),
                                 )
                             }
                         }

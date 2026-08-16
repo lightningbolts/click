@@ -1986,7 +1986,16 @@ fun App() {
                                                         },
                                                         label = "app_screen_transition",
                                                     ) { animatedScreen ->
-                                                        renderScreen(animatedScreen)
+                                                        CompositionLocalProvider(
+                                                            LocalNativeChromeActive provides
+                                                                (
+                                                                    animatedScreen == screenKey &&
+                                                                        addClickOverlayKey == null &&
+                                                                        hubChatArgs == null
+                                                                ),
+                                                        ) {
+                                                            renderScreen(animatedScreen)
+                                                        }
                                                     }
                                                 }
                                             }

@@ -992,7 +992,7 @@ private fun MapAlwaysOnChrome(
     val style = LocalPlatformStyle.current
     if (style.isIOS) {
         PlatformNativeMapFloatingChrome(
-            visible = chromeVisible,
+            visible = chromeVisible && LocalNativeChromeActive.current,
             layerLabel = mapLayerFilterShortLabel(layerFilters),
             layerOptions =
                 MapLayerFilter.entries.map { filter ->

@@ -6,7 +6,7 @@ package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -55,10 +55,23 @@ actual fun PlatformNativeMapFloatingChrome(
 
     DisposableEffect(host) {
         IosHostMapFloatingChrome.attach(host, usesNativeLiquidGlass)
-        onDispose { IosHostMapFloatingChrome.detach() }
+        onDispose {
+            IosHostMapFloatingChrome.update(
+                visible = false,
+                layerLabel = "",
+                layerOptions = emptyList(),
+                bottomPaddingPoints = 0.0,
+                usesNativeLiquidGlass = usesNativeLiquidGlass,
+                onToggleLayerId = {},
+                onDropBeacon = {},
+                onZoomIn = {},
+                onZoomOut = {},
+            )
+            IosHostMapFloatingChrome.detach()
+        }
     }
 
-    LaunchedEffect(visible, layerLabel, layerOptions, bottomPadding, usesNativeLiquidGlass) {
+    SideEffect {
         IosHostMapFloatingChrome.update(
             visible = visible,
             layerLabel = layerLabel,
@@ -85,6 +98,7 @@ private object IosHostMapFloatingChrome {
     private var attachedHost: UIViewController? = null
     private var bottomConstraint: NSLayoutConstraint? = null
     private var glassApplied = false
+    private var lastMenuSignature: String? = null
 
     fun attach(
         host: UIViewController,
@@ -167,32 +181,46 @@ private object IosHostMapFloatingChrome {
         dropTarget.handler = onDropBeacon
         zoomInTarget.handler = onZoomIn
         zoomOutTarget.handler = onZoomOut
-        layerButton.setTitle(layerLabel, forState = UIControlStateNormal)
-        layerButton.menu =
-            UIMenu.menuWithTitle(
-                title = "",
-                children =
-                    layerOptions.map { option ->
-                        UIAction.actionWithTitle(
-                            title = option.label,
-                            image =
-                                if (option.selected) {
-                                    UIImage.systemImageNamed("checkmark")
-                                } else {
-                                    null
-                                },
-                            identifier = null,
-                            handler = { onToggleLayerId(option.id) },
-                        )
-                    },
-            )
+        val menuSignature =
+            buildString {
+                append(layerLabel)
+                layerOptions.forEach { option ->
+                    append('|')
+                    append(option.id)
+                    append(':')
+                    append(option.selected)
+                }
+            }
+        if (menuSignature != lastMenuSignature) {
+            lastMenuSignature = menuSignature
+            layerButton.setTitle(layerLabel, forState = UIControlStateNormal)
+            layerButton.menu =
+                UIMenu.menuWithTitle(
+                    title = "",
+                    children =
+                        layerOptions.map { option ->
+                            UIAction.actionWithTitle(
+                                title = option.label,
+                                image =
+                                    if (option.selected) {
+                                        UIImage.systemImageNamed("checkmark")
+                                    } else {
+                                        null
+                                    },
+                                identifier = null,
+                                handler = { onToggleLayerId(option.id) },
+                            )
+                        },
+                )
+        }
         bottomConstraint?.constant = -bottomPaddingPoints
-        val show = visible
         listOf(layerButton, dropButton, zoomInButton, zoomOutButton).forEach { button ->
-            button.hidden = !show
-            button.userInteractionEnabled = show
-            if (show) {
+            button.hidden = !visible
+            button.userInteractionEnabled = visible
+            if (visible) {
                 attachedHost?.view?.bringSubviewToFront(button)
+            } else {
+                attachedHost?.view?.sendSubviewToBack(button)
             }
         }
     }
@@ -200,6 +228,7 @@ private object IosHostMapFloatingChrome {
     fun detach() {
         listOf(layerButton, dropButton, zoomInButton, zoomOutButton).forEach { it.removeFromSuperview() }
         bottomConstraint = null
+        lastMenuSignature = null
         attachedHost = null
         glassApplied = false
     }

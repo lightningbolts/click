@@ -58,6 +58,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -107,7 +108,9 @@ import compose.project.click.click.ui.components.GlassAlertDialog // pragma: all
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.HeaderBackIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
+import compose.project.click.click.ui.components.LocalNativeChromeActive // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
+import compose.project.click.click.ui.components.PlatformNativeNavigationBarSwipeReveal // pragma: allowlist secret
 import compose.project.click.click.ui.components.SavedEventsSection // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastHost // pragma: allowlist secret
 import compose.project.click.click.ui.components.interactiveSwipeBackUnderlay // pragma: allowlist secret
@@ -268,6 +271,7 @@ fun SettingsScreen(
     // One host state means tap-back and swipe-back share a single animation and the hub behind gets
     // the same parallax either way, instead of tap-back using a separate slide-out with no underlay.
     val backHost = rememberInteractiveBackHostState()
+    PlatformNativeNavigationBarSwipeReveal(backHost.dragOffsetPx)
     val backScope = rememberCoroutineScope()
     var subpageClosing by remember { mutableStateOf(false) }
 
@@ -306,6 +310,9 @@ fun SettingsScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.fillMaxSize()) {
+                CompositionLocalProvider(
+                    LocalNativeChromeActive provides (settingsPage == SettingsPage.Hub),
+                ) {
                 AppScreenScaffold(
                     title = "Settings",
                     onOpenSearch = onOpenSearch,
@@ -334,6 +341,7 @@ fun SettingsScreen(
                         item {
                             SettingsSignOutButton(onSignOut = onSignOut)
                         }
+                }
                 }
 
                 val slideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)

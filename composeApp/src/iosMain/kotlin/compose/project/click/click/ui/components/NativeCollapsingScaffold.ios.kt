@@ -1,5 +1,6 @@
 @file:Suppress(
     "ktlint:standard:function-naming",
+    "ktlint:standard:property-naming",
 )
 
 package compose.project.click.click.ui.components // pragma: allowlist secret
@@ -52,30 +53,52 @@ import platform.CoreGraphics.CGAffineTransformMakeTranslation
 import platform.Foundation.NSProcessInfo
 import platform.Foundation.NSSelectorFromString
 import platform.UIKit.NSLayoutConstraint
+import platform.UIKit.NSLineBreakByTruncatingTail
+import platform.UIKit.NSTextAlignmentCenter
 import platform.UIKit.NSTextAlignmentLeft
 import platform.UIKit.UIBarButtonItem
 import platform.UIKit.UIBarButtonItemStyle
+import platform.UIKit.UIBarPosition
+import platform.UIKit.UIBarPositionTopAttached
+import platform.UIKit.UIBarPositioningProtocol
 import platform.UIKit.UIBlurEffect
 import platform.UIKit.UIBlurEffectStyle
 import platform.UIKit.UIColor
 import platform.UIKit.UIFont
+import platform.UIKit.UIGlassEffect
+import platform.UIKit.UIGlassEffectStyle
 import platform.UIKit.UIImage
 import platform.UIKit.UILabel
 import platform.UIKit.UINavigationBar
 import platform.UIKit.UINavigationBarAppearance
+import platform.UIKit.UINavigationBarDelegateProtocol
 import platform.UIKit.UINavigationItem
 import platform.UIKit.UIViewController
+import platform.UIKit.UIVisualEffectView
 import platform.UIKit.setAccessibilityLabel
 import platform.darwin.NSObject
 
 private val IosCompactBarHeight = 44.dp
-private val IosExpandedBarExtra = 12.dp
 private val IosSubtitleLineHeight = 18.dp
+private const val IosSubtitleMaxLines = 2
+private const val IosTitleExpandedPt = 20.0
+private const val IosTitleCollapsedPt = 17.0
+private const val IosBarButtonReservePt = 48.0
 
-private fun iosNavBarRowHeight(collapseFraction: Float): Dp =
-    IosCompactBarHeight + IosExpandedBarExtra * (1f - collapseFraction.coerceIn(0f, 1f))
+private fun iosTitlePointSize(collapseFraction: Float): Double {
+    val fraction = collapseFraction.coerceIn(0f, 1f).toDouble()
+    return IosTitleExpandedPt - (IosTitleExpandedPt - IosTitleCollapsedPt) * fraction
+}
 
-private fun iosNavBarExtraHeight(hasSubtitle: Boolean): Dp = IosExpandedBarExtra + if (hasSubtitle) IosSubtitleLineHeight else 0.dp
+private fun iosNavBarExtraHeight(hasSubtitle: Boolean): Dp = if (hasSubtitle) IosSubtitleLineHeight * IosSubtitleMaxLines else 0.dp
+
+private fun iosSubtitleOverlayHeight(
+    hasSubtitle: Boolean,
+    collapseFraction: Float,
+): Dp {
+    if (!hasSubtitle) return 0.dp
+    return IosSubtitleLineHeight * IosSubtitleMaxLines * (1f - collapseFraction.coerceIn(0f, 1f))
+}
 
 @OptIn(ExperimentalForeignApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -111,7 +134,12 @@ actual fun NativeCollapsingScaffold(
             scrollBehavior.state.heightOffsetLimit = -extraPx
         }
     }
-    val collapseFraction = if (showHeader) scrollBehavior.state.collapsedFraction else 0f
+    val collapseFraction =
+        when {
+            !showHeader -> 0f
+            onNavigateBack != null -> 1f
+            else -> scrollBehavior.state.collapsedFraction
+        }
     val chromeActive = LocalNativeChromeActive.current
     rememberIosHostNavBar(
         title = title,
@@ -125,7 +153,20 @@ actual fun NativeCollapsingScaffold(
         collapseSearchIntoBar = collapseSearchIntoBar,
     )
 
-    Column(
+    val subtitleHeight =
+        if (showHeader) {
+            iosSubtitleOverlayHeight(hasSubtitle, collapseFraction)
+        } else {
+            0.dp
+        }
+    val headerClearance =
+        if (showHeader) {
+            statusBarTop + IosCompactBarHeight + subtitleHeight
+        } else {
+            statusBarTop + 16.dp
+        }
+
+    Box(
         modifier =
             modifier
                 .fillMaxSize()
@@ -137,41 +178,52 @@ actual fun NativeCollapsingScaffold(
                     },
                 ),
     ) {
-        if (showHeader) {
-            Spacer(Modifier.fillMaxWidth().height(statusBarTop))
-            Box(Modifier.fillMaxWidth().height(iosNavBarRowHeight(collapseFraction))) {
-                if (!chromeActive) {
-                    IosNativeChromeFallbackTitle(
-                        title = title,
-                        collapseFraction = collapseFraction,
-                    )
-                }
-            }
-            if (hasSubtitle) {
-                val subH = IosSubtitleLineHeight * (1f - collapseFraction.coerceIn(0f, 1f))
-                if (subH > 0.5.dp) {
-                    Box(Modifier.fillMaxWidth().height(subH)) {
-                        IosNativeChromeFallbackSubtitle(subtitle = subtitle, presenceOnline = presenceOnline)
-                    }
-                }
-            }
-            headerBelowContent?.invoke()
-        } else {
-            Spacer(Modifier.fillMaxWidth().height(statusBarTop + 16.dp))
-        }
         LazyColumn(
             state = lazyListState,
-            modifier = Modifier.weight(1f).fillMaxWidth(),
+            modifier = Modifier.fillMaxSize(),
             verticalArrangement = verticalArrangement,
             contentPadding =
                 PaddingValues(
                     start = horizontalPadding,
                     end = horizontalPadding,
-                    top = belowHeaderSpacing,
+                    top = headerClearance + belowHeaderSpacing,
                     bottom = bottomChrome,
                 ),
             content = content,
         )
+        if (showHeader) {
+            if (!chromeActive) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Spacer(Modifier.fillMaxWidth().height(statusBarTop))
+                    Box(Modifier.fillMaxWidth().height(IosCompactBarHeight)) {
+                        IosNativeChromeFallbackTitle(
+                            title = title,
+                            collapseFraction = collapseFraction,
+                        )
+                    }
+                    if (subtitleHeight > 0.5.dp) {
+                        Box(Modifier.fillMaxWidth().height(subtitleHeight)) {
+                            IosNativeChromeFallbackSubtitle(subtitle = subtitle, presenceOnline = presenceOnline)
+                        }
+                    }
+                    headerBelowContent?.invoke()
+                }
+            } else if (subtitleHeight > 0.5.dp || headerBelowContent != null) {
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = statusBarTop + IosCompactBarHeight),
+                ) {
+                    if (subtitleHeight > 0.5.dp) {
+                        Box(Modifier.fillMaxWidth().height(subtitleHeight)) {
+                            IosNativeChromeFallbackSubtitle(subtitle = subtitle, presenceOnline = presenceOnline)
+                        }
+                    }
+                    headerBelowContent?.invoke()
+                }
+            }
+        }
     }
 }
 
@@ -204,7 +256,7 @@ actual fun NativeCollapsingScrollScaffold(
             scrollBehavior.state.heightOffsetLimit = -extraPx
         }
     }
-    val collapseFraction = scrollBehavior.state.collapsedFraction
+    val collapseFraction = if (onNavigateBack != null) 1f else scrollBehavior.state.collapsedFraction
     val chromeActive = LocalNativeChromeActive.current
     rememberIosHostNavBar(
         title = title,
@@ -218,42 +270,55 @@ actual fun NativeCollapsingScrollScaffold(
         collapseSearchIntoBar = false,
     )
 
-    Column(
+    val subtitleHeight = iosSubtitleOverlayHeight(hasSubtitle, collapseFraction)
+    val headerClearance = statusBarTop + IosCompactBarHeight + subtitleHeight
+
+    Box(
         modifier =
             modifier
                 .fillMaxSize()
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
     ) {
-        Spacer(Modifier.fillMaxWidth().height(statusBarTop))
-        Box(Modifier.fillMaxWidth().height(iosNavBarRowHeight(collapseFraction))) {
-            if (!chromeActive) {
-                IosNativeChromeFallbackTitle(
-                    title = title,
-                    collapseFraction = collapseFraction,
-                )
-            }
-        }
-        if (hasSubtitle) {
-            val subH = IosSubtitleLineHeight * (1f - collapseFraction.coerceIn(0f, 1f))
-            if (subH > 0.5.dp) {
-                Box(Modifier.fillMaxWidth().height(subH)) {
-                    IosNativeChromeFallbackSubtitle(subtitle = subtitle, presenceOnline = presenceOnline)
-                }
-            }
-        }
         Column(
             modifier =
                 Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
+                    .fillMaxSize()
                     .verticalScroll(scrollState)
                     .padding(
                         start = horizontalPadding,
                         end = horizontalPadding,
+                        top = headerClearance,
                         bottom = bottomChrome,
                     ),
         ) {
             content(Modifier.fillMaxWidth())
+        }
+        if (!chromeActive) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Spacer(Modifier.fillMaxWidth().height(statusBarTop))
+                Box(Modifier.fillMaxWidth().height(IosCompactBarHeight)) {
+                    IosNativeChromeFallbackTitle(
+                        title = title,
+                        collapseFraction = collapseFraction,
+                    )
+                }
+                if (subtitleHeight > 0.5.dp) {
+                    Box(Modifier.fillMaxWidth().height(subtitleHeight)) {
+                        IosNativeChromeFallbackSubtitle(subtitle = subtitle, presenceOnline = presenceOnline)
+                    }
+                }
+            }
+        } else if (subtitleHeight > 0.5.dp) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = statusBarTop + IosCompactBarHeight),
+            ) {
+                Box(Modifier.fillMaxWidth().height(subtitleHeight)) {
+                    IosNativeChromeFallbackSubtitle(subtitle = subtitle, presenceOnline = presenceOnline)
+                }
+            }
         }
     }
 }
@@ -264,7 +329,7 @@ private fun IosNativeChromeFallbackTitle(
     collapseFraction: Float,
 ) {
     val fraction = collapseFraction.coerceIn(0f, 1f)
-    val size = (34f - 17f * fraction).sp
+    val size = iosTitlePointSize(fraction).toFloat().sp
     Box(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
         contentAlignment = if (fraction < 0.45f) Alignment.CenterStart else Alignment.Center,
@@ -297,8 +362,7 @@ private fun IosNativeChromeFallbackSubtitle(
         text = text,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f),
-        style = MaterialTheme.typography.bodySmall,
-        maxLines = 1,
+        maxLines = 2,
         overflow = TextOverflow.Ellipsis,
     )
 }
@@ -425,20 +489,30 @@ private object IosHostNavigationBar {
             prefersLargeTitles = false
             clipsToBounds = false
             insetsLayoutMarginsFromSafeArea = false
+            backgroundColor = UIColor.clearColor
+        }
+    private val glassPlate =
+        UIVisualEffectView().apply {
+            translatesAutoresizingMaskIntoConstraints = false
+            userInteractionEnabled = false
+            clipsToBounds = true
         }
     private val item = UINavigationItem()
     private val titleLabel =
         UILabel().apply {
             translatesAutoresizingMaskIntoConstraints = false
-            font = UIFont.boldSystemFontOfSize(34.0)
+            font = UIFont.boldSystemFontOfSize(IosTitleExpandedPt)
             textAlignment = NSTextAlignmentLeft
             numberOfLines = 1
             adjustsFontSizeToFitWidth = true
-            minimumScaleFactor = 0.65
+            minimumScaleFactor = 0.72
+            lineBreakMode = NSLineBreakByTruncatingTail
+            userInteractionEnabled = false
         }
     private var heightConstraint: NSLayoutConstraint? = null
     private var titleLeadingConstraint: NSLayoutConstraint? = null
     private var titleTrailingConstraint: NSLayoutConstraint? = null
+    private var titleCenterXConstraint: NSLayoutConstraint? = null
     private var attachedHost: UIViewController? = null
     private var ownerToken: Any? = null
     private var coverCount = 0
@@ -450,7 +524,8 @@ private object IosHostNavigationBar {
     private val backTarget = IosBarButtonTarget()
     private val trailingTargets = mutableListOf<IosBarButtonTarget>()
     private var lastButtonSignature: String? = null
-    private var lastCompactTitle: String? = null
+    private var glassEnabled = false
+    private var positionDelegate: IosNavBarPositionDelegate? = null
 
     fun acquireCover() {
         coverCount++
@@ -472,7 +547,9 @@ private object IosHostNavigationBar {
             slideOffsets[owner] = points
         }
         val x = slideOffsets.values.maxOrNull() ?: 0.0
-        bar.transform = CGAffineTransformMakeTranslation(x, 0.0)
+        val transform = CGAffineTransformMakeTranslation(x, 0.0)
+        bar.transform = transform
+        glassPlate.transform = transform
     }
 
     fun attach(host: UIViewController) {
@@ -480,8 +557,12 @@ private object IosHostNavigationBar {
         detachFromSuperview()
         attachedHost = host
         val hostView = host.view
+        hostView.addSubview(glassPlate)
         hostView.addSubview(bar)
-        val height = bar.heightAnchor.constraintEqualToConstant(56.0)
+        hostView.insertSubview(glassPlate, belowSubview = bar)
+        val delegate = positionDelegate ?: IosNavBarPositionDelegate().also { positionDelegate = it }
+        bar.delegate = delegate
+        val height = bar.heightAnchor.constraintEqualToConstant(44.0)
         heightConstraint = height
         NSLayoutConstraint.activateConstraints(
             listOf(
@@ -489,6 +570,10 @@ private object IosHostNavigationBar {
                 bar.leadingAnchor.constraintEqualToAnchor(hostView.leadingAnchor),
                 bar.trailingAnchor.constraintEqualToAnchor(hostView.trailingAnchor),
                 height,
+                glassPlate.topAnchor.constraintEqualToAnchor(hostView.topAnchor),
+                glassPlate.leadingAnchor.constraintEqualToAnchor(hostView.leadingAnchor),
+                glassPlate.trailingAnchor.constraintEqualToAnchor(hostView.trailingAnchor),
+                glassPlate.bottomAnchor.constraintEqualToAnchor(bar.bottomAnchor),
             ),
         )
         if (titleLabel.superview != bar) {
@@ -496,8 +581,11 @@ private object IosHostNavigationBar {
             val leading = titleLabel.leadingAnchor.constraintEqualToAnchor(bar.leadingAnchor, constant = 16.0)
             val trailing =
                 titleLabel.trailingAnchor.constraintLessThanOrEqualToAnchor(bar.trailingAnchor, constant = -16.0)
+            val centerX = titleLabel.centerXAnchor.constraintEqualToAnchor(bar.centerXAnchor)
+            centerX.active = false
             titleLeadingConstraint = leading
             titleTrailingConstraint = trailing
+            titleCenterXConstraint = centerX
             NSLayoutConstraint.activateConstraints(
                 listOf(
                     leading,
@@ -510,7 +598,6 @@ private object IosHostNavigationBar {
         bar.setItems(listOf(item), animated = false)
         bar.bringSubviewToFront(titleLabel)
         lastButtonSignature = null
-        lastCompactTitle = null
         appliedShow = null
         hostView.layoutIfNeeded()
         applyVisibility()
@@ -537,9 +624,15 @@ private object IosHostNavigationBar {
             }
         titleLabel.textColor = titleColor
         bar.tintColor = titleColor
+        bar.backgroundColor = UIColor.clearColor
         if (usesNativeLiquidGlass && !reduceTransparency) {
+            glassEnabled = true
+            glassPlate.effect = UIGlassEffect.effectWithStyle(UIGlassEffectStyle.UIGlassEffectStyleRegular)
+            applyVisibility()
             return
         }
+        glassEnabled = false
+        glassPlate.effect = null
         val clear = UIColor.clearColor
         bar.backgroundColor = clear
         val accessibleMaterial =
@@ -591,22 +684,12 @@ private object IosHostNavigationBar {
         ownerToken = owner
         bar.prefersLargeTitles = false
         item.titleView = null
+        item.title = null
         val fraction = collapseFraction.coerceIn(0f, 1f)
-        val expanded = fraction < 0.45f
-        heightConstraint?.constant = 44.0 + 12.0 * (1.0 - fraction.toDouble())
-        if (expanded) {
-            lastCompactTitle = null
-            item.title = null
-            titleLabel.hidden = false
-            titleLabel.text = title
-            titleLabel.font = UIFont.boldSystemFontOfSize(34.0 - 17.0 * fraction.toDouble())
-        } else {
-            titleLabel.hidden = true
-            if (lastCompactTitle != title) {
-                lastCompactTitle = title
-                item.title = title
-            }
-        }
+        heightConstraint?.constant = 44.0
+        titleLabel.hidden = false
+        titleLabel.text = title
+        titleLabel.font = UIFont.boldSystemFontOfSize(iosTitlePointSize(fraction))
         bindButtons(onOpenSearch, onNavigateBack, trailingActions, collapseSearchIntoBar, fraction)
         setVisible(visible)
         @Suppress("UNUSED_VARIABLE")
@@ -657,7 +740,11 @@ private object IosHostNavigationBar {
             trailingActions.asReversed().forEachIndexed { index, action ->
                 trailingTargets.getOrNull(index)?.handler = action.onClick
             }
-            applyTitleInsets(onNavigateBack != null, trailingActions.size + if (showSearch) 1 else 0)
+            applyTitleInsets(
+                hasBack = onNavigateBack != null,
+                trailingCount = trailingActions.size + if (showSearch) 1 else 0,
+                collapseFraction = collapseFraction,
+            )
             return
         }
         lastButtonSignature = signature
@@ -707,15 +794,31 @@ private object IosHostNavigationBar {
         item.rightBarButtonItems = trailing.ifEmpty { null }
         bar.setItems(listOf(item), animated = false)
         bar.bringSubviewToFront(titleLabel)
-        applyTitleInsets(onNavigateBack != null, trailing.size)
+        applyTitleInsets(
+            hasBack = onNavigateBack != null,
+            trailingCount = trailing.size,
+            collapseFraction = collapseFraction,
+        )
     }
 
     private fun applyTitleInsets(
         hasBack: Boolean,
         trailingCount: Int,
+        collapseFraction: Float,
     ) {
-        titleLeadingConstraint?.constant = if (hasBack) 52.0 else 16.0
-        titleTrailingConstraint?.constant = -16.0 - 40.0 * trailingCount.toDouble()
+        titleTrailingConstraint?.constant = -16.0 - IosBarButtonReservePt * trailingCount.toDouble()
+        // Pushed screens keep a leading title so it cannot sit under the back/refresh capsules.
+        val compactTabRoot = !hasBack && collapseFraction >= 0.45f
+        if (compactTabRoot) {
+            titleLeadingConstraint?.active = false
+            titleCenterXConstraint?.active = true
+            titleLabel.textAlignment = NSTextAlignmentCenter
+        } else {
+            titleCenterXConstraint?.active = false
+            titleLeadingConstraint?.constant = if (hasBack) 52.0 else 16.0
+            titleLeadingConstraint?.active = true
+            titleLabel.textAlignment = NSTextAlignmentLeft
+        }
     }
 
     private fun setVisible(visible: Boolean) {
@@ -727,28 +830,45 @@ private object IosHostNavigationBar {
         val show = wantVisible && coverCount == 0
         bar.hidden = !show
         bar.userInteractionEnabled = show
-        if (appliedShow == show) return
+        glassPlate.hidden = !show || !glassEnabled
+        if (appliedShow == show) {
+            if (show) {
+                attachedHost?.view?.bringSubviewToFront(bar)
+            }
+            return
+        }
         appliedShow = show
         val hostView = attachedHost?.view ?: return
         if (show) {
+            hostView.insertSubview(glassPlate, belowSubview = bar)
             hostView.bringSubviewToFront(bar)
         } else {
             hostView.sendSubviewToBack(bar)
+            hostView.sendSubviewToBack(glassPlate)
         }
     }
 
     private fun detachFromSuperview() {
         titleLabel.removeFromSuperview()
         bar.transform = CGAffineTransformMakeTranslation(0.0, 0.0)
+        glassPlate.transform = CGAffineTransformMakeTranslation(0.0, 0.0)
+        glassPlate.removeFromSuperview()
         bar.removeFromSuperview()
         heightConstraint = null
         titleLeadingConstraint = null
         titleTrailingConstraint = null
+        titleCenterXConstraint = null
         attachedHost = null
         lastButtonSignature = null
-        lastCompactTitle = null
         appliedShow = null
     }
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private class IosNavBarPositionDelegate :
+    NSObject(),
+    UINavigationBarDelegateProtocol {
+    override fun positionForBar(bar: UIBarPositioningProtocol): UIBarPosition = UIBarPositionTopAttached
 }
 
 @OptIn(BetaInteropApi::class)
