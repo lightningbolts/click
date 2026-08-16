@@ -103,7 +103,7 @@ import kotlin.time.Duration.Companion.milliseconds
 private val ScreenPaddingHorizontal = 20.dp
 private val CardSpacing = 24.dp
 
-/** Visible gap under the floating greeting before the search pill (cancels spacedBy after inset). */
+/** Visible gap under the native greeting before the sticky search pill. */
 private val HeaderToSearchGap = 8.dp
 
 @Composable
@@ -339,9 +339,22 @@ fun HomeScreen(
                     title = homeGreetingTitle(firstName),
                     subtitle = HomeGreetingSubtitle,
                     showFloatingHeader = true,
-                    // spacedBy also applies after the header inset item — compensate so search
-                    // sits HeaderToSearchGap under the greeting, not CardSpacing×2.
-                    belowHeaderSpacing = HeaderToSearchGap - CardSpacing,
+                    // Sticky under the native greeting so scroll cannot pull it into the status bar.
+                    belowHeaderSpacing = CardSpacing,
+                    headerBelowContent =
+                        if (onOpenSearch != null) {
+                            {
+                                HomeSearchPill(
+                                    onClick = onOpenSearch,
+                                    modifier =
+                                        Modifier
+                                            .padding(horizontal = ScreenPaddingHorizontal)
+                                            .padding(top = HeaderToSearchGap),
+                                )
+                            }
+                        } else {
+                            null
+                        },
                     verticalArrangement = Arrangement.spacedBy(CardSpacing),
                     nativeTrailingActions =
                         listOf(
@@ -399,12 +412,6 @@ fun HomeScreen(
                         }
                     },
                 ) {
-                    if (onOpenSearch != null) {
-                        item(key = "home_search_pill") {
-                            HomeSearchPill(onClick = onOpenSearch)
-                        }
-                    }
-
                     if (homeLayoutMode == HomeLayoutMode.PILE) {
                         item(key = "availability_intents_strip") {
                             Column(

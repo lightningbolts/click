@@ -72,10 +72,8 @@ private fun uiKitPointsToDp(points: Double): Dp = points.toFloat().dp
 
 private fun iosNavBarFallbackHeight(
     statusBarTop: Dp,
-    collapsed: Boolean,
     hasSubtitle: Boolean,
 ): Dp {
-    if (collapsed) return statusBarTop + IosCompactBarHeight
     val extra = IosLargeTitleExtraHeight + if (hasSubtitle) IosSubtitleExtraHeight else 0.dp
     return statusBarTop + IosCompactBarHeight + extra
 }
@@ -244,7 +242,7 @@ private fun rememberIosHostNavBar(
     val backHandler by rememberUpdatedState(onNavigateBack)
     val trailingHandlers by rememberUpdatedState(nativeTrailingActions)
     val hasSubtitle = !subtitle.isNullOrBlank() || presenceOnline == true
-    val fallbackHeight = iosNavBarFallbackHeight(statusBarTop, collapsed, hasSubtitle)
+    val fallbackHeight = iosNavBarFallbackHeight(statusBarTop, hasSubtitle)
     var measuredHeight by remember { mutableStateOf(fallbackHeight) }
 
     DisposableEffect(viewController) {
@@ -267,7 +265,6 @@ private fun rememberIosHostNavBar(
             title = title,
             subtitle = subtitle,
             presenceOnline = presenceOnline,
-            collapsed = collapsed,
             visible = visible,
             statusBarPoints = statusBarTop.value.toDouble(),
             hasSubtitle = hasSubtitle,
@@ -277,7 +274,7 @@ private fun rememberIosHostNavBar(
         )
     }
 
-    LaunchedEffect(viewController, visible, collapsed, statusBarTop, hasSubtitle) {
+    LaunchedEffect(viewController, visible, statusBarTop, hasSubtitle) {
         var stable = 0
         while (true) {
             IosHostNavigationBar.bar.superview?.layoutIfNeeded()
@@ -396,7 +393,6 @@ private object IosHostNavigationBar {
         title: String,
         subtitle: String?,
         presenceOnline: Boolean?,
-        collapsed: Boolean,
         visible: Boolean,
         statusBarPoints: Double,
         hasSubtitle: Boolean,
@@ -418,19 +414,12 @@ private object IosHostNavigationBar {
                 }
             }.ifBlank { null }
         runCatching { item.setValue(subtitleText, forKey = "subtitle") }
+        // Keep large titles and bar height stable. Shrinking the Compose inset on scroll
+        // double-counts movement (list already scrolled) and pulls search into the status bar.
         item.largeTitleDisplayMode =
-            if (collapsed) {
-                UINavigationItemLargeTitleDisplayMode.UINavigationItemLargeTitleDisplayModeNever
-            } else {
-                UINavigationItemLargeTitleDisplayMode.UINavigationItemLargeTitleDisplayModeAlways
-            }
+            UINavigationItemLargeTitleDisplayMode.UINavigationItemLargeTitleDisplayModeAlways
         bar.prefersLargeTitles = true
-        val extra =
-            if (collapsed) {
-                0.0
-            } else {
-                52.0 + if (hasSubtitle) 22.0 else 0.0
-            }
+        val extra = 52.0 + if (hasSubtitle) 22.0 else 0.0
         heightConstraint?.constant = (statusBarPoints + 44.0 + extra).coerceAtLeast(44.0)
         host.view.layoutIfNeeded()
         bindButtons(onOpenSearch, onNavigateBack, trailingActions)
