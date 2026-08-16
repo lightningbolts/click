@@ -100,14 +100,17 @@ import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx // pr
 import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay // pragma: allowlist secret
 import compose.project.click.click.ui.chat.scrollChatTimelineToLatest // pragma: allowlist secret
 import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
+import compose.project.click.click.ui.components.BindPlatformNativeNavigationBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
 import compose.project.click.click.ui.components.LocalGlassAlertAnimatedDismiss // pragma: allowlist secret
+import compose.project.click.click.ui.components.NativeChromeAction // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
+import compose.project.click.click.ui.components.platformNativeHeaderClearance // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetPageBackground // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
@@ -164,6 +167,23 @@ fun HubChatScreen(
     val resolvedCreatorId by viewModel.resolvedCreatorId.collectAsState()
     val hubDetails by viewModel.hubDetails.collectAsState()
     var settingsMenuExpanded by remember { mutableStateOf(false) }
+    val nativeNavChrome = LocalPlatformStyle.current.isIOS
+    if (nativeNavChrome) {
+        BindPlatformNativeNavigationBar(
+            title = hubDetails.name.ifBlank { args.hubTitle },
+            subtitle = "$occupantCount people in this hub",
+            onNavigateBack = onNavigateBack,
+            nativeTrailingActions =
+                listOf(
+                    NativeChromeAction(
+                        sfSymbol = "ellipsis",
+                        contentDescription = "Hub settings",
+                        onClick = { settingsMenuExpanded = true },
+                    ),
+                ),
+            collapseFraction = 1f,
+        )
+    }
     var showEditDialog by remember { mutableStateOf(false) }
     var showLeaveConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -267,11 +287,13 @@ fun HubChatScreen(
                 message = channelError,
                 onBackPressed = onNavigateBack,
                 onRetry = { viewModel.retryRealtime() },
+                composeHeader = !nativeNavChrome,
             )
         } else if (!channelReady && messages.isEmpty()) {
             ChatChannelLoadingView(
                 topInset = topInset,
                 onBackPressed = onNavigateBack,
+                composeHeader = !nativeNavChrome,
             )
         }
 
@@ -282,57 +304,67 @@ fun HubChatScreen(
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    Box(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(top = topInset)
-                                .height(56.dp)
-                                .testTag(ChatGlassHeaderPlateTestTag),
-                    ) {
-                        ChatLiquidGlassPlate(
-                            modifier = Modifier.matchParentSize(),
-                            testTag = ChatGlassHeaderPlateTestTag,
-                        )
-                        Row(
+                    if (nativeNavChrome) {
+                        Spacer(
                             modifier =
                                 Modifier
-                                    .fillMaxSize()
-                                    .padding(horizontal = ChatChromeHorizontalPadding),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    .fillMaxWidth()
+                                    .height(platformNativeHeaderClearance(topInset))
+                                    .testTag(ChatGlassHeaderPlateTestTag),
+                        )
+                    } else {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = topInset)
+                                    .height(56.dp)
+                                    .testTag(ChatGlassHeaderPlateTestTag),
                         ) {
-                            ChatHeaderIconButton(
-                                icon = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                onClick = onNavigateBack,
-                                showBorder = true,
+                            ChatLiquidGlassPlate(
+                                modifier = Modifier.matchParentSize(),
+                                testTag = ChatGlassHeaderPlateTestTag,
                             )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = hubDetails.name,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface,
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = ChatChromeHorizontalPadding),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                ChatHeaderIconButton(
+                                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back",
+                                    onClick = onNavigateBack,
+                                    showBorder = true,
                                 )
-                                Text(
-                                    text =
-                                        if (inLobby) {
-                                            "$occupantCount ${if (occupantCount == 1) "person" else "people"} here"
-                                        } else {
-                                            "$occupantCount people in this hub"
-                                        },
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = hubDetails.name,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        text =
+                                            if (inLobby) {
+                                                "$occupantCount ${if (occupantCount == 1) "person" else "people"} here"
+                                            } else {
+                                                "$occupantCount people in this hub"
+                                            },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                ChatHeaderIconButton(
+                                    icon = Icons.Filled.MoreVert,
+                                    contentDescription = "Hub settings",
+                                    onClick = { settingsMenuExpanded = true },
+                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                    modifier = Modifier.testTag("hub_settings_menu"),
                                 )
                             }
-                            ChatHeaderIconButton(
-                                icon = Icons.Filled.MoreVert,
-                                contentDescription = "Hub settings",
-                                onClick = { settingsMenuExpanded = true },
-                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                                modifier = Modifier.testTag("hub_settings_menu"),
-                            )
                         }
                     }
 
@@ -858,30 +890,35 @@ private fun HubRealtimeErrorView(
     message: String,
     onBackPressed: () -> Unit,
     onRetry: () -> Unit,
+    composeHeader: Boolean = true,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                ChatHeaderIconButton(
-                    icon = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    onClick = onBackPressed,
-                    showBorder = true,
-                )
+        if (composeHeader) {
+            Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ChatHeaderIconButton(
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        onClick = onBackPressed,
+                        showBorder = true,
+                    )
+                }
             }
+        } else {
+            Spacer(modifier = Modifier.fillMaxWidth().height(platformNativeHeaderClearance(topInset)))
         }
         Column(
             modifier =
                 Modifier
                     .fillMaxSize()
                     .padding(horizontal = 32.dp)
-                    .padding(top = topInset + 56.dp),
+                    .padding(top = if (composeHeader) topInset + 56.dp else platformNativeHeaderClearance(topInset)),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {

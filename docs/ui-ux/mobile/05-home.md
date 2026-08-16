@@ -8,7 +8,7 @@
 
 **Home layout:** Default is **photo pile** (`HomeLayoutMode.PILE`) — one full-width, draggable stack of Polaroids per section, stacked vertically. Header greeting + search stay pinned (not in the pile). Toggle in the header (list / pile icons) and **Settings → Appearance → Photo pile home**. Linear list is the accessibility fallback (TalkBack / VoiceOver). Persistence: `TokenStorage` key `home_layout_mode`.
 
-**Track C (2026-07-17):** Discovery-first IA — greeting + search pill + Featured Event + dynamic nearby explore; availability + reconnect remain first-class above Explore. Greeting uses **native collapsing chrome** (`NativeCollapsingScaffold`): Android `LargeTopAppBar` + `exitUntilCollapsedScrollBehavior`, iOS `UINavigationController` large titles. Collapse is compact chrome, never hide.
+**Track C (2026-07-17):** Discovery-first IA — greeting + search pill + Featured Event + dynamic nearby explore; availability + reconnect remain first-class above Explore. Greeting uses **native collapsing chrome** (`NativeCollapsingScaffold`): Android `LargeTopAppBar` + `exitUntilCollapsedScrollBehavior`, iOS host-view `UINavigationBar`. Collapse is compact chrome, never hide.
 
 ---
 

@@ -15,11 +15,17 @@ import androidx.compose.ui.viewinterop.UIKitView
 import compose.project.click.click.platform.rememberReduceTransparencyEnabled // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalIsDarkMode // pragma: allowlist secret
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.useContents
+import platform.Foundation.NSProcessInfo
 import platform.UIKit.UIBlurEffect
 import platform.UIKit.UIBlurEffectStyle
 import platform.UIKit.UIColor
 import platform.UIKit.UIVisualEffectView
 
+/**
+ * Tab-root chrome uses the host-view UINavigationBar. This backdrop is only for leftover
+ * compact headers. On iOS 26, skip UIKitView entirely — that overlay class paints over Compose.
+ */
 @OptIn(ExperimentalForeignApi::class)
 @Composable
 actual fun HeaderGlassBackdrop(
@@ -29,15 +35,14 @@ actual fun HeaderGlassBackdrop(
     val fraction = collapseFraction.coerceIn(0f, 1f)
     val isDarkMode = LocalIsDarkMode.current
     val reduceTransparency = rememberReduceTransparencyEnabled()
-    val backdropAlpha = 0.55f + 0.3f * fraction
-    val accessibleMaterial =
-        remember(isDarkMode) {
-            if (isDarkMode) {
-                UIColor.colorWithRed(0x10 / 255.0, green = 0x12 / 255.0, blue = 0x12 / 255.0, alpha = 0.96)
-            } else {
-                UIColor.colorWithRed(0xF9 / 255.0, green = 0xF9 / 255.0, blue = 0xF9 / 255.0, alpha = 0.96)
-            }
+    val usesNativeLiquidGlass =
+        remember {
+            NSProcessInfo.processInfo.operatingSystemVersion.useContents { majorVersion >= 26 }
         }
+    if (usesNativeLiquidGlass && !reduceTransparency) {
+        return
+    }
+    val backdropAlpha = 0.55f + 0.3f * fraction
     val blurStyle =
         if (isDarkMode) {
             UIBlurEffectStyle.UIBlurEffectStyleSystemThinMaterialDark
@@ -53,8 +58,6 @@ actual fun HeaderGlassBackdrop(
         return
     }
 
-    // Always use a system UIVisualEffectView — including iOS 26 Liquid Glass. An opaque Compose
-    // Box here was the flat Clicks header.
     UIKitView(
         factory = {
             UIVisualEffectView(effect = UIBlurEffect.effectWithStyle(blurStyle)).apply {
@@ -64,13 +67,8 @@ actual fun HeaderGlassBackdrop(
         modifier = modifier.alpha(backdropAlpha),
         update = { view ->
             val effectView = view as? UIVisualEffectView ?: return@UIKitView
-            if (reduceTransparency) {
-                effectView.effect = null
-                effectView.backgroundColor = accessibleMaterial
-            } else {
-                effectView.effect = UIBlurEffect.effectWithStyle(blurStyle)
-                effectView.backgroundColor = UIColor.clearColor
-            }
+            effectView.effect = UIBlurEffect.effectWithStyle(blurStyle)
+            effectView.backgroundColor = UIColor.clearColor
         },
     )
 }

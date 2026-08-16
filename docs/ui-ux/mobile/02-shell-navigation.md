@@ -303,7 +303,7 @@ See §6 Screen Transitions.
 
 - `LazyColumn` / `verticalScroll` with horizontal padding `AppScreenDefaults.HorizontalPadding` (20 dp).
 - Bottom `contentPadding` = `rememberBottomChromePadding()` (tab overlay + 16 dp).
-- Native collapsing top bar (`NativeCollapsingScaffold`): Android `LargeTopAppBar` + `exitUntilCollapsed`; iOS `UINavigationController` large titles + companion `UIScrollView`. Compact chrome stays visible. iOS status-bar / Dynamic Island uses a system `UIVisualEffectView`.
+- Native collapsing top bar (`NativeCollapsingScaffold`): Android `LargeTopAppBar` + `exitUntilCollapsed`; iOS host-view `UINavigationBar` (same mounting as `UITabBar` — sibling of the Compose canvas, top-pinned, never a full-screen `UIKitViewController` overlay). Compact chrome stays visible. iOS 26 uses system Liquid Glass (no custom `UINavigationBarAppearance`).
 
 ### 5.2 Interactive Elements
 

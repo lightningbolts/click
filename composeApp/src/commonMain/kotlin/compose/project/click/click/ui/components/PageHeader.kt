@@ -27,10 +27,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,10 +41,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 
 enum class HeaderDisplayMode {
     Large,
@@ -218,19 +221,64 @@ fun HeaderSearchIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    IconButton(
+    HeaderChromeIconButton(
+        icon = Icons.Filled.Search,
+        contentDescription = "Search",
+        onClick = onClick,
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun HeaderBackIconButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    contentDescription: String = "Back",
+) {
+    HeaderChromeIconButton(
+        icon = Icons.AutoMirrored.Filled.ArrowBack,
+        contentDescription = contentDescription,
+        onClick = onClick,
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun HeaderOverflowIconButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    contentDescription: String = "More options",
+) {
+    HeaderChromeIconButton(
+        icon = Icons.Filled.MoreVert,
+        contentDescription = contentDescription,
+        onClick = onClick,
+        modifier = modifier,
+    )
+}
+
+@Composable
+fun HeaderChromeIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    ClickCircularIconButton(
+        icon = icon,
+        contentDescription = contentDescription,
         onClick = {
             PlatformHapticsPolicy.heavyImpact()
             onClick()
         },
         modifier = modifier,
-    ) {
-        Icon(
-            imageVector = Icons.Filled.Search,
-            contentDescription = "Search",
-            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
-        )
-    }
+        enabled = enabled,
+        size = 40.dp,
+        iconSize = 22.dp,
+        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+        glassStrength = if (LocalPlatformStyle.current.isIOS) 0.64f else 0.4f,
+    )
 }
 
 /** Reload action for discovery feed headers (pull-to-refresh alternative). */
@@ -240,20 +288,13 @@ fun HeaderRefreshIconButton(
     enabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    IconButton(
-        onClick = {
-            if (enabled) PlatformHapticsPolicy.heavyImpact()
-            onClick()
-        },
-        enabled = enabled,
+    HeaderChromeIconButton(
+        icon = Icons.Filled.Refresh,
+        contentDescription = "Refresh feed",
+        onClick = onClick,
         modifier = modifier,
-    ) {
-        Icon(
-            imageVector = Icons.Filled.Refresh,
-            contentDescription = "Refresh feed",
-            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.85f else 0.4f),
-        )
-    }
+        enabled = enabled,
+    )
 }
 
 @Composable
@@ -264,10 +305,44 @@ fun PageHeader(
     presenceOnline: Boolean? = null,
     navigationIcon: @Composable (() -> Unit)? = null,
     actions: @Composable (RowScope.() -> Unit)? = null,
+    onNavigateBack: (() -> Unit)? = null,
+    nativeTrailingActions: List<NativeChromeAction> = emptyList(),
     @Suppress("UNUSED_PARAMETER") displayMode: HeaderDisplayMode =
         if (navigationIcon != null) HeaderDisplayMode.Inline else HeaderDisplayMode.Large,
     collapseFraction: Float = 0f,
 ) {
+    if (LocalPlatformStyle.current.isIOS) {
+        BindPlatformNativeNavigationBar(
+            title = title,
+            subtitle = subtitle,
+            presenceOnline = presenceOnline,
+            onNavigateBack = onNavigateBack,
+            nativeTrailingActions = nativeTrailingActions,
+            collapseFraction = 1f,
+        )
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Spacer(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(NativeHeaderMetrics.barHeightDp(1f)),
+            )
+            if (!subtitle.isNullOrBlank()) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                )
+            }
+            if (presenceOnline != null) {
+                PresenceSubtitleRow(online = presenceOnline)
+            }
+        }
+        return
+    }
     LiquidGlassPageHeader(
         title = title,
         subtitle = subtitle,

@@ -1,3 +1,8 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:property-naming",
+)
+
 package compose.project.click.click.ui.components
 
 import androidx.compose.animation.core.Spring
@@ -12,11 +17,12 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,7 +37,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.material3.MaterialTheme
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -74,6 +79,7 @@ data class InteractiveSwipeBackRightToLeftPeek(
 internal const val InteractiveSwipeBackParallaxPeekRatio = 0.3f
 
 private const val ParallaxBackgroundPeek = InteractiveSwipeBackParallaxPeekRatio
+
 /** Commit interactive back past the horizontal midpoint or on a fast rightward flick. */
 private const val SwipeBackCommitFraction = GlassGestureCommitFraction
 private const val SwipeBackFlickVelocityPxPerSec = GlassGestureFlickVelocityPxPerSec
@@ -129,7 +135,7 @@ fun InteractiveSwipeBackContainer(
     /** Invoked when the swipe offset returns to rest (canceled or container disposed). */
     onInteractiveSwipeFinished: () -> Unit = {},
     previousContent: @Composable () -> Unit,
-    currentContent: @Composable () -> Unit
+    currentContent: @Composable () -> Unit,
 ) {
     val internalOffsetPx = remember { mutableFloatStateOf(0f) }
     val offsetPx = externalDragOffsetPx ?: internalOffsetPx
@@ -193,166 +199,176 @@ fun InteractiveSwipeBackContainer(
             val target = if (shouldComplete) widthPx else 0f
             isSettling = true
 
-            settleJob = settleScope.launch {
-                val releaseVelocity = when {
-                    shouldComplete -> velocityX.coerceAtLeast(0f)
-                    else -> velocityX.coerceAtMost(0f)
-                }
-                animate(
-                    initialValue = currentOffset,
-                    targetValue = target,
-                    initialVelocity = releaseVelocity,
-                    animationSpec = if (shouldComplete) {
-                        spring(
-                            dampingRatio = Spring.DampingRatioNoBouncy,
-                            stiffness = Spring.StiffnessMedium,
-                        )
-                    } else {
-                        spring(
-                            dampingRatio = 0.75f,
-                            stiffness = Spring.StiffnessLow,
-                        )
-                    },
-                ) { value, _ ->
-                    offsetPx.floatValue = value
-                    notifySwipeOffset()
-                }
+            settleJob =
+                settleScope.launch {
+                    try {
+                        val releaseVelocity =
+                            when {
+                                shouldComplete -> velocityX.coerceAtLeast(0f)
+                                else -> velocityX.coerceAtMost(0f)
+                            }
+                        animate(
+                            initialValue = currentOffset,
+                            targetValue = target,
+                            initialVelocity = releaseVelocity,
+                            animationSpec =
+                                spring(
+                                    dampingRatio = if (shouldComplete) 0.72f else 0.58f,
+                                    stiffness = Spring.StiffnessMediumLow,
+                                ),
+                        ) { value, _ ->
+                            offsetPx.floatValue =
+                                if (shouldComplete) {
+                                    value.coerceAtLeast(widthPx * 0.99f)
+                                } else {
+                                    value
+                                }
+                            notifySwipeOffset()
+                        }
 
-                if (shouldComplete) {
-                    onBack()
-                    // Do not zero [offsetPx] here: while this composable is still composed until the
-                    // next frame, resetting would snap the foreground (translationX) back to 0 and
-                    // flash the chat full-screen. External mirrors are cleared after removal via
-                    // [LaunchedEffect] in the parent.
-                    kotlinx.coroutines.delay(34)
-                    onInteractiveSwipeFinishedState.value.invoke()
-                } else {
-                    offsetPx.floatValue = 0f
-                    notifySwipeOffset()
-                    onInteractiveSwipeFinishedState.value.invoke()
+                        if (shouldComplete) {
+                            onBack()
+                            // Do not zero [offsetPx] here: while this composable is still composed until the
+                            // next frame, resetting would snap the foreground (translationX) back to 0 and
+                            // flash the chat full-screen. External mirrors are cleared after removal via
+                            // [LaunchedEffect] in the parent.
+                            kotlinx.coroutines.delay(34)
+                            onInteractiveSwipeFinishedState.value.invoke()
+                        } else {
+                            offsetPx.floatValue = 0f
+                            notifySwipeOffset()
+                            onInteractiveSwipeFinishedState.value.invoke()
+                        }
+                    } finally {
+                        isGestureActive = false
+                        isSettling = false
+                        settleJob = null
+                    }
                 }
-                isGestureActive = false
-                isSettling = false
-                settleJob = null
-            }
         }
 
-    val rightToLeftPeekState = rememberUpdatedState(rightToLeftPeek)
-    val onHorizontalDragStartedState = rememberUpdatedState(onHorizontalDragStarted)
-        val dragState = rememberDraggableState { delta ->
-            // Allow interrupting an in-flight settle (quick back↔forward) without waiting
-            // for the spring to finish — previously `enabled = !isSettling` blocked new drags.
-            if (isSettling) {
-                settleJob?.cancel()
-                settleJob = null
-                isSettling = false
-            }
-            val offset = offsetPx.floatValue
-            val peek = rightToLeftPeekState.value
-            when {
-                delta > 0f && offset > 0f -> {
-                    isGestureActive = true
-                    snapDragOffset(offset + delta)
-                }
-                delta > 0f && offset <= 0f && peek?.isPeekRevealed?.invoke() == true -> {
-                    peek.onRightDragDelta(delta)
-                }
-                delta > 0f && offset <= 0f -> {
-                    isGestureActive = true
-                    peek?.onRightDragFromRest?.invoke(delta)
-                    snapDragOffset(offset + delta)
-                }
-                delta < 0f && offset > 0f -> {
-                    isGestureActive = true
-                    snapDragOffset(offset + delta)
-                }
-                delta < 0f && offset <= 0f ->
-                    peek?.onLeftDragDelta?.invoke(-delta)
-                else -> Unit
-            }
-        }
-
-        val dragModifier = if (enabled) {
-            Modifier.draggable(
-                state = dragState,
-                orientation = Orientation.Horizontal,
-                enabled = true,
-                startDragImmediately = isGestureActive || isSettling,
-                onDragStarted = {
+        val rightToLeftPeekState = rememberUpdatedState(rightToLeftPeek)
+        val onHorizontalDragStartedState = rememberUpdatedState(onHorizontalDragStarted)
+        val dragState =
+            rememberDraggableState { delta ->
+                // Allow interrupting an in-flight settle (quick back↔forward) without waiting
+                // for the spring to finish — previously `enabled = !isSettling` blocked new drags.
+                if (isSettling) {
                     settleJob?.cancel()
                     settleJob = null
                     isSettling = false
-                    // Keep isGestureActive if already dragging so underlay layers do not
-                    // remount on every finger restart (was causing laggy back swipes).
-                    onHorizontalDragStartedState.value.invoke()
-                    rightToLeftPeekState.value?.onGestureStart?.invoke()
-                },
-                onDragStopped = { velocity ->
-                    rightToLeftPeekState.value?.onLeftDragEnd?.invoke(velocity)
-                    if (isGestureActive) {
-                        finishGesture(velocity)
-                    } else {
-                        isGestureActive = false
-                    }
                 }
-            )
-        } else {
+                val offset = offsetPx.floatValue
+                val peek = rightToLeftPeekState.value
+                when {
+                    delta > 0f && offset > 0f -> {
+                        isGestureActive = true
+                        snapDragOffset(offset + delta)
+                    }
+                    delta > 0f && offset <= 0f && peek?.isPeekRevealed?.invoke() == true -> {
+                        peek.onRightDragDelta(delta)
+                    }
+                    delta > 0f && offset <= 0f -> {
+                        isGestureActive = true
+                        peek?.onRightDragFromRest?.invoke(delta)
+                        snapDragOffset(offset + delta)
+                    }
+                    delta < 0f && offset > 0f -> {
+                        isGestureActive = true
+                        snapDragOffset(offset + delta)
+                    }
+                    delta < 0f && offset <= 0f ->
+                        peek?.onLeftDragDelta?.invoke(-delta)
+                    else -> Unit
+                }
+            }
+
+        val dragModifier =
+            if (enabled) {
+                Modifier.draggable(
+                    state = dragState,
+                    orientation = Orientation.Horizontal,
+                    enabled = true,
+                    startDragImmediately = isGestureActive || isSettling,
+                    onDragStarted = {
+                        settleJob?.cancel()
+                        settleJob = null
+                        isSettling = false
+                        // Keep isGestureActive if already dragging so underlay layers do not
+                        // remount on every finger restart (was causing laggy back swipes).
+                        onHorizontalDragStartedState.value.invoke()
+                        rightToLeftPeekState.value?.onGestureStart?.invoke()
+                    },
+                    onDragStopped = { velocity ->
+                        rightToLeftPeekState.value?.onLeftDragEnd?.invoke(velocity)
+                        if (isGestureActive) {
+                            finishGesture(velocity)
+                        } else {
+                            isGestureActive = false
+                        }
+                    },
+                )
+            } else {
+                Modifier
+            }
+
+        val foregroundSlide =
+            Modifier.graphicsLayer {
+                translationX = offsetPx.floatValue
+            }
+
+        val contentChrome =
             Modifier
-        }
-
-        val foregroundSlide = Modifier.graphicsLayer {
-            translationX = offsetPx.floatValue
-        }
-
-        val contentChrome = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .then(
-                if (enabled && useFullWidthHorizontalDrag) dragModifier else Modifier
-            )
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .then(
+                    if (enabled && useFullWidthHorizontalDrag) dragModifier else Modifier,
+                )
 
         // Keep layer boxes always in the tree (stable slot for [currentContent]). Gating the
         // whole underlay with `if (showPreviousLayer)` remounted ChatView at gesture start —
         // every image bubble reloaded and interactive-back hitch followed the finger.
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(
-                    if (opaquePreviousBackground) {
-                        Modifier.background(MaterialTheme.colorScheme.background)
-                    } else {
-                        Modifier
-                    }
-                )
-                .graphicsLayer {
-                    val currentSwipeOffset = offsetPx.floatValue.coerceIn(0f, widthPx)
-                    val active = currentSwipeOffset > 0.5f || isSettling
-                    alpha = if (active) 1f else 0f
-                    val progress = (currentSwipeOffset / widthPx).coerceIn(0f, 1f)
-                    translationX = -(size.width * ParallaxBackgroundPeek) * (1f - progress)
-                },
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (opaquePreviousBackground) {
+                            Modifier.background(MaterialTheme.colorScheme.background)
+                        } else {
+                            Modifier
+                        },
+                    ).graphicsLayer {
+                        val currentSwipeOffset = offsetPx.floatValue.coerceAtLeast(0f)
+                        val active = currentSwipeOffset > 0.5f || isSettling
+                        alpha = if (active) 1f else 0f
+                        val progress = currentSwipeOffset / widthPx
+                        translationX = -(size.width * ParallaxBackgroundPeek) * (1f - progress)
+                    },
         ) {
             if (showPreviousLayer) {
                 previousContent()
             }
         }
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .drawBehind {
-                    val w = size.width.coerceAtLeast(1f)
-                    val currentSwipeOffset = offsetPx.floatValue.coerceIn(0f, w)
-                    if (currentSwipeOffset <= 0.5f && !isSettling) return@drawBehind
-                    val progress = (currentSwipeOffset / w).coerceIn(0f, 1f)
-                    drawRect(Color.Black.copy(alpha = 0.5f * (1f - progress)))
-                },
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .drawBehind {
+                        val w = size.width.coerceAtLeast(1f)
+                        val currentSwipeOffset = offsetPx.floatValue.coerceIn(0f, w)
+                        if (currentSwipeOffset <= 0.5f && !isSettling) return@drawBehind
+                        val progress = (currentSwipeOffset / w).coerceIn(0f, 1f)
+                        drawRect(Color.Black.copy(alpha = 0.5f * (1f - progress)))
+                    },
         )
 
         // Layer 3 — foreground: follows the finger; drawn above layers 1–2.
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(foregroundSlide)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .then(foregroundSlide),
         ) {
             Box(modifier = contentChrome) {
                 currentContent()
@@ -360,11 +376,12 @@ fun InteractiveSwipeBackContainer(
 
             if (enabled && !useFullWidthHorizontalDrag) {
                 Box(
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .fillMaxHeight()
-                        .width(edgeSwipeWidth)
-                        .then(dragModifier)
+                    modifier =
+                        Modifier
+                            .align(Alignment.CenterStart)
+                            .fillMaxHeight()
+                            .width(edgeSwipeWidth)
+                            .then(dragModifier),
                 )
             }
         }

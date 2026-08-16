@@ -73,7 +73,7 @@ Click's visual language is **liquid glass**: frosted surfaces, grabbers, adaptiv
 | `GlassSheetTokens` / `GlassSheetGesturePhysics` | Shared corner radii, drag thresholds, spring physics |
 | `GlassFullscreenMediaOverlay` | Full-bleed photo/video preview in chat |
 | `UnifiedToastHost` (`GlassSnackbarHost` aliases) | Transient bottom feedback — always pad with `rememberBottomChromePadding()` so toasts sit above the tab bar |
-| `AppScreenScaffold` / `NativeCollapsingScaffold` / `ScreenChrome` | Native collapsing chrome (Android LargeTopAppBar, iOS large titles) + keyboard-aware padding |
+| `AppScreenScaffold` / `NativeCollapsingScaffold` / `ScreenChrome` | Native collapsing chrome (Android LargeTopAppBar, iOS host-view UINavigationBar) + keyboard-aware padding |
 | `LiquidGlassPill` / `BentoGlassOptionRow` | Segmented controls and option lists |
 
 ### Sheet authoring contract

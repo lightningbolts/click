@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+@Suppress("UNUSED_PARAMETER")
 actual fun NativeCollapsingScaffold(
     title: String,
     modifier: Modifier,
@@ -50,6 +51,10 @@ actual fun NativeCollapsingScaffold(
     presenceOnline: Boolean?,
     navigationIcon: @Composable (() -> Unit)?,
     actions: @Composable (RowScope.() -> Unit)?,
+    onOpenSearch: (() -> Unit)?,
+    onNavigateBack: (() -> Unit)?,
+    nativeTrailingActions: List<NativeChromeAction>,
+    collapseSearchIntoBar: Boolean,
     showHeader: Boolean,
     belowHeaderSpacing: Dp,
     horizontalPadding: Dp,
@@ -87,13 +92,21 @@ actual fun NativeCollapsingScaffold(
                             )
                         },
                         navigationIcon = { navigationIcon?.invoke() },
-                        actions = { actions?.invoke(this) },
+                        actions = {
+                            if (collapseSearchIntoBar &&
+                                onOpenSearch != null &&
+                                scrollBehavior.state.collapsedFraction > 0.32f
+                            ) {
+                                HeaderSearchIconButton(onClick = onOpenSearch)
+                            }
+                            actions?.invoke(this)
+                        },
                         scrollBehavior = scrollBehavior,
                         colors =
                             TopAppBarDefaults.largeTopAppBarColors(
                                 containerColor = Color.Transparent,
                                 scrolledContainerColor =
-                                    MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                                    MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
                             ),
                     )
                     headerBelowContent?.invoke()
@@ -125,6 +138,7 @@ actual fun NativeCollapsingScaffold(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+@Suppress("UNUSED_PARAMETER")
 actual fun NativeCollapsingScrollScaffold(
     title: String,
     modifier: Modifier,
@@ -132,6 +146,9 @@ actual fun NativeCollapsingScrollScaffold(
     presenceOnline: Boolean?,
     navigationIcon: @Composable (() -> Unit)?,
     actions: @Composable (RowScope.() -> Unit)?,
+    onOpenSearch: (() -> Unit)?,
+    onNavigateBack: (() -> Unit)?,
+    nativeTrailingActions: List<NativeChromeAction>,
     horizontalPadding: Dp,
     content: @Composable (Modifier) -> Unit,
 ) {
@@ -162,7 +179,7 @@ actual fun NativeCollapsingScrollScaffold(
                     TopAppBarDefaults.largeTopAppBarColors(
                         containerColor = Color.Transparent,
                         scrolledContainerColor =
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
                     ),
             )
         },
@@ -223,3 +240,36 @@ private fun NativeCollapsingTitle(
         }
     }
 }
+
+@Composable
+actual fun HidePlatformNativeNavigationBar() = Unit
+
+@Composable
+@Suppress("UNUSED_PARAMETER")
+actual fun PlatformNativeNavigationBarSwipeReveal(revealPx: androidx.compose.runtime.MutableFloatState) = Unit
+
+@Composable
+@Suppress("UNUSED_PARAMETER")
+actual fun BindPlatformNativeNavigationBar(
+    title: String,
+    subtitle: String?,
+    presenceOnline: Boolean?,
+    identity: NativeChromeIdentity?,
+    onNavigateBack: (() -> Unit)?,
+    onOpenSearch: (() -> Unit)?,
+    nativeTrailingActions: List<NativeChromeAction>,
+    collapseFraction: Float,
+) = Unit
+
+@Composable
+@Suppress("UNUSED_PARAMETER")
+actual fun PlatformNativeMapFloatingChrome(
+    visible: Boolean,
+    layerLabel: String,
+    layerOptions: List<NativeMapLayerOption>,
+    onToggleLayerId: (String) -> Unit,
+    onDropBeacon: () -> Unit,
+    onZoomIn: () -> Unit,
+    onZoomOut: () -> Unit,
+    bottomPadding: Dp,
+) = Unit

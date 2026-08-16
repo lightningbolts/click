@@ -88,11 +88,15 @@ import compose.project.click.click.ui.components.GlassSheetTokens // pragma: all
 import compose.project.click.click.ui.components.GlassmorphicOverlay // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
 import compose.project.click.click.ui.components.LiquidGlassPill // pragma: allowlist secret
+import compose.project.click.click.ui.components.LocalNativeChromeActive // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapClusterPin // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPin // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPinKind // pragma: allowlist secret
+import compose.project.click.click.ui.components.NativeMapLayerOption // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformMap // pragma: allowlist secret
+import compose.project.click.click.ui.components.PlatformNativeMapFloatingChrome // pragma: allowlist secret
+import compose.project.click.click.ui.components.PlatformNativeNavigationBarSwipeReveal // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProfileSheetBadge // pragma: allowlist secret
 import compose.project.click.click.ui.components.TabbedUserProfileSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastHost // pragma: allowlist secret
@@ -252,6 +256,7 @@ fun MapScreen(
     var eventsListTransitionMode by remember { mutableStateOf(EventsListTransitionMode.Tap) }
     val eventsBackHost = rememberInteractiveBackHostState()
     val eventsSwipeDragPx = eventsBackHost.dragOffsetPx
+    PlatformNativeNavigationBarSwipeReveal(eventsSwipeDragPx)
     // Keep events UI composed after first open so swipe-back does not remount the list.
     var eventsOverlayMounted by remember { mutableStateOf(false) }
     var eventsCloseJob by remember { mutableStateOf<Job?>(null) }
@@ -498,6 +503,8 @@ fun MapScreen(
                                     },
                             )
 
+                            val nearbyFullyOpen =
+                                eventsSheetExpanded && !eventsBackHost.behindLayersVisible
                             MapAlwaysOnChrome(
                                 dockBottomPadding = fabBottomPadding,
                                 layerFilters = layerFilters,
@@ -508,12 +515,14 @@ fun MapScreen(
                                 },
                                 onZoomIn = { viewModel.zoomIn() },
                                 onZoomOut = { viewModel.zoomOut() },
-                                // Stay composed under the events overlay (covered, not alpha-hidden) so
+                                chromeVisible = !eventsSheetExpanded && !eventsBackHost.behindLayersVisible,
+                                // Stay composed under the events overlay (covered, not remounted) so
                                 // swipe-back reveals controls that never remounted.
                                 modifier =
                                     Modifier
                                         .fillMaxSize()
                                         .zIndex(10f)
+                                        .graphicsLayer { alpha = if (nearbyFullyOpen) 0f else 1f }
                                         .interactiveSwipeBackUnderlay(eventsBackHost),
                             )
 
@@ -969,10 +978,37 @@ private fun MapAlwaysOnChrome(
     onDropBeacon: () -> Unit,
     onZoomIn: () -> Unit,
     onZoomOut: () -> Unit,
+    chromeVisible: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val style = LocalPlatformStyle.current
-    val glassStrength = if (style.isIOS) 0.64f else 0.4f
+    if (style.isIOS) {
+        PlatformNativeMapFloatingChrome(
+            visible = chromeVisible && LocalNativeChromeActive.current,
+            layerLabel = mapLayerFilterShortLabel(layerFilters),
+            layerOptions =
+                MapLayerFilter.entries.map { filter ->
+                    NativeMapLayerOption(
+                        id = filter.name,
+                        label = filter.label,
+                        selected =
+                            when (filter) {
+                                MapLayerFilter.ALL -> MapLayerFilter.ALL in layerFilters
+                                else -> filter in layerFilters
+                            },
+                    )
+                },
+            onToggleLayerId = { id ->
+                MapLayerFilter.entries.firstOrNull { it.name == id }?.let(onToggleLayerFilter)
+            },
+            onDropBeacon = onDropBeacon,
+            onZoomIn = onZoomIn,
+            onZoomOut = onZoomOut,
+            bottomPadding = dockBottomPadding,
+        )
+        return
+    }
+    val glassStrength = 0.4f
     val topSafe =
         WindowInsets.safeDrawing.only(
             WindowInsetsSides.Top + WindowInsetsSides.Horizontal,

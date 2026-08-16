@@ -17,6 +17,18 @@ Run on **both iOS and Android** unless a section is platform-tagged.
 - [ ] `./gradlew :composeApp:iosSimulatorArm64Test` (or `iosSimulatorArm64Test` target)
 - [ ] `bash scripts/maestro-smoke-android.sh` (`click/`; rebuilds and reinstalls debug APK, then smoke)
 - [ ] `click-web`: `npm run test:e2e` with the app on `:3000`
+
+## 0b. Visual proof (required before merge to main)
+
+CI green is not enough. Attach a screen recording or screenshots of **every tab and nested screen** with real content visible:
+
+- [ ] Home
+- [ ] Add Click (+ nested My QR / Tap if exercised)
+- [ ] Clicks (+ chat if reachable)
+- [ ] Map (+ uploaded-photo beacon pin clipped to marker shape)
+- [ ] Settings (+ one sub-screen)
+
+iOS: native `UINavigationBar` / `UITabBar` on the host view; body content must not be covered by a full-screen overlay. Do not merge native-chrome or Liquid Glass work without this set.
 - [ ] `ChatSwipeMathTest` — swipe-to-reply inverse math
 - [ ] `ChatViewModelTest` — send/receive/session
 - [ ] `GlassCardUiTest` — bordered card rendering (iOS sim; Functional Clarity)

@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.components
 
 import androidx.compose.foundation.layout.Box
@@ -30,10 +32,10 @@ import kotlinx.cinterop.useContents
 import platform.Foundation.NSProcessInfo
 import platform.Foundation.setValue
 import platform.UIKit.NSLayoutConstraint
-import platform.UIKit.UIColor
-import platform.UIKit.UIImage
 import platform.UIKit.UIBlurEffect
 import platform.UIKit.UIBlurEffectStyle
+import platform.UIKit.UIColor
+import platform.UIKit.UIImage
 import platform.UIKit.UITabBar
 import platform.UIKit.UITabBarAppearance
 import platform.UIKit.UITabBarDelegateProtocol
@@ -55,47 +57,54 @@ actual fun PlatformBottomBar(
     val currentRouteState by rememberUpdatedState(currentRoute)
     val isDarkMode = LocalIsDarkMode.current
     val reduceTransparency = rememberReduceTransparencyEnabled()
-    val usesNativeLiquidGlass = remember {
-        NSProcessInfo.processInfo.operatingSystemVersion.useContents { majorVersion >= 26 }
-    }
-
-    val tabBar = remember {
-        UITabBar().apply {
-            translatesAutoresizingMaskIntoConstraints = false
-            setTranslucent(true)
+    val usesNativeLiquidGlass =
+        remember {
+            NSProcessInfo.processInfo.operatingSystemVersion.useContents { majorVersion >= 26 }
         }
-    }
+
+    val tabBar =
+        remember {
+            UITabBar().apply {
+                translatesAutoresizingMaskIntoConstraints = false
+                setTranslucent(true)
+            }
+        }
 
     // Appearance is theme-only. Re-applying UITabBarAppearance on every chat-close recomposition
     // remounts Liquid Glass and looks like the whole nav bar restarted.
     LaunchedEffect(isDarkMode, reduceTransparency, usesNativeLiquidGlass, viewController) {
         val clear = UIColor.clearColor
-        val selectedColor = if (isDarkMode) {
-            UIColor.colorWithRed(0xD2 / 255.0, green = 0xBB / 255.0, blue = 0xFF / 255.0, alpha = 1.0)
-        } else {
-            UIColor.colorWithRed(0x63 / 255.0, green = 0x0E / 255.0, blue = 0xD4 / 255.0, alpha = 1.0)
-        }
-        val unselectedColor = if (isDarkMode) {
-            UIColor.colorWithRed(0xF0 / 255.0, green = 0xF1 / 255.0, blue = 0xF1 / 255.0, alpha = 1.0)
-        } else {
-            UIColor.colorWithRed(0x4A / 255.0, green = 0x44 / 255.0, blue = 0x55 / 255.0, alpha = 1.0)
-        }
-        val clickTint = if (isDarkMode) {
-            UIColor.colorWithRed(0x63 / 255.0, green = 0x0E / 255.0, blue = 0xD4 / 255.0, alpha = 0.22)
-        } else {
-            UIColor.colorWithRed(0x63 / 255.0, green = 0x0E / 255.0, blue = 0xD4 / 255.0, alpha = 0.14)
-        }
-        val accessibleMaterial = if (isDarkMode) {
-            UIColor.colorWithRed(0x10 / 255.0, green = 0x12 / 255.0, blue = 0x12 / 255.0, alpha = 0.96)
-        } else {
-            UIColor.colorWithRed(0xF9 / 255.0, green = 0xF9 / 255.0, blue = 0xF9 / 255.0, alpha = 0.96)
-        }
+        val selectedColor =
+            if (isDarkMode) {
+                UIColor.colorWithRed(0xD2 / 255.0, green = 0xBB / 255.0, blue = 0xFF / 255.0, alpha = 1.0)
+            } else {
+                UIColor.colorWithRed(0x63 / 255.0, green = 0x0E / 255.0, blue = 0xD4 / 255.0, alpha = 1.0)
+            }
+        val unselectedColor =
+            if (isDarkMode) {
+                UIColor.colorWithRed(0xF0 / 255.0, green = 0xF1 / 255.0, blue = 0xF1 / 255.0, alpha = 1.0)
+            } else {
+                UIColor.colorWithRed(0x4A / 255.0, green = 0x44 / 255.0, blue = 0x55 / 255.0, alpha = 1.0)
+            }
+        val clickTint =
+            if (isDarkMode) {
+                UIColor.colorWithRed(0x63 / 255.0, green = 0x0E / 255.0, blue = 0xD4 / 255.0, alpha = 0.22)
+            } else {
+                UIColor.colorWithRed(0x63 / 255.0, green = 0x0E / 255.0, blue = 0xD4 / 255.0, alpha = 0.14)
+            }
+        val accessibleMaterial =
+            if (isDarkMode) {
+                UIColor.colorWithRed(0x10 / 255.0, green = 0x12 / 255.0, blue = 0x12 / 255.0, alpha = 0.96)
+            } else {
+                UIColor.colorWithRed(0xF9 / 255.0, green = 0xF9 / 255.0, blue = 0xF9 / 255.0, alpha = 0.96)
+            }
 
-        viewController.view.backgroundColor = if (isDarkMode) {
-            UIColor.colorWithRed(0x10 / 255.0, green = 0x12 / 255.0, blue = 0x12 / 255.0, alpha = 1.0)
-        } else {
-            UIColor.colorWithRed(0xF9 / 255.0, green = 0xF9 / 255.0, blue = 0xF9 / 255.0, alpha = 1.0)
-        }
+        viewController.view.backgroundColor =
+            if (isDarkMode) {
+                UIColor.colorWithRed(0x10 / 255.0, green = 0x12 / 255.0, blue = 0x12 / 255.0, alpha = 1.0)
+            } else {
+                UIColor.colorWithRed(0xF9 / 255.0, green = 0xF9 / 255.0, blue = 0xF9 / 255.0, alpha = 1.0)
+            }
 
         tabBar.tintColor = selectedColor
         tabBar.unselectedItemTintColor = unselectedColor
@@ -106,71 +115,81 @@ actual fun PlatformBottomBar(
             tabBar.backgroundColor = clear
             tabBar.backgroundImage = UIImage()
             tabBar.shadowImage = UIImage()
-            val materialStyle = if (isDarkMode) {
-                UIBlurEffectStyle.UIBlurEffectStyleSystemMaterialDark
-            } else {
-                UIBlurEffectStyle.UIBlurEffectStyleSystemMaterialLight
-            }
-            val appearance = UITabBarAppearance().apply {
-                configureWithTransparentBackground()
-                backgroundColor = if (reduceTransparency) accessibleMaterial else clickTint
-                backgroundEffect = if (reduceTransparency) null else UIBlurEffect.effectWithStyle(materialStyle)
-                shadowColor = clear
-            }
+            val materialStyle =
+                if (isDarkMode) {
+                    UIBlurEffectStyle.UIBlurEffectStyleSystemMaterialDark
+                } else {
+                    UIBlurEffectStyle.UIBlurEffectStyleSystemMaterialLight
+                }
+            val appearance =
+                UITabBarAppearance().apply {
+                    configureWithTransparentBackground()
+                    backgroundColor = if (reduceTransparency) accessibleMaterial else clickTint
+                    backgroundEffect = if (reduceTransparency) null else UIBlurEffect.effectWithStyle(materialStyle)
+                    shadowColor = clear
+                }
             tabBar.standardAppearance = appearance
             tabBar.scrollEdgeAppearance = appearance
         }
     }
 
-    val delegate = remember {
-        object : NSObject(), UITabBarDelegateProtocol {
-            override fun tabBar(tabBar: UITabBar, didSelectItem: UITabBarItem) {
-                tabBar.selectedItem = didSelectItem
-                val idx = didSelectItem.tag.toInt()
-                currentItems.getOrNull(idx)?.let { item ->
-                    if (item.route != currentRouteState) {
-                        if (item.route == NavigationItem.AddClick.route) {
-                            PlatformHapticsPolicy.heavyImpact()
-                        } else {
-                            PlatformHapticsPolicy.lightImpact()
+    val delegate =
+        remember {
+            object : NSObject(), UITabBarDelegateProtocol {
+                override fun tabBar(
+                    tabBar: UITabBar,
+                    didSelectItem: UITabBarItem,
+                ) {
+                    tabBar.selectedItem = didSelectItem
+                    val idx = didSelectItem.tag.toInt()
+                    currentItems.getOrNull(idx)?.let { item ->
+                        if (item.route != currentRouteState) {
+                            if (item.route == NavigationItem.AddClick.route) {
+                                PlatformHapticsPolicy.heavyImpact()
+                            } else {
+                                PlatformHapticsPolicy.lightImpact()
+                            }
                         }
+                        onItemSelectedState(item)
                     }
-                    onItemSelectedState(item)
                 }
             }
         }
-    }
 
     LaunchedEffect(tabBar) { tabBar.delegate = delegate }
 
     // Item identity only — route selection is a SideEffect below (no setItems flash).
-    val itemSignature = remember(items) {
-        items.joinToString("|") { "${it.route}:${it.title}:${it.sfSymbol}" }
-    }
+    val itemSignature =
+        remember(items) {
+            items.joinToString("|") { "${it.route}:${it.title}:${it.sfSymbol}" }
+        }
     LaunchedEffect(itemSignature, isDarkMode) {
-        val selectedColor = if (isDarkMode) {
-            UIColor.colorWithRed(0xD2 / 255.0, green = 0xBB / 255.0, blue = 0xFF / 255.0, alpha = 1.0)
-        } else {
-            UIColor.colorWithRed(0x63 / 255.0, green = 0x0E / 255.0, blue = 0xD4 / 255.0, alpha = 1.0)
-        }
-        val uiItems = items.mapIndexed { index, navItem ->
-            val symbol = UIImage.systemImageNamed(navItem.sfSymbol)
-            val image = if (navItem.route == NavigationItem.AddClick.route) {
-                symbol?.imageWithTintColor(
-                    selectedColor,
-                    renderingMode = platform.UIKit.UIImageRenderingMode.UIImageRenderingModeAlwaysOriginal,
-                ) ?: symbol
+        val selectedColor =
+            if (isDarkMode) {
+                UIColor.colorWithRed(0xD2 / 255.0, green = 0xBB / 255.0, blue = 0xFF / 255.0, alpha = 1.0)
             } else {
-                symbol
+                UIColor.colorWithRed(0x63 / 255.0, green = 0x0E / 255.0, blue = 0xD4 / 255.0, alpha = 1.0)
             }
-            UITabBarItem(
-                title = navItem.title,
-                image = image,
-                tag = index.toLong(),
-            ).apply {
-                setValue(navItem.maestroTestTag, forKey = "accessibilityIdentifier")
+        val uiItems =
+            items.mapIndexed { index, navItem ->
+                val symbol = UIImage.systemImageNamed(navItem.sfSymbol)
+                val image =
+                    if (navItem.route == NavigationItem.AddClick.route) {
+                        symbol?.imageWithTintColor(
+                            selectedColor,
+                            renderingMode = platform.UIKit.UIImageRenderingMode.UIImageRenderingModeAlwaysOriginal,
+                        ) ?: symbol
+                    } else {
+                        symbol
+                    }
+                UITabBarItem(
+                    title = navItem.title,
+                    image = image,
+                    tag = index.toLong(),
+                ).apply {
+                    setValue(navItem.maestroTestTag, forKey = "accessibilityIdentifier")
+                }
             }
-        }
         tabBar.setItems(uiItems)
         val selectedIdx = items.indexOfFirst { it.route == currentRouteState }.coerceAtLeast(0)
         uiItems.getOrNull(selectedIdx)?.let { tabBar.selectedItem = it }
@@ -237,9 +256,10 @@ actual fun PlatformBottomBar(
                 }
                 val clearanceFromTopPx = viewHeightPx - origin.y
                 if (clearanceFromTopPx > 0.0) {
-                    val clearanceFromTop = with(density) {
-                        clearanceFromTopPx.toFloat().toDp()
-                    }
+                    val clearanceFromTop =
+                        with(density) {
+                            clearanceFromTopPx.toFloat().toDp()
+                        }
                     lastClearance = clearanceFromTop
                     AppScreenChromeState.updateBottomChromeHeight(clearanceFromTop)
                 }
@@ -250,19 +270,18 @@ actual fun PlatformBottomBar(
     }
 
     Box(
-        modifier = Modifier
-            .onPlaced {
-                val p = it.positionInRoot()
-                positionInRoot = with(density) { DpOffset(p.x.toDp(), p.y.toDp()) }
-            }
-            .graphicsLayer {
-                translationX = (topLeft.x - positionInRoot.x).toPx()
-                translationY = (topLeft.y - positionInRoot.y).toPx()
-                // Spacer only — native UITabBar is always opaque. Hide this Compose mirror while
-                // the bar is behind the host so it does not paint a second chrome stack.
-                alpha = if (visible) 1f else 0f
-            }
-            .width(tabBarWidth)
-            .height(tabBarHeight)
+        modifier =
+            Modifier
+                .onPlaced {
+                    val p = it.positionInRoot()
+                    positionInRoot = with(density) { DpOffset(p.x.toDp(), p.y.toDp()) }
+                }.graphicsLayer {
+                    translationX = (topLeft.x - positionInRoot.x).toPx()
+                    translationY = (topLeft.y - positionInRoot.y).toPx()
+                    // Spacer only — native UITabBar is always opaque. Hide this Compose mirror while
+                    // the bar is behind the host so it does not paint a second chrome stack.
+                    alpha = if (visible) 1f else 0f
+                }.width(tabBarWidth)
+                .height(tabBarHeight),
     )
 }

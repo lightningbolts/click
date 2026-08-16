@@ -41,6 +41,7 @@ import compose.project.click.click.ui.chat.GroupMembersPickerContext
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
 import compose.project.click.click.ui.components.PlatformBackHandler
+import compose.project.click.click.ui.components.PlatformNativeNavigationBarSwipeReveal
 import compose.project.click.click.ui.components.TabbedGroupProfileSheet
 import compose.project.click.click.ui.components.TabbedUserProfileSheet
 import compose.project.click.click.ui.components.interactiveSwipeBackUnderlay
@@ -83,12 +84,12 @@ fun ConnectionsScreen(
     onVerifiedCliqueProximityAutofillConsumed: () -> Unit = {},
 ) {
     var selectedChatId by remember { mutableStateOf(initialChatId) }
-    var listRevealEpoch by remember { mutableStateOf(0) }
     val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
 
     /** Shared with [InteractiveSwipeBackContainer] so the persistent list mirrors layer-1 parallax. */
     val chatBackHost = rememberInteractiveBackHostState()
     val iosChatSwipeDragPx = chatBackHost.dragOffsetPx
+    PlatformNativeNavigationBarSwipeReveal(iosChatSwipeDragPx)
     var iosChatRightToLeftPeek by remember { mutableStateOf<InteractiveSwipeBackRightToLeftPeek?>(null) }
     var chatTransitionMode by remember { mutableStateOf(ChatTransitionMode.Tap) }
     var isTapCloseInFlight by remember { mutableStateOf(false) }
@@ -123,8 +124,6 @@ fun ConnectionsScreen(
         onChatOpenStateChanged(false)
         // Bring the already-warm UITabBar to front (alpha stayed 1 while it was behind Compose).
         onChatSuppressesTabBarChanged(false)
-        // Re-measure floating header inset at expanded height so Remember Me never sits under Clicks.
-        listRevealEpoch += 1
     }
 
     fun closeActiveChat(mode: ChatTransitionMode = ChatTransitionMode.Tap) {
@@ -167,6 +166,7 @@ fun ConnectionsScreen(
     // (that restarts global realtime and flickers the inbox).
     LaunchedEffect(initialChatId) {
         val id = initialChatId ?: return@LaunchedEffect
+        lastOpenChatIdForIosOverlay = id
         viewModel.loadChatMessages(id)
         selectedChatId = id
         viewModel.loadChats(isForced = false)
@@ -204,6 +204,7 @@ fun ConnectionsScreen(
         onChatOpenStateChanged(true)
         onChatSuppressesTabBarChanged(true)
         ChatNotificationDismisser.dismissForThread(chatId, chatId)
+        lastOpenChatIdForIosOverlay = chatId
         selectedChatId = chatId
         viewModel.loadChatMessages(chatId)
     }
@@ -235,7 +236,6 @@ fun ConnectionsScreen(
                     verifiedCliqueProximityAutofill = verifiedCliqueProximityAutofill,
                     onVerifiedCliqueProximityAutofillConsumed = onVerifiedCliqueProximityAutofillConsumed,
                     isListObscured = selectedChatId != null,
-                    listRevealEpoch = listRevealEpoch,
                 )
             }
 

@@ -115,9 +115,11 @@ import compose.project.click.click.ui.components.GlobalTetherOverlay // pragma: 
 import compose.project.click.click.ui.components.INTEREST_ONBOARDING_MIN_TAGS // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
+import compose.project.click.click.ui.components.LocalNativeChromeActive // pragma: allowlist secret
 import compose.project.click.click.ui.components.OfflineStatusBanner // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBottomBar // pragma: allowlist secret
+import compose.project.click.click.ui.components.PlatformNativeNavigationBarSwipeReveal // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastHost // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.interactiveSwipeBackUnderlay // pragma: allowlist secret
@@ -1605,6 +1607,7 @@ fun App() {
                                         val screenKey = activeScreenKey
                                         val addClickBackHost = rememberInteractiveBackHostState()
                                         val addClickSwipeDragPx = addClickBackHost.dragOffsetPx
+                                        PlatformNativeNavigationBarSwipeReveal(addClickSwipeDragPx)
                                         var lastAddClickOverlayKey by remember { mutableStateOf<String?>(null) }
                                         var addClickOverlayTransitionMode by remember {
                                             mutableStateOf(NavigationTransitionMode.Tap)
@@ -1867,6 +1870,7 @@ fun App() {
                                             mutableStateOf<InteractiveSwipeBackRightToLeftPeek?>(null)
                                         }
                                         val hubSwipeDragPx = remember { mutableFloatStateOf(0f) }
+                                        PlatformNativeNavigationBarSwipeReveal(hubSwipeDragPx)
                                         LaunchedEffect(hubChatArgs) {
                                             if (hubChatArgs != null) {
                                                 lastHubChatArgs = hubChatArgs
@@ -1915,7 +1919,16 @@ fun App() {
                                                                         0
                                                                     }
                                                                 }
-                                                            val targetIndex = routeOrder.indexOf(targetState).let { if (it >= 0) it else 0 }
+                                                            val targetIndex =
+                                                                routeOrder.indexOf(targetState).let {
+                                                                    if (it >=
+                                                                        0
+                                                                    ) {
+                                                                        it
+                                                                    } else {
+                                                                        0
+                                                                    }
+                                                                }
                                                             val movingForward = targetIndex >= initialIndex
 
                                                             val primaryTabs =
@@ -1969,7 +1982,12 @@ fun App() {
                                                     },
                                                     label = "app_screen_transition",
                                                 ) { animatedScreen ->
-                                                    renderScreen(animatedScreen)
+                                                    CompositionLocalProvider(
+                                                        LocalNativeChromeActive provides
+                                                            (animatedScreen == screenKey),
+                                                    ) {
+                                                        renderScreen(animatedScreen)
+                                                    }
                                                 }
                                             }
 
@@ -2150,6 +2168,7 @@ fun App() {
                                                     enabled = true,
                                                     opaquePreviousBackground = false,
                                                     externalDragOffsetPx = hubSwipeDragPx,
+                                                    onBehindLayersVisibleChanged = {},
                                                     onBack = {
                                                         hubFocusManager.clearFocus()
                                                         if (!isIOS) {

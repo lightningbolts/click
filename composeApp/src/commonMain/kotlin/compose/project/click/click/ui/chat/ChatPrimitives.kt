@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.chat
 
 import androidx.compose.animation.AnimatedVisibility
@@ -5,10 +7,10 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -32,14 +34,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -49,27 +49,26 @@ import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import compose.project.click.click.PlatformHapticsPolicy
-import kotlinx.coroutines.delay
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import kotlin.math.roundToInt
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.beaconIdFromMetadata
@@ -78,7 +77,7 @@ import compose.project.click.click.data.storage.BeaconRsvpPersistence
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.events.EventReminderCoordinator
 import compose.project.click.click.ui.theme.LightBlue
-import compose.project.click.click.ui.theme.PrimaryBlue
+import kotlinx.coroutines.delay
 
 /** Anchored attachment tray that does not steal IME focus from the composer field. */
 @Composable
@@ -107,10 +106,11 @@ internal fun ChatAttachmentMenuPopup(
 
     if (!keepMounted) return
 
-    val menuSpring = spring<Float>(
-        dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = Spring.StiffnessMedium,
-    )
+    val menuSpring =
+        spring<Float>(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium,
+        )
     val menuEnter =
         fadeIn(animationSpec = menuSpring) +
             scaleIn(initialScale = 0.86f, animationSpec = menuSpring)
@@ -124,12 +124,13 @@ internal fun ChatAttachmentMenuPopup(
         onDismissRequest = {
             if (expanded) onDismissRequest()
         },
-        properties = PopupProperties(
-            focusable = false,
-            dismissOnBackPress = true,
-            // Disabled: + taps are "outside" the menu surface and would dismiss then retoggle open.
-            dismissOnClickOutside = false,
-        ),
+        properties =
+            PopupProperties(
+                focusable = false,
+                dismissOnBackPress = true,
+                // Disabled: + taps are "outside" the menu surface and would dismiss then retoggle open.
+                dismissOnClickOutside = false,
+            ),
     ) {
         AnimatedVisibility(
             visible = contentVisible,
@@ -142,10 +143,11 @@ internal fun ChatAttachmentMenuPopup(
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 tonalElevation = 3.dp,
                 shadowElevation = 12.dp,
-                border = BorderStroke(
-                    0.5.dp,
-                    MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
-                ),
+                border =
+                    BorderStroke(
+                        0.5.dp,
+                        MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                    ),
             ) {
                 content()
             }
@@ -180,20 +182,22 @@ internal fun ChatAttachmentMenuAnchorHost(
             Popup(
                 alignment = Alignment.TopStart,
                 onDismissRequest = dismissMenu,
-                properties = PopupProperties(
-                    focusable = false,
-                    dismissOnBackPress = true,
-                    dismissOnClickOutside = false,
-                ),
+                properties =
+                    PopupProperties(
+                        focusable = false,
+                        dismissOnBackPress = true,
+                        dismissOnClickOutside = false,
+                    ),
             ) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clickable(
-                            indication = null,
-                            interactionSource = scrimInteraction,
-                            onClick = dismissMenu,
-                        ),
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .clickable(
+                                indication = null,
+                                interactionSource = scrimInteraction,
+                                onClick = dismissMenu,
+                            ),
                 )
             }
         }
@@ -205,17 +209,18 @@ internal fun ChatAttachmentMenuAnchorHost(
             menuContent()
         }
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clickable(
-                    interactionSource = anchorInteraction,
-                    indication = null,
-                    enabled = anchorEnabled,
-                    onClick = {
-                        PlatformHapticsPolicy.heavyImpact()
-                        onExpandedChange(!expanded)
-                    },
-                ),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .clickable(
+                        interactionSource = anchorInteraction,
+                        indication = null,
+                        enabled = anchorEnabled,
+                        onClick = {
+                            PlatformHapticsPolicy.heavyImpact()
+                            onExpandedChange(!expanded)
+                        },
+                    ),
             contentAlignment = Alignment.Center,
         ) {
             anchor()
@@ -233,16 +238,16 @@ internal fun ChatAttachmentMenuRow(
 ) {
     val onSurface = MaterialTheme.colorScheme.onSurface
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .clickable(
-                enabled = enabled,
-                interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(bounded = true),
-                onClick = onClick,
-            )
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .clickable(
+                    enabled = enabled,
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = ripple(bounded = true),
+                    onClick = onClick,
+                ).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, contentDescription = null, tint = onSurface.copy(alpha = if (enabled) 1f else 0.45f))
@@ -271,19 +276,14 @@ internal object ChatChromeMotion {
     val Crossfade = tween<Float>(durationMillis = 220, easing = FastOutSlowInEasing)
 }
 
-/**
- * Leaf composables used inside the chat timeline. Extracted from
- * ConnectionsScreen.kt; no arguments, no state, no side effects —
- * safe to host anywhere in the module.
- */
-
 /** Row with centered label between two thin dividers — e.g. "Today". */
 @Composable
 internal fun ConversationDaySeparator(label: String) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 10.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 10.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -317,18 +317,20 @@ internal fun ChatTypingDots() {
             val offsetY by transition.animateFloat(
                 initialValue = 0f,
                 targetValue = 1f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(520, delayMillis = delayMs, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Reverse,
-                ),
+                animationSpec =
+                    infiniteRepeatable(
+                        animation = tween(520, delayMillis = delayMs, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse,
+                    ),
                 label = "dot_$index",
             )
             Box(
-                modifier = Modifier
-                    .offset(y = chatBubbleTypingDotOffsetY(offsetY))
-                    .size(chatBubbleScaledDp(8f))
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)),
+                modifier =
+                    Modifier
+                        .offset(y = chatBubbleTypingDotOffsetY(offsetY))
+                        .size(chatBubbleScaledDp(8f))
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)),
             )
         }
     }
@@ -344,19 +346,21 @@ internal fun LoadingSubtitlePlaceholder(modifier: Modifier = Modifier) {
     val alpha by transition.animateFloat(
         initialValue = 0.3f,
         targetValue = 0.7f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
         label = "connection_subtitle_shimmer_alpha",
     )
 
     Box(
-        modifier = modifier
-            .height(12.dp)
-            .width(120.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)),
+        modifier =
+            modifier
+                .height(12.dp)
+                .width(120.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)),
     )
 }
 
@@ -387,22 +391,24 @@ internal fun AnimatedVisibilityChatBubble(
         progress.snapTo(0f)
         progress.animateTo(
             targetValue = 1f,
-            animationSpec = spring(
-                dampingRatio = 0.78f,
-                stiffness = 700f,
-            ),
+            animationSpec =
+                spring(
+                    dampingRatio = 0.78f,
+                    stiffness = 700f,
+                ),
         )
     }
     Box(
-        modifier = Modifier.graphicsLayer {
-            val t = progress.value
-            alpha = t
-            val scale = 0.92f + 0.08f * t
-            scaleX = scale
-            scaleY = scale
-            // Rise from the composer without changing layout size.
-            translationY = (1f - t) * 28f
-        },
+        modifier =
+            Modifier.graphicsLayer {
+                val t = progress.value
+                alpha = t
+                val scale = 0.92f + 0.08f * t
+                scaleX = scale
+                scaleY = scale
+                // Rise from the composer without changing layout size.
+                translationY = (1f - t) * 28f
+            },
     ) {
         content()
     }
@@ -417,9 +423,10 @@ internal fun AnimatedVisibilityChatBubble(
 internal fun CallLogSystemRow(message: Message) {
     val (label, isMissed) = remember(message.id, message.metadata) { callLogLabel(message) }
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Surface(
@@ -464,6 +471,8 @@ internal fun CallLogSystemRow(message: Message) {
 internal fun ChatCallOptionsIosSurface(
     onVoice: () -> Unit,
     onVideo: () -> Unit,
+    voiceLabel: String = "Voice call",
+    videoLabel: String = "Video call",
 ) {
     val bg = MaterialTheme.colorScheme.surfaceContainerHigh
     val onSurface = MaterialTheme.colorScheme.onSurface
@@ -478,44 +487,76 @@ internal fun ChatCallOptionsIosSurface(
     ) {
         Column(Modifier.padding(vertical = 6.dp)) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = ripple(bounded = true),
-                        onClick = {
-                            PlatformHapticsPolicy.lightImpact()
-                            onVoice()
-                        },
-                    )
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = ripple(bounded = true),
+                            onClick = {
+                                PlatformHapticsPolicy.lightImpact()
+                                onVoice()
+                            },
+                        ).padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(Icons.Filled.Call, contentDescription = null, tint = onSurface)
                 Spacer(Modifier.width(12.dp))
-                Text("Voice call", style = MaterialTheme.typography.bodyLarge, color = onSurface)
+                Text(voiceLabel, style = MaterialTheme.typography.bodyLarge, color = onSurface)
             }
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = ripple(bounded = true),
-                        onClick = {
-                            PlatformHapticsPolicy.lightImpact()
-                            onVideo()
-                        },
-                    )
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = ripple(bounded = true),
+                            onClick = {
+                                PlatformHapticsPolicy.lightImpact()
+                                onVideo()
+                            },
+                        ).padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(Icons.Filled.Videocam, contentDescription = null, tint = onSurface)
                 Spacer(Modifier.width(12.dp))
-                Text("Video call", style = MaterialTheme.typography.bodyLarge, color = onSurface)
+                Text(videoLabel, style = MaterialTheme.typography.bodyLarge, color = onSurface)
             }
         }
+    }
+}
+
+@Composable
+internal fun ChatCallOptionsPopup(
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    onVoice: () -> Unit,
+    onVideo: () -> Unit,
+    voiceLabel: String = "Voice call",
+    videoLabel: String = "Video call",
+    alignment: Alignment = Alignment.TopEnd,
+    offset: IntOffset = IntOffset.Zero,
+) {
+    if (!expanded) return
+    Popup(
+        alignment = alignment,
+        offset = offset,
+        onDismissRequest = onDismiss,
+        properties =
+            PopupProperties(
+                focusable = true,
+                dismissOnBackPress = true,
+                dismissOnClickOutside = true,
+            ),
+    ) {
+        ChatCallOptionsIosSurface(
+            onVoice = onVoice,
+            onVideo = onVideo,
+            voiceLabel = voiceLabel,
+            videoLabel = videoLabel,
+        )
     }
 }
 
@@ -536,30 +577,31 @@ internal fun ReplySwipeSideIcon(
     modifier: Modifier = Modifier,
 ) {
     Box(
-        modifier = modifier
-            .size(chatBubbleScaledDp(40f))
-            .graphicsLayer {
-                val rawHintP = replyDragHintProgress(
-                    rawSwipeTravelPx.floatValue,
-                    isSent,
-                    swipeThresholdPx,
-                )
-                val visualHintP =
-                    (kotlin.math.abs(displayVisualPx.floatValue) / maxSwipeVisualPx.coerceAtLeast(1f))
-                        .coerceIn(0f, 1f)
-                val hintProgress = maxOf(rawHintP, visualHintP)
-                val t = hintProgress.coerceIn(0f, 1f)
-                val smooth = t * t * (3f - 2f * t)
-                val scale = 0.82f + 0.18f * smooth
-                val visibility = smooth * (0.28f + 0.72f * smooth).coerceIn(0f, 1f)
-                val hintAlpha = (0.52f + 0.48f * (hintProgress * hintProgress)).coerceIn(0f, 1f)
-                val a = (visibility * hintAlpha).coerceIn(0f, 1f)
-                alpha = a
-                scaleX = scale
-                scaleY = scale
-            }
-            .clip(CircleShape)
-            .background(LightBlue.copy(alpha = 0.28f)),
+        modifier =
+            modifier
+                .size(chatBubbleScaledDp(40f))
+                .graphicsLayer {
+                    val rawHintP =
+                        replyDragHintProgress(
+                            rawSwipeTravelPx.floatValue,
+                            isSent,
+                            swipeThresholdPx,
+                        )
+                    val visualHintP =
+                        (kotlin.math.abs(displayVisualPx.floatValue) / maxSwipeVisualPx.coerceAtLeast(1f))
+                            .coerceIn(0f, 1f)
+                    val hintProgress = maxOf(rawHintP, visualHintP)
+                    val t = hintProgress.coerceIn(0f, 1f)
+                    val smooth = t * t * (3f - 2f * t)
+                    val scale = 0.82f + 0.18f * smooth
+                    val visibility = smooth * (0.28f + 0.72f * smooth).coerceIn(0f, 1f)
+                    val hintAlpha = (0.52f + 0.48f * (hintProgress * hintProgress)).coerceIn(0f, 1f)
+                    val a = (visibility * hintAlpha).coerceIn(0f, 1f)
+                    alpha = a
+                    scaleX = scale
+                    scaleY = scale
+                }.clip(CircleShape)
+                .background(LightBlue.copy(alpha = 0.28f)),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
@@ -585,15 +627,20 @@ internal fun BeaconChatCard(
     enableContextMenu: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    val beaconId = remember(message.id, message.metadata) {
-        beaconIdFromMetadata(message.metadata).orEmpty()
-    }
+    val beaconId =
+        remember(message.id, message.metadata) {
+            beaconIdFromMetadata(message.metadata).orEmpty()
+        }
     val prefetched by AppDataManager.prefetchedMapBeacons.collectAsState()
-    val knownBeacon = remember(beaconId, prefetched) {
-        if (beaconId.isBlank()) null
-        else prefetched.firstOrNull { it.id == beaconId }
-            ?: EventReminderCoordinator.beaconById(beaconId)
-    }
+    val knownBeacon =
+        remember(beaconId, prefetched) {
+            if (beaconId.isBlank()) {
+                null
+            } else {
+                prefetched.firstOrNull { it.id == beaconId }
+                    ?: EventReminderCoordinator.beaconById(beaconId)
+            }
+        }
     val currentUserId = AppDataManager.currentUser.value?.id
     var signedUp by remember(beaconId) { mutableStateOf(false) }
     var bookmarked by remember(beaconId) { mutableStateOf(false) }
@@ -612,23 +659,24 @@ internal fun BeaconChatCard(
         bookmarked = engagement?.bookmarked == true
         checkedIn = engagement?.checkedIn == true || engagement?.localEarlyCheckIn == true
     }
-    val model = remember(
-        message.id,
-        message.metadata,
-        message.content,
-        knownBeacon,
-        signedUp,
-        bookmarked,
-        checkedIn,
-    ) {
-        BeaconPreviewModel.fromMessage(
-            message = message,
-            knownBeacon = knownBeacon,
-            signedUp = signedUp,
-            bookmarked = bookmarked,
-            checkedIn = checkedIn,
-        )
-    }
+    val model =
+        remember(
+            message.id,
+            message.metadata,
+            message.content,
+            knownBeacon,
+            signedUp,
+            bookmarked,
+            checkedIn,
+        ) {
+            BeaconPreviewModel.fromMessage(
+                message = message,
+                knownBeacon = knownBeacon,
+                signedUp = signedUp,
+                bookmarked = bookmarked,
+                checkedIn = checkedIn,
+            )
+        }
     val align = if (isSent) Alignment.CenterEnd else Alignment.CenterStart
     val longPressModifier =
         if (enableContextMenu && onLongPress != null) {
@@ -644,10 +692,11 @@ internal fun BeaconChatCard(
             Modifier
         }
     Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp, horizontal = 8.dp)
-            .then(longPressModifier),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp, horizontal = 8.dp)
+                .then(longPressModifier),
         contentAlignment = align,
     ) {
         BeaconPreviewCard(

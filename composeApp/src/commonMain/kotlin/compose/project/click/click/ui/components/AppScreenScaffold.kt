@@ -31,8 +31,8 @@ import kotlinx.coroutines.delay
 /**
  * Standard tab-root layout: scrollable body extends under the floating nav bar, with bottom
  * content padding so every control stays reachable. Header chrome is platform-native
- * ([NativeCollapsingScaffold]) — Material 3 LargeTopAppBar on Android, UINavigationController
- * large titles on iOS. Collapse is compact chrome, never hide.
+ * ([NativeCollapsingScaffold]) — Material 3 LargeTopAppBar on Android, host-view
+ * `UINavigationBar` (tab-bar mounting) on iOS. Collapse is compact chrome, never hide.
  *
  * When [showFloatingHeader] is false, only status-bar top inset is applied — no title
  * island. Prefer [showFloatingHeader] true for tab roots (including Home’s greeting).
@@ -46,6 +46,9 @@ fun AppScreenScaffold(
     navigationIcon: @Composable (() -> Unit)? = null,
     actions: @Composable (RowScope.() -> Unit)? = null,
     onOpenSearch: (() -> Unit)? = null,
+    onNavigateBack: (() -> Unit)? = null,
+    nativeTrailingActions: List<NativeChromeAction> = emptyList(),
+    collapseSearchIntoBar: Boolean = false,
     showFloatingHeader: Boolean = true,
     /**
      * Space between the native header bottom and the first list item.
@@ -67,9 +70,9 @@ fun AppScreenScaffold(
         presenceOnline = presenceOnline,
         navigationIcon = navigationIcon,
         actions =
-            if (onOpenSearch != null || actions != null) {
+            if ((onOpenSearch != null && !collapseSearchIntoBar) || actions != null) {
                 {
-                    if (onOpenSearch != null) {
+                    if (onOpenSearch != null && !collapseSearchIntoBar) {
                         HeaderSearchIconButton(onClick = onOpenSearch)
                     }
                     actions?.invoke(this)
@@ -77,6 +80,10 @@ fun AppScreenScaffold(
             } else {
                 null
             },
+        onOpenSearch = onOpenSearch,
+        onNavigateBack = onNavigateBack,
+        nativeTrailingActions = nativeTrailingActions,
+        collapseSearchIntoBar = collapseSearchIntoBar,
         showHeader = showFloatingHeader,
         belowHeaderSpacing = belowHeaderSpacing,
         horizontalPadding = horizontalPadding,
@@ -98,6 +105,9 @@ fun AppScreenScaffoldScroll(
     presenceOnline: Boolean? = null,
     navigationIcon: @Composable (() -> Unit)? = null,
     actions: @Composable (RowScope.() -> Unit)? = null,
+    onOpenSearch: (() -> Unit)? = null,
+    onNavigateBack: (() -> Unit)? = null,
+    nativeTrailingActions: List<NativeChromeAction> = emptyList(),
     horizontalPadding: Dp = AppScreenDefaults.HorizontalPadding,
     content: @Composable (Modifier) -> Unit,
 ) {
@@ -108,6 +118,9 @@ fun AppScreenScaffoldScroll(
         presenceOnline = presenceOnline,
         navigationIcon = navigationIcon,
         actions = actions,
+        onOpenSearch = onOpenSearch,
+        onNavigateBack = onNavigateBack,
+        nativeTrailingActions = nativeTrailingActions,
         horizontalPadding = horizontalPadding,
         content = content,
     )
@@ -117,7 +130,7 @@ fun AppScreenScaffoldScroll(
  * Scroll offset → 0 (large) … 1 (compact) for tab-root collapsing headers.
  * [thresholdPx] should be [AppScreenDefaults.HeaderCollapseScrollThreshold] converted with Density.
  *
- * This fraction drives native chrome (iOS companion UIScrollView / Android LargeTopAppBar).
+ * This fraction drives native chrome (iOS host-view UINavigationBar / Android LargeTopAppBar).
  * It must never be used to hide the header.
  */
 fun computeHeaderCollapseFraction(
@@ -150,6 +163,9 @@ fun AppScreenWithFloatingHeader(
     presenceOnline: Boolean? = null,
     navigationIcon: @Composable (() -> Unit)? = null,
     actions: @Composable (RowScope.() -> Unit)? = null,
+    onOpenSearch: (() -> Unit)? = null,
+    onNavigateBack: (() -> Unit)? = null,
+    nativeTrailingActions: List<NativeChromeAction> = emptyList(),
     horizontalPadding: Dp = AppScreenDefaults.HorizontalPadding,
     content: @Composable (Modifier) -> Unit,
 ) {
@@ -160,6 +176,9 @@ fun AppScreenWithFloatingHeader(
         presenceOnline = presenceOnline,
         navigationIcon = navigationIcon,
         actions = actions,
+        onOpenSearch = onOpenSearch,
+        onNavigateBack = onNavigateBack,
+        nativeTrailingActions = nativeTrailingActions,
         horizontalPadding = horizontalPadding,
         content = content,
     )

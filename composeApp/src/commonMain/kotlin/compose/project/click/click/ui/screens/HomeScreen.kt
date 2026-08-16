@@ -65,11 +65,13 @@ import compose.project.click.click.ui.components.FeaturedEventSection // pragma:
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
+import compose.project.click.click.ui.components.HeaderChromeIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeExploreTile // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeGreetingSubtitle // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomePileActions // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomePileBoardData // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeSearchPill // pragma: allowlist secret
+import compose.project.click.click.ui.components.NativeChromeAction // pragma: allowlist secret
 import compose.project.click.click.ui.components.PollPairCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.SavedEventsSection // pragma: allowlist secret
 import compose.project.click.click.ui.components.SectionHeader // pragma: allowlist secret
@@ -102,8 +104,8 @@ import kotlin.time.Duration.Companion.milliseconds
 private val ScreenPaddingHorizontal = 20.dp
 private val CardSpacing = 24.dp
 
-/** Visible gap under the floating greeting before the search pill (cancels spacedBy after inset). */
-private val HeaderToSearchGap = 8.dp
+/** Visible gap under the native greeting before the sticky search pill. */
+private val HeaderToSearchGap = 12.dp
 
 @Composable
 fun HomeScreen(
@@ -338,12 +340,50 @@ fun HomeScreen(
                     title = homeGreetingTitle(firstName),
                     subtitle = HomeGreetingSubtitle,
                     showFloatingHeader = true,
-                    // spacedBy also applies after the header inset item — compensate so search
-                    // sits HeaderToSearchGap under the greeting, not CardSpacing×2.
-                    belowHeaderSpacing = HeaderToSearchGap - CardSpacing,
+                    belowHeaderSpacing = HeaderToSearchGap,
+                    collapseSearchIntoBar = true,
+                    onOpenSearch = onOpenSearch,
                     verticalArrangement = Arrangement.spacedBy(CardSpacing),
+                    nativeTrailingActions =
+                        listOf(
+                            NativeChromeAction(
+                                sfSymbol =
+                                    if (homeLayoutMode == HomeLayoutMode.PILE) {
+                                        "list.bullet"
+                                    } else {
+                                        "square.stack"
+                                    },
+                                contentDescription =
+                                    if (homeLayoutMode == HomeLayoutMode.PILE) {
+                                        "Switch to list view"
+                                    } else {
+                                        "Switch to photo pile"
+                                    },
+                                onClick = {
+                                    AppDataManager.setHomeLayoutMode(
+                                        if (homeLayoutMode == HomeLayoutMode.PILE) {
+                                            HomeLayoutMode.LINEAR
+                                        } else {
+                                            HomeLayoutMode.PILE
+                                        },
+                                    )
+                                },
+                            ),
+                        ),
                     actions = {
-                        IconButton(
+                        HeaderChromeIconButton(
+                            icon =
+                                if (homeLayoutMode == HomeLayoutMode.PILE) {
+                                    Icons.Filled.Menu
+                                } else {
+                                    Icons.Filled.Star
+                                },
+                            contentDescription =
+                                if (homeLayoutMode == HomeLayoutMode.PILE) {
+                                    "Switch to list view"
+                                } else {
+                                    "Switch to photo pile"
+                                },
                             onClick = {
                                 AppDataManager.setHomeLayoutMode(
                                     if (homeLayoutMode == HomeLayoutMode.PILE) {
@@ -353,23 +393,7 @@ fun HomeScreen(
                                     },
                                 )
                             },
-                        ) {
-                            Icon(
-                                imageVector =
-                                    if (homeLayoutMode == HomeLayoutMode.PILE) {
-                                        Icons.Filled.Menu
-                                    } else {
-                                        Icons.Filled.Star
-                                    },
-                                contentDescription =
-                                    if (homeLayoutMode == HomeLayoutMode.PILE) {
-                                        "Switch to list view"
-                                    } else {
-                                        "Switch to photo pile"
-                                    },
-                                tint = accentColor(AccentRole.Icon),
-                            )
-                        }
+                        )
                     },
                 ) {
                     if (onOpenSearch != null) {
@@ -377,7 +401,6 @@ fun HomeScreen(
                             HomeSearchPill(onClick = onOpenSearch)
                         }
                     }
-
                     if (homeLayoutMode == HomeLayoutMode.PILE) {
                         item(key = "availability_intents_strip") {
                             Column(

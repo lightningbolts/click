@@ -78,8 +78,8 @@ class InteractiveBackHostState {
     suspend fun dismiss(
         animationSpec: AnimationSpec<Float> =
             spring(
-                dampingRatio = Spring.DampingRatioNoBouncy,
-                stiffness = Spring.StiffnessMedium,
+                dampingRatio = 0.58f,
+                stiffness = Spring.StiffnessMediumLow,
             ),
     ) {
         behindLayersVisible = true
@@ -110,6 +110,6 @@ fun Modifier.interactiveSwipeBackUnderlay(state: InteractiveBackHostState): Modi
                 return@graphicsLayer
             }
             val width = size.width.coerceAtLeast(1f)
-            val progress = (state.dragOffsetPx.floatValue.coerceIn(0f, width) / width).coerceIn(0f, 1f)
+            val progress = state.dragOffsetPx.floatValue.coerceAtLeast(0f) / width
             translationX = -(width * InteractiveSwipeBackParallaxPeekRatio) * (1f - progress)
         }

@@ -1,11 +1,13 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.chat
 
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.background
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.TextFieldColors
@@ -16,13 +18,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.components.ClickCircularIconButton
+import compose.project.click.click.ui.theme.LocalPlatformStyle
+import compose.project.click.click.ui.theme.PrimaryBlue
 
 /** Shared horizontal inset for chat header row and composer strip (outer edges align). */
 internal val ChatChromeHorizontalPadding: Dp = 16.dp
@@ -56,6 +58,7 @@ internal fun ChatHeaderIconButton(
         size = size,
         iconSize = iconSize,
         showBorder = showBorder,
+        glassStrength = if (LocalPlatformStyle.current.isIOS) 0.64f else 0.4f,
     )
 }
 
@@ -72,10 +75,11 @@ internal fun ChatLiquidGlassPlate(
     @Suppress("UNUSED_VARIABLE")
     val ignoredBlur = blurRadius
     Box(
-        modifier = modifier
-            .graphicsLayer { clip = true }
-            .background(tint)
-            .testTag(testTag),
+        modifier =
+            modifier
+                .graphicsLayer { clip = true }
+                .background(tint)
+                .testTag(testTag),
     )
 }
 
@@ -89,9 +93,10 @@ internal fun ChatComposerChromeFadeUnderlay(
 ) {
     val bg = MaterialTheme.colorScheme.surface
     Box(
-        modifier = modifier
-            .testTag(testTag)
-            .background(bg),
+        modifier =
+            modifier
+                .testTag(testTag)
+                .background(bg),
     )
 }
 
@@ -115,7 +120,9 @@ internal fun rememberChatComposerFieldColors(): TextFieldColors {
     val fieldFill = MaterialTheme.colorScheme.surface
     return OutlinedTextFieldDefaults.colors(
         focusedBorderColor = PrimaryBlue,
-        unfocusedBorderColor = compose.project.click.click.ui.theme.clickBorderColor(),
+        unfocusedBorderColor =
+            compose.project.click.click.ui.theme
+                .clickBorderColor(),
         focusedContainerColor = fieldFill,
         unfocusedContainerColor = fieldFill,
     )
