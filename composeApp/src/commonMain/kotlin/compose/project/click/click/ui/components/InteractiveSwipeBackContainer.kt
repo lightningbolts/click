@@ -201,46 +201,49 @@ fun InteractiveSwipeBackContainer(
 
             settleJob =
                 settleScope.launch {
-                    val releaseVelocity =
-                        when {
-                            shouldComplete -> velocityX.coerceAtLeast(0f)
-                            else -> velocityX.coerceAtMost(0f)
-                        }
-                    animate(
-                        initialValue = currentOffset,
-                        targetValue = target,
-                        initialVelocity = releaseVelocity,
-                        animationSpec =
-                            spring(
-                                dampingRatio = if (shouldComplete) 0.72f else 0.58f,
-                                stiffness = Spring.StiffnessMediumLow,
-                            ),
-                    ) { value, _ ->
-                        offsetPx.floatValue =
-                            if (shouldComplete) {
-                                value.coerceAtLeast(widthPx * 0.99f)
-                            } else {
-                                value
+                    try {
+                        val releaseVelocity =
+                            when {
+                                shouldComplete -> velocityX.coerceAtLeast(0f)
+                                else -> velocityX.coerceAtMost(0f)
                             }
-                        notifySwipeOffset()
-                    }
+                        animate(
+                            initialValue = currentOffset,
+                            targetValue = target,
+                            initialVelocity = releaseVelocity,
+                            animationSpec =
+                                spring(
+                                    dampingRatio = if (shouldComplete) 0.72f else 0.58f,
+                                    stiffness = Spring.StiffnessMediumLow,
+                                ),
+                        ) { value, _ ->
+                            offsetPx.floatValue =
+                                if (shouldComplete) {
+                                    value.coerceAtLeast(widthPx * 0.99f)
+                                } else {
+                                    value
+                                }
+                            notifySwipeOffset()
+                        }
 
-                    if (shouldComplete) {
-                        onBack()
-                        // Do not zero [offsetPx] here: while this composable is still composed until the
-                        // next frame, resetting would snap the foreground (translationX) back to 0 and
-                        // flash the chat full-screen. External mirrors are cleared after removal via
-                        // [LaunchedEffect] in the parent.
-                        kotlinx.coroutines.delay(34)
-                        onInteractiveSwipeFinishedState.value.invoke()
-                    } else {
-                        offsetPx.floatValue = 0f
-                        notifySwipeOffset()
-                        onInteractiveSwipeFinishedState.value.invoke()
+                        if (shouldComplete) {
+                            onBack()
+                            // Do not zero [offsetPx] here: while this composable is still composed until the
+                            // next frame, resetting would snap the foreground (translationX) back to 0 and
+                            // flash the chat full-screen. External mirrors are cleared after removal via
+                            // [LaunchedEffect] in the parent.
+                            kotlinx.coroutines.delay(34)
+                            onInteractiveSwipeFinishedState.value.invoke()
+                        } else {
+                            offsetPx.floatValue = 0f
+                            notifySwipeOffset()
+                            onInteractiveSwipeFinishedState.value.invoke()
+                        }
+                    } finally {
+                        isGestureActive = false
+                        isSettling = false
+                        settleJob = null
                     }
-                    isGestureActive = false
-                    isSettling = false
-                    settleJob = null
                 }
         }
 

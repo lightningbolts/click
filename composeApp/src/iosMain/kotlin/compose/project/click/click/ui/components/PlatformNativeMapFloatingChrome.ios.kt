@@ -98,6 +98,7 @@ private object IosHostMapFloatingChrome {
     private var attachedHost: UIViewController? = null
     private var bottomConstraint: NSLayoutConstraint? = null
     private var glassApplied = false
+    private var usesGlassButtons = false
     private var lastMenuSignature: String? = null
 
     fun attach(
@@ -230,6 +231,7 @@ private object IosHostMapFloatingChrome {
     }
 
     private fun applyGlass(usesNativeLiquidGlass: Boolean) {
+        usesGlassButtons = usesNativeLiquidGlass
         if (glassApplied) return
         glassApplied = true
         if (!usesNativeLiquidGlass) {
@@ -254,14 +256,13 @@ private object IosHostMapFloatingChrome {
     }
 
     private fun paintLayerButton(label: String) {
-        val config =
-            if (layerButton.configuration != null) {
-                layerButton.configuration!!
-            } else {
-                UIButtonConfiguration.glassButtonConfiguration()
-            }
-        config.title = label
-        layerButton.configuration = config
+        if (usesGlassButtons) {
+            val config =
+                layerButton.configuration
+                    ?: UIButtonConfiguration.glassButtonConfiguration()
+            config.title = label
+            layerButton.configuration = config
+        }
         layerButton.setTitle(label, forState = UIControlStateNormal)
     }
 
