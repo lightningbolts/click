@@ -515,7 +515,7 @@ fun MapScreen(
                                 },
                                 onZoomIn = { viewModel.zoomIn() },
                                 onZoomOut = { viewModel.zoomOut() },
-                                chromeVisible = !nearbyFullyOpen,
+                                chromeVisible = !eventsSheetExpanded && !eventsBackHost.behindLayersVisible,
                                 // Stay composed under the events overlay (covered, not remounted) so
                                 // swipe-back reveals controls that never remounted.
                                 modifier =
@@ -608,34 +608,26 @@ fun MapScreen(
                                             },
                                             previousContent = {},
                                             currentContent = {
-                                                CompositionLocalProvider(
-                                                    LocalNativeChromeActive provides
-                                                        (
-                                                            eventsSheetExpanded ||
-                                                                eventsBackHost.behindLayersVisible
-                                                        ),
-                                                ) {
-                                                    EventsDiscoveryFullScreen(
-                                                        feedItems = feedItems,
-                                                        discoveryFeedPending = discoveryFeedPending,
-                                                        discoveryFeedRefreshing = discoveryFeedLoading,
-                                                        onRefreshDiscovery = { viewModel.refreshDiscoveryFeed() },
-                                                        layerFilters = layerFilters,
-                                                        onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
-                                                        viewModel = viewModel,
-                                                        onBack = {
-                                                            closeEventsList(EventsListTransitionMode.Tap)
-                                                        },
-                                                        onBeaconClick = { beacon, distanceM ->
-                                                            TelemetryBatcher.recordActionTaken()
-                                                            viewModel.onBeaconPinTapped(
-                                                                beacon.id,
-                                                                seedDistanceMeters = distanceM,
-                                                            )
-                                                        },
-                                                        interactiveBackSwipeOffsetPx = eventsSwipeDragPx,
-                                                    )
-                                                }
+                                                EventsDiscoveryFullScreen(
+                                                    feedItems = feedItems,
+                                                    discoveryFeedPending = discoveryFeedPending,
+                                                    discoveryFeedRefreshing = discoveryFeedLoading,
+                                                    onRefreshDiscovery = { viewModel.refreshDiscoveryFeed() },
+                                                    layerFilters = layerFilters,
+                                                    onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
+                                                    viewModel = viewModel,
+                                                    onBack = {
+                                                        closeEventsList(EventsListTransitionMode.Tap)
+                                                    },
+                                                    onBeaconClick = { beacon, distanceM ->
+                                                        TelemetryBatcher.recordActionTaken()
+                                                        viewModel.onBeaconPinTapped(
+                                                            beacon.id,
+                                                            seedDistanceMeters = distanceM,
+                                                        )
+                                                    },
+                                                    interactiveBackSwipeOffsetPx = eventsSwipeDragPx,
+                                                )
                                             },
                                         )
                                     }

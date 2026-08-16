@@ -106,7 +106,7 @@ actual fun NativeCollapsingScaffold(
                             TopAppBarDefaults.largeTopAppBarColors(
                                 containerColor = Color.Transparent,
                                 scrolledContainerColor =
-                                    MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                                    MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
                             ),
                     )
                     headerBelowContent?.invoke()
@@ -179,7 +179,7 @@ actual fun NativeCollapsingScrollScaffold(
                     TopAppBarDefaults.largeTopAppBarColors(
                         containerColor = Color.Transparent,
                         scrolledContainerColor =
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
                     ),
             )
         },
@@ -254,6 +254,7 @@ actual fun BindPlatformNativeNavigationBar(
     title: String,
     subtitle: String?,
     presenceOnline: Boolean?,
+    identity: NativeChromeIdentity?,
     onNavigateBack: (() -> Unit)?,
     onOpenSearch: (() -> Unit)?,
     nativeTrailingActions: List<NativeChromeAction>,

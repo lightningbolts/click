@@ -105,7 +105,7 @@ private val ScreenPaddingHorizontal = 20.dp
 private val CardSpacing = 24.dp
 
 /** Visible gap under the native greeting before the sticky search pill. */
-private val HeaderToSearchGap = 8.dp
+private val HeaderToSearchGap = 12.dp
 
 @Composable
 fun HomeScreen(

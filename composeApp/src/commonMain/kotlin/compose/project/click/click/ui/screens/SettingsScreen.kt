@@ -313,7 +313,7 @@ fun SettingsScreen(
                 CompositionLocalProvider(
                     LocalNativeChromeActive provides (settingsPage == SettingsPage.Hub),
                 ) {
-                AppScreenScaffold(
+                    AppScreenScaffold(
                     title = "Settings",
                     onOpenSearch = onOpenSearch,
                     verticalArrangement = Arrangement.spacedBy(24.dp),

@@ -1,3 +1,7 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+)
+
 package compose.project.click.click.ui.components
 
 import androidx.compose.foundation.background
@@ -8,7 +12,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -44,14 +47,16 @@ private val OnlineGreen = Color(0xFF22C55E)
 private val GroupAvatarOverflowDiameter = 40.dp
 
 /** Horizontal overlap between stacked faces in [GroupAvatar]. */
-fun groupAvatarOverlapDp(avatarSize: Dp): Dp =
-    (avatarSize.value * 0.36f).dp
+fun groupAvatarOverlapDp(avatarSize: Dp): Dp = (avatarSize.value * 0.36f).dp
 
 /**
  * Width occupied by [GroupAvatar] for [memberCount] members (including "+N"),
  * so parent Rows can reserve space and avoid overlap with neighboring text.
  */
-fun groupAvatarClusterWidth(memberCount: Int, avatarSize: Dp): Dp {
+fun groupAvatarClusterWidth(
+    memberCount: Int,
+    avatarSize: Dp,
+): Dp {
     if (memberCount <= 0) return avatarSize
     val extraCount = (memberCount - 2).coerceAtLeast(0)
     val visibleFaceCount = if (extraCount > 0) 2 else minOf(3, memberCount)
@@ -63,27 +68,32 @@ fun groupAvatarClusterWidth(memberCount: Int, avatarSize: Dp): Dp {
 }
 
 /** Saturated backgrounds that keep white initials readable. */
-private val PlaceholderAvatarColors = listOf(
-    Color(0xFF4F46E5),
-    Color(0xFF7C3AED),
-    Color(0xFF0D9488),
-    Color(0xFF2563EB),
-    Color(0xFFBE185D),
-    Color(0xFFB45309),
-    Color(0xFF0F766E),
-    Color(0xFF4338CA),
-    Color(0xFF15803D),
-    Color(0xFF92400E),
-)
+private val PlaceholderAvatarColors =
+    listOf(
+        Color(0xFF4F46E5),
+        Color(0xFF7C3AED),
+        Color(0xFF0D9488),
+        Color(0xFF2563EB),
+        Color(0xFFBE185D),
+        Color(0xFFB45309),
+        Color(0xFF0F766E),
+        Color(0xFF4338CA),
+        Color(0xFF15803D),
+        Color(0xFF92400E),
+    )
 
 /**
  * Two-letter style initials for list avatars ("Alex Smith" → "AS", single token → up to two chars).
  */
-fun initialsForAvatar(displayName: String?, email: String? = null): String {
+fun initialsForAvatar(
+    displayName: String?,
+    email: String? = null,
+): String {
     val primary = displayName?.trim()?.takeIf { it.isNotEmpty() }
-    val source = primary
-        ?: email?.substringBefore('@')?.trim()?.takeIf { it.isNotEmpty() }
-        ?: return "?"
+    val source =
+        primary
+            ?: email?.substringBefore('@')?.trim()?.takeIf { it.isNotEmpty() }
+            ?: return "?"
     val parts = source.split(Regex("\\s+")).filter { it.isNotEmpty() }
     return when {
         parts.size >= 2 -> {
@@ -108,6 +118,28 @@ fun stableAvatarPlaceholderColor(seed: String): Color {
 }
 
 /**
+ * Initials, seed color, and photo URL used by [ConnectionListUserAvatarFace] and the iOS
+ * native header. Keep both call sites on this function so faces stay identical.
+ */
+data class AvatarFaceSpec(
+    val initials: String,
+    val background: Color,
+    val photoUrl: String?,
+)
+
+fun avatarFaceSpec(
+    displayName: String?,
+    email: String?,
+    avatarUrl: String?,
+    userId: String,
+): AvatarFaceSpec =
+    AvatarFaceSpec(
+        initials = initialsForAvatar(displayName, email),
+        background = stableAvatarPlaceholderColor(userId),
+        photoUrl = avatarUrl?.trim()?.takeIf { it.isNotEmpty() },
+    )
+
+/**
  * Circular face: loads [avatarUrl] on a background thread via Coil; on null/error or before load,
  * shows [initialsForAvatar] on a stable color from [userId].
  */
@@ -120,19 +152,25 @@ fun ConnectionListUserAvatarFace(
     modifier: Modifier = Modifier,
     useCompactTypography: Boolean = false,
 ) {
-    val trimmedUrl = avatarUrl?.trim()?.takeIf { it.isNotEmpty() }
-    val initials = remember(displayName, email) { initialsForAvatar(displayName, email) }
-    val bg = remember(userId) { stableAvatarPlaceholderColor(userId) }
+    val spec =
+        remember(displayName, email, avatarUrl, userId) {
+            avatarFaceSpec(displayName, email, avatarUrl, userId)
+        }
+    val initials = spec.initials
+    val bg = spec.background
+    val trimmedUrl = spec.photoUrl
     var imageReady by remember(trimmedUrl, userId) { mutableStateOf(false) }
 
     Box(
-        modifier = modifier
-            .clip(CircleShape),
+        modifier =
+            modifier
+                .clip(CircleShape),
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(bg),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(bg),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -142,11 +180,12 @@ fun ConnectionListUserAvatarFace(
                 maxLines = 1,
                 overflow = TextOverflow.Clip,
                 textAlign = TextAlign.Center,
-                style = if (useCompactTypography) {
-                    MaterialTheme.typography.labelMedium
-                } else {
-                    MaterialTheme.typography.bodyMedium
-                },
+                style =
+                    if (useCompactTypography) {
+                        MaterialTheme.typography.labelMedium
+                    } else {
+                        MaterialTheme.typography.bodyMedium
+                    },
             )
         }
         if (trimmedUrl != null) {
@@ -154,10 +193,11 @@ fun ConnectionListUserAvatarFace(
                 model = trimmedUrl,
                 contentDescription = displayName?.trim()?.takeIf { it.isNotEmpty() }?.let { "$it profile photo" },
                 contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(CircleShape)
-                    .alpha(if (imageReady) 1f else 0f),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape)
+                        .alpha(if (imageReady) 1f else 0f),
                 onSuccess = { imageReady = true },
                 onError = { imageReady = false },
             )
@@ -182,37 +222,40 @@ fun CoreConnectionAvatarFrame(
     val ringPad = if (isCore) CoreHaloRingWidth else 0.dp
     val outerSize = avatarSize + ringPad * 2
     val interactionSource = remember { MutableInteractionSource() }
-    val clickModifier = if (onClick != null) {
-        Modifier.clickable(
-            interactionSource = interactionSource,
-            indication = ripple(bounded = false, radius = outerSize / 2),
-            onClick = onClick,
-        )
-    } else {
-        Modifier
-    }
+    val clickModifier =
+        if (onClick != null) {
+            Modifier.clickable(
+                interactionSource = interactionSource,
+                indication = ripple(bounded = false, radius = outerSize / 2),
+                onClick = onClick,
+            )
+        } else {
+            Modifier
+        }
     Box(
-        modifier = modifier
-            .size(outerSize)
-            .clip(CircleShape)
-            .then(clickModifier)
-            .then(
-                if (isCore) {
-                    Modifier.border(
-                        width = CoreHaloRingWidth,
-                        color = PrimaryBlue,
-                        shape = CircleShape,
-                    )
-                } else {
-                    Modifier
-                },
-            ),
+        modifier =
+            modifier
+                .size(outerSize)
+                .clip(CircleShape)
+                .then(clickModifier)
+                .then(
+                    if (isCore) {
+                        Modifier.border(
+                            width = CoreHaloRingWidth,
+                            color = PrimaryBlue,
+                            shape = CircleShape,
+                        )
+                    } else {
+                        Modifier
+                    },
+                ),
         contentAlignment = Alignment.Center,
     ) {
         Box(
-            modifier = Modifier
-                .size(avatarSize)
-                .clip(CircleShape),
+            modifier =
+                Modifier
+                    .size(avatarSize)
+                    .clip(CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             content()
@@ -237,17 +280,18 @@ fun AvatarWithOnlineIndicator(
         content()
         if (isOnline) {
             Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .offset(x = 1.dp, y = 1.dp)
-                    .size(indicatorSize)
-                    .clip(CircleShape)
-                    .background(OnlineGreen)
-                    .border(
-                        width = indicatorBorder,
-                        color = indicatorBorderColor,
-                        shape = CircleShape
-                    )
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .offset(x = 1.dp, y = 1.dp)
+                        .size(indicatorSize)
+                        .clip(CircleShape)
+                        .background(OnlineGreen)
+                        .border(
+                            width = indicatorBorder,
+                            color = indicatorBorderColor,
+                            shape = CircleShape,
+                        ),
             )
         }
     }
@@ -270,20 +314,22 @@ fun GroupAvatar(
             model = groupAvatarUrl,
             contentDescription = "Group avatar",
             contentScale = ContentScale.Crop,
-            modifier = modifier
-                .size(avatarSize)
-                .clip(CircleShape)
-                .border(2.dp, MaterialTheme.colorScheme.background, CircleShape),
+            modifier =
+                modifier
+                    .size(avatarSize)
+                    .clip(CircleShape)
+                    .border(2.dp, MaterialTheme.colorScheme.background, CircleShape),
         )
         return
     }
     if (members.isEmpty()) return
-    val sortedUsers: List<User> = members
-        .sortedWith(
-            compareByDescending<User> { maxOf(it.lastPolled ?: 0L, it.last_paired ?: 0L) }
-                .thenBy { it.name?.lowercase().orEmpty() }
-                .thenBy { it.id },
-        )
+    val sortedUsers: List<User> =
+        members
+            .sortedWith(
+                compareByDescending<User> { maxOf(it.lastPolled ?: 0L, it.last_paired ?: 0L) }
+                    .thenBy { it.name?.lowercase().orEmpty() }
+                    .thenBy { it.id },
+            )
     val extraCount = (sortedUsers.size - 2).coerceAtLeast(0)
     val visibleUsers = if (extraCount > 0) sortedUsers.take(2) else sortedUsers.take(3)
     val stackCount = visibleUsers.size + if (extraCount > 0) 1 else 0
@@ -294,33 +340,38 @@ fun GroupAvatar(
     val ringColor = MaterialTheme.colorScheme.background
     val overflowDiameter = GroupAvatarOverflowDiameter
     Box(
-        modifier = modifier
-            .width(stackWidth)
-            .height(avatarSize + 4.dp),
+        modifier =
+            modifier
+                .width(stackWidth)
+                .height(avatarSize + 4.dp),
     ) {
         visibleUsers.forEachIndexed { index, member ->
             val profile: UserProfile = member.toUserProfile()
-            val verticalNudge = when (stackCount) {
-                1 -> 0.dp
-                2 -> if (index == 0) 2.dp else 0.dp
-                else -> when (index) {
-                    0 -> 3.dp
+            val verticalNudge =
+                when (stackCount) {
                     1 -> 0.dp
-                    else -> 3.dp
+                    2 -> if (index == 0) 2.dp else 0.dp
+                    else ->
+                        when (index) {
+                            0 -> 3.dp
+                            1 -> 0.dp
+                            else -> 3.dp
+                        }
                 }
-            }
             Box(
-                modifier = Modifier
-                    .offset(x = overlap * index, y = verticalNudge)
-                    .size(avatarSize)
-                    .zIndex(index.toFloat())
-                    .align(Alignment.BottomStart),
+                modifier =
+                    Modifier
+                        .offset(x = overlap * index, y = verticalNudge)
+                        .size(avatarSize)
+                        .zIndex(index.toFloat())
+                        .align(Alignment.BottomStart),
             ) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(CircleShape)
-                        .border(2.dp, ringColor, CircleShape),
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape)
+                            .border(2.dp, ringColor, CircleShape),
                 ) {
                     ConnectionListUserAvatarFace(
                         displayName = profile.displayName,
@@ -336,19 +387,21 @@ fun GroupAvatar(
         if (extraCount > 0) {
             val index = visibleUsers.size
             Box(
-                modifier = Modifier
-                    .offset(x = overlap * index, y = 3.dp)
-                    .size(overflowDiameter)
-                    .zIndex(100f + index.toFloat())
-                    .align(Alignment.BottomStart),
+                modifier =
+                    Modifier
+                        .offset(x = overlap * index, y = 3.dp)
+                        .size(overflowDiameter)
+                        .zIndex(100f + index.toFloat())
+                        .align(Alignment.BottomStart),
                 contentAlignment = Alignment.Center,
             ) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.secondaryContainer)
-                        .border(2.dp, ringColor, CircleShape),
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.secondaryContainer)
+                            .border(2.dp, ringColor, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(

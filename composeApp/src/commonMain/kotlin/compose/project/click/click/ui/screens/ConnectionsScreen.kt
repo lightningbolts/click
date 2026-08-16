@@ -17,7 +17,6 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,7 +40,6 @@ import compose.project.click.click.ui.chat.ConnectionSheetDialogs
 import compose.project.click.click.ui.chat.GroupMembersPickerContext
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
-import compose.project.click.click.ui.components.LocalNativeChromeActive
 import compose.project.click.click.ui.components.PlatformBackHandler
 import compose.project.click.click.ui.components.PlatformNativeNavigationBarSwipeReveal
 import compose.project.click.click.ui.components.TabbedGroupProfileSheet
@@ -86,7 +84,6 @@ fun ConnectionsScreen(
     onVerifiedCliqueProximityAutofillConsumed: () -> Unit = {},
 ) {
     var selectedChatId by remember { mutableStateOf(initialChatId) }
-    var listRevealEpoch by remember { mutableStateOf(0) }
     val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
 
     /** Shared with [InteractiveSwipeBackContainer] so the persistent list mirrors layer-1 parallax. */
@@ -127,8 +124,6 @@ fun ConnectionsScreen(
         onChatOpenStateChanged(false)
         // Bring the already-warm UITabBar to front (alpha stayed 1 while it was behind Compose).
         onChatSuppressesTabBarChanged(false)
-        // Re-measure floating header inset at expanded height so Remember Me never sits under Clicks.
-        listRevealEpoch += 1
     }
 
     fun closeActiveChat(mode: ChatTransitionMode = ChatTransitionMode.Tap) {
@@ -171,6 +166,7 @@ fun ConnectionsScreen(
     // (that restarts global realtime and flickers the inbox).
     LaunchedEffect(initialChatId) {
         val id = initialChatId ?: return@LaunchedEffect
+        lastOpenChatIdForIosOverlay = id
         viewModel.loadChatMessages(id)
         selectedChatId = id
         viewModel.loadChats(isForced = false)
@@ -208,6 +204,7 @@ fun ConnectionsScreen(
         onChatOpenStateChanged(true)
         onChatSuppressesTabBarChanged(true)
         ChatNotificationDismisser.dismissForThread(chatId, chatId)
+        lastOpenChatIdForIosOverlay = chatId
         selectedChatId = chatId
         viewModel.loadChatMessages(chatId)
     }
@@ -224,25 +221,22 @@ fun ConnectionsScreen(
                         .fillMaxSize()
                         .interactiveSwipeBackUnderlay(chatBackHost),
             ) {
-                CompositionLocalProvider(LocalNativeChromeActive provides (selectedChatId == null)) {
-                    ConnectionsListView(
-                        viewModel = viewModel,
-                        searchQuery = searchQuery,
-                        onOpenSearch = onOpenSearch,
-                        onChatSelected = { chatId -> openChat(chatId) },
-                        onHubSelected = onHubSelected,
-                        onNavigateToLocationSettings = onNavigateToLocationSettings,
-                        onUserProfileClick = { profileUserId = it },
-                        onGroupMembersPicker = {
-                            groupMembersPickerContext = it
-                            showGroupMembersSheet = true
-                        },
-                        verifiedCliqueProximityAutofill = verifiedCliqueProximityAutofill,
-                        onVerifiedCliqueProximityAutofillConsumed = onVerifiedCliqueProximityAutofillConsumed,
-                        isListObscured = selectedChatId != null,
-                        listRevealEpoch = listRevealEpoch,
-                    )
-                }
+                ConnectionsListView(
+                    viewModel = viewModel,
+                    searchQuery = searchQuery,
+                    onOpenSearch = onOpenSearch,
+                    onChatSelected = { chatId -> openChat(chatId) },
+                    onHubSelected = onHubSelected,
+                    onNavigateToLocationSettings = onNavigateToLocationSettings,
+                    onUserProfileClick = { profileUserId = it },
+                    onGroupMembersPicker = {
+                        groupMembersPickerContext = it
+                        showGroupMembersSheet = true
+                    },
+                    verifiedCliqueProximityAutofill = verifiedCliqueProximityAutofill,
+                    onVerifiedCliqueProximityAutofillConsumed = onVerifiedCliqueProximityAutofillConsumed,
+                    isListObscured = selectedChatId != null,
+                )
             }
 
             // Sits under the chat overlay; any pointer that misses the overlay (Compose "holes")

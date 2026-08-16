@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.SideEffect
@@ -213,7 +212,7 @@ fun InteractiveSwipeBackContainer(
                         initialVelocity = releaseVelocity,
                         animationSpec =
                             spring(
-                                dampingRatio = if (shouldComplete) 0.78f else 0.68f,
+                                dampingRatio = if (shouldComplete) 0.72f else 0.58f,
                                 stiffness = Spring.StiffnessMediumLow,
                             ),
                     ) { value, _ ->
@@ -345,9 +344,7 @@ fun InteractiveSwipeBackContainer(
                     },
         ) {
             if (showPreviousLayer) {
-                CompositionLocalProvider(LocalNativeChromeActive provides false) {
-                    previousContent()
-                }
+                previousContent()
             }
         }
         Box(

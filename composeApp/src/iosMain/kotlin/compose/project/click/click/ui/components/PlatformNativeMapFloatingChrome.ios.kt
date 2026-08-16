@@ -157,9 +157,6 @@ private object IosHostMapFloatingChrome {
                 zoomInButton.heightAnchor.constraintEqualToConstant(48.0),
             ),
         )
-        dropButton.setImage(UIImage.systemImageNamed("mappin.and.ellipse"), forState = UIControlStateNormal)
-        zoomInButton.setImage(UIImage.systemImageNamed("plus"), forState = UIControlStateNormal)
-        zoomOutButton.setImage(UIImage.systemImageNamed("minus"), forState = UIControlStateNormal)
         dropButton.setAccessibilityLabel("Drop beacon")
         zoomInButton.setAccessibilityLabel("Zoom in")
         zoomOutButton.setAccessibilityLabel("Zoom out")
@@ -193,7 +190,7 @@ private object IosHostMapFloatingChrome {
             }
         if (menuSignature != lastMenuSignature) {
             lastMenuSignature = menuSignature
-            layerButton.setTitle(layerLabel, forState = UIControlStateNormal)
+            paintLayerButton(layerLabel)
             layerButton.menu =
                 UIMenu.menuWithTitle(
                     title = "",
@@ -216,11 +213,10 @@ private object IosHostMapFloatingChrome {
         bottomConstraint?.constant = -bottomPaddingPoints
         listOf(layerButton, dropButton, zoomInButton, zoomOutButton).forEach { button ->
             button.hidden = !visible
+            button.alpha = if (visible) 1.0 else 0.0
             button.userInteractionEnabled = visible
             if (visible) {
                 attachedHost?.view?.bringSubviewToFront(button)
-            } else {
-                attachedHost?.view?.sendSubviewToBack(button)
             }
         }
     }
@@ -236,10 +232,37 @@ private object IosHostMapFloatingChrome {
     private fun applyGlass(usesNativeLiquidGlass: Boolean) {
         if (glassApplied) return
         glassApplied = true
-        if (!usesNativeLiquidGlass) return
-        listOf(layerButton, dropButton, zoomInButton, zoomOutButton).forEach { button ->
-            button.configuration = UIButtonConfiguration.glassButtonConfiguration()
+        if (!usesNativeLiquidGlass) {
+            dropButton.setImage(UIImage.systemImageNamed("mappin.and.ellipse"), forState = UIControlStateNormal)
+            zoomInButton.setImage(UIImage.systemImageNamed("plus"), forState = UIControlStateNormal)
+            zoomOutButton.setImage(UIImage.systemImageNamed("minus"), forState = UIControlStateNormal)
+            return
         }
+        paintIconButton(dropButton, "mappin.and.ellipse")
+        paintIconButton(zoomInButton, "plus")
+        paintIconButton(zoomOutButton, "minus")
+        paintLayerButton(layerButton.titleForState(UIControlStateNormal) ?: "All")
+    }
+
+    private fun paintIconButton(
+        button: UIButton,
+        symbol: String,
+    ) {
+        val config = UIButtonConfiguration.glassButtonConfiguration()
+        config.image = UIImage.systemImageNamed(symbol)
+        button.configuration = config
+    }
+
+    private fun paintLayerButton(label: String) {
+        val config =
+            if (layerButton.configuration != null) {
+                layerButton.configuration!!
+            } else {
+                UIButtonConfiguration.glassButtonConfiguration()
+            }
+        config.title = label
+        layerButton.configuration = config
+        layerButton.setTitle(label, forState = UIControlStateNormal)
     }
 
     private fun makeIconButton(): UIButton =

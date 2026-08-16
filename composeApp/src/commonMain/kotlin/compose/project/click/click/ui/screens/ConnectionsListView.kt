@@ -110,8 +110,6 @@ fun ConnectionsListView(
     verifiedCliqueProximityAutofill: VerifiedCliqueProximityIntent? = null,
     onVerifiedCliqueProximityAutofillConsumed: () -> Unit = {},
     isListObscured: Boolean = false,
-    /** Bumped when returning from chat so header inset remeasures at expanded height. */
-    listRevealEpoch: Int = 0,
 ) {
     val chatListState by viewModel.chatListState.collectAsState()
     val decryptedPreviews by viewModel.decryptedPreviews.collectAsState()
@@ -209,10 +207,6 @@ fun ConnectionsListView(
         rememberSaveable(saver = LazyListState.Saver) {
             LazyListState(0, 0)
         }
-    LaunchedEffect(listRevealEpoch) {
-        if (listRevealEpoch <= 0) return@LaunchedEffect
-        connectionsLazyListState.scrollToItem(0)
-    }
 
     // Render only the unified inbox payload emitted by ChatViewModel.
     val effectiveChats: List<ChatWithDetails> =

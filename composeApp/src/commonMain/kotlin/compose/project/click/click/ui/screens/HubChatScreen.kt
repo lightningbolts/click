@@ -110,6 +110,7 @@ import compose.project.click.click.ui.components.LocalGlassAlertAnimatedDismiss 
 import compose.project.click.click.ui.components.NativeChromeAction // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
+import compose.project.click.click.ui.components.platformNativeHeaderClearance // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetPageBackground // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
@@ -308,8 +309,7 @@ fun HubChatScreen(
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
-                                    .padding(top = topInset)
-                                    .height(44.dp)
+                                    .height(platformNativeHeaderClearance(topInset))
                                     .testTag(ChatGlassHeaderPlateTestTag),
                         )
                     } else {
@@ -911,14 +911,14 @@ private fun HubRealtimeErrorView(
                 }
             }
         } else {
-            Spacer(modifier = Modifier.fillMaxWidth().height(topInset + 44.dp))
+            Spacer(modifier = Modifier.fillMaxWidth().height(platformNativeHeaderClearance(topInset)))
         }
         Column(
             modifier =
                 Modifier
                     .fillMaxSize()
                     .padding(horizontal = 32.dp)
-                    .padding(top = if (composeHeader) topInset + 56.dp else topInset + 44.dp),
+                    .padding(top = if (composeHeader) topInset + 56.dp else platformNativeHeaderClearance(topInset)),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {

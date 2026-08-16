@@ -57,7 +57,6 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -76,7 +75,6 @@ import compose.project.click.click.platform.KeyboardHeightProvider // pragma: al
 import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatBeaconDetailSheet // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatCallOptionsPopup // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatChromeHorizontalPadding // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatChromeMotion // pragma: allowlist secret
@@ -126,10 +124,13 @@ import compose.project.click.click.ui.components.GlassToastHost // pragma: allow
 import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
 import compose.project.click.click.ui.components.NativeChromeAction // pragma: allowlist secret
+import compose.project.click.click.ui.components.NativeChromeIdentity // pragma: allowlist secret
+import compose.project.click.click.ui.components.NativeChromeMenuItem // pragma: allowlist secret
 import compose.project.click.click.ui.components.TetherCompassToast // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
 import compose.project.click.click.ui.components.groupAvatarClusterWidth // pragma: allowlist secret
+import compose.project.click.click.ui.components.platformNativeHeaderClearance // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberEdgeToEdgeBottomPadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberGlassToastState // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
@@ -278,8 +279,32 @@ fun ChatView(
         (chatListState as? ChatListState.Success)
             ?.chats
             ?.firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
-    val successChat = chatMessagesState as? ChatMessagesState.Success
-    val bindIsGroup = successChat?.chatDetails?.groupClique != null
+    val successChat =
+        (chatMessagesState as? ChatMessagesState.Success)?.takeIf { state ->
+            state.chatDetails.connection.id == chatId || state.chatDetails.chat.id == chatId
+        }
+    val bindIsGroup =
+        successChat?.chatDetails?.groupClique != null ||
+            hintedChatRow?.groupClique != null
+    val bindAvatarUrl =
+        successChat?.let { details ->
+            details.chatDetails.groupClique
+                ?.avatarUrl
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?: details.chatDetails.otherUser.image
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+        } ?: hintedChatRow
+            ?.groupClique
+            ?.avatarUrl
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: hintedChatRow
+                ?.otherUser
+                ?.image
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
     val bindTitle =
         successChat?.let { details ->
             if (details.chatDetails.groupClique != null) {
@@ -303,8 +328,15 @@ fun ChatView(
                 ?.takeIf { it.isNotEmpty() }
             ?: "Chat"
     val bindOnline =
-        successChat?.let {
-            it.chatDetails.otherUser.id in onlineUsers || isPeerOnline
+        if (bindIsGroup) {
+            null
+        } else {
+            val peerId =
+                successChat
+                    ?.chatDetails
+                    ?.otherUser
+                    ?.id ?: hintedChatRow?.otherUser?.id
+            peerId?.let { it in onlineUsers || isPeerOnline }
         }
     if (nativeNavChrome) {
         BindPlatformNativeNavigationBar(
@@ -313,10 +345,48 @@ fun ChatView(
                 when {
                     bindIsGroup -> null
                     bindOnline == true -> "Online"
-                    successChat != null -> "Offline"
+                    successChat != null || hintedChatRow != null -> "Offline"
                     else -> null
                 },
-            presenceOnline = if (bindIsGroup) null else bindOnline,
+            presenceOnline = bindOnline,
+            identity =
+                NativeChromeIdentity(
+                    displayName = bindTitle,
+                    email =
+                        successChat
+                            ?.chatDetails
+                            ?.otherUser
+                            ?.email
+                            ?: hintedChatRow?.otherUser?.email,
+                    avatarUrl = bindAvatarUrl,
+                    userId =
+                        successChat
+                            ?.chatDetails
+                            ?.groupClique
+                            ?.groupId
+                            ?: successChat
+                                ?.chatDetails
+                                ?.otherUser
+                                ?.id
+                            ?: hintedChatRow?.groupClique?.groupId
+                            ?: hintedChatRow?.otherUser?.id
+                            ?: chatId,
+                    onClick = {
+                        if (bindIsGroup) {
+                            successChat?.chatDetails?.let { details ->
+                                groupMembersPickerContextFrom(details)?.let(onOpenGroupMembersPicker)
+                            }
+                        } else {
+                            val peerId =
+                                successChat
+                                    ?.chatDetails
+                                    ?.otherUser
+                                    ?.id
+                                    ?: hintedChatRow?.otherUser?.id
+                            if (peerId != null) onOpenUserProfile(peerId)
+                        }
+                    },
+                ),
             onNavigateBack = onBackPressed,
             nativeTrailingActions =
                 buildList {
@@ -340,14 +410,27 @@ fun ChatView(
                     }
                     add(
                         NativeChromeAction(
-                            sfSymbol = "phone",
+                            sfSymbol = "phone.fill",
                             contentDescription = "Call options",
-                            onClick = { showCallMenu = true },
+                            onClick = {},
+                            menuItems =
+                                listOf(
+                                    NativeChromeMenuItem(
+                                        title = if (bindIsGroup) "Group voice call" else "Voice call",
+                                        sfSymbol = "phone.fill",
+                                        onClick = { successChat?.let { startOutgoingChatCall(it, videoEnabled = false) } },
+                                    ),
+                                    NativeChromeMenuItem(
+                                        title = if (bindIsGroup) "Group video call" else "Video call",
+                                        sfSymbol = "video.fill",
+                                        onClick = { successChat?.let { startOutgoingChatCall(it, videoEnabled = true) } },
+                                    ),
+                                ),
                         ),
                     )
                     add(
                         NativeChromeAction(
-                            sfSymbol = "ellipsis",
+                            sfSymbol = "ellipsis.circle",
                             contentDescription = "More options",
                             onClick = { showConnectionSheet = true },
                         ),
@@ -468,7 +551,7 @@ fun ChatView(
                 }
                 is ChatMessagesState.Error -> {
                     if (nativeNavChrome) {
-                        Spacer(modifier = Modifier.fillMaxWidth().height(topInset + 44.dp))
+                        Spacer(modifier = Modifier.fillMaxWidth().height(platformNativeHeaderClearance(topInset)))
                     } else {
                         Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
                             Row(
@@ -778,7 +861,7 @@ fun ChatView(
                                     modifier =
                                         Modifier
                                             .fillMaxWidth()
-                                            .height(topInset + 44.dp)
+                                            .height(platformNativeHeaderClearance(topInset))
                                             .testTag(ChatGlassHeaderPlateTestTag),
                                 )
                             } else {
@@ -1446,22 +1529,6 @@ fun ChatView(
                                     onDismiss = { forwardMessageId = null },
                                 )
                             }
-                            if (nativeNavChrome) {
-                                ChatCallOptionsPopup(
-                                    expanded = showCallMenu,
-                                    onDismiss = { showCallMenu = false },
-                                    onVoice = startVoiceCall,
-                                    onVideo = startVideoCall,
-                                    voiceLabel = if (isGroupChat) "Group voice call" else "Voice call",
-                                    videoLabel = if (isGroupChat) "Group video call" else "Video call",
-                                    alignment = Alignment.TopEnd,
-                                    offset =
-                                        IntOffset(
-                                            x = with(density) { (-ChatChromeHorizontalPadding).roundToPx() },
-                                            y = with(density) { (topInset + 44.dp).roundToPx() },
-                                        ),
-                                )
-                            }
                         }
                     }
                 }
@@ -1667,4 +1734,30 @@ fun ChatView(
             },
         )
     } // End outer Box
+}
+
+private fun startOutgoingChatCall(
+    details: ChatMessagesState.Success,
+    videoEnabled: Boolean,
+) {
+    val clique = details.chatDetails.groupClique
+    if (clique != null) {
+        val groupId = clique.groupId
+        val threadId = details.chatDetails.chat.id
+        if (!groupId.isNullOrBlank() && !threadId.isNullOrBlank()) {
+            CallSessionManager.startOutgoingGroupCall(
+                groupId = groupId,
+                chatId = threadId,
+                memberIds = clique.memberUserIds,
+                videoEnabled = videoEnabled,
+            )
+        }
+        return
+    }
+    CallSessionManager.startOutgoingCall(
+        connectionId = details.chatDetails.connection.id,
+        otherUserId = details.chatDetails.otherUser.id,
+        otherUserName = details.chatDetails.otherUser.name ?: "Connection",
+        videoEnabled = videoEnabled,
+    )
 }

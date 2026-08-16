@@ -39,6 +39,7 @@ import compose.project.click.click.data.models.isActiveForUser // pragma: allowl
 import compose.project.click.click.ui.components.ClickLogoPulse
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.platformNativeHeaderClearance
 import compose.project.click.click.viewmodel.ChatListState // pragma: allowlist secret
 
 /**
@@ -92,7 +93,7 @@ internal fun ChatWarmLoadingView(
                 )
             }
         } else {
-            Spacer(modifier = Modifier.fillMaxWidth().height(topInset + 44.dp))
+            Spacer(modifier = Modifier.fillMaxWidth().height(platformNativeHeaderClearance(topInset)))
         }
         Box(
             modifier =
@@ -142,14 +143,14 @@ internal fun ChatChannelLoadingView(
                 }
             }
         } else {
-            Spacer(modifier = Modifier.fillMaxWidth().height(topInset + 44.dp))
+            Spacer(modifier = Modifier.fillMaxWidth().height(platformNativeHeaderClearance(topInset)))
         }
 
         Box(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .padding(top = if (composeHeader) topInset + 56.dp else topInset + 44.dp),
+                    .padding(top = if (composeHeader) topInset + 56.dp else platformNativeHeaderClearance(topInset)),
             contentAlignment = Alignment.Center,
         ) {
             ClickLogoPulse(logoSize = 72.dp)

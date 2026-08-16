@@ -14,19 +14,42 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 
+data class NativeChromeMenuItem(
+    val title: String,
+    val sfSymbol: String? = null,
+    val onClick: () -> Unit,
+)
+
 /**
  * Trailing iOS navigation-bar button described with an SF Symbol. Android ignores this and uses
  * the Compose [NativeCollapsingScaffold] `actions` slot instead.
+ *
+ * When [menuItems] is non-empty, iOS shows a native `UIMenu` (no Compose popup).
  */
 data class NativeChromeAction(
     val sfSymbol: String,
     val contentDescription: String,
     val onClick: () -> Unit,
+    val menuItems: List<NativeChromeMenuItem> = emptyList(),
 )
 
 /**
- * Underlays (swipe-back previous layer, covered tab roots) must not steal the singleton
- * iOS `UINavigationBar`. Frontmost content leaves this at the default `true`.
+ * Leading identity for pushed native headers (chat). Uses [avatarFaceSpec] — the same
+ * initials, seed color, and photo URL as [ConnectionListUserAvatarFace]. Tapping opens
+ * the existing profile sheet.
+ */
+data class NativeChromeIdentity(
+    val displayName: String?,
+    val email: String?,
+    val avatarUrl: String?,
+    val userId: String,
+    val onClick: () -> Unit,
+)
+
+/**
+ * Inactive [AnimatedContent] tab roots must not steal the tab-layer `UINavigationBar`.
+ * Covering routes (chat, nearby) use a second overlay layer and suppress the tab bar in
+ * UIKit — do not flip this local for those covers or the tab header remounts after swipe-back.
  */
 val LocalNativeChromeActive = staticCompositionLocalOf { true }
 
@@ -37,8 +60,9 @@ val LocalNativeChromeActive = staticCompositionLocalOf { true }
  * Android uses Material 3 [androidx.compose.material3.LargeTopAppBar] with
  * `exitUntilCollapsedScrollBehavior`. iOS attaches a real `UINavigationBar` to the Compose
  * host view (same mounting as the liquid-glass `UITabBar`) — never a full-screen
- *         `UIKitViewController` overlay. At rest the title is large (iOS large-title size) on the
- * same row as glass bar buttons; nested scroll collapses it into a compact centered title.
+ *         `UIKitViewController` overlay. At rest the title is large-title size (34pt, wrapping
+ * up to 2 lines) on the same row as glass bar buttons; the title column wraps before the
+ * action cluster. Nested scroll collapses it into a compact centered title.
  * The collapsed bar stays translucent (WhatsApp-style). iOS 26 leaves system Liquid Glass
  * alone (no custom `UINavigationBarAppearance`).
  *
@@ -112,6 +136,7 @@ expect fun BindPlatformNativeNavigationBar(
     title: String,
     subtitle: String? = null,
     presenceOnline: Boolean? = null,
+    identity: NativeChromeIdentity? = null,
     onNavigateBack: (() -> Unit)? = null,
     onOpenSearch: (() -> Unit)? = null,
     nativeTrailingActions: List<NativeChromeAction> = emptyList(),

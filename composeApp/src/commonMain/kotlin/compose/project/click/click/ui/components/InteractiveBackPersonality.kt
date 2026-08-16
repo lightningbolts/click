@@ -78,7 +78,7 @@ class InteractiveBackHostState {
     suspend fun dismiss(
         animationSpec: AnimationSpec<Float> =
             spring(
-                dampingRatio = 0.68f,
+                dampingRatio = 0.58f,
                 stiffness = Spring.StiffnessMediumLow,
             ),
     ) {

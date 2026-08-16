@@ -498,7 +498,7 @@ internal fun EventsDiscoveryFullScreen(
                         enabled = !discoveryFeedRefreshing,
                     )
                 },
-                belowHeaderSpacing = 8.dp,
+                belowHeaderSpacing = 12.dp,
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 item(key = "events_search") {

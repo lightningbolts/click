@@ -321,7 +321,12 @@ fun PageHeader(
             collapseFraction = 1f,
         )
         Column(modifier = Modifier.fillMaxWidth()) {
-            Spacer(modifier = Modifier.fillMaxWidth().height(44.dp))
+            Spacer(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(NativeHeaderMetrics.barHeightDp(1f)),
+            )
             if (!subtitle.isNullOrBlank()) {
                 Text(
                     text = subtitle,
