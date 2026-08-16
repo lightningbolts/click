@@ -533,25 +533,25 @@ fun ConnectionsListView(
                     subtitle = headerSubtitle.takeIf { it.isNotBlank() },
                     onOpenSearch = onOpenSearch,
                     lazyListState = connectionsLazyListState,
+                    belowHeaderSpacing = 8.dp,
                     verticalArrangement = Arrangement.spacedBy(10.dp),
-                    headerBelowContent = {
-                        if (effectiveChats.isNotEmpty() || activeHubs.isNotEmpty()) {
-                            ConnectionsSegmentBar(
-                                selectedTabIndex = selectedTabIndex,
-                                onTabSelected = { selectedTabIndex = it },
-                                activeCount = activeCount,
-                                groupCount = groupCount,
-                                archivedCount = archivedCount,
-                                modifier = Modifier.padding(top = 8.dp),
-                            )
-                        }
-                    },
                     modifier =
                         Modifier.graphicsLayer {
                             translationX = tabContentOffsetX.value
                             alpha = tabContentAlpha.value
                         },
                 ) {
+                    if (effectiveChats.isNotEmpty() || activeHubs.isNotEmpty()) {
+                        item(key = "clicks_segment_bar", contentType = "segment_bar") {
+                            ConnectionsSegmentBar(
+                                selectedTabIndex = selectedTabIndex,
+                                onTabSelected = { selectedTabIndex = it },
+                                activeCount = activeCount,
+                                groupCount = groupCount,
+                                archivedCount = archivedCount,
+                            )
+                        }
+                    }
                     if (effectiveChats.isEmpty() && chatListState is ChatListState.Loading) {
                         item(key = "clicks_loading") {
                             Box(

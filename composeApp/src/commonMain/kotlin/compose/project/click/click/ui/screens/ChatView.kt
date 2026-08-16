@@ -118,6 +118,7 @@ import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx // pr
 import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay // pragma: allowlist secret
 import compose.project.click.click.ui.chat.scrollChatTimelineToLatest // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
+import compose.project.click.click.ui.components.BindPlatformNativeNavigationBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickDropdownMenu // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickMenuItem // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
@@ -127,8 +128,8 @@ import compose.project.click.click.ui.components.GlassCard // pragma: allowlist 
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassToastHost // pragma: allowlist secret
 import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
-import compose.project.click.click.ui.components.HidePlatformNativeNavigationBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
+import compose.project.click.click.ui.components.NativeChromeAction // pragma: allowlist secret
 import compose.project.click.click.ui.components.TetherCompassToast // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
@@ -184,7 +185,6 @@ fun ChatView(
     parentInteractiveBackSwipePx: MutableFloatState? = null,
     keyboardHeightProvider: KeyboardHeightProvider = rememberKeyboardHeightProvider(),
 ) {
-    HidePlatformNativeNavigationBar()
     val chatMessagesState by viewModel.chatMessagesState.collectAsState()
     val isPeerTyping by viewModel.isPeerTyping.collectAsState()
     val isPeerOnline by viewModel.isPeerOnline.collectAsState()
@@ -278,6 +278,89 @@ fun ChatView(
     var tetherToastMessage by remember { mutableStateOf<String?>(null) }
     var tetherSenderAck by remember { mutableStateOf<String?>(null) }
     var showCallMenu by remember { mutableStateOf(false) }
+    val nativeNavChrome = LocalPlatformStyle.current.isIOS
+    val hintedChatRow =
+        (chatListState as? ChatListState.Success)
+            ?.chats
+            ?.firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
+    val successChat = chatMessagesState as? ChatMessagesState.Success
+    val bindIsGroup = successChat?.chatDetails?.groupClique != null
+    val bindTitle =
+        successChat?.let { details ->
+            if (details.chatDetails.groupClique != null) {
+                details.chatDetails.groupClique
+                    ?.name
+                    ?.trim()
+                    .orEmpty()
+                    .ifBlank { "Group" }
+            } else {
+                details.chatDetails.otherUser.name ?: "Chat"
+            }
+        } ?: hintedChatRow
+            ?.groupClique
+            ?.name
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: hintedChatRow
+                ?.otherUser
+                ?.name
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+            ?: "Chat"
+    val bindOnline =
+        successChat?.let {
+            it.chatDetails.otherUser.id in onlineUsers || isPeerOnline
+        }
+    if (nativeNavChrome) {
+        BindPlatformNativeNavigationBar(
+            title = bindTitle,
+            subtitle =
+                when {
+                    bindIsGroup -> null
+                    bindOnline == true -> "Online"
+                    successChat != null -> "Offline"
+                    else -> null
+                },
+            presenceOnline = if (bindIsGroup) null else bindOnline,
+            onNavigateBack = onBackPressed,
+            nativeTrailingActions =
+                buildList {
+                    if (bindIsGroup) {
+                        add(
+                            NativeChromeAction(
+                                sfSymbol = "pencil",
+                                contentDescription = "Rename group",
+                                onClick = {
+                                    renameGroupDraft =
+                                        successChat
+                                            ?.chatDetails
+                                            ?.groupClique
+                                            ?.name
+                                            .orEmpty()
+                                            .ifBlank { bindTitle }
+                                    showRenameGroupDialog = true
+                                },
+                            ),
+                        )
+                    }
+                    add(
+                        NativeChromeAction(
+                            sfSymbol = "phone",
+                            contentDescription = "Call options",
+                            onClick = { showCallMenu = true },
+                        ),
+                    )
+                    add(
+                        NativeChromeAction(
+                            sfSymbol = "ellipsis",
+                            contentDescription = "More options",
+                            onClick = { showConnectionSheet = true },
+                        ),
+                    )
+                },
+            collapseFraction = 1f,
+        )
+    }
 
     LaunchedEffect(nudgeResult) {
         val r = nudgeResult ?: return@LaunchedEffect
@@ -378,37 +461,42 @@ fun ChatView(
                             topInset = topInset,
                             onBackPressed = onBackPressed,
                             chatRow = hintedRow,
+                            composeHeader = !nativeNavChrome,
                         )
                     } else {
                         ChatChannelLoadingView(
                             topInset = topInset,
                             onBackPressed = onBackPressed,
+                            composeHeader = !nativeNavChrome,
                         )
                     }
                 }
                 is ChatMessagesState.Error -> {
-                    Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
-                        Row(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height(56.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            IconButton(onClick = onBackPressed) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
+                    if (nativeNavChrome) {
+                        Spacer(modifier = Modifier.fillMaxWidth().height(topInset + 44.dp))
+                    } else {
+                        Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .height(56.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                ChatHeaderIconButton(
+                                    icon = Icons.AutoMirrored.Filled.ArrowBack,
                                     contentDescription = "Back",
-                                    tint = MaterialTheme.colorScheme.onSurface,
+                                    onClick = onBackPressed,
+                                    showBorder = true,
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = "Chat",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                 )
                             }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = "Chat",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
                         }
                     }
                     Box(
@@ -448,11 +536,13 @@ fun ChatView(
                                 topInset = topInset,
                                 onBackPressed = onBackPressed,
                                 chatRow = hintedRow,
+                                composeHeader = !nativeNavChrome,
                             )
                         } else {
                             ChatChannelLoadingView(
                                 topInset = topInset,
                                 onBackPressed = onBackPressed,
+                                composeHeader = !nativeNavChrome,
                             )
                         }
                         return@Column
@@ -639,332 +729,403 @@ fun ChatView(
                         modifier = Modifier.fillMaxSize(),
                     ) {
                         Column(modifier = Modifier.fillMaxSize()) {
-                            Column(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = topInset)
-                                        .height(56.dp)
-                                        .padding(horizontal = ChatChromeHorizontalPadding)
-                                        .testTag(ChatGlassHeaderPlateTestTag),
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxSize(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    ChatHeaderIconButton(
-                                        icon = Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = "Back",
-                                        onClick = onBackPressed,
-                                        showBorder = true,
-                                    )
-
-                                    if (isGroupChat) {
-                                        val chatHeaderGroupAvatarSize = 34.dp
-                                        val groupAvatarUrl =
-                                            chatDetails.groupClique
-                                                ?.avatarUrl
-                                                ?.trim()
-                                                ?.takeIf { it.isNotEmpty() }
-                                        val groupClusterWidth =
-                                            if (groupAvatarUrl != null) {
-                                                chatHeaderGroupAvatarSize
-                                            } else {
-                                                groupAvatarClusterWidth(
-                                                    chatDetails.groupMemberUsers.size,
-                                                    chatHeaderGroupAvatarSize,
-                                                )
-                                            }
-                                        Box(
-                                            modifier =
-                                                Modifier
-                                                    .width(groupClusterWidth)
-                                                    .heightIn(min = 40.dp)
-                                                    .clickable(
-                                                        interactionSource = remember { MutableInteractionSource() },
-                                                        indication = ripple(bounded = false, radius = 22.dp),
-                                                        onClick = {
-                                                            groupMembersPickerContextFrom(chatDetails)
-                                                                ?.let(onOpenGroupMembersPicker)
-                                                        },
-                                                    ),
-                                            contentAlignment = Alignment.CenterStart,
-                                        ) {
-                                            GroupAvatar(
-                                                members = chatDetails.groupMemberUsers,
-                                                avatarSize = chatHeaderGroupAvatarSize,
-                                                avatarUrl = groupAvatarUrl,
-                                            )
+                            if (nativeNavChrome) {
+                                Spacer(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .height(topInset + 44.dp)
+                                            .testTag(ChatGlassHeaderPlateTestTag),
+                                )
+                                Box(modifier = Modifier.fillMaxWidth()) {
+                                    val groupCallMemberIds =
+                                        remember(chatDetails.groupClique) {
+                                            chatDetails.groupClique?.memberUserIds.orEmpty()
                                         }
-                                    } else {
-                                        val isPeerCore = chatDetails.connection.id in coreConnectionIds
-                                        val peerOnline =
-                                            chatDetails.otherUser.id in onlineUsers || isPeerOnline
-                                        AvatarWithOnlineIndicator(
-                                            isOnline = peerOnline,
-                                            indicatorSize = 9.dp,
-                                            indicatorBorder = 1.25.dp,
-                                        ) {
-                                            CoreConnectionAvatarFrame(
-                                                isCore = isPeerCore,
-                                                avatarSize = 36.dp,
-                                                onClick = { onOpenUserProfile(chatDetails.otherUser.id) },
-                                            ) {
-                                                ConnectionListUserAvatarFace(
-                                                    displayName = chatDetails.otherUser.name,
-                                                    email = chatDetails.otherUser.email,
-                                                    avatarUrl = chatDetails.otherUser.image,
-                                                    userId = chatDetails.otherUser.id,
-                                                    modifier = Modifier.fillMaxSize(),
-                                                    useCompactTypography = true,
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.width(12.dp))
-
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = if (isGroupChat) groupTitle else (chatDetails.otherUser.name ?: "Unknown"),
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                        if (isGroupChat && memberSummaryLine != null) {
-                                            Text(
-                                                text = memberSummaryLine,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis,
-                                            )
-                                        } else if (!isGroupChat) {
-                                            val subtitleOnline =
-                                                chatDetails.otherUser.id in onlineUsers || isPeerOnline
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            ) {
-                                                AnimatedVisibility(
-                                                    visible = subtitleOnline,
-                                                    enter = fadeIn() + expandVertically(),
-                                                    exit = fadeOut() + shrinkVertically(),
-                                                ) {
-                                                    Box(
-                                                        modifier =
-                                                            Modifier
-                                                                .size(8.dp)
-                                                                .clip(CircleShape)
-                                                                .background(Color(0xFF22C55E)),
+                                    androidx.compose.material3.DropdownMenu(
+                                        expanded = showCallMenu,
+                                        onDismissRequest = { showCallMenu = false },
+                                    ) {
+                                        androidx.compose.material3.DropdownMenuItem(
+                                            text = { Text("Voice") },
+                                            onClick = {
+                                                showCallMenu = false
+                                                if (isGroupChat) {
+                                                    val groupId = chatDetails.groupClique?.groupId
+                                                    val threadId = chatDetails.chat.id
+                                                    if (!groupId.isNullOrBlank() && !threadId.isNullOrBlank()) {
+                                                        CallSessionManager.startOutgoingGroupCall(
+                                                            groupId = groupId,
+                                                            chatId = threadId,
+                                                            memberIds = groupCallMemberIds,
+                                                            videoEnabled = false,
+                                                        )
+                                                    }
+                                                } else {
+                                                    CallSessionManager.startOutgoingCall(
+                                                        connectionId = chatDetails.connection.id,
+                                                        otherUserId = chatDetails.otherUser.id,
+                                                        otherUserName = chatDetails.otherUser.name ?: "Connection",
+                                                        videoEnabled = false,
                                                     )
                                                 }
-                                                AnimatedContent(
-                                                    targetState = subtitleOnline,
-                                                    transitionSpec = {
-                                                        fadeIn(
-                                                            animationSpec =
-                                                                spring(
-                                                                    dampingRatio = Spring.DampingRatioNoBouncy,
-                                                                    stiffness = Spring.StiffnessMedium,
-                                                                ),
-                                                        ) togetherWith
-                                                            fadeOut(
+                                            },
+                                        )
+                                        androidx.compose.material3.DropdownMenuItem(
+                                            text = { Text("Video") },
+                                            onClick = {
+                                                showCallMenu = false
+                                                if (isGroupChat) {
+                                                    val groupId = chatDetails.groupClique?.groupId
+                                                    val threadId = chatDetails.chat.id
+                                                    if (!groupId.isNullOrBlank() && !threadId.isNullOrBlank()) {
+                                                        CallSessionManager.startOutgoingGroupCall(
+                                                            groupId = groupId,
+                                                            chatId = threadId,
+                                                            memberIds = groupCallMemberIds,
+                                                            videoEnabled = true,
+                                                        )
+                                                    }
+                                                } else {
+                                                    CallSessionManager.startOutgoingCall(
+                                                        connectionId = chatDetails.connection.id,
+                                                        otherUserId = chatDetails.otherUser.id,
+                                                        otherUserName = chatDetails.otherUser.name ?: "Connection",
+                                                        videoEnabled = true,
+                                                    )
+                                                }
+                                            },
+                                        )
+                                    }
+                                }
+                            } else {
+                                Column(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .padding(top = topInset)
+                                            .height(56.dp)
+                                            .padding(horizontal = ChatChromeHorizontalPadding)
+                                            .testTag(ChatGlassHeaderPlateTestTag),
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        ChatHeaderIconButton(
+                                            icon = Icons.AutoMirrored.Filled.ArrowBack,
+                                            contentDescription = "Back",
+                                            onClick = onBackPressed,
+                                            showBorder = true,
+                                        )
+
+                                        if (isGroupChat) {
+                                            val chatHeaderGroupAvatarSize = 34.dp
+                                            val groupAvatarUrl =
+                                                chatDetails.groupClique
+                                                    ?.avatarUrl
+                                                    ?.trim()
+                                                    ?.takeIf { it.isNotEmpty() }
+                                            val groupClusterWidth =
+                                                if (groupAvatarUrl != null) {
+                                                    chatHeaderGroupAvatarSize
+                                                } else {
+                                                    groupAvatarClusterWidth(
+                                                        chatDetails.groupMemberUsers.size,
+                                                        chatHeaderGroupAvatarSize,
+                                                    )
+                                                }
+                                            Box(
+                                                modifier =
+                                                    Modifier
+                                                        .width(groupClusterWidth)
+                                                        .heightIn(min = 40.dp)
+                                                        .clickable(
+                                                            interactionSource = remember { MutableInteractionSource() },
+                                                            indication = ripple(bounded = false, radius = 22.dp),
+                                                            onClick = {
+                                                                groupMembersPickerContextFrom(chatDetails)
+                                                                    ?.let(onOpenGroupMembersPicker)
+                                                            },
+                                                        ),
+                                                contentAlignment = Alignment.CenterStart,
+                                            ) {
+                                                GroupAvatar(
+                                                    members = chatDetails.groupMemberUsers,
+                                                    avatarSize = chatHeaderGroupAvatarSize,
+                                                    avatarUrl = groupAvatarUrl,
+                                                )
+                                            }
+                                        } else {
+                                            val isPeerCore = chatDetails.connection.id in coreConnectionIds
+                                            val peerOnline =
+                                                chatDetails.otherUser.id in onlineUsers || isPeerOnline
+                                            AvatarWithOnlineIndicator(
+                                                isOnline = peerOnline,
+                                                indicatorSize = 9.dp,
+                                                indicatorBorder = 1.25.dp,
+                                            ) {
+                                                CoreConnectionAvatarFrame(
+                                                    isCore = isPeerCore,
+                                                    avatarSize = 36.dp,
+                                                    onClick = { onOpenUserProfile(chatDetails.otherUser.id) },
+                                                ) {
+                                                    ConnectionListUserAvatarFace(
+                                                        displayName = chatDetails.otherUser.name,
+                                                        email = chatDetails.otherUser.email,
+                                                        avatarUrl = chatDetails.otherUser.image,
+                                                        userId = chatDetails.otherUser.id,
+                                                        modifier = Modifier.fillMaxSize(),
+                                                        useCompactTypography = true,
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.width(12.dp))
+
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = if (isGroupChat) groupTitle else (chatDetails.otherUser.name ?: "Unknown"),
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                            if (isGroupChat && memberSummaryLine != null) {
+                                                Text(
+                                                    text = memberSummaryLine,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                            } else if (!isGroupChat) {
+                                                val subtitleOnline =
+                                                    chatDetails.otherUser.id in onlineUsers || isPeerOnline
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                ) {
+                                                    AnimatedVisibility(
+                                                        visible = subtitleOnline,
+                                                        enter = fadeIn() + expandVertically(),
+                                                        exit = fadeOut() + shrinkVertically(),
+                                                    ) {
+                                                        Box(
+                                                            modifier =
+                                                                Modifier
+                                                                    .size(8.dp)
+                                                                    .clip(CircleShape)
+                                                                    .background(Color(0xFF22C55E)),
+                                                        )
+                                                    }
+                                                    AnimatedContent(
+                                                        targetState = subtitleOnline,
+                                                        transitionSpec = {
+                                                            fadeIn(
                                                                 animationSpec =
                                                                     spring(
                                                                         dampingRatio = Spring.DampingRatioNoBouncy,
                                                                         stiffness = Spring.StiffnessMedium,
                                                                     ),
-                                                            )
-                                                    },
-                                                    label = "peer_presence_subtitle",
-                                                ) { online ->
-                                                    Text(
-                                                        text = if (online) "Online" else "Offline",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color =
-                                                            if (online) {
-                                                                Color(0xFF16A34A)
-                                                            } else {
-                                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                                                            },
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    if (!isGroupChat && chatHasIntentOverlap) {
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Icon(
-                                            Icons.Filled.Bolt,
-                                            contentDescription = "Shared availability",
-                                            tint = Color(0xFFFBBF24),
-                                            modifier = Modifier.size(22.dp),
-                                        )
-                                    }
-
-                                    if (isGroupChat) {
-                                        ChatHeaderIconButton(
-                                            icon = Icons.Outlined.Edit,
-                                            contentDescription = "Rename group",
-                                            onClick = {
-                                                renameGroupDraft = groupTitle
-                                                showRenameGroupDialog = true
-                                            },
-                                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                                        )
-                                    }
-
-                                    Box {
-                                        ChatHeaderIconButton(
-                                            icon = Icons.Filled.Call,
-                                            contentDescription = "Call options",
-                                            onClick = { showCallMenu = true },
-                                            tint = PrimaryBlue.copy(alpha = 0.85f),
-                                        )
-                                        val menuStyle = LocalPlatformStyle.current
-                                        val density = LocalDensity.current
-                                        val callMenuSpring =
-                                            spring<Float>(
-                                                dampingRatio = Spring.DampingRatioNoBouncy,
-                                                stiffness = Spring.StiffnessMedium,
-                                            )
-                                        val callMenuEnter =
-                                            fadeIn(animationSpec = callMenuSpring) +
-                                                scaleIn(
-                                                    initialScale = 0.92f,
-                                                    animationSpec = callMenuSpring,
-                                                )
-                                        val callMenuExit =
-                                            fadeOut(animationSpec = callMenuSpring) +
-                                                scaleOut(
-                                                    targetScale = 0.96f,
-                                                    animationSpec = callMenuSpring,
-                                                )
-                                        var keepIosCallMenuMounted by remember { mutableStateOf(false) }
-                                        var iosCallMenuContentVisible by remember { mutableStateOf(false) }
-                                        LaunchedEffect(showCallMenu) {
-                                            if (showCallMenu) {
-                                                keepIosCallMenuMounted = true
-                                                iosCallMenuContentVisible = false
-                                                withFrameNanos { }
-                                                iosCallMenuContentVisible = true
-                                            } else {
-                                                iosCallMenuContentVisible = false
-                                                delay(150)
-                                                keepIosCallMenuMounted = false
-                                            }
-                                        }
-                                        val groupCallMemberIds =
-                                            remember(chatDetails.groupClique) {
-                                                chatDetails.groupClique?.memberUserIds.orEmpty()
-                                            }
-                                        val startVoiceCall = {
-                                            showCallMenu = false
-                                            if (isGroupChat) {
-                                                val groupId = chatDetails.groupClique?.groupId
-                                                val chatId = chatDetails.chat.id
-                                                if (!groupId.isNullOrBlank() && !chatId.isNullOrBlank()) {
-                                                    CallSessionManager.startOutgoingGroupCall(
-                                                        groupId = groupId,
-                                                        chatId = chatId,
-                                                        memberIds = groupCallMemberIds,
-                                                        videoEnabled = false,
-                                                    )
-                                                }
-                                            } else {
-                                                CallSessionManager.startOutgoingCall(
-                                                    connectionId = chatDetails.connection.id,
-                                                    otherUserId = chatDetails.otherUser.id,
-                                                    otherUserName = chatDetails.otherUser.name ?: "Connection",
-                                                    videoEnabled = false,
-                                                )
-                                            }
-                                        }
-                                        val startVideoCall = {
-                                            showCallMenu = false
-                                            if (isGroupChat) {
-                                                val groupId = chatDetails.groupClique?.groupId
-                                                val chatId = chatDetails.chat.id
-                                                if (!groupId.isNullOrBlank() && !chatId.isNullOrBlank()) {
-                                                    CallSessionManager.startOutgoingGroupCall(
-                                                        groupId = groupId,
-                                                        chatId = chatId,
-                                                        memberIds = groupCallMemberIds,
-                                                        videoEnabled = true,
-                                                    )
-                                                }
-                                            } else {
-                                                CallSessionManager.startOutgoingCall(
-                                                    connectionId = chatDetails.connection.id,
-                                                    otherUserId = chatDetails.otherUser.id,
-                                                    otherUserName = chatDetails.otherUser.name ?: "Connection",
-                                                    videoEnabled = true,
-                                                )
-                                            }
-                                        }
-                                        if (menuStyle.isIOS) {
-                                            if (keepIosCallMenuMounted) {
-                                                Popup(
-                                                    alignment = Alignment.TopStart,
-                                                    offset = IntOffset(0, with(density) { 48.dp.roundToPx() }),
-                                                    onDismissRequest = { showCallMenu = false },
-                                                    properties =
-                                                        PopupProperties(
-                                                            focusable = true,
-                                                            dismissOnBackPress = true,
-                                                            dismissOnClickOutside = true,
-                                                        ),
-                                                ) {
-                                                    androidx.compose.animation.AnimatedVisibility(
-                                                        visible = iosCallMenuContentVisible,
-                                                        enter = callMenuEnter,
-                                                        exit = callMenuExit,
-                                                    ) {
-                                                        ChatCallOptionsIosSurface(
-                                                            onVoice = startVoiceCall,
-                                                            onVideo = startVideoCall,
+                                                            ) togetherWith
+                                                                fadeOut(
+                                                                    animationSpec =
+                                                                        spring(
+                                                                            dampingRatio = Spring.DampingRatioNoBouncy,
+                                                                            stiffness = Spring.StiffnessMedium,
+                                                                        ),
+                                                                )
+                                                        },
+                                                        label = "peer_presence_subtitle",
+                                                    ) { online ->
+                                                        Text(
+                                                            text = if (online) "Online" else "Offline",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color =
+                                                                if (online) {
+                                                                    Color(0xFF16A34A)
+                                                                } else {
+                                                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                                                                },
                                                         )
                                                     }
                                                 }
                                             }
-                                        } else {
-                                            ClickDropdownMenu(
-                                                expanded = showCallMenu,
-                                                onDismissRequest = { showCallMenu = false },
-                                                items =
-                                                    listOf(
-                                                        ClickMenuItem(
-                                                            label = if (isGroupChat) "Group voice call" else "Voice call",
-                                                            onClick = {
-                                                                PlatformHapticsPolicy.lightImpact()
-                                                                startVoiceCall()
-                                                            },
-                                                            icon = Icons.Filled.Call,
-                                                        ),
-                                                        ClickMenuItem(
-                                                            label = if (isGroupChat) "Group video call" else "Video call",
-                                                            onClick = {
-                                                                PlatformHapticsPolicy.lightImpact()
-                                                                startVideoCall()
-                                                            },
-                                                            icon = Icons.Filled.Videocam,
-                                                        ),
-                                                    ),
+                                        }
+
+                                        if (!isGroupChat && chatHasIntentOverlap) {
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Icon(
+                                                Icons.Filled.Bolt,
+                                                contentDescription = "Shared availability",
+                                                tint = Color(0xFFFBBF24),
+                                                modifier = Modifier.size(22.dp),
                                             )
                                         }
+
+                                        if (isGroupChat) {
+                                            ChatHeaderIconButton(
+                                                icon = Icons.Outlined.Edit,
+                                                contentDescription = "Rename group",
+                                                onClick = {
+                                                    renameGroupDraft = groupTitle
+                                                    showRenameGroupDialog = true
+                                                },
+                                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                                            )
+                                        }
+
+                                        Box {
+                                            ChatHeaderIconButton(
+                                                icon = Icons.Filled.Call,
+                                                contentDescription = "Call options",
+                                                onClick = { showCallMenu = true },
+                                                tint = PrimaryBlue.copy(alpha = 0.85f),
+                                            )
+                                            val menuStyle = LocalPlatformStyle.current
+                                            val density = LocalDensity.current
+                                            val callMenuSpring =
+                                                spring<Float>(
+                                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                                    stiffness = Spring.StiffnessMedium,
+                                                )
+                                            val callMenuEnter =
+                                                fadeIn(animationSpec = callMenuSpring) +
+                                                    scaleIn(
+                                                        initialScale = 0.92f,
+                                                        animationSpec = callMenuSpring,
+                                                    )
+                                            val callMenuExit =
+                                                fadeOut(animationSpec = callMenuSpring) +
+                                                    scaleOut(
+                                                        targetScale = 0.96f,
+                                                        animationSpec = callMenuSpring,
+                                                    )
+                                            var keepIosCallMenuMounted by remember { mutableStateOf(false) }
+                                            var iosCallMenuContentVisible by remember { mutableStateOf(false) }
+                                            LaunchedEffect(showCallMenu) {
+                                                if (showCallMenu) {
+                                                    keepIosCallMenuMounted = true
+                                                    iosCallMenuContentVisible = false
+                                                    withFrameNanos { }
+                                                    iosCallMenuContentVisible = true
+                                                } else {
+                                                    iosCallMenuContentVisible = false
+                                                    delay(150)
+                                                    keepIosCallMenuMounted = false
+                                                }
+                                            }
+                                            val groupCallMemberIds =
+                                                remember(chatDetails.groupClique) {
+                                                    chatDetails.groupClique?.memberUserIds.orEmpty()
+                                                }
+                                            val startVoiceCall = {
+                                                showCallMenu = false
+                                                if (isGroupChat) {
+                                                    val groupId = chatDetails.groupClique?.groupId
+                                                    val chatId = chatDetails.chat.id
+                                                    if (!groupId.isNullOrBlank() && !chatId.isNullOrBlank()) {
+                                                        CallSessionManager.startOutgoingGroupCall(
+                                                            groupId = groupId,
+                                                            chatId = chatId,
+                                                            memberIds = groupCallMemberIds,
+                                                            videoEnabled = false,
+                                                        )
+                                                    }
+                                                } else {
+                                                    CallSessionManager.startOutgoingCall(
+                                                        connectionId = chatDetails.connection.id,
+                                                        otherUserId = chatDetails.otherUser.id,
+                                                        otherUserName = chatDetails.otherUser.name ?: "Connection",
+                                                        videoEnabled = false,
+                                                    )
+                                                }
+                                            }
+                                            val startVideoCall = {
+                                                showCallMenu = false
+                                                if (isGroupChat) {
+                                                    val groupId = chatDetails.groupClique?.groupId
+                                                    val chatId = chatDetails.chat.id
+                                                    if (!groupId.isNullOrBlank() && !chatId.isNullOrBlank()) {
+                                                        CallSessionManager.startOutgoingGroupCall(
+                                                            groupId = groupId,
+                                                            chatId = chatId,
+                                                            memberIds = groupCallMemberIds,
+                                                            videoEnabled = true,
+                                                        )
+                                                    }
+                                                } else {
+                                                    CallSessionManager.startOutgoingCall(
+                                                        connectionId = chatDetails.connection.id,
+                                                        otherUserId = chatDetails.otherUser.id,
+                                                        otherUserName = chatDetails.otherUser.name ?: "Connection",
+                                                        videoEnabled = true,
+                                                    )
+                                                }
+                                            }
+                                            if (menuStyle.isIOS) {
+                                                if (keepIosCallMenuMounted) {
+                                                    Popup(
+                                                        alignment = Alignment.TopStart,
+                                                        offset = IntOffset(0, with(density) { 48.dp.roundToPx() }),
+                                                        onDismissRequest = { showCallMenu = false },
+                                                        properties =
+                                                            PopupProperties(
+                                                                focusable = true,
+                                                                dismissOnBackPress = true,
+                                                                dismissOnClickOutside = true,
+                                                            ),
+                                                    ) {
+                                                        androidx.compose.animation.AnimatedVisibility(
+                                                            visible = iosCallMenuContentVisible,
+                                                            enter = callMenuEnter,
+                                                            exit = callMenuExit,
+                                                        ) {
+                                                            ChatCallOptionsIosSurface(
+                                                                onVoice = startVoiceCall,
+                                                                onVideo = startVideoCall,
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            } else {
+                                                ClickDropdownMenu(
+                                                    expanded = showCallMenu,
+                                                    onDismissRequest = { showCallMenu = false },
+                                                    items =
+                                                        listOf(
+                                                            ClickMenuItem(
+                                                                label = if (isGroupChat) "Group voice call" else "Voice call",
+                                                                onClick = {
+                                                                    PlatformHapticsPolicy.lightImpact()
+                                                                    startVoiceCall()
+                                                                },
+                                                                icon = Icons.Filled.Call,
+                                                            ),
+                                                            ClickMenuItem(
+                                                                label = if (isGroupChat) "Group video call" else "Video call",
+                                                                onClick = {
+                                                                    PlatformHapticsPolicy.lightImpact()
+                                                                    startVideoCall()
+                                                                },
+                                                                icon = Icons.Filled.Videocam,
+                                                            ),
+                                                        ),
+                                                )
+                                            }
+                                        }
+                                        // Overflow / connection options
+                                        ChatHeaderIconButton(
+                                            icon = Icons.Filled.MoreVert,
+                                            contentDescription = "More options",
+                                            onClick = { showConnectionSheet = true },
+                                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                        )
                                     }
-                                    // Overflow / connection options
-                                    ChatHeaderIconButton(
-                                        icon = Icons.Filled.MoreVert,
-                                        contentDescription = "More options",
-                                        onClick = { showConnectionSheet = true },
-                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                                    )
                                 }
                             }
 

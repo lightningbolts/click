@@ -65,6 +65,7 @@ import compose.project.click.click.ui.components.FeaturedEventSection // pragma:
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
+import compose.project.click.click.ui.components.HeaderChromeIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeExploreTile // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeGreetingSubtitle // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomePileActions // pragma: allowlist secret
@@ -339,22 +340,9 @@ fun HomeScreen(
                     title = homeGreetingTitle(firstName),
                     subtitle = HomeGreetingSubtitle,
                     showFloatingHeader = true,
-                    // Sticky under the native greeting so scroll cannot pull it into the status bar.
-                    belowHeaderSpacing = CardSpacing,
-                    headerBelowContent =
-                        if (onOpenSearch != null) {
-                            {
-                                HomeSearchPill(
-                                    onClick = onOpenSearch,
-                                    modifier =
-                                        Modifier
-                                            .padding(horizontal = ScreenPaddingHorizontal)
-                                            .padding(top = HeaderToSearchGap),
-                                )
-                            }
-                        } else {
-                            null
-                        },
+                    belowHeaderSpacing = HeaderToSearchGap,
+                    collapseSearchIntoBar = true,
+                    onOpenSearch = onOpenSearch,
                     verticalArrangement = Arrangement.spacedBy(CardSpacing),
                     nativeTrailingActions =
                         listOf(
@@ -383,7 +371,19 @@ fun HomeScreen(
                             ),
                         ),
                     actions = {
-                        IconButton(
+                        HeaderChromeIconButton(
+                            icon =
+                                if (homeLayoutMode == HomeLayoutMode.PILE) {
+                                    Icons.Filled.Menu
+                                } else {
+                                    Icons.Filled.Star
+                                },
+                            contentDescription =
+                                if (homeLayoutMode == HomeLayoutMode.PILE) {
+                                    "Switch to list view"
+                                } else {
+                                    "Switch to photo pile"
+                                },
                             onClick = {
                                 AppDataManager.setHomeLayoutMode(
                                     if (homeLayoutMode == HomeLayoutMode.PILE) {
@@ -393,25 +393,14 @@ fun HomeScreen(
                                     },
                                 )
                             },
-                        ) {
-                            Icon(
-                                imageVector =
-                                    if (homeLayoutMode == HomeLayoutMode.PILE) {
-                                        Icons.Filled.Menu
-                                    } else {
-                                        Icons.Filled.Star
-                                    },
-                                contentDescription =
-                                    if (homeLayoutMode == HomeLayoutMode.PILE) {
-                                        "Switch to list view"
-                                    } else {
-                                        "Switch to photo pile"
-                                    },
-                                tint = accentColor(AccentRole.Icon),
-                            )
-                        }
+                        )
                     },
                 ) {
+                    if (onOpenSearch != null) {
+                        item(key = "home_search_pill") {
+                            HomeSearchPill(onClick = onOpenSearch)
+                        }
+                    }
                     if (homeLayoutMode == HomeLayoutMode.PILE) {
                         item(key = "availability_intents_strip") {
                             Column(

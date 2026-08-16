@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.chat // pragma: allowlist secret
 
 import androidx.compose.foundation.background
@@ -11,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,10 +20,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -37,9 +34,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
-import compose.project.click.click.ui.components.ClickLogoPulse
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickLogoPulse
+import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatListState // pragma: allowlist secret
 
 /**
@@ -47,11 +46,9 @@ import compose.project.click.click.viewmodel.ChatListState // pragma: allowlist 
  *
  * Extracted from ConnectionsScreen.kt so chat loading / forward UI
  * doesn't share a file with the screen shell. Bodies moved verbatim.
- */
-
-/**
- * Shown when [ChatMessagesState.Loading] but the chat list already has
- * a row for this thread, so we avoid a blank full-screen spinner
+ *
+ * [ChatDetailsLoadingHeader] is shown when [ChatMessagesState.Loading] but the chat
+ * list already has a row for this thread, so we avoid a blank full-screen spinner
  * while the ViewModel resolves details.
  */
 @Composable
@@ -59,37 +56,49 @@ internal fun ChatWarmLoadingView(
     topInset: Dp,
     onBackPressed: () -> Unit,
     chatRow: ChatWithDetails,
+    composeHeader: Boolean = true,
 ) {
-    val title = chatRow.groupClique?.name?.trim()?.takeIf { it.isNotEmpty() }
-        ?: chatRow.otherUser.name?.trim()?.takeIf { it.isNotEmpty() }
-        ?: "Chat"
+    val title =
+        chatRow.groupClique
+            ?.name
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: chatRow.otherUser.name
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+            ?: "Chat"
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 20.dp, top = topInset, end = 20.dp)
-                .height(56.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = onBackPressed) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
+        if (composeHeader) {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, top = topInset, end = 20.dp)
+                        .height(56.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ChatHeaderIconButton(
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",
-                    tint = MaterialTheme.colorScheme.onSurface,
+                    onClick = onBackPressed,
+                    showBorder = true,
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
+        } else {
+            Spacer(modifier = Modifier.fillMaxWidth().height(topInset + 44.dp))
         }
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 24.dp, vertical = 20.dp),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp, vertical = 20.dp),
             contentAlignment = Alignment.Center,
         ) {
             ClickLogoPulse(logoSize = 72.dp)
@@ -105,36 +114,42 @@ internal fun ChatWarmLoadingView(
 internal fun ChatChannelLoadingView(
     topInset: Dp,
     onBackPressed: () -> Unit,
+    composeHeader: Boolean = true,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = onBackPressed) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
+        if (composeHeader) {
+            Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ChatHeaderIconButton(
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
-                        tint = MaterialTheme.colorScheme.onSurface,
+                        onClick = onBackPressed,
+                        showBorder = true,
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Chat",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                 }
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = "Chat",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
             }
+        } else {
+            Spacer(modifier = Modifier.fillMaxWidth().height(topInset + 44.dp))
         }
 
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = topInset + 56.dp),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(top = if (composeHeader) topInset + 56.dp else topInset + 44.dp),
             contentAlignment = Alignment.Center,
         ) {
             ClickLogoPulse(logoSize = 72.dp)
@@ -162,18 +177,19 @@ internal fun ForwardDialog(
         title = { Text("Forward to...") },
         text = {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.9f)
-                    .wrapContentHeight(),
+                modifier =
+                    Modifier
+                        .fillMaxWidth(0.9f)
+                        .wrapContentHeight(),
             ) {
                 when (chatListState) {
                     is ChatListState.Success -> {
-                        val options = chatListState.chats
-                            .filter {
-                                it.connection.id != currentChatId &&
-                                    it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-                            }
-                            .sortedByDescending { connectionListActivityTs(it) }
+                        val options =
+                            chatListState.chats
+                                .filter {
+                                    it.connection.id != currentChatId &&
+                                        it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
+                                }.sortedByDescending { connectionListActivityTs(it) }
                         if (options.isEmpty()) {
                             Text("No other chats available")
                         } else {
@@ -182,15 +198,16 @@ internal fun ForwardDialog(
                                     ListItem(
                                         headlineContent = { Text(item.otherUser.name ?: "Unknown") },
                                         supportingContent = { Text(item.otherUser.email ?: "") },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 4.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(GlassSheetTokens.GlassSurface())
-                                            .padding(8.dp)
-                                            .clickable {
-                                                onSelect(item.connection.id)
-                                            },
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 4.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(GlassSheetTokens.GlassSurface())
+                                                .padding(8.dp)
+                                                .clickable {
+                                                    onSelect(item.connection.id)
+                                                },
                                     )
                                 }
                             }

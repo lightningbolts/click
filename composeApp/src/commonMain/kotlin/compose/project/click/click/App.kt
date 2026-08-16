@@ -115,9 +115,11 @@ import compose.project.click.click.ui.components.GlobalTetherOverlay // pragma: 
 import compose.project.click.click.ui.components.INTEREST_ONBOARDING_MIN_TAGS // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
+import compose.project.click.click.ui.components.LocalNativeChromeActive // pragma: allowlist secret
 import compose.project.click.click.ui.components.OfflineStatusBanner // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBottomBar // pragma: allowlist secret
+import compose.project.click.click.ui.components.PlatformNativeNavigationBarSwipeReveal // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastHost // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.interactiveSwipeBackUnderlay // pragma: allowlist secret
@@ -1605,6 +1607,7 @@ fun App() {
                                         val screenKey = activeScreenKey
                                         val addClickBackHost = rememberInteractiveBackHostState()
                                         val addClickSwipeDragPx = addClickBackHost.dragOffsetPx
+                                        PlatformNativeNavigationBarSwipeReveal(addClickSwipeDragPx)
                                         var lastAddClickOverlayKey by remember { mutableStateOf<String?>(null) }
                                         var addClickOverlayTransitionMode by remember {
                                             mutableStateOf(NavigationTransitionMode.Tap)
@@ -1867,6 +1870,7 @@ fun App() {
                                             mutableStateOf<InteractiveSwipeBackRightToLeftPeek?>(null)
                                         }
                                         val hubSwipeDragPx = remember { mutableFloatStateOf(0f) }
+                                        PlatformNativeNavigationBarSwipeReveal(hubSwipeDragPx)
                                         LaunchedEffect(hubChatArgs) {
                                             if (hubChatArgs != null) {
                                                 lastHubChatArgs = hubChatArgs
@@ -1877,99 +1881,113 @@ fun App() {
                                         }
 
                                         Box(modifier = Modifier.fillMaxSize()) {
-                                            Box(
-                                                modifier =
-                                                    Modifier
-                                                        .fillMaxSize()
-                                                        .interactiveSwipeBackUnderlay(addClickBackHost),
+                                            CompositionLocalProvider(
+                                                LocalNativeChromeActive provides
+                                                    (addClickOverlayKey == null && hubChatArgs == null),
                                             ) {
-                                                AnimatedContent(
-                                                    // Primary tabs (Home/AddClick/Connections/Map/Settings) all go through
-                                                    // this AnimatedContent with the 280ms crossfade. Do not reintroduce a
-                                                    // Home-underlay + Map overlay shell — it flashed Home on Map open and
-                                                    // broke Connections tab motion.
-                                                    targetState = screenKey,
-                                                    transitionSpec = {
-                                                        if (transitionMode == NavigationTransitionMode.GestureBack) {
-                                                            EnterTransition.None togetherWith ExitTransition.None
-                                                        } else if (reduceMotion) {
-                                                            fadeIn(animationSpec = tween(120))
-                                                                .togetherWith(fadeOut(animationSpec = tween(90)))
-                                                        } else {
-                                                            val routeOrder =
-                                                                listOf(
-                                                                    NavigationItem.Home.route,
-                                                                    NavigationItem.AddClick.route,
-                                                                    NavigationItem.Connections.route,
-                                                                    NavigationItem.Map.route,
-                                                                    NavigationItem.Settings.route,
-                                                                )
-
-                                                            val initialIndex =
-                                                                routeOrder.indexOf(initialState).let {
-                                                                    if (it >=
-                                                                        0
-                                                                    ) {
-                                                                        it
-                                                                    } else {
-                                                                        0
-                                                                    }
-                                                                }
-                                                            val targetIndex = routeOrder.indexOf(targetState).let { if (it >= 0) it else 0 }
-                                                            val movingForward = targetIndex >= initialIndex
-
-                                                            val primaryTabs =
-                                                                setOf(
-                                                                    NavigationItem.Home.route,
-                                                                    NavigationItem.AddClick.route,
-                                                                    NavigationItem.Connections.route,
-                                                                    NavigationItem.Map.route,
-                                                                    NavigationItem.Settings.route,
-                                                                )
-                                                            val isPrimaryTabCrossfade =
-                                                                initialState in primaryTabs && targetState in primaryTabs
-
-                                                            val slideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
-                                                            val fadeSpec = tween<Float>(320, easing = LinearOutSlowInEasing)
-                                                            val crossfadeSpec = tween<Float>(280, easing = FastOutSlowInEasing)
-
-                                                            if (isPrimaryTabCrossfade) {
-                                                                fadeIn(animationSpec = crossfadeSpec)
-                                                                    .togetherWith(fadeOut(animationSpec = crossfadeSpec))
-                                                            } else if (movingForward) {
-                                                                (
-                                                                    slideInHorizontally(
-                                                                        animationSpec = slideSpec,
-                                                                        initialOffsetX = { it },
-                                                                    ) +
-                                                                        fadeIn(animationSpec = fadeSpec)
-                                                                ).togetherWith(
-                                                                    slideOutHorizontally(
-                                                                        animationSpec = slideSpec,
-                                                                        targetOffsetX = { -it },
-                                                                    ) +
-                                                                        fadeOut(animationSpec = fadeSpec),
-                                                                ).using(SizeTransform(clip = true))
+                                                Box(
+                                                    modifier =
+                                                        Modifier
+                                                            .fillMaxSize()
+                                                            .interactiveSwipeBackUnderlay(addClickBackHost),
+                                                ) {
+                                                    AnimatedContent(
+                                                        // Primary tabs (Home/AddClick/Connections/Map/Settings) all go through
+                                                        // this AnimatedContent with the 280ms crossfade. Do not reintroduce a
+                                                        // Home-underlay + Map overlay shell — it flashed Home on Map open and
+                                                        // broke Connections tab motion.
+                                                        targetState = screenKey,
+                                                        transitionSpec = {
+                                                            if (transitionMode == NavigationTransitionMode.GestureBack) {
+                                                                EnterTransition.None togetherWith ExitTransition.None
+                                                            } else if (reduceMotion) {
+                                                                fadeIn(animationSpec = tween(120))
+                                                                    .togetherWith(fadeOut(animationSpec = tween(90)))
                                                             } else {
-                                                                (
-                                                                    slideInHorizontally(
-                                                                        animationSpec = slideSpec,
-                                                                        initialOffsetX = { -it },
-                                                                    ) +
-                                                                        fadeIn(animationSpec = fadeSpec)
-                                                                ).togetherWith(
-                                                                    slideOutHorizontally(
-                                                                        animationSpec = slideSpec,
-                                                                        targetOffsetX = { it },
-                                                                    ) +
-                                                                        fadeOut(animationSpec = fadeSpec),
-                                                                ).using(SizeTransform(clip = true))
+                                                                val routeOrder =
+                                                                    listOf(
+                                                                        NavigationItem.Home.route,
+                                                                        NavigationItem.AddClick.route,
+                                                                        NavigationItem.Connections.route,
+                                                                        NavigationItem.Map.route,
+                                                                        NavigationItem.Settings.route,
+                                                                    )
+
+                                                                val initialIndex =
+                                                                    routeOrder.indexOf(initialState).let {
+                                                                        if (it >=
+                                                                            0
+                                                                        ) {
+                                                                            it
+                                                                        } else {
+                                                                            0
+                                                                        }
+                                                                    }
+                                                                val targetIndex =
+                                                                    routeOrder.indexOf(targetState).let {
+                                                                        if (it >=
+                                                                            0
+                                                                        ) {
+                                                                            it
+                                                                        } else {
+                                                                            0
+                                                                        }
+                                                                    }
+                                                                val movingForward = targetIndex >= initialIndex
+
+                                                                val primaryTabs =
+                                                                    setOf(
+                                                                        NavigationItem.Home.route,
+                                                                        NavigationItem.AddClick.route,
+                                                                        NavigationItem.Connections.route,
+                                                                        NavigationItem.Map.route,
+                                                                        NavigationItem.Settings.route,
+                                                                    )
+                                                                val isPrimaryTabCrossfade =
+                                                                    initialState in primaryTabs && targetState in primaryTabs
+
+                                                                val slideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
+                                                                val fadeSpec = tween<Float>(320, easing = LinearOutSlowInEasing)
+                                                                val crossfadeSpec = tween<Float>(280, easing = FastOutSlowInEasing)
+
+                                                                if (isPrimaryTabCrossfade) {
+                                                                    fadeIn(animationSpec = crossfadeSpec)
+                                                                        .togetherWith(fadeOut(animationSpec = crossfadeSpec))
+                                                                } else if (movingForward) {
+                                                                    (
+                                                                        slideInHorizontally(
+                                                                            animationSpec = slideSpec,
+                                                                            initialOffsetX = { it },
+                                                                        ) +
+                                                                            fadeIn(animationSpec = fadeSpec)
+                                                                    ).togetherWith(
+                                                                        slideOutHorizontally(
+                                                                            animationSpec = slideSpec,
+                                                                            targetOffsetX = { -it },
+                                                                        ) +
+                                                                            fadeOut(animationSpec = fadeSpec),
+                                                                    ).using(SizeTransform(clip = true))
+                                                                } else {
+                                                                    (
+                                                                        slideInHorizontally(
+                                                                            animationSpec = slideSpec,
+                                                                            initialOffsetX = { -it },
+                                                                        ) +
+                                                                            fadeIn(animationSpec = fadeSpec)
+                                                                    ).togetherWith(
+                                                                        slideOutHorizontally(
+                                                                            animationSpec = slideSpec,
+                                                                            targetOffsetX = { it },
+                                                                        ) +
+                                                                            fadeOut(animationSpec = fadeSpec),
+                                                                    ).using(SizeTransform(clip = true))
+                                                                }
                                                             }
-                                                        }
-                                                    },
-                                                    label = "app_screen_transition",
-                                                ) { animatedScreen ->
-                                                    renderScreen(animatedScreen)
+                                                        },
+                                                        label = "app_screen_transition",
+                                                    ) { animatedScreen ->
+                                                        renderScreen(animatedScreen)
+                                                    }
                                                 }
                                             }
 

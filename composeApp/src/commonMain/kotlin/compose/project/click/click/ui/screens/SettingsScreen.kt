@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.BluetoothSearching
@@ -53,7 +52,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SwitchDefaults
@@ -107,6 +105,7 @@ import compose.project.click.click.ui.components.ClickNavRow // pragma: allowlis
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.HeaderBackIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
 import compose.project.click.click.ui.components.SavedEventsSection // pragma: allowlist secret
@@ -369,13 +368,10 @@ fun SettingsScreen(
                                 onOpenSearch = null,
                                 onNavigateBack = { closeSettingsSubpage() },
                                 navigationIcon = {
-                                    IconButton(onClick = { closeSettingsSubpage() }) {
-                                        Icon(
-                                            Icons.AutoMirrored.Filled.ArrowBack,
-                                            contentDescription = "Back to settings",
-                                            tint = MaterialTheme.colorScheme.onSurface,
-                                        )
-                                    }
+                                    HeaderBackIconButton(
+                                        onClick = { closeSettingsSubpage() },
+                                        contentDescription = "Back to settings",
+                                    )
                                 },
                                 verticalArrangement = Arrangement.spacedBy(24.dp),
                             ) {

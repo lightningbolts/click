@@ -3,8 +3,6 @@
 package compose.project.click.click.ui.screens
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -14,6 +12,7 @@ import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.User
 import compose.project.click.click.ui.components.AdaptiveBackground
 import compose.project.click.click.ui.components.AppScreenWithFloatingHeader
+import compose.project.click.click.ui.components.HeaderBackIconButton
 import compose.project.click.click.ui.components.UserQrCode
 import compose.project.click.click.utils.LocationService
 
@@ -30,13 +29,7 @@ fun MyQRCodeScreen(
             title = "My QR Code",
             onNavigateBack = onNavigateBack,
             navigationIcon = {
-                IconButton(onClick = onNavigateBack) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
+                HeaderBackIconButton(onClick = onNavigateBack)
             },
         ) { contentModifier ->
             Column(

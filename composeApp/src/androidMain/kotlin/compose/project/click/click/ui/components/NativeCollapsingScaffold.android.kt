@@ -54,6 +54,7 @@ actual fun NativeCollapsingScaffold(
     onOpenSearch: (() -> Unit)?,
     onNavigateBack: (() -> Unit)?,
     nativeTrailingActions: List<NativeChromeAction>,
+    collapseSearchIntoBar: Boolean,
     showHeader: Boolean,
     belowHeaderSpacing: Dp,
     horizontalPadding: Dp,
@@ -91,7 +92,15 @@ actual fun NativeCollapsingScaffold(
                             )
                         },
                         navigationIcon = { navigationIcon?.invoke() },
-                        actions = { actions?.invoke(this) },
+                        actions = {
+                            if (collapseSearchIntoBar &&
+                                onOpenSearch != null &&
+                                scrollBehavior.state.collapsedFraction > 0.32f
+                            ) {
+                                HeaderSearchIconButton(onClick = onOpenSearch)
+                            }
+                            actions?.invoke(this)
+                        },
                         scrollBehavior = scrollBehavior,
                         colors =
                             TopAppBarDefaults.largeTopAppBarColors(
@@ -234,3 +243,32 @@ private fun NativeCollapsingTitle(
 
 @Composable
 actual fun HidePlatformNativeNavigationBar() = Unit
+
+@Composable
+@Suppress("UNUSED_PARAMETER")
+actual fun PlatformNativeNavigationBarSwipeReveal(revealPx: androidx.compose.runtime.MutableFloatState) = Unit
+
+@Composable
+@Suppress("UNUSED_PARAMETER")
+actual fun BindPlatformNativeNavigationBar(
+    title: String,
+    subtitle: String?,
+    presenceOnline: Boolean?,
+    onNavigateBack: (() -> Unit)?,
+    onOpenSearch: (() -> Unit)?,
+    nativeTrailingActions: List<NativeChromeAction>,
+    collapseFraction: Float,
+) = Unit
+
+@Composable
+@Suppress("UNUSED_PARAMETER")
+actual fun PlatformNativeMapFloatingChrome(
+    visible: Boolean,
+    layerLabel: String,
+    layerOptions: List<NativeMapLayerOption>,
+    onToggleLayerId: (String) -> Unit,
+    onDropBeacon: () -> Unit,
+    onZoomIn: () -> Unit,
+    onZoomOut: () -> Unit,
+    bottomPadding: Dp,
+) = Unit

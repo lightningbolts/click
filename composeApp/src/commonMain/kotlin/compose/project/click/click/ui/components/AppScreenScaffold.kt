@@ -48,6 +48,7 @@ fun AppScreenScaffold(
     onOpenSearch: (() -> Unit)? = null,
     onNavigateBack: (() -> Unit)? = null,
     nativeTrailingActions: List<NativeChromeAction> = emptyList(),
+    collapseSearchIntoBar: Boolean = false,
     showFloatingHeader: Boolean = true,
     /**
      * Space between the native header bottom and the first list item.
@@ -69,9 +70,9 @@ fun AppScreenScaffold(
         presenceOnline = presenceOnline,
         navigationIcon = navigationIcon,
         actions =
-            if (onOpenSearch != null || actions != null) {
+            if ((onOpenSearch != null && !collapseSearchIntoBar) || actions != null) {
                 {
-                    if (onOpenSearch != null) {
+                    if (onOpenSearch != null && !collapseSearchIntoBar) {
                         HeaderSearchIconButton(onClick = onOpenSearch)
                     }
                     actions?.invoke(this)
@@ -82,6 +83,7 @@ fun AppScreenScaffold(
         onOpenSearch = onOpenSearch,
         onNavigateBack = onNavigateBack,
         nativeTrailingActions = nativeTrailingActions,
+        collapseSearchIntoBar = collapseSearchIntoBar,
         showHeader = showFloatingHeader,
         belowHeaderSpacing = belowHeaderSpacing,
         horizontalPadding = horizontalPadding,

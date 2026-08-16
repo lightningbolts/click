@@ -17,6 +17,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,7 +41,9 @@ import compose.project.click.click.ui.chat.ConnectionSheetDialogs
 import compose.project.click.click.ui.chat.GroupMembersPickerContext
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
+import compose.project.click.click.ui.components.LocalNativeChromeActive
 import compose.project.click.click.ui.components.PlatformBackHandler
+import compose.project.click.click.ui.components.PlatformNativeNavigationBarSwipeReveal
 import compose.project.click.click.ui.components.TabbedGroupProfileSheet
 import compose.project.click.click.ui.components.TabbedUserProfileSheet
 import compose.project.click.click.ui.components.interactiveSwipeBackUnderlay
@@ -89,6 +92,7 @@ fun ConnectionsScreen(
     /** Shared with [InteractiveSwipeBackContainer] so the persistent list mirrors layer-1 parallax. */
     val chatBackHost = rememberInteractiveBackHostState()
     val iosChatSwipeDragPx = chatBackHost.dragOffsetPx
+    PlatformNativeNavigationBarSwipeReveal(iosChatSwipeDragPx)
     var iosChatRightToLeftPeek by remember { mutableStateOf<InteractiveSwipeBackRightToLeftPeek?>(null) }
     var chatTransitionMode by remember { mutableStateOf(ChatTransitionMode.Tap) }
     var isTapCloseInFlight by remember { mutableStateOf(false) }
@@ -220,23 +224,25 @@ fun ConnectionsScreen(
                         .fillMaxSize()
                         .interactiveSwipeBackUnderlay(chatBackHost),
             ) {
-                ConnectionsListView(
-                    viewModel = viewModel,
-                    searchQuery = searchQuery,
-                    onOpenSearch = onOpenSearch,
-                    onChatSelected = { chatId -> openChat(chatId) },
-                    onHubSelected = onHubSelected,
-                    onNavigateToLocationSettings = onNavigateToLocationSettings,
-                    onUserProfileClick = { profileUserId = it },
-                    onGroupMembersPicker = {
-                        groupMembersPickerContext = it
-                        showGroupMembersSheet = true
-                    },
-                    verifiedCliqueProximityAutofill = verifiedCliqueProximityAutofill,
-                    onVerifiedCliqueProximityAutofillConsumed = onVerifiedCliqueProximityAutofillConsumed,
-                    isListObscured = selectedChatId != null,
-                    listRevealEpoch = listRevealEpoch,
-                )
+                CompositionLocalProvider(LocalNativeChromeActive provides (selectedChatId == null)) {
+                    ConnectionsListView(
+                        viewModel = viewModel,
+                        searchQuery = searchQuery,
+                        onOpenSearch = onOpenSearch,
+                        onChatSelected = { chatId -> openChat(chatId) },
+                        onHubSelected = onHubSelected,
+                        onNavigateToLocationSettings = onNavigateToLocationSettings,
+                        onUserProfileClick = { profileUserId = it },
+                        onGroupMembersPicker = {
+                            groupMembersPickerContext = it
+                            showGroupMembersSheet = true
+                        },
+                        verifiedCliqueProximityAutofill = verifiedCliqueProximityAutofill,
+                        onVerifiedCliqueProximityAutofillConsumed = onVerifiedCliqueProximityAutofillConsumed,
+                        isListObscured = selectedChatId != null,
+                        listRevealEpoch = listRevealEpoch,
+                    )
+                }
             }
 
             // Sits under the chat overlay; any pointer that misses the overlay (Compose "holes")

@@ -24,7 +24,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material3.*
@@ -61,6 +60,9 @@ import compose.project.click.click.ui.components.AdaptiveBackground // pragma: a
 import compose.project.click.click.ui.components.ClickTextFieldMinHeight // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionContextPresentation // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionContextSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.HeaderBackIconButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.HeaderChromeIconButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.NativeChromeAction // pragma: allowlist secret
 import compose.project.click.click.ui.components.PageHeader // pragma: allowlist secret
 import compose.project.click.click.ui.components.bottomChromePadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberConnectionHandshakePulse // pragma: allowlist secret
@@ -178,23 +180,24 @@ fun NfcScreen(
                     PageHeader(
                         title = "Tap to Connect",
                         subtitle = "BLE + ultrasonic handshake",
+                        onNavigateBack = onBackPressed,
+                        nativeTrailingActions =
+                            listOf(
+                                NativeChromeAction(
+                                    sfSymbol = "gearshape",
+                                    contentDescription = "Bluetooth and audio settings",
+                                    onClick = { proximityManager.openRadiosSettings() },
+                                ),
+                            ),
                         navigationIcon = {
-                            IconButton(onClick = onBackPressed) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = MaterialTheme.colorScheme.onSurface,
-                                )
-                            }
+                            HeaderBackIconButton(onClick = onBackPressed)
                         },
                         actions = {
-                            IconButton(onClick = { proximityManager.openRadiosSettings() }) {
-                                Icon(
-                                    Icons.Default.Settings,
-                                    contentDescription = "Bluetooth and audio settings",
-                                    tint = MaterialTheme.colorScheme.onSurface,
-                                )
-                            }
+                            HeaderChromeIconButton(
+                                icon = Icons.Default.Settings,
+                                contentDescription = "Bluetooth and audio settings",
+                                onClick = { proximityManager.openRadiosSettings() },
+                            )
                         },
                     )
                 }
@@ -271,8 +274,10 @@ fun NfcScreen(
                                                 val weatherLabel =
                                                     withContext(Dispatchers.Default) {
                                                         if (
-                                                            la != null && lo != null &&
-                                                            la.isFinite() && lo.isFinite() &&
+                                                            la != null &&
+                                                            lo != null &&
+                                                            la.isFinite() &&
+                                                            lo.isFinite() &&
                                                             !(la == 0.0 && lo == 0.0)
                                                         ) {
                                                             openMeteoWeather.fetchWeather(la, lo)?.toConnectionPayloadWeatherJson()

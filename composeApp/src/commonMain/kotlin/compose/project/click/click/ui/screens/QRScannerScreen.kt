@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
@@ -43,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import compose.project.click.click.qr.QrParseResult // pragma: allowlist secret
 import compose.project.click.click.qr.parseQrCode // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
+import compose.project.click.click.ui.components.HeaderBackIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.PageHeader // pragma: allowlist secret
 import compose.project.click.click.ui.components.QRScanner // pragma: allowlist secret
 import compose.project.click.click.ui.components.QrScannerDetection // pragma: allowlist secret
@@ -221,14 +221,9 @@ fun QRScannerScreen(
                                 QrScannerPresentationState.Connecting -> "Locking in the connection"
                                 QrScannerPresentationState.Error -> "That code doesn't look right"
                             },
+                        onNavigateBack = onNavigateBack,
                         navigationIcon = {
-                            IconButton(onClick = onNavigateBack) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = MaterialTheme.colorScheme.onSurface,
-                                )
-                            }
+                            HeaderBackIconButton(onClick = onNavigateBack)
                         },
                     )
                 }
