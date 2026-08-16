@@ -39,29 +39,33 @@ import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.ObjCAction
 import kotlinx.cinterop.useContents
+import platform.CoreGraphics.CGRectMake
 import platform.Foundation.NSProcessInfo
 import platform.Foundation.NSSelectorFromString
-import platform.Foundation.setValue
 import platform.UIKit.NSLayoutConstraint
+import platform.UIKit.NSTextAlignmentCenter
 import platform.UIKit.UIBarButtonItem
 import platform.UIKit.UIBarButtonItemStyle
 import platform.UIKit.UIBlurEffect
 import platform.UIKit.UIBlurEffectStyle
 import platform.UIKit.UIColor
+import platform.UIKit.UIFont
 import platform.UIKit.UIImage
+import platform.UIKit.UILabel
+import platform.UIKit.UILayoutConstraintAxisVertical
 import platform.UIKit.UINavigationBar
 import platform.UIKit.UINavigationBarAppearance
 import platform.UIKit.UINavigationItem
-import platform.UIKit.UINavigationItemLargeTitleDisplayMode
+import platform.UIKit.UIStackView
+import platform.UIKit.UIStackViewAlignmentCenter
 import platform.UIKit.UIViewController
 import platform.UIKit.setAccessibilityLabel
 import platform.darwin.NSObject
 
 private val IosCompactBarHeight = 44.dp
-private val IosLargeTitleExtraHeight = 52.dp
-private val IosSubtitleExtraHeight = 22.dp
+private val IosSubtitleLineHeight = 18.dp
 
-private fun iosNavBarExtraHeight(hasSubtitle: Boolean): Dp = IosLargeTitleExtraHeight + if (hasSubtitle) IosSubtitleExtraHeight else 0.dp
+private fun iosNavBarExtraHeight(hasSubtitle: Boolean): Dp = if (hasSubtitle) IosSubtitleLineHeight else 0.dp
 
 private fun iosNavBarBodyHeight(
     hasSubtitle: Boolean,
@@ -272,24 +276,62 @@ private fun rememberIosHostNavBar(
     }
 }
 
+@Composable
+actual fun HidePlatformNativeNavigationBar() {
+    DisposableEffect(Unit) {
+        IosHostNavigationBar.acquireCover()
+        onDispose { IosHostNavigationBar.releaseCover() }
+    }
+}
+
 @OptIn(ExperimentalForeignApi::class)
 private object IosHostNavigationBar {
     val bar: UINavigationBar =
         UINavigationBar().apply {
             translatesAutoresizingMaskIntoConstraints = false
             setTranslucent(true)
-            prefersLargeTitles = true
+            prefersLargeTitles = false
             backgroundColor = UIColor.clearColor
             clipsToBounds = true
             insetsLayoutMarginsFromSafeArea = false
         }
     private val item = UINavigationItem()
+    private val titleLabel =
+        UILabel().apply {
+            font = UIFont.boldSystemFontOfSize(17.0)
+            textAlignment = NSTextAlignmentCenter
+        }
+    private val subtitleLabel =
+        UILabel().apply {
+            font = UIFont.systemFontOfSize(12.0)
+            textAlignment = NSTextAlignmentCenter
+        }
+    private val titleStack =
+        UIStackView().apply {
+            axis = UILayoutConstraintAxisVertical
+            alignment = UIStackViewAlignmentCenter
+            spacing = 1.0
+            addArrangedSubview(titleLabel)
+            addArrangedSubview(subtitleLabel)
+        }
     private var heightConstraint: NSLayoutConstraint? = null
     private var attachedHost: UIViewController? = null
     private var ownerToken: Any? = null
+    private var coverCount = 0
+    private var wantVisible = false
     private val searchTarget = IosBarButtonTarget()
     private val backTarget = IosBarButtonTarget()
     private val trailingTargets = mutableListOf<IosBarButtonTarget>()
+
+    fun acquireCover() {
+        coverCount++
+        applyVisibility()
+    }
+
+    fun releaseCover() {
+        coverCount = (coverCount - 1).coerceAtLeast(0)
+        applyVisibility()
+    }
 
     fun attach(host: UIViewController) {
         if (attachedHost === host && bar.superview == host.view) return
@@ -297,7 +339,7 @@ private object IosHostNavigationBar {
         attachedHost = host
         val hostView = host.view
         hostView.addSubview(bar)
-        val height = bar.heightAnchor.constraintEqualToConstant(96.0)
+        val height = bar.heightAnchor.constraintEqualToConstant(44.0)
         heightConstraint = height
         NSLayoutConstraint.activateConstraints(
             listOf(
@@ -307,9 +349,10 @@ private object IosHostNavigationBar {
                 height,
             ),
         )
+        item.titleView = titleStack
         bar.setItems(listOf(item), animated = false)
         hostView.layoutIfNeeded()
-        hostView.bringSubviewToFront(bar)
+        applyVisibility()
     }
 
     fun release(owner: Any) {
@@ -326,6 +369,14 @@ private object IosHostNavigationBar {
     ) {
         bar.setTranslucent(true)
         bar.backgroundColor = UIColor.clearColor
+        val titleColor =
+            if (isDarkMode) {
+                UIColor.whiteColor
+            } else {
+                UIColor.blackColor
+            }
+        titleLabel.textColor = titleColor
+        subtitleLabel.textColor = titleColor.colorWithAlphaComponent(0.62)
         if (usesNativeLiquidGlass && !reduceTransparency) {
             // System Liquid Glass — matching UITabBar. Do not set UINavigationBarAppearance.
             return
@@ -377,7 +428,8 @@ private object IosHostNavigationBar {
             attach(host)
         }
         ownerToken = owner
-        item.title = title
+        item.title = null
+        bar.prefersLargeTitles = false
         val subtitleText =
             buildString {
                 if (!subtitle.isNullOrBlank()) append(subtitle)
@@ -386,23 +438,19 @@ private object IosHostNavigationBar {
                     append("Online")
                 }
             }.ifBlank { null }
-        runCatching { item.setValue(subtitleText, forKey = "subtitle") }
-        val collapsed = collapseFraction > 0.55f
-        item.largeTitleDisplayMode =
-            if (collapsed) {
-                UINavigationItemLargeTitleDisplayMode.UINavigationItemLargeTitleDisplayModeNever
-            } else {
-                UINavigationItemLargeTitleDisplayMode.UINavigationItemLargeTitleDisplayModeAlways
-            }
-        bar.prefersLargeTitles = true
-        val extra = (52.0 + if (hasSubtitle) 22.0 else 0.0) * (1.0 - collapseFraction.toDouble().coerceIn(0.0, 1.0))
+        val fraction = collapseFraction.coerceIn(0f, 1f)
+        titleLabel.text = title
+        titleLabel.font = UIFont.boldSystemFontOfSize(17.0 + 3.0 * (1.0 - fraction.toDouble()))
+        subtitleLabel.text = subtitleText
+        subtitleLabel.hidden = subtitleText == null || fraction >= 0.97f
+        subtitleLabel.alpha = if (subtitleText == null) 0.0 else (1.0 - fraction.toDouble())
+        item.titleView = titleStack
+        val extra = (if (hasSubtitle) 18.0 else 0.0) * (1.0 - fraction.toDouble())
         heightConstraint?.constant = (44.0 + extra).coerceAtLeast(44.0)
+        titleStack.setFrame(CGRectMake(0.0, 0.0, 220.0, 40.0 + extra))
         host.view.layoutIfNeeded()
         bindButtons(onOpenSearch, onNavigateBack, trailingActions)
         setVisible(visible)
-        if (visible) {
-            host.view.bringSubviewToFront(bar)
-        }
     }
 
     private fun bindButtons(
@@ -459,10 +507,16 @@ private object IosHostNavigationBar {
     }
 
     private fun setVisible(visible: Boolean) {
-        bar.hidden = !visible
-        bar.userInteractionEnabled = visible
+        wantVisible = visible
+        applyVisibility()
+    }
+
+    private fun applyVisibility() {
+        val show = wantVisible && coverCount == 0
+        bar.hidden = !show
+        bar.userInteractionEnabled = show
         val hostView = attachedHost?.view ?: return
-        if (visible) {
+        if (show) {
             hostView.bringSubviewToFront(bar)
         } else {
             hostView.sendSubviewToBack(bar)

@@ -104,6 +104,7 @@ import compose.project.click.click.ui.components.ClickActionBottomSheet // pragm
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.HidePlatformNativeNavigationBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
 import compose.project.click.click.ui.components.LocalGlassAlertAnimatedDismiss // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
@@ -143,6 +144,7 @@ fun HubChatScreen(
     parentInteractiveBackSwipePx: androidx.compose.runtime.MutableFloatState? = null,
     keyboardHeightProvider: KeyboardHeightProvider = rememberKeyboardHeightProvider(),
 ) {
+    HidePlatformNativeNavigationBar()
     val viewModel: HubChatViewModel =
         viewModel(key = args.realtimeChannel) {
             HubChatViewModel(

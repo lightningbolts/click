@@ -268,6 +268,7 @@ fun PageHeader(
         if (navigationIcon != null) HeaderDisplayMode.Inline else HeaderDisplayMode.Large,
     collapseFraction: Float = 0f,
 ) {
+    HidePlatformNativeNavigationBar()
     LiquidGlassPageHeader(
         title = title,
         subtitle = subtitle,

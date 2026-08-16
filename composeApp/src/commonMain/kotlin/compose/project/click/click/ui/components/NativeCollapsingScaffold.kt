@@ -29,8 +29,9 @@ data class NativeChromeAction(
  * Android uses Material 3 [androidx.compose.material3.LargeTopAppBar] with
  * `exitUntilCollapsedScrollBehavior`. iOS attaches a real `UINavigationBar` to the Compose
  * host view (same mounting as the liquid-glass `UITabBar`) — never a full-screen
- * `UIKitViewController` overlay. Large→inline collapse is `largeTitleDisplayMode`, not a dummy
- * `UIScrollView`. iOS 26 leaves system Liquid Glass alone (no custom `UINavigationBarAppearance`).
+ * `UIKitViewController` overlay. Title and bar buttons share one compact row (WhatsApp-style);
+ * subtitle tucks away smoothly with nested scroll. iOS 26 leaves system Liquid Glass alone
+ * (no custom `UINavigationBarAppearance`).
  *
  * The collapsed state is always a compact app bar — never `if (hidden) return`.
  */
@@ -72,6 +73,13 @@ expect fun NativeCollapsingScrollScaffold(
     horizontalPadding: Dp = AppScreenDefaults.HorizontalPadding,
     content: @Composable (Modifier) -> Unit,
 )
+
+/**
+ * Hides the iOS host-view `UINavigationBar` while a screen draws its own header (chat, Tap to
+ * Connect). No-op on Android.
+ */
+@Composable
+expect fun HidePlatformNativeNavigationBar()
 
 /**
  * Maps a lazy list's first-visible item into a monotonically increasing scroll offset so iOS

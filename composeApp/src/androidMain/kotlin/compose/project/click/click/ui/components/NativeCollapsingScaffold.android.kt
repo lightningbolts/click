@@ -231,3 +231,6 @@ private fun NativeCollapsingTitle(
         }
     }
 }
+
+@Composable
+actual fun HidePlatformNativeNavigationBar() = Unit
