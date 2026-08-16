@@ -367,6 +367,7 @@ fun SettingsScreen(
                             AppScreenScaffold(
                                 title = settingsPage.title(),
                                 onOpenSearch = null,
+                                onNavigateBack = { closeSettingsSubpage() },
                                 navigationIcon = {
                                     IconButton(onClick = { closeSettingsSubpage() }) {
                                         Icon(

@@ -9,6 +9,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.Rect
 import android.graphics.RectF
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -350,7 +351,7 @@ private fun bitmapDescriptorForCircularAvatarPin(
     canvas.drawCircle(cx, cy, radius, fillPaint)
 
     if (photo != null && !photo.isRecycled) {
-        val shaderBmp = Bitmap.createScaledBitmap(photo, sizePx, sizePx, true)
+        val shaderBmp = centerCroppedSquareBitmap(photo, sizePx)
         val shader =
             android.graphics.BitmapShader(
                 shaderBmp,
@@ -416,7 +417,7 @@ private fun bitmapDescriptorForShapedBeaconPin(
         canvas.drawRect(sizePx / 2f, 0f, sizePx.toFloat(), sizePx.toFloat(), overlay)
     }
     if (photo != null && !photo.isRecycled) {
-        val shaderBmp = Bitmap.createScaledBitmap(photo, sizePx, sizePx, true)
+        val shaderBmp = centerCroppedSquareBitmap(photo, sizePx)
         val photoPaint =
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 shader =
@@ -499,6 +500,31 @@ private fun beaconShapePath(
         }
     }
     return path
+}
+
+private fun centerCroppedSquareBitmap(
+    photo: Bitmap,
+    sizePx: Int,
+): Bitmap {
+    val crop =
+        centerCropSourceRect(
+            srcWidth = photo.width.toFloat(),
+            srcHeight = photo.height.toFloat(),
+            dstSize = sizePx.toFloat(),
+        )
+    val out = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(out)
+    val src =
+        Rect(
+            crop.srcX.toInt(),
+            crop.srcY.toInt(),
+            (crop.srcX + crop.srcW).toInt().coerceAtMost(photo.width),
+            (crop.srcY + crop.srcH).toInt().coerceAtMost(photo.height),
+        )
+    val paint =
+        Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    canvas.drawBitmap(photo, src, Rect(0, 0, sizePx, sizePx), paint)
+    return out
 }
 
 private fun bitmapDescriptorForSquadPin(

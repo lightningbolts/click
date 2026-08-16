@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+@Suppress("UNUSED_PARAMETER")
 actual fun NativeCollapsingScaffold(
     title: String,
     modifier: Modifier,
@@ -50,6 +51,9 @@ actual fun NativeCollapsingScaffold(
     presenceOnline: Boolean?,
     navigationIcon: @Composable (() -> Unit)?,
     actions: @Composable (RowScope.() -> Unit)?,
+    onOpenSearch: (() -> Unit)?,
+    onNavigateBack: (() -> Unit)?,
+    nativeTrailingActions: List<NativeChromeAction>,
     showHeader: Boolean,
     belowHeaderSpacing: Dp,
     horizontalPadding: Dp,
@@ -125,6 +129,7 @@ actual fun NativeCollapsingScaffold(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+@Suppress("UNUSED_PARAMETER")
 actual fun NativeCollapsingScrollScaffold(
     title: String,
     modifier: Modifier,
@@ -132,6 +137,9 @@ actual fun NativeCollapsingScrollScaffold(
     presenceOnline: Boolean?,
     navigationIcon: @Composable (() -> Unit)?,
     actions: @Composable (RowScope.() -> Unit)?,
+    onOpenSearch: (() -> Unit)?,
+    onNavigateBack: (() -> Unit)?,
+    nativeTrailingActions: List<NativeChromeAction>,
     horizontalPadding: Dp,
     content: @Composable (Modifier) -> Unit,
 ) {

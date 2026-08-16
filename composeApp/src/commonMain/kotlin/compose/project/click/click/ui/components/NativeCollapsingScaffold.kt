@@ -13,14 +13,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 
 /**
+ * Trailing iOS navigation-bar button described with an SF Symbol. Android ignores this and uses
+ * the Compose [NativeCollapsingScaffold] `actions` slot instead.
+ */
+data class NativeChromeAction(
+    val sfSymbol: String,
+    val contentDescription: String,
+    val onClick: () -> Unit,
+)
+
+/**
  * Header chrome is platform-native on purpose; folding this back into a shared
  * [CollapsibleGlassTopBar] reintroduces hide-instead-of-collapse and fake glass.
  *
  * Android uses Material 3 [androidx.compose.material3.LargeTopAppBar] with
- * `exitUntilCollapsedScrollBehavior`. iOS uses a real `UINavigationController` with
- * `prefersLargeTitles` plus a companion `UIScrollView` mirrored from [LazyListState] so the
- * system bar performs large→inline collapse (including iOS 26 Liquid Glass). A system
- * `UIVisualEffectView` covers the status-bar / Dynamic Island band.
+ * `exitUntilCollapsedScrollBehavior`. iOS attaches a real `UINavigationBar` to the Compose
+ * host view (same mounting as the liquid-glass `UITabBar`) — never a full-screen
+ * `UIKitViewController` overlay. Large→inline collapse is `largeTitleDisplayMode`, not a dummy
+ * `UIScrollView`. iOS 26 leaves system Liquid Glass alone (no custom `UINavigationBarAppearance`).
  *
  * The collapsed state is always a compact app bar — never `if (hidden) return`.
  */
@@ -32,6 +42,9 @@ expect fun NativeCollapsingScaffold(
     presenceOnline: Boolean? = null,
     navigationIcon: @Composable (() -> Unit)? = null,
     actions: @Composable (RowScope.() -> Unit)? = null,
+    onOpenSearch: (() -> Unit)? = null,
+    onNavigateBack: (() -> Unit)? = null,
+    nativeTrailingActions: List<NativeChromeAction> = emptyList(),
     showHeader: Boolean = true,
     belowHeaderSpacing: Dp = AppScreenDefaults.SectionSpacing,
     horizontalPadding: Dp = AppScreenDefaults.HorizontalPadding,
@@ -53,13 +66,16 @@ expect fun NativeCollapsingScrollScaffold(
     presenceOnline: Boolean? = null,
     navigationIcon: @Composable (() -> Unit)? = null,
     actions: @Composable (RowScope.() -> Unit)? = null,
+    onOpenSearch: (() -> Unit)? = null,
+    onNavigateBack: (() -> Unit)? = null,
+    nativeTrailingActions: List<NativeChromeAction> = emptyList(),
     horizontalPadding: Dp = AppScreenDefaults.HorizontalPadding,
     content: @Composable (Modifier) -> Unit,
 )
 
 /**
- * Maps a lazy list's first-visible item into a monotonically increasing scroll offset so a
- * companion UIKit `UIScrollView` can drive large-title collapse after the first row.
+ * Maps a lazy list's first-visible item into a monotonically increasing scroll offset so iOS
+ * large-title chrome can switch `largeTitleDisplayMode` after the first row.
  */
 fun nativeChromeScrollOffsetPx(
     firstVisibleItemIndex: Int,

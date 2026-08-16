@@ -70,6 +70,7 @@ import compose.project.click.click.ui.components.HomeGreetingSubtitle // pragma:
 import compose.project.click.click.ui.components.HomePileActions // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomePileBoardData // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeSearchPill // pragma: allowlist secret
+import compose.project.click.click.ui.components.NativeChromeAction // pragma: allowlist secret
 import compose.project.click.click.ui.components.PollPairCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.SavedEventsSection // pragma: allowlist secret
 import compose.project.click.click.ui.components.SectionHeader // pragma: allowlist secret
@@ -342,6 +343,32 @@ fun HomeScreen(
                     // sits HeaderToSearchGap under the greeting, not CardSpacing×2.
                     belowHeaderSpacing = HeaderToSearchGap - CardSpacing,
                     verticalArrangement = Arrangement.spacedBy(CardSpacing),
+                    nativeTrailingActions =
+                        listOf(
+                            NativeChromeAction(
+                                sfSymbol =
+                                    if (homeLayoutMode == HomeLayoutMode.PILE) {
+                                        "list.bullet"
+                                    } else {
+                                        "square.stack"
+                                    },
+                                contentDescription =
+                                    if (homeLayoutMode == HomeLayoutMode.PILE) {
+                                        "Switch to list view"
+                                    } else {
+                                        "Switch to photo pile"
+                                    },
+                                onClick = {
+                                    AppDataManager.setHomeLayoutMode(
+                                        if (homeLayoutMode == HomeLayoutMode.PILE) {
+                                            HomeLayoutMode.LINEAR
+                                        } else {
+                                            HomeLayoutMode.PILE
+                                        },
+                                    )
+                                },
+                            ),
+                        ),
                     actions = {
                         IconButton(
                             onClick = {

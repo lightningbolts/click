@@ -89,6 +89,7 @@ import compose.project.click.click.ui.components.ConnectionListUserAvatarFace //
 import compose.project.click.click.ui.components.DiscoverySortSegmentBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.HeaderRefreshIconButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.NativeChromeAction // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberCardVisual // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
@@ -477,6 +478,15 @@ internal fun EventsDiscoveryFullScreen(
             AppScreenScaffold(
                 title = "Nearby",
                 subtitle = null,
+                onNavigateBack = onBack,
+                nativeTrailingActions =
+                    listOf(
+                        NativeChromeAction(
+                            sfSymbol = "arrow.clockwise",
+                            contentDescription = "Refresh feed",
+                            onClick = onRefreshDiscovery,
+                        ),
+                    ),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(

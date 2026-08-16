@@ -46,3 +46,13 @@ CI: Android job runs on Linux (`testDebugUnitTest` + `assembleDebug`); iOS job r
 - **`click-web/supabase` is the source of truth** for shared migrations and `bind-proximity-connection`. Sync mirrors with `bash scripts/sync-supabase-from-click-web.sh`. Mobile-only functions (`send-push-notification`, `expire-*`, `verify-hub-proximity`) stay in this repo.
 - Supabase Edge Functions require the Supabase CLI to deploy/serve locally; they are not needed for basic mobile build testing.
 - `local.properties` is gitignored. Recreate it on each fresh checkout (or rely on `local.defaults.properties` for Gradle configure-only steps such as iOS framework embedding).
+
+### Native iOS chrome (do not regress)
+
+The liquid-glass **tab bar** and **navigation bar** are real UIKit views added to `ComposeUIViewController.view` (`BottomBar.ios.kt`, `NativeCollapsingScaffold.ios.kt`). They are **not** Compose `UIKitView` / `UIKitViewController` overlays.
+
+- Pin `UITabBar` to the host bottom and `UINavigationBar` to the host top. Height is intrinsic / constrained to the bar — **never** `fillMaxSize()`.
+- On iOS 26, do **not** apply `UITabBarAppearance` / `UINavigationBarAppearance` (that opts out of Liquid Glass).
+- Do **not** restore Compose `LiquidGlassPageHeader` / opaque-Box headers as iOS tab-root chrome.
+- **No merge to `main` without device/simulator screenshots or a recording of every tab** (Home, Add Click, Clicks, Map, Settings, nested screens) attached to the PR. CI passing is not visual proof.
+- Re-attempts of a SwiftUI `TabView`/`NavigationStack` shell stay on a branch until that visual checklist is complete.

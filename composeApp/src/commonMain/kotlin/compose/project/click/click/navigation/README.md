@@ -103,7 +103,7 @@ Each item carries a Material `ImageVector` for Android/Compose and an `sfSymbol`
 `ui/components/AppScreenScaffold.kt` is the standard layout for tab-root screens. It delegates to `NativeCollapsingScaffold`:
 
 - **Android:** Material 3 `LargeTopAppBar` + `exitUntilCollapsedScrollBehavior` (compact bar, never hidden)
-- **iOS:** `UINavigationController` large titles + companion `UIScrollView` mirrored from `LazyListState`; system `UIVisualEffectView` on the status-bar / Dynamic Island band
+- **iOS:** host-view `UINavigationBar` added to `ComposeUIViewController.view` (same pattern as `UITabBar`). Large titles collapse via `largeTitleDisplayMode`. iOS 26 leaves system Liquid Glass alone — no `UINavigationBarAppearance`, no `UIVisualEffectView` overlay, no `UIKitViewController(fillMaxSize)`.
 - **LazyColumn body** — extends under bottom nav with `rememberBottomChromePadding()`
 - **Optional search action** — `onOpenSearch` opens unified search sheet
 - **Encounter tether banner** — `EncounterTetherManager` compass message when active

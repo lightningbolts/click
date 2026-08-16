@@ -16,6 +16,8 @@ import compose.project.click.click.ui.utils.TimeState // pragma: allowlist secre
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
 import kotlinx.datetime.Clock
+import platform.CoreGraphics.CGContextRestoreGState
+import platform.CoreGraphics.CGContextSaveGState
 import platform.CoreGraphics.CGPointMake
 import platform.CoreGraphics.CGRectMake
 import platform.CoreGraphics.CGSizeMake
@@ -42,6 +44,7 @@ import platform.UIKit.UIColor
 import platform.UIKit.UIFont
 import platform.UIKit.UIGraphicsBeginImageContextWithOptions
 import platform.UIKit.UIGraphicsEndImageContext
+import platform.UIKit.UIGraphicsGetCurrentContext
 import platform.UIKit.UIGraphicsGetImageFromCurrentImageContext
 import platform.UIKit.UIImage
 import platform.UIKit.UILabel
@@ -986,15 +989,25 @@ private fun shapedMapPinUIImage(
     UIGraphicsBeginImageContextWithOptions(CGSizeMake(size, size), false, 0.0)
     try {
         val path = beaconShapeBezierPath(shape, size, pad)
+        val ctx = UIGraphicsGetCurrentContext()
+        if (ctx != null) {
+            CGContextSaveGState(ctx)
+        }
         path.addClip()
         if (photo != null) {
             val pw = photo.size.useContents { width }.coerceAtLeast(1.0)
             val ph = photo.size.useContents { height }.coerceAtLeast(1.0)
-            val scale = maxOf(size / pw, size / ph)
+            val crop =
+                centerCropSourceRect(
+                    srcWidth = pw.toFloat(),
+                    srcHeight = ph.toFloat(),
+                    dstSize = size.toFloat(),
+                )
+            val scale = size / crop.srcW.toDouble()
             val dw = pw * scale
             val dh = ph * scale
-            val dx = (size - dw) / 2.0
-            val dy = (size - dh) / 2.0
+            val dx = -crop.srcX.toDouble() * scale
+            val dy = -crop.srcY.toDouble() * scale
             photo.drawInRect(CGRectMake(dx, dy, dw, dh))
         } else {
             fill.setFill()
@@ -1013,6 +1026,9 @@ private fun shapedMapPinUIImage(
             label.textAlignment = NSTextAlignmentCenter
             label.backgroundColor = UIColor.clearColor
             label.drawTextInRect(CGRectMake(0.0, 0.0, size, size))
+        }
+        if (ctx != null) {
+            CGContextRestoreGState(ctx)
         }
         UIColor.blackColor.setStroke()
         path.lineWidth = 2.0

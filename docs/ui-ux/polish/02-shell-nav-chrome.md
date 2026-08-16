@@ -114,7 +114,7 @@ Secondary chrome (chat/events headers) may use `Modifier.interactiveBackPersonal
 
 ### 6.1 Required outcomes
 
-- Native collapsing headers (`NativeCollapsingScaffold`) on Home / Add Click / Nearby / Settings / Clicks. Android `LargeTopAppBar` + `exitUntilCollapsed`; iOS `UINavigationController` large titles + companion `UIScrollView`. Compact chrome stays visible — never hide. iOS status-bar / Dynamic Island uses a system `UIVisualEffectView`, not a Compose gradient or opaque iOS 26 shortcut.  
+- Native collapsing headers (`NativeCollapsingScaffold`) on Home / Add Click / Nearby / Settings / Clicks. Android `LargeTopAppBar` + `exitUntilCollapsed`; iOS host-view `UINavigationBar` (tab-bar mounting, top-pinned, never `UIKitViewController(fillMaxSize)`). Compact chrome stays visible — never hide. iOS 26 uses system Liquid Glass; do not apply custom `UINavigationBarAppearance` on iOS 26.  
 
 ---
 

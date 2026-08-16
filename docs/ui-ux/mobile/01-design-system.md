@@ -144,7 +144,7 @@
 ### 2.6 A11y & Responsive
 
 - Manrope scales with system font size (M3 default).
-- `AppScreenScaffold` uses platform-native collapsing chrome (`NativeCollapsingScaffold`); large fonts scale inside `LargeTopAppBar` / iOS large titles.
+- `AppScreenScaffold` uses platform-native collapsing chrome (`NativeCollapsingScaffold`); large fonts scale inside `LargeTopAppBar` / iOS host-view `UINavigationBar`.
 
 ---
 
@@ -255,7 +255,7 @@ Helpers: `rememberTabBarOverlayHeight()`, `rememberBottomChromePadding()`, `reme
 
 1. `PlatformBottomBar` measures and calls `AppScreenChromeState.updateBottomChromeHeight`.
 2. Tab-root screens use `bottomChromePadding()` or scaffold content padding.
-3. Collapsing header screens use `NativeCollapsingScaffold` (Material 3 LargeTopAppBar / iOS large titles).
+3. Collapsing header screens use `NativeCollapsingScaffold` (Material 3 LargeTopAppBar / iOS host-view UINavigationBar).
 
 ### 4.6 A11y & Responsive
 
