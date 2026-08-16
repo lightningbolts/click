@@ -5,10 +5,10 @@
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,19 +18,17 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.uikit.LocalUIViewController
 import androidx.compose.ui.unit.Dp
@@ -63,22 +61,14 @@ private val IosCompactBarHeight = 44.dp
 private val IosLargeTitleExtraHeight = 52.dp
 private val IosSubtitleExtraHeight = 22.dp
 
-/**
- * UIKit `frame` / Auto Layout constants are in **points**. Compose iOS maps 1.dp = 1 point, so
- * convert with `.dp` — never [androidx.compose.ui.unit.Density.toDp], which treats the value as
- * pixels and shrinks the spacer by the screen scale (titles then paint over the body).
- */
-private fun uiKitPointsToDp(points: Double): Dp = points.toFloat().dp
+private fun iosNavBarExtraHeight(hasSubtitle: Boolean): Dp = IosLargeTitleExtraHeight + if (hasSubtitle) IosSubtitleExtraHeight else 0.dp
 
-private fun iosNavBarFallbackHeight(
-    statusBarTop: Dp,
+private fun iosNavBarBodyHeight(
     hasSubtitle: Boolean,
-): Dp {
-    val extra = IosLargeTitleExtraHeight + if (hasSubtitle) IosSubtitleExtraHeight else 0.dp
-    return statusBarTop + IosCompactBarHeight + extra
-}
+    collapseFraction: Float,
+): Dp = IosCompactBarHeight + iosNavBarExtraHeight(hasSubtitle) * (1f - collapseFraction.coerceIn(0f, 1f))
 
-@OptIn(ExperimentalForeignApi::class)
+@OptIn(ExperimentalForeignApi::class, ExperimentalMaterial3Api::class)
 @Composable
 @Suppress("UNUSED_PARAMETER")
 actual fun NativeCollapsingScaffold(
@@ -101,70 +91,65 @@ actual fun NativeCollapsingScaffold(
 ) {
     val bottomChrome = rememberBottomChromePadding()
     val statusBarTop = rememberStatusBarTopPadding()
-    val scrollOffsetPx by remember(lazyListState) {
-        derivedStateOf {
-            nativeChromeScrollOffsetPx(
-                firstVisibleItemIndex = lazyListState.firstVisibleItemIndex,
-                firstVisibleItemScrollOffset = lazyListState.firstVisibleItemScrollOffset,
-            )
+    val hasSubtitle = !subtitle.isNullOrBlank() || presenceOnline == true
+    val extraHeight = iosNavBarExtraHeight(hasSubtitle)
+    val density = LocalDensity.current
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val extraPx = with(density) { extraHeight.toPx() }
+    SideEffect {
+        if (scrollBehavior.state.heightOffsetLimit != -extraPx) {
+            scrollBehavior.state.heightOffsetLimit = -extraPx
         }
     }
-    val collapseFraction = (scrollOffsetPx / 52f).coerceIn(0f, 1f)
-    val collapsed = collapseFraction > 0.55f
-    val navHeight =
-        rememberIosHostNavBar(
-            title = title,
-            subtitle = subtitle,
-            presenceOnline = presenceOnline,
-            collapsed = collapsed,
-            visible = showHeader,
-            statusBarTop = statusBarTop,
-            onOpenSearch = onOpenSearch,
-            onNavigateBack = onNavigateBack,
-            nativeTrailingActions = nativeTrailingActions,
-        )
-    val density = LocalDensity.current
-    var belowHeaderHeight by remember { mutableStateOf(0.dp) }
-    val topPad =
-        if (showHeader) {
-            navHeight + belowHeaderHeight + belowHeaderSpacing
-        } else {
-            statusBarTop + 16.dp
-        }
+    val collapseFraction = if (showHeader) scrollBehavior.state.collapsedFraction else 0f
+    val barHeight = iosNavBarBodyHeight(hasSubtitle, collapseFraction)
+    rememberIosHostNavBar(
+        title = title,
+        subtitle = subtitle,
+        presenceOnline = presenceOnline,
+        collapseFraction = collapseFraction,
+        visible = showHeader,
+        onOpenSearch = onOpenSearch,
+        onNavigateBack = onNavigateBack,
+        nativeTrailingActions = nativeTrailingActions,
+    )
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Column(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .then(
+                    if (showHeader) {
+                        Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
+                    } else {
+                        Modifier
+                    },
+                ),
+    ) {
+        if (showHeader) {
+            Spacer(Modifier.fillMaxWidth().height(statusBarTop))
+            Spacer(Modifier.fillMaxWidth().height(barHeight))
+            headerBelowContent?.invoke()
+        } else {
+            Spacer(Modifier.fillMaxWidth().height(statusBarTop + 16.dp))
+        }
         LazyColumn(
             state = lazyListState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.weight(1f).fillMaxWidth(),
             verticalArrangement = verticalArrangement,
             contentPadding =
                 PaddingValues(
                     start = horizontalPadding,
                     end = horizontalPadding,
-                    top = topPad,
+                    top = belowHeaderSpacing,
                     bottom = bottomChrome,
                 ),
             content = content,
         )
-        if (showHeader) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Box(Modifier.fillMaxWidth().height(navHeight))
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .onSizeChanged { size ->
-                                belowHeaderHeight = with(density) { size.height.toDp() }
-                            },
-                ) {
-                    headerBelowContent?.invoke()
-                }
-            }
-        }
     }
 }
 
-@OptIn(ExperimentalForeignApi::class)
+@OptIn(ExperimentalForeignApi::class, ExperimentalMaterial3Api::class)
 @Composable
 @Suppress("UNUSED_PARAMETER")
 actual fun NativeCollapsingScrollScaffold(
@@ -183,31 +168,46 @@ actual fun NativeCollapsingScrollScaffold(
     val scrollState = rememberScrollState()
     val bottomChrome = rememberBottomChromePadding()
     val statusBarTop = rememberStatusBarTopPadding()
-    val collapseFraction = (scrollState.value / 52f).coerceIn(0f, 1f)
-    val collapsed = collapseFraction > 0.55f
-    val navHeight =
-        rememberIosHostNavBar(
-            title = title,
-            subtitle = subtitle,
-            presenceOnline = presenceOnline,
-            collapsed = collapsed,
-            visible = true,
-            statusBarTop = statusBarTop,
-            onOpenSearch = onOpenSearch,
-            onNavigateBack = onNavigateBack,
-            nativeTrailingActions = nativeTrailingActions,
-        )
+    val hasSubtitle = !subtitle.isNullOrBlank() || presenceOnline == true
+    val extraHeight = iosNavBarExtraHeight(hasSubtitle)
+    val density = LocalDensity.current
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val extraPx = with(density) { extraHeight.toPx() }
+    SideEffect {
+        if (scrollBehavior.state.heightOffsetLimit != -extraPx) {
+            scrollBehavior.state.heightOffsetLimit = -extraPx
+        }
+    }
+    val collapseFraction = scrollBehavior.state.collapsedFraction
+    val barHeight = iosNavBarBodyHeight(hasSubtitle, collapseFraction)
+    rememberIosHostNavBar(
+        title = title,
+        subtitle = subtitle,
+        presenceOnline = presenceOnline,
+        collapseFraction = collapseFraction,
+        visible = true,
+        onOpenSearch = onOpenSearch,
+        onNavigateBack = onNavigateBack,
+        nativeTrailingActions = nativeTrailingActions,
+    )
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Column(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
+    ) {
+        Spacer(Modifier.fillMaxWidth().height(statusBarTop))
+        Spacer(Modifier.fillMaxWidth().height(barHeight))
         Column(
             modifier =
                 Modifier
-                    .fillMaxSize()
+                    .weight(1f)
+                    .fillMaxWidth()
                     .verticalScroll(scrollState)
                     .padding(
                         start = horizontalPadding,
                         end = horizontalPadding,
-                        top = navHeight,
                         bottom = bottomChrome,
                     ),
         ) {
@@ -223,13 +223,12 @@ private fun rememberIosHostNavBar(
     title: String,
     subtitle: String?,
     presenceOnline: Boolean?,
-    collapsed: Boolean,
+    collapseFraction: Float,
     visible: Boolean,
-    statusBarTop: Dp,
     onOpenSearch: (() -> Unit)?,
     onNavigateBack: (() -> Unit)?,
     nativeTrailingActions: List<NativeChromeAction>,
-): Dp {
+) {
     val viewController = LocalUIViewController.current
     val isDarkMode = LocalIsDarkMode.current
     val reduceTransparency = rememberReduceTransparencyEnabled()
@@ -242,8 +241,6 @@ private fun rememberIosHostNavBar(
     val backHandler by rememberUpdatedState(onNavigateBack)
     val trailingHandlers by rememberUpdatedState(nativeTrailingActions)
     val hasSubtitle = !subtitle.isNullOrBlank() || presenceOnline == true
-    val fallbackHeight = iosNavBarFallbackHeight(statusBarTop, hasSubtitle)
-    var measuredHeight by remember { mutableStateOf(fallbackHeight) }
 
     DisposableEffect(viewController) {
         IosHostNavigationBar.attach(viewController)
@@ -266,35 +263,13 @@ private fun rememberIosHostNavBar(
             subtitle = subtitle,
             presenceOnline = presenceOnline,
             visible = visible,
-            statusBarPoints = statusBarTop.value.toDouble(),
+            collapseFraction = collapseFraction,
             hasSubtitle = hasSubtitle,
             onOpenSearch = searchHandler,
             onNavigateBack = backHandler,
             trailingActions = trailingHandlers,
         )
     }
-
-    LaunchedEffect(viewController, visible, statusBarTop, hasSubtitle) {
-        var stable = 0
-        while (true) {
-            IosHostNavigationBar.bar.superview?.layoutIfNeeded()
-            val frameH =
-                IosHostNavigationBar.bar.frame.useContents { size.height }
-            if (frameH > 0.0) {
-                val h = uiKitPointsToDp(frameH)
-                if (measuredHeight != h) {
-                    measuredHeight = h
-                    stable = 0
-                } else {
-                    stable++
-                }
-            }
-            if (stable > 6) break
-            withFrameMillis { }
-        }
-    }
-
-    return maxOf(measuredHeight, fallbackHeight)
 }
 
 @OptIn(ExperimentalForeignApi::class)
@@ -306,12 +281,12 @@ private object IosHostNavigationBar {
             prefersLargeTitles = true
             backgroundColor = UIColor.clearColor
             clipsToBounds = true
+            insetsLayoutMarginsFromSafeArea = false
         }
     private val item = UINavigationItem()
     private var heightConstraint: NSLayoutConstraint? = null
     private var attachedHost: UIViewController? = null
     private var ownerToken: Any? = null
-    private var appearanceConfigured = false
     private val searchTarget = IosBarButtonTarget()
     private val backTarget = IosBarButtonTarget()
     private val trailingTargets = mutableListOf<IosBarButtonTarget>()
@@ -326,7 +301,7 @@ private object IosHostNavigationBar {
         heightConstraint = height
         NSLayoutConstraint.activateConstraints(
             listOf(
-                bar.topAnchor.constraintEqualToAnchor(hostView.topAnchor),
+                bar.topAnchor.constraintEqualToAnchor(hostView.safeAreaLayoutGuide.topAnchor),
                 bar.leadingAnchor.constraintEqualToAnchor(hostView.leadingAnchor),
                 bar.trailingAnchor.constraintEqualToAnchor(hostView.trailingAnchor),
                 height,
@@ -353,7 +328,6 @@ private object IosHostNavigationBar {
         bar.backgroundColor = UIColor.clearColor
         if (usesNativeLiquidGlass && !reduceTransparency) {
             // System Liquid Glass — matching UITabBar. Do not set UINavigationBarAppearance.
-            appearanceConfigured = true
             return
         }
         val clear = UIColor.clearColor
@@ -384,7 +358,6 @@ private object IosHostNavigationBar {
         bar.standardAppearance = appearance
         bar.scrollEdgeAppearance = appearance
         bar.compactAppearance = appearance
-        appearanceConfigured = true
     }
 
     fun update(
@@ -394,7 +367,7 @@ private object IosHostNavigationBar {
         subtitle: String?,
         presenceOnline: Boolean?,
         visible: Boolean,
-        statusBarPoints: Double,
+        collapseFraction: Float,
         hasSubtitle: Boolean,
         onOpenSearch: (() -> Unit)?,
         onNavigateBack: (() -> Unit)?,
@@ -414,13 +387,16 @@ private object IosHostNavigationBar {
                 }
             }.ifBlank { null }
         runCatching { item.setValue(subtitleText, forKey = "subtitle") }
-        // Keep large titles and bar height stable. Shrinking the Compose inset on scroll
-        // double-counts movement (list already scrolled) and pulls search into the status bar.
+        val collapsed = collapseFraction > 0.55f
         item.largeTitleDisplayMode =
-            UINavigationItemLargeTitleDisplayMode.UINavigationItemLargeTitleDisplayModeAlways
+            if (collapsed) {
+                UINavigationItemLargeTitleDisplayMode.UINavigationItemLargeTitleDisplayModeNever
+            } else {
+                UINavigationItemLargeTitleDisplayMode.UINavigationItemLargeTitleDisplayModeAlways
+            }
         bar.prefersLargeTitles = true
-        val extra = 52.0 + if (hasSubtitle) 22.0 else 0.0
-        heightConstraint?.constant = (statusBarPoints + 44.0 + extra).coerceAtLeast(44.0)
+        val extra = (52.0 + if (hasSubtitle) 22.0 else 0.0) * (1.0 - collapseFraction.toDouble().coerceIn(0.0, 1.0))
+        heightConstraint?.constant = (44.0 + extra).coerceAtLeast(44.0)
         host.view.layoutIfNeeded()
         bindButtons(onOpenSearch, onNavigateBack, trailingActions)
         setVisible(visible)
