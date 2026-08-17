@@ -48,8 +48,10 @@ data class NativeChromeIdentity(
 
 /**
  * Inactive [AnimatedContent] tab roots must not steal the tab-layer `UINavigationBar`.
- * Covering routes (chat, nearby) use a second overlay layer and suppress the tab bar in
- * UIKit — do not flip this local for those covers or the tab header remounts after swipe-back.
+ * Covering routes (chat, nearby) use a second overlay layer and clip the live tab header
+ * to the uncovered leading strip — do not flip this local for those covers or the tab
+ * header remounts after swipe-back. Swipe-back *underlays* (Home behind Map) must keep
+ * this false so a stale Add Click title cannot paint over Map at gesture start.
  */
 val LocalNativeChromeActive = staticCompositionLocalOf { true }
 

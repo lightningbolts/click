@@ -72,13 +72,17 @@ object NativeHeaderMetrics {
         collapseFraction: Float,
         hasSubtitle: Boolean = false,
         stackSubtitle: Boolean = false,
+        growCompactSubtitle: Boolean = false,
     ): Double {
         val fraction = collapseFraction.coerceIn(0f, 1f).toDouble()
         val expanded =
             ExpandedBarHeightPt +
                 if (hasSubtitle) SubtitleLineHeightPt * SubtitleMaxLines else 0.0
-        // [stackSubtitle] selects identity-column centering, not extra compact height.
-        val compact = CompactBarHeightPt
+        // Identity stacks stay 52pt (centered on the avatar). Subpages with a
+        // back button grow so the subtitle is not clipped under the glass.
+        val compact =
+            CompactBarHeightPt +
+                if (growCompactSubtitle && hasSubtitle) SubtitleLineHeightPt else 0.0
         return expanded + (compact - expanded) * fraction
     }
 
@@ -86,7 +90,8 @@ object NativeHeaderMetrics {
         collapseFraction: Float,
         hasSubtitle: Boolean = false,
         stackSubtitle: Boolean = false,
-    ): Dp = barHeightPt(collapseFraction, hasSubtitle, stackSubtitle).toFloat().dp
+        growCompactSubtitle: Boolean = false,
+    ): Dp = barHeightPt(collapseFraction, hasSubtitle, stackSubtitle, growCompactSubtitle).toFloat().dp
 
     fun subtitleHeightPt(
         hasSubtitle: Boolean,
@@ -107,7 +112,10 @@ object NativeHeaderMetrics {
         collapseFraction: Float,
         hasSubtitle: Boolean,
         stackSubtitle: Boolean = false,
-    ): Dp = statusBarTop + barHeightDp(collapseFraction, hasSubtitle, stackSubtitle)
+        growCompactSubtitle: Boolean = false,
+    ): Dp =
+        statusBarTop +
+            barHeightDp(collapseFraction, hasSubtitle, stackSubtitle, growCompactSubtitle)
 
     fun collapseRangeDp(hasSubtitle: Boolean): Dp = headerClearanceDp(0.dp, 0f, hasSubtitle) - headerClearanceDp(0.dp, 1f, hasSubtitle)
 
@@ -164,6 +172,55 @@ object NativeHeaderMetrics {
 
     /** Username + status column height for a compact chat identity stack. */
     fun stackedIdentityColumnHeightPt(): Double = CompactTitlePointSize + StackedIdentitySpacingPt + StackedIdentitySubtitlePointSize
+
+    /**
+     * Collapsed tab-root chrome inlines title + subtitle. Subpages (back) and chat identity
+     * always stack those lines so the subtitle is not truncated beside the title.
+     */
+    fun isCompactTabRootChrome(
+        collapseFraction: Float,
+        hasBack: Boolean,
+        hasIdentity: Boolean,
+    ): Boolean = !hasBack && !hasIdentity && isCompactTitle(collapseFraction)
+
+    /**
+     * Compact two-line identity (avatar + name/status) or subpage title + subtitle, centered
+     * on the 40pt chrome plane.
+     */
+    fun shouldStackCompactSubtitle(
+        hasBack: Boolean,
+        hasIdentity: Boolean,
+        hasSubtitle: Boolean,
+        collapseFraction: Float,
+    ): Boolean = hasSubtitle && isCompactTitle(collapseFraction) && (hasIdentity || hasBack)
+
+    /**
+     * Scan QR / Tap to Connect compact chrome must grow so the instruction line sits
+     * *in* the native bar, not under the glass plate. Chat identity does not grow.
+     */
+    fun shouldGrowCompactBarForStackedSubtitle(
+        hasBack: Boolean,
+        hasIdentity: Boolean,
+        hasSubtitle: Boolean,
+        collapseFraction: Float,
+    ): Boolean =
+        shouldStackCompactSubtitle(hasBack, hasIdentity, hasSubtitle, collapseFraction) &&
+            hasBack &&
+            !hasIdentity
+
+    /**
+     * Only the live tab-root header may be clipped into the overlay peek. A stale header from
+     * a previous tab (e.g. Add Click still sitting in the shared layer while Map is showing)
+     * must not be unhidden.
+     */
+    fun shouldClipTabChromeUnderOverlay(tabWantVisible: Boolean): Boolean = tabWantVisible
+
+    /**
+     * Swipe underlays and inactive AnimatedContent copies must not bind the shared tab
+     * `UINavigationBar`. Map in particular has no tab header — showing the previous tab's
+     * title over the map at gesture start is a bug.
+     */
+    fun shouldBindSharedTabChrome(chromeActive: Boolean): Boolean = chromeActive
 }
 
 /** Status bar + interpolating native bar + collapsing subtitle overlay. */

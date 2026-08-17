@@ -1855,8 +1855,15 @@ fun App() {
                                                         // Exactly one slot owns movable Home. On commit currentRoute
                                                         // flips before AnimatedContent disposes this outgoing route,
                                                         // so relinquish the underlay in that same recomposition.
-                                                        if (shouldRenderHomeSwipeUnderlay(currentRoute)) {
-                                                            renderPrimaryScreen(previousKey)
+                                                        // Never bind the shared tab UINavigationBar from this underlay —
+                                                        // Map has no tab header, and a stale Add Click title would paint
+                                                        // over the map the moment the back gesture starts.
+                                                        CompositionLocalProvider(
+                                                            LocalNativeChromeActive provides false,
+                                                        ) {
+                                                            if (shouldRenderHomeSwipeUnderlay(currentRoute)) {
+                                                                renderPrimaryScreen(previousKey)
+                                                            }
                                                         }
                                                     },
                                                     currentContent = { renderPrimaryScreen(animatedScreen) },

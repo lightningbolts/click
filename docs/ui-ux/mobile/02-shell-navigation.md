@@ -399,14 +399,15 @@ targetIndex >= initialIndex? ──YES──► slide forward + fade
 - 3-layer stack: (1) previous route parallax peek 30% width, (2) scrim opacity `0.5 × (1 - progress)`, (3) current route `translationX`.
 - Default `edgeSwipeWidth` = 24 dp; **App uses 44 dp** for all shell swipe surfaces.
 - Commit: offset > 50% width OR velocity > 800 px/s.
-- Overlay native chrome translates with the drag. The tab-root header is **clipped to the uncovered leading strip** for the whole gesture (not gated on the commit midpoint) so the underlay title is visible in the peek without showing through translucent overlay glass.
+- Overlay native chrome translates with the drag. The **live** tab-root header is **clipped to the uncovered leading strip** for the whole gesture (not gated on the commit midpoint) so the underlay title is visible in the peek without showing through translucent overlay glass. Tab chrome is never unhidden unless that tab layer is the current underlay — Map has no tab header, so starting a back gesture on Map must not paint Add Click / Home titles over the map.
+- Finger tracking is 1:1. On lift, cancel and commit springs are slightly under-damped (`0.82` / `0.78`) and may overshoot rest / the trailing edge so both paths land with a small settle jiggle. Do not clamp settle to `0..width` or use `DampingRatioNoBouncy` on commit — that killed the landing bounce.
 
 ### 7.2 Interactive Elements
 
 - Full-width horizontal drag (`useFullWidthHorizontalDrag = true` default).
 - `rightToLeftPeek` optional (hub chat timestamps).
 - `opaquePreviousBackground = false` for hub chat and Add Click overlays (list / tab persists underneath).
-- Primary tab swipe-to-Home uses `previousContent = Home` inside `InteractiveSwipeBackContainer` (standard AnimatedContent child — not a persistent underlay shell).
+- Primary tab swipe-to-Home uses `previousContent = Home` inside `InteractiveSwipeBackContainer` (standard AnimatedContent child — not a persistent underlay shell). That underlay is composed with `LocalNativeChromeActive = false` so it never binds the shared tab `UINavigationBar`. Map in particular has no tab header; a stale Add Click title must not appear when the back gesture starts.
 
 ### 7.3 States
 

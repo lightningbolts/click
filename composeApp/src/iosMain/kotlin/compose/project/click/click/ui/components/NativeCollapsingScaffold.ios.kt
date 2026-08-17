@@ -168,7 +168,18 @@ actual fun NativeCollapsingScaffold(
 
     val headerClearance =
         if (showHeader) {
-            NativeHeaderMetrics.headerClearanceDp(statusBarTop, collapseFraction, hasSubtitle)
+            NativeHeaderMetrics.headerClearanceDp(
+                statusBarTop = statusBarTop,
+                collapseFraction = collapseFraction,
+                hasSubtitle = hasSubtitle,
+                growCompactSubtitle =
+                    NativeHeaderMetrics.shouldGrowCompactBarForStackedSubtitle(
+                        hasBack = onNavigateBack != null,
+                        hasIdentity = false,
+                        hasSubtitle = hasSubtitle,
+                        collapseFraction = collapseFraction,
+                    ),
+            )
         } else {
             statusBarTop + 16.dp
         }
@@ -262,7 +273,19 @@ actual fun NativeCollapsingScrollScaffold(
         collapseSearchIntoBar = false,
     )
 
-    val headerClearance = NativeHeaderMetrics.headerClearanceDp(statusBarTop, collapseFraction, hasSubtitle)
+    val headerClearance =
+        NativeHeaderMetrics.headerClearanceDp(
+            statusBarTop = statusBarTop,
+            collapseFraction = collapseFraction,
+            hasSubtitle = hasSubtitle,
+            growCompactSubtitle =
+                NativeHeaderMetrics.shouldGrowCompactBarForStackedSubtitle(
+                    hasBack = onNavigateBack != null,
+                    hasIdentity = false,
+                    hasSubtitle = hasSubtitle,
+                    collapseFraction = collapseFraction,
+                ),
+        )
 
     Box(
         modifier =
@@ -323,23 +346,18 @@ private fun rememberIosHostNavBar(
 
     DisposableEffect(viewController, overlay) {
         layer.attach(viewController)
-        if (!overlay) {
-            layer.setWantVisible(true)
-        }
         onDispose { layer.release(owner, immediate = overlay) }
     }
 
     SideEffect {
-        if (overlay) {
-            layer.setWantVisible(visible)
+        if (!visible) {
+            // Inactive underlays (Map swipe-back composing Home) must not unhide stale
+            // tab chrome. Only hide if this composition currently owns the layer.
+            if (layer.owns(owner)) {
+                layer.setWantVisible(false)
+            }
+            return@SideEffect
         }
-    }
-
-    if (!visible) {
-        return
-    }
-
-    SideEffect {
         layer.applyAppearance(
             isDarkMode = isDarkMode,
             reduceTransparency = reduceTransparency,
@@ -487,7 +505,7 @@ private class IosHostNavBarLayer {
     private var titleTrailingToBar: NSLayoutConstraint? = null
     private var titleColumnTopConstraint: NSLayoutConstraint? = null
     private var titleColumnCenterYConstraint: NSLayoutConstraint? = null
-    private var leadingRevealWidthPt = 0.0
+    private var leadingRevealWidthPt = -1.0
     private var barLeadingMask: CALayer? = null
     private var chromeLeadingMask: CALayer? = null
     private var glassClipHost: CALayer? = null
@@ -496,7 +514,6 @@ private class IosHostNavBarLayer {
     private var coverCount = 0
     private var wantVisible = false
     private var suppressed = false
-    private var revealUnderOverlay = false
     private val slideOffsets = mutableMapOf<Any, Double>()
     private var searchPinnedVisible = false
     private val searchTarget = IosBarButtonTarget()
@@ -563,6 +580,12 @@ private class IosHostNavBarLayer {
         applyVisibility()
         if (changed) {
             if (this === IosNavChrome.overlay) {
+                val tabLive = IosNavChrome.tab.isWantVisible()
+                if (visible && NativeHeaderMetrics.shouldClipTabChromeUnderOverlay(tabLive)) {
+                    IosNavChrome.tab.clipLeadingUnderlay(0.0)
+                } else if (!visible) {
+                    IosNavChrome.tab.clipLeadingUnderlay(null)
+                }
                 IosNavChrome.tab.setSuppressed(visible)
             }
             IosNavChrome.restack()
@@ -572,19 +595,12 @@ private class IosHostNavBarLayer {
     fun setSuppressed(value: Boolean) {
         if (suppressed == value) return
         suppressed = value
-        if (!value) {
-            applyLeadingRevealMask(0.0)
-        }
-        applyVisibility()
-    }
-
-    fun setRevealUnderOverlay(value: Boolean) {
-        if (revealUnderOverlay == value) return
-        revealUnderOverlay = value
         applyVisibility()
     }
 
     fun isWantVisible(): Boolean = wantVisible
+
+    fun owns(owner: Any): Boolean = ownerToken === owner
 
     fun bringChromeToFront() {
         val hostView = attachedHost?.view ?: return
@@ -611,25 +627,20 @@ private class IosHostNavBarLayer {
         bar.transform = transform
         glassPlate.transform = transform
         chromeRow.transform = transform
-        val uncover = isWantVisible() && x > NativeHeaderMetrics.OverlayUncoverEpsilonPt
-        val strip = NativeHeaderMetrics.overlayUncoverLeadingWidthPt(x)
-        IosNavChrome.tab.revealUnderOverlayLeadingStrip(uncover = uncover, widthPt = strip)
-        CATransaction.commit()
-        if (uncover) {
-            IosNavChrome.overlay.bringChromeToFront()
+        val tabLive = IosNavChrome.tab.isWantVisible()
+        if (isWantVisible() && NativeHeaderMetrics.shouldClipTabChromeUnderOverlay(tabLive)) {
+            IosNavChrome.tab.clipLeadingUnderlay(NativeHeaderMetrics.overlayUncoverLeadingWidthPt(x))
         }
+        CATransaction.commit()
     }
 
     /**
-     * Paint the tab header only in the uncovered leading strip so interactive-back
-     * shows "Clicks" immediately, without the list title showing through chat glass.
+     * Clip the tab header to [leadingWidthPt] points while an overlay covers it.
+     * `null` removes the clip (overlay gone). `0.0` hides every pixel so chat glass
+     * cannot show the list title, without toggling `hidden` (that flashed twice).
      */
-    fun revealUnderOverlayLeadingStrip(
-        uncover: Boolean,
-        widthPt: Double,
-    ) {
-        applyLeadingRevealMask(if (uncover) widthPt else 0.0)
-        setRevealUnderOverlay(uncover)
+    fun clipLeadingUnderlay(leadingWidthPt: Double?) {
+        applyLeadingRevealMask(leadingWidthPt)
     }
 
     fun release(
@@ -790,9 +801,6 @@ private class IosHostNavBarLayer {
             attach(host)
         }
         ownerToken = owner
-        if (suppressed) {
-            return
-        }
         val fraction = collapseFraction.coerceIn(0f, 1f)
         val stackIdentity = identity != null
         val subtitleText =
@@ -819,6 +827,8 @@ private class IosHostNavBarLayer {
                 append(visible)
                 append('|')
                 append(stackIdentity)
+                append('|')
+                append(onNavigateBack != null)
                 trailingActions.forEach { action ->
                     append('|')
                     append(action.sfSymbol)
@@ -843,10 +853,32 @@ private class IosHostNavBarLayer {
         item.leftBarButtonItem = null
         item.rightBarButtonItems = null
         lastCollapseFraction = fraction
-        setBarHeight(NativeHeaderMetrics.barHeightPt(fraction, hasSubtitle, stackSubtitle = stackIdentity))
+        val hasBack = onNavigateBack != null
+        val stackTwoLine =
+            NativeHeaderMetrics.shouldStackCompactSubtitle(
+                hasBack = hasBack,
+                hasIdentity = stackIdentity,
+                hasSubtitle = subtitleText.isNotEmpty(),
+                collapseFraction = fraction,
+            )
+        val growCompactSubtitle =
+            NativeHeaderMetrics.shouldGrowCompactBarForStackedSubtitle(
+                hasBack = hasBack,
+                hasIdentity = stackIdentity,
+                hasSubtitle = subtitleText.isNotEmpty(),
+                collapseFraction = fraction,
+            )
+        setBarHeight(
+            NativeHeaderMetrics.barHeightPt(
+                fraction,
+                hasSubtitle,
+                stackSubtitle = stackTwoLine,
+                growCompactSubtitle = growCompactSubtitle,
+            ),
+        )
         titleColumnTopConstraint?.constant = NativeHeaderMetrics.titleColumnTopInsetPt(fraction)
-        titleColumnTopConstraint?.active = !stackIdentity
-        titleColumnCenterYConstraint?.active = stackIdentity
+        titleColumnTopConstraint?.active = !stackTwoLine
+        titleColumnCenterYConstraint?.active = stackTwoLine
         chromeRow.clipsToBounds = false
         titleLabel.font = UIFont.boldSystemFontOfSize(NativeHeaderMetrics.titlePointSize(fraction))
         val identityUserId = identity?.userId
@@ -865,33 +897,42 @@ private class IosHostNavBarLayer {
             titleLabel.text = title
         }
         lastTitle = title
-        val compactTabRoot = !stackIdentity && NativeHeaderMetrics.isCompactTitle(fraction)
+        val compactTabRoot =
+            NativeHeaderMetrics.isCompactTabRootChrome(
+                collapseFraction = fraction,
+                hasBack = hasBack,
+                hasIdentity = stackIdentity,
+            )
         titleColumn.axis =
             if (compactTabRoot) UILayoutConstraintAxisHorizontal else UILayoutConstraintAxisVertical
         titleColumn.alignment =
             if (compactTabRoot) UIStackViewAlignmentCenter else UIStackViewAlignmentLeading
         titleColumn.spacing =
             when {
-                stackIdentity -> NativeHeaderMetrics.StackedIdentitySpacingPt
+                stackTwoLine -> NativeHeaderMetrics.StackedIdentitySpacingPt
                 compactTabRoot -> 6.0
                 else -> 2.0
             }
         subtitleLabel.font =
             UIFont.systemFontOfSize(
-                if (stackIdentity) {
+                if (stackTwoLine) {
                     NativeHeaderMetrics.StackedIdentitySubtitlePointSize
                 } else {
                     13.0
                 },
             )
         titleLabel.numberOfLines =
-            if (stackIdentity || NativeHeaderMetrics.isCompactTitle(fraction)) {
+            if (stackTwoLine || NativeHeaderMetrics.isCompactTitle(fraction)) {
                 1
             } else {
                 NativeHeaderMetrics.titleMaxLines(fraction).toLong()
             }
         subtitleLabel.numberOfLines =
-            if (stackIdentity) 1 else NativeHeaderMetrics.SubtitleMaxLines.toLong()
+            when {
+                stackTwoLine && growCompactSubtitle -> NativeHeaderMetrics.SubtitleMaxLines.toLong()
+                stackTwoLine -> 1
+                else -> NativeHeaderMetrics.SubtitleMaxLines.toLong()
+            }
         titleLabel.setContentCompressionResistancePriority(749f, forAxis = UILayoutConstraintAxisHorizontal)
         subtitleLabel.setContentCompressionResistancePriority(751f, forAxis = UILayoutConstraintAxisHorizontal)
         subtitleLabel.text = subtitleText
@@ -973,7 +1014,12 @@ private class IosHostNavBarLayer {
                 menuClicksByKey["$index:$itemIndex"] = item.onClick
             }
         }
-        val compactTabRoot = onNavigateBack == null && NativeHeaderMetrics.isCompactTitle(collapseFraction)
+        val compactTabRoot =
+            NativeHeaderMetrics.isCompactTabRootChrome(
+                collapseFraction = collapseFraction,
+                hasBack = onNavigateBack != null,
+                hasIdentity = false,
+            )
         titleLabel.textAlignment = if (compactTabRoot) NSTextAlignmentCenter else NSTextAlignmentLeft
         subtitleLabel.textAlignment = titleLabel.textAlignment
         if (signature != lastButtonSignature) {
@@ -1327,11 +1373,11 @@ private class IosHostNavBarLayer {
     }
 
     private fun applyVisibility() {
-        val show = wantVisible && coverCount == 0 && (!suppressed || revealUnderOverlay)
+        val show = wantVisible && coverCount == 0
         bar.hidden = !show
-        bar.userInteractionEnabled = show && !revealUnderOverlay
+        bar.userInteractionEnabled = show && !suppressed
         chromeRow.hidden = !show
-        chromeRow.userInteractionEnabled = show && !revealUnderOverlay
+        chromeRow.userInteractionEnabled = show && !suppressed
         val glassAlpha = NativeHeaderMetrics.collapsedGlassAlpha(lastCollapseFraction)
         glassPlate.alpha = glassAlpha.toDouble()
         glassPlate.hidden = !show || glassAlpha < 0.02f
@@ -1418,9 +1464,9 @@ private class IosHostNavBarLayer {
         }
     }
 
-    private fun applyLeadingRevealMask(widthPt: Double) {
-        leadingRevealWidthPt = widthPt
-        if (widthPt <= NativeHeaderMetrics.OverlayUncoverEpsilonPt) {
+    private fun applyLeadingRevealMask(widthPt: Double?) {
+        if (widthPt == null) {
+            leadingRevealWidthPt = -1.0
             bar.layer.mask = null
             chromeRow.layer.mask = null
             if (!glassPlate.hidden) {
@@ -1428,8 +1474,9 @@ private class IosHostNavBarLayer {
             }
             return
         }
-        barLeadingMask = leadingRectMask(bar, barLeadingMask, widthPt)
-        chromeLeadingMask = leadingRectMask(chromeRow, chromeLeadingMask, widthPt)
+        leadingRevealWidthPt = widthPt.coerceAtLeast(0.0)
+        barLeadingMask = leadingRectMask(bar, barLeadingMask, leadingRevealWidthPt)
+        chromeLeadingMask = leadingRectMask(chromeRow, chromeLeadingMask, leadingRevealWidthPt)
         if (!glassPlate.hidden) {
             updateGlassFadeMask()
         }
@@ -1461,8 +1508,9 @@ private class IosHostNavBarLayer {
                 layer.endPoint = CGPointMake(0.5, 1.0)
                 glassFadeMask = layer
             }
+        val clipping = leadingRevealWidthPt >= 0.0
         val clipWidth =
-            if (leadingRevealWidthPt > NativeHeaderMetrics.OverlayUncoverEpsilonPt) {
+            if (clipping) {
                 leadingRevealWidthPt.coerceAtMost(width)
             } else {
                 width
@@ -1476,7 +1524,7 @@ private class IosHostNavBarLayer {
                 UIColor.clearColor.CGColor,
             )
         mask.locations = listOf(0.0, opaqueUntil, 1.0)
-        if (leadingRevealWidthPt > NativeHeaderMetrics.OverlayUncoverEpsilonPt) {
+        if (clipping) {
             val host =
                 glassClipHost ?: CALayer().also { layer ->
                     glassClipHost = layer

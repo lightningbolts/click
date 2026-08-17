@@ -608,26 +608,34 @@ fun MapScreen(
                                             },
                                             previousContent = {},
                                             currentContent = {
-                                                EventsDiscoveryFullScreen(
-                                                    feedItems = feedItems,
-                                                    discoveryFeedPending = discoveryFeedPending,
-                                                    discoveryFeedRefreshing = discoveryFeedLoading,
-                                                    onRefreshDiscovery = { viewModel.refreshDiscoveryFeed() },
-                                                    layerFilters = layerFilters,
-                                                    onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
-                                                    viewModel = viewModel,
-                                                    onBack = {
-                                                        closeEventsList(EventsListTransitionMode.Tap)
-                                                    },
-                                                    onBeaconClick = { beacon, distanceM ->
-                                                        TelemetryBatcher.recordActionTaken()
-                                                        viewModel.onBeaconPinTapped(
-                                                            beacon.id,
-                                                            seedDistanceMeters = distanceM,
-                                                        )
-                                                    },
-                                                    interactiveBackSwipeOffsetPx = eventsSwipeDragPx,
-                                                )
+                                                CompositionLocalProvider(
+                                                    LocalNativeChromeActive provides
+                                                        (
+                                                            eventsSheetExpanded ||
+                                                                eventsBackHost.behindLayersVisible
+                                                        ),
+                                                ) {
+                                                    EventsDiscoveryFullScreen(
+                                                        feedItems = feedItems,
+                                                        discoveryFeedPending = discoveryFeedPending,
+                                                        discoveryFeedRefreshing = discoveryFeedLoading,
+                                                        onRefreshDiscovery = { viewModel.refreshDiscoveryFeed() },
+                                                        layerFilters = layerFilters,
+                                                        onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
+                                                        viewModel = viewModel,
+                                                        onBack = {
+                                                            closeEventsList(EventsListTransitionMode.Tap)
+                                                        },
+                                                        onBeaconClick = { beacon, distanceM ->
+                                                            TelemetryBatcher.recordActionTaken()
+                                                            viewModel.onBeaconPinTapped(
+                                                                beacon.id,
+                                                                seedDistanceMeters = distanceM,
+                                                            )
+                                                        },
+                                                        interactiveBackSwipeOffsetPx = eventsSwipeDragPx,
+                                                    )
+                                                }
                                             },
                                         )
                                     }

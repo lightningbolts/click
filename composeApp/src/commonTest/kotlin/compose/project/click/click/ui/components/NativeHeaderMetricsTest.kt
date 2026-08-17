@@ -56,6 +56,89 @@ class NativeHeaderMetricsTest {
     }
 
     @Test
+    fun compactTabRoot_inlinesOnlyWithoutBackOrIdentity() {
+        assertTrue(NativeHeaderMetrics.isCompactTabRootChrome(1f, hasBack = false, hasIdentity = false))
+        assertTrue(!NativeHeaderMetrics.isCompactTabRootChrome(1f, hasBack = true, hasIdentity = false))
+        assertTrue(!NativeHeaderMetrics.isCompactTabRootChrome(1f, hasBack = false, hasIdentity = true))
+        assertTrue(!NativeHeaderMetrics.isCompactTabRootChrome(0f, hasBack = false, hasIdentity = false))
+    }
+
+    @Test
+    fun stackCompactSubtitle_forChatIdentityAndSubpages() {
+        assertTrue(
+            NativeHeaderMetrics.shouldStackCompactSubtitle(
+                hasBack = true,
+                hasIdentity = false,
+                hasSubtitle = true,
+                collapseFraction = 1f,
+            ),
+        )
+        assertTrue(
+            NativeHeaderMetrics.shouldStackCompactSubtitle(
+                hasBack = false,
+                hasIdentity = true,
+                hasSubtitle = true,
+                collapseFraction = 1f,
+            ),
+        )
+        assertTrue(
+            !NativeHeaderMetrics.shouldStackCompactSubtitle(
+                hasBack = false,
+                hasIdentity = false,
+                hasSubtitle = true,
+                collapseFraction = 1f,
+            ),
+        )
+    }
+
+    @Test
+    fun growCompactBar_onlyForSubpageSubtitleNotIdentity() {
+        assertTrue(
+            NativeHeaderMetrics.shouldGrowCompactBarForStackedSubtitle(
+                hasBack = true,
+                hasIdentity = false,
+                hasSubtitle = true,
+                collapseFraction = 1f,
+            ),
+        )
+        assertTrue(
+            !NativeHeaderMetrics.shouldGrowCompactBarForStackedSubtitle(
+                hasBack = true,
+                hasIdentity = true,
+                hasSubtitle = true,
+                collapseFraction = 1f,
+            ),
+        )
+        assertEquals(
+            70.0,
+            NativeHeaderMetrics.barHeightPt(
+                collapseFraction = 1f,
+                hasSubtitle = true,
+                growCompactSubtitle = true,
+            ),
+            0.01,
+        )
+        assertEquals(
+            52.0,
+            NativeHeaderMetrics.barHeightPt(
+                collapseFraction = 1f,
+                hasSubtitle = true,
+                stackSubtitle = true,
+                growCompactSubtitle = false,
+            ),
+            0.01,
+        )
+    }
+
+    @Test
+    fun tabChromeClip_onlyWhenTabHeaderIsLive() {
+        assertTrue(NativeHeaderMetrics.shouldClipTabChromeUnderOverlay(tabWantVisible = true))
+        assertTrue(!NativeHeaderMetrics.shouldClipTabChromeUnderOverlay(tabWantVisible = false))
+        assertTrue(NativeHeaderMetrics.shouldBindSharedTabChrome(chromeActive = true))
+        assertTrue(!NativeHeaderMetrics.shouldBindSharedTabChrome(chromeActive = false))
+    }
+
+    @Test
     fun titleMaxWidth_wrapsBeforeTrailingActions() {
         val leading = NativeHeaderMetrics.titleLeadingInsetPt(hasBack = false)
         val trailing = NativeHeaderMetrics.titleTrailingInsetPt(trailingCount = 2)

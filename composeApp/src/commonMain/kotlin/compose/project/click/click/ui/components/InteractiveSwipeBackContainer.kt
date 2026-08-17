@@ -214,14 +214,19 @@ fun InteractiveSwipeBackContainer(
                                 spring(
                                     dampingRatio =
                                         if (shouldComplete) {
-                                            Spring.DampingRatioNoBouncy
+                                            InteractiveBackCommitDampingRatio
                                         } else {
-                                            0.58f
+                                            InteractiveBackCancelDampingRatio
                                         },
                                     stiffness = Spring.StiffnessMediumLow,
                                 ),
                         ) { value, _ ->
-                            offsetPx.floatValue = value.coerceIn(0f, widthPx)
+                            offsetPx.floatValue =
+                                clampInteractiveBackSettleOffset(
+                                    value = value,
+                                    widthPx = widthPx,
+                                    committing = shouldComplete,
+                                )
                             notifySwipeOffset()
                         }
 
