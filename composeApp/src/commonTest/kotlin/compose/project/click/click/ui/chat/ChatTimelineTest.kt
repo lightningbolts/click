@@ -270,5 +270,17 @@ class ChatTimelineTest {
         assertEquals(chatBubbleStableRowKey(optimistic), chatBubbleStableRowKey(delivered))
     }
 
+    @Test
+    fun newestFirst_indexOfMessageId_findsTarget() {
+        val first = tsLocal(2026, 4, 1, 9, 0)
+        val second = tsLocal(2026, 4, 1, 15, 0)
+        val entries = buildChatTimelineEntriesNewestFirst(
+            listOf(mwu("a", first), mwu("b", second)),
+        )
+        assertEquals(0, entries.indexOfMessageId("b"))
+        assertEquals(1, entries.indexOfMessageId("a"))
+        assertEquals(-1, entries.indexOfMessageId("missing"))
+    }
+
     // endregion
 }

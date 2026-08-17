@@ -31,8 +31,8 @@ data class ChatNativeKeyboardInsets(
 )
 
 /**
- * @param subtractTabBarOverlay When true (connections chat on iOS), lift is keyboard−tabOverlay
- * because the native bar stays visible. Hub chat hides the bar — pass false (keyboard−nav).
+ * @param subtractTabBarOverlay When true (connections and hub chat on iOS), lift is keyboard−tabOverlay
+ * because the native bar stays visible. Pass false only when the tab bar is actually hidden.
  */
 @Composable
 fun rememberChatNativeKeyboardInsets(

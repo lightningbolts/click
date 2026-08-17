@@ -83,6 +83,7 @@ import compose.project.click.click.ui.chat.ChatExpandedPhotoPreview // pragma: a
 import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatHeaderIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatSearchFocusHoldMs // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatTypingDots // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatWarmLoadingView // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionActionSheet // pragma: allowlist secret
@@ -104,6 +105,7 @@ import compose.project.click.click.ui.chat.chatTimelineFollowUsesAnimation // pr
 import compose.project.click.click.ui.chat.chatTimelineShouldFollowInbound // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft // pragma: allowlist secret
 import compose.project.click.click.ui.chat.groupMembersPickerContextFrom // pragma: allowlist secret
+import compose.project.click.click.ui.chat.indexOfMessageId // pragma: allowlist secret
 import compose.project.click.click.ui.chat.isTimestampPeekRevealed // pragma: allowlist secret
 import compose.project.click.click.ui.chat.launchTimestampPeekReplyStyleSettle // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
@@ -112,6 +114,7 @@ import compose.project.click.click.ui.chat.rememberTimestampPeekRevealPx // prag
 import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx // pragma: allowlist secret
 import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay // pragma: allowlist secret
 import compose.project.click.click.ui.chat.scrollChatTimelineToLatest // pragma: allowlist secret
+import compose.project.click.click.ui.chat.scrollChatTimelineToMessage // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
 import compose.project.click.click.ui.components.BindPlatformNativeNavigationBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickDropdownMenu // pragma: allowlist secret
@@ -145,6 +148,7 @@ import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist 
 import kotlinx.coroutines.Dispatchers // pragma: allowlist secret
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext // pragma: allowlist secret
 import kotlinx.serialization.json.JsonObject
 
@@ -153,6 +157,7 @@ import kotlinx.serialization.json.JsonObject
 fun ChatView(
     viewModel: ChatViewModel,
     chatId: String,
+    targetMessageId: String? = null,
     onBackPressed: () -> Unit,
     onOpenUserProfile: (String) -> Unit = {},
     onOpenGroupMembersPicker: (GroupMembersPickerContext) -> Unit = {},
@@ -481,6 +486,7 @@ fun ChatView(
             ?.message
             ?.id
     var initialTimelineScrollDone by remember(chatId) { mutableStateOf(false) }
+    var focusedSearchMessageId by remember(chatId) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(listState) {
         snapshotFlow {
@@ -499,8 +505,19 @@ fun ChatView(
         }
     }
 
-    LaunchedEffect(chatId, successMessages.isNotEmpty()) {
+    LaunchedEffect(chatId, successMessages.isNotEmpty(), targetMessageId) {
         if (successMessages.isEmpty() || initialTimelineScrollDone) return@LaunchedEffect
+        if (!targetMessageId.isNullOrBlank()) {
+            val found = viewModel.ensureTargetMessageLoaded(targetMessageId)
+            if (!found) {
+                initialTimelineScrollDone = true
+                scrollChatTimelineToLatest(
+                    listState = listState,
+                    suppressKeyboardDismiss = suppressKeyboardDismissWhileProgrammaticTimelineScroll,
+                )
+            }
+            return@LaunchedEffect
+        }
         initialTimelineScrollDone = true
         scrollChatTimelineToLatest(
             listState = listState,
@@ -1233,6 +1250,33 @@ fun ChatView(
                                                         remember(messages) {
                                                             buildChatTimelineEntriesNewestFirst(messages)
                                                         }
+                                                    LaunchedEffect(chatId, targetMessageId, timelineEntries) {
+                                                        val id =
+                                                            targetMessageId
+                                                                ?.trim()
+                                                                ?.takeIf { it.isNotEmpty() }
+                                                                ?: return@LaunchedEffect
+                                                        val index = timelineEntries.indexOfMessageId(id)
+                                                        if (index < 0) {
+                                                            val found = viewModel.ensureTargetMessageLoaded(id)
+                                                            if (!found) {
+                                                                initialTimelineScrollDone = true
+                                                            }
+                                                            return@LaunchedEffect
+                                                        }
+                                                        initialTimelineScrollDone = true
+                                                        scrollChatTimelineToMessage(
+                                                            listState = listState,
+                                                            suppressKeyboardDismiss =
+                                                                suppressKeyboardDismissWhileProgrammaticTimelineScroll,
+                                                            index = index,
+                                                        )
+                                                        focusedSearchMessageId = id
+                                                        delay(ChatSearchFocusHoldMs)
+                                                        if (focusedSearchMessageId == id) {
+                                                            focusedSearchMessageId = null
+                                                        }
+                                                    }
                                                     val rawTimestampPeekTravelPx = remember { mutableFloatStateOf(0f) }
                                                     val displayTimestampPeekVisualPx = remember { mutableFloatStateOf(0f) }
                                                     val timestampPeekSettleJob = remember { mutableStateOf<Job?>(null) }
@@ -1362,6 +1406,7 @@ fun ChatView(
                                                             }
                                                         },
                                                         isLoadingOlderMessages = isLoadingOlderMessages,
+                                                        highlightedMessageId = focusedSearchMessageId,
                                                         modifier =
                                                             messageContentModifier
                                                                 .padding(horizontal = 4.dp)

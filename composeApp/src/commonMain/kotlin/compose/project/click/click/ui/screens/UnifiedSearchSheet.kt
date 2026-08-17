@@ -63,6 +63,8 @@ import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist sec
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickCardSurface // pragma: allowlist secret
 import compose.project.click.click.viewmodel.GlobalSearchViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.SearchChatOpenTarget // pragma: allowlist secret
+import compose.project.click.click.viewmodel.SearchResultCategory // pragma: allowlist secret
 import compose.project.click.click.viewmodel.SearchResultCategory // pragma: allowlist secret
 import kotlinx.coroutines.delay
 
@@ -74,7 +76,7 @@ import kotlinx.coroutines.delay
 fun UnifiedSearchSheet(
     onDismissRequest: () -> Unit,
     userId: String,
-    onNavigateToChat: (connectionId: String) -> Unit,
+    onNavigateToChat: (SearchChatOpenTarget) -> Unit,
     onNavigateToMap: () -> Unit,
     onNavigateToBeacon: (beaconId: String) -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
@@ -112,7 +114,7 @@ fun UnifiedSearchSheet(
 private fun UnifiedSearchSheetContent(
     userId: String,
     viewModel: GlobalSearchViewModel,
-    onNavigateToChat: (String) -> Unit,
+    onNavigateToChat: (SearchChatOpenTarget) -> Unit,
     onNavigateToMap: () -> Unit,
     onNavigateToBeacon: (String) -> Unit,
     onNavigateToSettings: () -> Unit,

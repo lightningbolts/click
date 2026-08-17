@@ -103,3 +103,27 @@ internal fun formatSearchDistance(meters: Double): String {
         "$whole.$frac km away"
     }
 }
+
+/**
+ * Compact snippet around the first case-insensitive [query] match so search rows
+ * show the hit instead of the full message body.
+ */
+internal fun highlightedMessageSnippet(
+    content: String,
+    query: String,
+    maxLen: Int = 140,
+): String {
+    val trimmed = content.trim().replace(Regex("\\s+"), " ")
+    if (trimmed.isEmpty()) return ""
+    val needle = query.trim()
+    if (needle.isEmpty()) return trimmed.take(maxLen)
+    val idx = trimmed.indexOf(needle, ignoreCase = true)
+    if (idx < 0) return trimmed.take(maxLen)
+    val pad = 28
+    val start = (idx - pad).coerceAtLeast(0)
+    val end = (idx + needle.length + 48).coerceAtMost(trimmed.length)
+    val prefix = if (start > 0) "…" else ""
+    val suffix = if (end < trimmed.length) "…" else ""
+    val slice = trimmed.substring(start, end)
+    return (prefix + slice + suffix).take(maxLen)
+}

@@ -85,8 +85,10 @@ import compose.project.click.click.ui.theme.clickBorderColor
 import compose.project.click.click.ui.theme.clickCardSurface
 import compose.project.click.click.ui.theme.clickTextFieldTextStyle
 import compose.project.click.click.viewmodel.GlobalSearchViewModel
+import compose.project.click.click.viewmodel.SearchChatOpenTarget // pragma: allowlist secret
 import compose.project.click.click.viewmodel.SearchResult
 import compose.project.click.click.viewmodel.SearchResultCategory
+import compose.project.click.click.viewmodel.toChatOpenTarget // pragma: allowlist secret
 import compose.project.click.click.viewmodel.beaconDisplaySubtitle
 import compose.project.click.click.viewmodel.beaconDisplayTitle
 import kotlinx.datetime.Instant
@@ -101,7 +103,7 @@ import kotlinx.datetime.toLocalDateTime
 @Composable
 fun GlobalSearchScreen(
     userId: String,
-    onNavigateToChat: (connectionId: String) -> Unit,
+    onNavigateToChat: (SearchChatOpenTarget) -> Unit,
     onNavigateToMap: () -> Unit,
     viewModel: GlobalSearchViewModel = viewModel { GlobalSearchViewModel() },
 ) {
@@ -296,7 +298,7 @@ internal fun EmptySearchHint(
 internal fun UnifiedSearchResultsList(
     results: List<SearchResult>,
     bottomPadding: Dp,
-    onNavigateToChat: (String) -> Unit,
+    onNavigateToChat: (SearchChatOpenTarget) -> Unit,
     onNavigateToMap: () -> Unit,
     onNavigateToBeacon: (String) -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
@@ -368,7 +370,7 @@ internal fun SearchSectionHeader(label: String) {
 @Composable
 internal fun SearchResultRow(
     result: SearchResult,
-    onNavigateToChat: (String) -> Unit,
+    onNavigateToChat: (SearchChatOpenTarget) -> Unit,
     onNavigateToMap: () -> Unit,
     onNavigateToBeacon: (String) -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
@@ -391,13 +393,7 @@ internal fun SearchResultRow(
                         is SearchResult.LocationBucket -> onNavigateToMap()
                         is SearchResult.BeaconMatch -> onNavigateToBeacon(result.beacon.id)
                         is SearchResult.OwnAvailabilityIntentMatch -> onNavigateToSettings()
-                        is SearchResult.MessageHit -> onNavigateToChat(result.result.connectionId)
-                        is SearchResult.ActiveConnection -> onNavigateToChat(result.details.connection.id)
-                        is SearchResult.ArchivedConnection -> onNavigateToChat(result.details.connection.id)
-                        is SearchResult.Clique -> onNavigateToChat(result.details.connection.id)
-                        is SearchResult.IntentMatch -> onNavigateToChat(result.details.connection.id)
-                        is SearchResult.InterestMatch -> onNavigateToChat(result.details.connection.id)
-                        is SearchResult.MemoryContextMatch -> onNavigateToChat(result.details.connection.id)
+                        else -> result.toChatOpenTarget()?.let(onNavigateToChat)
                     }
                 }.padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -439,7 +435,8 @@ internal fun BadgeRow(result: SearchResult) {
             is SearchResult.IntentMatch -> TinyBadge("Intent")
             is SearchResult.InterestMatch -> TinyBadge("Interest")
             is SearchResult.MemoryContextMatch -> TinyBadge("Context")
-            is SearchResult.MessageHit -> TinyBadge("Message")
+            is SearchResult.MessageHit ->
+                TinyBadge(if (result.result.isHub) "Hub" else "Message")
             is SearchResult.LocationBucket -> TinyBadge("Place")
             is SearchResult.BeaconMatch -> TinyBadge("Beacon")
             is SearchResult.OwnAvailabilityIntentMatch -> TinyBadge("Your intent")
@@ -509,7 +506,7 @@ internal fun TitleAndSubtitle(result: SearchResult) {
         is SearchResult.MessageHit -> {
             Text(result.result.chatName, style = titleStyle)
             Text(
-                text = result.result.message.content,
+                text = result.result.snippet.ifBlank { result.result.message.content },
                 style = subtitleStyle,
                 maxLines = 2,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,

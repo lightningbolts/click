@@ -146,6 +146,7 @@ import compose.project.click.click.viewmodel.HomeViewModel // pragma: allowlist 
 import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.OnboardingViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.SearchChatOpenTarget // pragma: allowlist secret
 import compose.project.click.click.viewmodel.VerifiedCliqueProximityIntent // pragma: allowlist secret
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -1111,6 +1112,8 @@ fun App() {
                         val routeHistory = remember { mutableStateListOf("home") }
                         var showNfcScreen by remember { mutableStateOf(false) }
                         var pendingChatId by remember { mutableStateOf<String?>(null) }
+                        var pendingTargetMessageId by remember { mutableStateOf<String?>(null) }
+                        var pendingHubTargetMessageId by remember { mutableStateOf<String?>(null) }
                         var pendingBeaconId by remember { mutableStateOf<String?>(null) }
                         var pendingMapLayerFilter by remember { mutableStateOf<MapLayerFilter?>(null) }
                         var isConnectionsChatOpen by remember { mutableStateOf(false) }
@@ -1161,6 +1164,8 @@ fun App() {
                             isConnectionsChatOpen = false
                             connectionsChatSuppressesTabBar = false
                             pendingChatId = null
+                            pendingTargetMessageId = null
+                            pendingHubTargetMessageId = null
                             pendingBeaconId = null
                             pendingMapLayerFilter = null
                             return true
@@ -1180,6 +1185,7 @@ fun App() {
                         fun closeHubChat(mode: NavigationTransitionMode) {
                             hubChatCloseJob?.cancel()
                             hubChatTransitionMode = mode
+                            pendingHubTargetMessageId = null
                             if (mode == NavigationTransitionMode.GestureBack) {
                                 // Keep route ownership and bottom chrome stable through the gesture's final
                                 // frame; otherwise the revealed tab resizes while the foreground is settling.
@@ -1214,6 +1220,8 @@ fun App() {
                                 hubChatArgs = null
                                 connectionRevealState = null
                                 pendingChatId = null
+                                pendingTargetMessageId = null
+                                pendingHubTargetMessageId = null
                             }
                         }
                         val addClickOverlayKey =
@@ -1565,7 +1573,7 @@ fun App() {
                         // tab bar for it (that resize was flashing the whole chat on send/dismiss).
                         val hideMainBottomBar =
                             (!isIOS && connectionsChatSuppressesTabBar) ||
-                                hubChatArgs != null ||
+                                (!isIOS && hubChatArgs != null) ||
                                 (!isIOS && (showConnectionDisposableRoll || disposableRollOpening)) ||
                                 callOwnsNativeChrome
 
@@ -1716,11 +1724,16 @@ fun App() {
                                                                     searchQuery = "",
                                                                     onOpenSearch = { showUnifiedSearchSheet = true },
                                                                     initialChatId = pendingChatId,
-                                                                    onChatDismissed = { pendingChatId = null },
+                                                                    initialTargetMessageId = pendingTargetMessageId,
+                                                                    onChatDismissed = {
+                                                                        pendingChatId = null
+                                                                        pendingTargetMessageId = null
+                                                                    },
                                                                     onChatOpenStateChanged = { isOpen ->
                                                                         isConnectionsChatOpen = isOpen
                                                                         if (!isOpen) {
                                                                             pendingChatId = null
+                                                                            pendingTargetMessageId = null
                                                                             connectionsChatSuppressesTabBar = false
                                                                         }
                                                                     },
@@ -2189,6 +2202,7 @@ fun App() {
                                                         HubChatScreen(
                                                             args = activeHubArgs,
                                                             currentUserId = hubUserId,
+                                                            targetMessageId = pendingHubTargetMessageId,
                                                             onNavigateBack = {
                                                                 closeHubChat(NavigationTransitionMode.Tap)
                                                             },
@@ -2865,10 +2879,26 @@ fun App() {
                                     UnifiedSearchSheet(
                                         onDismissRequest = { showUnifiedSearchSheet = false },
                                         userId = searchUserId,
-                                        onNavigateToChat = { connectionId ->
+                                        onNavigateToChat = { target ->
                                             showUnifiedSearchSheet = false
-                                            pendingChatId = connectionId
-                                            navigateTo(NavigationItem.Connections.route)
+                                            if (target.isHub && !target.hubId.isNullOrBlank()) {
+                                                pendingHubTargetMessageId = target.targetMessageId
+                                                hubChatArgs =
+                                                    HubChatNavArgs(
+                                                        hubId = target.hubId,
+                                                        realtimeChannel =
+                                                            target.hubRealtimeChannel
+                                                                ?.takeIf { it.isNotBlank() }
+                                                                ?: "hub:${target.hubId}",
+                                                        hubTitle = target.hubTitle?.ifBlank { "Hub" } ?: "Hub",
+                                                        creatorId = target.hubCreatorId,
+                                                        hubCategory = target.hubCategory,
+                                                    )
+                                            } else {
+                                                pendingChatId = target.connectionId
+                                                pendingTargetMessageId = target.targetMessageId
+                                                navigateTo(NavigationItem.Connections.route)
+                                            }
                                         },
                                         onNavigateToMap = {
                                             showUnifiedSearchSheet = false

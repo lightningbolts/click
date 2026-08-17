@@ -8,6 +8,7 @@ import compose.project.click.click.data.models.GroupCliqueDetails
 import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.data.models.MapBeaconKind
 import compose.project.click.click.data.models.MapBeaconMetadata
+import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.syntheticConnectionForGroupClique
 import kotlin.test.Test
@@ -97,6 +98,39 @@ class GlobalSearchResultsTest {
         assertEquals(2, visible.size)
         assertTrue(visible.any { it is SearchResult.IntentMatch })
         assertTrue(visible.any { it is SearchResult.OwnAvailabilityIntentMatch })
+    }
+
+    @Test
+    fun highlightedMessageSnippet_keepsQueryInView() {
+        val snippet = highlightedMessageSnippet(
+            content = "hello there, the blue notebook is on the desk near the window",
+            query = "notebook",
+        )
+        assertTrue(snippet.contains("notebook"))
+        assertTrue(snippet.length <= 140)
+    }
+
+    @Test
+    fun messageHit_toChatOpenTarget_carriesMessageId() {
+        val details = stubDetails("c1", "Ann")
+        val result = SearchResult.MessageHit(
+            result = MessageSearchResult(
+                message = Message(
+                    id = "mid",
+                    user_id = "peer-c1",
+                    content = "hello notebook world",
+                    timeCreated = 1L,
+                ),
+                chatId = "chat-c1",
+                chatName = "Ann",
+                connectionId = "c1",
+                snippet = "hello notebook world",
+            ),
+            categories = setOf(SearchResultCategory.Active),
+        )
+        val target = result.toChatOpenTarget()
+        assertEquals("c1", target?.connectionId)
+        assertEquals("mid", target?.targetMessageId)
     }
 }
 

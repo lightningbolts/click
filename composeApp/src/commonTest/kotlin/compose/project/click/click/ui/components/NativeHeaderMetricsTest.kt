@@ -232,10 +232,15 @@ class NativeHeaderMetricsTest {
     }
 
     @Test
-    fun headerClearance_compactMatchesStatusPlusBar() {
+    fun headerClearance_hubCompactGrowsForSubtitle() {
         assertEquals(
-            99.dp,
-            platformNativeHeaderClearance(statusBarTop = 47.dp, collapseFraction = 1f, hasSubtitle = false),
+            117.dp,
+            platformNativeHeaderClearance(
+                statusBarTop = 47.dp,
+                collapseFraction = 1f,
+                hasSubtitle = true,
+                growCompactSubtitle = true,
+            ),
         )
     }
 

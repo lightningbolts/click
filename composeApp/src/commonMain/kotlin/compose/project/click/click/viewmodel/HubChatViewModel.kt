@@ -837,6 +837,60 @@ class HubChatViewModel(
         }
     }
 
+    suspend fun ensureTargetMessageLoaded(messageId: String): Boolean {
+        val id = messageId.trim()
+        if (id.isEmpty()) return false
+        if (_messages.value.any { it.message.id == id }) return true
+        loadMessagesAround(id)
+        return _messages.value.any { it.message.id == id }
+    }
+
+    private suspend fun loadMessagesAround(messageId: String) {
+        withContext(Dispatchers.Default) {
+            try {
+                val target =
+                    supabase
+                        .from("hub_messages")
+                        .select {
+                            filter {
+                                eq("hub_id", hubId)
+                                eq("id", messageId)
+                            }
+                            limit(1)
+                        }.decodeList<HubMessageRow>()
+                        .firstOrNull() ?: return@withContext
+                val older =
+                    supabase
+                        .from("hub_messages")
+                        .select {
+                            filter {
+                                eq("hub_id", hubId)
+                                lte("created_at", target.createdAt)
+                            }
+                            order("created_at", Order.DESCENDING)
+                            limit(HUB_INITIAL_MESSAGE_LIMIT)
+                        }.decodeList<HubMessageRow>()
+                        .asReversed()
+                val newer =
+                    supabase
+                        .from("hub_messages")
+                        .select {
+                            filter {
+                                eq("hub_id", hubId)
+                                gt("created_at", target.createdAt)
+                            }
+                            order("created_at", Order.ASCENDING)
+                            limit(40)
+                        }.decodeList<HubMessageRow>()
+                mergeMessages((older + newer + listOf(target)).distinctBy { it.id })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                println("HubChatViewModel: load around $messageId failed: ${e.redactedRestMessage()}")
+            }
+        }
+    }
+
     private suspend fun resolveGatekeeperLocationOrThrow(): LocationResult {
         val now = Clock.System.now().toEpochMilliseconds()
         cachedGatekeeperLocation

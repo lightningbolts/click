@@ -80,7 +80,8 @@ GlobalSearchScreen (@Deprecated — full-screen scaffold, same VM + row componen
 
 | Result type | Navigation |
 |-------------|------------|
-| `ActiveConnection`, `ArchivedConnection`, `Clique`, `IntentMatch`, `InterestMatch`, `MemoryContextMatch`, `MessageHit` | `onNavigateToChat(connectionId)` |
+| `ActiveConnection`, `ArchivedConnection`, `Clique`, `IntentMatch`, `InterestMatch`, `MemoryContextMatch` | `onNavigateToChat(SearchChatOpenTarget(connectionId))` |
+| `MessageHit` | `onNavigateToChat(SearchChatOpenTarget)` with `targetMessageId`. Hub hits also carry `hubId` / realtime channel and open `HubChatScreen`. Direct/clique hits open `ChatView`. |
 | `LocationBucket` | `onNavigateToMap()` |
 | `BeaconMatch` | `onNavigateToBeacon(beaconId)` |
 | `OwnAvailabilityIntentMatch` | `onNavigateToSettings()` |
@@ -161,7 +162,7 @@ Rows with archived channel context render at **0.7 alpha** (`ArchivedConnection`
 | `IntentMatch` | `"Intent"` |
 | `InterestMatch` | `"Interest"` |
 | `MemoryContextMatch` | `"Context"` |
-| `MessageHit` | `"Message"` |
+| `MessageHit` | `"Hub"` when the hit is a community hub message; otherwise `"Message"` |
 | `LocationBucket` | `"Place"` |
 | `BeaconMatch` | `"Beacon"` |
 | `OwnAvailabilityIntentMatch` | `"Your intent"` |
@@ -177,7 +178,7 @@ Rows with archived channel context render at **0.7 alpha** (`ArchivedConnection`
 | `IntentMatch` | `{otherUser.name}` or `"Unknown"` | `"Looking for {intentLabel}"` + optional `" · {intentTimeframe}"` |
 | `InterestMatch` | `{otherUser.name}` or `"Unknown"` | `"Shared: {tag1}, {tag2}, …"` |
 | `MemoryContextMatch` | `{otherUser.name}` or `"Unknown"` | `{matchLabel}` (dynamic) |
-| `MessageHit` | `{chatName}` | Message `content` (2 lines) + time `"{h}:{mm} {AM\|PM}"` |
+| `MessageHit` | `{chatName}` | Highlighted snippet around the query (2 lines) + time `"{h}:{mm} {AM\|PM}"` |
 | `LocationBucket` | `{location}` | `"1 connection"` or `"{n} connections"` |
 | `BeaconMatch` | `beaconDisplayTitle(beacon)` (dynamic title) | `beaconDisplaySubtitle(beacon, distance)` |
 | `OwnAvailabilityIntentMatch` | `{intentTag}` or `"Availability"` | `"Your availability"` + optional `" · {timeframe}"` |
@@ -219,6 +220,7 @@ flowchart TD
     K -->|no| M[Results list]
     M --> N{Row tap}
     N -->|chat types| O[Dismiss → Chat]
+    N -->|message hit| O2[Dismiss → Chat or HubChat at targetMessageId]
     N -->|place| P[Dismiss → Map tab]
     N -->|beacon| Q[Dismiss → Map beacon focus]
     N -->|own intent| R[Dismiss → Settings]
@@ -246,3 +248,11 @@ flowchart TD
 **Keyboard:** `ImeAction.Search` dismisses focus but does not close sheet.
 
 **Focus trap:** Sheet content receives initial focus; dismiss returns to underlying screen.
+
+---
+
+## 7. Message deep-link
+
+`MessageSearchResult` carries `messageId` (via `message.id`), `chatId`, `connectionId` / hub ids, `senderId` (`message.user_id`), timestamp, and a highlighted `snippet`. Hub messages from `hub_messages` are included (Nearby chip, `"Hub"` badge).
+
+Tapping a message hit passes `SearchChatOpenTarget.targetMessageId` into `ChatView` or `HubChatScreen`. The timeline paginates (1:1/group) or loads an around-window (hub) until that id is present, scrolls it into view, and applies `ChatSearchFocusFrame` for ~1.8s.

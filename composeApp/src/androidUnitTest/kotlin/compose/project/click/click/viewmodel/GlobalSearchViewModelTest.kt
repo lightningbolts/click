@@ -2,6 +2,7 @@ package compose.project.click.click.viewmodel
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.test.core.app.ApplicationProvider
+import compose.project.click.click.data.ActiveHubEntry // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow
 import compose.project.click.click.data.models.Chat
 import compose.project.click.click.data.models.ChatWithDetails
@@ -268,7 +269,7 @@ class GlobalSearchViewModelTest {
     @Test
     fun messageSearch_findsMessageHit() = runVmTest {
         val active = listOf(directChat(VIEWER, PEER_A, "conn-msg", "Bo"))
-        val hit = Message(
+        val message = Message(
             id = "m1",
             user_id = PEER_A,
             content = "the blue notebook is on the desk",
@@ -278,12 +279,61 @@ class GlobalSearchViewModelTest {
             onFetchDirectUserChatsWithDetails = { if (it == VIEWER) active else emptyList() },
             onFetchArchivedUserChatsWithDetails = { emptyList() },
             onFetchGroupUserChatsWithDetails = { emptyList() },
-            onSearchMessagesByConnectionId = { _, _ -> "chat-conn-msg" to listOf(hit) },
+            onSearchMessagesByConnectionId = { _, _ -> "chat-conn-msg" to listOf(message) },
         )
         val vm = newVm(fake)
         vm.search("notebook", VIEWER)
         drainSearchWork()
-        assertTrue(vm.results.value.items.any { it is SearchResult.MessageHit })
+        val hit = vm.results.value.items.filterIsInstance<SearchResult.MessageHit>().single()
+        assertEquals("m1", hit.result.message.id)
+        assertEquals("chat-conn-msg", hit.result.chatId)
+        assertTrue(hit.result.snippet.contains("notebook", ignoreCase = true))
+        val target = hit.toChatOpenTarget()
+        assertEquals("conn-msg", target?.connectionId)
+        assertEquals("m1", target?.targetMessageId)
+        assertTrue(target?.isHub != true)
+    }
+
+    @Test
+    fun messageSearch_findsHubMessageHit() = runVmTest {
+        val hubMessage = Message(
+            id = "hub-m1",
+            user_id = PEER_A,
+            content = "see you at the tap-to-connect table",
+            timeCreated = 9000L,
+        )
+        val fake = FakeChatRepository(
+            onFetchDirectUserChatsWithDetails = { emptyList() },
+            onFetchArchivedUserChatsWithDetails = { emptyList() },
+            onFetchGroupUserChatsWithDetails = { emptyList() },
+            onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
+        )
+        val vm = newVm(
+            fake,
+            activeHubs = {
+                listOf(
+                    ActiveHubEntry(
+                        hubId = "hub-1",
+                        name = "Cafe Hub",
+                        realtimeChannel = "hub:hub-1",
+                        creatorId = VIEWER,
+                        category = "social",
+                    ),
+                )
+            },
+            searchHubMessages = { hubId, _ ->
+                if (hubId == "hub-1") listOf(hubMessage) else emptyList()
+            },
+        )
+        vm.search("tap-to-connect", VIEWER)
+        drainSearchWork()
+        val hit = vm.results.value.items.filterIsInstance<SearchResult.MessageHit>().single()
+        assertTrue(hit.result.isHub)
+        assertEquals("hub-1", hit.result.hubId)
+        val target = hit.toChatOpenTarget()
+        assertEquals("hub-m1", target?.targetMessageId)
+        assertEquals("hub-1", target?.hubId)
+        assertTrue(target?.isHub == true)
     }
 
     @Test
@@ -337,6 +387,8 @@ class GlobalSearchViewModelTest {
             fetchOwnAvailabilityIntents: suspend (String) -> List<AvailabilityIntentRow> = { emptyList() },
             fetchBeaconsForSearch: suspend (Double, Double) -> List<MapBeacon> = { _, _ -> emptyList() },
             resolveSearchLocation: suspend () -> Pair<Double, Double>? = { null },
+            activeHubs: () -> List<ActiveHubEntry> = { emptyList() },
+            searchHubMessages: suspend (String, String) -> List<Message> = { _, _ -> emptyList() },
         ): GlobalSearchViewModel = GlobalSearchViewModel(
             tokenStorage = FakeTokenStorage(),
             chatRepository = repo,
@@ -346,6 +398,8 @@ class GlobalSearchViewModelTest {
             fetchOwnAvailabilityIntents = fetchOwnAvailabilityIntents,
             fetchBeaconsForSearch = fetchBeaconsForSearch,
             resolveSearchLocation = resolveSearchLocation,
+            activeHubs = activeHubs,
+            searchHubMessages = searchHubMessages,
         )
 
         fun directChat(

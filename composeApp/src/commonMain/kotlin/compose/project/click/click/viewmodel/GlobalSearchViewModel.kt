@@ -2,6 +2,7 @@ package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import compose.project.click.click.data.ActiveHubEntry // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.AvailabilityIntentRow
 import compose.project.click.click.data.models.ChatWithDetails
@@ -149,7 +150,52 @@ data class MessageSearchResult(
     val chatId: String,
     val chatName: String,
     val connectionId: String,
-)
+    val snippet: String,
+    val hubId: String? = null,
+    val hubRealtimeChannel: String? = null,
+    val hubTitle: String? = null,
+    val hubCreatorId: String? = null,
+    val hubCategory: String = "general",
+) {
+    val isHub: Boolean get() = !hubId.isNullOrBlank()
+}
+
+/** Navigation payload when a unified-search row opens a conversation. */
+data class SearchChatOpenTarget(
+    val connectionId: String,
+    val targetMessageId: String? = null,
+    val hubId: String? = null,
+    val hubRealtimeChannel: String? = null,
+    val hubTitle: String? = null,
+    val hubCreatorId: String? = null,
+    val hubCategory: String = "general",
+) {
+    val isHub: Boolean get() = !hubId.isNullOrBlank()
+}
+
+fun SearchResult.toChatOpenTarget(): SearchChatOpenTarget? =
+    when (this) {
+        is SearchResult.MessageHit ->
+            SearchChatOpenTarget(
+                connectionId = result.connectionId,
+                targetMessageId = result.message.id,
+                hubId = result.hubId,
+                hubRealtimeChannel = result.hubRealtimeChannel,
+                hubTitle = result.hubTitle,
+                hubCreatorId = result.hubCreatorId,
+                hubCategory = result.hubCategory,
+            )
+        is SearchResult.ActiveConnection -> SearchChatOpenTarget(details.connection.id)
+        is SearchResult.ArchivedConnection -> SearchChatOpenTarget(details.connection.id)
+        is SearchResult.Clique -> SearchChatOpenTarget(details.connection.id)
+        is SearchResult.IntentMatch -> SearchChatOpenTarget(details.connection.id)
+        is SearchResult.InterestMatch -> SearchChatOpenTarget(details.connection.id)
+        is SearchResult.MemoryContextMatch -> SearchChatOpenTarget(details.connection.id)
+        is SearchResult.LocationBucket,
+        is SearchResult.BeaconMatch,
+        is SearchResult.OwnAvailabilityIntentMatch,
+        -> null
+    }
 
 data class LocationSearchResult(
     val location: String,
@@ -174,6 +220,7 @@ data class GlobalSearchResults(
 
 private const val REMOTE_MESSAGE_SEARCH_MAX_DIRECT_CHATS = 40
 private const val REMOTE_MESSAGE_SEARCH_MAX_GROUP_CHATS = 24
+private const val REMOTE_MESSAGE_SEARCH_MAX_HUBS = 16
 private const val MESSAGE_SEARCH_CONCURRENCY = 8
 private const val MIN_QUERY_LENGTH_FOR_REMOTE_MESSAGE_SCAN = 2
 
@@ -224,6 +271,10 @@ class GlobalSearchViewModel(
     },
     private val resolveSearchLocation: suspend () -> Pair<Double, Double>? = {
         locationService.getCurrentLocation()?.let { it.latitude to it.longitude }
+    },
+    private val activeHubs: () -> List<ActiveHubEntry> = { AppDataManager.activeHubs.value },
+    private val searchHubMessages: suspend (hubId: String, query: String) -> List<Message> = { hubId, query ->
+        searchHubMessagesByQuery(hubId, query)
     },
 ) : ViewModel() {
 
@@ -360,7 +411,15 @@ class GlobalSearchViewModel(
 
                 val messageHits =
                     if (lowerQuery.length >= MIN_QUERY_LENGTH_FOR_REMOTE_MESSAGE_SCAN) {
-                        searchAllMessages(lowerQuery, userId, activeRows, archivedRows, cliqueRows, archivedIds)
+                        searchAllMessages(
+                            lowerQuery,
+                            userId,
+                            activeRows,
+                            archivedRows,
+                            cliqueRows,
+                            archivedIds,
+                            activeHubs(),
+                        )
                     } else {
                         emptyList()
                     }
@@ -389,6 +448,7 @@ class GlobalSearchViewModel(
         archivedRows: List<ChatWithDetails>,
         cliqueRows: List<ChatWithDetails>,
         archivedIds: Set<String>,
+        hubs: List<ActiveHubEntry>,
     ): List<SearchResult.MessageHit> = coroutineScope {
         val limiter = Semaphore(MESSAGE_SEARCH_CONCURRENCY)
         val directAll = (activeRows + archivedRows).filter { it.groupClique == null }
@@ -423,6 +483,7 @@ class GlobalSearchViewModel(
                                 chatId = resultChatId,
                                 chatName = chatName,
                                 connectionId = row.connection.id,
+                                snippet = highlightedMessageSnippet(msg.content, lowerQuery),
                             ),
                             categories = cats,
                         )
@@ -452,6 +513,7 @@ class GlobalSearchViewModel(
                                 chatId = chatId,
                                 chatName = title,
                                 connectionId = row.connection.id,
+                                snippet = highlightedMessageSnippet(msg.content, lowerQuery),
                             ),
                             categories = setOf(SearchResultCategory.Cliques),
                         )
@@ -459,7 +521,34 @@ class GlobalSearchViewModel(
                 }
             }
         }
-        (directJobs + groupJobs).flatMap { it.await() }
+        val hubJobs = hubs
+            .sortedByDescending { it.joinedAtMs }
+            .take(REMOTE_MESSAGE_SEARCH_MAX_HUBS)
+            .map { hub ->
+                async {
+                    limiter.withPermit {
+                        val matches = searchHubMessages(hub.hubId, lowerQuery)
+                        matches.map { msg ->
+                            SearchResult.MessageHit(
+                                result = MessageSearchResult(
+                                    message = msg,
+                                    chatId = hub.hubId,
+                                    chatName = hub.name,
+                                    connectionId = hub.hubId,
+                                    snippet = highlightedMessageSnippet(msg.content, lowerQuery),
+                                    hubId = hub.hubId,
+                                    hubRealtimeChannel = hub.realtimeChannel,
+                                    hubTitle = hub.name,
+                                    hubCreatorId = hub.creatorId,
+                                    hubCategory = hub.category,
+                                ),
+                                categories = setOf(SearchResultCategory.Nearby),
+                            )
+                        }
+                    }
+                }
+            }
+        (directJobs + groupJobs + hubJobs).flatMap { it.await() }
     }
 }
 
