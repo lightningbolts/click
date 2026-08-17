@@ -139,6 +139,69 @@ class NativeHeaderMetricsTest {
         assertTrue(NativeHeaderMetrics.shouldKeepDestinationChromeBoundUnderOverlay())
         assertTrue(!NativeHeaderMetrics.shouldHideMapFloatingChromeForNearbyCover(nearbyCovering = true))
         assertTrue(!NativeHeaderMetrics.shouldHideMapFloatingChromeForNearbyCover(nearbyCovering = false))
+        assertTrue(!NativeHeaderMetrics.shouldRematerializeChromeOnUnsuppress())
+    }
+
+    @Test
+    fun overlayHide_keepsFullWidthUnderlayMaskAfterCompletedSwipe() {
+        assertTrue(!NativeHeaderMetrics.shouldClearLeadingClipOnOverlayHide(-1.0, 390.0))
+        assertTrue(NativeHeaderMetrics.shouldClearLeadingClipOnOverlayHide(0.0, 390.0))
+        assertTrue(NativeHeaderMetrics.shouldClearLeadingClipOnOverlayHide(200.0, 390.0))
+        assertTrue(!NativeHeaderMetrics.shouldClearLeadingClipOnOverlayHide(360.0, 390.0))
+        assertTrue(!NativeHeaderMetrics.shouldClearLeadingClipOnOverlayHide(390.0, 390.0))
+        assertTrue(NativeHeaderMetrics.shouldClearLeadingClipOnOverlayHide(0.0, 0.0))
+    }
+
+    @Test
+    fun overlaySlide_skipsIdentityTransformAfterCompletedSwipe() {
+        assertTrue(
+            NativeHeaderMetrics.shouldApplyOverlaySlideTransform(
+                overlayWantVisible = true,
+                newOffsetPt = 40.0,
+                currentAppliedOffsetPt = 20.0,
+                hostWidthPt = 390.0,
+            ),
+        )
+        assertTrue(
+            NativeHeaderMetrics.shouldApplyOverlaySlideTransform(
+                overlayWantVisible = true,
+                newOffsetPt = 0.0,
+                currentAppliedOffsetPt = 12.0,
+                hostWidthPt = 390.0,
+            ),
+        )
+        assertTrue(
+            !NativeHeaderMetrics.shouldApplyOverlaySlideTransform(
+                overlayWantVisible = true,
+                newOffsetPt = 0.0,
+                currentAppliedOffsetPt = 390.0,
+                hostWidthPt = 390.0,
+            ),
+        )
+        assertTrue(
+            !NativeHeaderMetrics.shouldApplyOverlaySlideTransform(
+                overlayWantVisible = true,
+                newOffsetPt = 0.0,
+                currentAppliedOffsetPt = 340.0,
+                hostWidthPt = 390.0,
+            ),
+        )
+        assertTrue(
+            !NativeHeaderMetrics.shouldApplyOverlaySlideTransform(
+                overlayWantVisible = false,
+                newOffsetPt = 0.0,
+                currentAppliedOffsetPt = 390.0,
+                hostWidthPt = 390.0,
+            ),
+        )
+        assertTrue(
+            !NativeHeaderMetrics.shouldApplyOverlaySlideTransform(
+                overlayWantVisible = false,
+                newOffsetPt = 48.0,
+                currentAppliedOffsetPt = 0.0,
+                hostWidthPt = 390.0,
+            ),
+        )
     }
 
     @Test

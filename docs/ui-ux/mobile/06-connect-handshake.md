@@ -8,6 +8,8 @@
 
 **Track C (landed):** `AddClickContent` order is **Tap to Connect** → My Code / Scan grid → hub links (`Create hub` / `Join hub`). Card dimensions unchanged; mock used for hierarchy only.
 
+**iOS overlay swipe:** My QR / Scan / Tap sit in `InteractiveSwipeBackContainer` over the Add Click hub. The hub native header stays bound and clipped for the whole drag. After a completed swipe, keep a full-width underlay mask and do not snap overlay chrome to identity (`addClickBackHost.reset()` still runs while that chrome is composed) — clearing the mask or applying identity flashed the hub title after land.
+
 **Glossary (event social graph):**
 - **Connection** — direct Click edge between you and another user.
 - **Mutual (FoF)** — attendee who is a connection of your connection (2nd degree). Shown for future reference only; **no Connect CTA** from the event directory. Distinct from **mutual keep** (`should_continue` both true).

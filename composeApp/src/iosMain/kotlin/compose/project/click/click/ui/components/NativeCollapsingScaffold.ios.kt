@@ -96,6 +96,7 @@ import platform.UIKit.UINavigationBar
 import platform.UIKit.UINavigationBarAppearance
 import platform.UIKit.UINavigationBarDelegateProtocol
 import platform.UIKit.UINavigationItem
+import platform.UIKit.UIScreen
 import platform.UIKit.UIStackView
 import platform.UIKit.UIStackViewAlignmentCenter
 import platform.UIKit.UIStackViewAlignmentLeading
@@ -506,6 +507,7 @@ private class IosHostNavBarLayer {
     private var titleColumnTopConstraint: NSLayoutConstraint? = null
     private var titleColumnCenterYConstraint: NSLayoutConstraint? = null
     private var leadingRevealWidthPt = -1.0
+    private var appliedSlideOffsetPt = 0.0
     private var barLeadingMask: CALayer? = null
     private var chromeLeadingMask: CALayer? = null
     private var glassClipHost: CALayer? = null
@@ -579,16 +581,40 @@ private class IosHostNavBarLayer {
         wantVisible = visible
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        if (changed && this === IosNavChrome.overlay && visible) {
+            // Next open must not inherit a completed-swipe translation.
+            resetSlideTransformLocked()
+        }
         applyVisibility()
         if (changed && this === IosNavChrome.overlay) {
             val tabLive = IosNavChrome.tab.isWantVisible()
+            val hostW = hostWidthPt()
             if (visible && NativeHeaderMetrics.shouldClipTabChromeUnderOverlay(tabLive)) {
                 IosNavChrome.tab.clipLeadingUnderlay(0.0)
             } else if (!visible) {
-                IosNavChrome.tab.clipLeadingUnderlay(null)
+                if (NativeHeaderMetrics.shouldClearLeadingClipOnOverlayHide(
+                        IosNavChrome.tab.leadingClipUncoverPt(),
+                        hostW,
+                    )
+                ) {
+                    IosNavChrome.tab.clipLeadingUnderlay(null)
+                }
             }
-            IosHostMapFloatingChrome.clipLeadingUnderlay(if (visible) 0.0 else null)
+            if (visible) {
+                IosHostMapFloatingChrome.clipLeadingUnderlay(0.0)
+            } else if (
+                NativeHeaderMetrics.shouldClearLeadingClipOnOverlayHide(
+                    IosHostMapFloatingChrome.leadingClipUncoverPt(),
+                    hostW,
+                )
+            ) {
+                IosHostMapFloatingChrome.clipLeadingUnderlay(null)
+            }
             IosNavChrome.tab.setSuppressed(visible)
+            if (!visible) {
+                // Overlay is already hidden; identity is safe and unsticks the next present.
+                resetSlideTransformLocked()
+            }
         }
         CATransaction.commit()
         // Restack only when showing the overlay. Re-inserting the tab glass plate on
@@ -601,8 +627,19 @@ private class IosHostNavBarLayer {
     fun setSuppressed(value: Boolean) {
         if (suppressed == value) return
         suppressed = value
-        applyVisibility()
+        if (NativeHeaderMetrics.shouldRematerializeChromeOnUnsuppress()) {
+            applyVisibility()
+            return
+        }
+        val show = wantVisible && coverCount == 0
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        bar.userInteractionEnabled = show && !suppressed
+        chromeRow.userInteractionEnabled = show && !suppressed
+        CATransaction.commit()
     }
+
+    fun leadingClipUncoverPt(): Double = leadingRevealWidthPt
 
     fun isWantVisible(): Boolean = wantVisible
 
@@ -627,6 +664,17 @@ private class IosHostNavBarLayer {
             slideOffsets[owner] = points
         }
         val x = slideOffsets.values.maxOrNull() ?: 0.0
+        val hostW = hostWidthPt()
+        if (!NativeHeaderMetrics.shouldApplyOverlaySlideTransform(
+                overlayWantVisible = isWantVisible(),
+                newOffsetPt = x,
+                currentAppliedOffsetPt = appliedSlideOffsetPt,
+                hostWidthPt = hostW,
+            )
+        ) {
+            return
+        }
+        appliedSlideOffsetPt = x
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         val transform = CGAffineTransformMakeTranslation(x, 0.0)
@@ -643,6 +691,21 @@ private class IosHostNavBarLayer {
             )
         }
         CATransaction.commit()
+    }
+
+    private fun resetSlideTransformLocked() {
+        slideOffsets.clear()
+        appliedSlideOffsetPt = 0.0
+        val identity = CGAffineTransformMakeTranslation(0.0, 0.0)
+        bar.transform = identity
+        glassPlate.transform = identity
+        chromeRow.transform = identity
+    }
+
+    private fun hostWidthPt(): Double {
+        val fromSuperview = bar.superview?.bounds?.useContents { size.width } ?: 0.0
+        if (fromSuperview > 1.0) return fromSuperview
+        return UIScreen.mainScreen.bounds.useContents { size.width }
     }
 
     /**
@@ -893,7 +956,11 @@ private class IosHostNavBarLayer {
         chromeRow.clipsToBounds = false
         titleLabel.font = UIFont.boldSystemFontOfSize(NativeHeaderMetrics.titlePointSize(fraction))
         val identityUserId = identity?.userId
-        val snapTitle = identityUserId != lastBoundIdentityUserId || lastTitle == null
+        val snapTitle =
+            identityUserId != lastBoundIdentityUserId ||
+                lastTitle == null ||
+                !wantVisible ||
+                bar.hidden
         lastBoundIdentityUserId = identityUserId
         if (!snapTitle && title != lastTitle && lastTitle != null) {
             UIView.transitionWithView(
@@ -969,7 +1036,8 @@ private class IosHostNavBarLayer {
             return
         }
         heightConstraint?.constant = targetPt
-        if (lastHeightPt >= 0.0 && jump > 20.0) {
+        val animateJump = lastHeightPt >= 0.0 && jump > 20.0 && wantVisible && !bar.hidden
+        if (animateJump) {
             UIView.animateWithDuration(0.22) {
                 bar.superview?.layoutIfNeeded()
                 chromeRow.superview?.layoutIfNeeded()
@@ -1399,9 +1467,7 @@ private class IosHostNavBarLayer {
     }
 
     private fun detachFromSuperview() {
-        bar.transform = CGAffineTransformMakeTranslation(0.0, 0.0)
-        glassPlate.transform = CGAffineTransformMakeTranslation(0.0, 0.0)
-        chromeRow.transform = CGAffineTransformMakeTranslation(0.0, 0.0)
+        resetSlideTransformLocked()
         glassPlate.removeFromSuperview()
         chromeRow.removeFromSuperview()
         bar.removeFromSuperview()

@@ -238,6 +238,8 @@ internal object IosHostMapFloatingChrome {
         applyLeadingRevealMask()
     }
 
+    fun leadingClipUncoverPt(): Double = leadingRevealWidthPt
+
     private fun applyLeadingRevealMask() {
         val hostView = attachedHost?.view ?: return
         val uncover = leadingRevealWidthPt

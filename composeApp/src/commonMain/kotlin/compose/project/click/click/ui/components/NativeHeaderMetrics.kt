@@ -42,6 +42,8 @@ object NativeHeaderMetrics {
     const val StackedIdentitySpacingPt = 3.0
     const val StackedIdentitySubtitlePointSize = 12.0
     const val OverlayUncoverEpsilonPt = 0.5
+    const val OverlayHideKeepClipFraction = 0.92
+    const val OverlayCompletedSwipeFraction = 0.85
 
     /** Vertical center of compact chrome (40pt buttons in the 52pt bar). Expanded titles pin here too. */
     const val CompactChromeCenterYPt = CompactBarHeightPt / 2.0
@@ -234,6 +236,47 @@ object NativeHeaderMetrics {
      * liquid glass after Nearby dismiss. Clip to the uncovered strip instead.
      */
     fun shouldHideMapFloatingChromeForNearbyCover(nearbyCovering: Boolean): Boolean = false
+
+    /**
+     * After a completed swipe the destination header is already fully revealed (mask ≈ screen
+     * width). Clearing `CALayer.mask` rematerializes liquid glass / labels. Keep that mask.
+     * Tap-dismiss at rest (clip 0) still unclips so the hub/tab title can appear.
+     */
+    fun shouldClearLeadingClipOnOverlayHide(
+        uncoverLeadingPt: Double,
+        hostWidthPt: Double,
+    ): Boolean {
+        if (uncoverLeadingPt < 0.0) return false
+        if (hostWidthPt <= 0.0) return true
+        return uncoverLeadingPt < hostWidthPt * OverlayHideKeepClipFraction
+    }
+
+    /**
+     * `reset()` / overlay-key disposal drives slide offset to 0 while the overlay chrome is
+     * still composed (AnimatedVisibility exit, Settings hub `LaunchedEffect`). Applying
+     * identity after a completed swipe snaps My QR / Availability back on-screen for a frame.
+     */
+    fun shouldApplyOverlaySlideTransform(
+        overlayWantVisible: Boolean,
+        newOffsetPt: Double,
+        currentAppliedOffsetPt: Double,
+        hostWidthPt: Double,
+    ): Boolean {
+        if (!overlayWantVisible) return false
+        if (newOffsetPt > OverlayUncoverEpsilonPt) return true
+        if (hostWidthPt > 0.0 &&
+            currentAppliedOffsetPt >= hostWidthPt * OverlayCompletedSwipeFraction
+        ) {
+            return false
+        }
+        return true
+    }
+
+    /**
+     * Unsuppressing tab chrome after overlay dismiss must not re-run full `applyVisibility()`
+     * (that re-sets `glassPlate.hidden` and rematerializes Liquid Glass). Toggle hit-testing only.
+     */
+    fun shouldRematerializeChromeOnUnsuppress(): Boolean = false
 
     /**
      * Visible width of a host-view control that is not left-aligned, given a leading uncover
