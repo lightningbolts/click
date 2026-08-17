@@ -73,6 +73,7 @@ import compose.project.click.click.encounter.tetherCompassMessage // pragma: all
 import compose.project.click.click.notifications.NotificationRuntimeState // pragma: allowlist secret
 import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
+import compose.project.click.click.ui.chat.CHAT_SEARCH_FOCUS_HOLD_MS // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatBeaconDetailSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: allowlist secret
@@ -83,7 +84,6 @@ import compose.project.click.click.ui.chat.ChatExpandedPhotoPreview // pragma: a
 import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatHeaderIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatSearchFocusHoldMs // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatTypingDots // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatWarmLoadingView // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionActionSheet // pragma: allowlist secret
@@ -1268,11 +1268,11 @@ fun ChatView(
                                                         scrollChatTimelineToMessage(
                                                             listState = listState,
                                                             suppressKeyboardDismiss =
-                                                                suppressKeyboardDismissWhileProgrammaticTimelineScroll,
+                                                            suppressKeyboardDismissWhileProgrammaticTimelineScroll,
                                                             index = index,
                                                         )
                                                         focusedSearchMessageId = id
-                                                        delay(ChatSearchFocusHoldMs)
+                                                        delay(CHAT_SEARCH_FOCUS_HOLD_MS)
                                                         if (focusedSearchMessageId == id) {
                                                             focusedSearchMessageId = null
                                                         }

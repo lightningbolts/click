@@ -65,7 +65,6 @@ import compose.project.click.click.ui.theme.clickCardSurface // pragma: allowlis
 import compose.project.click.click.viewmodel.GlobalSearchViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.SearchChatOpenTarget // pragma: allowlist secret
 import compose.project.click.click.viewmodel.SearchResultCategory // pragma: allowlist secret
-import compose.project.click.click.viewmodel.SearchResultCategory // pragma: allowlist secret
 import kotlinx.coroutines.delay
 
 /**

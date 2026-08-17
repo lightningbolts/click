@@ -88,9 +88,9 @@ import compose.project.click.click.viewmodel.GlobalSearchViewModel
 import compose.project.click.click.viewmodel.SearchChatOpenTarget // pragma: allowlist secret
 import compose.project.click.click.viewmodel.SearchResult
 import compose.project.click.click.viewmodel.SearchResultCategory
-import compose.project.click.click.viewmodel.toChatOpenTarget // pragma: allowlist secret
 import compose.project.click.click.viewmodel.beaconDisplaySubtitle
 import compose.project.click.click.viewmodel.beaconDisplayTitle
+import compose.project.click.click.viewmodel.toChatOpenTarget // pragma: allowlist secret
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime

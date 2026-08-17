@@ -20,7 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 
-internal const val ChatSearchFocusHoldMs = 1800L
+internal const val CHAT_SEARCH_FOCUS_HOLD_MS = 1800L
 
 internal fun List<ChatTimelineEntry>.indexOfMessageId(messageId: String): Int {
     if (messageId.isBlank()) return -1

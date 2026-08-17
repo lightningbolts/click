@@ -72,6 +72,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
+import compose.project.click.click.ui.chat.CHAT_SEARCH_FOCUS_HOLD_MS // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAttachmentMenuRow // pragma: allowlist secret
@@ -85,7 +86,6 @@ import compose.project.click.click.ui.chat.ChatInterMessageHubBaseCompact // pra
 import compose.project.click.click.ui.chat.ChatLiquidGlassPlate // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMediaPickerHandles // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatSearchFocusHoldMs // pragma: allowlist secret
 import compose.project.click.click.ui.chat.applyTimestampPeekDragStep // pragma: allowlist secret
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatDismissKeyboardAfterScrollConnection // pragma: allowlist secret
@@ -531,7 +531,7 @@ fun HubChatScreen(
                             index = index,
                         )
                         focusedSearchMessageId = id
-                        delay(ChatSearchFocusHoldMs)
+                        delay(CHAT_SEARCH_FOCUS_HOLD_MS)
                         if (focusedSearchMessageId == id) {
                             focusedSearchMessageId = null
                         }
