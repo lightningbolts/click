@@ -58,6 +58,7 @@ import platform.Foundation.NSURLRequest
 import platform.Foundation.create
 import platform.Foundation.dataWithContentsOfURL
 import platform.QuartzCore.CAGradientLayer
+import platform.QuartzCore.CATransaction
 import platform.UIKit.NSDirectionalEdgeInsetsMake
 import platform.UIKit.NSLayoutConstraint
 import platform.UIKit.NSLineBreakByClipping
@@ -94,6 +95,7 @@ import platform.UIKit.UINavigationBar
 import platform.UIKit.UINavigationBarAppearance
 import platform.UIKit.UINavigationBarDelegateProtocol
 import platform.UIKit.UINavigationItem
+import platform.UIKit.UIScreen
 import platform.UIKit.UIStackView
 import platform.UIKit.UIStackViewAlignmentCenter
 import platform.UIKit.UIStackViewAlignmentLeading
@@ -496,6 +498,7 @@ private class IosHostNavBarLayer {
     private val backTarget = IosBarButtonTarget()
     private val avatarTarget = IosBarButtonTarget()
     private val actionTargets = List(4) { IosBarButtonTarget() }
+    private var lastVisualKey: String? = null
     private var lastButtonSignature: String? = null
     private var lastCollapseFraction = 0f
     private var lastHeightPt = -1.0
@@ -594,11 +597,19 @@ private class IosHostNavBarLayer {
             slideOffsets[owner] = points
         }
         val x = slideOffsets.values.maxOrNull() ?: 0.0
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         val transform = CGAffineTransformMakeTranslation(x, 0.0)
         bar.transform = transform
         glassPlate.transform = transform
         chromeRow.transform = transform
-        IosNavChrome.tab.setRevealUnderOverlay(isWantVisible() && x > 0.5)
+        CATransaction.commit()
+        val screenWidth =
+            UIScreen.mainScreen.bounds.useContents { size.width }.coerceAtLeast(1.0)
+        // Only uncover the tab header once the overlay has crossed the commit midpoint.
+        // Revealing it on every point of travel made the list title flash through chat
+        // glass during a sub-threshold spring-back.
+        IosNavChrome.tab.setRevealUnderOverlay(isWantVisible() && x > screenWidth * 0.5)
     }
 
     fun release(
@@ -762,14 +773,57 @@ private class IosHostNavBarLayer {
         if (suppressed) {
             return
         }
+        val fraction = collapseFraction.coerceIn(0f, 1f)
+        val stackIdentity = identity != null
+        val subtitleText =
+            subtitle?.trim()?.takeIf { it.isNotEmpty() }
+                ?: when (presenceOnline) {
+                    true -> "Online"
+                    false -> "Offline"
+                    null -> ""
+                }
+        val visualKey =
+            buildString {
+                append(title)
+                append('|')
+                append(subtitleText)
+                append('|')
+                append(presenceOnline)
+                append('|')
+                append(identity?.userId.orEmpty())
+                append('|')
+                append(fraction)
+                append('|')
+                append(hasSubtitle)
+                append('|')
+                append(visible)
+                append('|')
+                append(stackIdentity)
+                trailingActions.forEach { action ->
+                    append('|')
+                    append(action.sfSymbol)
+                    append(':')
+                    append(action.contentDescription)
+                }
+            }
+        bindRow(onOpenSearch, onNavigateBack, trailingActions, collapseSearchIntoBar, fraction)
+        if (visualKey == lastVisualKey) {
+            bindIdentity(
+                hasBack = onNavigateBack != null,
+                identity = identity,
+                presenceOnline = presenceOnline,
+            )
+            setWantVisible(visible)
+            return
+        }
+        lastVisualKey = visualKey
         bar.prefersLargeTitles = false
         item.titleView = null
         item.title = null
         item.leftBarButtonItem = null
         item.rightBarButtonItems = null
-        val fraction = collapseFraction.coerceIn(0f, 1f)
         lastCollapseFraction = fraction
-        setBarHeight(NativeHeaderMetrics.barHeightPt(fraction, hasSubtitle))
+        setBarHeight(NativeHeaderMetrics.barHeightPt(fraction, hasSubtitle, stackSubtitle = stackIdentity))
         titleColumnTopConstraint?.constant = NativeHeaderMetrics.titleColumnTopInsetPt(fraction)
         chromeRow.clipsToBounds = false
         titleLabel.font = UIFont.boldSystemFontOfSize(NativeHeaderMetrics.titlePointSize(fraction))
@@ -789,33 +843,30 @@ private class IosHostNavBarLayer {
             titleLabel.text = title
         }
         lastTitle = title
-        val inlineMeta = identity != null || NativeHeaderMetrics.isCompactTitle(fraction)
+        val compactTabRoot = !stackIdentity && NativeHeaderMetrics.isCompactTitle(fraction)
         titleColumn.axis =
-            if (inlineMeta) UILayoutConstraintAxisHorizontal else UILayoutConstraintAxisVertical
+            if (compactTabRoot) UILayoutConstraintAxisHorizontal else UILayoutConstraintAxisVertical
         titleColumn.alignment =
-            if (inlineMeta) UIStackViewAlignmentCenter else UIStackViewAlignmentLeading
-        titleColumn.spacing = if (inlineMeta) 6.0 else 2.0
+            if (compactTabRoot) UIStackViewAlignmentCenter else UIStackViewAlignmentLeading
+        titleColumn.spacing = if (compactTabRoot) 6.0 else 2.0
         titleLabel.numberOfLines =
-            if (inlineMeta) 1 else NativeHeaderMetrics.titleMaxLines(fraction).toLong()
-        subtitleLabel.numberOfLines = if (inlineMeta) 1 else NativeHeaderMetrics.SubtitleMaxLines.toLong()
+            if (stackIdentity || NativeHeaderMetrics.isCompactTitle(fraction)) {
+                1
+            } else {
+                NativeHeaderMetrics.titleMaxLines(fraction).toLong()
+            }
+        subtitleLabel.numberOfLines =
+            if (stackIdentity) 1 else NativeHeaderMetrics.SubtitleMaxLines.toLong()
         titleLabel.setContentCompressionResistancePriority(749f, forAxis = UILayoutConstraintAxisHorizontal)
         subtitleLabel.setContentCompressionResistancePriority(751f, forAxis = UILayoutConstraintAxisHorizontal)
-        val subtitleText =
-            subtitle?.trim()?.takeIf { it.isNotEmpty() }
-                ?: when (presenceOnline) {
-                    true -> "Online"
-                    false -> "Offline"
-                    null -> ""
-                }
         subtitleLabel.text = subtitleText
         subtitleLabel.hidden = subtitleText.isEmpty()
         subtitleLabel.textColor =
-            if (presenceOnline == true) {
+            if (presenceOnline == true && !subtitleText.equals("Typing…", ignoreCase = true)) {
                 UIColor.colorWithRed(34.0 / 255.0, green = 197.0 / 255.0, blue = 94.0 / 255.0, alpha = 1.0)
             } else {
                 titleLabel.textColor.colorWithAlphaComponent(0.62)
             }
-        bindRow(onOpenSearch, onNavigateBack, trailingActions, collapseSearchIntoBar, fraction)
         bindIdentity(
             hasBack = onNavigateBack != null,
             identity = identity,

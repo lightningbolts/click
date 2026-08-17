@@ -32,6 +32,20 @@ class NativeHeaderMetricsTest {
     }
 
     @Test
+    fun barHeight_stackedIdentityKeepsSubtitleAtCompact() {
+        assertEquals(
+            70.0,
+            NativeHeaderMetrics.barHeightPt(1f, hasSubtitle = true, stackSubtitle = true),
+            0.01,
+        )
+        assertEquals(
+            52.0,
+            NativeHeaderMetrics.barHeightPt(1f, hasSubtitle = true, stackSubtitle = false),
+            0.01,
+        )
+    }
+
+    @Test
     fun titleMaxWidth_wrapsBeforeTrailingActions() {
         val leading = NativeHeaderMetrics.titleLeadingInsetPt(hasBack = false)
         val trailing = NativeHeaderMetrics.titleTrailingInsetPt(trailingCount = 2)

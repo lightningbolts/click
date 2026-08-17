@@ -68,18 +68,23 @@ object NativeHeaderMetrics {
     fun barHeightPt(
         collapseFraction: Float,
         hasSubtitle: Boolean = false,
+        stackSubtitle: Boolean = false,
     ): Double {
         val fraction = collapseFraction.coerceIn(0f, 1f).toDouble()
         val expanded =
             ExpandedBarHeightPt +
                 if (hasSubtitle) SubtitleLineHeightPt * SubtitleMaxLines else 0.0
-        return expanded + (CompactBarHeightPt - expanded) * fraction
+        val compact =
+            CompactBarHeightPt +
+                if (hasSubtitle && stackSubtitle) SubtitleLineHeightPt else 0.0
+        return expanded + (compact - expanded) * fraction
     }
 
     fun barHeightDp(
         collapseFraction: Float,
         hasSubtitle: Boolean = false,
-    ): Dp = barHeightPt(collapseFraction, hasSubtitle).toFloat().dp
+        stackSubtitle: Boolean = false,
+    ): Dp = barHeightPt(collapseFraction, hasSubtitle, stackSubtitle).toFloat().dp
 
     fun subtitleHeightPt(
         hasSubtitle: Boolean,
@@ -99,7 +104,8 @@ object NativeHeaderMetrics {
         statusBarTop: Dp,
         collapseFraction: Float,
         hasSubtitle: Boolean,
-    ): Dp = statusBarTop + barHeightDp(collapseFraction, hasSubtitle)
+        stackSubtitle: Boolean = false,
+    ): Dp = statusBarTop + barHeightDp(collapseFraction, hasSubtitle, stackSubtitle)
 
     fun collapseRangeDp(hasSubtitle: Boolean): Dp = headerClearanceDp(0.dp, 0f, hasSubtitle) - headerClearanceDp(0.dp, 1f, hasSubtitle)
 
@@ -154,9 +160,11 @@ fun platformNativeHeaderClearance(
     statusBarTop: Dp,
     collapseFraction: Float = 1f,
     hasSubtitle: Boolean = false,
+    stackSubtitle: Boolean = false,
 ): Dp =
     NativeHeaderMetrics.headerClearanceDp(
         statusBarTop = statusBarTop,
         collapseFraction = collapseFraction,
         hasSubtitle = hasSubtitle,
+        stackSubtitle = stackSubtitle,
     )

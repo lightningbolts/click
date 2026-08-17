@@ -93,7 +93,18 @@ internal fun ChatWarmLoadingView(
                 )
             }
         } else {
-            Spacer(modifier = Modifier.fillMaxWidth().height(platformNativeHeaderClearance(topInset)))
+            val stacked = chatRow.groupClique == null
+            Spacer(
+                modifier =
+                    Modifier.fillMaxWidth().height(
+                        platformNativeHeaderClearance(
+                            statusBarTop = topInset,
+                            collapseFraction = 1f,
+                            hasSubtitle = stacked,
+                            stackSubtitle = stacked,
+                        ),
+                    ),
+            )
         }
         Box(
             modifier =
