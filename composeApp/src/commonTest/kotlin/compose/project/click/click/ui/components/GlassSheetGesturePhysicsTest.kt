@@ -24,6 +24,31 @@ class GlassSheetGesturePhysicsTest {
     }
 
     @Test
+    fun interactiveBack_commitsPastMidpointOrOnFlick() {
+        assertFalse(
+            shouldCommitInteractiveBack(
+                offsetPx = 200f,
+                widthPx = 400f,
+                velocityXPxPerSec = 0f,
+            ),
+        )
+        assertTrue(
+            shouldCommitInteractiveBack(
+                offsetPx = 201f,
+                widthPx = 400f,
+                velocityXPxPerSec = 0f,
+            ),
+        )
+        assertTrue(
+            shouldCommitInteractiveBack(
+                offsetPx = 40f,
+                widthPx = 400f,
+                velocityXPxPerSec = GlassGestureFlickVelocityPxPerSec + 1f,
+            ),
+        )
+    }
+
+    @Test
     fun downwardFlickCommitsFromAnySheetBodyRegion() {
         assertTrue(
             shouldCommitVerticalDismiss(

@@ -35,6 +35,21 @@ internal fun shouldCommitVerticalDismiss(
 }
 
 /**
+ * Interactive-back commit: past the horizontal midpoint, or a fast rightward flick.
+ * Completing routes must animate remaining travel with the release velocity — never
+ * snap the offset to the trailing edge in a single frame.
+ */
+internal fun shouldCommitInteractiveBack(
+    offsetPx: Float,
+    widthPx: Float,
+    velocityXPxPerSec: Float,
+): Boolean {
+    val width = widthPx.coerceAtLeast(1f)
+    return offsetPx > width * GlassGestureCommitFraction ||
+        velocityXPxPerSec > GlassGestureFlickVelocityPxPerSec
+}
+
+/**
  * Whether a downward nested-scroll leftover may drive sheet surface-drag dismiss.
  * Mid-list scrolls must finish before a new at-top gesture can dismiss.
  */
