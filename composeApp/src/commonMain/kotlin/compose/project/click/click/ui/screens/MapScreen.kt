@@ -515,9 +515,9 @@ fun MapScreen(
                                 },
                                 onZoomIn = { viewModel.zoomIn() },
                                 onZoomOut = { viewModel.zoomOut() },
-                                chromeVisible = !eventsSheetExpanded && !eventsBackHost.behindLayersVisible,
-                                // Stay composed under the events overlay (covered, not remounted) so
-                                // swipe-back reveals controls that never remounted.
+                                chromeVisible = true,
+                                // Stay composed under the events overlay. iOS clips host-view
+                                // controls to the uncovered strip instead of toggling hidden.
                                 modifier =
                                     Modifier
                                         .fillMaxSize()

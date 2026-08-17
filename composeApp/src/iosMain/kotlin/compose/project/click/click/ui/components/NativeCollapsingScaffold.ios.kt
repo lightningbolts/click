@@ -577,17 +577,23 @@ private class IosHostNavBarLayer {
     fun setWantVisible(visible: Boolean) {
         val changed = wantVisible != visible
         wantVisible = visible
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         applyVisibility()
-        if (changed) {
-            if (this === IosNavChrome.overlay) {
-                val tabLive = IosNavChrome.tab.isWantVisible()
-                if (visible && NativeHeaderMetrics.shouldClipTabChromeUnderOverlay(tabLive)) {
-                    IosNavChrome.tab.clipLeadingUnderlay(0.0)
-                } else if (!visible) {
-                    IosNavChrome.tab.clipLeadingUnderlay(null)
-                }
-                IosNavChrome.tab.setSuppressed(visible)
+        if (changed && this === IosNavChrome.overlay) {
+            val tabLive = IosNavChrome.tab.isWantVisible()
+            if (visible && NativeHeaderMetrics.shouldClipTabChromeUnderOverlay(tabLive)) {
+                IosNavChrome.tab.clipLeadingUnderlay(0.0)
+            } else if (!visible) {
+                IosNavChrome.tab.clipLeadingUnderlay(null)
             }
+            IosHostMapFloatingChrome.clipLeadingUnderlay(if (visible) 0.0 else null)
+            IosNavChrome.tab.setSuppressed(visible)
+        }
+        CATransaction.commit()
+        // Restack only when showing the overlay. Re-inserting the tab glass plate on
+        // dismiss rematerializes Liquid Glass and flashes the destination header.
+        if (changed && visible) {
             IosNavChrome.restack()
         }
     }
@@ -630,6 +636,11 @@ private class IosHostNavBarLayer {
         val tabLive = IosNavChrome.tab.isWantVisible()
         if (isWantVisible() && NativeHeaderMetrics.shouldClipTabChromeUnderOverlay(tabLive)) {
             IosNavChrome.tab.clipLeadingUnderlay(NativeHeaderMetrics.overlayUncoverLeadingWidthPt(x))
+        }
+        if (isWantVisible()) {
+            IosHostMapFloatingChrome.clipLeadingUnderlay(
+                NativeHeaderMetrics.overlayUncoverLeadingWidthPt(x),
+            )
         }
         CATransaction.commit()
     }
@@ -1374,6 +1385,8 @@ private class IosHostNavBarLayer {
 
     private fun applyVisibility() {
         val show = wantVisible && coverCount == 0
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         bar.hidden = !show
         bar.userInteractionEnabled = show && !suppressed
         chromeRow.hidden = !show
@@ -1381,6 +1394,7 @@ private class IosHostNavBarLayer {
         val glassAlpha = NativeHeaderMetrics.collapsedGlassAlpha(lastCollapseFraction)
         glassPlate.alpha = glassAlpha.toDouble()
         glassPlate.hidden = !show || glassAlpha < 0.02f
+        CATransaction.commit()
         if (show) updateGlassFadeMask()
     }
 

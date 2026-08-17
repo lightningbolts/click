@@ -221,6 +221,28 @@ object NativeHeaderMetrics {
      * title over the map at gesture start is a bug.
      */
     fun shouldBindSharedTabChrome(chromeActive: Boolean): Boolean = chromeActive
+
+    /**
+     * Overlay covers (chat, settings subpages, Add Click QR/NFC/Tap, Nearby) must keep the
+     * destination host chrome bound and clip it to the uncovered leading strip. Flipping
+     * [LocalNativeChromeActive] off remounts liquid glass when the overlay dismisses.
+     */
+    fun shouldKeepDestinationChromeBoundUnderOverlay(): Boolean = true
+
+    /**
+     * Map layer / zoom / drop controls are host-view siblings. Toggling `hidden` rematerializes
+     * liquid glass after Nearby dismiss. Clip to the uncovered strip instead.
+     */
+    fun shouldHideMapFloatingChromeForNearbyCover(nearbyCovering: Boolean): Boolean = false
+
+    /**
+     * Visible width of a host-view control that is not left-aligned, given a leading uncover
+     * strip in host coordinates. The nav bar sits at x=0 so this equals [uncoverLeadingPt].
+     */
+    fun hostLeadingClipWidthPt(
+        uncoverLeadingPt: Double,
+        viewMinXPt: Double,
+    ): Double = (uncoverLeadingPt - viewMinXPt).coerceAtLeast(0.0)
 }
 
 /** Status bar + interpolating native bar + collapsing subtitle overlay. */

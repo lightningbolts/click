@@ -16,13 +16,18 @@ import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.ObjCAction
 import kotlinx.cinterop.useContents
+import platform.CoreGraphics.CGPointMake
+import platform.CoreGraphics.CGRectMake
 import platform.Foundation.NSProcessInfo
 import platform.Foundation.NSSelectorFromString
+import platform.QuartzCore.CALayer
+import platform.QuartzCore.CATransaction
 import platform.UIKit.NSLayoutConstraint
 import platform.UIKit.UIAction
 import platform.UIKit.UIButton
 import platform.UIKit.UIButtonConfiguration
 import platform.UIKit.UIButtonTypeSystem
+import platform.UIKit.UIColor
 import platform.UIKit.UIControlEventTouchUpInside
 import platform.UIKit.UIControlStateNormal
 import platform.UIKit.UIImage
@@ -87,7 +92,7 @@ actual fun PlatformNativeMapFloatingChrome(
 }
 
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
-private object IosHostMapFloatingChrome {
+internal object IosHostMapFloatingChrome {
     private val layerButton = makeIconButton()
     private val dropButton = makeIconButton()
     private val zoomInButton = makeIconButton()
@@ -100,6 +105,8 @@ private object IosHostMapFloatingChrome {
     private var glassApplied = false
     private var usesGlassButtons = false
     private var lastMenuSignature: String? = null
+    private val buttonMasks = mutableMapOf<UIButton, CALayer>()
+    private var leadingRevealWidthPt = -1.0
 
     fun attach(
         host: UIViewController,
@@ -212,18 +219,64 @@ private object IosHostMapFloatingChrome {
                 )
         }
         bottomConstraint?.constant = -bottomPaddingPoints
-        listOf(layerButton, dropButton, zoomInButton, zoomOutButton).forEach { button ->
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        chromeButtons().forEach { button ->
             button.hidden = !visible
-            button.alpha = if (visible) 1.0 else 0.0
-            button.userInteractionEnabled = visible
-            if (visible) {
-                attachedHost?.view?.bringSubviewToFront(button)
-            }
+            button.alpha = 1.0
         }
+        CATransaction.commit()
+        applyLeadingRevealMask()
     }
 
+    /**
+     * Clip floating map controls to the uncovered leading strip while Nearby (or another
+     * overlay) covers the map. Do not toggle [hidden] for cover — that rematerializes glass.
+     */
+    fun clipLeadingUnderlay(leadingWidthPt: Double?) {
+        leadingRevealWidthPt = leadingWidthPt ?: -1.0
+        applyLeadingRevealMask()
+    }
+
+    private fun applyLeadingRevealMask() {
+        val hostView = attachedHost?.view ?: return
+        val uncover = leadingRevealWidthPt
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        chromeButtons().forEach { button ->
+            if (button.superview == null) {
+                return@forEach
+            }
+            if (uncover < 0.0) {
+                button.layer.mask = null
+                button.userInteractionEnabled = !button.hidden
+                return@forEach
+            }
+            val minX =
+                button.convertPoint(CGPointMake(0.0, 0.0), toView = hostView).useContents { x }
+            val clipW = NativeHeaderMetrics.hostLeadingClipWidthPt(uncover, minX)
+            val height = button.bounds.useContents { size.height }.coerceAtLeast(1.0)
+            val mask =
+                buttonMasks.getOrPut(button) {
+                    CALayer().apply { backgroundColor = UIColor.blackColor.CGColor }
+                }
+            mask.frame = CGRectMake(0.0, 0.0, clipW, height)
+            button.layer.mask = mask
+            button.userInteractionEnabled = !button.hidden && clipW > 8.0
+        }
+        CATransaction.commit()
+    }
+
+    private fun chromeButtons(): List<UIButton> =
+        listOf(layerButton, dropButton, zoomInButton, zoomOutButton)
+
     fun detach() {
-        listOf(layerButton, dropButton, zoomInButton, zoomOutButton).forEach { it.removeFromSuperview() }
+        chromeButtons().forEach { button ->
+            button.layer.mask = null
+            button.removeFromSuperview()
+        }
+        buttonMasks.clear()
+        leadingRevealWidthPt = -1.0
         bottomConstraint = null
         lastMenuSignature = null
         attachedHost = null

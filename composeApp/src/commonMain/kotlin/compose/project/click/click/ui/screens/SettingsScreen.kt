@@ -58,7 +58,6 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -108,7 +107,6 @@ import compose.project.click.click.ui.components.GlassAlertDialog // pragma: all
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.HeaderBackIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
-import compose.project.click.click.ui.components.LocalNativeChromeActive // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformNativeNavigationBarSwipeReveal // pragma: allowlist secret
 import compose.project.click.click.ui.components.SavedEventsSection // pragma: allowlist secret
@@ -308,16 +306,15 @@ fun SettingsScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
+                AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.fillMaxSize()) {
-                CompositionLocalProvider(
-                    LocalNativeChromeActive provides (settingsPage == SettingsPage.Hub),
-                ) {
                     AppScreenScaffold(
                     title = "Settings",
                     onOpenSearch = onOpenSearch,
                     verticalArrangement = Arrangement.spacedBy(24.dp),
                     // The hub stays mounted under the subpage and parallaxes as it is pushed away.
+                    // Keep native hub chrome bound (clipped, not unbound) so it does not pop in
+                    // after swipe-back the way Clicks stays bound under chat.
                     modifier = Modifier.interactiveSwipeBackUnderlay(backHost),
                 ) {
                     item {
@@ -341,7 +338,6 @@ fun SettingsScreen(
                         item {
                             SettingsSignOutButton(onSignOut = onSignOut)
                         }
-                }
                 }
 
                 val slideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)

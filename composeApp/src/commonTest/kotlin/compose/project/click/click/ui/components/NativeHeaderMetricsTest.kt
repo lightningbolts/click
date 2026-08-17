@@ -136,6 +136,18 @@ class NativeHeaderMetricsTest {
         assertTrue(!NativeHeaderMetrics.shouldClipTabChromeUnderOverlay(tabWantVisible = false))
         assertTrue(NativeHeaderMetrics.shouldBindSharedTabChrome(chromeActive = true))
         assertTrue(!NativeHeaderMetrics.shouldBindSharedTabChrome(chromeActive = false))
+        assertTrue(NativeHeaderMetrics.shouldKeepDestinationChromeBoundUnderOverlay())
+        assertTrue(!NativeHeaderMetrics.shouldHideMapFloatingChromeForNearbyCover(nearbyCovering = true))
+        assertTrue(!NativeHeaderMetrics.shouldHideMapFloatingChromeForNearbyCover(nearbyCovering = false))
+    }
+
+    @Test
+    fun hostLeadingClip_revealsTrailingControlsAsOverlaySlides() {
+        assertEquals(0.0, NativeHeaderMetrics.hostLeadingClipWidthPt(0.0, viewMinXPt = 16.0), 0.01)
+        assertEquals(24.0, NativeHeaderMetrics.hostLeadingClipWidthPt(40.0, viewMinXPt = 16.0), 0.01)
+        assertEquals(0.0, NativeHeaderMetrics.hostLeadingClipWidthPt(200.0, viewMinXPt = 320.0), 0.01)
+        assertEquals(80.0, NativeHeaderMetrics.hostLeadingClipWidthPt(400.0, viewMinXPt = 320.0), 0.01)
+        assertEquals(200.0, NativeHeaderMetrics.hostLeadingClipWidthPt(200.0, viewMinXPt = 0.0), 0.01)
     }
 
     @Test

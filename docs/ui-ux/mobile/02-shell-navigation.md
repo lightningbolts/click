@@ -400,6 +400,7 @@ targetIndex >= initialIndex? ──YES──► slide forward + fade
 - Default `edgeSwipeWidth` = 24 dp; **App uses 44 dp** for all shell swipe surfaces.
 - Commit: offset > 50% width OR velocity > 800 px/s.
 - Overlay native chrome translates with the drag. The **live** tab-root header is **clipped to the uncovered leading strip** for the whole gesture (not gated on the commit midpoint) so the underlay title is visible in the peek without showing through translucent overlay glass. Tab chrome is never unhidden unless that tab layer is the current underlay — Map has no tab header, so starting a back gesture on Map must not paint Add Click / Home titles over the map.
+- Destination chrome for overlay covers (Add Click under QR/NFC/Tap, Settings hub under a subpage, Map floating controls under Nearby) stays **bound**. Clip it; do not flip `LocalNativeChromeActive` off or toggle `hidden` — that remounts liquid glass and the destination header/controls pop in after the swipe completes. Overlay hide uses `CATransaction.setDisableActions(true)` and does not restack the tab glass plate.
 - Finger tracking is 1:1. On lift, cancel and commit springs are slightly under-damped (`0.82` / `0.78`) and may overshoot rest / the trailing edge so both paths land with a small settle jiggle. Do not clamp settle to `0..width` or use `DampingRatioNoBouncy` on commit — that killed the landing bounce.
 
 ### 7.2 Interactive Elements

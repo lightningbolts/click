@@ -53,7 +53,7 @@ CreateHubModal — also reachable from BeaconDropSheet Hub category
 | Property | Value |
 |----------|-------|
 | Primary canvas | Full-bleed `PlatformMap` with gestures enabled on tab entry |
-| Map chrome | `MapAlwaysOnChrome` — layer filter top-end; drop-beacon FAB + zoom docked **above** reopen chip (`mapFabAboveNav + 120.dp`) |
+| Map chrome | `MapAlwaysOnChrome` — layer filter top-end; drop-beacon FAB + zoom docked **above** reopen chip. On iOS these are host-view siblings: they stay mounted under Nearby and are **clipped** to the uncovered leading strip during swipe-back (never `hidden`, which rematerializes liquid glass). |
 | Events list | **Full-screen** slide-up / slide-down (`slideInVertically` / `slideOutVertically`) + `InteractiveSwipeBackContainer` (horizontal edge swipe still dismisses). Title **Events** (peek chip same). `AppScreenScaffold` + Liquid Glass header |
 | Search | Only inside full-screen list |
 | Filters / sort | Distance/Recent segment + layer chips; refresh in header |
