@@ -18,10 +18,10 @@ ChatView (organism — full-screen thread)
 │   │   ├── Loading → ChatWarmLoadingView | ChatChannelLoadingView
 │   │   ├── Error → minimal header + centered error
 │   │   └── Success
-│   │       ├── Header plate (56dp, status-bar inset)
+│   │       ├── Header plate (56dp+, status-bar inset)
 │   │       │   ├── Back
 │   │       │   ├── Avatar (1:1 Core frame + online dot | group cluster)
-│   │       │   ├── Title + subtitle (Online/Offline | member summary)
+│   │       │   ├── Identity column (two rows: username / status subtitle)
 │   │       │   ├── Shared availability bolt (1:1 overlap)
 │   │       │   ├── Rename group (groups)
 │   │       │   ├── Call options menu
@@ -76,9 +76,9 @@ ChatView (organism — full-screen thread)
 | 1:1 avatar | `AvatarWithOnlineIndicator` **outside** `CoreConnectionAvatarFrame` 36dp + online indicator 9dp (dot overlays avatar rim; ring uses background token, not near-black surface) |
 | Group avatar | `GroupAvatar` 34dp cluster; tap → group members picker |
 | Presence subtitle | “Online” / “Offline” uses `isPeerOnline \|\| peerId in onlineUsers` (same source as avatar dot) |
-| Title | `titleMedium`, semibold, 1 line ellipsis |
-| Subtitle (1:1) | Green dot + `"Online"` / `"Offline"` (`AnimatedContent`) |
-| Subtitle (group) | `"{N} members: {first names…}"` up to 2 lines |
+| Title | `titleMedium`, semibold, 1 line ellipsis — **top row** of the identity column next to the avatar |
+| Subtitle (1:1) | **Bottom row** of the same identity column: `"Typing…"` while the peer is typing, otherwise green dot + `"Online"` / `"Offline"` (`AnimatedContent`). Never inline with the username. |
+| Subtitle (group) | `"{N} members: {first names…}"` up to 2 lines, still under the group title |
 | Trailing actions | Bolt (overlap), Rename (group), Call, More |
 
 ### Thread dock
@@ -651,6 +651,8 @@ Attach → "Ping Tether" (success haptic)
 | Call dropdown | Custom `Popup` surface (dark-mode safe) | Material `DropdownMenu` |
 | Composer chrome | 44dp aux, 20dp field radius | 52dp aux, 12dp field radius |
 | Timestamp peek | Integrated with swipe-back drag | Local `chatTimestampPeekOnSwipeLeft` |
+| Identity header | Native `UINavigationBar` sibling: avatar + **stacked** username / status (never inline). Compact chat bars grow by one subtitle line. | Compose header: same two-row identity column next to the avatar |
+| Back-gesture complete | `InteractiveSwipeBackContainer` springs to full width with release velocity (no 99% snap). Sub-threshold release springs back; overlay chrome uses `CATransaction` with implicit animations disabled so the header does not tear. Tab chrome uncovers only past the 50% commit midpoint. | Android uses `AnimatedContent` slide; no interactive-back overlay |
 
 ---
 
