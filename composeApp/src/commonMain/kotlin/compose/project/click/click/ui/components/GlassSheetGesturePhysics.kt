@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:property-naming")
+
 package compose.project.click.click.ui.components
 
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -77,20 +79,21 @@ fun rememberGlassModalBottomSheetState(
     val lastOffsetPx = remember { mutableFloatStateOf(0f) }
     val lastSampleMs = remember { mutableLongStateOf(0L) }
 
-    val sheetState = rememberModalBottomSheetState(
-        skipPartiallyExpanded = skipPartiallyExpanded,
-        confirmValueChange = { target ->
-            when (target) {
-                SheetValue.Hidden ->
-                    shouldCommitVerticalDismiss(
-                        offsetPx = offsetPx.floatValue,
-                        travelPx = travelPx,
-                        velocityPxPerSec = velocityPxPerSec.floatValue,
-                    )
-                else -> true
-            }
-        },
-    )
+    val sheetState =
+        rememberModalBottomSheetState(
+            skipPartiallyExpanded = skipPartiallyExpanded,
+            confirmValueChange = { target ->
+                when (target) {
+                    SheetValue.Hidden ->
+                        shouldCommitVerticalDismiss(
+                            offsetPx = offsetPx.floatValue,
+                            travelPx = travelPx,
+                            velocityPxPerSec = velocityPxPerSec.floatValue,
+                        )
+                    else -> true
+                }
+            },
+        )
 
     LaunchedEffect(sheetState, travelPx) {
         snapshotFlow {
@@ -118,9 +121,7 @@ fun rememberGlassModalBottomSheetState(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun rememberGlassAdaptiveSheetState(
-    skipPartiallyExpanded: Boolean = false,
-): AdaptiveSheetState {
+fun rememberGlassAdaptiveSheetState(skipPartiallyExpanded: Boolean = false): AdaptiveSheetState {
     val density = LocalDensity.current
     val positionalThresholdToPx = { with(density) { 56.dp.toPx() } }
     val velocityThresholdToPx = { GlassGestureFlickVelocityPxPerSec }

@@ -1,3 +1,9 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:property-naming",
+    "MagicNumber",
+)
+
 package compose.project.click.click.ui.chat
 
 import androidx.compose.animation.core.LinearEasing

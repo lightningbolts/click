@@ -605,7 +605,9 @@ private class IosHostNavBarLayer {
         chromeRow.transform = transform
         CATransaction.commit()
         val screenWidth =
-            UIScreen.mainScreen.bounds.useContents { size.width }.coerceAtLeast(1.0)
+            UIScreen.mainScreen.bounds
+                .useContents { size.width }
+                .coerceAtLeast(1.0)
         // Only uncover the tab header once the overlay has crossed the commit midpoint.
         // Revealing it on every point of travel made the list title flash through chat
         // glass during a sub-threshold spring-back.
