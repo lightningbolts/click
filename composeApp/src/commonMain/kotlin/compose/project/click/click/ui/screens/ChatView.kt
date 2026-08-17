@@ -964,7 +964,8 @@ fun ChatView(
 
                                         Column(
                                             modifier = Modifier.weight(1f),
-                                            verticalArrangement = Arrangement.Center,
+                                            verticalArrangement =
+                                                Arrangement.spacedBy(3.dp, Alignment.CenterVertically),
                                         ) {
                                             Text(
                                                 text = if (isGroupChat) groupTitle else (chatDetails.otherUser.name ?: "Unknown"),

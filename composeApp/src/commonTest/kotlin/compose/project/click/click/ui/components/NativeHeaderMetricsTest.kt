@@ -32,9 +32,9 @@ class NativeHeaderMetricsTest {
     }
 
     @Test
-    fun barHeight_stackedIdentityKeepsSubtitleAtCompact() {
+    fun barHeight_stackedIdentityStaysCompactAndCentersOnAvatar() {
         assertEquals(
-            70.0,
+            52.0,
             NativeHeaderMetrics.barHeightPt(1f, hasSubtitle = true, stackSubtitle = true),
             0.01,
         )
@@ -43,6 +43,16 @@ class NativeHeaderMetricsTest {
             NativeHeaderMetrics.barHeightPt(1f, hasSubtitle = true, stackSubtitle = false),
             0.01,
         )
+        assertTrue(NativeHeaderMetrics.stackedIdentityColumnHeightPt() <= NativeHeaderMetrics.ChromeButtonSizePt)
+        assertEquals(26.0, NativeHeaderMetrics.CompactChromeCenterYPt, 0.01)
+    }
+
+    @Test
+    fun overlayUncover_clipsToDragOffsetNotCommitMidpoint() {
+        assertEquals(0.0, NativeHeaderMetrics.overlayUncoverLeadingWidthPt(0.0), 0.01)
+        assertEquals(0.0, NativeHeaderMetrics.overlayUncoverLeadingWidthPt(0.5), 0.01)
+        assertEquals(24.0, NativeHeaderMetrics.overlayUncoverLeadingWidthPt(24.0), 0.01)
+        assertEquals(200.0, NativeHeaderMetrics.overlayUncoverLeadingWidthPt(200.0), 0.01)
     }
 
     @Test

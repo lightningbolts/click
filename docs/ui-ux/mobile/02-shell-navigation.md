@@ -399,6 +399,7 @@ targetIndex >= initialIndex? ──YES──► slide forward + fade
 - 3-layer stack: (1) previous route parallax peek 30% width, (2) scrim opacity `0.5 × (1 - progress)`, (3) current route `translationX`.
 - Default `edgeSwipeWidth` = 24 dp; **App uses 44 dp** for all shell swipe surfaces.
 - Commit: offset > 50% width OR velocity > 800 px/s.
+- Overlay native chrome translates with the drag. The tab-root header is **clipped to the uncovered leading strip** for the whole gesture (not gated on the commit midpoint) so the underlay title is visible in the peek without showing through translucent overlay glass.
 
 ### 7.2 Interactive Elements
 

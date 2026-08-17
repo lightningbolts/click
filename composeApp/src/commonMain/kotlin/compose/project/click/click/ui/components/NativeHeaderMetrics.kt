@@ -39,6 +39,9 @@ object NativeHeaderMetrics {
     const val CompactRowBottomPaddingPt = 8.0
     const val GlassFadeExtensionPt = 8.0
     const val CollapsedGlassAlphaMax = 0.92f
+    const val StackedIdentitySpacingPt = 3.0
+    const val StackedIdentitySubtitlePointSize = 12.0
+    const val OverlayUncoverEpsilonPt = 0.5
 
     /** Vertical center of compact chrome (40pt buttons in the 52pt bar). Expanded titles pin here too. */
     const val CompactChromeCenterYPt = CompactBarHeightPt / 2.0
@@ -74,9 +77,8 @@ object NativeHeaderMetrics {
         val expanded =
             ExpandedBarHeightPt +
                 if (hasSubtitle) SubtitleLineHeightPt * SubtitleMaxLines else 0.0
-        val compact =
-            CompactBarHeightPt +
-                if (hasSubtitle && stackSubtitle) SubtitleLineHeightPt else 0.0
+        // [stackSubtitle] selects identity-column centering, not extra compact height.
+        val compact = CompactBarHeightPt
         return expanded + (compact - expanded) * fraction
     }
 
@@ -153,6 +155,15 @@ object NativeHeaderMetrics {
             LargeTitleLineHeightPt + (CompactTitlePointSize - LargeTitleLineHeightPt) * t
         return CompactChromeCenterYPt - lineHeight / 2.0
     }
+
+    /**
+     * Leading strip of the underlay (tab) header that should paint during interactive-back.
+     * Zero while the overlay is at rest so translucent chat glass cannot show the list title.
+     */
+    fun overlayUncoverLeadingWidthPt(offsetPt: Double): Double = if (offsetPt <= OverlayUncoverEpsilonPt) 0.0 else offsetPt
+
+    /** Username + status column height for a compact chat identity stack. */
+    fun stackedIdentityColumnHeightPt(): Double = CompactTitlePointSize + StackedIdentitySpacingPt + StackedIdentitySubtitlePointSize
 }
 
 /** Status bar + interpolating native bar + collapsing subtitle overlay. */

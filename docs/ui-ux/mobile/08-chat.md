@@ -76,8 +76,8 @@ ChatView (organism — full-screen thread)
 | 1:1 avatar | `AvatarWithOnlineIndicator` **outside** `CoreConnectionAvatarFrame` 36dp + online indicator 9dp (dot overlays avatar rim; ring uses background token, not near-black surface) |
 | Group avatar | `GroupAvatar` 34dp cluster; tap → group members picker |
 | Presence subtitle | “Online” / “Offline” uses `isPeerOnline \|\| peerId in onlineUsers` (same source as avatar dot) |
-| Title | `titleMedium`, semibold, 1 line ellipsis — **top row** of the identity column next to the avatar |
-| Subtitle (1:1) | **Bottom row** of the same identity column: `"Typing…"` while the peer is typing, otherwise green dot + `"Online"` / `"Offline"` (`AnimatedContent`). Never inline with the username. |
+| Title | `titleMedium`, semibold, 1 line ellipsis — **top row** of the identity column next to the avatar. The two-row block is vertically centered on the avatar. |
+| Subtitle (1:1) | **Bottom row** of the same identity column (`3pt` / `3dp` below the name): `"Typing…"` while the peer is typing, otherwise green dot + `"Online"` / `"Offline"` (`AnimatedContent`). Never inline with the username. |
 | Subtitle (group) | `"{N} members: {first names…}"` up to 2 lines, still under the group title |
 | Trailing actions | Bolt (overlap), Rename (group), Call, More |
 
@@ -651,8 +651,8 @@ Attach → "Ping Tether" (success haptic)
 | Call dropdown | Custom `Popup` surface (dark-mode safe) | Material `DropdownMenu` |
 | Composer chrome | 44dp aux, 20dp field radius | 52dp aux, 12dp field radius |
 | Timestamp peek | Integrated with swipe-back drag | Local `chatTimestampPeekOnSwipeLeft` |
-| Identity header | Native `UINavigationBar` sibling: avatar + **stacked** username / status (never inline). Compact chat bars grow by one subtitle line. | Compose header: same two-row identity column next to the avatar |
-| Back-gesture complete | `InteractiveSwipeBackContainer` springs to full width with release velocity (no 99% snap). Sub-threshold release springs back; overlay chrome uses `CATransaction` with implicit animations disabled so the header does not tear. Tab chrome uncovers only past the 50% commit midpoint. | Android uses `AnimatedContent` slide; no interactive-back overlay |
+| Identity header | Native `UINavigationBar` sibling: avatar + **stacked** username / status (never inline). The two-line column is vertically centered on the 40pt avatar inside the compact 52pt bar. | Compose header: same two-row identity column, `spacedBy(3.dp)` and vertically centered on the avatar |
+| Back-gesture complete | `InteractiveSwipeBackContainer` springs to full width with release velocity (no 99% snap). Sub-threshold release springs back; overlay chrome uses `CATransaction` with implicit animations disabled so the header does not tear. Tab chrome is clipped to the uncovered leading strip for the whole drag (not gated on the 50% commit midpoint), so the list title never vanishes then pops. | Android uses `AnimatedContent` slide; no interactive-back overlay |
 
 ---
 
