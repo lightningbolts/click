@@ -18,10 +18,10 @@ ChatView (organism — full-screen thread)
 │   │   ├── Loading → ChatWarmLoadingView | ChatChannelLoadingView
 │   │   ├── Error → minimal header + centered error
 │   │   └── Success
-│   │       ├── Header plate (56dp, status-bar inset)
+│   │       ├── Header plate (56dp+, status-bar inset)
 │   │       │   ├── Back
 │   │       │   ├── Avatar (1:1 Core frame + online dot | group cluster)
-│   │       │   ├── Title + subtitle (Online/Offline | member summary)
+│   │       │   ├── Identity column (two rows: username / status subtitle)
 │   │       │   ├── Shared availability bolt (1:1 overlap)
 │   │       │   ├── Rename group (groups)
 │   │       │   ├── Call options menu
@@ -76,9 +76,9 @@ ChatView (organism — full-screen thread)
 | 1:1 avatar | `AvatarWithOnlineIndicator` **outside** `CoreConnectionAvatarFrame` 36dp + online indicator 9dp (dot overlays avatar rim; ring uses background token, not near-black surface) |
 | Group avatar | `GroupAvatar` 34dp cluster; tap → group members picker |
 | Presence subtitle | “Online” / “Offline” uses `isPeerOnline \|\| peerId in onlineUsers` (same source as avatar dot) |
-| Title | `titleMedium`, semibold, 1 line ellipsis |
-| Subtitle (1:1) | Green dot + `"Online"` / `"Offline"` (`AnimatedContent`) |
-| Subtitle (group) | `"{N} members: {first names…}"` up to 2 lines |
+| Title | `titleMedium`, semibold, 1 line ellipsis — **top row** of the identity column next to the avatar. The two-row block is vertically centered on the avatar. |
+| Subtitle (1:1) | **Bottom row** of the same identity column (`3pt` / `3dp` below the name): `"Typing…"` while the peer is typing, otherwise green dot + `"Online"` / `"Offline"` (`AnimatedContent`). Never inline with the username. |
+| Subtitle (group) | `"{N} members: {first names…}"` up to 2 lines, still under the group title |
 | Trailing actions | Bolt (overlap), Rename (group), Call, More |
 
 ### Thread dock
@@ -651,6 +651,8 @@ Attach → "Ping Tether" (success haptic)
 | Call dropdown | Custom `Popup` surface (dark-mode safe) | Material `DropdownMenu` |
 | Composer chrome | 44dp aux, 20dp field radius | 52dp aux, 12dp field radius |
 | Timestamp peek | Integrated with swipe-back drag | Local `chatTimestampPeekOnSwipeLeft` |
+| Identity header | Native `UINavigationBar` sibling: avatar + **stacked** username / status (never inline). The two-line column is vertically centered on the 40pt avatar inside the compact 52pt bar. | Compose header: same two-row identity column, `spacedBy(3.dp)` and vertically centered on the avatar |
+| Back-gesture complete | `InteractiveSwipeBackContainer` springs to full width with release velocity (no 99% snap) and a small overshoot settle. Sub-threshold release springs back with the same under-damped jiggle. Overlay chrome uses `CATransaction` with implicit animations disabled so the header does not tear. The **live** tab chrome is clipped to the uncovered leading strip for the whole drag (not gated on the 50% commit midpoint) and is never toggled `hidden` for cover — hide/show flashed the list title twice on cancel. Overlay dismiss does not restack the tab glass plate (that rematerialized Liquid Glass and stuttered Add Click / Settings). After the spring lands, keep a full-width underlay mask and do not snap overlay transform to 0 until that chrome is hidden (parent `reset()` still runs while the overlay is composed). Inactive underlays must not bind the shared tab bar (Map swipe must not show the previous tab's header). | Android uses `AnimatedContent` slide; no interactive-back overlay |
 
 ---
 

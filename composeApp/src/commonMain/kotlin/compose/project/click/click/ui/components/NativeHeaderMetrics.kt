@@ -39,6 +39,11 @@ object NativeHeaderMetrics {
     const val CompactRowBottomPaddingPt = 8.0
     const val GlassFadeExtensionPt = 8.0
     const val CollapsedGlassAlphaMax = 0.92f
+    const val StackedIdentitySpacingPt = 3.0
+    const val StackedIdentitySubtitlePointSize = 12.0
+    const val OverlayUncoverEpsilonPt = 0.5
+    const val OverlayHideKeepClipFraction = 0.92
+    const val OverlayCompletedSwipeFraction = 0.85
 
     /** Vertical center of compact chrome (40pt buttons in the 52pt bar). Expanded titles pin here too. */
     const val CompactChromeCenterYPt = CompactBarHeightPt / 2.0
@@ -68,18 +73,27 @@ object NativeHeaderMetrics {
     fun barHeightPt(
         collapseFraction: Float,
         hasSubtitle: Boolean = false,
+        stackSubtitle: Boolean = false,
+        growCompactSubtitle: Boolean = false,
     ): Double {
         val fraction = collapseFraction.coerceIn(0f, 1f).toDouble()
         val expanded =
             ExpandedBarHeightPt +
                 if (hasSubtitle) SubtitleLineHeightPt * SubtitleMaxLines else 0.0
-        return expanded + (CompactBarHeightPt - expanded) * fraction
+        // Identity stacks stay 52pt (centered on the avatar). Subpages with a
+        // back button grow so the subtitle is not clipped under the glass.
+        val compact =
+            CompactBarHeightPt +
+                if (growCompactSubtitle && hasSubtitle) SubtitleLineHeightPt else 0.0
+        return expanded + (compact - expanded) * fraction
     }
 
     fun barHeightDp(
         collapseFraction: Float,
         hasSubtitle: Boolean = false,
-    ): Dp = barHeightPt(collapseFraction, hasSubtitle).toFloat().dp
+        stackSubtitle: Boolean = false,
+        growCompactSubtitle: Boolean = false,
+    ): Dp = barHeightPt(collapseFraction, hasSubtitle, stackSubtitle, growCompactSubtitle).toFloat().dp
 
     fun subtitleHeightPt(
         hasSubtitle: Boolean,
@@ -99,7 +113,11 @@ object NativeHeaderMetrics {
         statusBarTop: Dp,
         collapseFraction: Float,
         hasSubtitle: Boolean,
-    ): Dp = statusBarTop + barHeightDp(collapseFraction, hasSubtitle)
+        stackSubtitle: Boolean = false,
+        growCompactSubtitle: Boolean = false,
+    ): Dp =
+        statusBarTop +
+            barHeightDp(collapseFraction, hasSubtitle, stackSubtitle, growCompactSubtitle)
 
     fun collapseRangeDp(hasSubtitle: Boolean): Dp = headerClearanceDp(0.dp, 0f, hasSubtitle) - headerClearanceDp(0.dp, 1f, hasSubtitle)
 
@@ -147,6 +165,127 @@ object NativeHeaderMetrics {
             LargeTitleLineHeightPt + (CompactTitlePointSize - LargeTitleLineHeightPt) * t
         return CompactChromeCenterYPt - lineHeight / 2.0
     }
+
+    /**
+     * Leading strip of the underlay (tab) header that should paint during interactive-back.
+     * Zero while the overlay is at rest so translucent chat glass cannot show the list title.
+     */
+    fun overlayUncoverLeadingWidthPt(offsetPt: Double): Double = if (offsetPt <= OverlayUncoverEpsilonPt) 0.0 else offsetPt
+
+    /** Username + status column height for a compact chat identity stack. */
+    fun stackedIdentityColumnHeightPt(): Double = CompactTitlePointSize + StackedIdentitySpacingPt + StackedIdentitySubtitlePointSize
+
+    /**
+     * Collapsed tab-root chrome inlines title + subtitle. Subpages (back) and chat identity
+     * always stack those lines so the subtitle is not truncated beside the title.
+     */
+    fun isCompactTabRootChrome(
+        collapseFraction: Float,
+        hasBack: Boolean,
+        hasIdentity: Boolean,
+    ): Boolean = !hasBack && !hasIdentity && isCompactTitle(collapseFraction)
+
+    /**
+     * Compact two-line identity (avatar + name/status) or subpage title + subtitle, centered
+     * on the 40pt chrome plane.
+     */
+    fun shouldStackCompactSubtitle(
+        hasBack: Boolean,
+        hasIdentity: Boolean,
+        hasSubtitle: Boolean,
+        collapseFraction: Float,
+    ): Boolean = hasSubtitle && isCompactTitle(collapseFraction) && (hasIdentity || hasBack)
+
+    /**
+     * Scan QR / Tap to Connect compact chrome must grow so the instruction line sits
+     * *in* the native bar, not under the glass plate. Chat identity does not grow.
+     */
+    fun shouldGrowCompactBarForStackedSubtitle(
+        hasBack: Boolean,
+        hasIdentity: Boolean,
+        hasSubtitle: Boolean,
+        collapseFraction: Float,
+    ): Boolean =
+        shouldStackCompactSubtitle(hasBack, hasIdentity, hasSubtitle, collapseFraction) &&
+            hasBack &&
+            !hasIdentity
+
+    /**
+     * Only the live tab-root header may be clipped into the overlay peek. A stale header from
+     * a previous tab (e.g. Add Click still sitting in the shared layer while Map is showing)
+     * must not be unhidden.
+     */
+    fun shouldClipTabChromeUnderOverlay(tabWantVisible: Boolean): Boolean = tabWantVisible
+
+    /**
+     * Swipe underlays and inactive AnimatedContent copies must not bind the shared tab
+     * `UINavigationBar`. Map in particular has no tab header — showing the previous tab's
+     * title over the map at gesture start is a bug.
+     */
+    fun shouldBindSharedTabChrome(chromeActive: Boolean): Boolean = chromeActive
+
+    /**
+     * Overlay covers (chat, settings subpages, Add Click QR/NFC/Tap, Nearby) must keep the
+     * destination host chrome bound and clip it to the uncovered leading strip. Flipping
+     * [LocalNativeChromeActive] off remounts liquid glass when the overlay dismisses.
+     */
+    fun shouldKeepDestinationChromeBoundUnderOverlay(): Boolean = true
+
+    /**
+     * Map layer / zoom / drop controls are host-view siblings. Toggling `hidden` rematerializes
+     * liquid glass after Nearby dismiss. Clip to the uncovered strip instead.
+     */
+    fun shouldHideMapFloatingChromeForNearbyCover(nearbyCovering: Boolean): Boolean = false
+
+    /**
+     * After a completed swipe the destination header is already fully revealed (mask ≈ screen
+     * width). Clearing `CALayer.mask` rematerializes liquid glass / labels. Keep that mask.
+     * Tap-dismiss at rest (clip 0) still unclips so the hub/tab title can appear.
+     */
+    fun shouldClearLeadingClipOnOverlayHide(
+        uncoverLeadingPt: Double,
+        hostWidthPt: Double,
+    ): Boolean {
+        if (uncoverLeadingPt < 0.0) return false
+        if (hostWidthPt <= 0.0) return true
+        return uncoverLeadingPt < hostWidthPt * OverlayHideKeepClipFraction
+    }
+
+    /**
+     * `reset()` / overlay-key disposal drives slide offset to 0 while the overlay chrome is
+     * still composed (AnimatedVisibility exit, Settings hub `LaunchedEffect`). Applying
+     * identity after a completed swipe snaps My QR / Availability back on-screen for a frame.
+     */
+    fun shouldApplyOverlaySlideTransform(
+        overlayWantVisible: Boolean,
+        newOffsetPt: Double,
+        currentAppliedOffsetPt: Double,
+        hostWidthPt: Double,
+    ): Boolean {
+        if (!overlayWantVisible) return false
+        if (newOffsetPt > OverlayUncoverEpsilonPt) return true
+        if (hostWidthPt > 0.0 &&
+            currentAppliedOffsetPt >= hostWidthPt * OverlayCompletedSwipeFraction
+        ) {
+            return false
+        }
+        return true
+    }
+
+    /**
+     * Unsuppressing tab chrome after overlay dismiss must not re-run full `applyVisibility()`
+     * (that re-sets `glassPlate.hidden` and rematerializes Liquid Glass). Toggle hit-testing only.
+     */
+    fun shouldRematerializeChromeOnUnsuppress(): Boolean = false
+
+    /**
+     * Visible width of a host-view control that is not left-aligned, given a leading uncover
+     * strip in host coordinates. The nav bar sits at x=0 so this equals [uncoverLeadingPt].
+     */
+    fun hostLeadingClipWidthPt(
+        uncoverLeadingPt: Double,
+        viewMinXPt: Double,
+    ): Double = (uncoverLeadingPt - viewMinXPt).coerceAtLeast(0.0)
 }
 
 /** Status bar + interpolating native bar + collapsing subtitle overlay. */
@@ -154,9 +293,11 @@ fun platformNativeHeaderClearance(
     statusBarTop: Dp,
     collapseFraction: Float = 1f,
     hasSubtitle: Boolean = false,
+    stackSubtitle: Boolean = false,
 ): Dp =
     NativeHeaderMetrics.headerClearanceDp(
         statusBarTop = statusBarTop,
         collapseFraction = collapseFraction,
         hasSubtitle = hasSubtitle,
+        stackSubtitle = stackSubtitle,
     )

@@ -99,6 +99,7 @@ import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst /
 import compose.project.click.click.ui.chat.chatBubbleReplySnippetStyle // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatBubbleScaledDp // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatDismissKeyboardAfterScrollConnection // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatPeerStatusSubtitle // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimelineFollowUsesAnimation // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimelineShouldFollowInbound // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft // pragma: allowlist secret
@@ -338,16 +339,26 @@ fun ChatView(
                     ?.id ?: hintedChatRow?.otherUser?.id
             peerId?.let { it in onlineUsers || isPeerOnline }
         }
+    val bindStatusSubtitle =
+        if (bindIsGroup) {
+            null
+        } else if (bindOnline != null || successChat != null || hintedChatRow != null) {
+            chatPeerStatusSubtitle(isTyping = isPeerTyping, isOnline = bindOnline == true)
+        } else {
+            null
+        }
+    val chatNativeHasStackedSubtitle = bindStatusSubtitle != null
+    val chatNativeClearance =
+        platformNativeHeaderClearance(
+            statusBarTop = topInset,
+            collapseFraction = 1f,
+            hasSubtitle = chatNativeHasStackedSubtitle,
+            stackSubtitle = chatNativeHasStackedSubtitle,
+        )
     if (nativeNavChrome) {
         BindPlatformNativeNavigationBar(
             title = bindTitle,
-            subtitle =
-                when {
-                    bindIsGroup -> null
-                    bindOnline == true -> "Online"
-                    successChat != null || hintedChatRow != null -> "Offline"
-                    else -> null
-                },
+            subtitle = bindStatusSubtitle,
             presenceOnline = bindOnline,
             identity =
                 NativeChromeIdentity(
@@ -551,7 +562,7 @@ fun ChatView(
                 }
                 is ChatMessagesState.Error -> {
                     if (nativeNavChrome) {
-                        Spacer(modifier = Modifier.fillMaxWidth().height(platformNativeHeaderClearance(topInset)))
+                        Spacer(modifier = Modifier.fillMaxWidth().height(chatNativeClearance))
                     } else {
                         Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
                             Row(
@@ -861,7 +872,7 @@ fun ChatView(
                                     modifier =
                                         Modifier
                                             .fillMaxWidth()
-                                            .height(platformNativeHeaderClearance(topInset))
+                                            .height(chatNativeClearance)
                                             .testTag(ChatGlassHeaderPlateTestTag),
                                 )
                             } else {
@@ -870,12 +881,12 @@ fun ChatView(
                                         Modifier
                                             .fillMaxWidth()
                                             .padding(top = topInset)
-                                            .height(56.dp)
-                                            .padding(horizontal = ChatChromeHorizontalPadding)
+                                            .heightIn(min = 56.dp)
+                                            .padding(horizontal = ChatChromeHorizontalPadding, vertical = 6.dp)
                                             .testTag(ChatGlassHeaderPlateTestTag),
                                 ) {
                                     Row(
-                                        modifier = Modifier.fillMaxSize(),
+                                        modifier = Modifier.fillMaxWidth(),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     ) {
@@ -951,7 +962,11 @@ fun ChatView(
 
                                         Spacer(modifier = Modifier.width(12.dp))
 
-                                        Column(modifier = Modifier.weight(1f)) {
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            verticalArrangement =
+                                                Arrangement.spacedBy(3.dp, Alignment.CenterVertically),
+                                        ) {
                                             Text(
                                                 text = if (isGroupChat) groupTitle else (chatDetails.otherUser.name ?: "Unknown"),
                                                 style = MaterialTheme.typography.titleMedium,
@@ -971,12 +986,18 @@ fun ChatView(
                                             } else if (!isGroupChat) {
                                                 val subtitleOnline =
                                                     chatDetails.otherUser.id in onlineUsers || isPeerOnline
+                                                val statusText =
+                                                    chatPeerStatusSubtitle(
+                                                        isTyping = isPeerTyping,
+                                                        isOnline = subtitleOnline,
+                                                    )
+                                                val showOnlineDot = subtitleOnline && !isPeerTyping
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                                                 ) {
                                                     AnimatedVisibility(
-                                                        visible = subtitleOnline,
+                                                        visible = showOnlineDot,
                                                         enter = fadeIn() + expandVertically(),
                                                         exit = fadeOut() + shrinkVertically(),
                                                     ) {
@@ -989,7 +1010,7 @@ fun ChatView(
                                                         )
                                                     }
                                                     AnimatedContent(
-                                                        targetState = subtitleOnline,
+                                                        targetState = statusText,
                                                         transitionSpec = {
                                                             fadeIn(
                                                                 animationSpec =
@@ -1007,12 +1028,12 @@ fun ChatView(
                                                                 )
                                                         },
                                                         label = "peer_presence_subtitle",
-                                                    ) { online ->
+                                                    ) { label ->
                                                         Text(
-                                                            text = if (online) "Online" else "Offline",
+                                                            text = label,
                                                             style = MaterialTheme.typography.labelSmall,
                                                             color =
-                                                                if (online) {
+                                                                if (label == "Online") {
                                                                     Color(0xFF16A34A)
                                                                 } else {
                                                                     MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)

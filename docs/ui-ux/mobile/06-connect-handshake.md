@@ -8,6 +8,8 @@
 
 **Track C (landed):** `AddClickContent` order is **Tap to Connect** → My Code / Scan grid → hub links (`Create hub` / `Join hub`). Card dimensions unchanged; mock used for hierarchy only.
 
+**iOS overlay swipe:** My QR / Scan / Tap sit in `InteractiveSwipeBackContainer` over the Add Click hub. The hub native header stays bound and clipped for the whole drag. After a completed swipe, keep a full-width underlay mask and do not snap overlay chrome to identity (`addClickBackHost.reset()` still runs while that chrome is composed) — clearing the mask or applying identity flashed the hub title after land.
+
 **Glossary (event social graph):**
 - **Connection** — direct Click edge between you and another user.
 - **Mutual (FoF)** — attendee who is a connection of your connection (2nd degree). Shown for future reference only; **no Connect CTA** from the event directory. Distinct from **mutual keep** (`should_continue` both true).
@@ -88,7 +90,7 @@ Centered column: QR 300dp → 32dp spacer → instructional text. Back via heade
 
 ### QRScannerScreen
 
-Column: header (status bar inset + 20dp horizontal) → weighted camera viewport (24dp radius border) → status surface → 24dp bottom spacer. Error banner overlays bottom.
+Column: status-bar inset + native header (title + stacked instruction subtitle on iOS) → weighted camera viewport (24dp radius border) → status surface → 24dp bottom spacer. Error banner overlays bottom.
 
 ### NfcScreen
 
@@ -499,7 +501,7 @@ flowchart TD
 | Context sheet | Filter chips are standard Material3; custom field exposes label + error |
 | Reveal overlay | Icon decorative; headline/subcopy carry meaning |
 | App Clip | High-contrast white on `#0A0A0A`; full-width download button |
-| iOS header | `PageHeader` with status bar padding on QR/NFC |
+| iOS header | Native `UINavigationBar` owns title **and** stacked subtitle (`"Point camera at a Click code"` lives in the bar, not under the glass). Compact subpage chrome grows by one subtitle line so the instruction is fully visible. Compose `PageHeader` is spacer-only on iOS. |
 | Android ripple | `AdaptiveCard` onClick ripples on Add Click cards |
 | Bottom chrome | `bottomChromePadding()` on scanner and NFC |
 | Haptics | `PlatformHapticsPolicy` on reveal phases, context confirm, calendar lock |

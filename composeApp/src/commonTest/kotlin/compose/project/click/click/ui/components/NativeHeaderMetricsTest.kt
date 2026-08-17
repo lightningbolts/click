@@ -32,6 +32,188 @@ class NativeHeaderMetricsTest {
     }
 
     @Test
+    fun barHeight_stackedIdentityStaysCompactAndCentersOnAvatar() {
+        assertEquals(
+            52.0,
+            NativeHeaderMetrics.barHeightPt(1f, hasSubtitle = true, stackSubtitle = true),
+            0.01,
+        )
+        assertEquals(
+            52.0,
+            NativeHeaderMetrics.barHeightPt(1f, hasSubtitle = true, stackSubtitle = false),
+            0.01,
+        )
+        assertTrue(NativeHeaderMetrics.stackedIdentityColumnHeightPt() <= NativeHeaderMetrics.ChromeButtonSizePt)
+        assertEquals(26.0, NativeHeaderMetrics.CompactChromeCenterYPt, 0.01)
+    }
+
+    @Test
+    fun overlayUncover_clipsToDragOffsetNotCommitMidpoint() {
+        assertEquals(0.0, NativeHeaderMetrics.overlayUncoverLeadingWidthPt(0.0), 0.01)
+        assertEquals(0.0, NativeHeaderMetrics.overlayUncoverLeadingWidthPt(0.5), 0.01)
+        assertEquals(24.0, NativeHeaderMetrics.overlayUncoverLeadingWidthPt(24.0), 0.01)
+        assertEquals(200.0, NativeHeaderMetrics.overlayUncoverLeadingWidthPt(200.0), 0.01)
+    }
+
+    @Test
+    fun compactTabRoot_inlinesOnlyWithoutBackOrIdentity() {
+        assertTrue(NativeHeaderMetrics.isCompactTabRootChrome(1f, hasBack = false, hasIdentity = false))
+        assertTrue(!NativeHeaderMetrics.isCompactTabRootChrome(1f, hasBack = true, hasIdentity = false))
+        assertTrue(!NativeHeaderMetrics.isCompactTabRootChrome(1f, hasBack = false, hasIdentity = true))
+        assertTrue(!NativeHeaderMetrics.isCompactTabRootChrome(0f, hasBack = false, hasIdentity = false))
+    }
+
+    @Test
+    fun stackCompactSubtitle_forChatIdentityAndSubpages() {
+        assertTrue(
+            NativeHeaderMetrics.shouldStackCompactSubtitle(
+                hasBack = true,
+                hasIdentity = false,
+                hasSubtitle = true,
+                collapseFraction = 1f,
+            ),
+        )
+        assertTrue(
+            NativeHeaderMetrics.shouldStackCompactSubtitle(
+                hasBack = false,
+                hasIdentity = true,
+                hasSubtitle = true,
+                collapseFraction = 1f,
+            ),
+        )
+        assertTrue(
+            !NativeHeaderMetrics.shouldStackCompactSubtitle(
+                hasBack = false,
+                hasIdentity = false,
+                hasSubtitle = true,
+                collapseFraction = 1f,
+            ),
+        )
+    }
+
+    @Test
+    fun growCompactBar_onlyForSubpageSubtitleNotIdentity() {
+        assertTrue(
+            NativeHeaderMetrics.shouldGrowCompactBarForStackedSubtitle(
+                hasBack = true,
+                hasIdentity = false,
+                hasSubtitle = true,
+                collapseFraction = 1f,
+            ),
+        )
+        assertTrue(
+            !NativeHeaderMetrics.shouldGrowCompactBarForStackedSubtitle(
+                hasBack = true,
+                hasIdentity = true,
+                hasSubtitle = true,
+                collapseFraction = 1f,
+            ),
+        )
+        assertEquals(
+            70.0,
+            NativeHeaderMetrics.barHeightPt(
+                collapseFraction = 1f,
+                hasSubtitle = true,
+                growCompactSubtitle = true,
+            ),
+            0.01,
+        )
+        assertEquals(
+            52.0,
+            NativeHeaderMetrics.barHeightPt(
+                collapseFraction = 1f,
+                hasSubtitle = true,
+                stackSubtitle = true,
+                growCompactSubtitle = false,
+            ),
+            0.01,
+        )
+    }
+
+    @Test
+    fun tabChromeClip_onlyWhenTabHeaderIsLive() {
+        assertTrue(NativeHeaderMetrics.shouldClipTabChromeUnderOverlay(tabWantVisible = true))
+        assertTrue(!NativeHeaderMetrics.shouldClipTabChromeUnderOverlay(tabWantVisible = false))
+        assertTrue(NativeHeaderMetrics.shouldBindSharedTabChrome(chromeActive = true))
+        assertTrue(!NativeHeaderMetrics.shouldBindSharedTabChrome(chromeActive = false))
+        assertTrue(NativeHeaderMetrics.shouldKeepDestinationChromeBoundUnderOverlay())
+        assertTrue(!NativeHeaderMetrics.shouldHideMapFloatingChromeForNearbyCover(nearbyCovering = true))
+        assertTrue(!NativeHeaderMetrics.shouldHideMapFloatingChromeForNearbyCover(nearbyCovering = false))
+        assertTrue(!NativeHeaderMetrics.shouldRematerializeChromeOnUnsuppress())
+    }
+
+    @Test
+    fun overlayHide_keepsFullWidthUnderlayMaskAfterCompletedSwipe() {
+        assertTrue(!NativeHeaderMetrics.shouldClearLeadingClipOnOverlayHide(-1.0, 390.0))
+        assertTrue(NativeHeaderMetrics.shouldClearLeadingClipOnOverlayHide(0.0, 390.0))
+        assertTrue(NativeHeaderMetrics.shouldClearLeadingClipOnOverlayHide(200.0, 390.0))
+        assertTrue(!NativeHeaderMetrics.shouldClearLeadingClipOnOverlayHide(360.0, 390.0))
+        assertTrue(!NativeHeaderMetrics.shouldClearLeadingClipOnOverlayHide(390.0, 390.0))
+        assertTrue(NativeHeaderMetrics.shouldClearLeadingClipOnOverlayHide(0.0, 0.0))
+    }
+
+    @Test
+    fun overlaySlide_skipsIdentityTransformAfterCompletedSwipe() {
+        assertTrue(
+            NativeHeaderMetrics.shouldApplyOverlaySlideTransform(
+                overlayWantVisible = true,
+                newOffsetPt = 40.0,
+                currentAppliedOffsetPt = 20.0,
+                hostWidthPt = 390.0,
+            ),
+        )
+        assertTrue(
+            NativeHeaderMetrics.shouldApplyOverlaySlideTransform(
+                overlayWantVisible = true,
+                newOffsetPt = 0.0,
+                currentAppliedOffsetPt = 12.0,
+                hostWidthPt = 390.0,
+            ),
+        )
+        assertTrue(
+            !NativeHeaderMetrics.shouldApplyOverlaySlideTransform(
+                overlayWantVisible = true,
+                newOffsetPt = 0.0,
+                currentAppliedOffsetPt = 390.0,
+                hostWidthPt = 390.0,
+            ),
+        )
+        assertTrue(
+            !NativeHeaderMetrics.shouldApplyOverlaySlideTransform(
+                overlayWantVisible = true,
+                newOffsetPt = 0.0,
+                currentAppliedOffsetPt = 340.0,
+                hostWidthPt = 390.0,
+            ),
+        )
+        assertTrue(
+            !NativeHeaderMetrics.shouldApplyOverlaySlideTransform(
+                overlayWantVisible = false,
+                newOffsetPt = 0.0,
+                currentAppliedOffsetPt = 390.0,
+                hostWidthPt = 390.0,
+            ),
+        )
+        assertTrue(
+            !NativeHeaderMetrics.shouldApplyOverlaySlideTransform(
+                overlayWantVisible = false,
+                newOffsetPt = 48.0,
+                currentAppliedOffsetPt = 0.0,
+                hostWidthPt = 390.0,
+            ),
+        )
+    }
+
+    @Test
+    fun hostLeadingClip_revealsTrailingControlsAsOverlaySlides() {
+        assertEquals(0.0, NativeHeaderMetrics.hostLeadingClipWidthPt(0.0, viewMinXPt = 16.0), 0.01)
+        assertEquals(24.0, NativeHeaderMetrics.hostLeadingClipWidthPt(40.0, viewMinXPt = 16.0), 0.01)
+        assertEquals(0.0, NativeHeaderMetrics.hostLeadingClipWidthPt(200.0, viewMinXPt = 320.0), 0.01)
+        assertEquals(80.0, NativeHeaderMetrics.hostLeadingClipWidthPt(400.0, viewMinXPt = 320.0), 0.01)
+        assertEquals(200.0, NativeHeaderMetrics.hostLeadingClipWidthPt(200.0, viewMinXPt = 0.0), 0.01)
+    }
+
+    @Test
     fun titleMaxWidth_wrapsBeforeTrailingActions() {
         val leading = NativeHeaderMetrics.titleLeadingInsetPt(hasBack = false)
         val trailing = NativeHeaderMetrics.titleTrailingInsetPt(trailingCount = 2)

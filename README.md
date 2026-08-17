@@ -208,6 +208,7 @@ The KMP app does **not** embed click-web—it calls it over HTTP with the user's
 | LiveKit room token | `CallApiClient` | `GET /api/livekit/token` |
 | Waitlist | Marketing links | `POST /api/waitlist` |
 | Home widget vibe | `ApiClient.getWidgetVibe()` | `GET /api/insights/widget-vibe` |
+| Home activity recap | `ApiClient.getActivityRecap()` | `GET /api/me/recap?window=day\|week` |
 
 ### What mobile produces for B2B Click Insights
 

@@ -80,10 +80,6 @@ internal const val InteractiveSwipeBackParallaxPeekRatio = 0.3f
 
 private const val ParallaxBackgroundPeek = InteractiveSwipeBackParallaxPeekRatio
 
-/** Commit interactive back past the horizontal midpoint or on a fast rightward flick. */
-private const val SwipeBackCommitFraction = GlassGestureCommitFraction
-private const val SwipeBackFlickVelocityPxPerSec = GlassGestureFlickVelocityPxPerSec
-
 /**
  * iOS-style interactive back container:
  * - Slide transform uses [Modifier.graphicsLayer] so [translationX] is read only during draw;
@@ -150,7 +146,6 @@ fun InteractiveSwipeBackContainer(
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
-        val commitThresholdPx = widthPx * SwipeBackCommitFraction
         val showPreviousLayer = isGestureActive || isSettling
         var lastBehindLayersVisible by remember { mutableStateOf<Boolean?>(null) }
 
@@ -195,7 +190,11 @@ fun InteractiveSwipeBackContainer(
             }
 
             val shouldComplete =
-                currentOffset > commitThresholdPx || velocityX > SwipeBackFlickVelocityPxPerSec
+                shouldCommitInteractiveBack(
+                    offsetPx = currentOffset,
+                    widthPx = widthPx,
+                    velocityXPxPerSec = velocityX,
+                )
             val target = if (shouldComplete) widthPx else 0f
             isSettling = true
 
@@ -213,16 +212,21 @@ fun InteractiveSwipeBackContainer(
                             initialVelocity = releaseVelocity,
                             animationSpec =
                                 spring(
-                                    dampingRatio = if (shouldComplete) 0.72f else 0.58f,
+                                    dampingRatio =
+                                        if (shouldComplete) {
+                                            InteractiveBackCommitDampingRatio
+                                        } else {
+                                            InteractiveBackCancelDampingRatio
+                                        },
                                     stiffness = Spring.StiffnessMediumLow,
                                 ),
                         ) { value, _ ->
                             offsetPx.floatValue =
-                                if (shouldComplete) {
-                                    value.coerceAtLeast(widthPx * 0.99f)
-                                } else {
-                                    value
-                                }
+                                clampInteractiveBackSettleOffset(
+                                    value = value,
+                                    widthPx = widthPx,
+                                    committing = shouldComplete,
+                                )
                             notifySwipeOffset()
                         }
 

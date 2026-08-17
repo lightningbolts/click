@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:property-naming")
+
 package compose.project.click.click.ui.components
 
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -24,6 +26,15 @@ internal const val GlassGestureFlickVelocityPxPerSec = 800f
 /** Fraction of travel past which a drag commits without a flick. */
 internal const val GlassGestureCommitFraction = 0.5f
 
+/**
+ * Interactive-back settle. Slightly under-damped so cancel and commit both land with a
+ * small iOS-like jiggle. `DampingRatioNoBouncy` plus a 0..width clamp killed commit settle.
+ */
+internal const val InteractiveBackCancelDampingRatio = 0.82f
+internal const val InteractiveBackCommitDampingRatio = 0.78f
+internal const val InteractiveBackCommitOvershootRatio = 0.045f
+internal const val InteractiveBackCancelOvershootRatio = 0.028f
+
 internal fun shouldCommitVerticalDismiss(
     offsetPx: Float,
     travelPx: Float,
@@ -32,6 +43,38 @@ internal fun shouldCommitVerticalDismiss(
     val travel = travelPx.coerceAtLeast(1f)
     return offsetPx > travel * GlassGestureCommitFraction ||
         velocityPxPerSec > GlassGestureFlickVelocityPxPerSec
+}
+
+/**
+ * Interactive-back commit: past the horizontal midpoint, or a fast rightward flick.
+ * Completing routes must animate remaining travel with the release velocity — never
+ * snap the offset to the trailing edge in a single frame.
+ */
+internal fun shouldCommitInteractiveBack(
+    offsetPx: Float,
+    widthPx: Float,
+    velocityXPxPerSec: Float,
+): Boolean {
+    val width = widthPx.coerceAtLeast(1f)
+    return offsetPx > width * GlassGestureCommitFraction ||
+        velocityXPxPerSec > GlassGestureFlickVelocityPxPerSec
+}
+
+/**
+ * Finger tracking stays 1:1 inside 0..width. After lift, the spring may overshoot slightly
+ * past rest (cancel) or past the trailing edge (commit) so the landing jiggle is visible.
+ */
+internal fun clampInteractiveBackSettleOffset(
+    value: Float,
+    widthPx: Float,
+    committing: Boolean,
+): Float {
+    val width = widthPx.coerceAtLeast(1f)
+    return if (committing) {
+        value.coerceIn(0f, width * (1f + InteractiveBackCommitOvershootRatio))
+    } else {
+        value.coerceIn(-width * InteractiveBackCancelOvershootRatio, width)
+    }
 }
 
 /**
@@ -62,20 +105,21 @@ fun rememberGlassModalBottomSheetState(
     val lastOffsetPx = remember { mutableFloatStateOf(0f) }
     val lastSampleMs = remember { mutableLongStateOf(0L) }
 
-    val sheetState = rememberModalBottomSheetState(
-        skipPartiallyExpanded = skipPartiallyExpanded,
-        confirmValueChange = { target ->
-            when (target) {
-                SheetValue.Hidden ->
-                    shouldCommitVerticalDismiss(
-                        offsetPx = offsetPx.floatValue,
-                        travelPx = travelPx,
-                        velocityPxPerSec = velocityPxPerSec.floatValue,
-                    )
-                else -> true
-            }
-        },
-    )
+    val sheetState =
+        rememberModalBottomSheetState(
+            skipPartiallyExpanded = skipPartiallyExpanded,
+            confirmValueChange = { target ->
+                when (target) {
+                    SheetValue.Hidden ->
+                        shouldCommitVerticalDismiss(
+                            offsetPx = offsetPx.floatValue,
+                            travelPx = travelPx,
+                            velocityPxPerSec = velocityPxPerSec.floatValue,
+                        )
+                    else -> true
+                }
+            },
+        )
 
     LaunchedEffect(sheetState, travelPx) {
         snapshotFlow {
@@ -103,9 +147,7 @@ fun rememberGlassModalBottomSheetState(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun rememberGlassAdaptiveSheetState(
-    skipPartiallyExpanded: Boolean = false,
-): AdaptiveSheetState {
+fun rememberGlassAdaptiveSheetState(skipPartiallyExpanded: Boolean = false): AdaptiveSheetState {
     val density = LocalDensity.current
     val positionalThresholdToPx = { with(density) { 56.dp.toPx() } }
     val velocityThresholdToPx = { GlassGestureFlickVelocityPxPerSec }

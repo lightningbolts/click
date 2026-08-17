@@ -78,16 +78,24 @@ class InteractiveBackHostState {
     suspend fun dismiss(
         animationSpec: AnimationSpec<Float> =
             spring(
-                dampingRatio = 0.58f,
+                dampingRatio = InteractiveBackCommitDampingRatio,
                 stiffness = Spring.StiffnessMediumLow,
             ),
     ) {
         behindLayersVisible = true
+        val width = measuredWidthPx.coerceAtLeast(1f)
         animate(
             initialValue = dragOffsetPx.floatValue,
-            targetValue = measuredWidthPx.coerceAtLeast(1f),
+            targetValue = width,
             animationSpec = animationSpec,
-        ) { value, _ -> dragOffsetPx.floatValue = value }
+        ) { value, _ ->
+            dragOffsetPx.floatValue =
+                clampInteractiveBackSettleOffset(
+                    value = value,
+                    widthPx = width,
+                    committing = true,
+                )
+        }
     }
 }
 

@@ -30,6 +30,20 @@ import compose.project.click.click.ui.theme.PrimaryBlue
 internal val ChatChromeHorizontalPadding: Dp = 16.dp
 
 /**
+ * Second row of the chat identity block (under the username). Typing wins over
+ * presence so the top bar never tries to render both on one horizontal line.
+ */
+internal fun chatPeerStatusSubtitle(
+    isTyping: Boolean,
+    isOnline: Boolean,
+): String =
+    when {
+        isTyping -> "Typing…"
+        isOnline -> "Online"
+        else -> "Offline"
+    }
+
+/**
  * Circular header action for chat / hub threads.
  *
  * Prefer [showBorder]=true only for the primary back control. Trailing actions (edit / call / ⋮)

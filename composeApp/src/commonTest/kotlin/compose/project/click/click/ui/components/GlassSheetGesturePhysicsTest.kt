@@ -1,6 +1,7 @@
 package compose.project.click.click.ui.components
 
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -21,6 +22,46 @@ class GlassSheetGesturePhysicsTest {
                 velocityPxPerSec = 0f,
             ),
         )
+    }
+
+    @Test
+    fun interactiveBack_commitsPastMidpointOrOnFlick() {
+        assertFalse(
+            shouldCommitInteractiveBack(
+                offsetPx = 200f,
+                widthPx = 400f,
+                velocityXPxPerSec = 0f,
+            ),
+        )
+        assertTrue(
+            shouldCommitInteractiveBack(
+                offsetPx = 201f,
+                widthPx = 400f,
+                velocityXPxPerSec = 0f,
+            ),
+        )
+        assertTrue(
+            shouldCommitInteractiveBack(
+                offsetPx = 40f,
+                widthPx = 400f,
+                velocityXPxPerSec = GlassGestureFlickVelocityPxPerSec + 1f,
+            ),
+        )
+    }
+
+    @Test
+    fun interactiveBack_settleAllowsCommitAndCancelOvershoot() {
+        assertEquals(400f, clampInteractiveBackSettleOffset(400f, 400f, committing = true))
+        assertEquals(
+            400f * (1f + InteractiveBackCommitOvershootRatio),
+            clampInteractiveBackSettleOffset(500f, 400f, committing = true),
+        )
+        assertEquals(0f, clampInteractiveBackSettleOffset(-8f, 400f, committing = true))
+        assertEquals(
+            -400f * InteractiveBackCancelOvershootRatio,
+            clampInteractiveBackSettleOffset(-50f, 400f, committing = false),
+        )
+        assertEquals(12f, clampInteractiveBackSettleOffset(12f, 400f, committing = false))
     }
 
     @Test

@@ -43,7 +43,6 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
@@ -320,26 +319,36 @@ fun PageHeader(
             nativeTrailingActions = nativeTrailingActions,
             collapseFraction = 1f,
         )
+        val hasSub = !subtitle.isNullOrBlank() || presenceOnline != null
+        val hasBack = onNavigateBack != null
+        val stackSubtitle =
+            NativeHeaderMetrics.shouldStackCompactSubtitle(
+                hasBack = hasBack,
+                hasIdentity = false,
+                hasSubtitle = hasSub,
+                collapseFraction = 1f,
+            )
+        val growCompactSubtitle =
+            NativeHeaderMetrics.shouldGrowCompactBarForStackedSubtitle(
+                hasBack = hasBack,
+                hasIdentity = false,
+                hasSubtitle = hasSub,
+                collapseFraction = 1f,
+            )
         Column(modifier = Modifier.fillMaxWidth()) {
             Spacer(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .height(NativeHeaderMetrics.barHeightDp(1f)),
+                        .height(
+                            NativeHeaderMetrics.barHeightDp(
+                                collapseFraction = 1f,
+                                hasSubtitle = hasSub,
+                                stackSubtitle = stackSubtitle,
+                                growCompactSubtitle = growCompactSubtitle,
+                            ),
+                        ),
             )
-            if (!subtitle.isNullOrBlank()) {
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-                )
-            }
-            if (presenceOnline != null) {
-                PresenceSubtitleRow(online = presenceOnline)
-            }
         }
         return
     }
