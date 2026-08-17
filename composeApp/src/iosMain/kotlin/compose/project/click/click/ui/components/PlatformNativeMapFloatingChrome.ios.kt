@@ -267,8 +267,7 @@ internal object IosHostMapFloatingChrome {
         CATransaction.commit()
     }
 
-    private fun chromeButtons(): List<UIButton> =
-        listOf(layerButton, dropButton, zoomInButton, zoomOutButton)
+    private fun chromeButtons(): List<UIButton> = listOf(layerButton, dropButton, zoomInButton, zoomOutButton)
 
     fun detach() {
         chromeButtons().forEach { button ->
