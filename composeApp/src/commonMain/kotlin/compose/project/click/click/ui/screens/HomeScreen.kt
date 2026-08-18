@@ -1618,72 +1618,72 @@ internal fun HomeAvailabilityIntentsRow(
                 }
             }
         } else {
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            intents.forEach { row ->
-                val label =
-                    row.intentTag
-                        ?.trim()
-                        .orEmpty()
-                        .ifEmpty { "Intent" }
-                val sub = row.activeUntilLabel()
-                AssistChip(
-                    onClick = { onEditIntent(row) },
-                    label = {
-                        Column(modifier = Modifier.padding(vertical = 2.dp)) {
-                            Text(
-                                label,
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            if (sub.isNotBlank()) {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                intents.forEach { row ->
+                    val label =
+                        row.intentTag
+                            ?.trim()
+                            .orEmpty()
+                            .ifEmpty { "Intent" }
+                    val sub = row.activeUntilLabel()
+                    AssistChip(
+                        onClick = { onEditIntent(row) },
+                        label = {
+                            Column(modifier = Modifier.padding(vertical = 2.dp)) {
                                 Text(
-                                    sub,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    label,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
+                                if (sub.isNotBlank()) {
+                                    Text(
+                                        sub,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
                             }
-                        }
+                        },
+                        shape = RoundedCornerShape(22.dp),
+                        border = BorderStroke(clickBorderWidth(), clickBorderColor()),
+                        colors =
+                            AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                labelColor = MaterialTheme.colorScheme.onSurface,
+                            ),
+                    )
+                }
+                AssistChip(
+                    onClick = onCreateIntent,
+                    label = {
+                        Text(
+                            if (intents.isEmpty()) "Set what you're down for" else "Add intent",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                     },
                     shape = RoundedCornerShape(22.dp),
                     border = BorderStroke(clickBorderWidth(), clickBorderColor()),
                     colors =
                         AssistChipDefaults.assistChipColors(
-                            containerColor = MaterialTheme.colorScheme.surface,
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
                             labelColor = MaterialTheme.colorScheme.onSurface,
                         ),
                 )
             }
-            AssistChip(
-                onClick = onCreateIntent,
-                label = {
-                    Text(
-                        if (intents.isEmpty()) "Set what you're down for" else "Add intent",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                },
-                leadingIcon = {
-                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                },
-                shape = RoundedCornerShape(22.dp),
-                border = BorderStroke(clickBorderWidth(), clickBorderColor()),
-                colors =
-                    AssistChipDefaults.assistChipColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        labelColor = MaterialTheme.colorScheme.onSurface,
-                    ),
-            )
-        }
         }
     }
 }

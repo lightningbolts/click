@@ -29,6 +29,7 @@ object MotionTokens {
     object PressScale {
         /** Strong enough to read on a light tap; still bouncy on release. */
         const val PressedScale = 0.92f
+
         /** WhatsApp-parity list/card tap: nearly full size, still perceptible. */
         const val CardPressedScale = 0.97f
         const val DampingRatio = Spring.DampingRatioMediumBouncy

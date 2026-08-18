@@ -97,16 +97,14 @@ import compose.project.click.click.sensors.rememberAmbientNoiseMonitor // pragma
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickButtonVariant // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickInsetDivider // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickSettingsDividerIndent // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvailabilitySheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickButtonVariant // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickInsetDivider // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickNavRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickSettingsDividerIndent // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.HeaderBackIconButton // pragma: allowlist secret
@@ -119,7 +117,6 @@ import compose.project.click.click.ui.components.interactiveSwipeBackUnderlay //
 import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberInteractiveBackHostState // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberUnifiedToastState // pragma: allowlist secret
-import compose.project.click.click.ui.theme.ClickAccent // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret

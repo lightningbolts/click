@@ -1,3 +1,8 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:property-naming",
+)
+
 package compose.project.click.click.ui.chat // pragma: allowlist secret
 
 import androidx.compose.animation.core.Animatable
@@ -28,21 +33,24 @@ internal fun Modifier.connectionRowPressGestures(
     interactionSource: MutableInteractionSource,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
-): Modifier = combinedClickable(
-    interactionSource = interactionSource,
-    indication = ripple(bounded = true, color = PrimaryBlue.copy(alpha = 0.16f)),
-    onClick = onClick,
-    onLongClick = {
-        PlatformHapticsPolicy.heavyImpact()
-        onLongPress()
-    },
-)
+): Modifier =
+    combinedClickable(
+        interactionSource = interactionSource,
+        indication = ripple(bounded = true, color = PrimaryBlue.copy(alpha = 0.16f)),
+        onClick = onClick,
+        onLongClick = {
+            PlatformHapticsPolicy.heavyImpact()
+            onLongPress()
+        },
+    )
 
 /** Clear full-row wash on press — no left-edge accent (that sat under the avatar). */
 private val PressHighlightIn = tween<Float>(durationMillis = 140, easing = FastOutSlowInEasing)
 private val PressHighlightOut = tween<Float>(durationMillis = 380, easing = LinearOutSlowInEasing)
+
 /** Stronger than the original 0.14, without a harsh left bar. */
 private const val PressHighlightAlpha = 0.18f
+
 /** Brief hold after a solid press so the wash survives into the chat transition. */
 private const val PressHighlightHoldMs = 140L
 
@@ -53,9 +61,7 @@ private const val PressHighlightHoldMs = 140L
  * still shows a clear tapped-row flash under the push.
  */
 @Composable
-internal fun Modifier.connectionRowPressHighlight(
-    interactionSource: MutableInteractionSource,
-): Modifier {
+internal fun Modifier.connectionRowPressHighlight(interactionSource: MutableInteractionSource): Modifier {
     val wash = remember { Animatable(0f) }
     LaunchedEffect(interactionSource) {
         interactionSource.interactions.collect { interaction ->

@@ -45,8 +45,7 @@ fun AdaptiveCard(
             .graphicsLayer {
                 scaleX = pressScale
                 scaleY = pressScale
-            }
-            .border(
+            }.border(
                 width = clickBorderWidth(),
                 color = clickBorderColor(),
                 shape = shape,

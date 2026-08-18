@@ -10,7 +10,6 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -77,12 +76,12 @@ import compose.project.click.click.ui.components.ClickListRowShimmer // pragma: 
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickPlatformListRowHeight // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionsSegmentBar // pragma: allowlist secret
-import compose.project.click.click.ui.components.platformPressScale // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassToastHost // pragma: allowlist secret
 import compose.project.click.click.ui.components.LocalGlassAlertAnimatedDismiss // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
+import compose.project.click.click.ui.components.platformPressScale // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberGlassToastState // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetPageBackground // pragma: allowlist secret
@@ -1247,8 +1246,7 @@ private fun ActiveHubFeedRow(
                             interactionSource = rowInteraction,
                             onClick = onClick,
                             onLongPress = onLongPress,
-                        )
-                        .padding(start = 16.dp, end = 4.dp),
+                        ).padding(start = 16.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(

@@ -38,7 +38,6 @@ import androidx.compose.material.icons.filled.Celebration
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Warning
@@ -861,8 +860,7 @@ private fun DiscoveryEventCard(
                                         Color.Black.copy(alpha = 0.6f),
                                     ),
                             ),
-                        )
-                        .padding(12.dp),
+                        ).padding(12.dp),
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
