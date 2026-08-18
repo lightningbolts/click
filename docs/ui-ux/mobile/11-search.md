@@ -94,11 +94,11 @@ GlobalSearchScreen (@Deprecated — full-screen scaffold, same VM + row componen
 
 | Condition | UI |
 |-----------|-----|
-| `isSearching` | Center `ClickLogoPulse` (72dp) |
+| `isSearching && results.isEmpty` | Center `ClickLogoPulse` (72dp) |
 | `query.isBlank()` | `EmptySearchHint` + search icon |
-| `results.isEmpty` (query non-blank) | `EmptySearchHint` + search-off icon |
+| `results.isEmpty` (query non-blank, not searching) | `EmptySearchHint` + search-off icon |
 | `visibleResults.isEmpty` (filters exclude all) | Filter-mismatch hint |
-| Else | `UnifiedSearchResultsList` |
+| Else | `UnifiedSearchResultsList` (kept visible while a later message scan is still in flight) |
 
 ### Filter chips
 
@@ -212,8 +212,8 @@ flowchart TD
     D -->|blank| E[Empty hint — scope examples]
     D -->|query| F[GlobalSearchViewModel.search]
     F --> G{Results?}
-    G -->|loading| H[ClickLogoPulse]
-    G -->|none| I["No results for query"]
+    G -->|loading and empty| H[ClickLogoPulse]
+    G -->|none after search| I["No results for query"]
     G -->|some| J[Apply filter chips]
     J --> K{visibleResults empty?}
     K -->|yes| L[Filter mismatch hint]
@@ -253,6 +253,6 @@ flowchart TD
 
 ## 7. Message deep-link
 
-`MessageSearchResult` carries `messageId` (via `message.id`), `chatId`, `connectionId` / hub ids, `senderId` (`message.user_id`), timestamp, and a highlighted `snippet`. Hub messages from `hub_messages` are included (Nearby chip, `"Hub"` badge).
+`GlobalSearchViewModel.search` debounces keystrokes (300ms), refreshes the JWT, then aggregates local SSOT matches (people, cliques, beacons, intents, places). Message hits come from click-web `GET /api/chat/search` first; if that returns empty, a bounded local/decrypted scan still runs. Cancelled keystrokes rethrow `CancellationException` so a newer query keeps `isSearching` until it finishes.
 
 Tapping a message hit passes `SearchChatOpenTarget.targetMessageId` into `ChatView` or `HubChatScreen`. The timeline paginates (1:1/group) or loads an around-window (hub) until that id is present, scrolls it into view, and applies `ChatSearchFocusFrame` for ~1.8s.

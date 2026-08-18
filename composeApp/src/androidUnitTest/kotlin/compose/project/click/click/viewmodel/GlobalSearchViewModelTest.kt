@@ -15,13 +15,16 @@ import compose.project.click.click.data.models.MapBeaconMetadata
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.syntheticConnectionForGroupClique
+import compose.project.click.click.data.repository.ConversationSearchHit // pragma: allowlist secret
 import compose.project.click.click.data.repository.UnifiedSearchSupplement
 import compose.project.click.click.data.storage.FakeTokenStorage
 import compose.project.click.click.data.storage.initTokenStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -399,6 +402,81 @@ class GlobalSearchViewModelTest {
             assertEquals("hub-m1", target?.targetMessageId)
             assertEquals("hub-1", target?.hubId)
             assertTrue(target?.isHub == true)
+        }
+
+    @Test
+    fun conversationApiHits_becomeDeepLinkableMessageRows() =
+        runVmTest {
+            val fake =
+                FakeChatRepository(
+                    onFetchDirectUserChatsWithDetails = { emptyList() },
+                    onFetchArchivedUserChatsWithDetails = { emptyList() },
+                    onFetchGroupUserChatsWithDetails = { emptyList() },
+                    onSearchConversationHits = {
+                        listOf(
+                            ConversationSearchHit( // pragma: allowlist secret
+                                messageId = "api-m1",
+                                chatId = "chat-1",
+                                conversationId = "conn-1",
+                                connectionId = "conn-1",
+                                senderId = PEER_A,
+                                timestamp = 9_000L,
+                                snippet = "…blue notebook…",
+                                chatName = "Bo",
+                            ),
+                        )
+                    },
+                )
+            val vm = newVm(fake)
+            vm.search("notebook", VIEWER)
+            drainSearchWork()
+            val hit =
+                vm.results.value.items
+                    .filterIsInstance<SearchResult.MessageHit>()
+                    .single()
+            assertEquals("api-m1", hit.toChatOpenTarget()?.targetMessageId)
+            assertEquals("conn-1", hit.toChatOpenTarget()?.connectionId)
+        }
+
+    @Test
+    fun debounceCancel_keepsSearchingUntilLatestQueryFinishes() =
+        runTest {
+            val dispatcher = StandardTestDispatcher(testScheduler)
+            Dispatchers.setMain(dispatcher)
+            try {
+                val active = listOf(directChat(VIEWER, PEER_A, "conn-a", "Alice Anderson"))
+                val fake =
+                    FakeChatRepository(
+                        onFetchDirectUserChatsWithDetails = { if (it == VIEWER) active else emptyList() },
+                        onFetchArchivedUserChatsWithDetails = { emptyList() },
+                        onFetchGroupUserChatsWithDetails = { emptyList() },
+                    )
+                val vm =
+                    GlobalSearchViewModel(
+                        tokenStorage = FakeTokenStorage(),
+                        chatRepository = fake,
+                        junctionArchivedConnectionIds = { emptySet() },
+                        junctionHiddenConnectionIds = { emptySet() },
+                        searchDebounceMs = 300L,
+                        fetchOwnAvailabilityIntents = { emptyList() },
+                        fetchBeaconsForSearch = { _, _ -> emptyList() },
+                        resolveSearchLocation = { null },
+                    )
+                vm.search("al", VIEWER)
+                assertTrue(vm.isSearching.value)
+                vm.search("alice", VIEWER)
+                assertTrue(vm.isSearching.value)
+                assertTrue(vm.results.value.isEmpty)
+                advanceTimeBy(300)
+                advanceUntilIdle()
+                assertFalse(vm.isSearching.value)
+                assertTrue(
+                    vm.results.value.items
+                        .any { it is SearchResult.ActiveConnection },
+                )
+            } finally {
+                Dispatchers.resetMain()
+            }
         }
 
     @Test

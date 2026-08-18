@@ -10,6 +10,20 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.JsonElement
 
+data class ConversationSearchHit(
+    val messageId: String,
+    val chatId: String,
+    val conversationId: String,
+    val connectionId: String,
+    val senderId: String,
+    val timestamp: Long,
+    val snippet: String,
+    val chatName: String,
+    val isHub: Boolean = false,
+    val hubId: String? = null,
+    val hubRealtimeChannel: String? = null,
+)
+
 /** Handle for attaching/detaching a Supabase realtime messages channel (testable without [RealtimeChannel]). */
 interface ChatMessageSubscription {
     suspend fun attach()
@@ -246,6 +260,12 @@ interface ChatRepository {
     suspend fun resolveChatIdForGroupId(groupId: String): String?
 
     suspend fun searchMessagesByConnectionId(connectionId: String, query: String): Pair<String?, List<Message>>
+
+    /**
+     * Server-side plaintext message search via click-web `GET /api/chat/search`.
+     * Encrypted bodies will not match; callers still scan local/decrypted caches.
+     */
+    suspend fun searchConversationHits(query: String): List<ConversationSearchHit>
 
     /**
      * Loads [user_interests] and active [availability_intents] rows for [peerUserIds]

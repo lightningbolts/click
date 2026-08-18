@@ -290,7 +290,7 @@ Shown when: `showIcebreakerPanel && prompts.nonEmpty() && messages.size < 5`.
 
 Shown once under the **newest sent** message in **DM and group** threads.
 
-Hub chats omit receipts: `hub_messages` has no `delivered_at` / `read_at`. `HubChatScreen` passes `newestSentMessage = null` and does **not** force `isRead = true`. Do not add a hub receipt schema for this polish.
+Hub chats omit receipts: `hub_messages` has no `delivered_at` / `read_at`. `HubChatScreen` passes `newestSentMessage = null` and does **not** force `isRead = true`. Do not add a hub receipt schema for this polish. Opening a hub hydrates `GET /api/hub/messages` and subscribes with the same 8s Realtime timeout as 1:1 chat so the pulsing logo cannot hang forever.
 
 | `MessageDeliveryState` / read | Icon semantics (`contentDescription`) |
 |-------------------------------|---------------------------------------|

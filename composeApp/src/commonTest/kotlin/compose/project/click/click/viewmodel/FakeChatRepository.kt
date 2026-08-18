@@ -10,6 +10,7 @@ import compose.project.click.click.data.repository.ChatMessageSubscription
 import compose.project.click.click.data.repository.ChatRealtimeEvent
 import compose.project.click.click.data.repository.ChatRepository
 import compose.project.click.click.data.repository.ChatTimelineCache
+import compose.project.click.click.data.repository.ConversationSearchHit // pragma: allowlist secret
 import compose.project.click.click.data.repository.PresenceHealth
 import compose.project.click.click.data.repository.UnifiedSearchSupplement
 import compose.project.click.click.data.repository.MessageChangeEvent
@@ -64,6 +65,7 @@ class FakeChatRepository(
         { _, _ -> UnifiedSearchSupplement.EMPTY },
     var onSearchMessagesByConnectionId: suspend (connectionId: String, query: String) -> Pair<String?, List<Message>> =
         { _, _ -> null to emptyList() },
+    var onSearchConversationHits: suspend (String) -> List<ConversationSearchHit> = { emptyList() }, // pragma: allowlist secret
 ) : ChatRepository {
 
     private val _onlineUsers = MutableStateFlow<Set<String>>(emptySet())
@@ -253,6 +255,9 @@ class FakeChatRepository(
 
     override suspend fun searchMessagesByConnectionId(connectionId: String, query: String): Pair<String?, List<Message>> =
         onSearchMessagesByConnectionId(connectionId, query)
+
+    override suspend fun searchConversationHits(query: String): List<ConversationSearchHit> = // pragma: allowlist secret
+        onSearchConversationHits(query)
 
     override suspend fun unifiedSearchSupplement(
         viewerUserId: String,

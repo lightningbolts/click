@@ -203,7 +203,7 @@ private fun UnifiedSearchSheetContent(
                         .weight(1f),
             ) {
                 when {
-                    isSearching -> {
+                    isSearching && results.isEmpty -> {
                         ClickLogoPulse(
                             modifier = Modifier.align(Alignment.Center),
                             logoSize = 72.dp,

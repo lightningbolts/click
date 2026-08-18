@@ -59,8 +59,8 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import compose.project.click.click.data.realtime.subscribeWithTimeout // pragma: allowlist secret
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.Clock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -273,7 +273,7 @@ class SupabaseChatRepository(
             }
 
             try {
-                if (!channel.subscribeWithTimeout()) {
+                if (!channel.subscribeWithTimeout()) { // pragma: allowlist secret
                     _presenceHealth.value = PresenceHealth.Degraded
                     presenceJob.cancel()
                     scope.cancel()
@@ -2224,7 +2224,7 @@ class SupabaseChatRepository(
 
         try {
             // Subscribe outside the mutex so leaveChatEphemeralChannel is not blocked for 8s.
-            if (!channel.subscribeWithTimeout()) {
+            if (!channel.subscribeWithTimeout()) { // pragma: allowlist secret
                 println("ChatRepository: join chat ephemeral subscribe timed out")
                 abandonJoin()
                 return
@@ -2326,8 +2326,11 @@ class SupabaseChatRepository(
 
     override suspend fun searchMessages(chatId: String, query: String): List<Message> {
         return try {
-            val allMessages = fetchMessagesForChat(chatId, null) ?: return emptyList()
+            val viewer = AppDataManager.currentUser.value?.id
+            val allMessages = fetchMessagesForChat(chatId, viewer, limit = 80) ?: return emptyList()
             allMessages.filter { it.content.contains(query, ignoreCase = true) }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             println("Error searching messages: ${e.redactedRestMessage()}")
             emptyList()
@@ -2374,6 +2377,37 @@ class SupabaseChatRepository(
             else -> emptyList()
         }
         return resolvedChatId to messages
+    }
+
+    override suspend fun searchConversationHits(query: String): List<ConversationSearchHit> {
+        val q = query.trim()
+        if (q.length < 2) return emptyList()
+        return try {
+            val token = ensureFreshJwtForChat() ?: return emptyList()
+            apiClient.searchConversations(q, token).getOrElse { err ->
+                println("ChatRepository: conversation search failed: ${err.redactedRestMessage()}")
+                return emptyList()
+            }.map { dto ->
+                ConversationSearchHit(
+                    messageId = dto.messageId,
+                    chatId = dto.chatId,
+                    conversationId = dto.conversationId,
+                    connectionId = dto.connectionId,
+                    senderId = dto.senderId,
+                    timestamp = dto.timestamp,
+                    snippet = dto.snippet,
+                    chatName = dto.chatName,
+                    isHub = dto.isHub,
+                    hubId = dto.hubId,
+                    hubRealtimeChannel = dto.hubRealtimeChannel,
+                )
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            println("ChatRepository: searchConversationHits failed: ${e.redactedRestMessage()}")
+            emptyList()
+        }
     }
 
     override suspend fun unifiedSearchSupplement(
@@ -2923,26 +2957,12 @@ class SupabaseChatRepository(
 
 private class SupabaseMessageSubscription(private val channel: RealtimeChannel) : ChatMessageSubscription {
     override suspend fun attach() {
-        if (!channel.subscribeWithTimeout()) {
+        if (!channel.subscribeWithTimeout()) { // pragma: allowlist secret
             throw IllegalStateException("Realtime channel subscribe timed out")
         }
     }
     override suspend fun detach() = channel.unsubscribe()
 }
-
-private suspend fun RealtimeChannel.subscribeWithTimeout(
-    timeoutMs: Long = REALTIME_SUBSCRIBE_TIMEOUT_MS,
-): Boolean {
-    return withTimeoutOrNull(timeoutMs) {
-        subscribe(blockUntilSubscribed = true)
-        true
-    } ?: run {
-        println("ChatRepository: channel subscribe timed out after ${timeoutMs}ms")
-        false
-    }
-}
-
-private const val REALTIME_SUBSCRIBE_TIMEOUT_MS = 8_000L
 
 private const val EPHEMERAL_SESSION_POLL_MS = 50L
 private const val EPHEMERAL_SESSION_WAIT_STEPS = 100
