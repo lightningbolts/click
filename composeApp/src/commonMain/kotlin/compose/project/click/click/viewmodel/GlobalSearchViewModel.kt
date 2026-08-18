@@ -282,7 +282,8 @@ class GlobalSearchViewModel(
     private val searchHubMessages: suspend (hubId: String, query: String) -> List<Message> = { hubId, query ->
         searchHubMessagesByQuery(hubId, query)
     },
-    private val searchConversationHits: suspend (String) -> List<ConversationSearchHit> = { query -> // pragma: allowlist secret
+    private val searchConversationHits: suspend (String) -> List<ConversationSearchHit> = { query ->
+        // pragma: allowlist secret
         chatRepository.searchConversationHits(query)
     },
 ) : ViewModel() {
@@ -478,6 +479,7 @@ class GlobalSearchViewModel(
                     .sortedByDescending { row ->
                         row.lastMessage?.timeCreated ?: row.connection.last_message_at ?: row.connection.created
                     }
+
             fun localMessageHits(
                 row: ChatWithDetails,
                 chatName: String,
@@ -510,8 +512,9 @@ class GlobalSearchViewModel(
             }
             val localDirect =
                 directAll.flatMap { row ->
-                    if (directPeerId(row, userId) == null) emptyList()
-                    else {
+                    if (directPeerId(row, userId) == null) {
+                        emptyList()
+                    } else {
                         val chatName = row.otherUser.name ?: row.connection.semanticLocation ?: "Chat"
                         localMessageHits(
                             row = row,
@@ -674,8 +677,9 @@ private fun ConversationSearchHit.toMessageHit( // pragma: allowlist secret
                 connectionId = connectionId,
                 snippet = snippet,
                 hubId = resolvedHubId,
-                hubRealtimeChannel = hubRealtimeChannel?.takeIf { it.isNotBlank() } ?: hub?.realtimeChannel
-                    ?: resolvedHubId?.let { "hub:$it" },
+                hubRealtimeChannel =
+                    hubRealtimeChannel?.takeIf { it.isNotBlank() } ?: hub?.realtimeChannel
+                        ?: resolvedHubId?.let { "hub:$it" },
                 hubTitle = hub?.name ?: chatName.takeIf { isHub },
                 hubCreatorId = hub?.creatorId,
                 hubCategory = hub?.category ?: "general",

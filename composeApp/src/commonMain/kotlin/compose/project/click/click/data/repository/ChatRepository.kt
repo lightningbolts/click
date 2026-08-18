@@ -27,6 +27,7 @@ data class ConversationSearchHit(
 /** Handle for attaching/detaching a Supabase realtime messages channel (testable without [RealtimeChannel]). */
 interface ChatMessageSubscription {
     suspend fun attach()
+
     suspend fun detach()
 }
 
@@ -65,10 +66,17 @@ interface ChatRepository {
 
     suspend fun stopGlobalPresence()
 
-    suspend fun cacheEncryptionKeys(chatId: String, connectionId: String, userIds: List<String>)
+    suspend fun cacheEncryptionKeys(
+        chatId: String,
+        connectionId: String,
+        userIds: List<String>,
+    )
 
     /** Caches the 32-byte group master key for [chatId] after local unwrap or creation. */
-    suspend fun cacheGroupMasterKey(chatId: String, masterKey: ByteArray)
+    suspend fun cacheGroupMasterKey(
+        chatId: String,
+        masterKey: ByteArray,
+    )
 
     /**
      * Clears all in-memory crypto state and disposes any active ephemeral
@@ -90,7 +98,10 @@ interface ChatRepository {
      * Resolves E2EE crypto for [chatId] and decrypts its newest message.
      * Returns `null` when the key cannot be unwrapped or the chat has no messages.
      */
-    suspend fun decryptGroupChatPreview(chatId: String, viewerUserId: String): Message?
+    suspend fun decryptGroupChatPreview(
+        chatId: String,
+        viewerUserId: String,
+    ): Message?
 
     suspend fun fetchArchivedUserChatsWithDetails(userId: String): List<ChatWithDetails>
 
@@ -137,7 +148,10 @@ interface ChatRepository {
         metadata: JsonElement? = null,
     ): Message?
 
-    suspend fun markMessagesAsRead(chatId: String, userId: String)
+    suspend fun markMessagesAsRead(
+        chatId: String,
+        userId: String,
+    )
 
     /** Marks the latest peer-authored message unread (syncs inbox badge across devices). */
     suspend fun markChatAsUnread(chatId: String)
@@ -145,12 +159,18 @@ interface ChatRepository {
     /**
      * Recipient device receipt: marks peer-authored rows with [delivered_at] (click-web gatekeeper).
      */
-    suspend fun markMessagesDelivered(chatId: String, messageIds: List<String>)
+    suspend fun markMessagesDelivered(
+        chatId: String,
+        messageIds: List<String>,
+    )
 
     /**
      * @param viewerUserId Required to unwrap group master keys from the database when not already cached.
      */
-    suspend fun subscribeToMessages(chatId: String, viewerUserId: String): Pair<ChatMessageSubscription, Flow<ChatRealtimeEvent>>
+    suspend fun subscribeToMessages(
+        chatId: String,
+        viewerUserId: String,
+    ): Pair<ChatMessageSubscription, Flow<ChatRealtimeEvent>>
 
     /**
      * Creates a verified clique server-side; returns the new **group** id on success.
@@ -166,7 +186,10 @@ interface ChatRepository {
 
     suspend fun deleteClique(groupId: String): Result<Unit>
 
-    suspend fun renameClique(groupId: String, newName: String): Result<Unit>
+    suspend fun renameClique(
+        groupId: String,
+        newName: String,
+    ): Result<Unit>
 
     /**
      * True when every pair in [memberUserIds] (including caller) has an active/kept 1:1 connection.
@@ -182,19 +205,34 @@ interface ChatRepository {
 
     fun peekCachedMessageTimeline(connectionId: String): List<Message>?
 
-    fun storeCachedMessageTimeline(connectionId: String, messages: List<Message>)
+    fun storeCachedMessageTimeline(
+        connectionId: String,
+        messages: List<Message>,
+    )
 
-    fun mergeCachedTimelineMessage(connectionId: String, message: Message)
+    fun mergeCachedTimelineMessage(
+        connectionId: String,
+        message: Message,
+    )
 
     /** Seeds chat-id → connection/group routing for realtime inserts without per-message DB lookups. */
     suspend fun seedInboxChatRouting(chats: List<ChatWithDetails>)
 
-    suspend fun addCliqueMember(groupId: String, newMemberUserId: String): Result<Unit>
+    suspend fun addCliqueMember(
+        groupId: String,
+        newMemberUserId: String,
+    ): Result<Unit>
 
-    suspend fun removeCliqueMember(groupId: String, memberUserId: String): Result<Unit>
+    suspend fun removeCliqueMember(
+        groupId: String,
+        memberUserId: String,
+    ): Result<Unit>
 
     /** Returns the cached or DB-unwrapped 32-byte group master key for E2EE member distribution. */
-    suspend fun peekGroupMasterKey(chatId: String, viewerUserId: String): ByteArray?
+    suspend fun peekGroupMasterKey(
+        chatId: String,
+        viewerUserId: String,
+    ): ByteArray?
 
     /**
      * Seeds junction cache from in-memory app state so chat loads skip a connection snapshot fetch.
@@ -215,24 +253,51 @@ interface ChatRepository {
 
     suspend fun fetchChatById(chatId: String): Chat?
 
-    suspend fun fetchChatWithDetails(chatId: String, currentUserId: String): ChatWithDetails?
+    suspend fun fetchChatWithDetails(
+        chatId: String,
+        currentUserId: String,
+    ): ChatWithDetails?
 
     suspend fun fetchChatParticipants(chatId: String): List<User>
 
     suspend fun getUserById(userId: String): User?
 
-    suspend fun updateMessage(chatId: String, messageId: String, userId: String, content: String): Message?
+    suspend fun updateMessage(
+        chatId: String,
+        messageId: String,
+        userId: String,
+        content: String,
+    ): Message?
 
-    suspend fun deleteMessage(chatId: String, messageId: String, userId: String): Boolean
+    suspend fun deleteMessage(
+        chatId: String,
+        messageId: String,
+        userId: String,
+    ): Boolean
 
     /** Fetch reactions for [chatId], optionally scoped to [messageIds] (reduces egress on paginated threads). */
-    suspend fun fetchReactionsForChat(chatId: String, messageIds: List<String>? = null): List<MessageReaction>
+    suspend fun fetchReactionsForChat(
+        chatId: String,
+        messageIds: List<String>? = null,
+    ): List<MessageReaction>
 
-    suspend fun addReaction(messageId: String, userId: String, reactionType: String): Boolean
+    suspend fun addReaction(
+        messageId: String,
+        userId: String,
+        reactionType: String,
+    ): Boolean
 
-    suspend fun removeReaction(messageId: String, userId: String, reactionType: String): Boolean
+    suspend fun removeReaction(
+        messageId: String,
+        userId: String,
+        reactionType: String,
+    ): Boolean
 
-    suspend fun sendTypingStatus(chatId: String, userId: String, isTyping: Boolean)
+    suspend fun sendTypingStatus(
+        chatId: String,
+        userId: String,
+        isTyping: Boolean,
+    )
 
     fun observeTypingStatus(chatId: String): Flow<TypingStatus>
 
@@ -242,30 +307,50 @@ interface ChatRepository {
      * Joins the Realtime channel `chat:{chatId}` for Broadcast (typing) and Presence (peer online).
      * Idempotent for the same [chatId]; replaces any prior ephemeral session for another chat.
      */
-    suspend fun joinChatEphemeralChannel(chatId: String, currentUserId: String, peerUserId: String)
+    suspend fun joinChatEphemeralChannel(
+        chatId: String,
+        currentUserId: String,
+        peerUserId: String,
+    )
 
     suspend fun leaveChatEphemeralChannel(chatId: String)
 
     /** Emits whether [peerUserId] is currently present on the chat channel (active in this chat). */
-    fun observePeerOnline(chatId: String, peerUserId: String): Flow<Boolean>
+    fun observePeerOnline(
+        chatId: String,
+        peerUserId: String,
+    ): Flow<Boolean>
 
-    suspend fun updateMessageStatus(messageId: String, status: String): Boolean
+    suspend fun updateMessageStatus(
+        messageId: String,
+        status: String,
+    ): Boolean
 
-    suspend fun forwardMessage(messageId: String, targetChatId: String, userId: String): Message?
+    suspend fun forwardMessage(
+        messageId: String,
+        targetChatId: String,
+        userId: String,
+    ): Message?
 
-    suspend fun searchMessages(chatId: String, query: String): List<Message>
+    suspend fun searchMessages(
+        chatId: String,
+        query: String,
+    ): List<Message>
 
     suspend fun resolveChatIdForConnection(connectionId: String): String?
 
     suspend fun resolveChatIdForGroupId(groupId: String): String?
 
-    suspend fun searchMessagesByConnectionId(connectionId: String, query: String): Pair<String?, List<Message>>
+    suspend fun searchMessagesByConnectionId(
+        connectionId: String,
+        query: String,
+    ): Pair<String?, List<Message>>
 
     /**
      * Server-side plaintext message search via click-web `GET /api/chat/search`.
      * Encrypted bodies will not match; callers still scan local/decrypted caches.
      */
-    suspend fun searchConversationHits(query: String): List<ConversationSearchHit>
+    suspend fun searchConversationHits(query: String): List<ConversationSearchHit> = fetchConversationSearchHits(query)
 
     /**
      * Loads [user_interests] and active [availability_intents] rows for [peerUserIds]
@@ -278,10 +363,18 @@ interface ChatRepository {
     ): UnifiedSearchSupplement
 
     /** Uploads raw bytes to Supabase Storage (`chat-media` bucket) and returns a public URL, or null on failure. */
-    suspend fun uploadChatMedia(bytes: ByteArray, objectPath: String, contentType: String): String?
+    suspend fun uploadChatMedia(
+        bytes: ByteArray,
+        objectPath: String,
+        contentType: String,
+    ): String?
 
     /** Downloads ciphertext from [mediaUrl] and decrypts for [chatId] as [viewerUserId]. */
-    suspend fun downloadAndDecryptChatMedia(chatId: String, viewerUserId: String, mediaUrl: String): ByteArray?
+    suspend fun downloadAndDecryptChatMedia(
+        chatId: String,
+        viewerUserId: String,
+        mediaUrl: String,
+    ): ByteArray?
 
     /**
      * Background-only media worker: downloads/decrypts recent encrypted media and rewrites message
