@@ -83,9 +83,12 @@ ConnectionsScreen (organism — tab shell + chat overlay)
 
 | Property | Value |
 |----------|-------|
-| Shape | 16dp `RoundedCornerShape` (Bento exterior) |
-| Border | 2dp `#000` hard border; pressed = 2dp translate + instant darken |
-| Padding | 16dp horizontal, 10dp vertical |
+| Shape | Flat full-width row (no card stroke). Height 72dp. |
+| Border | None — [ClickInsetDivider] at 72dp indent |
+| Padding | 16dp leading; text column after 44dp avatar |
+| Press | `platformPressScale(0.97)` + ripple Indication + wash |
+| Unread | 8dp `PrimaryBlue` dot, not a numeric badge |
+| Typography | Name SemiBold 16sp; preview Normal 14sp muted; timestamp Normal 12sp muted |
 | Avatar | 44dp; group uses `GroupAvatar` cluster |
 | Core pin | `CoreConnectionAvatarFrame` when in core set |
 

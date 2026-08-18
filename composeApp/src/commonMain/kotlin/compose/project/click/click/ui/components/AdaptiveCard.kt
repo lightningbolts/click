@@ -7,13 +7,18 @@ package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -28,12 +33,23 @@ fun AdaptiveCard(
 ) {
     val radius = getAdaptiveCornerRadius()
     val shape = RoundedCornerShape(radius)
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val pressScale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (onClick != null && pressed) MotionTokens.PressScale.CardPressedScale else 1f,
+        animationSpec = MotionTokens.pressScaleSpec(),
+        label = "adaptive_card_press",
+    )
     val cardModifier =
-        modifier.border(
-            width = clickBorderWidth(),
-            color = clickBorderColor(),
-            shape = shape,
-        )
+        modifier
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }.border(
+                width = clickBorderWidth(),
+                color = clickBorderColor(),
+                shape = shape,
+            )
 
     if (onClick != null) {
         Surface(
@@ -42,6 +58,7 @@ fun AdaptiveCard(
             color = MaterialTheme.colorScheme.surface,
             shadowElevation = 0.dp,
             onClick = onClick,
+            interactionSource = interactionSource,
             content = {
                 Column(modifier = Modifier.padding(getAdaptivePadding()), content = content)
             },
@@ -224,13 +241,18 @@ fun ClickNavRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (leadingIcon != null) {
-                Icon(
-                    imageVector = leadingIcon,
-                    contentDescription = null,
-                    modifier = Modifier.size(22.dp),
-                    tint = leadingTint,
-                )
-                Spacer(modifier = Modifier.width(14.dp))
+                Box(
+                    modifier = Modifier.size(32.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = leadingIcon,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = leadingTint,
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(

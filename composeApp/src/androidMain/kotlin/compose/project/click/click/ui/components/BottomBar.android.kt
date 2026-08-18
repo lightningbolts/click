@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.components
 
 import androidx.compose.animation.animateColorAsState
@@ -54,11 +56,12 @@ import compose.project.click.click.ui.theme.PrimaryBlue
 
 private val BarContentHeight = 80.dp
 
-private fun NavigationItem.androidIcon(): ImageVector = when (this) {
-    NavigationItem.AddClick -> Icons.Filled.AddCircle
-    NavigationItem.Connections -> Icons.Filled.Groups
-    else -> icon
-}
+private fun NavigationItem.androidIcon(): ImageVector =
+    when (this) {
+        NavigationItem.AddClick -> Icons.Filled.AddCircle
+        NavigationItem.Connections -> Icons.Filled.Groups
+        else -> icon
+    }
 
 @Composable
 actual fun PlatformBottomBar(
@@ -79,26 +82,29 @@ actual fun PlatformBottomBar(
 
     val barAlpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessHigh,
-        ),
+        animationSpec =
+            spring(
+                dampingRatio = Spring.DampingRatioNoBouncy,
+                stiffness = Spring.StiffnessHigh,
+            ),
         label = "bottom_bar_visibility",
     )
 
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .graphicsLayer { alpha = barAlpha },
-        color = scheme.surfaceContainer,
-        tonalElevation = 3.dp,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .graphicsLayer { alpha = barAlpha },
+        color = scheme.surface.copy(alpha = 0.88f),
+        tonalElevation = 0.dp,
         shadowElevation = 0.dp,
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = navBarBottom)
-                .height(BarContentHeight),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = navBarBottom)
+                    .height(BarContentHeight),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -142,20 +148,22 @@ private fun MaterialBottomBarItem(
     val accent = if (isDark) NeonPurple else PrimaryBlue
 
     val iconColor by animateColorAsState(
-        targetValue = when {
-            !enabled -> scheme.onSurfaceVariant.copy(alpha = 0.38f)
-            isAdd -> accent
-            selected -> if (isDark) scheme.onSecondaryContainer else scheme.onPrimary
-            else -> scheme.onSurfaceVariant
-        },
+        targetValue =
+            when {
+                !enabled -> scheme.onSurfaceVariant.copy(alpha = 0.38f)
+                isAdd -> accent
+                selected -> if (isDark) scheme.onSecondaryContainer else scheme.onPrimary
+                else -> scheme.onSurfaceVariant
+            },
         label = "nav_icon_${item.route}",
     )
     val labelColor by animateColorAsState(
-        targetValue = when {
-            !enabled -> scheme.onSurfaceVariant.copy(alpha = 0.38f)
-            selected || isAdd -> accent
-            else -> scheme.onSurfaceVariant
-        },
+        targetValue =
+            when {
+                !enabled -> scheme.onSurfaceVariant.copy(alpha = 0.38f)
+                selected || isAdd -> accent
+                else -> scheme.onSurfaceVariant
+            },
         label = "nav_label_${item.route}",
     )
 
@@ -163,32 +171,33 @@ private fun MaterialBottomBarItem(
 
     // No clip here — clipping was cutting off "Settings" / "Add Click".
     Column(
-        modifier = modifier
-            .testTag(item.maestroTestTag)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = ripple(bounded = false, radius = 36.dp, color = accent.copy(alpha = 0.2f)),
-                enabled = enabled,
-                onClick = onClick,
-            )
-            .padding(vertical = 6.dp),
+        modifier =
+            modifier
+                .testTag(item.maestroTestTag)
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = ripple(bounded = false, radius = 36.dp, color = accent.copy(alpha = 0.2f)),
+                    enabled = enabled,
+                    onClick = onClick,
+                ).padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .size(width = 56.dp, height = 32.dp)
-                .then(
-                    if (selected && !isAdd) {
-                        Modifier.background(
-                            color = if (isDark) scheme.secondaryContainer else PrimaryBlue,
-                            shape = RoundedCornerShape(16.dp),
-                        )
-                    } else {
-                        Modifier
-                    },
-                ),
+            modifier =
+                Modifier
+                    .size(width = 56.dp, height = 32.dp)
+                    .then(
+                        if (selected && !isAdd) {
+                            Modifier.background(
+                                color = if (isDark) scheme.secondaryContainer else PrimaryBlue,
+                                shape = RoundedCornerShape(16.dp),
+                            )
+                        } else {
+                            Modifier
+                        },
+                    ),
         ) {
             Icon(
                 imageVector = item.androidIcon(),
@@ -221,34 +230,38 @@ private fun FittedNavLabel(
 
     BoxWithConstraints(modifier = modifier, contentAlignment = Alignment.Center) {
         val maxWidthPx = with(density) { maxWidth.toPx() }.toInt().coerceAtLeast(1)
-        val fontSize = remember(text, maxWidthPx, selected) {
-            var sizeSp = 11f
-            while (sizeSp >= 8f) {
-                val result = measurer.measure(
-                    text = text,
-                    style = TextStyle(
-                        fontSize = sizeSp.sp,
-                        fontWeight = weight,
-                        letterSpacing = (-0.1).sp,
-                    ),
-                    maxLines = 1,
-                    softWrap = false,
-                )
-                if (result.size.width <= maxWidthPx) break
-                sizeSp -= 0.5f
+        val fontSize =
+            remember(text, maxWidthPx, selected) {
+                var sizeSp = 11f
+                while (sizeSp >= 8f) {
+                    val result =
+                        measurer.measure(
+                            text = text,
+                            style =
+                                TextStyle(
+                                    fontSize = sizeSp.sp,
+                                    fontWeight = weight,
+                                    letterSpacing = (-0.1).sp,
+                                ),
+                            maxLines = 1,
+                            softWrap = false,
+                        )
+                    if (result.size.width <= maxWidthPx) break
+                    sizeSp -= 0.5f
+                }
+                sizeSp.sp
             }
-            sizeSp.sp
-        }
 
         Text(
             text = text,
             color = color,
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = fontSize,
-                fontWeight = weight,
-                lineHeight = (fontSize.value + 2f).sp,
-                letterSpacing = (-0.1).sp,
-            ),
+            style =
+                MaterialTheme.typography.labelSmall.copy(
+                    fontSize = fontSize,
+                    fontWeight = weight,
+                    lineHeight = (fontSize.value + 2f).sp,
+                    letterSpacing = (-0.1).sp,
+                ),
             maxLines = 1,
             softWrap = false,
             overflow = TextOverflow.Visible,

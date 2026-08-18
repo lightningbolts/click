@@ -267,11 +267,10 @@ Init hydrates via `GET /api/hub/messages` (messages + `participant_ids`) in para
 |-----------|-------------|---------------|
 | `inLobby` (occupantCount < 3, currently forced off) | `"Chat unlocks when 3+ join"` | Disabled |
 | `outOfBounds` | `"You are no longer at this location"` | Disabled |
-| Send cooldown (5s after successful send; server 429 is source of truth) | `"Wait {N}s…"` | Disabled |
 | Normal | `"Message the hub…"` | Enabled when draft non-empty |
 | Sending | — | Send disabled; attach dimmed |
 
-**Cooldown:** `HUB_MESSAGE_COOLDOWN_SECONDS = 5`. `POST /api/hub/messages` returns `429` with `{ error: "HUB_MESSAGE_COOLDOWN", retry_after_seconds }` when the same user sends again too soon in the same hub. Client arms a countdown on success and on 429.
+Hub send has **no timed cooldown**. Rapid sends are allowed; geofence, expiry, and draft length still gate the composer. `POST /api/hub/messages` does not return `HUB_MESSAGE_COOLDOWN`.
 
 Lobby banner (when active): `"You're the first one here! We'll ping you when others join."`
 

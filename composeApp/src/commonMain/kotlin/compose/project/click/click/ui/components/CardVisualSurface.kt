@@ -146,8 +146,8 @@ fun CardVisualChip(
     Box(
         modifier =
             modifier
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color.Black.copy(alpha = 0.38f))
+                .clip(RoundedCornerShape(4.dp))
+                .background(Color.Black.copy(alpha = 0.45f))
                 .padding(horizontal = 8.dp, vertical = 4.dp),
     ) {
         Text(

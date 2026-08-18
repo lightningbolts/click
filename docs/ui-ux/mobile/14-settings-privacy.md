@@ -13,7 +13,7 @@
 ```
 SettingsScreen (tab route "settings")
 ├── Hub (AppScreenScaffold title: "Settings")
-│   ├── SettingsProfileHeader (avatar, name, email, Edit Profile)
+│   ├── SettingsProfileHeader (avatar, name, @handle, outlined Edit Profile)
 │   ├── Nav rows → Availability / Alerts / Privacy / Interests / Personality / Saved events / Appearance
 │   └── SettingsSignOutButton
 ├── Subpages (back → hub): Availability, Alerts, Privacy & data, Interests, Personality, Saved events, Appearance

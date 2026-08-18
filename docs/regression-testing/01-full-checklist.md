@@ -451,7 +451,7 @@ iOS: native `UINavigationBar` / `UITabBar` on the host view; body content must n
 - [ ] Map join hub → proximity verify → `HubChatScreen`
 - [ ] Deep link `click://hub/{id}` / universal link opens hub
 - [ ] `HubChatScreen` — realtime messages in lobby + unlocked chat
-- [ ] Hub send cooldown 5s — composer placeholder `Wait {N}s…`; server enforces 429 `HUB_MESSAGE_COOLDOWN`
+- [ ] Hub send has no timed cooldown — composer stays enabled for non-empty drafts; rapid sends are allowed
 - [ ] Outside geofence send → “No longer near hub…” (not expired copy)
 - [ ] Hub settings menu: leave, edit (owner), delete (owner)
 - [ ] Leave hub confirm → `leaveActiveHub`
@@ -602,7 +602,6 @@ Prefer the dedicated smoke doc for a timed pass: [02-smoke-10min.md](02-smoke-10
 - [ ] Long-press connection → archive → find in Archived tab
 - [ ] Drop beacon on map → see on map → open detail
 - [ ] Join hub from map → send hub message → leave hub
-- [ ] Hub message cooldown: after send, composer shows `Wait {N}s…` for 5s; rapid sends return 429 / restore draft
 - [ ] Beacon detail sheet: RSVP, share, navigate, bookmark, labeled check-in CTA
 - [ ] Event people directory: open Directory before RSVP/check-in → sort A–Z / Interests / Mutuals; relationship / sort-aware metrics show **N mutuals** (friends-in-common); list scrolls to top on chip change; no large blank band at full sheet height
 - [ ] Event mutuals: “Mutuals here” section lists FoF; Connections show friends-in-common count; Mutuals not duplicated under Everyone

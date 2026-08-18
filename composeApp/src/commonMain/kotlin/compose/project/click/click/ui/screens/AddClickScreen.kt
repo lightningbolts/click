@@ -5,13 +5,23 @@
 
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BluetoothSearching
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
@@ -19,9 +29,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.platform.rememberReduceMotionEnabled // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
@@ -119,6 +131,18 @@ fun AddClickContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
+        val reduceMotion = rememberReduceMotionEnabled()
+        val pulse = rememberInfiniteTransition(label = "tap_to_connect_pulse")
+        val pulseAlpha by pulse.animateFloat(
+            initialValue = 0.45f,
+            targetValue = 1f,
+            animationSpec =
+                infiniteRepeatable(
+                    animation = tween(durationMillis = 1100, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+            label = "tap_to_connect_pulse_alpha",
+        )
         // Tap to Connect (BLE + audio + GPS) — full width card first
         AdaptiveCard(
             modifier = Modifier.fillMaxWidth(),
@@ -136,7 +160,10 @@ fun AddClickContent(
                     Icons.Filled.BluetoothSearching,
                     contentDescription = "Tap to Connect",
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(64.dp),
+                    modifier =
+                        Modifier
+                            .size(64.dp)
+                            .graphicsLayer { alpha = if (reduceMotion) 1f else pulseAlpha },
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
@@ -230,13 +257,35 @@ fun AddClickContent(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            TextButton(onClick = { showCreateHubModal = true }) {
-                Text("Create hub")
+            OutlinedButton(
+                onClick = { showCreateHubModal = true },
+                modifier = Modifier.weight(1f).height(48.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurfaceVariant),
+                colors =
+                    ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    ),
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Icon(Icons.Filled.Campaign, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Create hub", fontWeight = FontWeight.SemiBold)
             }
-            TextButton(onClick = { showJoinHubSheet = true }) {
-                Text("Join hub")
+            OutlinedButton(
+                onClick = { showJoinHubSheet = true },
+                modifier = Modifier.weight(1f).height(48.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurfaceVariant),
+                colors =
+                    ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    ),
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Icon(Icons.Filled.GroupAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Join hub", fontWeight = FontWeight.SemiBold)
             }
         }
     }

@@ -38,7 +38,6 @@ import androidx.compose.material.icons.filled.Celebration
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Warning
@@ -64,6 +63,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -588,6 +589,16 @@ internal fun EventsDiscoveryFullScreen(
                                 }
                             }
                         }
+                        if (discoveryItemCount == 1) {
+                            item(key = "events_only_one") {
+                                AppEmptyState(
+                                    icon = Icons.Default.Place,
+                                    title = "Only 1 beacon nearby",
+                                    body = "Drop your own!",
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -652,22 +663,17 @@ private fun FilterChipPill(
     val shape = RoundedCornerShape(12.dp)
     val bg =
         if (selected) {
-            MaterialTheme.colorScheme.primaryContainer
+            MaterialTheme.colorScheme.primary
         } else {
-            MaterialTheme.colorScheme.surface
+            Color.Transparent
         }
     val fg =
         if (selected) {
-            MaterialTheme.colorScheme.onPrimaryContainer
+            MaterialTheme.colorScheme.onPrimary
         } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
-        }
-    val outline =
-        if (selected) {
             MaterialTheme.colorScheme.primary
-        } else {
-            clickBorderColor()
         }
+    val outline = MaterialTheme.colorScheme.primary
     Text(
         text = label,
         style = MaterialTheme.typography.labelLarge,
@@ -760,7 +766,7 @@ private fun DiscoveryEventCard(
         }
     }
 
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(12.dp)
     val title = beacon.displayDynamicTitle()
     val schedule = beacon.eventSchedule()?.let { formatEventScheduleRange(it) }
     val rawDescription =
@@ -827,10 +833,11 @@ private fun DiscoveryEventCard(
             visual = visual,
             imageUrl = soundtrackArt,
             chipLabel = kindLabel,
+            scrim = false,
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .height(96.dp),
+                    .height(168.dp),
         ) {
             if (soundtrackArt == null) {
                 Icon(
@@ -840,6 +847,49 @@ private fun DiscoveryEventCard(
                     tint = visual.onContent,
                 )
             }
+            Box(
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                colors =
+                                    listOf(
+                                        Color.Transparent,
+                                        Color.Black.copy(alpha = 0.6f),
+                                    ),
+                            ),
+                        ).padding(12.dp),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (host != null) {
+                        Text(
+                            text = "Hosted by $host",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.9f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    if (distanceText != null) {
+                        Text(
+                            text = distanceText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.9f),
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
         }
         Column(
             modifier =
@@ -848,33 +898,6 @@ private fun DiscoveryEventCard(
                     .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (host != null) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Filled.Person,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Hosted by $host",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
             if (schedule != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
@@ -901,23 +924,6 @@ private fun DiscoveryEventCard(
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
-            }
-            if (distanceText != null) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Filled.Place,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = distanceText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                    )
-                }
             }
             if (isEvent) {
                 when {

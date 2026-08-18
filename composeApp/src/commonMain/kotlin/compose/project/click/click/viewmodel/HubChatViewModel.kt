@@ -81,9 +81,6 @@ import kotlin.random.Random
 
 private const val HUB_CHAT_DRAFT_MAX_LENGTH = 1000
 
-/** Server + client send spacing for community hub messages (seconds). */
-const val HUB_MESSAGE_COOLDOWN_SECONDS = 5
-
 @Serializable
 private data class HubDetailsRow(
     val name: String? = null,
@@ -243,13 +240,8 @@ class HubChatViewModel(
     private val _isSending = MutableStateFlow(false)
     val isSending: StateFlow<Boolean> = _isSending.asStateFlow()
 
-    private val _sendCooldownRemainingSec = MutableStateFlow(0)
-    val sendCooldownRemainingSec: StateFlow<Int> = _sendCooldownRemainingSec.asStateFlow()
-
     private val _outOfBounds = MutableStateFlow(false)
     val outOfBounds: StateFlow<Boolean> = _outOfBounds.asStateFlow()
-
-    private var sendCooldownTickerJob: Job? = null
 
     private val _secureChatMediaLoadState = MutableStateFlow<Map<String, SecureChatMediaLoadState>>(emptyMap())
     override val secureChatMediaLoadState: StateFlow<Map<String, SecureChatMediaLoadState>> =
@@ -984,10 +976,6 @@ class HubChatViewModel(
     fun sendMessage() {
         val text = _draft.value.trim()
         if (text.isEmpty()) return
-        if (_sendCooldownRemainingSec.value > 0) {
-            _sendError.value = "Please wait ${_sendCooldownRemainingSec.value}s before sending again."
-            return
-        }
 
         _draft.value = ""
         _sendError.value = null
@@ -1024,15 +1012,10 @@ class HubChatViewModel(
                         ).message,
                     optimisticTempId = tempId,
                 )
-                armSendCooldown(HUB_MESSAGE_COOLDOWN_SECONDS)
             } catch (e: Exception) {
                 markOptimisticSendFailed(tempId)
                 _draft.value = text
-                val cooldownSec = parseHubCooldownSeconds(e)
-                if (cooldownSec != null) {
-                    armSendCooldown(cooldownSec)
-                    _sendError.value = "Please wait ${cooldownSec}s before sending again."
-                } else if (isHubExpired(e)) {
+                if (isHubExpired(e)) {
                     _sendError.value = HUB_EXPIRED_MESSAGE
                 } else if (isHubOutOfRange(e)) {
                     _outOfBounds.value = true
@@ -1052,10 +1035,6 @@ class HubChatViewModel(
         mimeType: String,
     ) {
         if (imageBytes.isEmpty() || _isSending.value) return
-        if (_sendCooldownRemainingSec.value > 0) {
-            _sendError.value = "Please wait ${_sendCooldownRemainingSec.value}s before sending again."
-            return
-        }
         viewModelScope.launch {
             _isSending.value = true
             _sendError.value = null
@@ -1095,13 +1074,8 @@ class HubChatViewModel(
                         messageType = ChatMessageType.IMAGE,
                         metadata = metadata,
                     ).getOrElse { e -> throw e }
-                armSendCooldown(HUB_MESSAGE_COOLDOWN_SECONDS)
             } catch (e: Exception) {
-                val cooldownSec = parseHubCooldownSeconds(e)
-                if (cooldownSec != null) {
-                    armSendCooldown(cooldownSec)
-                    _sendError.value = "Please wait ${cooldownSec}s before sending again."
-                } else if (isHubExpired(e)) {
+                if (isHubExpired(e)) {
                     _sendError.value = HUB_EXPIRED_MESSAGE
                 } else if (isHubOutOfRange(e)) {
                     _outOfBounds.value = true
@@ -1113,26 +1087,6 @@ class HubChatViewModel(
                 _isSending.value = false
             }
         }
-    }
-
-    private fun sendCooldownRemainingSecCeil(endEpochMs: Long): Int =
-        ((endEpochMs - Clock.System.now().toEpochMilliseconds() + 999L) / 1000L).toInt().coerceAtLeast(0)
-
-    private fun armSendCooldown(seconds: Int) {
-        val secs = seconds.coerceAtLeast(1)
-        sendCooldownTickerJob?.cancel()
-        val end = Clock.System.now().toEpochMilliseconds() + secs * 1000L
-        _sendCooldownRemainingSec.value = sendCooldownRemainingSecCeil(end)
-        sendCooldownTickerJob =
-            viewModelScope.launch {
-                while (isActive) {
-                    delay(1_000L)
-                    val rem = sendCooldownRemainingSecCeil(end)
-                    _sendCooldownRemainingSec.value = rem
-                    if (rem <= 0) break
-                }
-                _sendCooldownRemainingSec.value = 0
-            }
     }
 
     override fun ensureSecureChatImageLoaded(
@@ -1329,8 +1283,6 @@ class HubChatViewModel(
     override fun onCleared() {
         sessionJob?.cancel()
         sessionJob = null
-        sendCooldownTickerJob?.cancel()
-        sendCooldownTickerJob = null
         clearHubSecureMediaCache(purgePersistentCache = true)
         val ch = hubChannel
         hubChannel = null
@@ -1361,21 +1313,6 @@ class HubChatViewModel(
         fun isHubExpired(e: Throwable): Boolean {
             val msg = e.message ?: return false
             return msg.contains("HUB_EXPIRED")
-        }
-
-        /** Parses `HUB_MESSAGE_COOLDOWN:N` from [ChatApiClient] 429 responses. */
-        fun parseHubCooldownSeconds(e: Throwable): Int? = parseHubCooldownSecondsForTest(e)
-
-        /** Test-visible wrapper for cooldown error parsing. */
-        fun parseHubCooldownSecondsForTest(e: Throwable): Int? {
-            val msg = e.message ?: return null
-            if (!msg.contains("HUB_MESSAGE_COOLDOWN")) return null
-            val afterColon =
-                msg
-                    .substringAfter("HUB_MESSAGE_COOLDOWN:", missingDelimiterValue = "")
-                    .trim()
-                    .takeWhile { it.isDigit() }
-            return afterColon.toIntOrNull()?.coerceAtLeast(1) ?: HUB_MESSAGE_COOLDOWN_SECONDS
         }
     }
 }

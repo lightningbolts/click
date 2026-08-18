@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Chat
@@ -484,8 +485,11 @@ fun ActivityRecapSection(
     window: String,
     onWindowChange: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onMakeFirstClick: () -> Unit = {},
 ) {
     val shape = RoundedCornerShape(16.dp)
+    val empty = recap.isAllZero()
+    val peak = recap.peakValue()
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -503,23 +507,55 @@ fun ActivityRecapSection(
                 onClick = { onWindowChange("week") },
             )
         }
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .clip(shape)
-                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                    .border(clickBorderWidth(), clickBorderColor(), shape)
-                    .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            RecapStatRow("Connections formed", recap.connectionsFormed)
-            RecapStatRow("Messages sent", recap.messagesSent)
-            RecapStatRow("Messages received", recap.messagesReceived)
-            RecapStatRow("Beacons created", recap.beaconsCreated)
-            RecapStatRow("Events RSVP’d", recap.eventsRsvped)
-            RecapStatRow("Check-ins", recap.eventsCheckedIn)
-            RecapStatRow("Events saved", recap.eventsSaved)
+        if (empty) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(shape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                        .border(clickBorderWidth(), clickBorderColor(), shape)
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                AppEmptyState(
+                    icon = Icons.Filled.Groups,
+                    title = "No activity yet",
+                    body = "Your first Click starts the recap.",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                ClickButton(
+                    onClick = onMakeFirstClick,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                    variant = ClickButtonVariant.Primary,
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Make your first Click", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        } else {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(shape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                        .border(clickBorderWidth(), clickBorderColor(), shape)
+                        .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                RecapStatRow("Connections formed", recap.connectionsFormed, peak)
+                RecapStatRow("Messages sent", recap.messagesSent, peak)
+                RecapStatRow("Messages received", recap.messagesReceived, peak)
+                RecapStatRow("Beacons created", recap.beaconsCreated, peak)
+                RecapStatRow("Events RSVP’d", recap.eventsRsvped, peak)
+                RecapStatRow("Check-ins", recap.eventsCheckedIn, peak)
+                RecapStatRow("Events saved", recap.eventsSaved, peak)
+            }
         }
     }
 }
@@ -555,7 +591,9 @@ private fun RecapWindowChip(
 private fun RecapStatRow(
     label: String,
     value: Int,
+    peak: Int,
 ) {
+    val isPeak = value > 0 && value == peak
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -564,13 +602,14 @@ private fun RecapStatRow(
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (isPeak) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = if (isPeak) FontWeight.SemiBold else FontWeight.Normal,
         )
         Text(
             text = value.toString(),
             style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = if (isPeak) FontWeight.Bold else FontWeight.Normal,
+            color = if (isPeak) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -583,13 +622,25 @@ fun SavedEventsSection(
     bookmarks: List<compose.project.click.click.data.api.EventBookmarkItemDto>, // pragma: allowlist secret
     onBookmarkClick: (compose.project.click.click.data.api.EventBookmarkItemDto) -> Unit, // pragma: allowlist secret
     modifier: Modifier = Modifier,
+    onExploreMap: () -> Unit = {},
 ) {
-    if (bookmarks.isEmpty()) return
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         SectionHeader(text = "Saved events")
+        if (bookmarks.isEmpty()) {
+            AppEmptyState(
+                icon = Icons.Filled.Event,
+                title = "No saved events yet",
+                body = "Explore the map and bookmark something you want to go to.",
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onExploreMap),
+            )
+            return@Column
+        }
         val rows = bookmarks.chunked(2)
         rows.forEach { rowBookmarks ->
             Row(

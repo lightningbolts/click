@@ -1655,6 +1655,9 @@ fun App() {
                                                         pendingMapLayerFilter = filter
                                                         navigateTo(NavigationItem.Map.route)
                                                     },
+                                                    onNavigateToAddClick = {
+                                                        navigateTo(NavigationItem.AddClick.route)
+                                                    },
                                                     onShareBeaconToChats = { beacon, chatIds, openConnectionId ->
                                                         chatIds.forEach { chatId ->
                                                             chatViewModel.sendBeaconMessageToChat(chatId, beacon)

@@ -56,6 +56,8 @@ import compose.project.click.click.ui.components.ActivityRecapSection // pragma:
 import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppShimmerScreen // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvailabilitySheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickButtonVariant // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDialogChrome // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionArchiveWarningBanner // pragma: allowlist secret
@@ -115,6 +117,7 @@ fun HomeScreen(
     onOpenSearch: (() -> Unit)? = null,
     onNavigateToMap: (beaconId: String?) -> Unit = {},
     onNavigateToMapLayer: (MapLayerFilter) -> Unit = {},
+    onNavigateToAddClick: () -> Unit = {},
     onShareBeaconToChats: (
         (
             MapBeacon,
@@ -595,24 +598,24 @@ fun HomeScreen(
                                     recap = recap,
                                     window = recapWindow,
                                     onWindowChange = { homeViewModel.setRecapWindow(it) },
+                                    onMakeFirstClick = onNavigateToAddClick,
                                 )
                             }
                         }
 
-                        if (displayedSavedBookmarks.isNotEmpty()) {
-                            item(key = "saved_events") {
-                                SavedEventsSection(
-                                    bookmarks = displayedSavedBookmarks,
-                                    onBookmarkClick = { bookmark ->
-                                        selectedSavedEventBeacon =
-                                            resolveSavedEventBeacon(
-                                                bookmark = bookmark,
-                                                mapBeacons = mapBeacons,
-                                                prefetchedBeacons = prefetchedBeacons,
-                                            )
-                                    },
-                                )
-                            }
+                        item(key = "saved_events") {
+                            SavedEventsSection(
+                                bookmarks = displayedSavedBookmarks,
+                                onBookmarkClick = { bookmark ->
+                                    selectedSavedEventBeacon =
+                                        resolveSavedEventBeacon(
+                                            bookmark = bookmark,
+                                            mapBeacons = mapBeacons,
+                                            prefetchedBeacons = prefetchedBeacons,
+                                        )
+                                },
+                                onExploreMap = { onNavigateToMap(null) },
+                            )
                         }
 
                         if (exploreTiles.isNotEmpty()) {
@@ -1594,71 +1597,93 @@ internal fun HomeAvailabilityIntentsRow(
     Column(modifier = Modifier.fillMaxWidth()) {
         SectionHeader(text = "I'm down for…")
         Spacer(modifier = Modifier.height(10.dp))
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            intents.forEach { row ->
-                val label =
-                    row.intentTag
-                        ?.trim()
-                        .orEmpty()
-                        .ifEmpty { "Intent" }
-                val sub = row.activeUntilLabel()
-                AssistChip(
-                    onClick = { onEditIntent(row) },
-                    label = {
-                        Column(modifier = Modifier.padding(vertical = 2.dp)) {
-                            Text(
-                                label,
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            if (sub.isNotBlank()) {
+        if (intents.isEmpty()) {
+            ClickButton(
+                onClick = onCreateIntent,
+                modifier = Modifier.fillMaxWidth(),
+                variant = ClickButtonVariant.Primary,
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Start,
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Set what you're down for",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+        } else {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                intents.forEach { row ->
+                    val label =
+                        row.intentTag
+                            ?.trim()
+                            .orEmpty()
+                            .ifEmpty { "Intent" }
+                    val sub = row.activeUntilLabel()
+                    AssistChip(
+                        onClick = { onEditIntent(row) },
+                        label = {
+                            Column(modifier = Modifier.padding(vertical = 2.dp)) {
                                 Text(
-                                    sub,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    label,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
+                                if (sub.isNotBlank()) {
+                                    Text(
+                                        sub,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
                             }
-                        }
+                        },
+                        shape = RoundedCornerShape(22.dp),
+                        border = BorderStroke(clickBorderWidth(), clickBorderColor()),
+                        colors =
+                            AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                labelColor = MaterialTheme.colorScheme.onSurface,
+                            ),
+                    )
+                }
+                AssistChip(
+                    onClick = onCreateIntent,
+                    label = {
+                        Text(
+                            if (intents.isEmpty()) "Set what you're down for" else "Add intent",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                     },
                     shape = RoundedCornerShape(22.dp),
                     border = BorderStroke(clickBorderWidth(), clickBorderColor()),
                     colors =
                         AssistChipDefaults.assistChipColors(
-                            containerColor = MaterialTheme.colorScheme.surface,
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
                             labelColor = MaterialTheme.colorScheme.onSurface,
                         ),
                 )
             }
-            AssistChip(
-                onClick = onCreateIntent,
-                label = {
-                    Text(
-                        if (intents.isEmpty()) "Set what you're down for" else "Add intent",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                },
-                leadingIcon = {
-                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                },
-                shape = RoundedCornerShape(22.dp),
-                border = BorderStroke(clickBorderWidth(), clickBorderColor()),
-                colors =
-                    AssistChipDefaults.assistChipColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        labelColor = MaterialTheme.colorScheme.onSurface,
-                    ),
-            )
         }
     }
 }

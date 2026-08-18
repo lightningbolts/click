@@ -202,7 +202,8 @@ A committed throw/recall fires `PlatformHapticsPolicy.lightImpact()`.
 | Availability | `"I'm down for…"`, `"Set what you're down for"`, `"Edit intents"` |
 | Reconnect | `"Reconnect"`, `"Connections you haven't talked to in a while"`, `"Message"`, `"Dismiss"` |
 | Empty connections | `"No Connections Yet"`, `"Start making connections by tapping Add Click"` |
-| Stats | `"Your Stats"`, `"Total Clicks"`, `"Locations"` |
+| Stats | `"Your recap"` — empty week shows `"Make your first Click"` instead of a zero table |
+| Saved events | Empty copy: `"No saved events yet"` |
 
 ---
 
