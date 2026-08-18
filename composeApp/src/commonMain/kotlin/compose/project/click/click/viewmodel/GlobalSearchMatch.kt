@@ -1,5 +1,6 @@
 package compose.project.click.click.viewmodel
 
+import compose.project.click.click.crypto.MessageCrypto // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow
 import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.ui.utils.beaconTypeDisplayLabel
@@ -150,4 +151,30 @@ internal fun highlightedMessageSnippet(
     val suffix = if (end < trimmed.length) "…" else ""
     val slice = trimmed.substring(start, end)
     return (prefix + slice + suffix).take(maxLen)
+}
+
+/**
+ * Server `ilike` on `messages.content` matches coincidental substrings inside E2EE wire
+ * payloads (`e2e:` + Base64). Truncated snippets then look like hashes. Never show those.
+ */
+internal fun isUndisplayableEncryptedSearchSnippet(snippet: String): Boolean {
+    val raw = snippet.trim()
+    if (raw.isEmpty()) return false
+    if (MessageCrypto.isAnyE2eeWireContent(raw)) return true
+    val compact =
+        raw
+            .trimStart('…', '.')
+            .trimEnd('…', '.')
+            .replace("…", "")
+            .trim()
+    if (MessageCrypto.isAnyE2eeWireContent(compact)) return true
+    if (compact.startsWith("e2e:") || compact.startsWith("e2e_grp:")) return true
+    if (compact.length < 24) return false
+    val spaces = compact.count { it.isWhitespace() }
+    if (spaces > compact.length / 20) return false
+    val b64ish =
+        compact.all { ch ->
+            ch.isLetterOrDigit() || ch == '+' || ch == '/' || ch == '=' || ch == '-' || ch == '_'
+        }
+    return b64ish && (compact.contains('/') || compact.contains('+'))
 }

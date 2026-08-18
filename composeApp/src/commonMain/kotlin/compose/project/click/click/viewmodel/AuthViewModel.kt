@@ -11,6 +11,7 @@ import compose.project.click.click.auth.AuthBootFastPath // pragma: allowlist se
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.displayNameFromMetadata // pragma: allowlist secret
+import compose.project.click.click.data.realtime.rebindRealtimeSocket // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.util.isHardAuthFailure // pragma: allowlist secret
@@ -187,9 +188,10 @@ class AuthViewModel(
     private suspend fun refreshSessionAndProfileInBackground() {
         withContext(Dispatchers.IO) {
             runCatching { SupabaseConfig.importStoredSessionIfSdkEmpty(tokenStorage) }
-            runCatching { authRepository.refreshSession() }
+            runCatching { authRepository.refreshSession(forceRefresh = true) }
                 .onSuccess {
                     runCatching { SupabaseConfig.client.auth.startAutoRefreshForCurrentSession() }
+                    runCatching { rebindRealtimeSocket() }
                 }.onFailure { error ->
                     if (error.isHardAuthFailure()) {
                         forceSessionExpiredReLogin(error)
@@ -229,11 +231,12 @@ class AuthViewModel(
                     try {
                         runCatching { SupabaseConfig.importStoredSessionIfSdkEmpty(tokenStorage) }
                         authRepository
-                            .refreshSession()
+                            .refreshSession(forceRefresh = true)
                             .onSuccess {
                                 runCatching {
                                     SupabaseConfig.client.auth.startAutoRefreshForCurrentSession()
                                 }
+                                runCatching { rebindRealtimeSocket() }
                                 println("AuthViewModel: Background token refresh successful")
                             }.onFailure { e ->
                                 println(
@@ -550,6 +553,7 @@ class AuthViewModel(
                 authState = AuthState.Loading
                 AppDataManager.clearData()
                 tokenStorage.clearSessionData()
+                runCatching { rebindRealtimeSocket() }
                 authRepository.signOut()
                 isAuthenticated = false
                 authState = AuthState.Idle

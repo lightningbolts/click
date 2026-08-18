@@ -17,6 +17,7 @@ import compose.project.click.click.data.models.audioCacheFileExtension // pragma
 import compose.project.click.click.data.models.hasLocalMediaUri // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
+import compose.project.click.click.data.realtime.rebindRealtimeSocket // pragma: allowlist secret
 import compose.project.click.click.data.realtime.subscribeWithTimeout // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.normalizeEncryptedMediaPayload // pragma: allowlist secret
@@ -44,7 +45,6 @@ import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.decodeRecordOrNull
 import io.github.jan.supabase.realtime.postgresChangeFlow
-import io.github.jan.supabase.realtime.realtime
 import io.github.jan.supabase.storage.storage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -195,9 +195,9 @@ private fun randomHubMediaLeaf(): String =
 
 private const val HUB_INITIAL_MESSAGE_LIMIT = 120L
 
-private suspend fun TokenStorage.requireFreshHubJwt(): String {
+private suspend fun TokenStorage.requireFreshHubJwt(forceRefresh: Boolean = false): String {
     val fresh =
-        runCatching { EnsureFreshAccessToken.get(this) }
+        runCatching { EnsureFreshAccessToken.get(this, forceRefresh = forceRefresh) }
             .getOrNull()
             ?.trim()
             .orEmpty()
@@ -373,7 +373,17 @@ class HubChatViewModel(
                                     override()
                                     _realtimeState.value = HubRealtimeState.Ready
                                 } else {
-                                    runRealtimeSession()
+                                    try {
+                                        runRealtimeSession()
+                                    } catch (first: CancellationException) {
+                                        throw first
+                                    } catch (first: Exception) {
+                                        println(
+                                            "HubChatViewModel: realtime connect failed, retrying: " +
+                                                first.redactedRestMessage(),
+                                        )
+                                        runRealtimeSession()
+                                    }
                                 }
                             }
                         if (override == null) {
@@ -699,12 +709,13 @@ class HubChatViewModel(
         }
     }
 
-    private suspend fun prepareHubRealtimeAuth() {
+    private suspend fun prepareHubRealtimeAuth(forceRefresh: Boolean = true) {
         if (supabase.auth.currentSessionOrNull() == null) {
             runCatching { SupabaseConfig.importStoredSessionIfSdkEmpty(tokenStorage) }
         }
-        tokenStorage.requireFreshHubJwt()
-        runCatching { supabase.realtime.connect() }
+        runCatching { EnsureFreshAccessToken.get(tokenStorage, forceRefresh = forceRefresh) }
+        tokenStorage.requireFreshHubJwt(forceRefresh = forceRefresh)
+        rebindRealtimeSocket()
     }
 
     private suspend fun CoroutineScope.runRealtimeSession() {
@@ -751,6 +762,8 @@ class HubChatViewModel(
 
         withContext(Dispatchers.Default) {
             if (!channel.subscribeWithTimeout()) { // pragma: allowlist secret
+                presenceJob.cancel()
+                runCatching { channel.unsubscribe() }
                 throw IllegalStateException("Couldn't connect to this hub")
             }
         }

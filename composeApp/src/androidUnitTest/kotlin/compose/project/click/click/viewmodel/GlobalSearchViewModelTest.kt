@@ -439,6 +439,39 @@ class GlobalSearchViewModelTest {
         }
 
     @Test
+    fun conversationApiHits_dropEncryptedCiphertextSnippets() =
+        runVmTest {
+            val fake =
+                FakeChatRepository(
+                    onFetchDirectUserChatsWithDetails = { emptyList() },
+                    onFetchArchivedUserChatsWithDetails = { emptyList() },
+                    onFetchGroupUserChatsWithDetails = { emptyList() },
+                    onSearchConversationHits = {
+                        listOf(
+                            ConversationSearchHit( // pragma: allowlist secret
+                                messageId = "api-enc",
+                                chatId = "chat-1",
+                                conversationId = "conn-1",
+                                connectionId = "conn-1",
+                                senderId = PEER_A,
+                                timestamp = 9_000L,
+                                snippet = "e2e:wZg/irGjiuFGVrCxCe1/Kpf5rGeilOLguHhDNqei62LgVuUIQ8Pb8",
+                                chatName = "Chat",
+                            ),
+                        )
+                    },
+                )
+            val vm = newVm(fake)
+            vm.search("lol", VIEWER)
+            drainSearchWork()
+            assertTrue(
+                vm.results.value.items
+                    .filterIsInstance<SearchResult.MessageHit>()
+                    .isEmpty(),
+            )
+        }
+
+    @Test
     fun debounceCancel_keepsSearchingUntilLatestQueryFinishes() =
         runTest {
             val dispatcher = StandardTestDispatcher(testScheduler)
