@@ -115,10 +115,10 @@ Discovery map with beacon pins, community hub overlays, ghost-mode grayscale sty
 Profile editing, interests card, availability intents sheet, notification toggles, memory-capsule sensor opt-ins, ghost mode, calendar permissions, web dashboard link, and sign-out.
 
 **Global search (`GlobalSearchScreen` + `UnifiedSearchSheet`)**  
-Filter chips (Active, Archived, Cliques, Nearby, Beacons, Intents), lazy result list, and navigation into chat/map/beacon targets.
+Filter chips (Active, Archived, Cliques, Nearby, Beacons, Intents), lazy result list, and navigation into chat/map/beacon targets. Message hits include a highlighted snippet and `targetMessageId`; hub hits open `HubChatScreen`.
 
 **Hub chat (`HubChatScreen`)**  
-Venue-scoped ephemeral chat for Community Hubs — lighter chrome than 1:1 E2EE threads.
+Venue-scoped ephemeral chat for Community Hubs. Native header clearance grows for the compact subtitle so the tap-to-connect banner is unclipped. Composer / tab-bar docking matches 1:1 chat (`chatThreadKeyboardDock`). Search deep-links scroll + pulse the target message.
 
 **Onboarding**  
 `WelcomeScreen` → `LoginScreen` / `SignUpScreen` → `PermissionsOnboardingScreen` → `LocationOnboardingScreen` → `ProfileBasicsGateScreen` → `InterestTaggingScreen`.
@@ -237,7 +237,7 @@ Home and connections surfaces show pending match / proximity-sync states; push n
 `BeaconDropSheet`, `MapBeaconSheetRoot`, `MapScreen` — users drop and discover **event, vibe, and social beacons** on the map.
 
 ### Global search
-`GlobalSearchScreen` + `UnifiedSearchSheet` — search connections, messages, beacons, intents, and archived threads with category chips.
+`GlobalSearchScreen` + `UnifiedSearchSheet` — search connections, messages (1:1, cliques, hubs), beacons, intents, and archived threads with category chips. Message rows deep-link to `targetMessageId` with timeline scroll + transient highlight.
 
 ### Core connections
 `ConnectionsTabControls` — pin core connections to the top of the list. Memory Map off does **not** hide non-core pins; hidden IDs still apply. Cores stay map-visible when ghosted off-map.

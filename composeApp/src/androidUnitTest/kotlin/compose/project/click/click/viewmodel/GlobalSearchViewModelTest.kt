@@ -2,6 +2,7 @@ package compose.project.click.click.viewmodel
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.test.core.app.ApplicationProvider
+import compose.project.click.click.data.ActiveHubEntry // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow
 import compose.project.click.click.data.models.Chat
 import compose.project.click.click.data.models.ChatWithDetails
@@ -36,15 +37,16 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-private fun runVmTest(testBody: suspend TestScope.() -> Unit) = runTest {
-    val mainDispatcher = UnconfinedTestDispatcher()
-    Dispatchers.setMain(mainDispatcher)
-    try {
-        testBody()
-    } finally {
-        Dispatchers.resetMain()
+private fun runVmTest(testBody: suspend TestScope.() -> Unit) =
+    runTest {
+        val mainDispatcher = UnconfinedTestDispatcher()
+        Dispatchers.setMain(mainDispatcher)
+        try {
+            testBody()
+        } finally {
+            Dispatchers.resetMain()
+        }
     }
-}
 
 private fun TestScope.drainSearchWork() {
     advanceUntilIdle()
@@ -55,7 +57,6 @@ private fun TestScope.drainSearchWork() {
 @LooperMode(LooperMode.Mode.PAUSED)
 @OptIn(ExperimentalCoroutinesApi::class)
 class GlobalSearchViewModelTest {
-
     @get:Rule
     val instantTaskExecutorRule = InstantTaskExecutorRule()
 
@@ -65,268 +66,387 @@ class GlobalSearchViewModelTest {
     }
 
     @Test
-    fun blankQuery_clearsResultsAndIdle() = runVmTest {
-        val active = listOf(directChat(VIEWER, PEER_A, "conn-x", "Zoe Zebra"))
-        val fake = FakeChatRepository(
-            onFetchDirectUserChatsWithDetails = { if (it == VIEWER) active else emptyList() },
-            onFetchArchivedUserChatsWithDetails = { emptyList() },
-            onFetchGroupUserChatsWithDetails = { emptyList() },
-            onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
-        )
-        val vm = newVm(fake)
-        vm.search("zoe", VIEWER)
-        drainSearchWork()
-        assertFalse(vm.results.value.isEmpty)
-        vm.search("", VIEWER)
-        advanceUntilIdle()
-        assertTrue(vm.results.value.isEmpty)
-        assertFalse(vm.isSearching.value)
-    }
-
-    @Test
-    fun nameSearch_findsActiveConnection() = runVmTest {
-        val active = listOf(directChat(VIEWER, PEER_A, "conn-a", "Alice Anderson"))
-        val fake = FakeChatRepository(
-            onFetchDirectUserChatsWithDetails = { if (it == VIEWER) active else emptyList() },
-            onFetchArchivedUserChatsWithDetails = { emptyList() },
-            onFetchGroupUserChatsWithDetails = { emptyList() },
-            onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
-        )
-        val vm = newVm(fake)
-        vm.search("alice", VIEWER)
-        drainSearchWork()
-        assertTrue(vm.results.value.items.any { it is SearchResult.ActiveConnection })
-    }
-
-    @Test
-    fun interestSearch_findsInterestMatch() = runVmTest {
-        val active = listOf(directChat(VIEWER, PEER_A, "conn-a", "Sam"))
-        val fake = FakeChatRepository(
-            onFetchDirectUserChatsWithDetails = { if (it == VIEWER) active else emptyList() },
-            onFetchArchivedUserChatsWithDetails = { emptyList() },
-            onFetchGroupUserChatsWithDetails = { emptyList() },
-            onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
-            onUnifiedSearchSupplement = { _, _ ->
-                UnifiedSearchSupplement(
-                    peerInterestTagsByUserId = mapOf(PEER_A to listOf("Hiking", "Music")),
-                    activePeerIntentsByUserId = emptyMap(),
+    fun blankQuery_clearsResultsAndIdle() =
+        runVmTest {
+            val active = listOf(directChat(VIEWER, PEER_A, "conn-x", "Zoe Zebra"))
+            val fake =
+                FakeChatRepository(
+                    onFetchDirectUserChatsWithDetails = { if (it == VIEWER) active else emptyList() },
+                    onFetchArchivedUserChatsWithDetails = { emptyList() },
+                    onFetchGroupUserChatsWithDetails = { emptyList() },
+                    onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
                 )
-            },
-        )
-        val vm = newVm(fake)
-        vm.search("hiking", VIEWER)
-        drainSearchWork()
-        assertTrue(vm.results.value.items.any { it is SearchResult.InterestMatch })
-    }
-
-    @Test
-    fun intentSearch_findsIntentMatch() = runVmTest {
-        val active = listOf(directChat(VIEWER, PEER_A, "conn-a", "Jordan"))
-        val intent = AvailabilityIntentRow(
-            userId = PEER_A,
-            intentTag = "Coffee",
-            timeframe = "30 min",
-            expiresAt = "2099-01-01T00:00:00Z",
-        )
-        val fake = FakeChatRepository(
-            onFetchDirectUserChatsWithDetails = { if (it == VIEWER) active else emptyList() },
-            onFetchArchivedUserChatsWithDetails = { emptyList() },
-            onFetchGroupUserChatsWithDetails = { emptyList() },
-            onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
-            onUnifiedSearchSupplement = { _, _ ->
-                UnifiedSearchSupplement(
-                    peerInterestTagsByUserId = emptyMap(),
-                    activePeerIntentsByUserId = mapOf(PEER_A to listOf(intent)),
-                )
-            },
-        )
-        val vm = newVm(fake)
-        vm.search("coffee", VIEWER)
-        drainSearchWork()
-        assertTrue(vm.results.value.items.any { it is SearchResult.IntentMatch })
-    }
-
-    @Test
-    fun cliqueNameSearch_findsClique() = runVmTest {
-        val clique = cliqueChat(VIEWER, "Weekend Hikers")
-        val fake = FakeChatRepository(
-            onFetchDirectUserChatsWithDetails = { emptyList() },
-            onFetchArchivedUserChatsWithDetails = { emptyList() },
-            onFetchGroupUserChatsWithDetails = { if (it == VIEWER) listOf(clique) else emptyList() },
-            onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
-        )
-        val vm = newVm(fake)
-        vm.search("hikers", VIEWER)
-        drainSearchWork()
-        assertTrue(vm.results.value.items.any { it is SearchResult.Clique })
-    }
-
-    @Test
-    fun ownIntentSearch_findsOwnAvailabilityIntentMatch() = runVmTest {
-        val ownIntent = AvailabilityIntentRow(
-            userId = VIEWER,
-            intentTag = "Study session",
-            timeframe = "Tonight",
-            expiresAt = "2099-01-01T00:00:00Z",
-        )
-        val fake = FakeChatRepository(
-            onFetchDirectUserChatsWithDetails = { emptyList() },
-            onFetchArchivedUserChatsWithDetails = { emptyList() },
-            onFetchGroupUserChatsWithDetails = { emptyList() },
-            onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
-        )
-        val vm = newVm(
-            repo = fake,
-            fetchOwnAvailabilityIntents = { listOf(ownIntent) },
-            fetchBeaconsForSearch = { _, _ -> emptyList() },
-            resolveSearchLocation = { null },
-        )
-        vm.search("study", VIEWER)
-        drainSearchWork()
-        assertTrue(vm.results.value.items.any { it is SearchResult.OwnAvailabilityIntentMatch })
-    }
-
-    @Test
-    fun beaconSearch_findsBeaconMatch() = runVmTest {
-        val beacon = MapBeacon(
-            id = "beacon-1",
-            kind = MapBeaconKind.SOUNDTRACK,
-            latitude = 37.0,
-            longitude = -122.0,
-            metadata = MapBeaconMetadata(
-                trackName = "Midnight City",
-                artistName = "M83",
-            ),
-            expiresAtEpochMs = Long.MAX_VALUE,
-            sourceBeaconType = "soundtrack",
-        )
-        val fake = FakeChatRepository(
-            onFetchDirectUserChatsWithDetails = { emptyList() },
-            onFetchArchivedUserChatsWithDetails = { emptyList() },
-            onFetchGroupUserChatsWithDetails = { emptyList() },
-            onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
-        )
-        val vm = newVm(
-            repo = fake,
-            fetchOwnAvailabilityIntents = { emptyList() },
-            fetchBeaconsForSearch = { _, _ -> listOf(beacon) },
-            resolveSearchLocation = { 37.0 to -122.0 },
-        )
-        vm.search("midnight", VIEWER)
-        drainSearchWork()
-        assertTrue(vm.results.value.items.any { it is SearchResult.BeaconMatch })
-    }
-
-    @Test
-    fun toggleCategory_filtersBeaconResults() = runVmTest {
-        val beacon = MapBeacon(
-            id = "beacon-2",
-            kind = MapBeaconKind.SOS,
-            latitude = 37.0,
-            longitude = -122.0,
-            metadata = MapBeaconMetadata(description = "Need help"),
-            expiresAtEpochMs = Long.MAX_VALUE,
-        )
-        val fake = FakeChatRepository(
-            onFetchDirectUserChatsWithDetails = { emptyList() },
-            onFetchArchivedUserChatsWithDetails = { emptyList() },
-            onFetchGroupUserChatsWithDetails = { emptyList() },
-            onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
-        )
-        val vm = newVm(
-            repo = fake,
-            fetchOwnAvailabilityIntents = { emptyList() },
-            fetchBeaconsForSearch = { _, _ -> listOf(beacon) },
-            resolveSearchLocation = { 37.0 to -122.0 },
-        )
-        vm.search("help", VIEWER)
-        drainSearchWork()
-        assertTrue(vm.results.value.visible(vm.visibleCategories.value).any { it is SearchResult.BeaconMatch })
-        vm.toggleCategory(SearchResultCategory.Beacons)
-        vm.toggleCategory(SearchResultCategory.Nearby)
-        val filtered = vm.results.value.visible(vm.visibleCategories.value)
-        assertTrue(filtered.none { it is SearchResult.BeaconMatch })
-    }
-
-    @Test
-    fun semanticLocationSearch_findsLocationBucket() = runVmTest {
-        val active = listOf(
-            directChat(VIEWER, PEER_A, "c1", "Ann", semanticLocation = "Terry Hall"),
-        )
-        val fake = FakeChatRepository(
-            onFetchDirectUserChatsWithDetails = { if (it == VIEWER) active else emptyList() },
-            onFetchArchivedUserChatsWithDetails = { emptyList() },
-            onFetchGroupUserChatsWithDetails = { emptyList() },
-            onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
-        )
-        val vm = newVm(fake)
-        vm.search("terry", VIEWER)
-        drainSearchWork()
-        assertTrue(vm.results.value.items.any { it is SearchResult.LocationBucket })
-    }
-
-    @Test
-    fun messageSearch_findsMessageHit() = runVmTest {
-        val active = listOf(directChat(VIEWER, PEER_A, "conn-msg", "Bo"))
-        val hit = Message(
-            id = "m1",
-            user_id = PEER_A,
-            content = "the blue notebook is on the desk",
-            timeCreated = 5000L,
-        )
-        val fake = FakeChatRepository(
-            onFetchDirectUserChatsWithDetails = { if (it == VIEWER) active else emptyList() },
-            onFetchArchivedUserChatsWithDetails = { emptyList() },
-            onFetchGroupUserChatsWithDetails = { emptyList() },
-            onSearchMessagesByConnectionId = { _, _ -> "chat-conn-msg" to listOf(hit) },
-        )
-        val vm = newVm(fake)
-        vm.search("notebook", VIEWER)
-        drainSearchWork()
-        assertTrue(vm.results.value.items.any { it is SearchResult.MessageHit })
-    }
-
-    @Test
-    fun toggleCategory_filtersVisibleResults() = runVmTest {
-        val active = listOf(
-            directChat(VIEWER, PEER_A, "c-loc", "Lee", semanticLocation = "Library Plaza"),
-        )
-        val fake = FakeChatRepository(
-            onFetchDirectUserChatsWithDetails = { if (it == VIEWER) active else emptyList() },
-            onFetchArchivedUserChatsWithDetails = { emptyList() },
-            onFetchGroupUserChatsWithDetails = { emptyList() },
-            onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
-        )
-        val vm = newVm(fake)
-        vm.search("library", VIEWER)
-        drainSearchWork()
-        val full = vm.results.value.visible(vm.visibleCategories.value)
-        assertTrue(full.any { it is SearchResult.LocationBucket })
-        vm.toggleCategory(SearchResultCategory.Nearby)
-        vm.toggleCategory(SearchResultCategory.Active)
-        val filtered = vm.results.value.visible(vm.visibleCategories.value)
-        assertTrue(filtered.none { it is SearchResult.LocationBucket })
-    }
-
-    @Test
-    fun toggleCategory_cannotDeselectLastChip() = runVmTest {
-        val vm = newVm(FakeChatRepository())
-        for (cat in SearchResultCategory.entries) {
-            if (cat == SearchResultCategory.Active) continue
-            vm.toggleCategory(cat)
+            val vm = newVm(fake)
+            vm.search("zoe", VIEWER)
+            drainSearchWork()
+            assertFalse(vm.results.value.isEmpty)
+            vm.search("", VIEWER)
+            advanceUntilIdle()
+            assertTrue(vm.results.value.isEmpty)
+            assertFalse(vm.isSearching.value)
         }
-        assertEquals(setOf(SearchResultCategory.Active), vm.visibleCategories.value)
-        vm.toggleCategory(SearchResultCategory.Active)
-        assertEquals(setOf(SearchResultCategory.Active), vm.visibleCategories.value)
-    }
 
     @Test
-    fun clear_resetsCategoriesToAll() = runVmTest {
-        val vm = newVm(FakeChatRepository())
-        vm.toggleCategory(SearchResultCategory.Archived)
-        vm.clear()
-        assertEquals(SearchResultCategory.entries.toSet(), vm.visibleCategories.value)
-    }
+    fun nameSearch_findsActiveConnection() =
+        runVmTest {
+            val active = listOf(directChat(VIEWER, PEER_A, "conn-a", "Alice Anderson"))
+            val fake =
+                FakeChatRepository(
+                    onFetchDirectUserChatsWithDetails = { if (it == VIEWER) active else emptyList() },
+                    onFetchArchivedUserChatsWithDetails = { emptyList() },
+                    onFetchGroupUserChatsWithDetails = { emptyList() },
+                    onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
+                )
+            val vm = newVm(fake)
+            vm.search("alice", VIEWER)
+            drainSearchWork()
+            assertTrue(
+                vm.results.value.items
+                    .any { it is SearchResult.ActiveConnection },
+            )
+        }
+
+    @Test
+    fun interestSearch_findsInterestMatch() =
+        runVmTest {
+            val active = listOf(directChat(VIEWER, PEER_A, "conn-a", "Sam"))
+            val fake =
+                FakeChatRepository(
+                    onFetchDirectUserChatsWithDetails = { if (it == VIEWER) active else emptyList() },
+                    onFetchArchivedUserChatsWithDetails = { emptyList() },
+                    onFetchGroupUserChatsWithDetails = { emptyList() },
+                    onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
+                    onUnifiedSearchSupplement = { _, _ ->
+                        UnifiedSearchSupplement(
+                            peerInterestTagsByUserId = mapOf(PEER_A to listOf("Hiking", "Music")),
+                            activePeerIntentsByUserId = emptyMap(),
+                        )
+                    },
+                )
+            val vm = newVm(fake)
+            vm.search("hiking", VIEWER)
+            drainSearchWork()
+            assertTrue(
+                vm.results.value.items
+                    .any { it is SearchResult.InterestMatch },
+            )
+        }
+
+    @Test
+    fun intentSearch_findsIntentMatch() =
+        runVmTest {
+            val active = listOf(directChat(VIEWER, PEER_A, "conn-a", "Jordan"))
+            val intent =
+                AvailabilityIntentRow(
+                    userId = PEER_A,
+                    intentTag = "Coffee",
+                    timeframe = "30 min",
+                    expiresAt = "2099-01-01T00:00:00Z",
+                )
+            val fake =
+                FakeChatRepository(
+                    onFetchDirectUserChatsWithDetails = { if (it == VIEWER) active else emptyList() },
+                    onFetchArchivedUserChatsWithDetails = { emptyList() },
+                    onFetchGroupUserChatsWithDetails = { emptyList() },
+                    onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
+                    onUnifiedSearchSupplement = { _, _ ->
+                        UnifiedSearchSupplement(
+                            peerInterestTagsByUserId = emptyMap(),
+                            activePeerIntentsByUserId = mapOf(PEER_A to listOf(intent)),
+                        )
+                    },
+                )
+            val vm = newVm(fake)
+            vm.search("coffee", VIEWER)
+            drainSearchWork()
+            assertTrue(
+                vm.results.value.items
+                    .any { it is SearchResult.IntentMatch },
+            )
+        }
+
+    @Test
+    fun cliqueNameSearch_findsClique() =
+        runVmTest {
+            val clique = cliqueChat(VIEWER, "Weekend Hikers")
+            val fake =
+                FakeChatRepository(
+                    onFetchDirectUserChatsWithDetails = { emptyList() },
+                    onFetchArchivedUserChatsWithDetails = { emptyList() },
+                    onFetchGroupUserChatsWithDetails = { if (it == VIEWER) listOf(clique) else emptyList() },
+                    onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
+                )
+            val vm = newVm(fake)
+            vm.search("hikers", VIEWER)
+            drainSearchWork()
+            assertTrue(
+                vm.results.value.items
+                    .any { it is SearchResult.Clique },
+            )
+        }
+
+    @Test
+    fun ownIntentSearch_findsOwnAvailabilityIntentMatch() =
+        runVmTest {
+            val ownIntent =
+                AvailabilityIntentRow(
+                    userId = VIEWER,
+                    intentTag = "Study session",
+                    timeframe = "Tonight",
+                    expiresAt = "2099-01-01T00:00:00Z",
+                )
+            val fake =
+                FakeChatRepository(
+                    onFetchDirectUserChatsWithDetails = { emptyList() },
+                    onFetchArchivedUserChatsWithDetails = { emptyList() },
+                    onFetchGroupUserChatsWithDetails = { emptyList() },
+                    onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
+                )
+            val vm =
+                newVm(
+                    repo = fake,
+                    fetchOwnAvailabilityIntents = { listOf(ownIntent) },
+                    fetchBeaconsForSearch = { _, _ -> emptyList() },
+                    resolveSearchLocation = { null },
+                )
+            vm.search("study", VIEWER)
+            drainSearchWork()
+            assertTrue(
+                vm.results.value.items
+                    .any { it is SearchResult.OwnAvailabilityIntentMatch },
+            )
+        }
+
+    @Test
+    fun beaconSearch_findsBeaconMatch() =
+        runVmTest {
+            val beacon =
+                MapBeacon(
+                    id = "beacon-1",
+                    kind = MapBeaconKind.SOUNDTRACK,
+                    latitude = 37.0,
+                    longitude = -122.0,
+                    metadata =
+                        MapBeaconMetadata(
+                            trackName = "Midnight City",
+                            artistName = "M83",
+                        ),
+                    expiresAtEpochMs = Long.MAX_VALUE,
+                    sourceBeaconType = "soundtrack",
+                )
+            val fake =
+                FakeChatRepository(
+                    onFetchDirectUserChatsWithDetails = { emptyList() },
+                    onFetchArchivedUserChatsWithDetails = { emptyList() },
+                    onFetchGroupUserChatsWithDetails = { emptyList() },
+                    onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
+                )
+            val vm =
+                newVm(
+                    repo = fake,
+                    fetchOwnAvailabilityIntents = { emptyList() },
+                    fetchBeaconsForSearch = { _, _ -> listOf(beacon) },
+                    resolveSearchLocation = { 37.0 to -122.0 },
+                )
+            vm.search("midnight", VIEWER)
+            drainSearchWork()
+            assertTrue(
+                vm.results.value.items
+                    .any { it is SearchResult.BeaconMatch },
+            )
+        }
+
+    @Test
+    fun toggleCategory_filtersBeaconResults() =
+        runVmTest {
+            val beacon =
+                MapBeacon(
+                    id = "beacon-2",
+                    kind = MapBeaconKind.SOS,
+                    latitude = 37.0,
+                    longitude = -122.0,
+                    metadata = MapBeaconMetadata(description = "Need help"),
+                    expiresAtEpochMs = Long.MAX_VALUE,
+                )
+            val fake =
+                FakeChatRepository(
+                    onFetchDirectUserChatsWithDetails = { emptyList() },
+                    onFetchArchivedUserChatsWithDetails = { emptyList() },
+                    onFetchGroupUserChatsWithDetails = { emptyList() },
+                    onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
+                )
+            val vm =
+                newVm(
+                    repo = fake,
+                    fetchOwnAvailabilityIntents = { emptyList() },
+                    fetchBeaconsForSearch = { _, _ -> listOf(beacon) },
+                    resolveSearchLocation = { 37.0 to -122.0 },
+                )
+            vm.search("help", VIEWER)
+            drainSearchWork()
+            assertTrue(
+                vm.results.value
+                    .visible(vm.visibleCategories.value)
+                    .any { it is SearchResult.BeaconMatch },
+            )
+            vm.toggleCategory(SearchResultCategory.Beacons)
+            vm.toggleCategory(SearchResultCategory.Nearby)
+            val filtered = vm.results.value.visible(vm.visibleCategories.value)
+            assertTrue(filtered.none { it is SearchResult.BeaconMatch })
+        }
+
+    @Test
+    fun semanticLocationSearch_findsLocationBucket() =
+        runVmTest {
+            val active =
+                listOf(
+                    directChat(VIEWER, PEER_A, "c1", "Ann", semanticLocation = "Terry Hall"),
+                )
+            val fake =
+                FakeChatRepository(
+                    onFetchDirectUserChatsWithDetails = { if (it == VIEWER) active else emptyList() },
+                    onFetchArchivedUserChatsWithDetails = { emptyList() },
+                    onFetchGroupUserChatsWithDetails = { emptyList() },
+                    onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
+                )
+            val vm = newVm(fake)
+            vm.search("terry", VIEWER)
+            drainSearchWork()
+            assertTrue(
+                vm.results.value.items
+                    .any { it is SearchResult.LocationBucket },
+            )
+        }
+
+    @Test
+    fun messageSearch_findsMessageHit() =
+        runVmTest {
+            val active = listOf(directChat(VIEWER, PEER_A, "conn-msg", "Bo"))
+            val message =
+                Message(
+                    id = "m1",
+                    user_id = PEER_A,
+                    content = "the blue notebook is on the desk",
+                    timeCreated = 5000L,
+                )
+            val fake =
+                FakeChatRepository(
+                    onFetchDirectUserChatsWithDetails = { if (it == VIEWER) active else emptyList() },
+                    onFetchArchivedUserChatsWithDetails = { emptyList() },
+                    onFetchGroupUserChatsWithDetails = { emptyList() },
+                    onSearchMessagesByConnectionId = { _, _ -> "chat-conn-msg" to listOf(message) },
+                )
+            val vm = newVm(fake)
+            vm.search("notebook", VIEWER)
+            drainSearchWork()
+            val hit =
+                vm.results.value.items
+                    .filterIsInstance<SearchResult.MessageHit>()
+                    .single()
+            assertEquals("m1", hit.result.message.id)
+            assertEquals("chat-conn-msg", hit.result.chatId)
+            assertTrue(hit.result.snippet.contains("notebook", ignoreCase = true))
+            val target = hit.toChatOpenTarget()
+            assertEquals("conn-msg", target?.connectionId)
+            assertEquals("m1", target?.targetMessageId)
+            assertTrue(target?.isHub != true)
+        }
+
+    @Test
+    fun messageSearch_findsHubMessageHit() =
+        runVmTest {
+            val hubMessage =
+                Message(
+                    id = "hub-m1",
+                    user_id = PEER_A,
+                    content = "see you at the tap-to-connect table",
+                    timeCreated = 9000L,
+                )
+            val fake =
+                FakeChatRepository(
+                    onFetchDirectUserChatsWithDetails = { emptyList() },
+                    onFetchArchivedUserChatsWithDetails = { emptyList() },
+                    onFetchGroupUserChatsWithDetails = { emptyList() },
+                    onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
+                )
+            val vm =
+                newVm(
+                    fake,
+                    activeHubs = {
+                        listOf(
+                            ActiveHubEntry(
+                                hubId = "hub-1",
+                                name = "Cafe Hub",
+                                realtimeChannel = "hub:hub-1",
+                                creatorId = VIEWER,
+                                category = "social",
+                            ),
+                        )
+                    },
+                    searchHubMessages = { hubId, _ ->
+                        if (hubId == "hub-1") listOf(hubMessage) else emptyList()
+                    },
+                )
+            vm.search("tap-to-connect", VIEWER)
+            drainSearchWork()
+            val hit =
+                vm.results.value.items
+                    .filterIsInstance<SearchResult.MessageHit>()
+                    .single()
+            assertTrue(hit.result.isHub)
+            assertEquals("hub-1", hit.result.hubId)
+            val target = hit.toChatOpenTarget()
+            assertEquals("hub-m1", target?.targetMessageId)
+            assertEquals("hub-1", target?.hubId)
+            assertTrue(target?.isHub == true)
+        }
+
+    @Test
+    fun toggleCategory_filtersVisibleResults() =
+        runVmTest {
+            val active =
+                listOf(
+                    directChat(VIEWER, PEER_A, "c-loc", "Lee", semanticLocation = "Library Plaza"),
+                )
+            val fake =
+                FakeChatRepository(
+                    onFetchDirectUserChatsWithDetails = { if (it == VIEWER) active else emptyList() },
+                    onFetchArchivedUserChatsWithDetails = { emptyList() },
+                    onFetchGroupUserChatsWithDetails = { emptyList() },
+                    onSearchMessagesByConnectionId = { _, _ -> null to emptyList() },
+                )
+            val vm = newVm(fake)
+            vm.search("library", VIEWER)
+            drainSearchWork()
+            val full = vm.results.value.visible(vm.visibleCategories.value)
+            assertTrue(full.any { it is SearchResult.LocationBucket })
+            vm.toggleCategory(SearchResultCategory.Nearby)
+            vm.toggleCategory(SearchResultCategory.Active)
+            val filtered = vm.results.value.visible(vm.visibleCategories.value)
+            assertTrue(filtered.none { it is SearchResult.LocationBucket })
+        }
+
+    @Test
+    fun toggleCategory_cannotDeselectLastChip() =
+        runVmTest {
+            val vm = newVm(FakeChatRepository())
+            for (cat in SearchResultCategory.entries) {
+                if (cat == SearchResultCategory.Active) continue
+                vm.toggleCategory(cat)
+            }
+            assertEquals(setOf(SearchResultCategory.Active), vm.visibleCategories.value)
+            vm.toggleCategory(SearchResultCategory.Active)
+            assertEquals(setOf(SearchResultCategory.Active), vm.visibleCategories.value)
+        }
+
+    @Test
+    fun clear_resetsCategoriesToAll() =
+        runVmTest {
+            val vm = newVm(FakeChatRepository())
+            vm.toggleCategory(SearchResultCategory.Archived)
+            vm.clear()
+            assertEquals(SearchResultCategory.entries.toSet(), vm.visibleCategories.value)
+        }
 
     private companion object {
         const val VIEWER = "viewer-test"
@@ -337,16 +457,21 @@ class GlobalSearchViewModelTest {
             fetchOwnAvailabilityIntents: suspend (String) -> List<AvailabilityIntentRow> = { emptyList() },
             fetchBeaconsForSearch: suspend (Double, Double) -> List<MapBeacon> = { _, _ -> emptyList() },
             resolveSearchLocation: suspend () -> Pair<Double, Double>? = { null },
-        ): GlobalSearchViewModel = GlobalSearchViewModel(
-            tokenStorage = FakeTokenStorage(),
-            chatRepository = repo,
-            junctionArchivedConnectionIds = { emptySet() },
-            junctionHiddenConnectionIds = { emptySet() },
-            searchDebounceMs = 0L,
-            fetchOwnAvailabilityIntents = fetchOwnAvailabilityIntents,
-            fetchBeaconsForSearch = fetchBeaconsForSearch,
-            resolveSearchLocation = resolveSearchLocation,
-        )
+            activeHubs: () -> List<ActiveHubEntry> = { emptyList() },
+            searchHubMessages: suspend (String, String) -> List<Message> = { _, _ -> emptyList() },
+        ): GlobalSearchViewModel =
+            GlobalSearchViewModel(
+                tokenStorage = FakeTokenStorage(),
+                chatRepository = repo,
+                junctionArchivedConnectionIds = { emptySet() },
+                junctionHiddenConnectionIds = { emptySet() },
+                searchDebounceMs = 0L,
+                fetchOwnAvailabilityIntents = fetchOwnAvailabilityIntents,
+                fetchBeaconsForSearch = fetchBeaconsForSearch,
+                resolveSearchLocation = resolveSearchLocation,
+                activeHubs = activeHubs,
+                searchHubMessages = searchHubMessages,
+            )
 
         fun directChat(
             viewer: String,
@@ -355,15 +480,16 @@ class GlobalSearchViewModelTest {
             peerName: String,
             semanticLocation: String? = null,
         ): ChatWithDetails {
-            val conn = Connection(
-                id = connectionId,
-                created = 10L,
-                expiry = Long.MAX_VALUE,
-                geo_location = GeoLocation(0.0, 0.0),
-                user_ids = listOf(viewer, peer),
-                semantic_location = semanticLocation,
-                status = "kept",
-            )
+            val conn =
+                Connection(
+                    id = connectionId,
+                    created = 10L,
+                    expiry = Long.MAX_VALUE,
+                    geo_location = GeoLocation(0.0, 0.0),
+                    user_ids = listOf(viewer, peer),
+                    semantic_location = semanticLocation,
+                    status = "kept",
+                )
             return ChatWithDetails(
                 chat = Chat(id = "chat-$connectionId", connectionId = connectionId, messages = emptyList()),
                 connection = conn,
@@ -373,17 +499,21 @@ class GlobalSearchViewModelTest {
             )
         }
 
-        fun cliqueChat(viewer: String, groupTitle: String): ChatWithDetails {
+        fun cliqueChat(
+            viewer: String,
+            groupTitle: String,
+        ): ChatWithDetails {
             val gid = "group-1"
             val peer = "peer-b"
             val conn = syntheticConnectionForGroupClique(gid, listOf(viewer, peer, "peer-c"))
-            val gc = GroupCliqueDetails(
-                groupId = gid,
-                name = groupTitle,
-                createdByUserId = viewer,
-                keyAnchorUserId = peer,
-                memberUserIds = conn.user_ids,
-            )
+            val gc =
+                GroupCliqueDetails(
+                    groupId = gid,
+                    name = groupTitle,
+                    createdByUserId = viewer,
+                    keyAnchorUserId = peer,
+                    memberUserIds = conn.user_ids,
+                )
             return ChatWithDetails(
                 chat = Chat(id = "chatg-1", groupId = gid, messages = emptyList()),
                 connection = conn,

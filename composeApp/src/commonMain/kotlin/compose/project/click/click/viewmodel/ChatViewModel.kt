@@ -336,83 +336,99 @@ class ChatViewModel(
     }
 
     fun loadOlderMessages() {
-        val userId = _currentUserId.value ?: return
-        val state = _chatMessagesState.value as? ChatMessagesState.Success ?: return
+        viewModelScope.launch { loadOlderMessagesPage() }
+    }
+
+    suspend fun ensureTargetMessageLoaded(messageId: String): Boolean {
+        val id = messageId.trim()
+        if (id.isEmpty()) return false
+        repeat(TARGET_MESSAGE_MAX_PAGES) {
+            val state = _chatMessagesState.value as? ChatMessagesState.Success ?: return false
+            if (state.messages.any { it.message.id == id }) return true
+            if (!_hasMoreOlderMessages.value) return false
+            if (!loadOlderMessagesPage()) return false
+        }
+        return (_chatMessagesState.value as? ChatMessagesState.Success)
+            ?.messages
+            ?.any { it.message.id == id } == true
+    }
+
+    private suspend fun loadOlderMessagesPage(): Boolean {
+        val userId = _currentUserId.value ?: return false
+        val state = _chatMessagesState.value as? ChatMessagesState.Success ?: return false
         val apiChatId =
             state.chatDetails.chat.id
-                ?.takeIf { it.isNotBlank() } ?: currentApiChatId ?: return
-        if (_isLoadingOlderMessages.value || !_hasMoreOlderMessages.value) return
-        val oldest = state.messages.minByOrNull { it.message.timeCreated }?.message ?: return
+                ?.takeIf { it.isNotBlank() } ?: currentApiChatId ?: return false
+        if (_isLoadingOlderMessages.value || !_hasMoreOlderMessages.value) return false
+        val oldest = state.messages.minByOrNull { it.message.timeCreated }?.message ?: return false
 
-        viewModelScope.launch {
-            _isLoadingOlderMessages.value = true
-            try {
-                suspend fun fetchPage(): List<Message>? =
-                    chatRepository.fetchMessagesForChat(
-                        chatId = apiChatId,
-                        viewerUserId = userId,
-                        limit = OLDER_MESSAGES_PAGE_SIZE,
-                        beforeTimeCreated = oldest.timeCreated,
-                    )
+        _isLoadingOlderMessages.value = true
+        try {
+            suspend fun fetchPage(): List<Message>? =
+                chatRepository.fetchMessagesForChat(
+                    chatId = apiChatId,
+                    viewerUserId = userId,
+                    limit = OLDER_MESSAGES_PAGE_SIZE,
+                    beforeTimeCreated = oldest.timeCreated,
+                )
 
-                var fetched = fetchPage()
-                // Auth-empty / null under stale JWT must not freeze pagination as "end of history".
-                var authReadyAfterRetry = false
-                if (fetched == null || fetched.isEmpty()) {
-                    authReadyAfterRetry = !chatRepository.ensureFreshAuthToken().isNullOrBlank()
-                    if (authReadyAfterRetry) {
-                        fetched = fetchPage()
-                    }
+            var fetched = fetchPage()
+            var authReadyAfterRetry = false
+            if (fetched == null || fetched.isEmpty()) {
+                authReadyAfterRetry = !chatRepository.ensureFreshAuthToken().isNullOrBlank()
+                if (authReadyAfterRetry) {
+                    fetched = fetchPage()
                 }
-                when (olderMessagesPageOutcome(fetched, authReadyAfterRetry)) {
-                    OlderMessagesPageOutcome.KeepHasMore -> {
-                        println("ChatViewModel: loadOlderMessages failed; keeping hasMoreOlderMessages")
-                        return@launch
-                    }
-                    OlderMessagesPageOutcome.EndOfHistory -> {
-                        _hasMoreOlderMessages.value = false
-                        return@launch
-                    }
-                    OlderMessagesPageOutcome.MergePage -> Unit
-                }
-                val page = fetched ?: return@launch
-                val vaulted = vaultMessagesForUi(apiChatId, userId, page)
-                val knownUsers =
-                    buildMap {
-                        state.messages.forEach { put(it.user.id, it.user) }
-                        AppDataManager.currentUser.value?.let { put(it.id, it) }
-                        put(state.chatDetails.otherUser.id, state.chatDetails.otherUser)
-                    }.toMutableMap()
-                val incoming =
-                    vaulted.map { message ->
-                        val user =
-                            knownUsers[message.user_id]
-                                ?: User(id = message.user_id, name = "Unknown", createdAt = 0L)
-                        MessageWithUser(
-                            message = message,
-                            user = user,
-                            isSent = message.user_id == userId,
-                        )
-                    }
-                val active = _chatMessagesState.value as? ChatMessagesState.Success ?: return@launch
-                if (active.chatDetails.chat.id != apiChatId) return@launch
-                val merged = mergeMessageTimelinesPreservingLiveState(active.messages, incoming)
-                _chatMessagesState.value = active.copy(messages = merged)
-                prefetchedChatPayloads[active.chatDetails.connection.id] =
-                    (
-                        prefetchedChatPayloads[active.chatDetails.connection.id] ?: PrefetchedChatPayload(
-                            messages = merged,
-                            reactionsByMessageId = _messageReactions.value,
-                            icebreakerPrompts = _icebreakerPrompts.value,
-                            showIcebreakerPanel = _showIcebreakerPanel.value,
-                        )
-                    ).copy(messages = merged)
-                if (page.size < OLDER_MESSAGES_PAGE_SIZE) {
-                    _hasMoreOlderMessages.value = false
-                }
-            } finally {
-                _isLoadingOlderMessages.value = false
             }
+            when (olderMessagesPageOutcome(fetched, authReadyAfterRetry)) {
+                OlderMessagesPageOutcome.KeepHasMore -> {
+                    println("ChatViewModel: loadOlderMessages failed; keeping hasMoreOlderMessages")
+                    return false
+                }
+                OlderMessagesPageOutcome.EndOfHistory -> {
+                    _hasMoreOlderMessages.value = false
+                    return false
+                }
+                OlderMessagesPageOutcome.MergePage -> Unit
+            }
+            val page = fetched ?: return false
+            val vaulted = vaultMessagesForUi(apiChatId, userId, page)
+            val knownUsers =
+                buildMap {
+                    state.messages.forEach { put(it.user.id, it.user) }
+                    AppDataManager.currentUser.value?.let { put(it.id, it) }
+                    put(state.chatDetails.otherUser.id, state.chatDetails.otherUser)
+                }.toMutableMap()
+            val incoming =
+                vaulted.map { message ->
+                    val user =
+                        knownUsers[message.user_id]
+                            ?: User(id = message.user_id, name = "Unknown", createdAt = 0L)
+                    MessageWithUser(
+                        message = message,
+                        user = user,
+                        isSent = message.user_id == userId,
+                    )
+                }
+            val active = _chatMessagesState.value as? ChatMessagesState.Success ?: return false
+            if (active.chatDetails.chat.id != apiChatId) return false
+            val merged = mergeMessageTimelinesPreservingLiveState(active.messages, incoming)
+            _chatMessagesState.value = active.copy(messages = merged)
+            prefetchedChatPayloads[active.chatDetails.connection.id] =
+                (
+                    prefetchedChatPayloads[active.chatDetails.connection.id] ?: PrefetchedChatPayload(
+                        messages = merged,
+                        reactionsByMessageId = _messageReactions.value,
+                        icebreakerPrompts = _icebreakerPrompts.value,
+                        showIcebreakerPanel = _showIcebreakerPanel.value,
+                    )
+                ).copy(messages = merged)
+            if (page.size < OLDER_MESSAGES_PAGE_SIZE) {
+                _hasMoreOlderMessages.value = false
+            }
+            return true
+        } finally {
+            _isLoadingOlderMessages.value = false
         }
     }
 
@@ -5670,6 +5686,7 @@ private const val CHAT_THREAD_CACHE_FRESH_MS = 120_000L
 private const val CHAT_OPEN_PREFETCH_CONCURRENCY = 4
 private const val INITIAL_CHAT_MESSAGE_FETCH_LIMIT = 80
 private const val OLDER_MESSAGES_PAGE_SIZE = 40
+private const val TARGET_MESSAGE_MAX_PAGES = 16
 private const val SECURE_CHAT_IMAGE_CACHE_MAX_ENTRIES = 160
 private const val SECURE_CHAT_IMAGE_NETWORK_CONCURRENCY = 4
 private const val SECURE_CHAT_DISK_HYDRATE_VISIBLE_BATCH = 12

@@ -72,6 +72,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
+import compose.project.click.click.ui.chat.CHAT_SEARCH_FOCUS_HOLD_MS // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAttachmentMenuRow // pragma: allowlist secret
@@ -91,6 +92,7 @@ import compose.project.click.click.ui.chat.chatDismissKeyboardAfterScrollConnect
 import compose.project.click.click.ui.chat.chatTimelineFollowUsesAnimation // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimelineShouldFollowInbound // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft // pragma: allowlist secret
+import compose.project.click.click.ui.chat.indexOfMessageId // pragma: allowlist secret
 import compose.project.click.click.ui.chat.isTimestampPeekRevealed // pragma: allowlist secret
 import compose.project.click.click.ui.chat.launchTimestampPeekReplyStyleSettle // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
@@ -99,6 +101,7 @@ import compose.project.click.click.ui.chat.rememberTimestampPeekRevealPx // prag
 import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx // pragma: allowlist secret
 import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay // pragma: allowlist secret
 import compose.project.click.click.ui.chat.scrollChatTimelineToLatest // pragma: allowlist secret
+import compose.project.click.click.ui.chat.scrollChatTimelineToMessage // pragma: allowlist secret
 import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.BindPlatformNativeNavigationBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
@@ -121,6 +124,7 @@ import compose.project.click.click.viewmodel.HubChatNavigationEvent // pragma: a
 import compose.project.click.click.viewmodel.HubChatViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.HubRealtimeState // pragma: allowlist secret
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 
 data class HubChatNavArgs(
     val hubId: String,
@@ -135,6 +139,7 @@ data class HubChatNavArgs(
 fun HubChatScreen(
     args: HubChatNavArgs,
     currentUserId: String,
+    targetMessageId: String? = null,
     onNavigateBack: () -> Unit,
     resolveHubGatekeeperLocation: suspend () -> LocationResult? = { null },
     /**
@@ -204,7 +209,7 @@ fun HubChatScreen(
     val nativeKeyboardInsets =
         rememberChatNativeKeyboardInsets(
             keyboardHeightProvider = keyboardHeightProvider,
-            subtractTabBarOverlay = false,
+            subtractTabBarOverlay = true,
         )
     val focusManager = LocalFocusManager.current
     val focusManagerState = rememberUpdatedState(focusManager)
@@ -220,6 +225,7 @@ fun HubChatScreen(
         }
 
     val initialTimelineScrollDone = remember(args.realtimeChannel) { mutableStateOf(false) }
+    var focusedSearchMessageId by remember(args.realtimeChannel) { mutableStateOf<String?>(null) }
     val peerNewestMessageId =
         messages
             .lastOrNull()
@@ -227,8 +233,19 @@ fun HubChatScreen(
             ?.message
             ?.id
 
-    LaunchedEffect(args.realtimeChannel, messages.isNotEmpty()) {
+    LaunchedEffect(args.realtimeChannel, messages.isNotEmpty(), targetMessageId) {
         if (messages.isEmpty() || initialTimelineScrollDone.value) return@LaunchedEffect
+        if (!targetMessageId.isNullOrBlank()) {
+            val found = viewModel.ensureTargetMessageLoaded(targetMessageId)
+            if (!found) {
+                initialTimelineScrollDone.value = true
+                scrollChatTimelineToLatest(
+                    listState = hubListState,
+                    suppressKeyboardDismiss = suppressKeyboardDismissWhileProgrammaticTimelineScroll,
+                )
+            }
+            return@LaunchedEffect
+        }
         initialTimelineScrollDone.value = true
         scrollChatTimelineToLatest(
             listState = hubListState,
@@ -268,6 +285,14 @@ fun HubChatScreen(
 
     val inLobby = false // TODO: restore `occupantCount < 3` after testing
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val hubHasSubtitle = true
+    val hubNativeClearance =
+        platformNativeHeaderClearance(
+            statusBarTop = topInset,
+            collapseFraction = 1f,
+            hasSubtitle = hubHasSubtitle,
+            growCompactSubtitle = true,
+        )
     val realtimeState by viewModel.realtimeState.collectAsState()
     val channelReady = realtimeState is HubRealtimeState.Ready
     val channelError = (realtimeState as? HubRealtimeState.Error)?.message
@@ -284,6 +309,7 @@ fun HubChatScreen(
         if (channelError != null && messages.isEmpty()) {
             HubRealtimeErrorView(
                 topInset = topInset,
+                nativeClearance = hubNativeClearance,
                 message = channelError,
                 onBackPressed = onNavigateBack,
                 onRetry = { viewModel.retryRealtime() },
@@ -309,7 +335,7 @@ fun HubChatScreen(
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
-                                    .height(platformNativeHeaderClearance(topInset))
+                                    .height(hubNativeClearance)
                                     .testTag(ChatGlassHeaderPlateTestTag),
                         )
                     } else {
@@ -372,7 +398,8 @@ fun HubChatScreen(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 4.dp)
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                                .testTag("hub_tap_to_connect_banner")
                                 .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(14.dp)),
                         color = PrimaryBlue,
                         shape = RoundedCornerShape(14.dp),
@@ -487,6 +514,28 @@ fun HubChatScreen(
                         remember(messages) {
                             buildChatTimelineEntriesNewestFirst(messages)
                         }
+                    LaunchedEffect(args.realtimeChannel, targetMessageId, timelineEntries) {
+                        val id = targetMessageId?.trim()?.takeIf { it.isNotEmpty() } ?: return@LaunchedEffect
+                        val index = timelineEntries.indexOfMessageId(id)
+                        if (index < 0) {
+                            val found = viewModel.ensureTargetMessageLoaded(id)
+                            if (!found) {
+                                initialTimelineScrollDone.value = true
+                            }
+                            return@LaunchedEffect
+                        }
+                        initialTimelineScrollDone.value = true
+                        scrollChatTimelineToMessage(
+                            listState = hubListState,
+                            suppressKeyboardDismiss = suppressKeyboardDismissWhileProgrammaticTimelineScroll,
+                            index = index,
+                        )
+                        focusedSearchMessageId = id
+                        delay(CHAT_SEARCH_FOCUS_HOLD_MS)
+                        if (focusedSearchMessageId == id) {
+                            focusedSearchMessageId = null
+                        }
+                    }
                     val reverseListNewestEdgePad = 6.dp
 
                     Box(
@@ -502,7 +551,7 @@ fun HubChatScreen(
                                     .fillMaxSize()
                                     .chatThreadKeyboardDock(
                                         nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
-                                        clearNativeTabBar = false,
+                                        clearNativeTabBar = true,
                                     ),
                         ) {
                             Box(
@@ -541,6 +590,7 @@ fun HubChatScreen(
                                     },
                                     interMessageBaseCompact = ChatInterMessageHubBaseCompact,
                                     enableMessageContextMenu = false,
+                                    highlightedMessageId = focusedSearchMessageId,
                                     modifier =
                                         Modifier
                                             .fillMaxSize()
@@ -887,6 +937,7 @@ private fun HubChatInputBar(
 @Suppress("ktlint:standard:function-naming")
 private fun HubRealtimeErrorView(
     topInset: androidx.compose.ui.unit.Dp,
+    nativeClearance: androidx.compose.ui.unit.Dp,
     message: String,
     onBackPressed: () -> Unit,
     onRetry: () -> Unit,
@@ -911,14 +962,14 @@ private fun HubRealtimeErrorView(
                 }
             }
         } else {
-            Spacer(modifier = Modifier.fillMaxWidth().height(platformNativeHeaderClearance(topInset)))
+            Spacer(modifier = Modifier.fillMaxWidth().height(nativeClearance))
         }
         Column(
             modifier =
                 Modifier
                     .fillMaxSize()
                     .padding(horizontal = 32.dp)
-                    .padding(top = if (composeHeader) topInset + 56.dp else platformNativeHeaderClearance(topInset)),
+                    .padding(top = if (composeHeader) topInset + 56.dp else nativeClearance),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {

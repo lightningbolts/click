@@ -8,6 +8,7 @@ import compose.project.click.click.data.models.GroupCliqueDetails
 import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.data.models.MapBeaconKind
 import compose.project.click.click.data.models.MapBeaconMetadata
+import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.syntheticConnectionForGroupClique
 import kotlin.test.Test
@@ -15,7 +16,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class GlobalSearchResultsTest {
-
     @Test
     fun isEmpty_trueWhenNoItems() {
         assertTrue(GlobalSearchResults().isEmpty)
@@ -45,14 +45,16 @@ class GlobalSearchResultsTest {
 
     @Test
     fun visible_onlyNearby_includesLocationBucketAndMemoryContext() {
-        val loc = SearchResult.LocationBucket(
-            LocationSearchResult(location = "Campus", connectionCount = 1, connectionIds = listOf("c1")),
-        )
-        val mem = SearchResult.MemoryContextMatch(
-            details = stubDetails("c1", "Sam"),
-            matchLabel = "Context",
-            isArchivedChannel = false,
-        )
+        val loc =
+            SearchResult.LocationBucket(
+                LocationSearchResult(location = "Campus", connectionCount = 1, connectionIds = listOf("c1")),
+            )
+        val mem =
+            SearchResult.MemoryContextMatch(
+                details = stubDetails("c1", "Sam"),
+                matchLabel = "Context",
+                isArchivedChannel = false,
+            )
         val name = SearchResult.ActiveConnection(details = stubDetails("c2", "Pat"))
         val results = GlobalSearchResults(items = listOf(name, loc, mem))
         val visible = results.visible(setOf(SearchResultCategory.Nearby))
@@ -63,16 +65,18 @@ class GlobalSearchResultsTest {
 
     @Test
     fun visible_onlyBeacons_includesBeaconMatch() {
-        val beacon = SearchResult.BeaconMatch(
-            beacon = MapBeacon(
-                id = "b1",
-                kind = MapBeaconKind.STUDY,
-                latitude = 0.0,
-                longitude = 0.0,
-                metadata = MapBeaconMetadata(title = "Quiet zone"),
-            ),
-            distanceMeters = 120.0,
-        )
+        val beacon =
+            SearchResult.BeaconMatch(
+                beacon =
+                    MapBeacon(
+                        id = "b1",
+                        kind = MapBeaconKind.STUDY,
+                        latitude = 0.0,
+                        longitude = 0.0,
+                        metadata = MapBeaconMetadata(title = "Quiet zone"),
+                    ),
+                distanceMeters = 120.0,
+            )
         val name = SearchResult.ActiveConnection(details = stubDetails("c2", "Pat"))
         val results = GlobalSearchResults(items = listOf(name, beacon))
         val visible = results.visible(setOf(SearchResultCategory.Beacons))
@@ -82,21 +86,60 @@ class GlobalSearchResultsTest {
 
     @Test
     fun visible_onlyIntents_includesPeerAndOwnIntentMatches() {
-        val peerIntent = SearchResult.IntentMatch(
-            details = stubDetails("c1", "Sam"),
-            intentLabel = "Coffee",
-            intentTimeframe = "30 min",
-            isArchivedChannel = false,
-        )
-        val ownIntent = SearchResult.OwnAvailabilityIntentMatch(
-            intent = AvailabilityIntentRow(intentTag = "Walk", timeframe = "Now"),
-        )
+        val peerIntent =
+            SearchResult.IntentMatch(
+                details = stubDetails("c1", "Sam"),
+                intentLabel = "Coffee",
+                intentTimeframe = "30 min",
+                isArchivedChannel = false,
+            )
+        val ownIntent =
+            SearchResult.OwnAvailabilityIntentMatch(
+                intent = AvailabilityIntentRow(intentTag = "Walk", timeframe = "Now"),
+            )
         val name = SearchResult.ActiveConnection(details = stubDetails("c2", "Pat"))
         val results = GlobalSearchResults(items = listOf(name, peerIntent, ownIntent))
         val visible = results.visible(setOf(SearchResultCategory.Intents))
         assertEquals(2, visible.size)
         assertTrue(visible.any { it is SearchResult.IntentMatch })
         assertTrue(visible.any { it is SearchResult.OwnAvailabilityIntentMatch })
+    }
+
+    @Test
+    fun highlightedMessageSnippet_keepsQueryInView() {
+        val snippet =
+            highlightedMessageSnippet(
+                content = "hello there, the blue notebook is on the desk near the window",
+                query = "notebook",
+            )
+        assertTrue(snippet.contains("notebook"))
+        assertTrue(snippet.length <= 140)
+    }
+
+    @Test
+    fun messageHit_toChatOpenTarget_carriesMessageId() {
+        val details = stubDetails("c1", "Ann")
+        val result =
+            SearchResult.MessageHit(
+                result =
+                    MessageSearchResult(
+                        message =
+                            Message(
+                                id = "mid",
+                                user_id = "peer-c1",
+                                content = "hello notebook world",
+                                timeCreated = 1L,
+                            ),
+                        chatId = "chat-c1",
+                        chatName = "Ann",
+                        connectionId = "c1",
+                        snippet = "hello notebook world",
+                    ),
+                categories = setOf(SearchResultCategory.Active),
+            )
+        val target = result.toChatOpenTarget()
+        assertEquals("c1", target?.connectionId)
+        assertEquals("mid", target?.targetMessageId)
     }
 }
 
@@ -107,44 +150,48 @@ private fun stubDetails(
 ): ChatWithDetails {
     val viewer = "viewer"
     val peer = "peer-$id"
-    val conn = if (isGroup) {
-        syntheticConnectionForGroupClique(groupId = id, memberUserIds = listOf(viewer, peer, "p3"))
-    } else {
-        Connection(
-            id = id,
-            created = 1L,
-            expiry = Long.MAX_VALUE,
-            user_ids = listOf(viewer, peer),
-            status = "kept",
-        )
-    }
-    val gc = if (isGroup) {
-        GroupCliqueDetails(
-            groupId = id,
-            name = title,
-            createdByUserId = viewer,
-            keyAnchorUserId = peer,
-            memberUserIds = conn.user_ids,
-        )
-    } else {
-        null
-    }
+    val conn =
+        if (isGroup) {
+            syntheticConnectionForGroupClique(groupId = id, memberUserIds = listOf(viewer, peer, "p3"))
+        } else {
+            Connection(
+                id = id,
+                created = 1L,
+                expiry = Long.MAX_VALUE,
+                user_ids = listOf(viewer, peer),
+                status = "kept",
+            )
+        }
+    val gc =
+        if (isGroup) {
+            GroupCliqueDetails(
+                groupId = id,
+                name = title,
+                createdByUserId = viewer,
+                keyAnchorUserId = peer,
+                memberUserIds = conn.user_ids,
+            )
+        } else {
+            null
+        }
     return ChatWithDetails(
-        chat = Chat(
-            id = "chat-$id",
-            connectionId = if (isGroup) null else id,
-            groupId = if (isGroup) id else null,
-            messages = emptyList(),
-        ),
+        chat =
+            Chat(
+                id = "chat-$id",
+                connectionId = if (isGroup) null else id,
+                groupId = if (isGroup) id else null,
+                messages = emptyList(),
+            ),
         connection = conn,
         otherUser = User(id = peer, name = if (isGroup) "Member" else title),
         lastMessage = null,
         unreadCount = 0,
         groupClique = gc,
-        groupMemberUsers = if (isGroup) {
-            listOf(User(id = peer, name = "Member"))
-        } else {
-            emptyList()
-        },
+        groupMemberUsers =
+            if (isGroup) {
+                listOf(User(id = peer, name = "Member"))
+            } else {
+                emptyList()
+            },
     )
 }

@@ -127,10 +127,10 @@ Soundtrack / community kinds (hazard, SOS, utility, study): same bordered hero; 
 | Region | Height / notes |
 |--------|----------------|
 | Solid header | 56dp + status bar; bordered back (`ChatHeaderIconButton(showBorder = true)`), title, occupant subtitle, borderless ⋮; 2dp bottom `#000` border |
-| Tap-to-connect banner | Primary blue surface, centered copy |
-| Lobby banner (when `inLobby`) | `primaryContainer` tint — currently disabled (`inLobby = false`) |
+| Tap-to-connect banner | Primary blue surface, centered copy. Top spacer uses `platformNativeHeaderClearance(..., hasSubtitle=true, growCompactSubtitle=true)` so the banner sits fully below the native compact bar (including Dynamic Island / notch). `testTag` `hub_tap_to_connect_banner`. |
 | Timeline | `ChatMessageTimeline`, hub-neutral mesh; **no** delivery receipts (`newestSentMessage = null`) |
-| Composer | `HubChatInputBar` — attach + field + solid primary send button |
+| Composer | `HubChatInputBar` — attach + field + solid primary send button. iOS: native tab bar stays visible (parity with 1:1 chat); `subtractTabBarOverlay=true`, `clearNativeTabBar=true`. |
+| Lobby banner (when `inLobby`) | `primaryContainer` tint — currently disabled (`inLobby = false`) |
 
 ---
 

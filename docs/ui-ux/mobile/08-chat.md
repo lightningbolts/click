@@ -510,6 +510,7 @@ sequenceDiagram
     end
     VM-->>CV: ChatMessagesState.Success
     CV->>CV: initial paint scrollToItem(0) newest (instant; anti-teleport)
+    Note over CV: If `targetMessageId` is set (search deep-link), skip snap-to-latest; paginate until the id is loaded; `scrollChatTimelineToMessage`; pulse `ChatSearchFocusFrame` ~1.8s
 ```
 
 ### Open thread (iOS overlay)

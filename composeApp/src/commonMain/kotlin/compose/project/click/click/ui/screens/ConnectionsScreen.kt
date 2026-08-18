@@ -57,6 +57,7 @@ fun ConnectionsScreen(
     userId: String,
     searchQuery: String = "",
     initialChatId: String? = null,
+    initialTargetMessageId: String? = null,
     onChatDismissed: (() -> Unit)? = null,
     onChatOpenStateChanged: (Boolean) -> Unit = {},
     /**
@@ -300,6 +301,7 @@ fun ConnectionsScreen(
                             ChatView(
                                 viewModel = viewModel,
                                 chatId = activeChatId,
+                                targetMessageId = initialTargetMessageId,
                                 onBackPressed = { closeActiveChat(ChatTransitionMode.Tap) },
                                 onOpenUserProfile = { profileUserId = it },
                                 onOpenGroupMembersPicker = {

@@ -20,24 +20,34 @@ import kotlin.test.assertTrue
  * labels at day boundaries.
  */
 class ChatTimelineTest {
-
     private val zone: TimeZone = TimeZone.currentSystemDefault()
 
-    private fun tsLocal(year: Int, month: Int, day: Int, hour: Int = 12, minute: Int = 0): Long =
+    private fun tsLocal(
+        year: Int,
+        month: Int,
+        day: Int,
+        hour: Int = 12,
+        minute: Int = 0,
+    ): Long =
         LocalDateTime(year, month, day, hour, minute, 0, 0)
             .toInstant(zone)
             .toEpochMilliseconds()
 
     private fun user(id: String = "u1"): User = User(id = id, name = "User $id")
 
-    private fun mwu(id: String, timestamp: Long, userId: String = "u1"): MessageWithUser =
+    private fun mwu(
+        id: String,
+        timestamp: Long,
+        userId: String = "u1",
+    ): MessageWithUser =
         MessageWithUser(
-            message = Message(
-                id = id,
-                user_id = userId,
-                content = "m-$id",
-                timeCreated = timestamp,
-            ),
+            message =
+                Message(
+                    id = id,
+                    user_id = userId,
+                    content = "m-$id",
+                    timeCreated = timestamp,
+                ),
             user = user(userId),
             isSent = userId == "u1",
         )
@@ -53,9 +63,10 @@ class ChatTimelineTest {
     fun oldestFirst_singleDayProducesOneSeparatorFollowedByMessages() {
         val day = tsLocal(2026, 4, 1, 9, 0)
         val later = tsLocal(2026, 4, 1, 15, 0)
-        val entries = buildChatTimelineEntries(
-            listOf(mwu("a", day), mwu("b", later))
-        )
+        val entries =
+            buildChatTimelineEntries(
+                listOf(mwu("a", day), mwu("b", later)),
+            )
 
         assertEquals(3, entries.size)
         assertTrue(entries[0] is ChatTimelineEntry.DaySeparator)
@@ -70,15 +81,17 @@ class ChatTimelineTest {
         val day1 = tsLocal(2026, 4, 1, 22, 0)
         val day2 = tsLocal(2026, 4, 2, 7, 0)
         val day3 = tsLocal(2026, 4, 5, 7, 0)
-        val entries = buildChatTimelineEntries(
-            listOf(mwu("a", day1), mwu("b", day2), mwu("c", day3))
-        )
+        val entries =
+            buildChatTimelineEntries(
+                listOf(mwu("a", day1), mwu("b", day2), mwu("c", day3)),
+            )
 
         // Expect: [sep1, a, sep2, b, sep3, c]
         assertEquals(6, entries.size)
-        val positions = entries.mapIndexedNotNull { i, e ->
-            if (e is ChatTimelineEntry.DaySeparator) i else null
-        }
+        val positions =
+            entries.mapIndexedNotNull { i, e ->
+                if (e is ChatTimelineEntry.DaySeparator) i else null
+            }
         assertEquals(listOf(0, 2, 4), positions)
     }
 
@@ -86,9 +99,10 @@ class ChatTimelineTest {
     fun oldestFirst_entryKeysAreStableAndUnique() {
         val day1 = tsLocal(2026, 4, 1, 22, 0)
         val day2 = tsLocal(2026, 4, 2, 7, 0)
-        val entries = buildChatTimelineEntries(
-            listOf(mwu("a", day1), mwu("b", day2))
-        )
+        val entries =
+            buildChatTimelineEntries(
+                listOf(mwu("a", day1), mwu("b", day2)),
+            )
         val keys = entries.map { it.key }
         assertEquals(keys.toSet().size, keys.size, "Keys must be unique, got $keys")
     }
@@ -107,9 +121,10 @@ class ChatTimelineTest {
         val first = tsLocal(2026, 4, 1, 9, 0)
         val second = tsLocal(2026, 4, 1, 15, 0)
         // Input is oldest-first; helper reverses it internally.
-        val entries = buildChatTimelineEntriesNewestFirst(
-            listOf(mwu("a", first), mwu("b", second))
-        )
+        val entries =
+            buildChatTimelineEntriesNewestFirst(
+                listOf(mwu("a", first), mwu("b", second)),
+            )
         // Expected newest-first order: b, a, trailing separator.
         assertEquals(3, entries.size)
         assertTrue(entries[0] is ChatTimelineEntry.MessageEntry)
@@ -132,9 +147,10 @@ class ChatTimelineTest {
         val day2 = tsLocal(2026, 4, 2, 9, 0)
         val day3 = tsLocal(2026, 4, 5, 9, 0)
 
-        val entries = buildChatTimelineEntriesNewestFirst(
-            listOf(mwu("a", day1a), mwu("b", day1b), mwu("c", day2), mwu("d", day3))
-        )
+        val entries =
+            buildChatTimelineEntriesNewestFirst(
+                listOf(mwu("a", day1a), mwu("b", day1b), mwu("c", day2), mwu("d", day3)),
+            )
         // Newest-first walk: d, sep(day2), c, sep(day1), b, a, sep(day1-tail)
         assertEquals(7, entries.size)
         assertEquals(
@@ -167,9 +183,10 @@ class ChatTimelineTest {
         val day1b = tsLocal(2026, 4, 1, 18, 0)
         val day2 = tsLocal(2026, 4, 2, 9, 0)
 
-        val entries = buildChatTimelineEntriesNewestFirst(
-            listOf(mwu("a", day1a), mwu("b", day1b), mwu("c", day2))
-        )
+        val entries =
+            buildChatTimelineEntriesNewestFirst(
+                listOf(mwu("a", day1a), mwu("b", day1b), mwu("c", day2)),
+            )
         val trailing = entries.last() as ChatTimelineEntry.DaySeparator
         // The trailing separator is labeled using the earliest message's day
         // (day1). formatConversationDayLabel depends on "now", so we just
@@ -184,9 +201,10 @@ class ChatTimelineTest {
     fun newestFirst_keysAreUnique() {
         val day1 = tsLocal(2026, 4, 1, 9, 0)
         val day2 = tsLocal(2026, 4, 2, 9, 0)
-        val entries = buildChatTimelineEntriesNewestFirst(
-            listOf(mwu("a", day1), mwu("b", day2))
-        )
+        val entries =
+            buildChatTimelineEntriesNewestFirst(
+                listOf(mwu("a", day1), mwu("b", day2)),
+            )
         val keys = entries.map { it.key }
         assertEquals(keys.toSet().size, keys.size, "Keys must be unique, got $keys")
     }
@@ -199,13 +217,14 @@ class ChatTimelineTest {
         val dayAMorning = tsLocal(2026, 4, 22, 9, 0)
         val dayB = tsLocal(2026, 4, 23, 9, 0)
         val dayAEvening = tsLocal(2026, 4, 22, 21, 0)
-        val entries = buildChatTimelineEntriesNewestFirst(
-            listOf(
-                mwu("a", dayAMorning),
-                mwu("b", dayB),
-                mwu("c", dayAEvening),
+        val entries =
+            buildChatTimelineEntriesNewestFirst(
+                listOf(
+                    mwu("a", dayAMorning),
+                    mwu("b", dayB),
+                    mwu("c", dayAEvening),
+                ),
             )
-        )
         val keys = entries.map { it.key }
         assertEquals(keys.toSet().size, keys.size, "Keys must be unique, got $keys")
         assertTrue(
@@ -221,13 +240,14 @@ class ChatTimelineTest {
         val apr22Morning = tsLocal(2026, 4, 22, 9, 0)
         val mar6 = tsLocal(2026, 3, 6, 12, 0)
         val apr22Evening = tsLocal(2026, 4, 22, 21, 0)
-        val entries = buildChatTimelineEntriesNewestFirst(
-            listOf(
-                mwu("a", apr22Morning),
-                mwu("b", mar6),
-                mwu("c", apr22Evening),
-            ),
-        )
+        val entries =
+            buildChatTimelineEntriesNewestFirst(
+                listOf(
+                    mwu("a", apr22Morning),
+                    mwu("b", mar6),
+                    mwu("c", apr22Evening),
+                ),
+            )
         val labels = entries.filterIsInstance<ChatTimelineEntry.DaySeparator>().map { it.label }
         // reverseLayout: newest day first among separators walking newest→oldest
         assertEquals(2, labels.size, "Expected one separator per distinct day, got $labels")
@@ -235,39 +255,58 @@ class ChatTimelineTest {
             labels.none { label -> labels.count { it == label } > 1 },
             "Duplicate day labels should not appear: $labels",
         )
-        val messageOrder = entries.filterIsInstance<ChatTimelineEntry.MessageEntry>()
-            .map { it.messageWithUser.message.id }
+        val messageOrder =
+            entries
+                .filterIsInstance<ChatTimelineEntry.MessageEntry>()
+                .map { it.messageWithUser.message.id }
         assertEquals(listOf("c", "a", "b"), messageOrder)
     }
 
     @Test
     fun stableRowKey_matchesOptimisticAndDeliveredOutboundWithSameLocalSentAt() {
         val t = 1_700_000_000_000L
-        val optimistic = MessageWithUser(
-            message = Message(
-                id = "temp-$t-1",
-                user_id = "u1",
-                content = "hi",
-                timeCreated = t,
-                localSentAt = t,
-                deliveryState = MessageDeliveryState.PENDING,
-            ),
-            user = user("u1"),
-            isSent = true,
-        )
-        val delivered = MessageWithUser(
-            message = Message(
-                id = "real-uuid",
-                user_id = "u1",
-                content = "hi",
-                timeCreated = t + 80,
-                localSentAt = t,
-                deliveryState = MessageDeliveryState.SENT,
-            ),
-            user = user("u1"),
-            isSent = true,
-        )
+        val optimistic =
+            MessageWithUser(
+                message =
+                    Message(
+                        id = "temp-$t-1",
+                        user_id = "u1",
+                        content = "hi",
+                        timeCreated = t,
+                        localSentAt = t,
+                        deliveryState = MessageDeliveryState.PENDING,
+                    ),
+                user = user("u1"),
+                isSent = true,
+            )
+        val delivered =
+            MessageWithUser(
+                message =
+                    Message(
+                        id = "real-uuid",
+                        user_id = "u1",
+                        content = "hi",
+                        timeCreated = t + 80,
+                        localSentAt = t,
+                        deliveryState = MessageDeliveryState.SENT,
+                    ),
+                user = user("u1"),
+                isSent = true,
+            )
         assertEquals(chatBubbleStableRowKey(optimistic), chatBubbleStableRowKey(delivered))
+    }
+
+    @Test
+    fun newestFirst_indexOfMessageId_findsTarget() {
+        val first = tsLocal(2026, 4, 1, 9, 0)
+        val second = tsLocal(2026, 4, 1, 15, 0)
+        val entries =
+            buildChatTimelineEntriesNewestFirst(
+                listOf(mwu("a", first), mwu("b", second)),
+            )
+        assertEquals(0, entries.indexOfMessageId("b"))
+        assertEquals(1, entries.indexOfMessageId("a"))
+        assertEquals(-1, entries.indexOfMessageId("missing"))
     }
 
     // endregion

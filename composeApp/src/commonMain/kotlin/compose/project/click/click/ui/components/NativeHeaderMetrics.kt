@@ -294,10 +294,12 @@ fun platformNativeHeaderClearance(
     collapseFraction: Float = 1f,
     hasSubtitle: Boolean = false,
     stackSubtitle: Boolean = false,
+    growCompactSubtitle: Boolean = false,
 ): Dp =
     NativeHeaderMetrics.headerClearanceDp(
         statusBarTop = statusBarTop,
         collapseFraction = collapseFraction,
         hasSubtitle = hasSubtitle,
         stackSubtitle = stackSubtitle,
+        growCompactSubtitle = growCompactSubtitle,
     )

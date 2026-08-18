@@ -5,12 +5,15 @@ import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.ui.utils.beaconTypeDisplayLabel
 import compose.project.click.click.ui.utils.displayDynamicTitle
 import compose.project.click.click.ui.utils.displayTypeTitle
-import compose.project.click.click.ui.utils.userFacingLabel
 import compose.project.click.click.ui.utils.haversineDistance
+import compose.project.click.click.ui.utils.userFacingLabel // pragma: allowlist secret
 import kotlin.math.PI
 import kotlin.math.cos
 
-internal fun availabilityIntentMatchesQuery(intent: AvailabilityIntentRow, lowerQuery: String): Boolean {
+internal fun availabilityIntentMatchesQuery(
+    intent: AvailabilityIntentRow,
+    lowerQuery: String,
+): Boolean {
     if (lowerQuery.isBlank()) return false
     val tag = intent.intentTag?.lowercase().orEmpty()
     val tf = intent.timeframe?.lowercase().orEmpty()
@@ -21,7 +24,7 @@ internal fun availabilityIntentMatchesQuery(intent: AvailabilityIntentRow, lower
 
 internal fun mapBeaconSearchHaystack(beacon: MapBeacon): String {
     val meta = beacon.metadata
-  return buildList {
+    return buildList {
         add(beacon.displayDynamicTitle())
         add(beacon.kind.userFacingLabel())
         beacon.sourceBeaconType?.let { add(beaconTypeDisplayLabel(it, beacon.kind)) }
@@ -33,17 +36,22 @@ internal fun mapBeaconSearchHaystack(beacon: MapBeacon): String {
         meta.description?.let { add(it) }
         meta.musicUrl?.let { add(it) }
         meta.originalUrl?.let { add(it) }
-    }
-        .joinToString(" ")
+    }.joinToString(" ")
         .lowercase()
 }
 
-internal fun mapBeaconMatchesQuery(beacon: MapBeacon, lowerQuery: String): Boolean {
+internal fun mapBeaconMatchesQuery(
+    beacon: MapBeacon,
+    lowerQuery: String,
+): Boolean {
     if (lowerQuery.isBlank()) return false
     return mapBeaconSearchHaystack(beacon).contains(lowerQuery)
 }
 
-internal fun isBeaconStillActive(beacon: MapBeacon, nowEpochMs: Long): Boolean {
+internal fun isBeaconStillActive(
+    beacon: MapBeacon,
+    nowEpochMs: Long,
+): Boolean {
     val exp = beacon.expiresAtEpochMs ?: return true
     return exp > nowEpochMs
 }
@@ -57,7 +65,11 @@ internal data class SearchBbox(
     val maxLon: Double,
 )
 
-internal fun searchBboxFromCenter(lat: Double, lon: Double, radiusMeters: Double): SearchBbox {
+internal fun searchBboxFromCenter(
+    lat: Double,
+    lon: Double,
+    radiusMeters: Double,
+): SearchBbox {
     val latDelta = radiusMeters / 111_000.0
     val lonDelta = radiusMeters / (111_000.0 * cos(lat * PI / 180.0)).coerceAtLeast(0.001)
     return SearchBbox(
@@ -79,13 +91,25 @@ internal fun beaconDistanceMeters(
 
 internal fun beaconDisplayTitle(beacon: MapBeacon): String = beacon.displayDynamicTitle()
 
-internal fun beaconDisplaySubtitle(beacon: MapBeacon, distanceMeters: Double?): String {
+internal fun beaconDisplaySubtitle(
+    beacon: MapBeacon,
+    distanceMeters: Double?,
+): String {
     val meta = beacon.metadata
     val typeLabel = beacon.displayTypeTitle()
-  return buildList {
-        meta.artistName?.trim()?.takeIf { it.isNotEmpty() }?.let { add(it) }
-            ?: meta.artist?.trim()?.takeIf { it.isNotEmpty() }?.let { add(it) }
-        meta.description?.trim()?.takeIf { it.isNotEmpty() }?.let { add(it) }
+    return buildList {
+        meta.artistName
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { add(it) }
+            ?: meta.artist
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { add(it) }
+        meta.description
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { add(it) }
         if (isEmpty()) add(typeLabel)
         distanceMeters?.let { add(formatSearchDistance(it)) }
     }.joinToString(" · ")
@@ -102,4 +126,28 @@ internal fun formatSearchDistance(meters: Double): String {
         val frac = tenths % 10
         "$whole.$frac km away"
     }
+}
+
+/**
+ * Compact snippet around the first case-insensitive [query] match so search rows
+ * show the hit instead of the full message body.
+ */
+internal fun highlightedMessageSnippet(
+    content: String,
+    query: String,
+    maxLen: Int = 140,
+): String {
+    val trimmed = content.trim().replace(Regex("\\s+"), " ")
+    if (trimmed.isEmpty()) return ""
+    val needle = query.trim()
+    if (needle.isEmpty()) return trimmed.take(maxLen)
+    val idx = trimmed.indexOf(needle, ignoreCase = true)
+    if (idx < 0) return trimmed.take(maxLen)
+    val pad = 28
+    val start = (idx - pad).coerceAtLeast(0)
+    val end = (idx + needle.length + 48).coerceAtMost(trimmed.length)
+    val prefix = if (start > 0) "…" else ""
+    val suffix = if (end < trimmed.length) "…" else ""
+    val slice = trimmed.substring(start, end)
+    return (prefix + slice + suffix).take(maxLen)
 }

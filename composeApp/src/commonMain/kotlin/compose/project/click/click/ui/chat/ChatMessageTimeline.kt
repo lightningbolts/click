@@ -149,6 +149,7 @@ internal fun ChatMessageTimeline(
     onExpandPhoto: (MessageWithUser) -> Unit = {},
     onOpenBeacon: (Message) -> Unit = {},
     isLoadingOlderMessages: Boolean = false,
+    highlightedMessageId: String? = null,
     interMessageBaseCompact: Dp = ChatInterMessageListBaseCompact,
     enableMessageContextMenu: Boolean = true,
     modifier: Modifier = Modifier,
@@ -234,29 +235,33 @@ internal fun ChatMessageTimeline(
                                 useHubNeutralMesh = useHubNeutralMesh,
                             ) {
                                 val bubble: @Composable () -> Unit = {
-                                    ChatMessageBubble(
-                                        messageWithUser = messageWithUser,
-                                        currentUserId = currentUserId,
-                                        reactions = msgReactions,
-                                        onToggleReaction = { reaction ->
-                                            onToggleReactionState.value(
-                                                messageWithUser.message.id,
-                                                reaction,
-                                            )
-                                        },
-                                        onForward = { msgId -> onForwardState.value(msgId) },
-                                        onLongPress = { onLongPressState.value(it) },
-                                        onSwipeReply = { onSwipeReplyState.value(it) },
-                                        showPeerAvatarInGroup = isGroupChat,
-                                        secureMediaHost = secureMediaHost,
-                                        activeChatId = activeChatId,
-                                        enableMessageContextMenu = enableMessageContextMenu,
-                                        onDownloadAttachment = { mwu, env ->
-                                            onDownloadAttachmentState.value(mwu, env)
-                                        },
-                                        onExpandPhoto = { onExpandPhotoState.value(it) },
-                                        onOpenBeacon = { onOpenBeaconState.value(it) },
-                                    )
+                                    ChatSearchFocusFrame(
+                                        active = highlightedMessageId == messageWithUser.message.id,
+                                    ) {
+                                        ChatMessageBubble(
+                                            messageWithUser = messageWithUser,
+                                            currentUserId = currentUserId,
+                                            reactions = msgReactions,
+                                            onToggleReaction = { reaction ->
+                                                onToggleReactionState.value(
+                                                    messageWithUser.message.id,
+                                                    reaction,
+                                                )
+                                            },
+                                            onForward = { msgId -> onForwardState.value(msgId) },
+                                            onLongPress = { onLongPressState.value(it) },
+                                            onSwipeReply = { onSwipeReplyState.value(it) },
+                                            showPeerAvatarInGroup = isGroupChat,
+                                            secureMediaHost = secureMediaHost,
+                                            activeChatId = activeChatId,
+                                            enableMessageContextMenu = enableMessageContextMenu,
+                                            onDownloadAttachment = { mwu, env ->
+                                                onDownloadAttachmentState.value(mwu, env)
+                                            },
+                                            onExpandPhoto = { onExpandPhotoState.value(it) },
+                                            onOpenBeacon = { onOpenBeaconState.value(it) },
+                                        )
+                                    }
                                 }
                                 if (isCallLog) {
                                     bubble()
