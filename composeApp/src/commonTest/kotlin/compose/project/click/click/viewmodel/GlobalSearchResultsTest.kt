@@ -131,8 +131,16 @@ class GlobalSearchResultsTest {
                 "…i7gs9740ic4EK2KjK7KOS+YpBitALoLI/vTTs",
             ),
         )
+        assertTrue(
+            isUndisplayableEncryptedSearchSnippet(
+                "…wZg_irGjiuFGVrCxCe1-Kpf5rGeilOLguHhDNqei62LgVuUIQ8Pb8gdNUI91Txv",
+            ),
+        )
         assertFalse(isUndisplayableEncryptedSearchSnippet("Lol"))
         assertFalse(isUndisplayableEncryptedSearchSnippet("hello notebook world"))
+        assertFalse(
+            isUndisplayableEncryptedSearchSnippet("well-known-hyphenated-search-title-here"),
+        )
     }
 
     @Test

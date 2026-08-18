@@ -76,8 +76,17 @@ object EnsureFreshAccessToken {
                 refreshed?.accessToken,
                 refreshed?.expiresAt?.toEpochMilliseconds(),
             )?.let { return it }
-            // Soft failure: keep previous usable token only if still unexpired.
-            if (!forceRefresh) return token
+            // Soft failure: keep previous usable token only if still unexpired *now*.
+            // Refresh can take AUTH_TIMEOUT_MS, so the timestamp captured at method entry
+            // can be stale; never return a JWT with unknown exp after a failed refresh.
+            if (
+                !forceRefresh &&
+                token != null &&
+                exp != null &&
+                exp > Clock.System.now().toEpochMilliseconds()
+            ) {
+                return token
+            }
             return null
         }
 

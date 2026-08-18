@@ -544,7 +544,7 @@ class GlobalSearchViewModel(
                 apiHits
                     .filterNot { isUndisplayableEncryptedSearchSnippet(it.snippet) }
                     .map { it.toMessageHit(archivedIds, hubs) }
-            val skipRemoteScan = apiHits.isNotEmpty()
+            val skipRemoteScan = fromApi.isNotEmpty()
             val remoteDirectIds: Set<String> =
                 if (skipRemoteScan) {
                     emptySet()

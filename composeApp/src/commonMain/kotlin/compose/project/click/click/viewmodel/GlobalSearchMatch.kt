@@ -176,5 +176,12 @@ internal fun isUndisplayableEncryptedSearchSnippet(snippet: String): Boolean {
         compact.all { ch ->
             ch.isLetterOrDigit() || ch == '+' || ch == '/' || ch == '=' || ch == '-' || ch == '_'
         }
-    return b64ish && (compact.contains('/') || compact.contains('+'))
+    // Standard Base64 uses +/; URL-safe uses -_. Require a separator so hyphenated
+    // English is not dropped. URL-safe ciphertext typically has both - and _.
+    return b64ish &&
+        (
+            compact.contains('+') ||
+                compact.contains('/') ||
+                (compact.contains('-') && compact.contains('_'))
+        )
 }

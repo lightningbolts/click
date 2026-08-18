@@ -441,9 +441,17 @@ class GlobalSearchViewModelTest {
     @Test
     fun conversationApiHits_dropEncryptedCiphertextSnippets() =
         runVmTest {
+            val active = listOf(directChat(VIEWER, PEER_A, "conn-1", "Ann"))
+            val plaintext =
+                Message(
+                    id = "local-lol",
+                    user_id = PEER_A,
+                    content = "Lol from the decrypted fallback",
+                    timeCreated = 8_000L,
+                )
             val fake =
                 FakeChatRepository(
-                    onFetchDirectUserChatsWithDetails = { emptyList() },
+                    onFetchDirectUserChatsWithDetails = { if (it == VIEWER) active else emptyList() },
                     onFetchArchivedUserChatsWithDetails = { emptyList() },
                     onFetchGroupUserChatsWithDetails = { emptyList() },
                     onSearchConversationHits = {
@@ -460,15 +468,16 @@ class GlobalSearchViewModelTest {
                             ),
                         )
                     },
+                    onSearchMessagesByConnectionId = { _, _ -> "chat-1" to listOf(plaintext) },
                 )
             val vm = newVm(fake)
             vm.search("lol", VIEWER)
             drainSearchWork()
-            assertTrue(
+            val hits =
                 vm.results.value.items
                     .filterIsInstance<SearchResult.MessageHit>()
-                    .isEmpty(),
-            )
+            assertTrue(hits.none { it.result.message.id == "api-enc" })
+            assertTrue(hits.any { it.result.message.id == "local-lol" })
         }
 
     @Test
