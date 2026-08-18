@@ -7,6 +7,7 @@ import compose.project.click.click.auth.LocalSessionCache // pragma: allowlist s
 import compose.project.click.click.auth.LocalSessionIdentity // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
+import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.auth.SessionRefreshCoordinator // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
@@ -310,11 +311,13 @@ class AuthRepository(
 
     suspend fun signOut(): Result<Unit> =
         try {
+            SessionRefreshCoordinator.clearSuccessfulRefresh()
             supabase.auth.signOut()
             tokenStorage.clearTokens()
             Result.success(Unit)
         } catch (e: Exception) {
             // Ensure tokens are cleared even if Supabase signout fails (e.g. network error)
+            SessionRefreshCoordinator.clearSuccessfulRefresh()
             tokenStorage.clearTokens()
             Result.failure(e)
         }
@@ -454,64 +457,92 @@ class AuthRepository(
 
     suspend fun hasValidLocalSession(): Boolean = LocalSessionCache.read(tokenStorage) != null
 
-    suspend fun refreshSession(): Result<Unit> =
-        SessionRefreshCoordinator.singleFlightRefresh {
+    suspend fun refreshSession(forceRefresh: Boolean = false): Result<Unit> {
+        return SessionRefreshCoordinator.singleFlightRefresh {
             try {
-                // Prefer the live GoTrue / SettingsSessionManager session. Re-importing TokenStorage
-                // over it can overwrite a good refresh token with a stale one (then AuthRestException
-                // and "no fresh JWT" until sign-out). Only import when the SDK has no session.
-                if (supabase.auth.currentSessionOrNull() == null) {
-                    runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
-                }
-                val existing = supabase.auth.currentSessionOrNull()
-                val now = Clock.System.now().toEpochMilliseconds()
-                val existingExp = existing?.expiresAt?.toEpochMilliseconds()
-                // Access token still has headroom — sync TokenStorage from SDK and skip network refresh
-                // to avoid concurrent refresh-token rotation races.
-                // Skip network refresh only when access token has headroom AND GoTrue knows the user.
-                // Offline import used to set user=null; skipping then left currentUserOrNull() empty forever.
-                if (existing != null &&
-                    existingExp != null &&
-                    existingExp > now + 120_000L &&
-                    supabase.auth
-                        .currentUserOrNull()
-                        ?.id
-                        ?.isNotBlank() == true
+                // Never skip GoTrue just because `exp` is still in the future. TestFlight updates
+                // and dual-store drift (SettingsSessionManager vs TokenStorage) keep access JWTs
+                // that click-web / Realtime reject as 401 until a real refreshCurrentSession().
+                // Coalesce only non-forced callers that race in right after a successful refresh
+                // (e.g. EnsureFreshAccessToken + chat send). Forced 401 retries always hit GoTrue
+                // unless another refresh is already in-flight (single-flight).
+                if (
+                    !forceRefresh &&
+                    accessTokenHasRefreshHeadroom() &&
+                    SessionRefreshCoordinator.recentlyRefreshed()
                 ) {
-                    tokenStorage.saveTokens(
-                        jwt = existing.accessToken,
-                        refreshToken = existing.refreshToken,
-                        expiresAt = existingExp,
-                        tokenType = existing.tokenType,
-                    )
+                    persistCurrentSessionToTokenStorage()
                     return@singleFlightRefresh Result.success(Unit)
                 }
-                // Session token present but user missing — re-import identity from JWT before refresh.
-                if (existing != null &&
-                    supabase.auth
-                        .currentUserOrNull()
-                        ?.id
-                        .isNullOrBlank()
-                ) {
-                    runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
-                }
+                hydrateGoTrueFromTokenStorageIfNeeded()
                 withTimeout(AUTH_TIMEOUT_MS) {
                     supabase.auth.refreshCurrentSession()
                 }
-                val session = supabase.auth.currentSessionOrNull()
-                if (session != null) {
-                    tokenStorage.saveTokens(
-                        jwt = session.accessToken,
-                        refreshToken = session.refreshToken,
-                        expiresAt = session.expiresAt?.toEpochMilliseconds(),
-                        tokenType = session.tokenType,
-                    )
-                }
+                persistCurrentSessionToTokenStorage()
+                SessionRefreshCoordinator.markSuccessfulRefresh()
                 Result.success(Unit)
             } catch (e: Exception) {
                 Result.failure(e)
             }
         }
+    }
+
+    private suspend fun accessTokenHasRefreshHeadroom(): Boolean {
+        if (shouldHydrateFromTokenStorage()) return false
+        val existing = supabase.auth.currentSessionOrNull() ?: return false
+        val existingExp = existing.expiresAt?.toEpochMilliseconds() ?: return false
+        val now = Clock.System.now().toEpochMilliseconds()
+        val userOk =
+            supabase.auth
+                .currentUserOrNull()
+                ?.id
+                ?.isNotBlank() == true
+        return userOk && existingExp > now + 120_000L
+    }
+
+    /**
+     * SettingsSessionManager can keep an older access token that still has wall-clock headroom
+     * after TestFlight while TokenStorage already holds the rotated refresh token (or vice versa).
+     * Import storage when the SDK session is missing/expired/near-expiry, or storage is newer.
+     */
+    private suspend fun shouldHydrateFromTokenStorage(): Boolean {
+        val storageRefresh = tokenStorage.getRefreshToken()?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+        val existing = supabase.auth.currentSessionOrNull()
+        if (existing == null) return true
+        val now = Clock.System.now().toEpochMilliseconds()
+        val sdkExp = existing.expiresAt?.toEpochMilliseconds()
+        if (sdkExp != null && sdkExp <= now + 90_000L) return true
+        if (supabase.auth
+                .currentUserOrNull()
+                ?.id
+                .isNullOrBlank()
+        ) {
+            return true
+        }
+        val storageExp =
+            tokenStorage.getExpiresAt()
+                ?: EnsureFreshAccessToken.jwtExpEpochMs(tokenStorage.getJwt())
+        return storageRefresh != existing.refreshToken &&
+            storageExp != null &&
+            sdkExp != null &&
+            storageExp > sdkExp + 2_000L
+    }
+
+    private suspend fun hydrateGoTrueFromTokenStorageIfNeeded() {
+        if (shouldHydrateFromTokenStorage()) {
+            runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+        }
+    }
+
+    private suspend fun persistCurrentSessionToTokenStorage() {
+        val session = supabase.auth.currentSessionOrNull() ?: return
+        tokenStorage.saveTokens(
+            jwt = session.accessToken,
+            refreshToken = session.refreshToken,
+            expiresAt = session.expiresAt?.toEpochMilliseconds(),
+            tokenType = session.tokenType,
+        )
+    }
 
     /**
      * Update auth user_metadata with explicit first/last names (and derived full_name / name).

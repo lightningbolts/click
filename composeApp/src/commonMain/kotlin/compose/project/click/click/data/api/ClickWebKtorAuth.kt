@@ -18,7 +18,7 @@ import io.ktor.http.Url
 import io.ktor.util.AttributeKey
 import kotlinx.datetime.Clock
 
-private val ClickWebForbiddenRetryOnceKey = AttributeKey<Boolean>("click-web-forbidden-retry-once")
+private val ClickWebAuthRetryOnceKey = AttributeKey<Boolean>("click-web-auth-retry-once")
 
 /**
  * Ktor bearer auth for click-web BFF routes — shared by [ApiClient] and [ChatApiClient].
@@ -44,19 +44,14 @@ internal fun HttpClientConfig<*>.installClickWebBearerAuth(tokenStorage: TokenSt
                 BearerTokens(stored, refresh)
             }
             refreshTokens {
-                runCatching { AuthRepository(tokenStorage).refreshSession() }
+                runCatching { AuthRepository(tokenStorage).refreshSession(forceRefresh = true) }
                 val session = SupabaseConfig.client.auth.currentSessionOrNull()
-                if (session != null) {
-                    val access = session.accessToken
-                    if (access.isNotBlank()) {
-                        return@refreshTokens BearerTokens(access, session.refreshToken.orEmpty())
-                    }
+                val access = session?.accessToken?.trim().orEmpty()
+                if (access.isNotEmpty()) {
+                    return@refreshTokens BearerTokens(access, session?.refreshToken.orEmpty())
                 }
-                val stored =
-                    tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
-                        ?: return@refreshTokens null
-                val refresh = tokenStorage.getRefreshToken()?.trim().orEmpty()
-                BearerTokens(stored, refresh)
+                // Never replay a TokenStorage JWT that already 401'd.
+                null
             }
             sendWithoutRequest { request ->
                 request.url.host == authHost
@@ -75,14 +70,15 @@ private val ClickWeb403RetryPlugin =
         val authHost = Url(ApiConfig.CLICK_WEB_BASE_URL.trimEnd('/')).host
         client.plugin(HttpSend).intercept { request ->
             val originalCall = execute(request)
+            val status = originalCall.response.status.value
             if (
-                originalCall.response.status.value == 403 &&
+                status in setOf(401, 403) &&
                 request.url.host.equals(authHost, ignoreCase = true) &&
-                request.attributes.getOrNull(ClickWebForbiddenRetryOnceKey) != true
+                request.attributes.getOrNull(ClickWebAuthRetryOnceKey) != true
             ) {
-                request.attributes.put(ClickWebForbiddenRetryOnceKey, true)
-                runCatching { AuthRepository(tokenStorage).refreshSession() }
-                val freshToken = EnsureFreshAccessToken.get(tokenStorage)
+                request.attributes.put(ClickWebAuthRetryOnceKey, true)
+                runCatching { AuthRepository(tokenStorage).refreshSession(forceRefresh = true) }
+                val freshToken = EnsureFreshAccessToken.get(tokenStorage, forceRefresh = false)
                 if (!freshToken.isNullOrBlank()) {
                     request.headers.remove(HttpHeaders.Authorization)
                     request.headers.append(HttpHeaders.Authorization, clickWebBearerHeader(freshToken))
@@ -107,7 +103,10 @@ internal fun HttpClientConfig<*>.installClickWeb403RetryInterceptor(tokenStorage
  * Hydrates GoTrue from disk, refreshes when near expiry, and returns a bearer-ready access token.
  * Call before click-web writes when Ktor's bearer plugin may not have loaded tokens yet.
  */
-internal suspend fun resolveClickWebAccessToken(tokenStorage: TokenStorage = createTokenStorage()): String? {
+internal suspend fun resolveClickWebAccessToken(
+    tokenStorage: TokenStorage = createTokenStorage(),
+    forceRefresh: Boolean = false,
+): String? {
     if (SupabaseConfig.client.auth.currentSessionOrNull() == null) {
         runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
     }
@@ -115,16 +114,11 @@ internal suspend fun resolveClickWebAccessToken(tokenStorage: TokenStorage = cre
     val now = Clock.System.now().toEpochMilliseconds()
     val session = SupabaseConfig.client.auth.currentSessionOrNull()
     val exp = session?.expiresAt?.toEpochMilliseconds()
-    val needsRefresh = session == null || (exp != null && exp <= now + 60_000L)
+    val needsRefresh = forceRefresh || session == null || (exp != null && exp <= now + 60_000L)
     if (needsRefresh) {
-        authRepository.refreshSession()
+        authRepository.refreshSession(forceRefresh = forceRefresh || session == null)
     }
-    return SupabaseConfig.client.auth
-        .currentSessionOrNull()
-        ?.accessToken
-        ?.trim()
-        ?.takeIf { it.isNotEmpty() }
-        ?: tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+    return EnsureFreshAccessToken.get(tokenStorage, authRepository, forceRefresh = false)
 }
 
 internal fun clickWebBearerHeader(rawToken: String): String {

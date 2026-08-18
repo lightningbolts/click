@@ -253,6 +253,6 @@ flowchart TD
 
 ## 7. Message deep-link
 
-`GlobalSearchViewModel.search` debounces keystrokes (300ms), refreshes the JWT, then aggregates local SSOT matches (people, cliques, beacons, intents, places). Message hits come from click-web `GET /api/chat/search` first; if that returns empty, a bounded local/decrypted scan still runs. Cancelled keystrokes rethrow `CancellationException` so a newer query keeps `isSearching` until it finishes.
+`GlobalSearchViewModel.search` debounces keystrokes (300ms), refreshes the JWT (401 on `GET /api/chat/search` forces a GoTrue refresh and retries once), then aggregates local SSOT matches (people, cliques, beacons, intents, places). Message hits come from click-web `GET /api/chat/search` first; encrypted `e2e:` / `e2e_grp:` bodies are never shown (server skips them; the client also drops truncated ciphertext snippets). If the API returns empty, a bounded local/decrypted scan still runs. Cancelled keystrokes rethrow `CancellationException` so a newer query keeps `isSearching` until it finishes.
 
 Tapping a message hit passes `SearchChatOpenTarget.targetMessageId` into `ChatView` or `HubChatScreen`. The timeline paginates (1:1/group) or loads an around-window (hub) until that id is present, scrolls it into view, and applies `ChatSearchFocusFrame` for ~1.8s.

@@ -547,8 +547,8 @@ class ChatApiClient(
             if (first.isFailure) {
                 val msg = first.exceptionOrNull()?.redactedRestMessage()?.lowercase()
                 if (msg?.contains("unauthorized") == true || msg?.contains("401") == true) {
-                    AuthRepository(tokenStorage).refreshSession()
-                    val retry = resolveClickWebAccessToken(tokenStorage)
+                    AuthRepository(tokenStorage).refreshSession(forceRefresh = true)
+                    val retry = resolveClickWebAccessToken(tokenStorage, forceRefresh = true)
                     if (!retry.isNullOrBlank()) {
                         return postOnce(retry)
                     }
@@ -1126,8 +1126,8 @@ class ChatApiClient(
             if (first.isFailure) {
                 val msg = first.exceptionOrNull()?.redactedRestMessage()?.lowercase()
                 if (msg?.contains("unauthorized") == true || msg?.contains("401") == true) {
-                    AuthRepository(tokenStorage).refreshSession()
-                    val retry = resolveClickWebAccessToken(tokenStorage)
+                    AuthRepository(tokenStorage).refreshSession(forceRefresh = true)
+                    val retry = resolveClickWebAccessToken(tokenStorage, forceRefresh = true)
                     if (!retry.isNullOrBlank()) {
                         return deleteOnce(retry)
                     }
@@ -1284,18 +1284,38 @@ class ChatApiClient(
         try {
             val q = query.trim()
             if (q.length < 2) return Result.success(emptyList())
-            val response =
-                client.get("$clickWebBaseUrl/api/chat/search") {
-                    headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
-                    parameter("q", q)
-                    accept(ContentType.Application.Json)
-                }
-            if (response.status.value in 200..299) {
-                val body = response.body<ConversationSearchEnvelope>()
-                Result.success(body.hits)
-            } else {
-                Result.failure(Exception("HTTP ${response.status} for chat search"))
+
+            suspend fun getOnce(bearer: String): Pair<Int, Result<List<ConversationSearchHitDto>>> {
+                val response =
+                    client.get("$clickWebBaseUrl/api/chat/search") {
+                        headers.append(HttpHeaders.Authorization, bearerAuthHeader(bearer))
+                        parameter("q", q)
+                        accept(ContentType.Application.Json)
+                    }
+                val status = response.status.value
+                val result =
+                    if (status in 200..299) {
+                        Result.success(response.body<ConversationSearchEnvelope>().hits)
+                    } else {
+                        Result.failure(Exception("HTTP $status for chat search"))
+                    }
+                return status to result
             }
+            val initial =
+                resolveClickWebAccessToken(tokenStorage)
+                    ?: authToken.trim().takeIf { it.isNotEmpty() }
+            if (initial.isNullOrBlank()) {
+                return Result.failure(Exception("HTTP 401 for chat search"))
+            }
+            val (status, first) = getOnce(initial)
+            if (status == 401 || status == 403) {
+                AuthRepository(tokenStorage).refreshSession(forceRefresh = true)
+                val retry = resolveClickWebAccessToken(tokenStorage, forceRefresh = true)
+                if (!retry.isNullOrBlank()) {
+                    return getOnce(retry).second
+                }
+            }
+            first
         } catch (e: Exception) {
             println("Error searching conversations: ${e.redactedRestMessage()}")
             Result.failure(e)
@@ -1313,21 +1333,39 @@ class ChatApiClient(
         try {
             val id = hubId.trim()
             if (id.isEmpty()) return Result.failure(IllegalArgumentException("hubId is required"))
-            val response =
-                client.get("$clickWebBaseUrl/api/hub/messages") {
-                    headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
-                    parameter("hubId", id)
-                    parameter("limit", limit.coerceIn(1, 120).toString())
-                    aroundMessageId?.trim()?.takeIf { it.isNotEmpty() }?.let { parameter("aroundMessageId", it) }
-                    accept(ContentType.Application.Json)
+
+            suspend fun getOnce(bearer: String): Result<HubThreadResponse> {
+                val response =
+                    client.get("$clickWebBaseUrl/api/hub/messages") {
+                        headers.append(HttpHeaders.Authorization, bearerAuthHeader(bearer))
+                        parameter("hubId", id)
+                        parameter("limit", limit.coerceIn(1, 120).toString())
+                        aroundMessageId?.trim()?.takeIf { it.isNotEmpty() }?.let { parameter("aroundMessageId", it) }
+                        accept(ContentType.Application.Json)
+                    }
+                val parsed = runCatching { response.body<HubThreadResponse>() }.getOrNull()
+                return when {
+                    response.status.value in 200..299 && parsed != null -> Result.success(parsed)
+                    response.status.value == 401 -> Result.failure(Exception("HTTP 401 for hub thread"))
+                    response.status.value == 403 ->
+                        Result.failure(Exception(parsed?.error?.takeIf { it.isNotBlank() } ?: "NOT_A_PARTICIPANT"))
+                    else -> Result.failure(Exception("HTTP ${response.status} for hub thread"))
                 }
-            val parsed = runCatching { response.body<HubThreadResponse>() }.getOrNull()
-            when {
-                response.status.value in 200..299 && parsed != null -> Result.success(parsed)
-                response.status.value == 403 ->
-                    Result.failure(Exception(parsed?.error?.takeIf { it.isNotBlank() } ?: "NOT_A_PARTICIPANT"))
-                else -> Result.failure(Exception("HTTP ${response.status} for hub thread"))
             }
+            val initial =
+                resolveClickWebAccessToken(tokenStorage)
+                    ?: authToken.trim().takeIf { it.isNotEmpty() }
+            if (initial.isNullOrBlank()) {
+                return Result.failure(Exception("HTTP 401 for hub thread"))
+            }
+            val first = getOnce(initial)
+            val msg = first.exceptionOrNull()?.message.orEmpty()
+            if (msg.contains("401")) {
+                AuthRepository(tokenStorage).refreshSession(forceRefresh = true)
+                val retry = resolveClickWebAccessToken(tokenStorage, forceRefresh = true)
+                if (!retry.isNullOrBlank()) return getOnce(retry)
+            }
+            first
         } catch (e: Exception) {
             println("Error fetching hub thread: ${e.redactedRestMessage()}")
             Result.failure(e)

@@ -79,7 +79,12 @@ object SupabaseConfig {
     suspend fun importStoredSessionWithoutRefresh(tokenStorage: TokenStorage): Boolean {
         val accessToken = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() } ?: return false
         val refreshToken = tokenStorage.getRefreshToken()?.trim()?.takeIf { it.isNotEmpty() } ?: return false
-        val identity = LocalSessionCache.read(tokenStorage) ?: return false
+        // TestFlight/app updates can drop the identity cache while JWT + refresh remain.
+        // Never refuse import solely because LocalSessionCache.read() is empty.
+        val identity =
+            LocalSessionCache.read(tokenStorage)
+                ?: LocalSessionCache.parseIdentityFromJwt(accessToken)
+                ?: return false
 
         val expiresAt = tokenStorage.getExpiresAt() ?: identity.expiresAtEpochMs
         val now = Clock.System.now().toEpochMilliseconds()
@@ -124,7 +129,11 @@ object SupabaseConfig {
      */
     suspend fun importStoredSessionIfSdkEmpty(tokenStorage: TokenStorage): Boolean {
         val existing = client.auth.currentSessionOrNull()
-        if (existing != null) {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val sdkExp = existing?.expiresAt?.toEpochMilliseconds()
+        val sdkExpired =
+            existing != null && sdkExp != null && sdkExp <= now + 90_000L
+        if (existing != null && !sdkExpired) {
             runCatching {
                 tokenStorage.saveTokens(
                     jwt = existing.accessToken,
@@ -135,6 +144,7 @@ object SupabaseConfig {
             }
             return true
         }
+        // Expired/missing SDK session: hydrate from TokenStorage instead of persisting a dead JWT.
         return importStoredSessionWithoutRefresh(tokenStorage)
     }
 

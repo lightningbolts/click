@@ -540,8 +540,11 @@ class GlobalSearchViewModel(
                     )
                 }
             val apiHits = apiHitsD.await()
-            val fromApi = apiHits.map { it.toMessageHit(archivedIds, hubs) }
-            val skipRemoteScan = apiHits.isNotEmpty()
+            val fromApi =
+                apiHits
+                    .filterNot { isUndisplayableEncryptedSearchSnippet(it.snippet) }
+                    .map { it.toMessageHit(archivedIds, hubs) }
+            val skipRemoteScan = fromApi.isNotEmpty()
             val remoteDirectIds: Set<String> =
                 if (skipRemoteScan) {
                     emptySet()
@@ -651,7 +654,9 @@ class GlobalSearchViewModel(
                         }
                 }
             val remoteHits = (directJobs + groupJobs + hubJobs).flatMap { it.await() }
-            (fromApi + localDirect + localGroups + remoteHits).distinctBy { it.result.message.id }
+            (fromApi + localDirect + localGroups + remoteHits)
+                .filterNot { isUndisplayableEncryptedSearchSnippet(it.result.snippet) }
+                .distinctBy { it.result.message.id }
         }
 }
 

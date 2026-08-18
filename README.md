@@ -86,7 +86,7 @@ Edit [`composeApp/src/commonMain/kotlin/compose/project/click/click/data/Supabas
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`  
 - Auth redirect scheme/host (`click` / `login`) must match Supabase Auth and the iOS/Android URL handlers.
 
-`SupabaseConfig.startSessionSync(tokenStorage)` keeps the SDK session aligned with **`TokenStorage`** (Keychain / encrypted prefs). Cold boot imports TokenStorage **only when the SDK session is empty**; JWT expiry is a soft failure so an app update does not force re-login.
+`SupabaseConfig.startSessionSync(tokenStorage)` keeps the SDK session aligned with **`TokenStorage`** (Keychain / encrypted prefs). Cold boot imports TokenStorage when the SDK session is **empty or expired**. Access-token wall-clock headroom is not enough to skip GoTrue refresh: TestFlight updates and dual-store drift otherwise keep a JWT that click-web rejects as `401 Unauthorized` until the user signs out. Boot, 45-minute ticker, foreground resume, and HTTP 401/403 retries call `refreshSession(forceRefresh = true)` (which always hits `/token` unless another refresh is already in-flight), then drop/reconnect the Realtime socket so hub subscribe and sends use the new bearer. `connect()` is a no-op on an open socket — `rebindRealtimeSocket()` disconnects first.
 
 ### Web base URL (QR, LiveKit token, waitlist)
 

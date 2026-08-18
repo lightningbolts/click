@@ -134,7 +134,7 @@ Soundtrack / community kinds (hazard, SOS, utility, study): same bordered hero; 
 | Loading | `ChatChannelLoadingView` (logo pulse) only while `realtimeState` is Loading **and** messages are empty |
 | Subscribe failure / not a participant | `HubRealtimeErrorView` + Retry — never stay on the pulse after the 8s Realtime subscribe timeout |
 
-Init hydrates via `GET /api/hub/messages` (messages + `participant_ids`) in parallel with Realtime. JWT refresh + `realtime.connect()` + `subscribeWithTimeout(8s)` match 1:1 chat so an expired session cannot hang the logo forever.
+Init hydrates via `GET /api/hub/messages` (messages + `participant_ids`) in parallel with Realtime. JWT refresh **drops and reconnects** the Realtime socket (`rebindRealtimeSocket`) before `subscribeWithTimeout(8s)` so an expired TestFlight/cold-start connection cannot fail as "Couldn't connect to this hub". A failed subscribe retries once after another refresh + rebind before showing Retry.
 
 ---
 

@@ -1,10 +1,10 @@
-package compose.project.click.click.data
+package compose.project.click.click.data // pragma: allowlist secret
 
-import compose.project.click.click.data.realtime.RealtimeCoordinator
-import compose.project.click.click.data.repository.AuthRepository
-import compose.project.click.click.data.storage.TokenStorage
-import compose.project.click.click.data.storage.createTokenStorage
-import compose.project.click.click.util.redactedRestMessage
+import compose.project.click.click.data.realtime.rebindRealtimeSocket // pragma: allowlist secret
+import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
+import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
+import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.realtime.realtime
@@ -23,29 +23,23 @@ object SupabaseForegroundRecovery {
         authRepository: AuthRepository = AuthRepository(tokenStorage),
     ): Boolean {
         runCatching { client.realtime.disconnect() }
-        // Only hydrate TokenStorage into GoTrue when the SDK has no session. Blind re-import
-        // overwrites a good SettingsSessionManager refresh token and breaks chat until sign-out.
-        if (client.auth.currentSessionOrNull() == null) {
-            runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
-        }
-        val refreshOk = authRepository.refreshSession()
-            .onSuccess {
-                runCatching { client.auth.startAutoRefreshForCurrentSession() }
-            }
-            .onFailure { e ->
-                println(
-                    "SupabaseForegroundRecovery: refresh failed: ${e.redactedRestMessage()}",
-                )
-            }
-            .isSuccess
+        // Expired SDK sessions must not overwrite TokenStorage; hydrate storage when empty/expired.
+        runCatching { SupabaseConfig.importStoredSessionIfSdkEmpty(tokenStorage) }
+        val refreshOk =
+            authRepository
+                .refreshSession(forceRefresh = true)
+                .onSuccess {
+                    runCatching { client.auth.startAutoRefreshForCurrentSession() }
+                }.onFailure { e ->
+                    println(
+                        "SupabaseForegroundRecovery: refresh failed: ${e.redactedRestMessage()}",
+                    )
+                }.isSuccess
         if (!refreshOk) {
             // Do not reconnect Realtime with a dead JWT — callers pause sync / force re-login.
             return false
         }
-        runCatching { client.realtime.connect() }
-        // Tear down stale RealtimeCoordinator channels so the next ensureStarted() re-subscribes
-        // with the refreshed JWT (jobs may still look "active" with a dead socket auth).
-        runCatching { RealtimeCoordinator.stopAndAwait() }
+        runCatching { rebindRealtimeSocket() }
         return true
     }
 }

@@ -439,6 +439,48 @@ class GlobalSearchViewModelTest {
         }
 
     @Test
+    fun conversationApiHits_dropEncryptedCiphertextSnippets() =
+        runVmTest {
+            val active = listOf(directChat(VIEWER, PEER_A, "conn-1", "Ann"))
+            val plaintext =
+                Message(
+                    id = "local-lol",
+                    user_id = PEER_A,
+                    content = "Lol from the decrypted fallback",
+                    timeCreated = 8_000L,
+                )
+            val fake =
+                FakeChatRepository(
+                    onFetchDirectUserChatsWithDetails = { if (it == VIEWER) active else emptyList() },
+                    onFetchArchivedUserChatsWithDetails = { emptyList() },
+                    onFetchGroupUserChatsWithDetails = { emptyList() },
+                    onSearchConversationHits = {
+                        listOf(
+                            ConversationSearchHit( // pragma: allowlist secret
+                                messageId = "api-enc",
+                                chatId = "chat-1",
+                                conversationId = "conn-1",
+                                connectionId = "conn-1",
+                                senderId = PEER_A,
+                                timestamp = 9_000L,
+                                snippet = "e2e:wZg/irGjiuFGVrCxCe1/Kpf5rGeilOLguHhDNqei62LgVuUIQ8Pb8",
+                                chatName = "Chat",
+                            ),
+                        )
+                    },
+                    onSearchMessagesByConnectionId = { _, _ -> "chat-1" to listOf(plaintext) },
+                )
+            val vm = newVm(fake)
+            vm.search("lol", VIEWER)
+            drainSearchWork()
+            val hits =
+                vm.results.value.items
+                    .filterIsInstance<SearchResult.MessageHit>()
+            assertTrue(hits.none { it.result.message.id == "api-enc" })
+            assertTrue(hits.any { it.result.message.id == "local-lol" })
+        }
+
+    @Test
     fun debounceCancel_keepsSearchingUntilLatestQueryFinishes() =
         runTest {
             val dispatcher = StandardTestDispatcher(testScheduler)

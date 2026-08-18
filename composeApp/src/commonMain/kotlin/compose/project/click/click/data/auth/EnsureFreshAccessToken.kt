@@ -48,7 +48,6 @@ object EnsureFreshAccessToken {
             expiresAtMs: Long?,
             tokenType: String?,
         ): String? {
-            val token = usable(accessToken, expiresAtMs) ?: return null
             runCatching {
                 tokenStorage.saveTokens(
                     jwt = accessToken,
@@ -57,13 +56,16 @@ object EnsureFreshAccessToken {
                     tokenType = tokenType,
                 )
             }
-            val exp = expiresAtMs ?: jwtExpEpochMs(token)
+            val token = usable(accessToken, expiresAtMs)
+            val exp = expiresAtMs ?: jwtExpEpochMs(accessToken)
             val needsRefresh =
                 forceRefresh ||
-                    (exp != null && exp <= now + REFRESH_SKEW_MS)
-            if (!needsRefresh) return token
+                    token == null ||
+                    exp == null ||
+                    exp <= now + REFRESH_SKEW_MS
+            if (!needsRefresh && token != null) return token
             authRepository
-                .refreshSession()
+                .refreshSession(forceRefresh = forceRefresh || token == null)
                 .onFailure {
                     println(
                         "EnsureFreshAccessToken: refresh failed: ${it.redactedRestMessage()}",
@@ -74,8 +76,17 @@ object EnsureFreshAccessToken {
                 refreshed?.accessToken,
                 refreshed?.expiresAt?.toEpochMilliseconds(),
             )?.let { return it }
-            // Soft failure: keep previous usable token only if still unexpired.
-            if (!forceRefresh) return token.takeIf { usable(it, exp) != null }
+            // Soft failure: keep previous usable token only if still unexpired *now*.
+            // Refresh can take AUTH_TIMEOUT_MS, so the timestamp captured at method entry
+            // can be stale; never return a JWT with unknown exp after a failed refresh.
+            if (
+                !forceRefresh &&
+                token != null &&
+                exp != null &&
+                exp > Clock.System.now().toEpochMilliseconds()
+            ) {
+                return token
+            }
             return null
         }
 
@@ -112,7 +123,7 @@ object EnsureFreshAccessToken {
         }
 
         authRepository
-            .refreshSession()
+            .refreshSession(forceRefresh = forceRefresh)
             .onFailure {
                 println(
                     "EnsureFreshAccessToken: refresh-after-import failed: ${it.redactedRestMessage()}",
