@@ -90,8 +90,8 @@ actual fun PlatformBottomBar(
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer { alpha = barAlpha },
-        color = scheme.surfaceContainer,
-        tonalElevation = 3.dp,
+        color = scheme.surface.copy(alpha = 0.88f),
+        tonalElevation = 0.dp,
         shadowElevation = 0.dp,
     ) {
         Row(

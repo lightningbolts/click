@@ -97,6 +97,10 @@ import compose.project.click.click.sensors.rememberAmbientNoiseMonitor // pragma
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickButtonVariant // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickInsetDivider // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickSettingsDividerIndent // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvailabilitySheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
@@ -1216,26 +1220,19 @@ private fun SettingsProfileHeader(
                 )
                 if (email != null) {
                     Text(
-                        text = email,
+                        text = "@${email.substringBefore("@")}",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                     )
                 }
-                Text(
-                    text = "Tap photo to change · auto-compressed if needed",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                )
             }
-            Button(
+            ClickButton(
                 onClick = onEditProfile,
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                variant = ClickButtonVariant.Secondary,
             ) {
-                Text("Edit Profile", fontWeight = FontWeight.Bold)
+                Text("Edit Profile", fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -1364,7 +1361,7 @@ private fun SettingsHubNavRow(
         subtitle = subtitle,
         onClick = onClick,
         leadingIcon = icon,
-        leadingTint = ClickAccent.colorForSlot(accentSlot),
+        leadingTint = MaterialTheme.colorScheme.onSurfaceVariant,
         trailing = {
             Icon(
                 Icons.AutoMirrored.Filled.KeyboardArrowRight,
@@ -1453,10 +1450,7 @@ private fun YourDataLocationRows(
 
 @Composable
 private fun SettingsDivider() {
-    HorizontalDivider(
-        modifier = Modifier.padding(start = 36.dp, top = 2.dp, bottom = 2.dp),
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
-    )
+    ClickInsetDivider(startIndent = ClickSettingsDividerIndent)
 }
 
 @Composable

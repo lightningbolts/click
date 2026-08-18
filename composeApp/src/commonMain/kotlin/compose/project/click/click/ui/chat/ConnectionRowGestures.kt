@@ -7,6 +7,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -21,7 +22,7 @@ import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist sec
  * Uses [combinedClickable] (not [androidx.compose.foundation.gestures.detectTapGestures]) so the
  * parent LazyColumn keeps ownership of drag + fling.
  *
- * Indication stays null (glass aesthetic); press impact is [connectionRowPressHighlight].
+ * Indication is a bounded ripple (never null) plus [connectionRowPressHighlight] wash.
  */
 internal fun Modifier.connectionRowPressGestures(
     interactionSource: MutableInteractionSource,
@@ -29,7 +30,7 @@ internal fun Modifier.connectionRowPressGestures(
     onLongPress: () -> Unit,
 ): Modifier = combinedClickable(
     interactionSource = interactionSource,
-    indication = null,
+    indication = ripple(bounded = true, color = PrimaryBlue.copy(alpha = 0.16f)),
     onClick = onClick,
     onLongClick = {
         PlatformHapticsPolicy.heavyImpact()

@@ -111,8 +111,7 @@ Full-screen flat scrim (black @ 40%, no blur). Centered bordered card max 340dp 
 | `"Tap to Connect"` card | `onNavigateToNfc()` |
 | `"My Code"` card | `onShowMyQRCode()` |
 | `"Scan Code"` card | `onScanQRCode()` |
-| `"Create hub"` | `showCreateHubModal = true` |
-| `"Join hub"` | `showJoinHubSheet = true` |
+| `"Create hub"` / `"Join hub"` | Equal-weight outlined buttons (hub icon + label) |
 | `"Start Chatting"` (success) | `onStartChatting()` |
 
 ### MyQRCodeScreen

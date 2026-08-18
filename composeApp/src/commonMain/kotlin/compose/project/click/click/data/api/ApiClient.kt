@@ -87,7 +87,27 @@ data class ActivityRecapDto(
     @SerialName("events_rsvped") val eventsRsvped: Int = 0,
     @SerialName("events_checked_in") val eventsCheckedIn: Int = 0,
     @SerialName("events_saved") val eventsSaved: Int = 0,
-)
+) {
+    fun isAllZero(): Boolean =
+        connectionsFormed == 0 &&
+            messagesSent == 0 &&
+            messagesReceived == 0 &&
+            beaconsCreated == 0 &&
+            eventsRsvped == 0 &&
+            eventsCheckedIn == 0 &&
+            eventsSaved == 0
+
+    fun peakValue(): Int =
+        maxOf(
+            connectionsFormed,
+            messagesSent,
+            messagesReceived,
+            beaconsCreated,
+            eventsRsvped,
+            eventsCheckedIn,
+            eventsSaved,
+        )
+}
 
 @Serializable
 private data class ActivityRecapResponseDto(

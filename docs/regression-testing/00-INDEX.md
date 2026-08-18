@@ -122,7 +122,7 @@ same-gesture scroll gate; create-group uses `sheetImePadding`.
 `compileDebugKotlinAndroid` + high-signal `testDebugUnitTest` PASS (`ConnectionMapGeoTest`,
 `ChatViewModelTest` group ensure, `CallLayoutPolicyTest`, `ResolveChatBeaconForDetailTest`) ·
 iOS `compileKotlinIosSimulatorArm64` (run in §0 gate) · click-web Jest targets PASS
-(`connectionMapPinGeo`, `event-bookmarks.route`, `hubMessageCooldown`, `callLayoutPolicy`).
+(`connectionMapPinGeo`, `event-bookmarks.route`, `callLayoutPolicy`).
 Fixes: origin map pins; form sheets Compose-owned IME (no UIKit scroll-host recreate);
 group `ensureChatForGroup`; Home bookmarks auth-ready retry; beacon POST never 500s after
 successful insert.

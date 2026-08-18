@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
@@ -71,8 +72,12 @@ import compose.project.click.click.ui.components.AppScreenScaffold // pragma: al
 import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickCircularGlassIconButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickInsetDivider // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickListRowShimmer // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickPlatformListRowHeight // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionsSegmentBar // pragma: allowlist secret
+import compose.project.click.click.ui.components.platformPressScale // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassToastHost // pragma: allowlist secret
@@ -528,7 +533,7 @@ fun ConnectionsListView(
                     onOpenSearch = onOpenSearch,
                     lazyListState = connectionsLazyListState,
                     belowHeaderSpacing = 8.dp,
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(0.dp),
                     modifier =
                         Modifier.graphicsLayer {
                             translationX = tabContentOffsetX.value
@@ -537,26 +542,24 @@ fun ConnectionsListView(
                 ) {
                     if (effectiveChats.isNotEmpty() || activeHubs.isNotEmpty()) {
                         item(key = "clicks_segment_bar", contentType = "segment_bar") {
-                            ConnectionsSegmentBar(
-                                selectedTabIndex = selectedTabIndex,
-                                onTabSelected = { selectedTabIndex = it },
-                                activeCount = activeCount,
-                                groupCount = groupCount,
-                                archivedCount = archivedCount,
-                            )
+                            Box(modifier = Modifier.padding(bottom = 8.dp)) {
+                                ConnectionsSegmentBar(
+                                    selectedTabIndex = selectedTabIndex,
+                                    onTabSelected = { selectedTabIndex = it },
+                                    activeCount = activeCount,
+                                    groupCount = groupCount,
+                                    archivedCount = archivedCount,
+                                )
+                            }
                         }
                     }
                     if (effectiveChats.isEmpty() && chatListState is ChatListState.Loading) {
-                        item(key = "clicks_loading") {
-                            Box(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = 360.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                AdaptiveCircularProgressIndicator()
-                            }
+                        items(
+                            items = listOf(0, 1, 2, 3, 4, 5),
+                            key = { "clicks_shimmer_$it" },
+                            contentType = { "shimmer" },
+                        ) {
+                            ClickListRowShimmer()
                         }
                     } else if (effectiveChats.isEmpty() && chatListState is ChatListState.Error) {
                         val errorMsg = (chatListState as ChatListState.Error).message
@@ -1217,76 +1220,94 @@ private fun ActiveHubFeedRow(
     onLongPress: () -> Unit,
 ) {
     val rowInteraction = remember { MutableInteractionSource() }
+    val unresolved = hub.name.isBlank() || hub.name == hub.hubId
 
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner))
-                .border(
-                    width = 2.dp,
-                    color = GlassSheetTokens.GlassBorder(),
-                    shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
-                ).background(GlassSheetTokens.GlassSurface())
-                .connectionRowPressHighlight(rowInteraction)
-                .connectionRowPressGestures(
-                    interactionSource = rowInteraction,
-                    onClick = onClick,
-                    onLongPress = onLongPress,
-                ).padding(start = 16.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier.size(44.dp),
-            contentAlignment = Alignment.CenterStart,
-        ) {
-            Box(
+    Column(modifier = Modifier.fillMaxWidth()) {
+        if (unresolved) {
+            ClickListRowShimmer(
                 modifier =
                     Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center,
+                        .platformPressScale(rowInteraction)
+                        .connectionRowPressHighlight(rowInteraction)
+                        .connectionRowPressGestures(
+                            interactionSource = rowInteraction,
+                            onClick = onClick,
+                            onLongPress = onLongPress,
+                        ),
+            )
+        } else {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(ClickPlatformListRowHeight)
+                        .platformPressScale(rowInteraction)
+                        .connectionRowPressHighlight(rowInteraction)
+                        .connectionRowPressGestures(
+                            interactionSource = rowInteraction,
+                            onClick = onClick,
+                            onLongPress = onLongPress,
+                        )
+                        .padding(start = 16.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    Icons.Filled.Public,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(22.dp),
-                )
+                Box(
+                    modifier = Modifier.size(44.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Filled.Public,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = hub.name,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 16.sp,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "${hub.occupantCount} ${if (hub.occupantCount == 1) "person" else "people"} • Community Hub",
+                        fontWeight = FontWeight.Normal,
+                        fontSize = 14.sp,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                IconButton(
+                    onClick = onOpenMenu,
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.MoreVert,
+                        contentDescription = "Hub options",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
-
-        Spacer(modifier = Modifier.width(12.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = hub.name,
-                fontWeight = FontWeight.SemiBold,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = "${hub.occupantCount} ${if (hub.occupantCount == 1) "person" else "people"} • Community Hub",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        IconButton(
-            onClick = onOpenMenu,
-            modifier = Modifier.size(36.dp),
-        ) {
-            Icon(
-                Icons.Filled.MoreVert,
-                contentDescription = "Hub options",
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        ClickInsetDivider()
     }
 }

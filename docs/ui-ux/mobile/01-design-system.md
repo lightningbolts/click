@@ -14,7 +14,8 @@
 | Screen chrome defaults | `ui/components/ScreenChrome.kt` | Solid headers, no blur |
 | Glass sheet tokens | `ui/components/GlassSheetTokens.kt` | **→** opaque sheet surfaces + 2dp `#000` border |
 | Glass cards | `ui/components/GlassCard.kt` | **→** bordered card (16dp radius, solid fill) |
-| Adaptive cards/buttons | `ui/components/AdaptiveCard.kt` | **→** bordered surfaces, solid primary buttons |
+| Adaptive cards/buttons | `ui/components/AdaptiveCard.kt` | **→** bordered surfaces, solid primary buttons; tappable cards scale to `0.97` |
+| Platform list rows | `ui/components/ClickPlatformListRow.kt` | **→** flat inbox/search/settings rows, inset dividers, 8dp unread dot, shimmer skeleton |
 | Liquid glass pill | `ui/components/LiquidGlassPill.kt` | **→** solid pill/chip (no gradient, no noise) |
 | Sheet grabber | `ui/components/GlassSheetGrabber.kt` | **→** 40×4dp `#000` bar on solid sheet header |
 | Sheet gesture physics | `ui/components/GlassSheetGesturePhysics.kt` | Unchanged behavior |

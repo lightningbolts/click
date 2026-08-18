@@ -33,14 +33,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.previewLabel // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator
+import compose.project.click.click.ui.components.ClickInsetDivider // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickPlatformListRowHeight // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickUnreadDot // pragma: allowlist secret
 import compose.project.click.click.ui.components.CoreConnectionAvatarFrame // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
 import compose.project.click.click.ui.components.groupAvatarClusterWidth // pragma: allowlist secret
+import compose.project.click.click.ui.components.platformPressScale // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.util.AvailabilityOverlapCache // pragma: allowlist secret
 
@@ -97,23 +101,19 @@ fun ConnectionItem(
 
     val rowInteraction = remember { MutableInteractionSource() }
 
+    Column(modifier = Modifier.fillMaxWidth()) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner))
-            .border(
-                width = 1.dp,
-                color = GlassSheetTokens.GlassBorder(),
-                shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
-            )
-            .background(GlassSheetTokens.GlassSurface())
+            .height(ClickPlatformListRowHeight)
+            .platformPressScale(rowInteraction)
             .connectionRowPressHighlight(rowInteraction)
             .connectionRowPressGestures(
                 interactionSource = rowInteraction,
                 onClick = onClick,
                 onLongPress = onLongPress,
             )
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(start = 16.dp, end = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (isGroup) {
@@ -205,7 +205,8 @@ fun ConnectionItem(
                     Text(
                         headline,
                         fontWeight = FontWeight.SemiBold,
-                        style = MaterialTheme.typography.bodyMedium,
+                        fontSize = 16.sp,
+                        style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f),
                         maxLines = 1,
@@ -223,6 +224,8 @@ fun ConnectionItem(
                 }
                 Text(
                     timeText,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 12.sp,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -254,37 +257,24 @@ fun ConnectionItem(
                     Text(
                         previewText,
                         modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (unreadCount > 0) {
-                            MaterialTheme.colorScheme.onSurface
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        fontWeight = if (unreadCount > 0) FontWeight.Medium else FontWeight.Normal,
+                        fontSize = 14.sp,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.Normal,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
 
                 if (unreadCount > 0) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Box(
-                        modifier = Modifier
-                            .size(20.dp)
-                            .background(PrimaryBlue, RoundedCornerShape(10.dp)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            unreadCount.toString(),
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    ClickUnreadDot()
                 }
             }
                 }
             }
         }
+    }
+        ClickInsetDivider()
     }
 }

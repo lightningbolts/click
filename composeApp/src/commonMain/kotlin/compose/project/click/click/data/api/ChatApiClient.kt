@@ -885,16 +885,6 @@ class ChatApiClient(
                         errorBody.contains("HUB_EXPIRED") ||
                             errorBody.contains("Hub expired", ignoreCase = true) ||
                             response.status.value == 410 -> "HUB_EXPIRED"
-                        response.status.value == 429 || errorBody.contains("HUB_MESSAGE_COOLDOWN") -> {
-                            val retry =
-                                Regex("\"retry_after_seconds\"\\s*:\\s*(\\d+)")
-                                    .find(errorBody)
-                                    ?.groupValues
-                                    ?.getOrNull(1)
-                                    ?.toIntOrNull()
-                                    ?: 5
-                            "HUB_MESSAGE_COOLDOWN:$retry"
-                        }
                         else -> "Failed to send hub message: ${response.status}"
                     }
                 Result.failure(Exception(message))
