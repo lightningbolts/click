@@ -17,6 +17,7 @@ import compose.project.click.click.data.models.audioCacheFileExtension // pragma
 import compose.project.click.click.data.models.hasLocalMediaUri // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
+import compose.project.click.click.data.realtime.subscribeWithTimeout // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.normalizeEncryptedMediaPayload // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
@@ -34,6 +35,7 @@ import compose.project.click.click.util.teardownBlocking // pragma: allowlist se
 import compose.project.click.click.util.writeChatMediaVaultFile // pragma: allowlist secret
 import compose.project.click.click.utils.HUB_GATEKEEPER_LOCATION_CACHE_TTL_MS // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
+import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.realtime.PostgresAction
@@ -42,6 +44,7 @@ import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.decodeRecordOrNull
 import io.github.jan.supabase.realtime.postgresChangeFlow
+import io.github.jan.supabase.realtime.realtime
 import io.github.jan.supabase.storage.storage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -297,6 +300,7 @@ class HubChatViewModel(
     private var cachedGatekeeperLocationAtMs: Long = 0L
     private var hubChannel: RealtimeChannel? = null
     private var sessionJob: Job? = null
+    private var participantDenied: Boolean = false
 
     init {
         hydrateFromDiskCache()
@@ -356,6 +360,7 @@ class HubChatViewModel(
 
     private fun launchRealtimeSession() {
         sessionJob?.cancel()
+        participantDenied = false
         _realtimeState.value = HubRealtimeState.Loading
         sessionJob =
             viewModelScope.launch {
@@ -694,7 +699,16 @@ class HubChatViewModel(
         }
     }
 
+    private suspend fun prepareHubRealtimeAuth() {
+        if (supabase.auth.currentSessionOrNull() == null) {
+            runCatching { SupabaseConfig.importStoredSessionIfSdkEmpty(tokenStorage) }
+        }
+        tokenStorage.requireFreshHubJwt()
+        runCatching { supabase.realtime.connect() }
+    }
+
     private suspend fun CoroutineScope.runRealtimeSession() {
+        prepareHubRealtimeAuth()
         val channel =
             supabase.channel(realtimeChannelName) {
                 presence {
@@ -736,9 +750,13 @@ class HubChatViewModel(
             }
 
         withContext(Dispatchers.Default) {
-            channel.subscribe(blockUntilSubscribed = true)
+            if (!channel.subscribeWithTimeout()) { // pragma: allowlist secret
+                throw IllegalStateException("Couldn't connect to this hub")
+            }
         }
-        _realtimeState.value = HubRealtimeState.Ready
+        if (!participantDenied) {
+            _realtimeState.value = HubRealtimeState.Ready
+        }
         channel.track(buildJsonObject { put("userId", currentUserId) })
         occupantKeys.add(currentUserId)
         recomputeOccupants()
@@ -814,9 +832,42 @@ class HubChatViewModel(
         }
     }
 
+    private fun ChatApiClient.HubMessageApiDto.toHubMessageRow(): HubMessageRow =
+        HubMessageRow(
+            id = id,
+            hubId = hubId,
+            userId = userId,
+            body = body,
+            createdAt = createdAt,
+            messageType = messageType,
+            metadata = metadata,
+        )
+
     private suspend fun loadInitialMessages() {
         withContext(Dispatchers.Default) {
             try {
+                val token = tokenStorage.requireFreshHubJwt()
+                val thread = chatApi.fetchHubThread(hubId, token)
+                thread.fold(
+                    onSuccess = { snapshot ->
+                        if (snapshot.occupantCount > 0) {
+                            _occupantCount.value = snapshot.occupantCount.coerceAtLeast(1)
+                        }
+                        prefetchSenderUi(snapshot.participantIds)
+                        mergeMessages(snapshot.messages.map { it.toHubMessageRow() })
+                        return@withContext
+                    },
+                    onFailure = { err ->
+                        val msg = err.message.orEmpty()
+                        if (msg.contains("NOT_A_PARTICIPANT")) {
+                            participantDenied = true
+                            _realtimeState.value =
+                                HubRealtimeState.Error("Join this hub from the map to chat")
+                            return@withContext
+                        }
+                        println("HubChatViewModel: hub thread API failed: ${err.redactedRestMessage()}")
+                    },
+                )
                 val rows =
                     supabase
                         .from("hub_messages")
@@ -848,6 +899,15 @@ class HubChatViewModel(
     private suspend fun loadMessagesAround(messageId: String) {
         withContext(Dispatchers.Default) {
             try {
+                val token = runCatching { tokenStorage.requireFreshHubJwt() }.getOrNull()
+                if (!token.isNullOrBlank()) {
+                    val thread = chatApi.fetchHubThread(hubId, token, aroundMessageId = messageId)
+                    thread.getOrNull()?.let { snapshot ->
+                        prefetchSenderUi(snapshot.participantIds)
+                        mergeMessages(snapshot.messages.map { it.toHubMessageRow() })
+                        if (_messages.value.any { it.message.id == messageId }) return@withContext
+                    }
+                }
                 val target =
                     supabase
                         .from("hub_messages")

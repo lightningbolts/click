@@ -6,6 +6,7 @@ import compose.project.click.click.data.models.Message // pragma: allowlist secr
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Order
+import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.SerialName
@@ -52,6 +53,8 @@ internal suspend fun searchHubMessagesByQuery(
                     metadata = row.metadata,
                 )
             }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         println("HubMessageSearch: $hubId failed: ${e.redactedRestMessage()}")
         emptyList()

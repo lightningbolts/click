@@ -128,6 +128,8 @@ LiveKit Android SDK / iOS ClickLiveKitBridge
 | LiveKit calls | `/api/livekit/token` |
 | Secure API tunnel | `/api/ping`, profile BFF routes |
 | Friction telemetry | `/api/telemetry/friction` |
+| Unified search (messages) | `GET /api/chat/search` |
+| Hub chat hydrate | `GET /api/hub/messages?hubId=` |
 | App Clip CTA | App Store URL alongside web profile load |
 | Web dashboard | Opens base URL in browser from Settings |
 

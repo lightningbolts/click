@@ -11,6 +11,7 @@ import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.collapseOneToOneChatsByPeer
 import compose.project.click.click.data.models.isArchivedChannelForUser
 import compose.project.click.click.data.repository.ChatRepository
+import compose.project.click.click.data.repository.ConversationSearchHit // pragma: allowlist secret
 import compose.project.click.click.data.repository.MapBeaconRepository
 import compose.project.click.click.data.repository.SupabaseChatRepository
 import compose.project.click.click.data.repository.SupabaseRepository
@@ -20,6 +21,7 @@ import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.util.connectionMatchesMemoryOrTimeQuery
 import compose.project.click.click.util.redactedRestMessage
 import compose.project.click.click.utils.LocationService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -280,6 +282,10 @@ class GlobalSearchViewModel(
     private val searchHubMessages: suspend (hubId: String, query: String) -> List<Message> = { hubId, query ->
         searchHubMessagesByQuery(hubId, query)
     },
+    private val searchConversationHits: suspend (String) -> List<ConversationSearchHit> = { query ->
+        // pragma: allowlist secret
+        chatRepository.searchConversationHits(query)
+    },
 ) : ViewModel() {
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -318,13 +324,15 @@ class GlobalSearchViewModel(
             return
         }
 
+        _isSearching.value = true
         searchJob =
             viewModelScope.launch {
+                val thisJob = coroutineContext[Job]
                 if (searchDebounceMs > 0L) {
                     delay(searchDebounceMs)
                 }
-                _isSearching.value = true
                 try {
+                    chatRepository.ensureFreshAuthToken()
                     val lowerQuery = query.lowercase().trim()
                     val userId = viewerUserId.trim()
                     if (userId.isEmpty()) {
@@ -415,7 +423,6 @@ class GlobalSearchViewModel(
 
                     if (out.isNotEmpty()) {
                         _results.value = GlobalSearchResults(items = out.toList())
-                        _isSearching.value = false
                     }
 
                     val messageHits =
@@ -434,10 +441,14 @@ class GlobalSearchViewModel(
                         }
                     out.addAll(messageHits)
                     _results.value = GlobalSearchResults(items = out)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     println("GlobalSearch error: ${e.redactedRestMessage()}")
                 } finally {
-                    _isSearching.value = false
+                    if (searchJob === thisJob) {
+                        _isSearching.value = false
+                    }
                 }
             }
     }
@@ -460,6 +471,7 @@ class GlobalSearchViewModel(
         hubs: List<ActiveHubEntry>,
     ): List<SearchResult.MessageHit> =
         coroutineScope {
+            val apiHitsD = async { searchConversationHits(lowerQuery) }
             val limiter = Semaphore(MESSAGE_SEARCH_CONCURRENCY)
             val directAll =
                 (activeRows + archivedRows)
@@ -467,44 +479,49 @@ class GlobalSearchViewModel(
                     .sortedByDescending { row ->
                         row.lastMessage?.timeCreated ?: row.connection.last_message_at ?: row.connection.created
                     }
-            val remoteDirectIds: Set<String> =
-                directAll.take(REMOTE_MESSAGE_SEARCH_MAX_DIRECT_CHATS).map { it.connection.id }.toSet()
-            val directJobs =
-                directAll.map { row ->
-                    async {
-                        limiter.withPermit {
-                            if (directPeerId(row, userId) == null) return@withPermit emptyList()
-                            val chatName = row.otherUser.name ?: row.connection.semanticLocation ?: "Chat"
-                            val (resolvedChatId, remoteMatches) =
-                                if (row.connection.id in remoteDirectIds) {
-                                    chatRepository.searchMessagesByConnectionId(
-                                        connectionId = row.connection.id,
-                                        query = lowerQuery,
-                                    )
-                                } else {
-                                    null to emptyList()
-                                }
-                            val localMatches =
-                                row.chat.messages.filter { msg ->
-                                    msg.content.lowercase().contains(lowerQuery)
-                                }
-                            val merged = (remoteMatches + localMatches).distinctBy { it.id }
-                            val resultChatId = resolvedChatId ?: row.chat.id ?: row.connection.id
-                            val cats = messageCategories(row.connection.id, archivedIds)
-                            merged.map { msg ->
-                                SearchResult.MessageHit(
-                                    result =
-                                        MessageSearchResult(
-                                            message = msg,
-                                            chatId = resultChatId,
-                                            chatName = chatName,
-                                            connectionId = row.connection.id,
-                                            snippet = highlightedMessageSnippet(msg.content, lowerQuery),
-                                        ),
-                                    categories = cats,
-                                )
-                            }
-                        }
+
+            fun localMessageHits(
+                row: ChatWithDetails,
+                chatName: String,
+                chatId: String,
+                categories: Set<SearchResultCategory>,
+                hub: ActiveHubEntry? = null,
+            ): List<SearchResult.MessageHit> {
+                val local =
+                    (listOfNotNull(row.lastMessage) + row.chat.messages)
+                        .distinctBy { it.id }
+                        .filter { it.content.contains(lowerQuery, ignoreCase = true) }
+                return local.map { msg ->
+                    SearchResult.MessageHit(
+                        result =
+                            MessageSearchResult(
+                                message = msg,
+                                chatId = chatId,
+                                chatName = chatName,
+                                connectionId = hub?.hubId ?: row.connection.id,
+                                snippet = highlightedMessageSnippet(msg.content, lowerQuery),
+                                hubId = hub?.hubId,
+                                hubRealtimeChannel = hub?.realtimeChannel,
+                                hubTitle = hub?.name,
+                                hubCreatorId = hub?.creatorId,
+                                hubCategory = hub?.category ?: "general",
+                            ),
+                        categories = categories,
+                    )
+                }
+            }
+            val localDirect =
+                directAll.flatMap { row ->
+                    if (directPeerId(row, userId) == null) {
+                        emptyList()
+                    } else {
+                        val chatName = row.otherUser.name ?: row.connection.semanticLocation ?: "Chat"
+                        localMessageHits(
+                            row = row,
+                            chatName = chatName,
+                            chatId = row.chat.id ?: row.connection.id,
+                            categories = messageCategories(row.connection.id, archivedIds),
+                        )
                     }
                 }
             val rankedGroups =
@@ -512,67 +529,168 @@ class GlobalSearchViewModel(
                     .sortedByDescending { row ->
                         row.lastMessage?.timeCreated ?: row.connection.last_message_at ?: row.connection.created
                     }.take(REMOTE_MESSAGE_SEARCH_MAX_GROUP_CHATS)
-            val groupJobs =
-                rankedGroups.mapNotNull { row ->
-                    val chatId = row.chat.id ?: return@mapNotNull null
-                    async {
-                        limiter.withPermit {
-                            val remote =
-                                chatRepository
-                                    .fetchMessagesForChat(chatId, userId)
-                                    ?.filter { msg ->
-                                        msg.content.lowercase().contains(lowerQuery)
-                                    }.orEmpty()
-                            val local = row.chat.messages.filter { it.content.lowercase().contains(lowerQuery) }
-                            val merged = (remote + local).distinctBy { it.id }
-                            val title = row.groupClique?.name ?: "Clique"
-                            merged.map { msg ->
-                                SearchResult.MessageHit(
-                                    result =
-                                        MessageSearchResult(
-                                            message = msg,
-                                            chatId = chatId,
-                                            chatName = title,
-                                            connectionId = row.connection.id,
-                                            snippet = highlightedMessageSnippet(msg.content, lowerQuery),
-                                        ),
-                                    categories = setOf(SearchResultCategory.Cliques),
-                                )
-                            }
-                        }
-                    }
+            val localGroups =
+                rankedGroups.flatMap { row ->
+                    val chatId = row.chat.id ?: return@flatMap emptyList()
+                    localMessageHits(
+                        row = row,
+                        chatName = row.groupClique?.name ?: "Clique",
+                        chatId = chatId,
+                        categories = setOf(SearchResultCategory.Cliques),
+                    )
                 }
-            val hubJobs =
-                hubs
-                    .sortedByDescending { it.joinedAtMs }
-                    .take(REMOTE_MESSAGE_SEARCH_MAX_HUBS)
-                    .map { hub ->
+            val apiHits = apiHitsD.await()
+            val fromApi = apiHits.map { it.toMessageHit(archivedIds, hubs) }
+            val skipRemoteScan = apiHits.isNotEmpty()
+            val remoteDirectIds: Set<String> =
+                if (skipRemoteScan) {
+                    emptySet()
+                } else {
+                    directAll.take(REMOTE_MESSAGE_SEARCH_MAX_DIRECT_CHATS).map { it.connection.id }.toSet()
+                }
+            val directJobs =
+                if (skipRemoteScan) {
+                    emptyList()
+                } else {
+                    directAll.map { row ->
                         async {
                             limiter.withPermit {
-                                val matches = searchHubMessages(hub.hubId, lowerQuery)
-                                matches.map { msg ->
+                                if (directPeerId(row, userId) == null) return@withPermit emptyList()
+                                val chatName = row.otherUser.name ?: row.connection.semanticLocation ?: "Chat"
+                                val (resolvedChatId, remoteMatches) =
+                                    if (row.connection.id in remoteDirectIds) {
+                                        chatRepository.searchMessagesByConnectionId(
+                                            connectionId = row.connection.id,
+                                            query = lowerQuery,
+                                        )
+                                    } else {
+                                        null to emptyList()
+                                    }
+                                val resultChatId = resolvedChatId ?: row.chat.id ?: row.connection.id
+                                val cats = messageCategories(row.connection.id, archivedIds)
+                                remoteMatches.map { msg ->
                                     SearchResult.MessageHit(
                                         result =
                                             MessageSearchResult(
                                                 message = msg,
-                                                chatId = hub.hubId,
-                                                chatName = hub.name,
-                                                connectionId = hub.hubId,
+                                                chatId = resultChatId,
+                                                chatName = chatName,
+                                                connectionId = row.connection.id,
                                                 snippet = highlightedMessageSnippet(msg.content, lowerQuery),
-                                                hubId = hub.hubId,
-                                                hubRealtimeChannel = hub.realtimeChannel,
-                                                hubTitle = hub.name,
-                                                hubCreatorId = hub.creatorId,
-                                                hubCategory = hub.category,
                                             ),
-                                        categories = setOf(SearchResultCategory.Nearby),
+                                        categories = cats,
                                     )
                                 }
                             }
                         }
                     }
-            (directJobs + groupJobs + hubJobs).flatMap { it.await() }
+                }
+            val groupJobs =
+                if (skipRemoteScan) {
+                    emptyList()
+                } else {
+                    rankedGroups.mapNotNull { row ->
+                        val chatId = row.chat.id ?: return@mapNotNull null
+                        async {
+                            limiter.withPermit {
+                                val remote =
+                                    chatRepository
+                                        .fetchMessagesForChat(chatId, userId, limit = 80)
+                                        ?.filter { msg ->
+                                            msg.content.contains(lowerQuery, ignoreCase = true)
+                                        }.orEmpty()
+                                val title = row.groupClique?.name ?: "Clique"
+                                remote.map { msg ->
+                                    SearchResult.MessageHit(
+                                        result =
+                                            MessageSearchResult(
+                                                message = msg,
+                                                chatId = chatId,
+                                                chatName = title,
+                                                connectionId = row.connection.id,
+                                                snippet = highlightedMessageSnippet(msg.content, lowerQuery),
+                                            ),
+                                        categories = setOf(SearchResultCategory.Cliques),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            val hubJobs =
+                if (skipRemoteScan) {
+                    emptyList()
+                } else {
+                    hubs
+                        .sortedByDescending { it.joinedAtMs }
+                        .take(REMOTE_MESSAGE_SEARCH_MAX_HUBS)
+                        .map { hub ->
+                            async {
+                                limiter.withPermit {
+                                    val matches = searchHubMessages(hub.hubId, lowerQuery)
+                                    matches.map { msg ->
+                                        SearchResult.MessageHit(
+                                            result =
+                                                MessageSearchResult(
+                                                    message = msg,
+                                                    chatId = hub.hubId,
+                                                    chatName = hub.name,
+                                                    connectionId = hub.hubId,
+                                                    snippet = highlightedMessageSnippet(msg.content, lowerQuery),
+                                                    hubId = hub.hubId,
+                                                    hubRealtimeChannel = hub.realtimeChannel,
+                                                    hubTitle = hub.name,
+                                                    hubCreatorId = hub.creatorId,
+                                                    hubCategory = hub.category,
+                                                ),
+                                            categories = setOf(SearchResultCategory.Nearby),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                }
+            val remoteHits = (directJobs + groupJobs + hubJobs).flatMap { it.await() }
+            (fromApi + localDirect + localGroups + remoteHits).distinctBy { it.result.message.id }
         }
+}
+
+private fun ConversationSearchHit.toMessageHit( // pragma: allowlist secret
+    archivedIds: Set<String>,
+    hubs: List<ActiveHubEntry>,
+): SearchResult.MessageHit {
+    val hub = hubs.firstOrNull { it.hubId == hubId || it.hubId == connectionId }
+    val resolvedHubId = hubId?.takeIf { isHub } ?: hub?.hubId
+    val message =
+        Message(
+            id = messageId,
+            user_id = senderId,
+            content = snippet,
+            timeCreated = timestamp,
+        )
+    return SearchResult.MessageHit(
+        result =
+            MessageSearchResult(
+                message = message,
+                chatId = chatId.ifBlank { connectionId },
+                chatName = chatName.ifBlank { if (isHub) "Hub" else "Chat" },
+                connectionId = connectionId,
+                snippet = snippet,
+                hubId = resolvedHubId,
+                hubRealtimeChannel =
+                    hubRealtimeChannel?.takeIf { it.isNotBlank() } ?: hub?.realtimeChannel
+                        ?: resolvedHubId?.let { "hub:$it" },
+                hubTitle = hub?.name ?: chatName.takeIf { isHub },
+                hubCreatorId = hub?.creatorId,
+                hubCategory = hub?.category ?: "general",
+            ),
+        categories =
+            when {
+                isHub -> setOf(SearchResultCategory.Nearby)
+                connectionId in archivedIds -> setOf(SearchResultCategory.Archived)
+                else -> setOf(SearchResultCategory.Active)
+            },
+    )
 }
 
 private fun messageCategories(

@@ -108,7 +108,7 @@ sealed class SearchResult {
 }
 ```
 
-Filter chips map to `SearchResultCategory` (Active, Archived, Cliques, Nearby, Beacons, Intents). Local matching uses `util/ConnectionSearchHaystack.kt`; remote supplement via `SupabaseRepository.unifiedSearch`.
+Filter chips map to `SearchResultCategory` (Active, Archived, Cliques, Nearby, Beacons, Intents). Local matching uses `util/ConnectionSearchHaystack.kt`. Remote message hits use click-web `GET /api/chat/search` (`ChatRepository.searchConversationHits`); encrypted bodies still match from the on-device timeline cache.
 
 ### ConnectionViewModel state machine
 

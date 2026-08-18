@@ -256,6 +256,35 @@ class ChatApiClient(
     )
 
     @Serializable
+    data class ConversationSearchHitDto(
+        val messageId: String,
+        val chatId: String,
+        val conversationId: String,
+        val connectionId: String,
+        val senderId: String,
+        val timestamp: Long = 0L,
+        val snippet: String = "",
+        val chatName: String = "",
+        val isHub: Boolean = false,
+        val hubId: String? = null,
+        val hubRealtimeChannel: String? = null,
+    )
+
+    @Serializable
+    private data class ConversationSearchEnvelope(
+        val hits: List<ConversationSearchHitDto> = emptyList(),
+    )
+
+    @Serializable
+    data class HubThreadResponse(
+        val messages: List<HubMessageApiDto> = emptyList(),
+        @SerialName("participant_ids") val participantIds: List<String> = emptyList(),
+        @SerialName("occupant_count") val occupantCount: Int = 1,
+        val channel: String? = null,
+        val error: String? = null,
+    )
+
+    @Serializable
     private data class ClickWebHubSendMessageBody(
         @SerialName("hub_id") val hubId: String,
         val body: String,
@@ -1246,13 +1275,72 @@ class ChatApiClient(
     ): Result<Message> = Result.failure(Exception("forwardMessage is not available on click-web yet"))
 
     /**
-     * Search messages — legacy Flask; clients filter locally via repository.
+     * GET /api/chat/search — plaintext message hits across 1:1, cliques, and hubs.
+     */
+    suspend fun searchConversations(
+        query: String,
+        authToken: String,
+    ): Result<List<ConversationSearchHitDto>> =
+        try {
+            val q = query.trim()
+            if (q.length < 2) return Result.success(emptyList())
+            val response =
+                client.get("$clickWebBaseUrl/api/chat/search") {
+                    headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                    parameter("q", q)
+                    accept(ContentType.Application.Json)
+                }
+            if (response.status.value in 200..299) {
+                val body = response.body<ConversationSearchEnvelope>()
+                Result.success(body.hits)
+            } else {
+                Result.failure(Exception("HTTP ${response.status} for chat search"))
+            }
+        } catch (e: Exception) {
+            println("Error searching conversations: ${e.redactedRestMessage()}")
+            Result.failure(e)
+        }
+
+    /**
+     * GET /api/hub/messages — participant-gated hub timeline + occupant ids.
+     */
+    suspend fun fetchHubThread(
+        hubId: String,
+        authToken: String,
+        aroundMessageId: String? = null,
+        limit: Int = 120,
+    ): Result<HubThreadResponse> =
+        try {
+            val id = hubId.trim()
+            if (id.isEmpty()) return Result.failure(IllegalArgumentException("hubId is required"))
+            val response =
+                client.get("$clickWebBaseUrl/api/hub/messages") {
+                    headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                    parameter("hubId", id)
+                    parameter("limit", limit.coerceIn(1, 120).toString())
+                    aroundMessageId?.trim()?.takeIf { it.isNotEmpty() }?.let { parameter("aroundMessageId", it) }
+                    accept(ContentType.Application.Json)
+                }
+            val parsed = runCatching { response.body<HubThreadResponse>() }.getOrNull()
+            when {
+                response.status.value in 200..299 && parsed != null -> Result.success(parsed)
+                response.status.value == 403 ->
+                    Result.failure(Exception(parsed?.error?.takeIf { it.isNotBlank() } ?: "NOT_A_PARTICIPANT"))
+                else -> Result.failure(Exception("HTTP ${response.status} for hub thread"))
+            }
+        } catch (e: Exception) {
+            println("Error fetching hub thread: ${e.redactedRestMessage()}")
+            Result.failure(e)
+        }
+
+    /**
+     * Search messages — use [searchConversations] (`GET /api/chat/search`) or local/repository scan.
      */
     suspend fun searchMessages(
         chatId: String,
         query: String,
         authToken: String,
-    ): Result<List<Message>> = Result.failure(Exception("searchMessages is no longer served; use local/repository search"))
+    ): Result<List<Message>> = Result.failure(Exception("searchMessages is no longer served; use GET /api/chat/search"))
 
     /**
      * Resolve display names — legacy Flask; use profile BFF / Supabase users.

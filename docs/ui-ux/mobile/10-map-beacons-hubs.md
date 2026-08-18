@@ -131,6 +131,10 @@ Soundtrack / community kinds (hazard, SOS, utility, study): same bordered hero; 
 | Timeline | `ChatMessageTimeline`, hub-neutral mesh; **no** delivery receipts (`newestSentMessage = null`) |
 | Composer | `HubChatInputBar` — attach + field + solid primary send button. iOS: native tab bar stays visible (parity with 1:1 chat); `subtractTabBarOverlay=true`, `clearNativeTabBar=true`. |
 | Lobby banner (when `inLobby`) | `primaryContainer` tint — currently disabled (`inLobby = false`) |
+| Loading | `ChatChannelLoadingView` (logo pulse) only while `realtimeState` is Loading **and** messages are empty |
+| Subscribe failure / not a participant | `HubRealtimeErrorView` + Retry — never stay on the pulse after the 8s Realtime subscribe timeout |
+
+Init hydrates via `GET /api/hub/messages` (messages + `participant_ids`) in parallel with Realtime. JWT refresh + `realtime.connect()` + `subscribeWithTimeout(8s)` match 1:1 chat so an expired session cannot hang the logo forever.
 
 ---
 

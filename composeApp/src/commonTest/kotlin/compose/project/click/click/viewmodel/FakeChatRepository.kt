@@ -1,20 +1,20 @@
-package compose.project.click.click.viewmodel
+package compose.project.click.click.viewmodel // pragma: allowlist secret
 
-import compose.project.click.click.data.models.Chat
-import compose.project.click.click.data.models.ChatWithDetails
-import compose.project.click.click.data.models.Connection
-import compose.project.click.click.data.models.Message
-import compose.project.click.click.data.models.MessageReaction
-import compose.project.click.click.data.models.User
-import compose.project.click.click.data.repository.ChatMessageSubscription
-import compose.project.click.click.data.repository.ChatRealtimeEvent
-import compose.project.click.click.data.repository.ChatRepository
-import compose.project.click.click.data.repository.ChatTimelineCache
-import compose.project.click.click.data.repository.PresenceHealth
-import compose.project.click.click.data.repository.UnifiedSearchSupplement
-import compose.project.click.click.data.repository.MessageChangeEvent
-import compose.project.click.click.data.repository.MessageListInsertEvent
-import compose.project.click.click.data.repository.TypingStatus
+import compose.project.click.click.data.models.Chat // pragma: allowlist secret
+import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
+import compose.project.click.click.data.models.Connection // pragma: allowlist secret
+import compose.project.click.click.data.models.Message // pragma: allowlist secret
+import compose.project.click.click.data.models.MessageReaction // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.repository.ChatMessageSubscription // pragma: allowlist secret
+import compose.project.click.click.data.repository.ChatRealtimeEvent // pragma: allowlist secret
+import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.ChatTimelineCache // pragma: allowlist secret
+import compose.project.click.click.data.repository.ConversationSearchHit // pragma: allowlist secret
+import compose.project.click.click.data.repository.MessageListInsertEvent // pragma: allowlist secret
+import compose.project.click.click.data.repository.PresenceHealth // pragma: allowlist secret
+import compose.project.click.click.data.repository.TypingStatus // pragma: allowlist secret
+import compose.project.click.click.data.repository.UnifiedSearchSupplement // pragma: allowlist secret
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +27,7 @@ import kotlinx.serialization.json.JsonElement
 
 private object NoopMessageSubscription : ChatMessageSubscription {
     override suspend fun attach() {}
+
     override suspend fun detach() {}
 }
 
@@ -64,8 +65,8 @@ class FakeChatRepository(
         { _, _ -> UnifiedSearchSupplement.EMPTY },
     var onSearchMessagesByConnectionId: suspend (connectionId: String, query: String) -> Pair<String?, List<Message>> =
         { _, _ -> null to emptyList() },
+    var onSearchConversationHits: suspend (String) -> List<ConversationSearchHit> = { emptyList() }, // pragma: allowlist secret
 ) : ChatRepository {
-
     private val _onlineUsers = MutableStateFlow<Set<String>>(emptySet())
     override val onlineUsers: StateFlow<Set<String>> = _onlineUsers.asStateFlow()
     private val _presenceHealth = MutableStateFlow(PresenceHealth.Idle)
@@ -73,14 +74,19 @@ class FakeChatRepository(
 
     override val messageTimelineCache = ChatTimelineCache()
 
-    override fun peekCachedMessageTimeline(connectionId: String): List<Message>? =
-        messageTimelineCache.peek(connectionId)
+    override fun peekCachedMessageTimeline(connectionId: String): List<Message>? = messageTimelineCache.peek(connectionId)
 
-    override fun storeCachedMessageTimeline(connectionId: String, messages: List<Message>) {
+    override fun storeCachedMessageTimeline(
+        connectionId: String,
+        messages: List<Message>,
+    ) {
         messageTimelineCache.store(connectionId, messages)
     }
 
-    override fun mergeCachedTimelineMessage(connectionId: String, message: Message) {
+    override fun mergeCachedTimelineMessage(
+        connectionId: String,
+        message: Message,
+    ) {
         messageTimelineCache.mergeMessage(connectionId, message)
     }
 
@@ -90,23 +96,29 @@ class FakeChatRepository(
 
     override suspend fun stopGlobalPresence() = onStopGlobalPresence()
 
-    override suspend fun cacheEncryptionKeys(chatId: String, connectionId: String, userIds: List<String>) {}
+    override suspend fun cacheEncryptionKeys(
+        chatId: String,
+        connectionId: String,
+        userIds: List<String>,
+    ) {}
 
-    override suspend fun cacheGroupMasterKey(chatId: String, masterKey: ByteArray) {}
+    override suspend fun cacheGroupMasterKey(
+        chatId: String,
+        masterKey: ByteArray,
+    ) {}
 
     override suspend fun clearSessionCaches() {}
 
-    override suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails> =
-        onFetchUserChatsWithDetails(userId)
+    override suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails> = onFetchUserChatsWithDetails(userId)
 
-    override suspend fun fetchDirectUserChatsWithDetails(userId: String): List<ChatWithDetails> =
-        onFetchDirectUserChatsWithDetails(userId)
+    override suspend fun fetchDirectUserChatsWithDetails(userId: String): List<ChatWithDetails> = onFetchDirectUserChatsWithDetails(userId)
 
-    override suspend fun fetchGroupUserChatsWithDetails(userId: String): List<ChatWithDetails> =
-        onFetchGroupUserChatsWithDetails(userId)
+    override suspend fun fetchGroupUserChatsWithDetails(userId: String): List<ChatWithDetails> = onFetchGroupUserChatsWithDetails(userId)
 
-    override suspend fun decryptGroupChatPreview(chatId: String, viewerUserId: String): Message? =
-        onDecryptGroupChatPreview(chatId, viewerUserId)
+    override suspend fun decryptGroupChatPreview(
+        chatId: String,
+        viewerUserId: String,
+    ): Message? = onDecryptGroupChatPreview(chatId, viewerUserId)
 
     override suspend fun fetchArchivedUserChatsWithDetails(userId: String): List<ChatWithDetails> =
         onFetchArchivedUserChatsWithDetails(userId)
@@ -118,16 +130,19 @@ class FakeChatRepository(
         beforeTimeCreated: Long?,
     ): List<Message>? =
         onFetchMessagesForChat(chatId, viewerUserId)?.let { messages ->
-            val bounded = beforeTimeCreated?.let { ts ->
-                messages.filter { it.timeCreated < ts }
-            } ?: messages
+            val bounded =
+                beforeTimeCreated?.let { ts ->
+                    messages.filter { it.timeCreated < ts }
+                } ?: messages
             limit?.takeIf { it > 0 }?.let { bounded.takeLast(it) } ?: bounded
         }
 
     override suspend fun ensureFreshAuthToken(): String? = "fake-jwt"
 
-    override suspend fun fetchReactionsForChat(chatId: String, messageIds: List<String>?): List<MessageReaction> =
-        onFetchReactionsForChat(chatId)
+    override suspend fun fetchReactionsForChat(
+        chatId: String,
+        messageIds: List<String>?,
+    ): List<MessageReaction> = onFetchReactionsForChat(chatId)
 
     override fun seedConnectionJunctionCache(
         userId: String,
@@ -144,14 +159,11 @@ class FakeChatRepository(
         metadata: JsonElement?,
         clientLocalSentAtMs: Long?,
         connectionId: String?,
-    ): Message? =
-        onSendMessage(chatId, userId, content, messageType, metadata, clientLocalSentAtMs)
+    ): Message? = onSendMessage(chatId, userId, content, messageType, metadata, clientLocalSentAtMs)
 
-    override suspend fun ensureChatForConnection(connectionId: String): Chat? =
-        onEnsureChatForConnection(connectionId)
+    override suspend fun ensureChatForConnection(connectionId: String): Chat? = onEnsureChatForConnection(connectionId)
 
-    override suspend fun ensureChatForGroup(groupId: String): Chat? =
-        onEnsureChatForGroup(groupId)
+    override suspend fun ensureChatForGroup(groupId: String): Chat? = onEnsureChatForGroup(groupId)
 
     override suspend fun sendMessageForConnection(
         connectionId: String,
@@ -165,58 +177,100 @@ class FakeChatRepository(
         return sendMessage(id, userId, content, messageType, metadata)
     }
 
-    override suspend fun markMessagesAsRead(chatId: String, userId: String) {}
+    override suspend fun markMessagesAsRead(
+        chatId: String,
+        userId: String,
+    ) {}
 
     override suspend fun markChatAsUnread(chatId: String) {}
 
-    override suspend fun markMessagesDelivered(chatId: String, messageIds: List<String>) {}
+    override suspend fun markMessagesDelivered(
+        chatId: String,
+        messageIds: List<String>,
+    ) {}
 
     override suspend fun subscribeToMessages(
         chatId: String,
         viewerUserId: String,
-    ): Pair<ChatMessageSubscription, Flow<ChatRealtimeEvent>> =
-        onSubscribeToMessages(chatId, viewerUserId)
+    ): Pair<ChatMessageSubscription, Flow<ChatRealtimeEvent>> = onSubscribeToMessages(chatId, viewerUserId)
 
     override suspend fun subscribeToMessageInserts(): Pair<ChatMessageSubscription, Flow<MessageListInsertEvent>> =
         onSubscribeToMessageInserts()
 
     override suspend fun fetchChatById(chatId: String): Chat? = null
 
-    override suspend fun fetchChatWithDetails(chatId: String, currentUserId: String): ChatWithDetails? =
-        onFetchChatWithDetails(chatId, currentUserId)
+    override suspend fun fetchChatWithDetails(
+        chatId: String,
+        currentUserId: String,
+    ): ChatWithDetails? = onFetchChatWithDetails(chatId, currentUserId)
 
-    override suspend fun fetchChatParticipants(chatId: String): List<User> =
-        onFetchChatParticipants(chatId)
+    override suspend fun fetchChatParticipants(chatId: String): List<User> = onFetchChatParticipants(chatId)
 
     override suspend fun getUserById(userId: String): User? = onGetUserById(userId)
 
-    override suspend fun updateMessage(chatId: String, messageId: String, userId: String, content: String): Message? =
-        null
+    override suspend fun updateMessage(
+        chatId: String,
+        messageId: String,
+        userId: String,
+        content: String,
+    ): Message? = null
 
-    override suspend fun deleteMessage(chatId: String, messageId: String, userId: String): Boolean = false
+    override suspend fun deleteMessage(
+        chatId: String,
+        messageId: String,
+        userId: String,
+    ): Boolean = false
 
-    override suspend fun addReaction(messageId: String, userId: String, reactionType: String): Boolean = false
+    override suspend fun addReaction(
+        messageId: String,
+        userId: String,
+        reactionType: String,
+    ): Boolean = false
 
-    override suspend fun removeReaction(messageId: String, userId: String, reactionType: String): Boolean = false
+    override suspend fun removeReaction(
+        messageId: String,
+        userId: String,
+        reactionType: String,
+    ): Boolean = false
 
-    override suspend fun sendTypingStatus(chatId: String, userId: String, isTyping: Boolean) {}
+    override suspend fun sendTypingStatus(
+        chatId: String,
+        userId: String,
+        isTyping: Boolean,
+    ) {}
 
     override fun observeTypingStatus(chatId: String): Flow<TypingStatus> = onObserveTypingStatus(chatId)
 
     override suspend fun getTypingUsers(chatId: String): List<String> = emptyList()
 
-    override suspend fun joinChatEphemeralChannel(chatId: String, currentUserId: String, peerUserId: String) {}
+    override suspend fun joinChatEphemeralChannel(
+        chatId: String,
+        currentUserId: String,
+        peerUserId: String,
+    ) {}
 
     override suspend fun leaveChatEphemeralChannel(chatId: String) {}
 
-    override fun observePeerOnline(chatId: String, peerUserId: String): Flow<Boolean> =
-        onObservePeerOnline(chatId, peerUserId)
+    override fun observePeerOnline(
+        chatId: String,
+        peerUserId: String,
+    ): Flow<Boolean> = onObservePeerOnline(chatId, peerUserId)
 
-    override suspend fun updateMessageStatus(messageId: String, status: String): Boolean = false
+    override suspend fun updateMessageStatus(
+        messageId: String,
+        status: String,
+    ): Boolean = false
 
-    override suspend fun forwardMessage(messageId: String, targetChatId: String, userId: String): Message? = null
+    override suspend fun forwardMessage(
+        messageId: String,
+        targetChatId: String,
+        userId: String,
+    ): Message? = null
 
-    override suspend fun searchMessages(chatId: String, query: String): List<Message> = emptyList()
+    override suspend fun searchMessages(
+        chatId: String,
+        query: String,
+    ): List<Message> = emptyList()
 
     override suspend fun resolveChatIdForConnection(connectionId: String): String? = null
 
@@ -228,38 +282,53 @@ class FakeChatRepository(
         initialGroupName: String,
     ): Result<String> = Result.failure(UnsupportedOperationException())
 
-    override suspend fun leaveClique(groupId: String): Result<Unit> =
-        Result.failure(UnsupportedOperationException())
+    override suspend fun leaveClique(groupId: String): Result<Unit> = Result.failure(UnsupportedOperationException())
 
-    override suspend fun deleteClique(groupId: String): Result<Unit> =
-        Result.failure(UnsupportedOperationException())
+    override suspend fun deleteClique(groupId: String): Result<Unit> = Result.failure(UnsupportedOperationException())
 
-    override suspend fun renameClique(groupId: String, newName: String): Result<Unit> =
-        Result.failure(UnsupportedOperationException())
+    override suspend fun renameClique(
+        groupId: String,
+        newName: String,
+    ): Result<Unit> = Result.failure(UnsupportedOperationException())
 
     override suspend fun addCliqueMember(
         groupId: String,
         newMemberUserId: String,
     ): Result<Unit> = Result.failure(UnsupportedOperationException())
 
-    override suspend fun removeCliqueMember(groupId: String, memberUserId: String): Result<Unit> =
-        Result.failure(UnsupportedOperationException())
+    override suspend fun removeCliqueMember(
+        groupId: String,
+        memberUserId: String,
+    ): Result<Unit> = Result.failure(UnsupportedOperationException())
 
-    override suspend fun peekGroupMasterKey(chatId: String, viewerUserId: String): ByteArray? = null
+    override suspend fun peekGroupMasterKey(
+        chatId: String,
+        viewerUserId: String,
+    ): ByteArray? = null
 
     override suspend fun verifiedCliqueEdgesExist(memberUserIds: List<String>): Boolean = true
 
     override fun clearChatListLocalCaches() {}
 
-    override suspend fun searchMessagesByConnectionId(connectionId: String, query: String): Pair<String?, List<Message>> =
-        onSearchMessagesByConnectionId(connectionId, query)
+    override suspend fun searchMessagesByConnectionId(
+        connectionId: String,
+        query: String,
+    ): Pair<String?, List<Message>> = onSearchMessagesByConnectionId(connectionId, query)
+
+    override suspend fun searchConversationHits(query: String): List<ConversationSearchHit> =
+        // pragma: allowlist secret
+        onSearchConversationHits(query)
 
     override suspend fun unifiedSearchSupplement(
         viewerUserId: String,
         peerUserIds: List<String>,
     ): UnifiedSearchSupplement = onUnifiedSearchSupplement(viewerUserId, peerUserIds)
 
-    override suspend fun uploadChatMedia(bytes: ByteArray, objectPath: String, contentType: String): String? = null
+    override suspend fun uploadChatMedia(
+        bytes: ByteArray,
+        objectPath: String,
+        contentType: String,
+    ): String? = null
 
     override suspend fun downloadAndDecryptChatMedia(
         chatId: String,
