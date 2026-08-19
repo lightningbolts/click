@@ -42,437 +42,28 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
- * JSON body for `GET /api/ping` on [ApiConfig.CLICK_WEB_BASE_URL] (verified Supabase JWT).
- */
-@Serializable
-data class SecurePingResponse(
-    val status: String,
-    val message: String,
-    @SerialName("user_id") val userId: String,
-)
-
-@Serializable
-private data class UserProfilePatchResponseDto(
-    val user: UserCore,
-)
-
-/**
- * Response for `GET /api/users/{userId}/profile` — BFF-owned peer profile hydration
- * (replaces the direct Supabase `users` + `user_interests` joins that used to live
- * inside `SupabaseRepository.fetchUserPublicProfile`).
- */
-@Serializable
-data class UserProfileGetResponse(
-    val user: UserCore,
-    val tags: List<String> = emptyList(),
-    @SerialName("personality_tags") val personalityTags: List<String> = emptyList(),
-    @SerialName("viewerInterestTags") val viewerInterestTags: List<String> = emptyList(),
-    @SerialName("sharedInterestTags") val sharedInterestTags: List<String> = emptyList(),
-    /** Full legacy shape (availability, sharedConnection) preserved as JSON. */
-    val availability: kotlinx.serialization.json.JsonElement? = null,
-    /** Typed so mobile can prefer BFF intents over a second Supabase round-trip. */
-    @SerialName("availabilityIntents")
-    val availabilityIntents: List<ProfileAvailabilityIntentBubble> = emptyList(),
-    @SerialName("sharedConnection") val sharedConnection: kotlinx.serialization.json.JsonElement? = null,
-)
-
-@Serializable
-data class ActivityRecapDto(
-    val window: String,
-    val since: String,
-    @SerialName("connections_formed") val connectionsFormed: Int = 0,
-    @SerialName("messages_sent") val messagesSent: Int = 0,
-    @SerialName("messages_received") val messagesReceived: Int = 0,
-    @SerialName("beacons_created") val beaconsCreated: Int = 0,
-    @SerialName("events_rsvped") val eventsRsvped: Int = 0,
-    @SerialName("events_checked_in") val eventsCheckedIn: Int = 0,
-    @SerialName("events_saved") val eventsSaved: Int = 0,
-) {
-    fun isAllZero(): Boolean =
-        connectionsFormed == 0 &&
-            messagesSent == 0 &&
-            messagesReceived == 0 &&
-            beaconsCreated == 0 &&
-            eventsRsvped == 0 &&
-            eventsCheckedIn == 0 &&
-            eventsSaved == 0
-
-    fun peakValue(): Int =
-        maxOf(
-            connectionsFormed,
-            messagesSent,
-            messagesReceived,
-            beaconsCreated,
-            eventsRsvped,
-            eventsCheckedIn,
-            eventsSaved,
-        )
-}
-
-@Serializable
-private data class ActivityRecapResponseDto(
-    val recap: ActivityRecapDto,
-)
-
-/**
- * Response for `GET /api/connections/{connectionId}/tabs` — returns the Media / Files
- * collections used by the profile sheet's Media and Files subtabs. Links are derived
- * client-side from locally-decrypted text messages (content is E2EE on the wire).
- */
-@Serializable
-data class ConnectionTabsGetResponse(
-    @SerialName("chatId") val chatId: String,
-    val media: List<ConnectionTabMessage> = emptyList(),
-    val files: List<ConnectionTabMessage> = emptyList(),
-    val beacons: List<ConnectionTabMessage> = emptyList(),
-)
-
-@Serializable
-data class ConnectionTabMessage(
-    val id: String,
-    @SerialName("chat_id") val chatId: String,
-    @SerialName("user_id") val userId: String,
-    val content: String = "",
-    @SerialName("time_created") val timeCreated: Long,
-    @SerialName("message_type") val messageType: String,
-    val metadata: kotlinx.serialization.json.JsonElement? = null,
-)
-
-@Serializable
-private data class AvatarUploadResponseDto(
-    val image: String,
-    val user: UserCore? = null,
-)
-
-@Serializable
-private data class AvatarUploadBodyDto(
-    @SerialName("file_b64") val fileBase64: String,
-    @SerialName("mime_type") val mimeType: String,
-)
-
-@Serializable
-data class NotificationPreferencesPatchBody(
-    @SerialName("message_push_enabled")
-    val messagePushEnabled: Boolean,
-    @SerialName("call_push_enabled")
-    val callPushEnabled: Boolean,
-    @SerialName("event_reminder_push_enabled")
-    val eventReminderPushEnabled: Boolean = true,
-    @SerialName("availability_match_push_enabled")
-    val availabilityMatchPushEnabled: Boolean = true,
-    @SerialName("hub_message_push_enabled")
-    val hubMessagePushEnabled: Boolean = true,
-)
-
-@Serializable
-data class NotificationPreferencesPatchResponse(
-    val ok: Boolean,
-    val message: String,
-)
-
-@Serializable
-private data class ProfileTimelinePostBody(
-    @SerialName("target_type") val targetType: String,
-    @SerialName("target_id") val targetId: String,
-    val body: String,
-    val visibility: String,
-)
-
-@Serializable
-private data class ProfileTimelineMutateBody(
-    val id: String,
-    val body: String? = null,
-    val visibility: String? = null,
-)
-
-@Serializable
-private data class ConnectionLifecyclePostBody(
-    @SerialName("connection_id") val connectionId: String,
-)
-
-@Serializable
-private data class ConnectionCoreListResponse(
-    val core: List<String> = emptyList(),
-)
-
-@Serializable
-private data class SafetyReportPostBody(
-    @SerialName("connection_id") val connectionId: String,
-    val reason: String,
-)
-
-@Serializable
-private data class ContactsDiscoverBody(
-    @SerialName("hashed_contacts") val hashedContacts: List<String>,
-)
-
-@Serializable
-data class DiscoverProfileCard(
-    val id: String,
-    val name: String,
-    @SerialName("avatar_url") val avatarUrl: String? = null,
-    val tags: List<String> = emptyList(),
-)
-
-@Serializable
-private data class ContactsDiscoverResponse(
-    val matches: List<DiscoverProfileCard> = emptyList(),
-)
-
-@Serializable
-private data class PriorConnectionRequestBody(
-    @SerialName("target_user_id") val targetUserId: String,
-    @SerialName("known_since") val knownSince: String,
-    @SerialName("context_tag") val contextTag: String? = null,
-)
-
-@Serializable
-data class PriorConnectionMutationResponse(
-    @SerialName("connection_id") val connectionId: String,
-    val status: String,
-    val source: String? = null,
-    val action: String? = null,
-)
-
-@Serializable
-private data class PriorConnectionRespondBody(
-    @SerialName("connection_id") val connectionId: String,
-    val action: String,
-)
-
-@Serializable
-private data class SignAttachmentPostBody(
-    val path: String,
-)
-
-@Serializable
-private data class SignAttachmentResponse(
-    val url: String,
-)
-
-/** POST `/api/livekit/token` — matches [click-web/app/api/livekit/token/route.ts]. */
-@Serializable
-data class LiveKitTokenPostBody(
-    @SerialName("connection_id") val connectionId: String,
-    @SerialName("room_name") val roomName: String,
-    @SerialName("participant_name") val participantName: String,
-    @SerialName("group_id") val groupId: String? = null,
-)
-
-@Serializable
-data class LiveKitTokenResponse(
-    val token: String,
-    @SerialName("ws_url") val wsUrl: String,
-)
-
-/** POST `/api/user/push-tokens` — matches [click-web/app/api/user/push-tokens/route.ts]. */
-@Serializable
-data class PushTokenRegisterBody(
-    val token: String,
-    val platform: String,
-    @SerialName("token_type") val tokenType: String,
-    @SerialName("device_id") val deviceId: String? = null,
-)
-
-@Serializable
-data class PushTokenRegisterResponse(
-    val ok: Boolean,
-)
-
-/** GET `/api/users/[userId]/public-profile` — no JWT (App Clip / Instant preview). */
-@Serializable
-data class PublicProfileUnauthenticatedResponse(
-    @SerialName("display_name") val displayName: String,
-    @SerialName("avatar_url") val avatarUrl: String? = null,
-    @SerialName("aura_colors") val auraColors: List<String> = emptyList(),
-)
-
-@Serializable
-data class HubCreateLocationBody(
-    val latitude: Double,
-    val longitude: Double,
-    @SerialName("radius_meters") val radiusMeters: Int = 50,
-)
-
-@Serializable
-data class HubCreatePostBody(
-    val name: String,
-    val category: String,
-    val location: HubCreateLocationBody,
-)
-
-@Serializable
-data class HubCreateResponseDto(
-    @SerialName("hub_id") val hubId: String,
-    @SerialName("expires_at") val expiresAt: String? = null,
-)
-
-/** POST `/api/connections/proximity` — tri-factor bind (mirrors legacy bind-proximity-connection). */
-@Serializable
-data class ProximityHandshakePostBody(
-    @SerialName("my_token") val myToken: String,
-    val tokens: List<String> = emptyList(),
-    @SerialName("heard_tokens") val heardTokens: List<String> = emptyList(),
-    @SerialName("detected_devices") val detectedDevices: List<String> = emptyList(),
-    @SerialName("latitude") val latitude: Double? = null,
-    @SerialName("longitude") val longitude: Double? = null,
-    @SerialName("exact_barometric_elevation_m") val exactBarometricElevationM: Double? = null,
-    @SerialName("noise_level") val noiseLevel: String? = null,
-    @SerialName("exact_noise_level_db") val exactNoiseLevelDb: Double? = null,
-    @SerialName("context_tags") val contextTags: List<String>? = null,
-    @SerialName("height_category") val heightCategory: String? = null,
-    @SerialName("lux_level") val luxLevel: Double? = null,
-    @SerialName("motion_variance") val motionVariance: Double? = null,
-    @SerialName("compass_azimuth") val compassAzimuth: Double? = null,
-    @SerialName("battery_level") val batteryLevel: Int? = null,
-    @SerialName("client_context_first") val clientContextFirst: Boolean? = null,
-    @SerialName("weather_snapshot") val weatherSnapshot: String? = null,
-    @SerialName("simulator_mock") val simulatorMock: Boolean? = null,
-    @SerialName("timezone_offset_minutes") val timezoneOffsetMinutes: Int? = null,
-)
-
-@Serializable
-data class ProximityGroupCliqueCandidateDto(
-    @SerialName("member_user_ids") val memberUserIds: List<String> = emptyList(),
-)
-
-/** HTTP 200 — instant peer match from `POST /api/connections/proximity`. */
-@Serializable
-data class ProximityBindOkResponseDto(
-    val success: Boolean? = true,
-    @SerialName("encounter_logged") val encounterLogged: Boolean? = null,
-    @SerialName("connection_id") val connectionId: String? = null,
-    @SerialName("is_new_connection") val isNewConnection: Boolean? = null,
-    @SerialName("is_group") val isGroup: Boolean? = null,
-    val matches: List<User>? = null,
-    val error: String? = null,
-    @SerialName("group_clique_candidate") val groupCliqueCandidate: ProximityGroupCliqueCandidateDto? = null,
-    @SerialName("encounter_id") val encounterId: String? = null,
-    @SerialName("collaboration_ttl") val collaborationTtl: String? = null,
-    /** Multi-peer first-time bind: host must confirm selected members before create. */
-    @SerialName("awaiting_selection") val awaitingSelection: Boolean? = null,
-    @SerialName("pending_handshake_id") val pendingHandshakeId: String? = null,
-    @SerialName("expires_at") val expiresAt: String? = null,
-)
-
-/** JSON body for `POST /api/connections/proximity/confirm`. */
-@Serializable
-data class ProximityConfirmSelectionPostBody(
-    @SerialName("pending_handshake_id") val pendingHandshakeId: String,
-    @SerialName("selected_member_ids") val selectedMemberIds: List<String>,
-    @SerialName("context_tags") val contextTags: List<String>? = null,
-)
-
-/** HTTP 202 — peer offline; handshake stored server-side for async match. */
-@Serializable
-data class ProximityBindPendingResponseDto(
-    val success: Boolean = true,
-    val status: String = "pending",
-    @SerialName("pending_handshake_id") val pendingHandshakeId: String,
-    @SerialName("expires_at") val expiresAt: String = "",
-    @SerialName("encounter_logged") val encounterLogged: Boolean = false,
-    val matches: List<User> = emptyList(),
-)
-
-/** HTTP 503 — connection create failed; handshake left unmatched for GET recovery. */
-@Serializable
-private data class ProximityBindUnavailableResponseDto(
-    val error: String? = null,
-    @SerialName("pending_handshake_id") val pendingHandshakeId: String? = null,
-    @SerialName("expires_at") val expiresAt: String? = null,
-)
-
-/** HTTP 200 — server ignored an empty peer-evidence payload (no DB row). */
-@Serializable
-data class ProximityBindIgnoredResponseDto(
-    val success: Boolean = false,
-    val status: String,
-    val message: String? = null,
-    @SerialName("encounter_logged") val encounterLogged: Boolean = false,
-    val matches: List<User> = emptyList(),
-)
-
-sealed class ProximityHandshakePostResult {
-    data class InstantMatch(
-        val body: ProximityBindOkResponseDto,
-    ) : ProximityHandshakePostResult()
-
-    data class PendingMatch(
-        val body: ProximityBindPendingResponseDto,
-    ) : ProximityHandshakePostResult()
-
-    data class IgnoredEmptyPayload(
-        val body: ProximityBindIgnoredResponseDto,
-    ) : ProximityHandshakePostResult()
-}
-
-@Serializable
-data class ConnectionEncounterPostBody(
-    @SerialName("user_id") val userId: String,
-    @SerialName("peer_id") val peerId: String,
-    @SerialName("sensor_data") val sensorData: JsonObject? = null,
-)
-
-@Serializable
-data class CollaborationSessionPostResponse(
-    val ok: Boolean = false,
-    @SerialName("encounter_id") val encounterId: String? = null,
-    @SerialName("collaboration_ttl") val collaborationTtl: String? = null,
-)
-
-/** Thrown for non-2xx click-web responses; carries HTTP status for fallback routing. */
-class ClickWebRequestException(
-    val statusCode: Int,
-    message: String,
-) : Exception(message)
-
-@Serializable
-data class WidgetVibePayloadDto(
-    @SerialName("status_text") val statusText: String,
-    @SerialName("density_hex_color") val densityHexColor: String,
-    @SerialName("active_counts") val activeCounts: Int,
-)
-
-@Serializable
-data class CommunityHubNearbyDto(
-    @SerialName("hub_id") val hubId: String,
-    val name: String,
-    val category: String = "general",
-    val latitude: Double,
-    val longitude: Double,
-    @SerialName("radius_meters") val radiusMeters: Int,
-    @SerialName("active_user_count") val activeUserCount: Int,
-    @SerialName("distance_meters") val distanceMeters: Double,
-)
-
-@Serializable
-private data class CommunityHubNearbyEnvelope(
-    val hubs: List<CommunityHubNearbyDto> = emptyList(),
-)
-
-/**
  * HTTP client for the Next.js companion (`click-web`). Auth uses Supabase JWT via Ktor Auth bearer.
  * Legacy Flask routes were removed — do not reintroduce `localhost:5000` / LAN API bases.
  */
 class ApiClient {
     companion object {
-        private val clickWebAuthOrigin: String
+        internal val clickWebAuthOrigin: String
             get() = ApiConfig.CLICK_WEB_BASE_URL.trimEnd('/')
     }
 
-    private val json =
+    internal val json =
         Json {
             ignoreUnknownKeys = true
             isLenient = true
         }
 
-    private val tokenStorage by lazy { createTokenStorage() }
+    internal val tokenStorage by lazy { createTokenStorage() }
 
     /**
      * Lazy so constructing [ApiClient] (e.g. via [MapBeaconRepository] in Robolectric unit tests)
      * does not touch AndroidKeyStore until an HTTP call actually runs.
      */
-    private val clickWebClientLazy =
+    internal val clickWebClientLazy =
         lazy {
             HttpClient {
                 install(ContentNegotiation) {
@@ -482,9 +73,9 @@ class ApiClient {
                 installClickWeb403RetryInterceptor(tokenStorage)
             }
         }
-    private val clickWebClient: HttpClient get() = clickWebClientLazy.value
+    internal val clickWebClient: HttpClient get() = clickWebClientLazy.value
 
-    private val clickWebPlainClientLazy =
+    internal val clickWebPlainClientLazy =
         lazy {
             HttpClient {
                 install(ContentNegotiation) {
@@ -492,7 +83,7 @@ class ApiClient {
                 }
             }
         }
-    private val clickWebPlainClient: HttpClient get() = clickWebPlainClientLazy.value
+    internal val clickWebPlainClient: HttpClient get() = clickWebPlainClientLazy.value
 
     /**
      * Temporary helper: calls Next.js `GET /api/ping` with a Supabase JWT (see Ktor [Auth] bearer config).
@@ -517,7 +108,7 @@ class ApiClient {
             Result.failure(e)
         }
 
-    private suspend fun readClickWebErrorMessage(response: HttpResponse): String {
+    internal suspend fun readClickWebErrorMessage(response: HttpResponse): String {
         val status = response.status.value
         val fromJson =
             runCatching { response.body<ErrorResponse>() }
@@ -538,13 +129,13 @@ class ApiClient {
         return raw.take(200).ifEmpty { "Request failed ($status)" }
     }
 
-    private suspend fun clickWebFailure(response: HttpResponse): Result<Nothing> {
+    internal suspend fun clickWebFailure(response: HttpResponse): Result<Nothing> {
         val status = response.status.value
         val message = readClickWebErrorMessage(response)
         return Result.failure(ClickWebRequestException(status, message))
     }
 
-    private suspend fun currentAccessToken(): String? = EnsureFreshAccessToken.get(tokenStorage)
+    internal suspend fun currentAccessToken(): String? = EnsureFreshAccessToken.get(tokenStorage)
 
     /**
      * POST `/api/user/avatar` on click-web (JSON base64 `file_b64` + JWT bearer).
@@ -662,193 +253,31 @@ class ApiClient {
         }
     }
 
-    /**
-     * GET `/api/users/{userId}/profile` on click-web (JWT via Ktor Auth bearer).
-     *
-     * BFF migration (Phase 3 — C15): replaces the direct `users` + `user_interests`
-     * Supabase PostgREST joins that used to live inside
-     * [SupabaseRepository.fetchUserPublicProfile]. The Next.js route owns the join so
-     * the mobile client never talks to Supabase directly for profile hydration.
-     */
-    suspend fun getUserProfile(userId: String): Result<UserProfileGetResponse> {
-        val id = userId.trim()
-        if (id.isEmpty()) return Result.failure(IllegalArgumentException("userId required"))
-        return try {
-            val response: HttpResponse =
-                clickWebClient.get(
-                    "$clickWebAuthOrigin/api/users/$id/profile",
-                )
-            if (response.status.value in 200..299) {
-                Result.success(response.body<UserProfileGetResponse>())
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun getUserProfile(userId: String): Result<UserProfileGetResponse> = getUserProfileImpl(userId = userId)
 
     suspend fun getProfileTimeline(
         targetType: String,
         targetId: String,
-    ): Result<ProfileTimelinePayload> {
-        val type = targetType.trim()
-        val id = targetId.trim()
-        if (type.isEmpty() || id.isEmpty()) return Result.failure(IllegalArgumentException("Timeline target required"))
-        return try {
-            val bearer = currentAccessToken()
-            val response: HttpResponse =
-                clickWebClient.get("$clickWebAuthOrigin/api/profile/timeline") {
-                    bearer?.let { token ->
-                        header("Authorization", "Bearer $token")
-                    }
-                    parameter("target_type", type)
-                    parameter("target_id", id)
-                }
-            if (response.status.value in 200..299) {
-                Result.success(response.body<ProfileTimelinePayload>())
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    ): Result<ProfileTimelinePayload> = getProfileTimelineImpl(targetType = targetType, targetId = targetId)
 
     suspend fun postProfileTimelineJournalEntry(
         targetType: String,
         targetId: String,
         body: String,
         visibility: String,
-    ): Result<ProfileTimelinePayload> {
-        val type = targetType.trim()
-        val id = targetId.trim()
-        val text = body.trim()
-        val vis = visibility.trim().lowercase()
-        if (type.isEmpty() || id.isEmpty()) return Result.failure(IllegalArgumentException("Timeline target required"))
-        if (text.isEmpty()) return Result.failure(IllegalArgumentException("Journal entry required"))
-        return try {
-            val bearer = currentAccessToken()
-            val response: HttpResponse =
-                clickWebClient.post("$clickWebAuthOrigin/api/profile/timeline") {
-                    contentType(ContentType.Application.Json)
-                    bearer?.let { token ->
-                        header("Authorization", "Bearer $token")
-                    }
-                    setBody(
-                        ProfileTimelinePostBody(
-                            targetType = type,
-                            targetId = id,
-                            body = text,
-                            visibility = vis,
-                        ),
-                    )
-                }
-            if (response.status.value in 200..299) {
-                Result.success(response.body<ProfileTimelinePayload>())
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    ): Result<ProfileTimelinePayload> = postProfileTimelineJournalEntryImpl(targetType = targetType, targetId = targetId, body = body, visibility = visibility)
 
     suspend fun putProfileTimelineJournalEntry(
         id: String,
         body: String,
         visibility: String,
-    ): Result<ProfileTimelinePayload> {
-        val entryId = id.trim()
-        val text = body.trim()
-        val vis = visibility.trim().lowercase()
-        if (entryId.isEmpty()) return Result.failure(IllegalArgumentException("Journal entry required"))
-        if (text.isEmpty()) return Result.failure(IllegalArgumentException("Journal entry body required"))
-        return try {
-            val bearer = currentAccessToken()
-            val response: HttpResponse =
-                clickWebClient.put("$clickWebAuthOrigin/api/profile/timeline") {
-                    contentType(ContentType.Application.Json)
-                    bearer?.let { token ->
-                        header("Authorization", "Bearer $token")
-                    }
-                    setBody(ProfileTimelineMutateBody(id = entryId, body = text, visibility = vis))
-                }
-            if (response.status.value in 200..299) {
-                Result.success(response.body<ProfileTimelinePayload>())
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    ): Result<ProfileTimelinePayload> = putProfileTimelineJournalEntryImpl(id = id, body = body, visibility = visibility)
 
-    suspend fun deleteProfileTimelineJournalEntry(id: String): Result<ProfileTimelinePayload> {
-        val entryId = id.trim()
-        if (entryId.isEmpty()) return Result.failure(IllegalArgumentException("Journal entry required"))
-        return try {
-            val bearer = currentAccessToken()
-            val response: HttpResponse =
-                clickWebClient.delete("$clickWebAuthOrigin/api/profile/timeline") {
-                    contentType(ContentType.Application.Json)
-                    bearer?.let { token ->
-                        header("Authorization", "Bearer $token")
-                    }
-                    setBody(ProfileTimelineMutateBody(id = entryId))
-                }
-            if (response.status.value in 200..299) {
-                Result.success(response.body<ProfileTimelinePayload>())
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun deleteProfileTimelineJournalEntry(id: String): Result<ProfileTimelinePayload> = deleteProfileTimelineJournalEntryImpl(id = id)
 
-    /**
-     * GET `/api/me/recap?window=day|week` — Home activity rollup.
-     */
-    suspend fun getActivityRecap(window: String = "week"): Result<ActivityRecapDto> {
-        val normalized = if (window == "day") "day" else "week"
-        return try {
-            val response: HttpResponse =
-                clickWebClient.get("$clickWebAuthOrigin/api/me/recap") {
-                    parameter("window", normalized)
-                }
-            if (response.status.value in 200..299) {
-                Result.success(response.body<ActivityRecapResponseDto>().recap)
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun getActivityRecap(window: String = "week"): Result<ActivityRecapDto> = getActivityRecapImpl(window = window)
 
-    /**
-     * GET `/api/connections/{connectionId}/tabs` on click-web — fetches Media + Files
-     * listings for the profile sheet. Links remain client-side because message
-     * [content] is E2EE on the wire; callers filter locally-decrypted state.
-     */
-    suspend fun getConnectionTabs(connectionId: String): Result<ConnectionTabsGetResponse> {
-        val id = connectionId.trim()
-        if (id.isEmpty()) return Result.failure(IllegalArgumentException("connectionId required"))
-        return try {
-            val response: HttpResponse =
-                clickWebClient.get(
-                    "$clickWebAuthOrigin/api/connections/$id/tabs",
-                )
-            if (response.status.value in 200..299) {
-                Result.success(response.body<ConnectionTabsGetResponse>())
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun getConnectionTabs(connectionId: String): Result<ConnectionTabsGetResponse> = getConnectionTabsImpl(connectionId = connectionId)
 
     suspend fun patchUserProfile(
         userId: String,
@@ -858,49 +287,7 @@ class ApiClient {
         tags: List<String>? = null,
         birthday: String? = null,
         personalityTags: List<String>? = null,
-    ): Result<User> {
-        if (
-            firstName == null &&
-            lastName == null &&
-            image == null &&
-            tags == null &&
-            birthday == null &&
-            personalityTags == null
-        ) {
-            return Result.failure(IllegalArgumentException("No profile fields to update"))
-        }
-        val body =
-            buildJsonObject {
-                firstName?.let { put("first_name", it) }
-                lastName?.let { put("last_name", it) }
-                image?.let { put("image", it) }
-                tags?.let { list ->
-                    put("tags", JsonArray(list.map { JsonPrimitive(it) }))
-                }
-                birthday?.let { put("birthday", it) }
-                personalityTags?.let { list ->
-                    put("personality_tags", JsonArray(list.map { JsonPrimitive(it) }))
-                }
-            }
-        if (body.isEmpty()) {
-            return Result.failure(IllegalArgumentException("No profile fields to update"))
-        }
-        return try {
-            val response =
-                clickWebClient.patch("$clickWebAuthOrigin/api/users/$userId/profile") {
-                    contentType(ContentType.Application.Json)
-                    setBody(body)
-                }
-            if (response.status.value in 200..299) {
-                val dto = response.body<UserProfilePatchResponseDto>()
-                Result.success(dto.user.toUser())
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    ): Result<User> = patchUserProfileImpl(userId = userId, firstName = firstName, lastName = lastName, image = image, tags = tags, birthday = birthday, personalityTags = personalityTags)
 
     /**
      * PATCH `/api/user/preferences` on click-web.
@@ -921,123 +308,17 @@ class ApiClient {
             Result.failure(e)
         }
 
-    /** POST `/api/connections/archive` — per-user archive junction (`connection_archives`). */
-    suspend fun postConnectionArchive(connectionId: String): Result<Unit> {
-        val id = connectionId.trim()
-        if (id.isEmpty()) return Result.failure(IllegalArgumentException("Missing connection id"))
-        return try {
-            val response =
-                clickWebClient.post("$clickWebAuthOrigin/api/connections/archive") {
-                    contentType(ContentType.Application.Json)
-                    setBody(ConnectionLifecyclePostBody(connectionId = id))
-                }
-            if (response.status.value in 200..299) {
-                Result.success(Unit)
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun postConnectionArchive(connectionId: String): Result<Unit> = postConnectionArchiveImpl(connectionId = connectionId)
 
-    /** POST `/api/connections/unarchive` — remove archive row and restore lifecycle (`kept`). */
-    suspend fun postConnectionUnarchive(connectionId: String): Result<Unit> {
-        val id = connectionId.trim()
-        if (id.isEmpty()) return Result.failure(IllegalArgumentException("Missing connection id"))
-        return try {
-            val response =
-                clickWebClient.post("$clickWebAuthOrigin/api/connections/unarchive") {
-                    contentType(ContentType.Application.Json)
-                    setBody(ConnectionLifecyclePostBody(connectionId = id))
-                }
-            if (response.status.value in 200..299) {
-                Result.success(Unit)
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun postConnectionUnarchive(connectionId: String): Result<Unit> = postConnectionUnarchiveImpl(connectionId = connectionId)
 
-    /** POST `/api/connections/core` — per-user core pin (`connection_core`). */
-    suspend fun postConnectionCore(connectionId: String): Result<Unit> {
-        val id = connectionId.trim()
-        if (id.isEmpty()) return Result.failure(IllegalArgumentException("Missing connection id"))
-        return try {
-            val response =
-                clickWebClient.post("$clickWebAuthOrigin/api/connections/core") {
-                    contentType(ContentType.Application.Json)
-                    setBody(ConnectionLifecyclePostBody(connectionId = id))
-                }
-            if (response.status.value in 200..299) {
-                Result.success(Unit)
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun postConnectionCore(connectionId: String): Result<Unit> = postConnectionCoreImpl(connectionId = connectionId)
 
-    /** GET `/api/connections/core` — core connection IDs for the signed-in user. */
-    suspend fun fetchConnectionCoreIds(): Result<Set<String>> =
-        try {
-            val response = clickWebClient.get("$clickWebAuthOrigin/api/connections/core")
-            if (response.status.value in 200..299) {
-                val body = response.body<ConnectionCoreListResponse>()
-                Result.success(
-                    body.core
-                        .map { it.trim() }
-                        .filter { it.isNotEmpty() }
-                        .toSet(),
-                )
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+    suspend fun fetchConnectionCoreIds(): Result<Set<String>> = fetchConnectionCoreIdsImpl()
 
-    /** DELETE `/api/connections/core?connection_id=` — remove from core list. */
-    suspend fun deleteConnectionCore(connectionId: String): Result<Unit> {
-        val id = connectionId.trim()
-        if (id.isEmpty()) return Result.failure(IllegalArgumentException("Missing connection id"))
-        return try {
-            val response =
-                clickWebClient.delete(
-                    "$clickWebAuthOrigin/api/connections/core?connection_id=$id",
-                )
-            if (response.status.value in 200..299) {
-                Result.success(Unit)
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun deleteConnectionCore(connectionId: String): Result<Unit> = deleteConnectionCoreImpl(connectionId = connectionId)
 
-    /** POST `/api/connections/hide` — per-user hide (`connection_hidden`) for the JWT user only. */
-    suspend fun postConnectionHide(connectionId: String): Result<Unit> {
-        val id = connectionId.trim()
-        if (id.isEmpty()) return Result.failure(IllegalArgumentException("Missing connection id"))
-        return try {
-            val response =
-                clickWebClient.post("$clickWebAuthOrigin/api/connections/hide") {
-                    contentType(ContentType.Application.Json)
-                    setBody(ConnectionLifecyclePostBody(connectionId = id))
-                }
-            if (response.status.value in 200..299) {
-                Result.success(Unit)
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun postConnectionHide(connectionId: String): Result<Unit> = postConnectionHideImpl(connectionId = connectionId)
 
     /**
      * POST `/api/livekit/token` on click-web (JWT via Ktor Auth bearer).
@@ -1196,140 +477,23 @@ class ApiClient {
         }
     }
 
-    /**
-     * `GET /api/beacons` — proximity map beacons (PostGIS); bearer is the Supabase session JWT.
-     */
     suspend fun getMapBeacons(
         lat: Double,
         lon: Double,
         radiusMeters: Double,
         filters: String? = null,
-    ): Result<String> {
-        if (!lat.isFinite() || !lon.isFinite() || !radiusMeters.isFinite()) {
-            return Result.failure(IllegalArgumentException("lat, lon, and radiusMeters must be finite"))
-        }
-        return try {
-            val response: HttpResponse =
-                clickWebClient.get("$clickWebAuthOrigin/api/beacons") {
-                    parameter("lat", lat)
-                    parameter("lon", lon)
-                    parameter("radius_meters", radiusMeters)
-                    val f = filters?.trim().orEmpty()
-                    if (f.isNotEmpty()) {
-                        parameter("filters", f)
-                    }
-                }
-            if (response.status.value in 200..299) {
-                Result.success(response.bodyAsText())
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    ): Result<String> = getMapBeaconsImpl(lat = lat, lon = lon, radiusMeters = radiusMeters, filters = filters)
 
-    /** `GET /api/beacons/{beaconId}` — full beacon row (metadata incl. event schedule). */
-    suspend fun getMapBeacon(beaconId: String): Result<MapBeacon> {
-        val id = beaconId.trim()
-        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
-        return try {
-            val response: HttpResponse = clickWebClient.get("$clickWebAuthOrigin/api/beacons/$id")
-            if (response.status.value in 200..299) {
-                val payload = response.body<MapBeaconPostResponseDto>()
-                val beaconObj =
-                    payload.beacon
-                        ?: return Result.failure(Exception("Beacon payload was missing"))
-                val beacon =
-                    parseMapBeaconRows(beaconObj).firstOrNull()
-                        ?: return Result.failure(Exception("Beacon payload was malformed"))
-                Result.success(beacon)
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: ClientRequestException) {
-            Result.failure(Exception(readClickWebErrorMessage(e.response)))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun getMapBeacon(beaconId: String): Result<MapBeacon> = getMapBeaconImpl(beaconId = beaconId)
 
-    /** `POST /api/beacons` — insert a map beacon (soundtrack rows enriched server-side). */
-    suspend fun postMapBeacon(insert: MapBeaconInsert): Result<MapBeacon> {
-        return try {
-            val response =
-                clickWebClient.post("$clickWebAuthOrigin/api/beacons") {
-                    contentType(ContentType.Application.Json)
-                    setBody(insert)
-                }
-            if (response.status.value in 200..299) {
-                val payload = response.body<MapBeaconPostResponseDto>()
-                val beaconObj =
-                    payload.beacon
-                        ?: return Result.failure(Exception("Insert succeeded but beacon payload was missing"))
-                val beacon =
-                    parseMapBeaconRows(beaconObj).firstOrNull()
-                        ?: return Result.failure(Exception("Insert succeeded but beacon payload was malformed"))
-                Result.success(beacon)
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: ClientRequestException) {
-            Result.failure(Exception(readClickWebErrorMessage(e.response)))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun postMapBeacon(insert: MapBeaconInsert): Result<MapBeacon> = postMapBeaconImpl(insert = insert)
 
-    /** PATCH `/api/beacons/{beaconId}` — update a creator-owned beacon. */
     suspend fun patchMapBeacon(
         beaconId: String,
         patch: MapBeaconPatchBody,
-    ): Result<MapBeacon> {
-        val id = beaconId.trim()
-        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
-        return try {
-            val response =
-                clickWebClient.patch("$clickWebAuthOrigin/api/beacons/$id") {
-                    contentType(ContentType.Application.Json)
-                    setBody(patch)
-                }
-            if (response.status.value in 200..299) {
-                val payload = response.body<MapBeaconPatchResponseDto>()
-                val beaconObj =
-                    payload.beacon
-                        ?: return Result.failure(Exception("Patch succeeded but beacon payload was missing"))
-                val beacon =
-                    parseMapBeaconRows(beaconObj).firstOrNull()
-                        ?: return Result.failure(Exception("Patch succeeded but beacon payload was malformed"))
-                Result.success(beacon)
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: ClientRequestException) {
-            Result.failure(Exception(readClickWebErrorMessage(e.response)))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    ): Result<MapBeacon> = patchMapBeaconImpl(beaconId = beaconId, patch = patch)
 
-    /** DELETE `/api/beacons/{beaconId}` — remove a creator-owned beacon. */
-    suspend fun deleteMapBeacon(beaconId: String): Result<Unit> {
-        val id = beaconId.trim()
-        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
-        return try {
-            val response = clickWebClient.delete("$clickWebAuthOrigin/api/beacons/$id")
-            if (response.status.value in 200..299) {
-                Result.success(Unit)
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: ClientRequestException) {
-            Result.failure(Exception(readClickWebErrorMessage(e.response)))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun deleteMapBeacon(beaconId: String): Result<Unit> = deleteMapBeaconImpl(beaconId = beaconId)
 
     /** POST `/api/chat/attachments/sign` — mint short-lived URL for a chat attachment path. */
     suspend fun getSignedChatAttachmentUrl(path: String): Result<String> {
@@ -1397,218 +561,24 @@ class ApiClient {
             Result.failure(e)
         }
 
-    /**
-     * POST `/api/connections/proximity` — tri-factor proximity bind (JWT bearer).
-     * Returns [ProximityHandshakePostResult.InstantMatch] on HTTP 200,
-     * [ProximityHandshakePostResult.PendingMatch] on HTTP 202 (peer not online yet),
-     * or HTTP 503 with `pending_handshake_id` (connection create failed; GET recovery).
-     */
     suspend fun postProximityHandshake(
         body: ProximityHandshakePostBody,
         bearerJwt: String? = null,
-    ): Result<ProximityHandshakePostResult> {
-        return try {
-            val response: HttpResponse =
-                clickWebClient.post(
-                    "$clickWebAuthOrigin/api/connections/proximity",
-                ) {
-                    contentType(ContentType.Application.Json)
-                    bearerJwt?.trim()?.takeIf { it.isNotEmpty() }?.let { token ->
-                        header("Authorization", "Bearer $token")
-                    }
-                    setBody(body)
-                }
-            when (response.status.value) {
-                200 -> {
-                    val raw = response.bodyAsText()
-                    if (raw.contains("ignored_empty_payload")) {
-                        val ignored = json.decodeFromString(ProximityBindIgnoredResponseDto.serializer(), raw)
-                        return Result.success(ProximityHandshakePostResult.IgnoredEmptyPayload(ignored))
-                    }
-                    val dto = response.body<ProximityBindOkResponseDto>()
-                    if (!dto.error.isNullOrBlank()) {
-                        Result.failure(Exception(dto.error))
-                    } else {
-                        Result.success(ProximityHandshakePostResult.InstantMatch(dto))
-                    }
-                }
-                202 -> {
-                    val dto = response.body<ProximityBindPendingResponseDto>()
-                    Result.success(ProximityHandshakePostResult.PendingMatch(dto))
-                }
-                503 -> {
-                    val raw = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
-                    val unavailable =
-                        runCatching {
-                            json.decodeFromString(ProximityBindUnavailableResponseDto.serializer(), raw)
-                        }.getOrNull()
-                    val pendingId = unavailable?.pendingHandshakeId?.trim().orEmpty()
-                    if (pendingId.isNotEmpty()) {
-                        Result.success(
-                            ProximityHandshakePostResult.PendingMatch(
-                                ProximityBindPendingResponseDto(
-                                    success = false,
-                                    status = unavailable?.error ?: "connection_unavailable",
-                                    pendingHandshakeId = pendingId,
-                                    expiresAt = unavailable?.expiresAt.orEmpty(),
-                                ),
-                            ),
-                        )
-                    } else {
-                        clickWebFailure(response)
-                    }
-                }
-                else -> clickWebFailure(response)
-            }
-        } catch (e: ClientRequestException) {
-            val status = e.response.status.value
-            if (status == 503) {
-                val raw = runCatching { e.response.bodyAsText() }.getOrNull().orEmpty()
-                val unavailable =
-                    runCatching {
-                        json.decodeFromString(ProximityBindUnavailableResponseDto.serializer(), raw)
-                    }.getOrNull()
-                val pendingId = unavailable?.pendingHandshakeId?.trim().orEmpty()
-                if (pendingId.isNotEmpty()) {
-                    return Result.success(
-                        ProximityHandshakePostResult.PendingMatch(
-                            ProximityBindPendingResponseDto(
-                                success = false,
-                                status = unavailable?.error ?: "connection_unavailable",
-                                pendingHandshakeId = pendingId,
-                                expiresAt = unavailable?.expiresAt.orEmpty(),
-                            ),
-                        ),
-                    )
-                }
-            }
-            clickWebFailure(e.response)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    ): Result<ProximityHandshakePostResult> = postProximityHandshakeImpl(body = body, bearerJwt = bearerJwt)
 
-    /**
-     * POST `/api/connections/proximity/confirm` — host confirms selected members after
-     * `awaiting_selection` on a multi-peer first-time bind.
-     */
     suspend fun postProximityConfirmSelection(
         bearerJwt: String,
         pendingHandshakeId: String,
         selectedMemberIds: List<String>,
         contextTags: List<String>? = null,
-    ): Result<ProximityBindOkResponseDto> {
-        val pendingId = pendingHandshakeId.trim()
-        if (pendingId.isEmpty()) {
-            return Result.failure(IllegalArgumentException("pendingHandshakeId required"))
-        }
-        val members =
-            selectedMemberIds
-                .map { it.trim() }
-                .filter { it.isNotEmpty() }
-                .distinct()
-                // Server adds host; max member set is PROXIMITY_HOST_SELECTION_MAX_MEMBERS (12).
-                .take(11)
-        if (members.isEmpty()) {
-            return Result.failure(IllegalArgumentException("selectedMemberIds required"))
-        }
-        val tags =
-            contextTags
-                ?.map { it.trim() }
-                ?.filter { it.isNotEmpty() }
-                ?.distinct()
-                ?.takeIf { it.isNotEmpty() }
-        return try {
-            val response: HttpResponse =
-                clickWebClient.post(
-                    "$clickWebAuthOrigin/api/connections/proximity/confirm",
-                ) {
-                    contentType(ContentType.Application.Json)
-                    bearerJwt.trim().takeIf { it.isNotEmpty() }?.let { token ->
-                        header("Authorization", "Bearer $token")
-                    }
-                    setBody(
-                        ProximityConfirmSelectionPostBody(
-                            pendingHandshakeId = pendingId,
-                            selectedMemberIds = members,
-                            contextTags = tags,
-                        ),
-                    )
-                }
-            when (response.status.value) {
-                in 200..299 -> {
-                    val dto = response.body<ProximityBindOkResponseDto>()
-                    if (!dto.error.isNullOrBlank()) {
-                        Result.failure(Exception(dto.error))
-                    } else {
-                        Result.success(dto)
-                    }
-                }
-                else -> clickWebFailure(response)
-            }
-        } catch (e: ClientRequestException) {
-            clickWebFailure(e.response)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    ): Result<ProximityBindOkResponseDto> = postProximityConfirmSelectionImpl(bearerJwt = bearerJwt, pendingHandshakeId = pendingHandshakeId, selectedMemberIds = selectedMemberIds, contextTags = contextTags)
 
-    /** GET `/api/connections/proximity` — recover a previously accepted pending handshake. */
     suspend fun getPendingProximityHandshake(
         pendingHandshakeId: String,
         bearerJwt: String? = null,
-    ): Result<ProximityHandshakePostResult> {
-        val pendingId = pendingHandshakeId.trim()
-        if (pendingId.isEmpty()) {
-            return Result.failure(IllegalArgumentException("pendingHandshakeId required"))
-        }
-        return try {
-            val response: HttpResponse =
-                clickWebClient.get(
-                    "$clickWebAuthOrigin/api/connections/proximity",
-                ) {
-                    bearerJwt?.trim()?.takeIf { it.isNotEmpty() }?.let { token ->
-                        header("Authorization", "Bearer $token")
-                    }
-                    parameter("pending_handshake_id", pendingId)
-                }
-            when (response.status.value) {
-                200 -> {
-                    val dto = response.body<ProximityBindOkResponseDto>()
-                    if (!dto.error.isNullOrBlank()) {
-                        Result.failure(Exception(dto.error))
-                    } else {
-                        Result.success(ProximityHandshakePostResult.InstantMatch(dto))
-                    }
-                }
-                202 -> {
-                    val dto = response.body<ProximityBindPendingResponseDto>()
-                    Result.success(ProximityHandshakePostResult.PendingMatch(dto))
-                }
-                else -> clickWebFailure(response)
-            }
-        } catch (e: ClientRequestException) {
-            clickWebFailure(e.response)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    ): Result<ProximityHandshakePostResult> = getPendingProximityHandshakeImpl(pendingHandshakeId = pendingHandshakeId, bearerJwt = bearerJwt)
 
-    /** Cold-start prewarm: invalid `my_token` exercises JWT/auth without inserting a row. */
-    suspend fun prewarmProximityHandshake() {
-        runCatching {
-            clickWebClient.post("$clickWebAuthOrigin/api/connections/proximity") {
-                contentType(ContentType.Application.Json)
-                setBody(
-                    ProximityHandshakePostBody(
-                        myToken = "",
-                        tokens = emptyList(),
-                        heardTokens = emptyList(),
-                    ),
-                )
-            }
-        }
-    }
+    suspend fun prewarmProximityHandshake() = prewarmProximityHandshakeImpl()
 
     /** POST `/api/connections/encounter` — JWT bearer; inserts encounter row only. */
     suspend fun postConnectionEncounter(body: ConnectionEncounterPostBody): Result<Unit> =
@@ -1629,85 +599,11 @@ class ApiClient {
             Result.failure(e)
         }
 
-    /** POST `/api/connections/{id}/collaboration-session` — opens Disposable Roll window. */
-    suspend fun postOpenCollaborationSession(connectionId: String): Result<CollaborationSessionPostResponse> {
-        val cid = connectionId.trim()
-        if (cid.isEmpty()) return Result.failure(IllegalArgumentException("connectionId required"))
-        return try {
-            val response =
-                clickWebClient.post(
-                    "$clickWebAuthOrigin/api/connections/$cid/collaboration-session",
-                ) {
-                    contentType(ContentType.Application.Json)
-                    setBody(buildJsonObject {})
-                }
-            if (response.status.value in 200..299) {
-                Result.success(response.body<CollaborationSessionPostResponse>())
-            } else {
-                clickWebFailure(response)
-            }
-        } catch (e: ClientRequestException) {
-            clickWebFailure(e.response)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun postOpenCollaborationSession(connectionId: String): Result<CollaborationSessionPostResponse> = postOpenCollaborationSessionImpl(connectionId = connectionId)
 
-    /** POST `/api/chats/{id}/collaboration-session` — opens Disposable Roll window for group chats. */
-    suspend fun postOpenCollaborationSessionForChat(chatId: String): Result<CollaborationSessionPostResponse> {
-        val cid = chatId.trim()
-        if (cid.isEmpty()) return Result.failure(IllegalArgumentException("chatId required"))
-        return try {
-            val response =
-                clickWebClient.post(
-                    "$clickWebAuthOrigin/api/chats/$cid/collaboration-session",
-                ) {
-                    contentType(ContentType.Application.Json)
-                    setBody(buildJsonObject {})
-                }
-            if (response.status.value in 200..299) {
-                Result.success(response.body<CollaborationSessionPostResponse>())
-            } else {
-                clickWebFailure(response)
-            }
-        } catch (e: ClientRequestException) {
-            clickWebFailure(e.response)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun postOpenCollaborationSessionForChat(chatId: String): Result<CollaborationSessionPostResponse> = postOpenCollaborationSessionForChatImpl(chatId = chatId)
 
-    /**
-     * Fallback when the dedicated collaboration-session route is not deployed yet.
-     * POST `/api/connections/encounter` with `{ connection_id, open_disposable_roll: true }`.
-     */
-    suspend fun postOpenCollaborationSessionFallback(connectionId: String): Result<CollaborationSessionPostResponse> {
-        val cid = connectionId.trim()
-        if (cid.isEmpty()) return Result.failure(IllegalArgumentException("connectionId required"))
-        return try {
-            val response =
-                clickWebClient.post("$clickWebAuthOrigin/api/connections/encounter") {
-                    contentType(ContentType.Application.Json)
-                    // encodeDefaults is off — must emit open_disposable_roll explicitly or the
-                    // server falls through to the legacy user_id/peer_id encounter validator.
-                    setBody(
-                        buildJsonObject {
-                            put("connection_id", cid)
-                            put("open_disposable_roll", true)
-                        },
-                    )
-                }
-            if (response.status.value in 200..299) {
-                Result.success(response.body<CollaborationSessionPostResponse>())
-            } else {
-                clickWebFailure(response)
-            }
-        } catch (e: ClientRequestException) {
-            clickWebFailure(e.response)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun postOpenCollaborationSessionFallback(connectionId: String): Result<CollaborationSessionPostResponse> = postOpenCollaborationSessionFallbackImpl(connectionId = connectionId)
 
     /** GET `/api/insights/widget-vibe` — JWT bearer. */
     suspend fun getWidgetVibePayload(): Result<WidgetVibePayloadDto> =
@@ -1753,42 +649,9 @@ class ApiClient {
         }
     }
 
-    /** GET `/api/beacons/{beaconId}/rsvp` — attendee list for event beacons. */
-    suspend fun getBeaconRsvp(beaconId: String): Result<BeaconRsvpGetResponseDto> {
-        val id = beaconId.trim()
-        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
-        return try {
-            val response: HttpResponse = clickWebClient.get("$clickWebAuthOrigin/api/beacons/$id/rsvp")
-            if (response.status.value in 200..299) {
-                Result.success(response.body<BeaconRsvpGetResponseDto>())
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: ClientRequestException) {
-            Result.failure(Exception(readClickWebErrorMessage(e.response)))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun getBeaconRsvp(beaconId: String): Result<BeaconRsvpGetResponseDto> = getBeaconRsvpImpl(beaconId = beaconId)
 
-    /** GET `/api/beacons/{beaconId}/attendees/directory` — enriched people directory (RSVP or check-in required). */
-    suspend fun getBeaconAttendeeDirectory(beaconId: String): Result<BeaconAttendeeDirectoryResponseDto> {
-        val id = beaconId.trim()
-        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
-        return try {
-            val response: HttpResponse =
-                clickWebClient.get("$clickWebAuthOrigin/api/beacons/$id/attendees/directory")
-            if (response.status.value in 200..299) {
-                Result.success(response.body<BeaconAttendeeDirectoryResponseDto>())
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: ClientRequestException) {
-            Result.failure(Exception(readClickWebErrorMessage(e.response)))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun getBeaconAttendeeDirectory(beaconId: String): Result<BeaconAttendeeDirectoryResponseDto> = getBeaconAttendeeDirectoryImpl(beaconId = beaconId)
 
     /**
      * GET `/api/connections/{connectionId}/event-recommendation` — one shared upcoming event for a new peer.
@@ -1818,240 +681,46 @@ class ApiClient {
         }
     }
 
-    /**
-     * POST `/api/beacons/{beaconId}/rsvp` — sign up for an event beacon, optionally persisting the
-     * attendee's current GPS location for granular tracking.
-     */
     suspend fun postBeaconRsvp(
         beaconId: String,
         latitude: Double? = null,
         longitude: Double? = null,
         accuracyMeters: Double? = null,
         platform: String? = null,
-    ): Result<BeaconAttendeeDto> {
-        val id = beaconId.trim()
-        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
-        return try {
-            val response: HttpResponse =
-                clickWebClient.post("$clickWebAuthOrigin/api/beacons/$id/rsvp") {
-                    contentType(ContentType.Application.Json)
-                    setBody(
-                        BeaconRsvpPostBody(
-                            latitude = latitude,
-                            longitude = longitude,
-                            accuracyMeters = accuracyMeters,
-                            source = "mobile",
-                            platform = platform,
-                        ),
-                    )
-                }
-            if (response.status.value in 200..299) {
-                val payload = response.body<BeaconRsvpPostResponseDto>()
-                val attendee =
-                    payload.attendee
-                        ?: return Result.failure(Exception("RSVP succeeded but attendee payload was missing"))
-                Result.success(attendee)
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: ClientRequestException) {
-            Result.failure(Exception(readClickWebErrorMessage(e.response)))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    ): Result<BeaconAttendeeDto> = postBeaconRsvpImpl(beaconId = beaconId, latitude = latitude, longitude = longitude, accuracyMeters = accuracyMeters, platform = platform)
 
-    /** DELETE `/api/beacons/{beaconId}/rsvp` — cancel the current user's RSVP. */
-    suspend fun deleteBeaconRsvp(beaconId: String): Result<Unit> {
-        val id = beaconId.trim()
-        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
-        return try {
-            val response: HttpResponse = clickWebClient.delete("$clickWebAuthOrigin/api/beacons/$id/rsvp")
-            if (response.status.value in 200..299) {
-                Result.success(Unit)
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: ClientRequestException) {
-            Result.failure(Exception(readClickWebErrorMessage(e.response)))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun deleteBeaconRsvp(beaconId: String): Result<Unit> = deleteBeaconRsvpImpl(beaconId = beaconId)
 
-    suspend fun getBeaconEngagement(beaconId: String): Result<BeaconEngagementDto> {
-        val id = beaconId.trim()
-        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
-        return try {
-            val response: HttpResponse =
-                clickWebClient.get("$clickWebAuthOrigin/api/beacons/$id/engagement")
-            if (response.status.value in 200..299) {
-                Result.success(response.body<BeaconEngagementDto>())
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: ClientRequestException) {
-            Result.failure(Exception(readClickWebErrorMessage(e.response)))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun getBeaconEngagement(beaconId: String): Result<BeaconEngagementDto> = getBeaconEngagementImpl(beaconId = beaconId)
 
     suspend fun putBeaconBookmark(
         beaconId: String,
         bookmarked: Boolean,
         telemetry: EngagementTelemetryBody = EngagementTelemetryBody(),
-    ): Result<Unit> {
-        val id = beaconId.trim()
-        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
-        return try {
-            val response: HttpResponse =
-                clickWebClient.put("$clickWebAuthOrigin/api/beacons/$id/bookmark") {
-                    contentType(ContentType.Application.Json)
-                    setBody(telemetry.copy(bookmarked = bookmarked))
-                }
-            if (response.status.value in 200..299) {
-                Result.success(Unit)
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: ClientRequestException) {
-            Result.failure(Exception(readClickWebErrorMessage(e.response)))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    ): Result<Unit> = putBeaconBookmarkImpl(beaconId = beaconId, bookmarked = bookmarked, telemetry = telemetry)
 
     suspend fun postBeaconCheckIn(
         beaconId: String,
         telemetry: EngagementTelemetryBody,
-    ): Result<BeaconCheckInMutationDto> {
-        val id = beaconId.trim()
-        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
-        return try {
-            val response: HttpResponse =
-                clickWebClient.post("$clickWebAuthOrigin/api/beacons/$id/check-in") {
-                    contentType(ContentType.Application.Json)
-                    setBody(telemetry)
-                }
-            if (response.status.value in 200..299) {
-                Result.success(response.body<BeaconCheckInMutationDto>())
-            } else {
-                Result.failure(
-                    BeaconEngagementHttpException(
-                        status = response.status.value,
-                        message = readClickWebErrorMessage(response),
-                    ),
-                )
-            }
-        } catch (e: ClientRequestException) {
-            Result.failure(
-                BeaconEngagementHttpException(
-                    status = e.response.status.value,
-                    message = readClickWebErrorMessage(e.response),
-                ),
-            )
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    ): Result<BeaconCheckInMutationDto> = postBeaconCheckInImpl(beaconId = beaconId, telemetry = telemetry)
 
-    suspend fun deleteBeaconCheckIn(beaconId: String): Result<Unit> {
-        val id = beaconId.trim()
-        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
-        return try {
-            val response: HttpResponse =
-                clickWebClient.delete("$clickWebAuthOrigin/api/beacons/$id/check-in")
-            if (response.status.value in 200..299) {
-                Result.success(Unit)
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: ClientRequestException) {
-            Result.failure(Exception(readClickWebErrorMessage(e.response)))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun deleteBeaconCheckIn(beaconId: String): Result<Unit> = deleteBeaconCheckInImpl(beaconId = beaconId)
 
     suspend fun postBeaconImpression(
         beaconId: String,
         telemetry: EngagementTelemetryBody = EngagementTelemetryBody(surface = "detail"),
-    ): Result<Unit> {
-        val id = beaconId.trim()
-        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
-        return try {
-            val response: HttpResponse =
-                clickWebClient.post("$clickWebAuthOrigin/api/beacons/$id/impressions") {
-                    contentType(ContentType.Application.Json)
-                    setBody(telemetry)
-                }
-            if (response.status.value in 200..299) {
-                Result.success(Unit)
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: Exception) {
-            // Fire-and-forget: soft-fail
-            Result.failure(e)
-        }
-    }
+    ): Result<Unit> = postBeaconImpressionImpl(beaconId = beaconId, telemetry = telemetry)
 
     suspend fun postBeaconShare(
         beaconId: String,
         telemetry: EngagementTelemetryBody = EngagementTelemetryBody(surface = "detail"),
         shareUrl: String? = null,
-    ): Result<Unit> {
-        val id = beaconId.trim()
-        if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
-        return try {
-            val response: HttpResponse =
-                clickWebClient.post("$clickWebAuthOrigin/api/beacons/$id/share") {
-                    contentType(ContentType.Application.Json)
-                    setBody(
-                        ShareTelemetryBody(
-                            latitude = telemetry.latitude,
-                            longitude = telemetry.longitude,
-                            accuracyMeters = telemetry.accuracyMeters,
-                            clientOccurredAt = telemetry.clientOccurredAt,
-                            source = telemetry.source,
-                            platform = telemetry.platform,
-                            appVersion = telemetry.appVersion,
-                            surface = telemetry.surface,
-                            shareUrl = shareUrl,
-                        ),
-                    )
-                }
-            if (response.status.value in 200..299) {
-                Result.success(Unit)
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    ): Result<Unit> = postBeaconShareImpl(beaconId = beaconId, telemetry = telemetry, shareUrl = shareUrl)
 
     suspend fun getMyEventBookmarks(
         limit: Int = 50,
         cursor: String? = null,
-    ): Result<EventBookmarksResponseDto> =
-        try {
-            val response: HttpResponse =
-                clickWebClient.get("$clickWebAuthOrigin/api/me/event-bookmarks") {
-                    parameter("limit", limit.coerceIn(1, 100))
-                    cursor?.trim()?.takeIf { it.isNotEmpty() }?.let { parameter("cursor", it) }
-                }
-            if (response.status.value in 200..299) {
-                Result.success(response.body<EventBookmarksResponseDto>())
-            } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
-            }
-        } catch (e: ClientRequestException) {
-            Result.failure(Exception(readClickWebErrorMessage(e.response)))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+    ): Result<EventBookmarksResponseDto> = getMyEventBookmarksImpl(limit = limit, cursor = cursor)
 
     fun close() {
         if (clickWebClientLazy.isInitialized()) clickWebClientLazy.value.close()
