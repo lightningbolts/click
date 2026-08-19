@@ -321,9 +321,10 @@ class SupabaseChatRepository(
     internal var cachedJunctionTimestamp: Long = 0L
     internal val junctionCacheTtlMs = 300_000L // 5 minutes
 
-    override suspend fun fetchUserChatsWithDetails(userId: String) : List<ChatWithDetails> = fetchUserChatsWithDetailsImpl(userId = userId)
+    override suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails> = fetchUserChatsWithDetailsImpl(userId = userId)
 
-    override suspend fun fetchDirectUserChatsWithDetails(userId: String) : List<ChatWithDetails> = fetchDirectUserChatsWithDetailsImpl(userId = userId)
+    override suspend fun fetchDirectUserChatsWithDetails(userId: String): List<ChatWithDetails> =
+        fetchDirectUserChatsWithDetailsImpl(userId = userId)
 
     override suspend fun fetchArchivedUserChatsWithDetails(userId: String): List<ChatWithDetails> =
         fetchArchivedUserChatsWithDetailsImpl(userId = userId)
@@ -357,9 +358,9 @@ class SupabaseChatRepository(
             connectionId = connectionId,
         )
 
-    override suspend fun ensureChatForConnection(connectionId: String) : Chat? = ensureChatForConnectionImpl(connectionId = connectionId)
+    override suspend fun ensureChatForConnection(connectionId: String): Chat? = ensureChatForConnectionImpl(connectionId = connectionId)
 
-    override suspend fun ensureChatForGroup(groupId: String) : Chat? = ensureChatForGroupImpl(groupId = groupId)
+    override suspend fun ensureChatForGroup(groupId: String): Chat? = ensureChatForGroupImpl(groupId = groupId)
 
     override suspend fun sendMessageForConnection(
         connectionId: String,

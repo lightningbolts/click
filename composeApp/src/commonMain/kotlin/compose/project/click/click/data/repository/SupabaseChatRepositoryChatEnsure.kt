@@ -7,13 +7,13 @@ import compose.project.click.click.data.models.*
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Order
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.async
 
 internal suspend fun SupabaseChatRepository.ensureChatForConnectionOnce(connectionId: String): Chat? {
     val existing =

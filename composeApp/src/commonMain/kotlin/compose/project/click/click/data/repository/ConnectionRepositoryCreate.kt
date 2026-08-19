@@ -161,8 +161,10 @@ internal suspend fun ConnectionRepository.createConnectionOnline(request: Connec
         // ── Proximity validation ──
 
         val loc1Valid =
-            request.locationLat != null && request.locationLng != null &&
-                request.locationLat.isFinite() && request.locationLng.isFinite() &&
+            request.locationLat != null &&
+                request.locationLng != null &&
+                request.locationLat.isFinite() &&
+                request.locationLng.isFinite() &&
                 !(request.locationLat == 0.0 && request.locationLng == 0.0)
 
         // For now, we only have the initiator's location on mobile.
@@ -420,8 +422,10 @@ internal suspend fun ConnectionRepository.restoreExistingConnection(
         val timeOfDayUtc = buildUtcTimeOfDayLabel(now)
 
         val loc1Valid =
-            request.locationLat != null && request.locationLng != null &&
-                request.locationLat.isFinite() && request.locationLng.isFinite() &&
+            request.locationLat != null &&
+                request.locationLng != null &&
+                request.locationLat.isFinite() &&
+                request.locationLng.isFinite() &&
                 !(request.locationLat == 0.0 && request.locationLng == 0.0)
         val gpsAvailable = loc1Valid
 

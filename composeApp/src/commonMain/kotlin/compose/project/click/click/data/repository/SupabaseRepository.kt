@@ -888,7 +888,7 @@ class SupabaseRepository {
         messageId: String,
         newContent: String,
         chatId: String? = null,
-    ) : Boolean = editMessageImpl(messageId = messageId, newContent = newContent, chatId = chatId)
+    ): Boolean = editMessageImpl(messageId = messageId, newContent = newContent, chatId = chatId)
 
     @kotlinx.serialization.Serializable
     internal data class ChatConnectionIdOnly(
@@ -903,7 +903,7 @@ class SupabaseRepository {
         val userIds: List<String>,
     )
 
-    suspend fun deleteMessage(messageId: String) : Boolean = deleteMessageImpl(messageId = messageId)
+    suspend fun deleteMessage(messageId: String): Boolean = deleteMessageImpl(messageId = messageId)
 
     /** Short PostgREST / Supabase error (never includes URL, headers, or tokens). */
     internal fun restErrorSummary(e: Throwable): String {

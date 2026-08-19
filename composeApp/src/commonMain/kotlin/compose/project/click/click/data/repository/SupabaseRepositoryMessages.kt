@@ -2,36 +2,11 @@
 
 package compose.project.click.click.data.repository // pragma: allowlist secret
 
-import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
-import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
-import compose.project.click.click.data.models.AvailabilityIntentInsert // pragma: allowlist secret
-import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
-import compose.project.click.click.data.models.Connection // pragma: allowlist secret
-import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
-import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
-import compose.project.click.click.data.models.ProfileTimelineCacheEntry // pragma: allowlist secret
-import compose.project.click.click.data.models.ProfileTimelinePayload // pragma: allowlist secret
-import compose.project.click.click.data.models.User // pragma: allowlist secret
-import compose.project.click.click.data.models.UserAvailability // pragma: allowlist secret
-import compose.project.click.click.data.models.UserInterests // pragma: allowlist secret
-import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
-import compose.project.click.click.data.models.mergeRichestEncounterEvents // pragma: allowlist secret
-import compose.project.click.click.data.models.resolveDisplayName // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
-import io.github.jan.supabase.auth.auth
-import io.github.jan.supabase.exceptions.RestException
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.datetime.Clock
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 
 /**
  * Edit the content of an existing message and stamp time_edited.

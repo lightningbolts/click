@@ -830,7 +830,7 @@ class ChatApiClient(
     suspend fun searchConversations(
         query: String,
         authToken: String,
-    ) : Result<List<ConversationSearchHitDto>> = searchConversationsImpl(query = query, authToken = authToken)
+    ): Result<List<ConversationSearchHitDto>> = searchConversationsImpl(query = query, authToken = authToken)
 
     suspend fun fetchHubThread(
         hubId: String,
