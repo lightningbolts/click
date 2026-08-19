@@ -14,7 +14,9 @@ mkdir -p "${ROOT}/supabase/functions/bind-proximity-connection" "${ROOT}/supabas
 
 cp "${WEB_ROOT}/supabase/functions/bind-proximity-connection/index.ts" \
   "${ROOT}/supabase/functions/bind-proximity-connection/index.ts"
-echo "Synced bind-proximity-connection/index.ts"
+cp "${WEB_ROOT}/supabase/functions/bind-proximity-connection/bindSupport.ts" \
+  "${ROOT}/supabase/functions/bind-proximity-connection/bindSupport.ts"
+echo "Synced bind-proximity-connection/index.ts + bindSupport.ts"
 
 # Sync every migration that already exists in both trees (mobile mirror subset).
 synced=0
