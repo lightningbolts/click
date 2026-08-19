@@ -7,6 +7,7 @@ import compose.project.click.click.chat.attachments.ChatAttachmentValidator
 import compose.project.click.click.crypto.MessageCrypto
 import compose.project.click.click.data.models.*
 import compose.project.click.click.util.chatMediaVaultLocalPath
+import compose.project.click.click.util.compressOutgoingChatImageForUpload
 import compose.project.click.click.util.imageVaultFileExtension
 import compose.project.click.click.util.readChatMediaVaultBytes
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
@@ -234,6 +235,63 @@ internal suspend fun SupabaseChatRepository.downloadAndDecryptChatMediaImpl(
         }.getOrNull()
     } catch (e: Exception) {
         println("ChatRepository: downloadAndDecryptChatMedia failed: ${e.redactedRestMessage()}")
+        null
+    }
+}
+
+internal suspend fun SupabaseChatRepository.uploadChatMediaImpl(
+    bytes: ByteArray,
+    objectPath: String,
+    contentType: String,
+): String? {
+    if (bytes.isEmpty()) return null
+    return try {
+        val parts = objectPath.split('/').map { it.trim() }.filter { it.isNotEmpty() }
+        val chatId = parts.getOrNull(1) ?: return null
+        val senderUserId = parts.getOrNull(0) ?: return null
+        val crypto = resolveChatCrypto(chatId, senderUserId) ?: return null
+        val ct = contentType.ifBlank { "application/octet-stream" }
+        val (plainBytes, uploadMime) =
+            if (ct.lowercase().startsWith("image/")) {
+                val compressed = compressOutgoingChatImageForUpload(bytes, ct)
+                if (compressed.size >= 2 &&
+                    compressed[0] == 0xFF.toByte() &&
+                    compressed[1] == 0xD8.toByte()
+                ) {
+                    compressed to "image/jpeg"
+                } else {
+                    compressed to ct
+                }
+            } else {
+                bytes to ct
+            }
+        val cipher =
+            when (crypto) {
+                is ChatSessionCaches.ResolvedChatCrypto.GroupMaster -> MessageCrypto.encryptMediaBytes(plainBytes, crypto.masterKey)
+                is ChatSessionCaches.ResolvedChatCrypto.Pairwise -> MessageCrypto.encryptMediaBytes(plainBytes, crypto.keys)
+            }
+        val jwt = ensureFreshJwtForChat() ?: return null
+        apiClient
+            .uploadMedia(
+                fileBytes = cipher,
+                chatId = chatId,
+                mimeType = uploadMime,
+                authToken = jwt,
+            ).getOrElse { firstErr ->
+                val retriedJwt = refreshedJwtAfterAuthFailure() ?: return null
+                apiClient
+                    .uploadMedia(
+                        fileBytes = cipher,
+                        chatId = chatId,
+                        mimeType = uploadMime,
+                        authToken = retriedJwt,
+                    ).getOrElse {
+                        println("ChatRepository: uploadChatMedia failed: ${firstErr.redactedRestMessage()}")
+                        return null
+                    }
+            }
+    } catch (e: Exception) {
+        println("ChatRepository: uploadChatMedia failed: ${e.redactedRestMessage()}")
         null
     }
 }
