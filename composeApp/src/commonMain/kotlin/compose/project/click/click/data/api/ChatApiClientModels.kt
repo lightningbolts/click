@@ -5,29 +5,15 @@
 package compose.project.click.click.data.api // pragma: allowlist secret
 
 import compose.project.click.click.data.models.* // pragma: allowlist secret
-import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
-import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
-import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
-import compose.project.click.click.qr.CLICK_WEB_BASE_URL // pragma: allowlist secret
-import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
-import io.ktor.client.request.forms.MultiPartFormDataContent
-import io.ktor.client.request.forms.formData
-import io.ktor.client.statement.HttpResponse
-import io.ktor.client.statement.bodyAsText
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
 
 @Serializable
 internal data class ClickWebMessageDto(

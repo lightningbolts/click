@@ -1,45 +1,17 @@
 package compose.project.click.click.data.api // pragma: allowlist secret
 
-import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
-import compose.project.click.click.data.models.ErrorResponse // pragma: allowlist secret
-import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
-import compose.project.click.click.data.models.MapBeaconInsert // pragma: allowlist secret
-import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
-import compose.project.click.click.data.models.ProfileTimelinePayload // pragma: allowlist secret
-import compose.project.click.click.data.models.StoredEventBookmark // pragma: allowlist secret
-import compose.project.click.click.data.models.User // pragma: allowlist secret
-import compose.project.click.click.data.models.UserCore // pragma: allowlist secret
-import compose.project.click.click.data.models.parseMapBeaconRows // pragma: allowlist secret
-import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
-import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
-import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.ClientRequestException
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
-import io.ktor.client.request.header
-import io.ktor.client.request.parameter
-import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
-import io.ktor.client.statement.HttpResponse
-import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
-import io.ktor.serialization.kotlinx.json.json
-import kotlinx.coroutines.delay
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
 
 /** POST `/api/connections/archive` — per-user archive junction (`connection_archives`). */
 internal suspend fun ApiClient.postConnectionArchiveImpl(connectionId: String): Result<Unit> {

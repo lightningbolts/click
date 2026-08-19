@@ -13,40 +13,25 @@ import compose.project.click.click.data.models.ProfileTimelineCacheEntry // prag
 import compose.project.click.click.data.models.ProfileTimelinePayload // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.UserAvailability // pragma: allowlist secret
-import compose.project.click.click.data.models.UserCore // pragma: allowlist secret
 import compose.project.click.click.data.models.UserInterests // pragma: allowlist secret
 import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
-import compose.project.click.click.data.models.isResolvedDisplayName // pragma: allowlist secret
 import compose.project.click.click.data.models.mergeRichestEncounterEvents // pragma: allowlist secret
 import compose.project.click.click.data.models.resolveDisplayName // pragma: allowlist secret
-import compose.project.click.click.util.dedupeOneToOneConnectionsByPeer // pragma: allowlist secret
-import compose.project.click.click.util.isOfflineNetworkFailure // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.exceptions.RestException
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
-import io.github.jan.supabase.postgrest.query.Order
-import io.github.jan.supabase.postgrest.query.filter.FilterOperator
-import io.github.jan.supabase.postgrest.rpc
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
 
 internal const val CONNECTION_ENCOUNTERS_PER_CONNECTION = 25L
 internal const val CONNECTION_ENCOUNTERS_TABLE = "connection_encounters"
@@ -199,7 +184,8 @@ class SupabaseRepository {
         targetId: String,
         body: String,
         visibility: String,
-    ): ProfileTimelinePayload? = createProfileTimelineJournalEntryImpl(targetType = targetType, targetId = targetId, body = body, visibility = visibility)
+    ): ProfileTimelinePayload? =
+        createProfileTimelineJournalEntryImpl(targetType = targetType, targetId = targetId, body = body, visibility = visibility)
 
     suspend fun updateProfileTimelineJournalEntry(
         id: String,
@@ -296,11 +282,14 @@ class SupabaseRepository {
         targetUserId: String,
     ): UserPublicProfile? = fetchUserPublicProfileImpl(viewerUserId = viewerUserId, targetUserId = targetUserId)
 
-    suspend fun fetchAvailabilityIntentBubblesFromUsersColumn(userId: String): List<ProfileAvailabilityIntentBubble> = fetchAvailabilityIntentBubblesFromUsersColumnImpl(userId = userId)
+    suspend fun fetchAvailabilityIntentBubblesFromUsersColumn(userId: String): List<ProfileAvailabilityIntentBubble> =
+        fetchAvailabilityIntentBubblesFromUsersColumnImpl(userId = userId)
 
-    suspend fun fetchAvailabilityIntentBubblesFromIntentsTable(targetUserId: String): List<ProfileAvailabilityIntentBubble> = fetchAvailabilityIntentBubblesFromIntentsTableImpl(targetUserId = targetUserId)
+    suspend fun fetchAvailabilityIntentBubblesFromIntentsTable(targetUserId: String): List<ProfileAvailabilityIntentBubble> =
+        fetchAvailabilityIntentBubblesFromIntentsTableImpl(targetUserId = targetUserId)
 
-    suspend fun fetchAvailabilityOverlapsBatch(peerUserIds: List<String>): Map<String, Boolean> = fetchAvailabilityOverlapsBatchImpl(peerUserIds = peerUserIds)
+    suspend fun fetchAvailabilityOverlapsBatch(peerUserIds: List<String>): Map<String, Boolean> =
+        fetchAvailabilityOverlapsBatchImpl(peerUserIds = peerUserIds)
 
     suspend fun fetchPeerProfileAvailabilityBubbles(
         viewerUserId: String,
@@ -516,7 +505,8 @@ class SupabaseRepository {
 
     suspend fun fetchUserAvailability(userId: String): UserAvailability? = fetchUserAvailabilityImpl(userId = userId)
 
-    suspend fun fetchAvailabilityForUsers(userIds: List<String>): Map<String, UserAvailability> = fetchAvailabilityForUsersImpl(userIds = userIds)
+    suspend fun fetchAvailabilityForUsers(userIds: List<String>): Map<String, UserAvailability> =
+        fetchAvailabilityForUsersImpl(userIds = userIds)
 
     suspend fun updateUserAvailability(availability: UserAvailability): Boolean = updateUserAvailabilityImpl(availability = availability)
 
@@ -525,9 +515,11 @@ class SupabaseRepository {
         isFree: Boolean,
     ): Boolean = setFreeThisWeekImpl(userId = userId, isFree = isFree)
 
-    suspend fun insertAvailabilityIntent(row: AvailabilityIntentInsert): AvailabilityIntentInsertResult = insertAvailabilityIntentImpl(row = row)
+    suspend fun insertAvailabilityIntent(row: AvailabilityIntentInsert): AvailabilityIntentInsertResult =
+        insertAvailabilityIntentImpl(row = row)
 
-    suspend fun fetchActiveAvailabilityIntentsForUser(userId: String): List<AvailabilityIntentRow> = fetchActiveAvailabilityIntentsForUserImpl(userId = userId)
+    suspend fun fetchActiveAvailabilityIntentsForUser(userId: String): List<AvailabilityIntentRow> =
+        fetchActiveAvailabilityIntentsForUserImpl(userId = userId)
 
     suspend fun updateAvailabilityIntent(
         id: String,
@@ -537,9 +529,19 @@ class SupabaseRepository {
         startsAt: String,
         endsAt: String,
         expiresAt: String,
-    ): AvailabilityIntentInsertResult = updateAvailabilityIntentImpl(id = id, userId = userId, intentTag = intentTag, timeframe = timeframe, startsAt = startsAt, endsAt = endsAt, expiresAt = expiresAt)
+    ): AvailabilityIntentInsertResult =
+        updateAvailabilityIntentImpl(
+            id = id,
+            userId = userId,
+            intentTag = intentTag,
+            timeframe = timeframe,
+            startsAt = startsAt,
+            endsAt = endsAt,
+            expiresAt = expiresAt,
+        )
 
-    suspend fun deleteAvailabilityIntent(intentId: String): AvailabilityIntentInsertResult = deleteAvailabilityIntentImpl(intentId = intentId)
+    suspend fun deleteAvailabilityIntent(intentId: String): AvailabilityIntentInsertResult =
+        deleteAvailabilityIntentImpl(intentId = intentId)
 
     /**
      * Update user's name
@@ -865,6 +867,7 @@ class SupabaseRepository {
     )
 
     suspend fun getCoreConnectionIds(userId: String): Set<String> = getCoreConnectionIdsImpl(userId = userId)
+
     suspend fun addConnectionToCore(
         userId: String,
         connectionId: String,

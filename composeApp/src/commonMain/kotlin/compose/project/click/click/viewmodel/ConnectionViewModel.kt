@@ -1,62 +1,38 @@
+@file:Suppress("ktlint:standard:no-wildcard-imports", "ktlint:standard:backing-property-naming")
+
 package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.collaboration.CollaborationSession // pragma: allowlist secret
 import compose.project.click.click.collaboration.CollaborationSessionManager // pragma: allowlist secret
-import compose.project.click.click.data.repository.BindProximityHandshakeOutcome // pragma: allowlist secret
-import compose.project.click.click.data.repository.BindProximityHandshakeResult // pragma: allowlist secret
-import compose.project.click.click.data.repository.PROXIMITY_HOST_SELECTION_MAX_PEERS // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
-import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
-import compose.project.click.click.data.models.isOneToOnePairEdge // pragma: allowlist secret
-import compose.project.click.click.data.models.ConnectionRequest // pragma: allowlist secret
 import compose.project.click.click.data.models.ContextTag // pragma: allowlist secret
 import compose.project.click.click.data.models.HeightCategory // pragma: allowlist secret
 import compose.project.click.click.data.models.NoiseLevelCategory // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.UserProfile // pragma: allowlist secret
+import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.toUserProfile // pragma: allowlist secret
-import compose.project.click.click.data.models.isPendingSync // pragma: allowlist secret
+import compose.project.click.click.data.repository.BindProximityHandshakeOutcome // pragma: allowlist secret
 import compose.project.click.click.data.repository.ConnectionCreateOutcome // pragma: allowlist secret
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.ProximityHandshakeRecoveryPayload // pragma: allowlist secret
-import compose.project.click.click.data.repository.isRetryableForProximityBind // pragma: allowlist secret
-import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
-import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
-import compose.project.click.click.domain.VerifiedCliqueCreation // pragma: allowlist secret
-import compose.project.click.click.proximity.MockProximityManager // pragma: allowlist secret
-import compose.project.click.click.proximity.ProximityHardwarePermissionException // pragma: allowlist secret
 import compose.project.click.click.proximity.ProximityManager // pragma: allowlist secret
-import compose.project.click.click.proximity.isSimulatorOrEmulatorRuntime // pragma: allowlist secret
-import compose.project.click.click.proximity.ProximityHandshakeListenResult
-import compose.project.click.click.proximity.PROXIMITY_SENSOR_LOCATION_WAIT_MS
-import compose.project.click.click.proximity.PROXIMITY_SENSOR_WAIT_MS
-import compose.project.click.click.proximity.proximityBindLocationWaitMs
-import compose.project.click.click.proximity.scheduleProximityHandshakeSync // pragma: allowlist secret
 import compose.project.click.click.sensors.AmbientNoiseMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.BarometricHeightMonitor // pragma: allowlist secret
-import compose.project.click.click.sensors.buildEncounterSensorJson // pragma: allowlist secret
-import compose.project.click.click.sensors.captureConnectionSensorContext // pragma: allowlist secret
 import compose.project.click.click.sensors.ConnectionSensorContext // pragma: allowlist secret
-import compose.project.click.click.sensors.HardwareVibeMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.HardwareVibeSnapshot // pragma: allowlist secret
 import compose.project.click.click.telemetry.ConnectionFlowTelemetry
-import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import io.ktor.client.HttpClient // pragma: allowlist secret
-import kotlin.random.Random
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -64,10 +40,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.datetime.Clock
 
 /** Emitted when a proximity bind returns a multi-user verified-clique cluster from the edge function. */
 data class VerifiedCliqueProximityIntent(
@@ -89,27 +62,40 @@ internal fun reconnectEncounterPeersNeedingInsert(
 
 sealed class ConnectionState {
     object Idle : ConnectionState()
+
     object Loading : ConnectionState()
+
     data class Success(
         val connection: Connection,
         val connectedUser: User,
     ) : ConnectionState()
-    data class Error(val message: String) : ConnectionState()
+
+    data class Error(
+        val message: String,
+    ) : ConnectionState()
+
     object ProximityFetchingLocation : ConnectionState()
+
     object ProximityHandshaking : ConnectionState()
-    data class PendingConfirmation(val users: List<User>) : ConnectionState()
+
+    data class PendingConfirmation(
+        val users: List<User>,
+    ) : ConnectionState()
+
     /**
      * Tri-factor tokens are stored locally; `POST /api/connections/proximity` will run when online again.
      */
     data class ProximityCapturedOfflineSyncing(
         val message: String = "Handshake saved offline. Will sync when connected.",
     ) : ConnectionState()
+
     /**
      * Server accepted the handshake (HTTP 202) but the peer is not online yet for instant match.
      */
     data class ProximityHandshakePendingMatch(
         val message: String = "Handshake saved! Waiting for the other user to come online...",
     ) : ConnectionState()
+
     /**
      * Proximity group (or single peer) connections are created; user is adding subjective context tags
      * to be fanned out to every [newConnections] row.
@@ -147,6 +133,7 @@ sealed class ConnectionState {
 
     /** Bind in flight after handshake; avoids [Loading] so the NFC sheet stays responsive. */
     object ProximityResolving : ConnectionState()
+
     object SecuringConnection : ConnectionState()
 }
 
@@ -193,8 +180,8 @@ class ConnectionViewModel : ViewModel() {
 
     fun lastProximityCoordinates(): Pair<Double?, Double?> = lastProximityLat to lastProximityLng
 
-    internal fun isProximityHandshakeInFlight(): Boolean {
-        return when (_connectionState.value) {
+    internal fun isProximityHandshakeInFlight(): Boolean =
+        when (_connectionState.value) {
             is ConnectionState.ProximityFetchingLocation,
             is ConnectionState.ProximityHandshaking,
             is ConnectionState.ProximityResolving,
@@ -206,10 +193,8 @@ class ConnectionViewModel : ViewModel() {
             -> true
             else -> false
         }
-    }
 
-    internal suspend fun <T> Deferred<T>.awaitWithin(timeoutMs: Long): T? =
-        withTimeoutOrNull(timeoutMs) { await() }
+    internal suspend fun <T> Deferred<T>.awaitWithin(timeoutMs: Long): T? = withTimeoutOrNull(timeoutMs) { await() }
 
     internal fun activateCollaborationSessionIfPresent(
         connectionId: String?,
@@ -256,17 +241,23 @@ class ConnectionViewModel : ViewModel() {
     /**
      * After a valid QR payload is read, show the context sheet before redeem/create.
      */
-    fun presentQrContextSheetFromScan(scannedUserId: String, qrToken: String?, venueId: String?) {
+    fun presentQrContextSheetFromScan(
+        scannedUserId: String,
+        qrToken: String?,
+        venueId: String?,
+    ) {
         if (scannedUserId.isBlank()) return
         viewModelScope.launch {
-            val profile = repository.getUserById(scannedUserId).getOrNull()?.toUserProfile()
-                ?: UserProfile(id = scannedUserId, displayName = "Connection")
-            _connectionState.value = ConnectionState.QrAwaitingContext(
-                scannedUserId = scannedUserId,
-                qrToken = qrToken,
-                venueId = venueId?.takeIf { it.isNotBlank() },
-                targetUsers = listOf(profile),
-            )
+            val profile =
+                repository.getUserById(scannedUserId).getOrNull()?.toUserProfile()
+                    ?: UserProfile(id = scannedUserId, displayName = "Connection")
+            _connectionState.value =
+                ConnectionState.QrAwaitingContext(
+                    scannedUserId = scannedUserId,
+                    qrToken = qrToken,
+                    venueId = venueId?.takeIf { it.isNotBlank() },
+                    targetUsers = listOf(profile),
+                )
         }
     }
 
@@ -277,20 +268,20 @@ class ConnectionViewModel : ViewModel() {
      * [ChatViewModel.chatListState], not on [Connection]. Use this flow when you only need raw [Connection] rows.
      * Excludes server-archived and removed rows so counts match the active map/home surfaces.
      */
-    val userConnections: StateFlow<List<Connection>> = combine(
-        AppDataManager.connections,
-        AppDataManager.archivedConnectionIds,
-        AppDataManager.hiddenConnectionIds,
-    ) { connections, archived, hidden ->
-        connections.filter { it.isActiveForUser(archived, hidden) }
-    }
-        .distinctUntilChanged()
-        // R1.5: SharingStarted.WhileSubscribed keeps the combine() alive only while a UI
-        // collector is active, with a 5s grace window to survive configuration changes and
-        // brief navigation transitions. This prevents this ViewModel from holding references
-        // to AppDataManager's realtime flows indefinitely after the user leaves screens that
-        // surface connections (reducing leaks during logout/login cycles).
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val userConnections: StateFlow<List<Connection>> =
+        combine(
+            AppDataManager.connections,
+            AppDataManager.archivedConnectionIds,
+            AppDataManager.hiddenConnectionIds,
+        ) { connections, archived, hidden ->
+            connections.filter { it.isActiveForUser(archived, hidden) }
+        }.distinctUntilChanged()
+            // R1.5: SharingStarted.WhileSubscribed keeps the combine() alive only while a UI
+            // collector is active, with a 5s grace window to survive configuration changes and
+            // brief navigation transitions. This prevents this ViewModel from holding references
+            // to AppDataManager's realtime flows indefinitely after the user leaves screens that
+            // surface connections (reducing leaks during logout/login cycles).
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Alias for callers that expect a `connections` name (same backing flow as [userConnections]). */
     val connections: StateFlow<List<Connection>> = userConnections
@@ -301,7 +292,10 @@ class ConnectionViewModel : ViewModel() {
     }
 
     /** Wake `POST /api/connections/proximity` when the connect screen appears (cold-start prewarm). */
-    fun prewarmBindProximityEdgeFunction(httpClient: HttpClient, jwt: String) {
+    fun prewarmBindProximityEdgeFunction(
+        httpClient: HttpClient,
+        jwt: String,
+    ) {
         if (jwt.isBlank()) return
         viewModelScope.launch(Dispatchers.Default) {
             repository.prewarmBindProximityConnection(httpClient = httpClient, bearerJwt = jwt)
@@ -321,14 +315,26 @@ class ConnectionViewModel : ViewModel() {
         skipLocation: Boolean,
         ambientNoiseMonitor: AmbientNoiseMonitor? = null,
         barometricHeightMonitor: BarometricHeightMonitor? = null,
-    ) = startTapProximityHandshakeImpl(httpClient = httpClient, proximityManager = proximityManager, jwt = jwt, currentUserId = currentUserId, locationService = locationService, skipLocation = skipLocation, ambientNoiseMonitor = ambientNoiseMonitor, barometricHeightMonitor = barometricHeightMonitor)
+    ) = startTapProximityHandshakeImpl(
+        httpClient = httpClient,
+        proximityManager = proximityManager,
+        jwt = jwt,
+        currentUserId = currentUserId,
+        locationService = locationService,
+        skipLocation = skipLocation,
+        ambientNoiseMonitor = ambientNoiseMonitor,
+        barometricHeightMonitor = barometricHeightMonitor,
+    )
 
     fun onProximityHandshakeRecoveredFromBackground(
         payload: ProximityHandshakeRecoveryPayload,
         currentUserId: String,
     ) = onProximityHandshakeRecoveredFromBackgroundImpl(payload = payload, currentUserId = currentUserId)
 
-    fun tryFlushPendingProximityHandshakes(jwt: String, currentUserId: String) = tryFlushPendingProximityHandshakesImpl(jwt = jwt, currentUserId = currentUserId)
+    fun tryFlushPendingProximityHandshakes(
+        jwt: String,
+        currentUserId: String,
+    ) = tryFlushPendingProximityHandshakesImpl(jwt = jwt, currentUserId = currentUserId)
 
     fun connectWithUser(
         scannedUserId: String,
@@ -351,14 +357,36 @@ class ConnectionViewModel : ViewModel() {
         responderId: String? = null,
         hardwareVibeOverride: HardwareVibeSnapshot? = null,
         weatherSnapshotLabel: String? = null,
-    ) = connectWithUserImpl(scannedUserId = scannedUserId, currentUserId = currentUserId, latitude = latitude, longitude = longitude, venueId = venueId, altitudeMeters = altitudeMeters, heightCategory = heightCategory, exactBarometricElevationMeters = exactBarometricElevationMeters, exactBarometricPressureHpa = exactBarometricPressureHpa, contextTag = contextTag, contextTagObject = contextTagObject, connectionMethod = connectionMethod, tokenAgeMs = tokenAgeMs, qrToken = qrToken, noiseLevelCategory = noiseLevelCategory, exactNoiseLevelDb = exactNoiseLevelDb, initiatorId = initiatorId, responderId = responderId, hardwareVibeOverride = hardwareVibeOverride, weatherSnapshotLabel = weatherSnapshotLabel)
+    ) = connectWithUserImpl(
+        scannedUserId = scannedUserId,
+        currentUserId = currentUserId,
+        latitude = latitude,
+        longitude = longitude,
+        venueId = venueId,
+        altitudeMeters = altitudeMeters,
+        heightCategory = heightCategory,
+        exactBarometricElevationMeters = exactBarometricElevationMeters,
+        exactBarometricPressureHpa = exactBarometricPressureHpa,
+        contextTag = contextTag,
+        contextTagObject = contextTagObject,
+        connectionMethod = connectionMethod,
+        tokenAgeMs = tokenAgeMs,
+        qrToken = qrToken,
+        noiseLevelCategory = noiseLevelCategory,
+        exactNoiseLevelDb = exactNoiseLevelDb,
+        initiatorId = initiatorId,
+        responderId = responderId,
+        hardwareVibeOverride = hardwareVibeOverride,
+        weatherSnapshotLabel = weatherSnapshotLabel,
+    )
 
     fun resetConnectionState() {
         val tagging = _connectionState.value as? ConnectionState.TaggingContext
         if (tagging?.requiresSelection == true) {
             ConnectionFlowTelemetry.recordHostSelectionAbandoned(
-                candidateCount = tagging.selectableUsers.size.takeIf { it > 0 }
-                    ?: tagging.targetUsers.size,
+                candidateCount =
+                    tagging.selectableUsers.size.takeIf { it > 0 }
+                        ?: tagging.targetUsers.size,
                 reason = "dismissed",
             )
         }
@@ -397,7 +425,14 @@ class ConnectionViewModel : ViewModel() {
         barometricHeightMonitor: BarometricHeightMonitor? = null,
         ambientNoiseOptIn: Boolean = true,
         barometricContextOptIn: Boolean = true,
-    ) = saveReconnectEncounterImpl(tagging = tagging, currentUserId = currentUserId, ambientNoiseMonitor = ambientNoiseMonitor, barometricHeightMonitor = barometricHeightMonitor, ambientNoiseOptIn = ambientNoiseOptIn, barometricContextOptIn = barometricContextOptIn)
+    ) = saveReconnectEncounterImpl(
+        tagging = tagging,
+        currentUserId = currentUserId,
+        ambientNoiseMonitor = ambientNoiseMonitor,
+        barometricHeightMonitor = barometricHeightMonitor,
+        ambientNoiseOptIn = ambientNoiseOptIn,
+        barometricContextOptIn = barometricContextOptIn,
+    )
 
     fun confirmProximityConnection(
         peerUsers: List<User>,
@@ -405,11 +440,18 @@ class ConnectionViewModel : ViewModel() {
         hardwareVibe: HardwareVibeSnapshot? = null,
         weatherSnapshotLabel: String? = null,
         sensorContext: ConnectionSensorContext? = null,
-    ) = confirmProximityConnectionImpl(peerUsers = peerUsers, currentUserId = currentUserId, hardwareVibe = hardwareVibe, weatherSnapshotLabel = weatherSnapshotLabel, sensorContext = sensorContext)
+    ) = confirmProximityConnectionImpl(
+        peerUsers = peerUsers,
+        currentUserId = currentUserId,
+        hardwareVibe = hardwareVibe,
+        weatherSnapshotLabel = weatherSnapshotLabel,
+        sensorContext = sensorContext,
+    )
 
     fun toggleHostSelectionPeer(peerId: String) = toggleHostSelectionPeerImpl(peerId = peerId)
 
-    fun promotePendingConfirmationToHostSelection(currentUserId: String) = promotePendingConfirmationToHostSelectionImpl(currentUserId = currentUserId)
+    fun promotePendingConfirmationToHostSelection(currentUserId: String) =
+        promotePendingConfirmationToHostSelectionImpl(currentUserId = currentUserId)
 
     fun confirmHostProximitySelection(
         selectedPeerIds: List<String>,
@@ -418,7 +460,14 @@ class ConnectionViewModel : ViewModel() {
         hardwareVibe: HardwareVibeSnapshot? = null,
         weatherSnapshotLabel: String? = null,
         sensorContext: ConnectionSensorContext? = null,
-    ) = confirmHostProximitySelectionImpl(selectedPeerIds = selectedPeerIds, currentUserId = currentUserId, contextTag = contextTag, hardwareVibe = hardwareVibe, weatherSnapshotLabel = weatherSnapshotLabel, sensorContext = sensorContext)
+    ) = confirmHostProximitySelectionImpl(
+        selectedPeerIds = selectedPeerIds,
+        currentUserId = currentUserId,
+        contextTag = contextTag,
+        hardwareVibe = hardwareVibe,
+        weatherSnapshotLabel = weatherSnapshotLabel,
+        sensorContext = sensorContext,
+    )
 
     fun saveContextTags(
         tagging: ConnectionState.TaggingContext,
@@ -431,6 +480,16 @@ class ConnectionViewModel : ViewModel() {
         barometricHeightMonitor: BarometricHeightMonitor? = null,
         ambientNoiseOptIn: Boolean = true,
         barometricContextOptIn: Boolean = true,
-    ) = saveContextTagsImpl(tagging = tagging, contextTag = contextTag, noiseLevelCategory = noiseLevelCategory, exactNoiseLevelDb = exactNoiseLevelDb, heightCategory = heightCategory, exactBarometricElevationMeters = exactBarometricElevationMeters, ambientNoiseMonitor = ambientNoiseMonitor, barometricHeightMonitor = barometricHeightMonitor, ambientNoiseOptIn = ambientNoiseOptIn, barometricContextOptIn = barometricContextOptIn)
-
+    ) = saveContextTagsImpl(
+        tagging = tagging,
+        contextTag = contextTag,
+        noiseLevelCategory = noiseLevelCategory,
+        exactNoiseLevelDb = exactNoiseLevelDb,
+        heightCategory = heightCategory,
+        exactBarometricElevationMeters = exactBarometricElevationMeters,
+        ambientNoiseMonitor = ambientNoiseMonitor,
+        barometricHeightMonitor = barometricHeightMonitor,
+        ambientNoiseOptIn = ambientNoiseOptIn,
+        barometricContextOptIn = barometricContextOptIn,
+    )
 }

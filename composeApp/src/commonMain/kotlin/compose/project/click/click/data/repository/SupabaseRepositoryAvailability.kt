@@ -2,46 +2,16 @@
 
 package compose.project.click.click.data.repository // pragma: allowlist secret
 
-import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
-import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentInsert // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
-import compose.project.click.click.data.models.Connection // pragma: allowlist secret
-import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
-import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
-import compose.project.click.click.data.models.ProfileTimelineCacheEntry // pragma: allowlist secret
-import compose.project.click.click.data.models.ProfileTimelinePayload // pragma: allowlist secret
-import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.UserAvailability // pragma: allowlist secret
-import compose.project.click.click.data.models.UserCore // pragma: allowlist secret
-import compose.project.click.click.data.models.UserInterests // pragma: allowlist secret
-import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
-import compose.project.click.click.data.models.isResolvedDisplayName // pragma: allowlist secret
-import compose.project.click.click.data.models.mergeRichestEncounterEvents // pragma: allowlist secret
-import compose.project.click.click.data.models.resolveDisplayName // pragma: allowlist secret
-import compose.project.click.click.util.dedupeOneToOneConnectionsByPeer // pragma: allowlist secret
-import compose.project.click.click.util.isOfflineNetworkFailure // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
-import io.github.jan.supabase.auth.auth
-import io.github.jan.supabase.exceptions.RestException
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
-import io.github.jan.supabase.postgrest.query.Columns
-import io.github.jan.supabase.postgrest.query.Order
-import io.github.jan.supabase.postgrest.query.filter.FilterOperator
 import io.github.jan.supabase.postgrest.rpc
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject

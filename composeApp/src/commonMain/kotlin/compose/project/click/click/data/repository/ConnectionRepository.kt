@@ -1,86 +1,48 @@
+@file:Suppress("ktlint:standard:no-wildcard-imports")
+
 package compose.project.click.click.data.repository
 
 import compose.project.click.click.collaboration.CollaborationSession
+import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.data.ContextTagTaxonomy
+import compose.project.click.click.data.OpenMeteoWeatherService
+import compose.project.click.click.data.SupabaseConfig
+import compose.project.click.click.data.WeatherService
 import compose.project.click.click.data.api.ClickWebRequestException
 import compose.project.click.click.data.api.CollaborationSessionPostResponse
 import compose.project.click.click.data.api.ProximityBindOkResponseDto
-import compose.project.click.click.data.api.ProximityHandshakePostBody
-import compose.project.click.click.data.api.ProximityHandshakePostResult
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.data.SupabaseConfig
-import compose.project.click.click.data.OpenMeteoWeatherService
-import compose.project.click.click.data.WeatherService
 import compose.project.click.click.data.models.Connection
-import compose.project.click.click.data.models.calibrateBarometricElevationMeters
-import compose.project.click.click.data.models.Chat
-import compose.project.click.click.data.models.ConnectionInsert
+import compose.project.click.click.data.models.ConnectionActivityStatus
 import compose.project.click.click.data.models.ConnectionRequest
 import compose.project.click.click.data.models.ContextTag
-import compose.project.click.click.data.models.PendingConnectionDraft
-import compose.project.click.click.data.models.PendingHandshake
-import compose.project.click.click.data.models.ProximityHandshakeLocationSnapshot
-import compose.project.click.click.data.models.newPendingHandshakeId
-import compose.project.click.click.data.models.GeoLocation
 import compose.project.click.click.data.models.HeightCategory
-import compose.project.click.click.data.models.ConnectionEncounter
-import compose.project.click.click.data.ContextTagTaxonomy
-import compose.project.click.click.data.models.WeatherSnapshot
+import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.NoiseLevelCategory
-import compose.project.click.click.data.models.newPendingConnectionId
 import compose.project.click.click.data.models.PollPairSuggestion
 import compose.project.click.click.data.models.ReconnectHelper
-import compose.project.click.click.data.models.ConnectionActivityStatus
-import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.User
 import compose.project.click.click.data.models.mergeRichestEncounterEvents
-import compose.project.click.click.qr.CLICK_WEB_BASE_URL
-import compose.project.click.click.sensors.HardwareVibeSnapshot
-import compose.project.click.click.encounter.PendingEncounterQueue
-import compose.project.click.click.proximity.PROXIMITY_NO_NEARBY_DEVICES_MESSAGE
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
+import compose.project.click.click.encounter.PendingEncounterQueue
+import compose.project.click.click.sensors.HardwareVibeSnapshot
+import compose.project.click.click.util.redactedRestMessage
 import io.github.jan.supabase.auth.auth
-import io.github.jan.supabase.exceptions.RestException
-import io.github.jan.supabase.postgrest.from
-import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
-import io.github.jan.supabase.postgrest.query.Order
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
-import io.ktor.client.request.headers
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
-import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
-import compose.project.click.click.util.redactedRestMessage
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
-import kotlinx.datetime.offsetIn
 import kotlinx.datetime.toLocalDateTime
-import kotlinx.serialization.SerializationException
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.encodeToJsonElement
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
-import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.*
 
@@ -117,7 +79,8 @@ internal fun Throwable.isRetryableForProximityBind(): Boolean {
         m.contains("connection reset") ||
         m.contains("connection refused") ||
         m.contains("no address associated") ||
-        m.contains("host") && m.contains("unreachable") ||
+        m.contains("host") &&
+        m.contains("unreachable") ||
         m.contains("connection_unavailable") ||
         m.contains("pairwise_connection_unavailable") ||
         m.contains("service unavailable")
@@ -185,7 +148,10 @@ data class BindProximityHandshakeOutcome(
 
 /** Result of `POST /api/connections/proximity` — instant match vs async pending. */
 sealed class BindProximityHandshakeResult {
-    data class InstantMatch(val outcome: BindProximityHandshakeOutcome) : BindProximityHandshakeResult()
+    data class InstantMatch(
+        val outcome: BindProximityHandshakeOutcome,
+    ) : BindProximityHandshakeResult()
+
     /**
      * Multi-peer (≥3) first-time bind: server returned candidates; host must
      * [ConnectionRepository.confirmProximitySelection] before a connection is created.
@@ -197,6 +163,7 @@ sealed class BindProximityHandshakeResult {
         val isAggregateNewConnection: Boolean = true,
         val groupCliqueCandidateMemberIds: List<String>? = null,
     ) : BindProximityHandshakeResult()
+
     data class PendingServerMatch(
         val pendingHandshakeId: String,
         val expiresAt: String,
@@ -211,10 +178,12 @@ const val PROXIMITY_HOST_SELECTION_MAX_PEERS = PROXIMITY_HOST_SELECTION_MAX_MEMB
 
 internal fun ProximityBindOkResponseDto.toBindOutcome(): BindProximityHandshakeOutcome {
     val rows = matches.orEmpty()
-    val aggregateEncounterLogged = encounterLogged
-        ?: rows.none { it.encounterLogged == false }
-    val aggregateNewConnection = isNewConnection
-        ?: rows.any { it.isNewConnection }
+    val aggregateEncounterLogged =
+        encounterLogged
+            ?: rows.none { it.encounterLogged == false }
+    val aggregateNewConnection =
+        isNewConnection
+            ?: rows.any { it.isNewConnection }
     val groupCliqueCandidateMemberIds =
         groupCliqueCandidate?.memberUserIds?.takeIf { it.isNotEmpty() }
     return BindProximityHandshakeOutcome(
@@ -235,8 +204,9 @@ internal fun ProximityBindOkResponseDto.toAwaitingHostSelectionOrNull(): BindPro
     if (pendingId.isEmpty()) return null
     val rows = matches.orEmpty()
     if (rows.isEmpty()) return null
-    val aggregateNewConnection = isNewConnection
-        ?: rows.any { it.isNewConnection }
+    val aggregateNewConnection =
+        isNewConnection
+            ?: rows.any { it.isNewConnection }
     return BindProximityHandshakeResult.AwaitingHostSelection(
         pendingHandshakeId = pendingId,
         expiresAt = expiresAt?.trim()?.takeIf { it.isNotEmpty() },
@@ -247,10 +217,11 @@ internal fun ProximityBindOkResponseDto.toAwaitingHostSelectionOrNull(): BindPro
 }
 
 internal fun buildUtcTimeOfDayLabel(epochMillis: Long): String {
-    val utcTime = Clock.System
-        .now()
-        .let { kotlinx.datetime.Instant.fromEpochMilliseconds(epochMillis) }
-        .toLocalDateTime(TimeZone.UTC)
+    val utcTime =
+        Clock.System
+            .now()
+            .let { kotlinx.datetime.Instant.fromEpochMilliseconds(epochMillis) }
+            .toLocalDateTime(TimeZone.UTC)
 
     fun Int.twoDigits(): String = toString().padStart(2, '0')
 
@@ -261,11 +232,18 @@ internal fun buildUtcTimeOfDayLabel(epochMillis: Long): String {
  * Proximity verification result from server-side validation.
  */
 sealed class ProximityResult {
-    data class Success(val connection: Connection) : ProximityResult()
-    data class ProximityRejected(val distance: Int) : ProximityResult()
-    data class Error(val message: String) : ProximityResult()
-}
+    data class Success(
+        val connection: Connection,
+    ) : ProximityResult()
 
+    data class ProximityRejected(
+        val distance: Int,
+    ) : ProximityResult()
+
+    data class Error(
+        val message: String,
+    ) : ProximityResult()
+}
 
 /**
  * Connection + encounter persistence.
@@ -279,11 +257,14 @@ sealed class ProximityResult {
  */
 class ConnectionRepository(
     internal val weatherService: WeatherService = OpenMeteoWeatherService(),
-    internal val tokenStorage: TokenStorage = createTokenStorage()
+    internal val tokenStorage: TokenStorage = createTokenStorage(),
 ) {
     internal val authRepository = AuthRepository(tokenStorage = tokenStorage)
+
     @Serializable
-    internal data class EncounterIdOnlyRow(val id: String)
+    internal data class EncounterIdOnlyRow(
+        val id: String,
+    )
 
     @Serializable
     internal data class EncounterPatchRow(
@@ -295,7 +276,10 @@ class ConnectionRepository(
 
     internal val supabase by lazy { SupabaseConfig.client }
     internal val supabaseRepository = SupabaseRepository()
-    internal val apiClient by lazy { compose.project.click.click.data.api.ApiClient() }
+    internal val apiClient by lazy {
+        compose.project.click.click.data.api
+            .ApiClient()
+    }
     internal val chatRepository: ChatRepository by lazy {
         SupabaseChatRepository(tokenStorage = tokenStorage)
     }
@@ -309,9 +293,7 @@ class ConnectionRepository(
      * part of this payload: message `content` is E2EE on the wire, so link extraction
      * has to run against the locally-decrypted chat state.
      */
-    suspend fun fetchConnectionTabs(
-        connectionId: String,
-    ): Result<compose.project.click.click.data.api.ConnectionTabsGetResponse> {
+    suspend fun fetchConnectionTabs(connectionId: String): Result<compose.project.click.click.data.api.ConnectionTabsGetResponse> {
         // Profile media tabs share the click-web bearer path — refresh before first call so a
         // stale cold-start JWT does not permanently empty the Media tab until sign-out.
         runCatching { authRepository.refreshSession() }
@@ -349,10 +331,12 @@ class ConnectionRepository(
         }
         val responseResult = openCollaborationSessionResponse(cid)
         return responseResult.mapCatching { response ->
-            val encounterId = response.encounterId?.trim()?.takeIf { it.isNotEmpty() }
-                ?: throw IllegalStateException("Missing encounter id")
-            val ttl = response.collaborationTtl?.trim()?.takeIf { it.isNotEmpty() }
-                ?: throw IllegalStateException("Missing collaboration window")
+            val encounterId =
+                response.encounterId?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: throw IllegalStateException("Missing encounter id")
+            val ttl =
+                response.collaborationTtl?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: throw IllegalStateException("Missing collaboration window")
             CollaborationSession(
                 encounterId = encounterId,
                 connectionId = cid,
@@ -368,10 +352,12 @@ class ConnectionRepository(
             return Result.failure(IllegalArgumentException("Invalid chat"))
         }
         return apiClient.postOpenCollaborationSessionForChat(cid).mapCatching { response ->
-            val encounterId = response.encounterId?.trim()?.takeIf { it.isNotEmpty() }
-                ?: throw IllegalStateException("Missing encounter id")
-            val ttl = response.collaborationTtl?.trim()?.takeIf { it.isNotEmpty() }
-                ?: throw IllegalStateException("Missing collaboration window")
+            val encounterId =
+                response.encounterId?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: throw IllegalStateException("Missing encounter id")
+            val ttl =
+                response.collaborationTtl?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: throw IllegalStateException("Missing collaboration window")
             CollaborationSession(
                 encounterId = encounterId,
                 connectionId = "",
@@ -381,9 +367,7 @@ class ConnectionRepository(
         }
     }
 
-    internal suspend fun openCollaborationSessionResponse(
-        connectionId: String,
-    ): Result<CollaborationSessionPostResponse> {
+    internal suspend fun openCollaborationSessionResponse(connectionId: String): Result<CollaborationSessionPostResponse> {
         val primary = apiClient.postOpenCollaborationSession(connectionId)
         if (primary.isSuccess) return primary
         val status = (primary.exceptionOrNull() as? ClickWebRequestException)?.statusCode
@@ -393,9 +377,8 @@ class ConnectionRepository(
         return primary
     }
 
-    suspend fun getProfileTabs(userId: String): Result<compose.project.click.click.data.api.ConnectionTabsGetResponse> {
-        return apiClient.getConnectionTabs(userId)
-    }
+    suspend fun getProfileTabs(userId: String): Result<compose.project.click.click.data.api.ConnectionTabsGetResponse> =
+        apiClient.getConnectionTabs(userId)
 
     /**
      * Loads decrypted chat messages for a profile sheet by [connectionId] without requiring the
@@ -417,15 +400,17 @@ class ConnectionRepository(
             return cachedThread.messages
         }
 
-        val chatId = runCatching {
-            chatRepository.resolveChatIdForConnection(cid)
-        }.getOrNull()?.takeIf { it.isNotBlank() } ?: cachedChatId
+        val chatId =
+            runCatching {
+                chatRepository.resolveChatIdForConnection(cid)
+            }.getOrNull()?.takeIf { it.isNotBlank() } ?: cachedChatId
 
         if (chatId.isNullOrBlank()) return cachedMessages
 
-        val fetched = runCatching {
-            chatRepository.fetchMessagesForChat(chatId, viewerUserId).orEmpty()
-        }.getOrDefault(emptyList())
+        val fetched =
+            runCatching {
+                chatRepository.fetchMessagesForChat(chatId, viewerUserId).orEmpty()
+            }.getOrDefault(emptyList())
 
         if (fetched.isEmpty()) return cachedMessages
         val uid = viewerUserId?.trim().orEmpty()
@@ -446,9 +431,10 @@ class ConnectionRepository(
         if (cachedThread != null && cachedThread.messages.isNotEmpty()) {
             return cachedThread.messages
         }
-        val fetched = runCatching {
-            chatRepository.fetchMessagesForChat(cid, viewerUserId).orEmpty()
-        }.getOrDefault(emptyList())
+        val fetched =
+            runCatching {
+                chatRepository.fetchMessagesForChat(cid, viewerUserId).orEmpty()
+            }.getOrDefault(emptyList())
         val uid = viewerUserId?.trim().orEmpty()
         return if (uid.isNotBlank() && fetched.isNotEmpty()) {
             chatRepository.vaultEncryptedMediaMessages(cid, uid, fetched)
@@ -502,12 +488,14 @@ class ConnectionRepository(
         }.getOrNull()
     }
 
-    internal val json = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-    }
+    internal val json =
+        Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+        }
 
     internal val pendingEncounterQueue by lazy { PendingEncounterQueue(tokenStorage, json) }
+
     /** Next.js companion (`/api/qr`, `/api/connections/proximity`, etc.). */
     internal val companionWebHttpClient by lazy {
         HttpClient {
@@ -539,28 +527,27 @@ class ConnectionRepository(
     }
 
     internal suspend fun refreshedJwtAfterAuthFailure(): String? {
-        authRepository.refreshSession()
+        authRepository
+            .refreshSession()
             .onFailure { println("ConnectionRepository: token refresh failed: ${it.redactedRestMessage()}") }
         return tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
     }
 
     internal fun normalizeContextTag(
         contextTagObject: ContextTag?,
-        contextTag: String?
-    ): ContextTag? {
-        return contextTagObject ?: contextTag
+        contextTag: String?,
+    ): ContextTag? =
+        contextTagObject ?: contextTag
             ?.trim()
             ?.takeIf { it.isNotEmpty() }
             ?.let { ContextTagTaxonomy.formatCustomUserContextTag(it) }
-    }
 
-    internal fun resolveContextTagId(contextTag: ContextTag?): String? {
-        return when {
+    internal fun resolveContextTagId(contextTag: ContextTag?): String? =
+        when {
             contextTag == null -> null
             contextTag.id == "custom" -> contextTag.label
             else -> contextTag.id
         }
-    }
 
     suspend fun prewarmBindProximityConnection(
         httpClient: HttpClient? = null,
@@ -584,19 +571,44 @@ class ConnectionRepository(
         bindExactNoiseLevelDb: Double? = null,
         bindHeightCategory: HeightCategory? = null,
         simulatorMock: Boolean = false,
-    ): Result<BindProximityHandshakeResult> = bindProximityHandshakeImpl(httpClient = httpClient, bearerJwt = bearerJwt, myToken = myToken, heardTokens = heardTokens, detectedDevices = detectedDevices, latitude = latitude, longitude = longitude, exactBarometricElevationM = exactBarometricElevationM, hardwareVibe = hardwareVibe, clientContextFirst = clientContextFirst, weatherSnapshotLabel = weatherSnapshotLabel, bindContextTags = bindContextTags, bindNoiseLevelCategory = bindNoiseLevelCategory, bindExactNoiseLevelDb = bindExactNoiseLevelDb, bindHeightCategory = bindHeightCategory, simulatorMock = simulatorMock)
+    ): Result<BindProximityHandshakeResult> =
+        bindProximityHandshakeImpl(
+            httpClient = httpClient,
+            bearerJwt = bearerJwt,
+            myToken = myToken,
+            heardTokens = heardTokens,
+            detectedDevices = detectedDevices,
+            latitude = latitude,
+            longitude = longitude,
+            exactBarometricElevationM = exactBarometricElevationM,
+            hardwareVibe = hardwareVibe,
+            clientContextFirst = clientContextFirst,
+            weatherSnapshotLabel = weatherSnapshotLabel,
+            bindContextTags = bindContextTags,
+            bindNoiseLevelCategory = bindNoiseLevelCategory,
+            bindExactNoiseLevelDb = bindExactNoiseLevelDb,
+            bindHeightCategory = bindHeightCategory,
+            simulatorMock = simulatorMock,
+        )
 
     suspend fun recoverPendingProximityHandshake(
         bearerJwt: String,
         pendingHandshakeId: String,
-    ): Result<BindProximityHandshakeResult> = recoverPendingProximityHandshakeImpl(bearerJwt = bearerJwt, pendingHandshakeId = pendingHandshakeId)
+    ): Result<BindProximityHandshakeResult> =
+        recoverPendingProximityHandshakeImpl(bearerJwt = bearerJwt, pendingHandshakeId = pendingHandshakeId)
 
     suspend fun confirmProximitySelection(
         pendingHandshakeId: String,
         selectedMemberIds: List<String>,
         contextTags: List<String>? = null,
         bearerJwt: String? = null,
-    ): Result<BindProximityHandshakeOutcome> = confirmProximitySelectionImpl(pendingHandshakeId = pendingHandshakeId, selectedMemberIds = selectedMemberIds, contextTags = contextTags, bearerJwt = bearerJwt)
+    ): Result<BindProximityHandshakeOutcome> =
+        confirmProximitySelectionImpl(
+            pendingHandshakeId = pendingHandshakeId,
+            selectedMemberIds = selectedMemberIds,
+            contextTags = contextTags,
+            bearerJwt = bearerJwt,
+        )
 
     suspend fun enqueuePendingProximityHandshake(
         myToken: String,
@@ -611,11 +623,25 @@ class ConnectionRepository(
         heightCategory: String? = null,
         exactBarometricElevationM: Double? = null,
         contextTags: List<String> = emptyList(),
-    ) = enqueuePendingProximityHandshakeImpl(myToken = myToken, heardTokens = heardTokens, detectedDevices = detectedDevices, latitude = latitude, longitude = longitude, altitudeMeters = altitudeMeters, hardwareVibe = hardwareVibe, noiseLevel = noiseLevel, exactNoiseLevelDb = exactNoiseLevelDb, heightCategory = heightCategory, exactBarometricElevationM = exactBarometricElevationM, contextTags = contextTags)
+    ) = enqueuePendingProximityHandshakeImpl(
+        myToken = myToken,
+        heardTokens = heardTokens,
+        detectedDevices = detectedDevices,
+        latitude = latitude,
+        longitude = longitude,
+        altitudeMeters = altitudeMeters,
+        hardwareVibe = hardwareVibe,
+        noiseLevel = noiseLevel,
+        exactNoiseLevelDb = exactNoiseLevelDb,
+        heightCategory = heightCategory,
+        exactBarometricElevationM = exactBarometricElevationM,
+        contextTags = contextTags,
+    )
 
     suspend fun pendingProximityHandshakeQueueSize(): Int = pendingProximityHandshakeQueueSizeImpl()
 
-    suspend fun syncPendingProximityHandshakes(bearerJwt: String): PendingProximityHandshakeSyncResult = syncPendingProximityHandshakesImpl(bearerJwt = bearerJwt)
+    suspend fun syncPendingProximityHandshakes(bearerJwt: String): PendingProximityHandshakeSyncResult =
+        syncPendingProximityHandshakesImpl(bearerJwt = bearerJwt)
 
     suspend fun updateConnectionTags(
         connectionId: String,
@@ -625,7 +651,16 @@ class ConnectionRepository(
         exactNoiseLevelDb: Double?,
         heightCategory: HeightCategory?,
         exactBarometricElevationMeters: Double?,
-    ): Result<Unit> = updateConnectionTagsImpl(connectionId = connectionId, reportingUserId = reportingUserId, contextTag = contextTag, noiseLevelCategory = noiseLevelCategory, exactNoiseLevelDb = exactNoiseLevelDb, heightCategory = heightCategory, exactBarometricElevationMeters = exactBarometricElevationMeters)
+    ): Result<Unit> =
+        updateConnectionTagsImpl(
+            connectionId = connectionId,
+            reportingUserId = reportingUserId,
+            contextTag = contextTag,
+            noiseLevelCategory = noiseLevelCategory,
+            exactNoiseLevelDb = exactNoiseLevelDb,
+            heightCategory = heightCategory,
+            exactBarometricElevationMeters = exactBarometricElevationMeters,
+        )
 
     @Serializable
     internal data class RedeemQrTokenResponse(
@@ -692,7 +727,6 @@ class ConnectionRepository(
 
     suspend fun syncPendingConnections(): Int = syncPendingConnectionsImpl()
 
-
     /**
      * Pick one connection the user has not interacted with recently: sorts by
      * last interaction time ascending (oldest first) among connections whose
@@ -703,7 +737,7 @@ class ConnectionRepository(
     fun getPollPairSuggestion(
         userId: String,
         connections: List<Connection>,
-        connectedUsers: Map<String, User>
+        connectedUsers: Map<String, User>,
     ): PollPairSuggestion? {
         return connections
             .asSequence()
@@ -714,8 +748,7 @@ class ConnectionRepository(
                 val status = ReconnectHelper.getActivityStatus(lastInteraction)
                 if (status == ConnectionActivityStatus.ACTIVE) return@mapNotNull null
                 Triple(connection, otherUserId, lastInteraction)
-            }
-            .sortedBy { it.third }
+            }.sortedBy { it.third }
             .firstOrNull()
             ?.let { (connection, otherUserId, lastInteraction) ->
                 val otherName = connectedUsers[otherUserId]?.name
@@ -725,7 +758,7 @@ class ConnectionRepository(
                     otherUserName = otherName,
                     lastInteractionAt = lastInteraction,
                     daysSinceContact = ReconnectHelper.getDaysSinceContact(lastInteraction),
-                    contextTag = connection.context_tag
+                    contextTag = connection.context_tag,
                 )
             }
     }
@@ -742,23 +775,23 @@ class ConnectionRepository(
     /**
      * Get all connections for a user
      */
-    suspend fun getUserConnections(userId: String): Result<List<Connection>> {
-        return try {
+    suspend fun getUserConnections(userId: String): Result<List<Connection>> =
+        try {
             val snapshot = supabaseRepository.fetchUserConnectionsSnapshot(userId)
             val visible = snapshot.connections.filter { it.isVisibleInActiveUi() }
             Result.success(visible)
         } catch (e: Exception) {
             Result.failure(e)
         }
-    }
 
     /**
      * Get user by ID
      */
     suspend fun getUserById(userId: String): Result<User> {
         return try {
-            val user = supabaseRepository.fetchUsersByIds(listOf(userId)).firstOrNull()
-                ?: return Result.failure(Exception("User not found"))
+            val user =
+                supabaseRepository.fetchUsersByIds(listOf(userId)).firstOrNull()
+                    ?: return Result.failure(Exception("User not found"))
             Result.success(user)
         } catch (e: Exception) {
             Result.failure(e)
@@ -770,12 +803,22 @@ class ConnectionRepository(
      */
     suspend fun deleteConnection(connectionId: String): Result<Unit> {
         return try {
-            val uid = SupabaseConfig.client.auth.currentUserOrNull()?.id?.takeIf { it.isNotBlank() }
-                ?: return Result.failure(Exception("Not signed in"))
-            val row = AppDataManager.connections.value.firstOrNull { it.id == connectionId }
-                ?: fetchConnectionById(connectionId)
-            val pair = row?.user_ids?.filter { it.isNotBlank() }?.distinct()?.takeIf { it.size >= 2 }
-                ?: return Result.failure(Exception("Connection not found"))
+            val uid =
+                SupabaseConfig.client.auth
+                    .currentUserOrNull()
+                    ?.id
+                    ?.takeIf { it.isNotBlank() }
+                    ?: return Result.failure(Exception("Not signed in"))
+            val row =
+                AppDataManager.connections.value.firstOrNull { it.id == connectionId }
+                    ?: fetchConnectionById(connectionId)
+            val pair =
+                row
+                    ?.user_ids
+                    ?.filter { it.isNotBlank() }
+                    ?.distinct()
+                    ?.takeIf { it.size >= 2 }
+                    ?: return Result.failure(Exception("Connection not found"))
             if (uid !in pair) {
                 return Result.failure(Exception("Connection not found"))
             }

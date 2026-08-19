@@ -14,8 +14,6 @@ import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
-import io.ktor.client.request.forms.MultiPartFormDataContent
-import io.ktor.client.request.forms.formData
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.*
@@ -24,10 +22,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
  * API client for chat-related operations via the Next.js companion (`click-web`).
@@ -570,7 +564,8 @@ class ChatApiClient(
         mimeType: String,
         fileName: String,
         authToken: String,
-    ): Result<UploadedAttachment> = uploadAttachmentImpl(fileBytes = fileBytes, chatId = chatId, mimeType = mimeType, fileName = fileName, authToken = authToken)
+    ): Result<UploadedAttachment> =
+        uploadAttachmentImpl(fileBytes = fileBytes, chatId = chatId, mimeType = mimeType, fileName = fileName, authToken = authToken)
 
     suspend fun signAttachmentUrl(
         path: String,
@@ -587,7 +582,16 @@ class ChatApiClient(
         authToken: String,
         messageType: String? = null,
         metadata: JsonElement? = null,
-    ): Result<HubMessageApiDto> = sendHubMessageImpl(hubId = hubId, body = body, userLat = userLat, userLong = userLong, authToken = authToken, messageType = messageType, metadata = metadata)
+    ): Result<HubMessageApiDto> =
+        sendHubMessageImpl(
+            hubId = hubId,
+            body = body,
+            userLat = userLat,
+            userLong = userLong,
+            authToken = authToken,
+            messageType = messageType,
+            metadata = metadata,
+        )
 
     suspend fun uploadHubMedia(
         fileBytes: ByteArray,
@@ -597,7 +601,16 @@ class ChatApiClient(
         authToken: String,
         userLat: Double,
         userLong: Double,
-    ): Result<String> = uploadHubMediaImpl(fileBytes = fileBytes, hubId = hubId, mimeType = mimeType, objectPath = objectPath, authToken = authToken, userLat = userLat, userLong = userLong)
+    ): Result<String> =
+        uploadHubMediaImpl(
+            fileBytes = fileBytes,
+            hubId = hubId,
+            mimeType = mimeType,
+            objectPath = objectPath,
+            authToken = authToken,
+            userLat = userLat,
+            userLong = userLong,
+        )
 
     suspend fun addCliqueMember(
         groupId: String,
@@ -866,7 +879,8 @@ class ChatApiClient(
         authToken: String,
         aroundMessageId: String? = null,
         limit: Int = 120,
-    ): Result<HubThreadResponse> = fetchHubThreadImpl(hubId = hubId, authToken = authToken, aroundMessageId = aroundMessageId, limit = limit)
+    ): Result<HubThreadResponse> =
+        fetchHubThreadImpl(hubId = hubId, authToken = authToken, aroundMessageId = aroundMessageId, limit = limit)
 
     /**
      * Search messages — use [searchConversations] (`GET /api/chat/search`) or local/repository scan.

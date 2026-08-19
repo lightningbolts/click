@@ -2,51 +2,22 @@
 
 package compose.project.click.click.data.repository // pragma: allowlist secret
 
-import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
-import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
-import compose.project.click.click.data.models.AvailabilityIntentInsert // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
-import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
 import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
 import compose.project.click.click.data.models.ProfileTimelineCacheEntry // pragma: allowlist secret
 import compose.project.click.click.data.models.ProfileTimelinePayload // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
-import compose.project.click.click.data.models.UserAvailability // pragma: allowlist secret
-import compose.project.click.click.data.models.UserCore // pragma: allowlist secret
-import compose.project.click.click.data.models.UserInterests // pragma: allowlist secret
 import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
-import compose.project.click.click.data.models.isResolvedDisplayName // pragma: allowlist secret
-import compose.project.click.click.data.models.mergeRichestEncounterEvents // pragma: allowlist secret
-import compose.project.click.click.data.models.resolveDisplayName // pragma: allowlist secret
-import compose.project.click.click.util.dedupeOneToOneConnectionsByPeer // pragma: allowlist secret
-import compose.project.click.click.util.isOfflineNetworkFailure // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
-import io.github.jan.supabase.auth.auth
-import io.github.jan.supabase.exceptions.RestException
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
-import io.github.jan.supabase.postgrest.query.filter.FilterOperator
-import io.github.jan.supabase.postgrest.rpc
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
 
 internal fun SupabaseRepository.cacheProfileTimeline(payload: ProfileTimelinePayload) {
     val key = profileTimelineCacheKey(payload.targetType, payload.targetId) ?: return
@@ -284,7 +255,9 @@ internal suspend fun SupabaseRepository.fetchUserPublicProfileImpl(
 /**
  * Reads [public.users.availability_intents] JSON mirror when the column exists (migration optional).
  */
-internal suspend fun SupabaseRepository.fetchAvailabilityIntentBubblesFromUsersColumnImpl(userId: String): List<ProfileAvailabilityIntentBubble> {
+internal suspend fun SupabaseRepository.fetchAvailabilityIntentBubblesFromUsersColumnImpl(
+    userId: String,
+): List<ProfileAvailabilityIntentBubble> {
     if (userId.isBlank()) return emptyList()
     return try {
         @Serializable
@@ -317,7 +290,9 @@ internal suspend fun SupabaseRepository.fetchAvailabilityIntentBubblesFromUsersC
 /**
  * Live rows from [public.availability_intents] (RLS: own row + mutual-connection read policy).
  */
-internal suspend fun SupabaseRepository.fetchAvailabilityIntentBubblesFromIntentsTableImpl(targetUserId: String): List<ProfileAvailabilityIntentBubble> {
+internal suspend fun SupabaseRepository.fetchAvailabilityIntentBubblesFromIntentsTableImpl(
+    targetUserId: String,
+): List<ProfileAvailabilityIntentBubble> {
     if (targetUserId.isBlank()) return emptyList()
     return try {
         val nowIso = Clock.System.now().toString()

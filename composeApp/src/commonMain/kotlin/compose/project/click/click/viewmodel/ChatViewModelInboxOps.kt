@@ -1,115 +1,33 @@
 @file:Suppress(
+    "ktlint:standard:no-consecutive-comments",
     "ktlint:standard:backing-property-naming",
     "ktlint:standard:no-wildcard-imports",
 )
 
 package compose.project.click.click.viewmodel
 
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import compose.project.click.click.PlatformHapticsPolicy
-import compose.project.click.click.chat.attachments.AttachmentCrypto // pragma: allowlist secret
-import compose.project.click.click.chat.attachments.ChatAttachmentValidator // pragma: allowlist secret
-import compose.project.click.click.collaboration.computeClickDropRevealTtlIso
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
-import compose.project.click.click.data.CHAT_ATTACHMENTS_BUCKET // pragma: allowlist secret
-import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
-import compose.project.click.click.data.api.ChatApiClient // pragma: allowlist secret
-import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.ConnectionEncounter // pragma: allowlist secret
-import compose.project.click.click.data.models.IcebreakerPrompt // pragma: allowlist secret
-import compose.project.click.click.data.models.IcebreakerRepository // pragma: allowlist secret
-import compose.project.click.click.data.models.Message // pragma: allowlist secret
-import compose.project.click.click.data.models.MessageDeliveryState // pragma: allowlist secret
-import compose.project.click.click.data.models.MessageReaction // pragma: allowlist secret
-import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
-import compose.project.click.click.data.models.audioCacheFileExtension // pragma: allowlist secret
 import compose.project.click.click.data.models.collapseOneToOneChatsByPeer // pragma: allowlist secret
-import compose.project.click.click.data.models.hasLocalMediaUri // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.isArchivedChannelForUser // pragma: allowlist secret
-import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
 import compose.project.click.click.data.models.isResolvedDisplayName // pragma: allowlist secret
-import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
-import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
-import compose.project.click.click.data.models.previewLabel // pragma: allowlist secret
-import compose.project.click.click.data.models.replySnippetForMessage // pragma: allowlist secret
-import compose.project.click.click.data.models.toBeaconChatContent
-import compose.project.click.click.data.models.toBeaconChatMetadata
-import compose.project.click.click.data.models.withCoercedBeaconType
-import compose.project.click.click.data.models.withDbDerivedDeliveryState // pragma: allowlist secret
 import compose.project.click.click.data.realtime.RealtimeCoordinator
-import compose.project.click.click.data.repository.ChatMessageSubscription // pragma: allowlist secret
-import compose.project.click.click.data.repository.ChatRealtimeEvent // pragma: allowlist secret
-import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
-import compose.project.click.click.data.repository.ChatSessionCaches
-import compose.project.click.click.data.repository.MessageChangeEvent // pragma: allowlist secret
-import compose.project.click.click.data.repository.ReactionChangeEvent // pragma: allowlist secret
-import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
-import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
-import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
-import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
-import compose.project.click.click.domain.VerifiedCliqueCreation // pragma: allowlist secret
-import compose.project.click.click.network.ConnectivityMonitor
-import compose.project.click.click.network.NetworkConnectivityMonitor
-import compose.project.click.click.notifications.ChatPushInboxBridge
-import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
-import compose.project.click.click.ui.chat.deleteSecureChatAudioTempFile // pragma: allowlist secret
-import compose.project.click.click.ui.chat.saveDecryptedAttachmentToDownloads // pragma: allowlist secret
-import compose.project.click.click.ui.chat.secureChatImageBitmapCache // pragma: allowlist secret
-import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile // pragma: allowlist secret
-import compose.project.click.click.ui.components.ProfileSheetLocalMessage // pragma: allowlist secret
-import compose.project.click.click.util.LruMemoryCache // pragma: allowlist secret
-import compose.project.click.click.util.chatMediaDispatcher // pragma: allowlist secret
-import compose.project.click.click.util.chatMediaVaultExtensionForMessage // pragma: allowlist secret
 import compose.project.click.click.util.dedupeOneToOneChatsByPeer
-import compose.project.click.click.util.fileUriToLocalPath // pragma: allowlist secret
-import compose.project.click.click.util.imageVaultFileExtension // pragma: allowlist secret
-import compose.project.click.click.util.isChatMediaVaultLocalPath // pragma: allowlist secret
-import compose.project.click.click.util.isOfflineNetworkFailure
 import compose.project.click.click.util.isPersistedApiChatId
-import compose.project.click.click.util.isPersistedApiUuid
-import compose.project.click.click.util.readChatMediaVaultBytesForMessage // pragma: allowlist secret
-import compose.project.click.click.util.readChatMediaVaultLocalPathForMessage // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
-import compose.project.click.click.util.teardownBlocking // pragma: allowlist secret
-import compose.project.click.click.util.vaultCacheExtension // pragma: allowlist secret
-import compose.project.click.click.util.writeChatMediaVaultFile // pragma: allowlist secret
-import io.github.jan.supabase.auth.auth
-import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.realtime.PostgresAction
-import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.decodeRecordOrNull
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.datetime.Clock
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.put
-import kotlin.random.Random
 
 internal fun ChatViewModel.scheduleDebouncedChatListRefresh() {
     debouncedChatListRefreshJob?.cancel()

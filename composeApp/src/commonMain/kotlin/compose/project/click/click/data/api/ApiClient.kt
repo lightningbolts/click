@@ -4,25 +4,19 @@ import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: a
 import compose.project.click.click.data.models.ErrorResponse // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconInsert // pragma: allowlist secret
-import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
 import compose.project.click.click.data.models.ProfileTimelinePayload // pragma: allowlist secret
 import compose.project.click.click.data.models.StoredEventBookmark // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
-import compose.project.click.click.data.models.UserCore // pragma: allowlist secret
-import compose.project.click.click.data.models.parseMapBeaconRows // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.request.delete
 import io.ktor.client.request.get
-import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.patch
 import io.ktor.client.request.post
-import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
@@ -33,11 +27,7 @@ import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -265,7 +255,8 @@ class ApiClient {
         targetId: String,
         body: String,
         visibility: String,
-    ): Result<ProfileTimelinePayload> = postProfileTimelineJournalEntryImpl(targetType = targetType, targetId = targetId, body = body, visibility = visibility)
+    ): Result<ProfileTimelinePayload> =
+        postProfileTimelineJournalEntryImpl(targetType = targetType, targetId = targetId, body = body, visibility = visibility)
 
     suspend fun putProfileTimelineJournalEntry(
         id: String,
@@ -273,11 +264,13 @@ class ApiClient {
         visibility: String,
     ): Result<ProfileTimelinePayload> = putProfileTimelineJournalEntryImpl(id = id, body = body, visibility = visibility)
 
-    suspend fun deleteProfileTimelineJournalEntry(id: String): Result<ProfileTimelinePayload> = deleteProfileTimelineJournalEntryImpl(id = id)
+    suspend fun deleteProfileTimelineJournalEntry(id: String): Result<ProfileTimelinePayload> =
+        deleteProfileTimelineJournalEntryImpl(id = id)
 
     suspend fun getActivityRecap(window: String = "week"): Result<ActivityRecapDto> = getActivityRecapImpl(window = window)
 
-    suspend fun getConnectionTabs(connectionId: String): Result<ConnectionTabsGetResponse> = getConnectionTabsImpl(connectionId = connectionId)
+    suspend fun getConnectionTabs(connectionId: String): Result<ConnectionTabsGetResponse> =
+        getConnectionTabsImpl(connectionId = connectionId)
 
     suspend fun patchUserProfile(
         userId: String,
@@ -287,7 +280,16 @@ class ApiClient {
         tags: List<String>? = null,
         birthday: String? = null,
         personalityTags: List<String>? = null,
-    ): Result<User> = patchUserProfileImpl(userId = userId, firstName = firstName, lastName = lastName, image = image, tags = tags, birthday = birthday, personalityTags = personalityTags)
+    ): Result<User> =
+        patchUserProfileImpl(
+            userId = userId,
+            firstName = firstName,
+            lastName = lastName,
+            image = image,
+            tags = tags,
+            birthday = birthday,
+            personalityTags = personalityTags,
+        )
 
     /**
      * PATCH `/api/user/preferences` on click-web.
@@ -571,12 +573,19 @@ class ApiClient {
         pendingHandshakeId: String,
         selectedMemberIds: List<String>,
         contextTags: List<String>? = null,
-    ): Result<ProximityBindOkResponseDto> = postProximityConfirmSelectionImpl(bearerJwt = bearerJwt, pendingHandshakeId = pendingHandshakeId, selectedMemberIds = selectedMemberIds, contextTags = contextTags)
+    ): Result<ProximityBindOkResponseDto> =
+        postProximityConfirmSelectionImpl(
+            bearerJwt = bearerJwt,
+            pendingHandshakeId = pendingHandshakeId,
+            selectedMemberIds = selectedMemberIds,
+            contextTags = contextTags,
+        )
 
     suspend fun getPendingProximityHandshake(
         pendingHandshakeId: String,
         bearerJwt: String? = null,
-    ): Result<ProximityHandshakePostResult> = getPendingProximityHandshakeImpl(pendingHandshakeId = pendingHandshakeId, bearerJwt = bearerJwt)
+    ): Result<ProximityHandshakePostResult> =
+        getPendingProximityHandshakeImpl(pendingHandshakeId = pendingHandshakeId, bearerJwt = bearerJwt)
 
     suspend fun prewarmProximityHandshake() = prewarmProximityHandshakeImpl()
 
@@ -599,11 +608,14 @@ class ApiClient {
             Result.failure(e)
         }
 
-    suspend fun postOpenCollaborationSession(connectionId: String): Result<CollaborationSessionPostResponse> = postOpenCollaborationSessionImpl(connectionId = connectionId)
+    suspend fun postOpenCollaborationSession(connectionId: String): Result<CollaborationSessionPostResponse> =
+        postOpenCollaborationSessionImpl(connectionId = connectionId)
 
-    suspend fun postOpenCollaborationSessionForChat(chatId: String): Result<CollaborationSessionPostResponse> = postOpenCollaborationSessionForChatImpl(chatId = chatId)
+    suspend fun postOpenCollaborationSessionForChat(chatId: String): Result<CollaborationSessionPostResponse> =
+        postOpenCollaborationSessionForChatImpl(chatId = chatId)
 
-    suspend fun postOpenCollaborationSessionFallback(connectionId: String): Result<CollaborationSessionPostResponse> = postOpenCollaborationSessionFallbackImpl(connectionId = connectionId)
+    suspend fun postOpenCollaborationSessionFallback(connectionId: String): Result<CollaborationSessionPostResponse> =
+        postOpenCollaborationSessionFallbackImpl(connectionId = connectionId)
 
     /** GET `/api/insights/widget-vibe` — JWT bearer. */
     suspend fun getWidgetVibePayload(): Result<WidgetVibePayloadDto> =
@@ -651,7 +663,8 @@ class ApiClient {
 
     suspend fun getBeaconRsvp(beaconId: String): Result<BeaconRsvpGetResponseDto> = getBeaconRsvpImpl(beaconId = beaconId)
 
-    suspend fun getBeaconAttendeeDirectory(beaconId: String): Result<BeaconAttendeeDirectoryResponseDto> = getBeaconAttendeeDirectoryImpl(beaconId = beaconId)
+    suspend fun getBeaconAttendeeDirectory(beaconId: String): Result<BeaconAttendeeDirectoryResponseDto> =
+        getBeaconAttendeeDirectoryImpl(beaconId = beaconId)
 
     /**
      * GET `/api/connections/{connectionId}/event-recommendation` — one shared upcoming event for a new peer.
@@ -687,7 +700,14 @@ class ApiClient {
         longitude: Double? = null,
         accuracyMeters: Double? = null,
         platform: String? = null,
-    ): Result<BeaconAttendeeDto> = postBeaconRsvpImpl(beaconId = beaconId, latitude = latitude, longitude = longitude, accuracyMeters = accuracyMeters, platform = platform)
+    ): Result<BeaconAttendeeDto> =
+        postBeaconRsvpImpl(
+            beaconId = beaconId,
+            latitude = latitude,
+            longitude = longitude,
+            accuracyMeters = accuracyMeters,
+            platform = platform,
+        )
 
     suspend fun deleteBeaconRsvp(beaconId: String): Result<Unit> = deleteBeaconRsvpImpl(beaconId = beaconId)
 
