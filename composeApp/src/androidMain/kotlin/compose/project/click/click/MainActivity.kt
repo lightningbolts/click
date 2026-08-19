@@ -42,7 +42,7 @@ class MainActivity : ComponentActivity() {
         registerForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions(),
         ) { results ->
-            AndroidCallRuntime.handlePermissionResult(results.isNotEmpty() && results.values.all { it })
+            AndroidCallRuntime.handlePermissionResult(results)
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -6,9 +6,13 @@ import android.content.Context.AUDIO_SERVICE
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioManager
+import android.os.Build
 import androidx.core.content.ContextCompat
+import io.livekit.android.AudioOptions
+import io.livekit.android.AudioType
 import io.livekit.android.ConnectOptions
 import io.livekit.android.LiveKit
+import io.livekit.android.LiveKitOverrides
 import io.livekit.android.RoomOptions
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
@@ -37,6 +41,7 @@ internal data class PendingCallStart(
     val token: String,
     val wsUrl: String,
     val videoEnabled: Boolean,
+    val requiredPermissions: List<String>,
 )
 
 internal object AndroidCallRuntime {
@@ -99,16 +104,40 @@ internal object AndroidCallRuntime {
         tryFlushDeferredStart()
     }
 
-    fun handlePermissionResult(allGranted: Boolean) {
+    fun handlePermissionResult(launcherResults: Map<String, Boolean> = emptyMap()) {
         val pending = pendingCallStart
         val grantedCb = onPermissionGranted
         val deniedCb = onPermissionDenied
+        val context = applicationContext
+        val osGranted =
+            pending?.requiredPermissions.orEmpty().filter { permission ->
+                context != null &&
+                    ContextCompat.checkSelfPermission(context, permission) ==
+                    PackageManager.PERMISSION_GRANTED
+            }.toSet()
+        val resume =
+            pending != null &&
+                CallPermissionResultPolicy.shouldResumeCall(
+                    requiredPermissions = pending.requiredPermissions,
+                    launcherResults = launcherResults,
+                    osGrantedPermissions = osGranted,
+                )
         clearPendingPermissionRequest()
-        if (allGranted && pending != null && grantedCb != null) {
+        if (resume && pending != null && grantedCb != null) {
             grantedCb(pending)
         } else {
             deniedCb?.invoke()
         }
+    }
+
+    fun startCallForegroundService(videoEnabled: Boolean) {
+        val context = applicationContext ?: return
+        CallForegroundService.start(context, videoEnabled)
+    }
+
+    fun stopCallForegroundService() {
+        val context = applicationContext ?: return
+        CallForegroundService.stop(context)
     }
 
     fun clearPendingPermissionRequest() {
@@ -156,21 +185,23 @@ actual class CallManager {
             return
         }
 
-        val requiredPermissions = buildList {
-            add(Manifest.permission.RECORD_AUDIO)
-            if (videoEnabled) add(Manifest.permission.CAMERA)
-        }
+        val requiredPermissions = callRequiredPermissions(videoEnabled)
+        val optionalPermissions = callOptionalPermissions()
 
-        val missingPermissions = requiredPermissions.filter { permission ->
+        val missingRequired = requiredPermissions.filter { permission ->
+            ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED
+        }
+        val missingOptional = optionalPermissions.filter { permission ->
             ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED
         }
 
-        if (missingPermissions.isNotEmpty()) {
+        if (missingRequired.isNotEmpty()) {
             val pending = PendingCallStart(
                 roomName = roomName,
                 token = token,
                 wsUrl = wsUrl,
                 videoEnabled = videoEnabled,
+                requiredPermissions = requiredPermissions,
             )
             val resumeStart: (PendingCallStart) -> Unit = { granted ->
                 startCall(
@@ -182,7 +213,7 @@ actual class CallManager {
             }
             _callState.value = CallState.Connecting(videoRequested = videoEnabled)
             val requested = AndroidCallRuntime.requestCallPermissions(
-                permissions = missingPermissions.toTypedArray(),
+                permissions = (missingRequired + missingOptional).toTypedArray(),
                 pending = pending,
                 onGranted = resumeStart,
                 onDenied = {
@@ -206,6 +237,7 @@ actual class CallManager {
         videoRequested = videoEnabled
         updateAudioRoute(videoEnabled)
         _callState.value = CallState.Connecting(videoRequested = videoEnabled)
+        AndroidCallRuntime.startCallForegroundService(videoEnabled)
 
         val liveKitRoom = LiveKit.create(
             appContext = context,
@@ -221,6 +253,12 @@ actual class CallManager {
                 videoTrackPublishDefaults = VideoTrackPublishDefaults(
                     videoEncoding = VideoPreset169.H540.encoding,
                     simulcast = true,
+                ),
+            ),
+            overrides = LiveKitOverrides(
+                audioOptions = AudioOptions(
+                    // LiveKit 2.20 name for voice-call routing (MODE_IN_COMMUNICATION).
+                    audioOutputType = AudioType.CallAudioType(),
                 ),
             ),
         )
@@ -305,14 +343,12 @@ actual class CallManager {
                     options = ConnectOptions(autoSubscribe = true),
                 )
                 // Serialize mic → camera (parallel CameraX + AudioRecord races on many devices).
-                val micOk = liveKitRoom.localParticipant.setMicrophoneEnabled(true)
-                if (!micOk) {
-                    cleanupRoom(releaseState = false)
-                    markEndedAndDeferIdle("Unable to enable microphone")
-                    return@launch
-                }
-                microphoneEnabled = true
+                val micOk = ensureMicrophoneEnabled(liveKitRoom)
+                microphoneEnabled = micOk
                 syncStateFromRoom()
+                if (!micOk) {
+                    println("CallManager: microphone still unpublished after retries; staying in-call")
+                }
 
                 if (videoEnabled) {
                     // Never hard-fail accept on camera lag — audio stays up; keep retrying publish.
@@ -357,13 +393,13 @@ actual class CallManager {
             try {
                 val ok = activeRoom.localParticipant.setMicrophoneEnabled(enabled)
                 if (!ok) {
-                    _callState.value = CallState.Ended("Unable to update microphone")
+                    println("CallManager: unable to update microphone")
                     return@launch
                 }
                 microphoneEnabled = enabled
                 syncStateFromRoom()
             } catch (error: Throwable) {
-                _callState.value = CallState.Ended(error.message ?: "Unable to update microphone")
+                println("CallManager: unable to update microphone: ${error.message}")
             }
         }
     }
@@ -573,6 +609,20 @@ actual class CallManager {
         }
     }
 
+    private suspend fun ensureMicrophoneEnabled(activeRoom: Room): Boolean {
+        if (activeRoom.localParticipant.setMicrophoneEnabled(true)) {
+            return true
+        }
+        delay(350)
+        if (room !== activeRoom) return false
+        if (activeRoom.localParticipant.setMicrophoneEnabled(true)) {
+            return true
+        }
+        delay(500)
+        if (room !== activeRoom) return false
+        return activeRoom.localParticipant.setMicrophoneEnabled(true)
+    }
+
     private suspend fun ensureCameraEnabled(activeRoom: Room): Boolean {
         if (activeRoom.localParticipant.setCameraEnabled(true)) {
             return true
@@ -594,6 +644,7 @@ actual class CallManager {
 
         // Always leave telephony/VoIP audio mode so the next incoming ToneGenerator ring is audible.
         updateAudioRoute(false, reset = true)
+        AndroidCallRuntime.stopCallForegroundService()
 
         if (releaseState) {
             microphoneEnabled = true
@@ -627,6 +678,17 @@ actual class CallManager {
 
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
         audioManager.isSpeakerphoneOn = enabled
+    }
+}
+
+private fun callRequiredPermissions(videoEnabled: Boolean): List<String> = buildList {
+    add(Manifest.permission.RECORD_AUDIO)
+    if (videoEnabled) add(Manifest.permission.CAMERA)
+}
+
+private fun callOptionalPermissions(): List<String> = buildList {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        add(Manifest.permission.BLUETOOTH_CONNECT)
     }
 }
 

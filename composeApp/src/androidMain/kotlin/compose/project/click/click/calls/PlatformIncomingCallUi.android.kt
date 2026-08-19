@@ -49,7 +49,7 @@ actual object PlatformIncomingCallUi {
         )
         val person = Person.Builder().setName(invite.callerName).build()
 
-        val notification = NotificationCompat.Builder(context, CLICK_CALLS_CHANNEL_ID)
+        val builder = NotificationCompat.Builder(context, CLICK_CALLS_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.sym_call_incoming)
             .setContentTitle(invite.callerName)
             .setContentText(if (invite.videoEnabled) "Incoming video call" else "Incoming voice call")
@@ -57,12 +57,17 @@ actual object PlatformIncomingCallUi {
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setOngoing(true)
             .setAutoCancel(false)
-            .setFullScreenIntent(contentIntent, true)
+            .setContentIntent(contentIntent)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setStyle(NotificationCompat.CallStyle.forIncomingCall(person, declineIntent, answerIntent))
             .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
             .setVibrate(longArrayOf(0, 1000, 500, 1000, 500, 1000))
-            .build()
+
+        if (canUseFullScreenIncomingIntent(context)) {
+            builder.setFullScreenIntent(contentIntent, true)
+        }
+
+        val notification = builder.build()
 
         try {
             NotificationManagerCompat.from(context).notify(notificationId(invite.callId), notification)
@@ -80,6 +85,12 @@ actual object PlatformIncomingCallUi {
     }
 
     private fun notificationId(callId: String): Int = callId.hashCode()
+
+    private fun canUseFullScreenIncomingIntent(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return true
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return false
+        return manager.canUseFullScreenIntent()
+    }
 
     private fun triggerVibration(context: Context) {
         try {
