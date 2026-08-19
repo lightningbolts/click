@@ -46,6 +46,7 @@ App.kt (navigation shell)
 | `screens/` | Route-level layout, navigation callbacks, ViewModel wiring | `ConnectionsScreen`, `ChatView`, `MapScreen` |
 | `components/` | Cross-screen glass primitives | `GlassCard`, `ClickPlatformSheet`, `AppScreenScaffold` |
 | `chat/` | Chat-only composables (keeps `ChatView` readable) | `ChatMessageBubble`, `ConnectionChatMessageComposer` |
+| *(convention)* | Screens stay under ~1000 lines: large screens split panels/sections into same-package sibling files (e.g. `MapScreen` + `MapChromeControls`/`EventBeaconDetail`, `ProfileBottomSheet` + `ProfileSheet*`, `SettingsScreen` + `SettingsScreenComponents`) | |
 | `theme/` | Design tokens | `Color.kt`, `Typography.kt`, `PlatformTheme.kt`, `ClickAccent.kt`, `CardVisual.kt`, `Contrast.kt` |
 | `utils/` | Composable-side platform hooks | `LocationPermissionRequester`, `MapUtils` |
 | Home pile | One unified Polaroid stack with interleaved category markers | `homePhotoPileItems`, `PhotoPileStack`, `PhotoCard`, `PilePhysics.kt` (Compose-free 2D dismiss/recall math) |
