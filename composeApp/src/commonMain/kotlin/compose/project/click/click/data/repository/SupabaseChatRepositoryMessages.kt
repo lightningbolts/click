@@ -487,3 +487,51 @@ internal suspend fun SupabaseChatRepository.decryptGroupChatPreviewImpl(
         null
     }
 }
+
+// Mark messages as read via click-web (service role); direct PostgREST updates hit RLS on mobile.
+internal suspend fun SupabaseChatRepository.markMessagesAsReadImpl(
+    chatId: String,
+    userId: String,
+) {
+    if (chatId.isBlank() || userId.isBlank()) return
+    try {
+        val jwt =
+            ensureFreshJwtForChat()
+                ?: tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+                ?: return
+        apiClient.markChatAsRead(chatId, jwt).onFailure { e ->
+            // Do not fall back to the legacy Flask /api/chats/:id/mark_read host — it often
+            // times out on simulator LAN and is not the read-receipt SSOT anymore.
+            println("markChatAsRead failed: ${e.redactedRestMessage()}")
+        }
+    } catch (e: Exception) {
+        println("Error marking messages as read: ${e.redactedRestMessage()}")
+    }
+}
+
+internal suspend fun SupabaseChatRepository.markChatAsUnreadImpl(chatId: String) {
+    if (chatId.isBlank()) return
+    try {
+        val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() } ?: return
+        apiClient.markChatAsUnread(chatId, jwt).onFailure { e ->
+            println("markChatAsUnread failed: ${e.redactedRestMessage()}")
+        }
+    } catch (e: Exception) {
+        println("Error marking chat as unread: ${e.redactedRestMessage()}")
+    }
+}
+
+internal suspend fun SupabaseChatRepository.markMessagesDeliveredImpl(
+    chatId: String,
+    messageIds: List<String>,
+) {
+    if (chatId.isBlank() || messageIds.isEmpty()) return
+    try {
+        val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() } ?: return
+        apiClient.markMessagesDelivered(chatId, messageIds, jwt).onFailure { e ->
+            println("markMessagesDelivered failed: ${e.redactedRestMessage()}")
+        }
+    } catch (e: Exception) {
+        println("Error marking messages delivered: ${e.redactedRestMessage()}")
+    }
+}

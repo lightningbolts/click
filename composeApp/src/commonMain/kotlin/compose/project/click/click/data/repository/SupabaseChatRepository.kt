@@ -107,17 +107,7 @@ class SupabaseChatRepository(
         ChatSessionCaches.mergeTimeline(connectionId, message)
     }
 
-    override suspend fun seedInboxChatRouting(chats: List<ChatWithDetails>) {
-        for (chat in chats) {
-            val chatId = chat.chat.id?.takeIf { it.isNotBlank() } ?: continue
-            val groupId = chat.groupClique?.groupId
-            if (groupId != null) {
-                ChatSessionCaches.seedGroupRouting(chatId, groupId)
-            } else {
-                ChatSessionCaches.seedConnectionRouting(chatId, chat.connection.id)
-            }
-        }
-    }
+    override suspend fun seedInboxChatRouting(chats: List<ChatWithDetails>) = seedInboxChatRoutingImpl(chats = chats)
 
     internal data class GlobalPresenceSession(
         val channel: RealtimeChannel,
@@ -331,38 +321,9 @@ class SupabaseChatRepository(
     internal var cachedJunctionTimestamp: Long = 0L
     internal val junctionCacheTtlMs = 300_000L // 5 minutes
 
-    // Fetch all chats for a user with details via API
-    override suspend fun fetchUserChatsWithDetails(userId: String): List<ChatWithDetails> =
-        try {
-            coroutineScope {
-                val direct = async { fetchDirectUserChatsWithDetails(userId) }
-                val groups =
-                    async {
-                        runCatching { fetchGroupUserChatsWithDetails(userId) }
-                            .onFailure { e ->
-                                println("Error fetching group chats: ${e.redactedRestMessage()}")
-                            }.getOrElse { emptyList() }
-                    }
-                (direct.await() + groups.await()).sortedByDescending { d ->
-                    d.lastMessage?.timeCreated
-                        ?: d.connection.last_message_at
-                        ?: d.connection.created
-                }
-            }
-        } catch (e: Exception) {
-            println("Error fetching user chats: ${e.redactedRestMessage()}")
-            emptyList()
-        }
+    override suspend fun fetchUserChatsWithDetails(userId: String) : List<ChatWithDetails> = fetchUserChatsWithDetailsImpl(userId = userId)
 
-    override suspend fun fetchDirectUserChatsWithDetails(userId: String): List<ChatWithDetails> =
-        try {
-            val (connections, archivedIds, hiddenIds) = getOrFetchJunctionData(userId)
-            val activeRows = connections.filter { it.isActiveForUser(archivedIds, hiddenIds) }
-            buildChatsWithDetailsForConnections(userId, activeRows)
-        } catch (e: Exception) {
-            println("Error fetching direct chats: ${e.redactedRestMessage()}")
-            emptyList()
-        }
+    override suspend fun fetchDirectUserChatsWithDetails(userId: String) : List<ChatWithDetails> = fetchDirectUserChatsWithDetailsImpl(userId = userId)
 
     override suspend fun fetchArchivedUserChatsWithDetails(userId: String): List<ChatWithDetails> =
         fetchArchivedUserChatsWithDetailsImpl(userId = userId)
@@ -396,54 +357,9 @@ class SupabaseChatRepository(
             connectionId = connectionId,
         )
 
-    override suspend fun ensureChatForConnection(connectionId: String): Chat? {
-        return try {
-            // Best-effort session prep — never hard-block with "no fresh JWT".
-            runCatching { ensureFreshJwtForChat() }
-            ensureChatForConnectionOnce(connectionId)
-        } catch (e: Exception) {
-            if (e.isAuthFailure()) {
-                val refreshed = refreshedJwtAfterAuthFailure()
-                if (refreshed != null) {
-                    return try {
-                        ensureChatForConnectionOnce(connectionId)
-                    } catch (retry: Exception) {
-                        println(
-                            "Error ensuring chat for connection $connectionId after refresh: " +
-                                retry.redactedRestMessage(),
-                        )
-                        null
-                    }
-                }
-            }
-            println("Error ensuring chat for connection $connectionId: ${e.redactedRestMessage()}")
-            null
-        }
-    }
+    override suspend fun ensureChatForConnection(connectionId: String) : Chat? = ensureChatForConnectionImpl(connectionId = connectionId)
 
-    override suspend fun ensureChatForGroup(groupId: String): Chat? {
-        return try {
-            runCatching { ensureFreshJwtForChat() }
-            ensureChatForGroupOnce(groupId)
-        } catch (e: Exception) {
-            if (e.isAuthFailure()) {
-                val refreshed = refreshedJwtAfterAuthFailure()
-                if (refreshed != null) {
-                    return try {
-                        ensureChatForGroupOnce(groupId)
-                    } catch (retry: Exception) {
-                        println(
-                            "Error ensuring chat for group $groupId after refresh: " +
-                                retry.redactedRestMessage(),
-                        )
-                        null
-                    }
-                }
-            }
-            println("Error ensuring chat for group $groupId: ${e.redactedRestMessage()}")
-            null
-        }
-    }
+    override suspend fun ensureChatForGroup(groupId: String) : Chat? = ensureChatForGroupImpl(groupId = groupId)
 
     override suspend fun sendMessageForConnection(
         connectionId: String,
@@ -456,53 +372,17 @@ class SupabaseChatRepository(
         return sendMessage(chat.id ?: return null, userId, content, messageType, metadata)
     }
 
-    // Mark messages as read via click-web (service role); direct PostgREST updates hit RLS on mobile.
     override suspend fun markMessagesAsRead(
         chatId: String,
         userId: String,
-    ) {
-        if (chatId.isBlank() || userId.isBlank()) return
-        try {
-            val jwt =
-                ensureFreshJwtForChat()
-                    ?: tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
-                    ?: return
-            apiClient.markChatAsRead(chatId, jwt).onFailure { e ->
-                // Do not fall back to the legacy Flask /api/chats/:id/mark_read host — it often
-                // times out on simulator LAN and is not the read-receipt SSOT anymore.
-                println("markChatAsRead failed: ${e.redactedRestMessage()}")
-            }
-        } catch (e: Exception) {
-            println("Error marking messages as read: ${e.redactedRestMessage()}")
-        }
-    }
+    ) = markMessagesAsReadImpl(chatId = chatId, userId = userId)
 
-    override suspend fun markChatAsUnread(chatId: String) {
-        if (chatId.isBlank()) return
-        try {
-            val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() } ?: return
-            apiClient.markChatAsUnread(chatId, jwt).onFailure { e ->
-                println("markChatAsUnread failed: ${e.redactedRestMessage()}")
-            }
-        } catch (e: Exception) {
-            println("Error marking chat as unread: ${e.redactedRestMessage()}")
-        }
-    }
+    override suspend fun markChatAsUnread(chatId: String) = markChatAsUnreadImpl(chatId = chatId)
 
     override suspend fun markMessagesDelivered(
         chatId: String,
         messageIds: List<String>,
-    ) {
-        if (chatId.isBlank() || messageIds.isEmpty()) return
-        try {
-            val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() } ?: return
-            apiClient.markMessagesDelivered(chatId, messageIds, jwt).onFailure { e ->
-                println("markMessagesDelivered failed: ${e.redactedRestMessage()}")
-            }
-        } catch (e: Exception) {
-            println("Error marking messages delivered: ${e.redactedRestMessage()}")
-        }
-    }
+    ) = markMessagesDeliveredImpl(chatId = chatId, messageIds = messageIds)
 
     override suspend fun subscribeToMessages(
         chatId: String,

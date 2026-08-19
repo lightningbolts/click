@@ -306,3 +306,50 @@ internal suspend fun ChatApiClient.fetchHubThreadImpl(
         println("Error fetching hub thread: ${e.redactedRestMessage()}")
         Result.failure(e)
     }
+
+/**
+ * GET /api/chat/search — plaintext message hits across 1:1, cliques, and hubs.
+ */
+internal suspend fun ChatApiClient.searchConversationsImpl(
+    query: String,
+    authToken: String,
+): Result<List<ChatApiClient.ConversationSearchHitDto>> =
+    try {
+        val q = query.trim()
+        if (q.length < 2) return Result.success(emptyList())
+
+        suspend fun getOnce(bearer: String): Pair<Int, Result<List<ChatApiClient.ConversationSearchHitDto>>> {
+            val response =
+                client.get("$clickWebBaseUrl/api/chat/search") {
+                    headers.append(HttpHeaders.Authorization, bearerAuthHeader(bearer))
+                    parameter("q", q)
+                    accept(ContentType.Application.Json)
+                }
+            val status = response.status.value
+            val result =
+                if (status in 200..299) {
+                    Result.success(response.body<ConversationSearchEnvelope>().hits)
+                } else {
+                    Result.failure(Exception("HTTP $status for chat search"))
+                }
+            return status to result
+        }
+        val initial =
+            resolveClickWebAccessToken(tokenStorage)
+                ?: authToken.trim().takeIf { it.isNotEmpty() }
+        if (initial.isNullOrBlank()) {
+            return Result.failure(Exception("HTTP 401 for chat search"))
+        }
+        val (status, first) = getOnce(initial)
+        if (status == 401 || status == 403) {
+            AuthRepository(tokenStorage).refreshSession(forceRefresh = true)
+            val retry = resolveClickWebAccessToken(tokenStorage, forceRefresh = true)
+            if (!retry.isNullOrBlank()) {
+                return getOnce(retry).second
+            }
+        }
+        first
+    } catch (e: Exception) {
+        println("Error searching conversations: ${e.redactedRestMessage()}")
+        Result.failure(e)
+    }

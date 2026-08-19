@@ -12,6 +12,8 @@ import kotlinx.datetime.Clock
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.async
 
 internal suspend fun SupabaseChatRepository.ensureChatForConnectionOnce(connectionId: String): Chat? {
     val existing =
@@ -349,5 +351,99 @@ internal suspend fun SupabaseChatRepository.sendMessageImpl(
         println("Error sending message: ${e.redactedRestMessage()}")
         // Propagate so ChatViewModel can surface the gatekeeper/API error body.
         throw e
+    }
+}
+
+internal suspend fun SupabaseChatRepository.seedInboxChatRoutingImpl(chats: List<ChatWithDetails>) {
+    for (chat in chats) {
+        val chatId = chat.chat.id?.takeIf { it.isNotBlank() } ?: continue
+        val groupId = chat.groupClique?.groupId
+        if (groupId != null) {
+            ChatSessionCaches.seedGroupRouting(chatId, groupId)
+        } else {
+            ChatSessionCaches.seedConnectionRouting(chatId, chat.connection.id)
+        }
+    }
+}
+
+// Fetch all chats for a user with details via API
+internal suspend fun SupabaseChatRepository.fetchUserChatsWithDetailsImpl(userId: String): List<ChatWithDetails> =
+    try {
+        coroutineScope {
+            val direct = async { fetchDirectUserChatsWithDetails(userId) }
+            val groups =
+                async {
+                    runCatching { fetchGroupUserChatsWithDetails(userId) }
+                        .onFailure { e ->
+                            println("Error fetching group chats: ${e.redactedRestMessage()}")
+                        }.getOrElse { emptyList() }
+                }
+            (direct.await() + groups.await()).sortedByDescending { d ->
+                d.lastMessage?.timeCreated
+                    ?: d.connection.last_message_at
+                    ?: d.connection.created
+            }
+        }
+    } catch (e: Exception) {
+        println("Error fetching user chats: ${e.redactedRestMessage()}")
+        emptyList()
+    }
+
+internal suspend fun SupabaseChatRepository.fetchDirectUserChatsWithDetailsImpl(userId: String): List<ChatWithDetails> =
+    try {
+        val (connections, archivedIds, hiddenIds) = getOrFetchJunctionData(userId)
+        val activeRows = connections.filter { it.isActiveForUser(archivedIds, hiddenIds) }
+        buildChatsWithDetailsForConnections(userId, activeRows)
+    } catch (e: Exception) {
+        println("Error fetching direct chats: ${e.redactedRestMessage()}")
+        emptyList()
+    }
+
+internal suspend fun SupabaseChatRepository.ensureChatForConnectionImpl(connectionId: String): Chat? {
+    return try {
+        // Best-effort session prep — never hard-block with "no fresh JWT".
+        runCatching { ensureFreshJwtForChat() }
+        ensureChatForConnectionOnce(connectionId)
+    } catch (e: Exception) {
+        if (e.isAuthFailure()) {
+            val refreshed = refreshedJwtAfterAuthFailure()
+            if (refreshed != null) {
+                return try {
+                    ensureChatForConnectionOnce(connectionId)
+                } catch (retry: Exception) {
+                    println(
+                        "Error ensuring chat for connection $connectionId after refresh: " +
+                            retry.redactedRestMessage(),
+                    )
+                    null
+                }
+            }
+        }
+        println("Error ensuring chat for connection $connectionId: ${e.redactedRestMessage()}")
+        null
+    }
+}
+
+internal suspend fun SupabaseChatRepository.ensureChatForGroupImpl(groupId: String): Chat? {
+    return try {
+        runCatching { ensureFreshJwtForChat() }
+        ensureChatForGroupOnce(groupId)
+    } catch (e: Exception) {
+        if (e.isAuthFailure()) {
+            val refreshed = refreshedJwtAfterAuthFailure()
+            if (refreshed != null) {
+                return try {
+                    ensureChatForGroupOnce(groupId)
+                } catch (retry: Exception) {
+                    println(
+                        "Error ensuring chat for group $groupId after refresh: " +
+                            retry.redactedRestMessage(),
+                    )
+                    null
+                }
+            }
+        }
+        println("Error ensuring chat for group $groupId: ${e.redactedRestMessage()}")
+        null
     }
 }
