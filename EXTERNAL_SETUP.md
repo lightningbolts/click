@@ -1,8 +1,6 @@
 # External Setup
 
-This repo now contains the app-side wiring for push notifications, the Supabase delivery path, the LiveKit token endpoint, and a real Android LiveKit client. The remaining work is service configuration outside the repo.
-
-The iOS call  path still requires one manual Xcode package step because the LiveKit Swift SDK is not vendored into this repository. Everything else is ready for configuration.
+This repo contains the app-side wiring for push notifications and the Supabase delivery path. The remaining work is service configuration outside the repo.
 
 ## 1. Supabase Database
 
@@ -177,123 +175,7 @@ Then inspect:
 1. Supabase function logs
 2. The target device notification tray
 
-## 6. LiveKit Cloud Or Self-Hosted
-
-### Create the project
-
-If using LiveKit Cloud:
-
-1. Create a LiveKit Cloud project.
-2. Copy these values:
-    - WebSocket URL
-    - API key
-    - API secret
-
-If self-hosting, you need the same three concepts:
-
-1. `LIVEKIT_WS_URL`
-2. `LIVEKIT_API_KEY`
-3. `LIVEKIT_API_SECRET`
-
-## 7. Next.js Token Endpoint
-
-From `click-web`, install dependencies:
-
-```bash
-npm install
-```
-
-Create `click-web/.env.local` with:
-
-```bash
-LIVEKIT_API_KEY=your_livekit_api_key
-LIVEKIT_API_SECRET=your_livekit_api_secret
-LIVEKIT_WS_URL=wss://your-project.livekit.cloud
-NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
-```
-
-Run the app:
-
-```bash
-cd click-web
-npm run dev
-```
-
-Validation:
-
-1. Authenticate in the web app or call the route with a valid Supabase bearer token.
-2. Test the route (body fields are snake_case; `room_name` must match `click-{connection_id}-…` or `click-group-{group_id}-…`):
-
-```bash
-curl -i http://localhost:3000/api/livekit/token \
-   -X POST \
-   -H "Authorization: Bearer SUPABASE_JWT" \
-   -H "Content-Type: application/json" \
-   -d '{
-      "connection_id": "CONNECTION_UUID",
-      "room_name": "click-CONNECTION_UUID-probe",
-      "participant_name": "alice"
-   }'
-```
-
-Expected result: JSON with `token` and `ws_url`.
-
-Unauthenticated probes return **401** and do **not** prove LiveKit env is set (auth runs before the env check). To distinguish config vs client faults against production:
-
-```bash
-curl -i -X POST https://joinclick.co/api/livekit/token \
-  -H "Authorization: Bearer <SUPABASE_ACCESS_TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{"connection_id":"<id>","room_name":"click-<id>-x","participant_name":"probe"}'
-```
-
-- `401 Unauthorized` — token missing/expired; try again with a real session.
-- `500 {"error":"LiveKit environment is not configured"}` — set `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, and `LIVEKIT_WS_URL` (or `LIVEKIT_URL`) on the **Cloudflare Worker** `click-web` (not GitHub Actions). Confirm presence via `GET /api/health/env`. Deploy with `--keep-vars`. No client code change.
-- `200` + JWT — server mint works; remaining call failures are client connect/publish (Android `CallManager`, iOS `ClickLiveKitBridge`, web `DashboardView` Room).
-
-## 8. Android Voice And Video Calls
-
-The Android app now includes a real LiveKit room client.
-
-What you still need to do:
-
-1. Sync Gradle so the new `livekit-android` dependency downloads.
-2. Build and install the Android app.
-3. Open a chat.
-4. Tap the phone or camera icon.
-5. Confirm:
-    - the token request succeeds
-    - the call overlay opens
-    - microphone toggle works
-    - camera toggle works
-    - local preview appears when camera is on
-    - remote video appears once the other participant joins with video
-
-## 9. iOS Voice And Video Calls
-
-The repo is prepared for iOS call permissions and call UI state, but native media transport still requires the LiveKit Swift SDK to be added in Xcode.
-
-This is the remaining manual step:
-
-1. Open `click/iosApp/iosApp.xcodeproj` in Xcode.
-2. Select `File > Add Package Dependencies...`
-3. Add:
-
-```text
-https://github.com/livekit/client-sdk-swift
-```
-
-4. Link the package to the `iosApp` target.
-5. Build the app again.
-
-Reason this is still manual:
-
-1. The iOS project uses Xcode-managed Swift packages.
-2. The package is not vendored in this repo.
-3. Kotlin shared code cannot complete that Xcode package installation step on its own.
-
-## 10. End-To-End Checklist
+## 6. End-To-End Checklist
 
 1. Run the push-token SQL.
 2. Enable `pg_net`.
@@ -301,13 +183,10 @@ Reason this is still manual:
 4. Set all Supabase secrets.
 5. Add Firebase Android config and service-account JSON.
 6. Add Apple APNs key and capabilities.
-7. Set `click-web/.env.local` for LiveKit and Supabase.
+7. Set `click-web/.env.local` for Supabase.
 8. Run `npm install` in `click-web`.
 9. Sync Gradle in `click`.
-10. Add the LiveKit Swift package in Xcode.
-11. Verify Android push token upload.
-12. Verify iOS push token upload.
-13. Send a message and confirm push delivery.
-14. Start an Android voice call.
-15. Start an Android video call.
-16. Validate iOS call flow after the Xcode package step.
+10. Verify Android push token upload.
+11. Verify iOS push token upload.
+12. Send a message and confirm push delivery.
+

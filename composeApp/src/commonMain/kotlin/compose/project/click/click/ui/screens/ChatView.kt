@@ -61,7 +61,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
-import compose.project.click.click.calls.CallSessionManager // pragma: allowlist secret
 import compose.project.click.click.collaboration.CollaborationSessionManager // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
@@ -117,8 +116,6 @@ import compose.project.click.click.ui.chat.scrollChatTimelineToLatest // pragma:
 import compose.project.click.click.ui.chat.scrollChatTimelineToMessage // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
 import compose.project.click.click.ui.components.BindPlatformNativeNavigationBar // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickDropdownMenu // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickMenuItem // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.CoreConnectionAvatarFrame // pragma: allowlist secret
@@ -129,7 +126,6 @@ import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlis
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
 import compose.project.click.click.ui.components.NativeChromeAction // pragma: allowlist secret
 import compose.project.click.click.ui.components.NativeChromeIdentity // pragma: allowlist secret
-import compose.project.click.click.ui.components.NativeChromeMenuItem // pragma: allowlist secret
 import compose.project.click.click.ui.components.TetherCompassToast // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
@@ -279,7 +275,6 @@ fun ChatView(
     val tetherPayload by EncounterTetherManager.activeTetherPayload.collectAsState()
     var tetherToastMessage by remember { mutableStateOf<String?>(null) }
     var tetherSenderAck by remember { mutableStateOf<String?>(null) }
-    var showCallMenu by remember { mutableStateOf(false) }
     val nativeNavChrome = LocalPlatformStyle.current.isIOS
     val hintedChatRow =
         (chatListState as? ChatListState.Success)
@@ -424,26 +419,6 @@ fun ChatView(
                             ),
                         )
                     }
-                    add(
-                        NativeChromeAction(
-                            sfSymbol = "phone.fill",
-                            contentDescription = "Call options",
-                            onClick = {},
-                            menuItems =
-                                listOf(
-                                    NativeChromeMenuItem(
-                                        title = if (bindIsGroup) "Group voice call" else "Voice call",
-                                        sfSymbol = "phone.fill",
-                                        onClick = { successChat?.let { startOutgoingChatCall(it, videoEnabled = false) } },
-                                    ),
-                                    NativeChromeMenuItem(
-                                        title = if (bindIsGroup) "Group video call" else "Video call",
-                                        sfSymbol = "video.fill",
-                                        onClick = { successChat?.let { startOutgoingChatCall(it, videoEnabled = true) } },
-                                    ),
-                                ),
-                        ),
-                    )
                     add(
                         NativeChromeAction(
                             sfSymbol = "ellipsis.circle",
@@ -831,55 +806,6 @@ fun ChatView(
                             .weight(1f)
                             .fillMaxWidth()
 
-                    val groupCallMemberIds =
-                        remember(chatDetails.groupClique) {
-                            chatDetails.groupClique?.memberUserIds.orEmpty()
-                        }
-                    val startVoiceCall = {
-                        showCallMenu = false
-                        if (isGroupChat) {
-                            val groupId = chatDetails.groupClique?.groupId
-                            val threadId = chatDetails.chat.id
-                            if (!groupId.isNullOrBlank() && !threadId.isNullOrBlank()) {
-                                CallSessionManager.startOutgoingGroupCall(
-                                    groupId = groupId,
-                                    chatId = threadId,
-                                    memberIds = groupCallMemberIds,
-                                    videoEnabled = false,
-                                )
-                            }
-                        } else {
-                            CallSessionManager.startOutgoingCall(
-                                connectionId = chatDetails.connection.id,
-                                otherUserId = chatDetails.otherUser.id,
-                                otherUserName = chatDetails.otherUser.name ?: "Connection",
-                                videoEnabled = false,
-                            )
-                        }
-                    }
-                    val startVideoCall = {
-                        showCallMenu = false
-                        if (isGroupChat) {
-                            val groupId = chatDetails.groupClique?.groupId
-                            val threadId = chatDetails.chat.id
-                            if (!groupId.isNullOrBlank() && !threadId.isNullOrBlank()) {
-                                CallSessionManager.startOutgoingGroupCall(
-                                    groupId = groupId,
-                                    chatId = threadId,
-                                    memberIds = groupCallMemberIds,
-                                    videoEnabled = true,
-                                )
-                            }
-                        } else {
-                            CallSessionManager.startOutgoingCall(
-                                connectionId = chatDetails.connection.id,
-                                otherUserId = chatDetails.otherUser.id,
-                                otherUserName = chatDetails.otherUser.name ?: "Connection",
-                                videoEnabled = true,
-                            )
-                        }
-                    }
-
                     Box(
                         modifier = Modifier.fillMaxSize(),
                     ) {
@@ -1083,37 +1009,6 @@ fun ChatView(
                                             )
                                         }
 
-                                        Box {
-                                            ChatHeaderIconButton(
-                                                icon = Icons.Filled.Call,
-                                                contentDescription = "Call options",
-                                                onClick = { showCallMenu = true },
-                                                tint = PrimaryBlue.copy(alpha = 0.85f),
-                                            )
-                                            ClickDropdownMenu(
-                                                expanded = showCallMenu,
-                                                onDismissRequest = { showCallMenu = false },
-                                                items =
-                                                    listOf(
-                                                        ClickMenuItem(
-                                                            label = if (isGroupChat) "Group voice call" else "Voice call",
-                                                            onClick = {
-                                                                PlatformHapticsPolicy.lightImpact()
-                                                                startVoiceCall()
-                                                            },
-                                                            icon = Icons.Filled.Call,
-                                                        ),
-                                                        ClickMenuItem(
-                                                            label = if (isGroupChat) "Group video call" else "Video call",
-                                                            onClick = {
-                                                                PlatformHapticsPolicy.lightImpact()
-                                                                startVideoCall()
-                                                            },
-                                                            icon = Icons.Filled.Videocam,
-                                                        ),
-                                                    ),
-                                            )
-                                        }
                                         // Overflow / connection options
                                         ChatHeaderIconButton(
                                             icon = Icons.Filled.MoreVert,
@@ -1800,30 +1695,4 @@ fun ChatView(
             },
         )
     } // End outer Box
-}
-
-private fun startOutgoingChatCall(
-    details: ChatMessagesState.Success,
-    videoEnabled: Boolean,
-) {
-    val clique = details.chatDetails.groupClique
-    if (clique != null) {
-        val groupId = clique.groupId
-        val threadId = details.chatDetails.chat.id
-        if (!groupId.isNullOrBlank() && !threadId.isNullOrBlank()) {
-            CallSessionManager.startOutgoingGroupCall(
-                groupId = groupId,
-                chatId = threadId,
-                memberIds = clique.memberUserIds,
-                videoEnabled = videoEnabled,
-            )
-        }
-        return
-    }
-    CallSessionManager.startOutgoingCall(
-        connectionId = details.chatDetails.connection.id,
-        otherUserId = details.chatDetails.otherUser.id,
-        otherUserName = details.chatDetails.otherUser.name ?: "Connection",
-        videoEnabled = videoEnabled,
-    )
 }

@@ -4,13 +4,13 @@
 > Click is built as a **people-first social utility**: fewer infinite feeds, more real-world presence. We optimize for intentional connection—not passive consumption—so moments in the room matter more than minutes on the timeline.
 
 **Click — The seamless offline-to-online connection app.**  
-This repository is the **Kotlin Multiplatform** mobile client: **Compose Multiplatform** UI with **Android** and **iOS** targets. Backend pieces (Postgres, Edge Functions, companion HTTP APIs) live in sibling services; the app integrates via **Supabase** and a configurable **web base URL** for QR and LiveKit token calls.
+This repository is the **Kotlin Multiplatform** mobile client: **Compose Multiplatform** UI with **Android** and **iOS** targets. Backend pieces (Postgres, Edge Functions, companion HTTP APIs) live in sibling services; the app integrates via **Supabase** and a configurable **web base URL** for QR and chat APIs.
 
 ---
 
 ## Core concept
 
-Click is a **digital handshake**: it turns brief, in-person encounters into lasting connections using a **multi-modal proximity mesh**—not a single hardware sandbox. Phones agree they shared the same physical context through corroborating signals, then open a lightweight path to chat, calls, and memory—without treating the OS as the source of truth for “who was really there.”
+Click is a **digital handshake**: it turns brief, in-person encounters into lasting connections using a **multi-modal proximity mesh**—not a single hardware sandbox. Phones agree they shared the same physical context through corroborating signals, then open a lightweight path to chat and memory—without treating the OS as the source of truth for “who was really there.”
 
 ### The Tri-Factor Handshake
 
@@ -43,13 +43,13 @@ There is **no “hard lock”** or forced expiry that deletes relationships by t
 
 | Location | Purpose |
 |----------|---------|
-| [`composeApp/src/commonMain/kotlin/`](./composeApp/src/commonMain/kotlin/) | Shared UI (Compose), ViewModels, repositories, Supabase client, call coordination, chat, connections, maps, most business logic |
-| [`composeApp/src/androidMain/kotlin/`](./composeApp/src/androidMain/kotlin/) | Android `actual` implementations: FCM service, LiveKit Android SDK, `TokenStorage`, crypto, location, incoming-call UI bridge |
+| [`composeApp/src/commonMain/kotlin/`](./composeApp/src/commonMain/kotlin/) | Shared UI (Compose), ViewModels, repositories, Supabase client, chat, connections, maps, most business logic |
+| [`composeApp/src/androidMain/kotlin/`](./composeApp/src/androidMain/kotlin/) | Android `actual` implementations: FCM service, `TokenStorage`, crypto, location |
 | [`composeApp/src/iosMain/kotlin/`](./composeApp/src/iosMain/kotlin/) | iOS `actual` implementations: `TokenStorage`, push helpers, permission requesters, stubs/bridges to Swift where needed |
-| [`iosApp/iosApp/`](./iosApp/iosApp/) | Xcode app: **Swift** for PushKit, CallKit, UserNotifications, **ClickLiveKitBridge** (LiveKit Swift SDK), app lifecycle and Kotlin entry |
-| [`composeApp/build.gradle.kts`](./composeApp/build.gradle.kts) | Multiplatform targets, dependencies (e.g. Supabase KMP, Ktor, `livekit-android`) |
+| [`iosApp/iosApp/`](./iosApp/iosApp/) | Xcode app: **Swift** for UserNotifications, Google Sign-In, app lifecycle and Kotlin entry |
+| [`composeApp/build.gradle.kts`](./composeApp/build.gradle.kts) | Multiplatform targets, dependencies (e.g. Supabase KMP, Ktor) |
 
-**Guideline:** add new features in **`commonMain`** first; use **`expect`/`actual`** (or small platform facades) only when you must touch **BLE / audio / GPS pipelines, CallKit, PushKit, Keychain, EncryptedSharedPreferences, platform location, or platform LiveKit**.
+**Guideline:** add new features in **`commonMain`** first; use **`expect`/`actual`** (or small platform facades) only when you must touch **BLE / audio / GPS pipelines, Keychain, EncryptedSharedPreferences, or platform location**.
 
 ---
 
@@ -57,9 +57,7 @@ There is **no “hard lock”** or forced expiry that deletes relationships by t
 
 - **Tri-Factor proximity mesh + QR** — In-person discovery and connection via **BLE + ultrasonic + progressive GPS**; **QR** remains a fallback path that uses HTTP against the configured web base URL (see `QRModels.kt` / `QrCodeView.kt`). Connection metadata can record `connectionMethod` (e.g. `"qr"`, `"tri_factor"`).  
 - **Multi-Tap verified cliques** — Simultaneous 3+ person handshakes validated server-side; E2EE group chat on success.  
-- **Real-time chat** — Supabase **Realtime** channels, `SupabaseChatRepository` / `ChatViewModel`, typing and presence-oriented state, push hooks for background delivery (Edge Function + FCM/APNs).  
-- **Voice & video calls (LiveKit)** — `CallSessionManager`, `CallCoordinator`, `CallApiClient` fetch a JWT and `wsUrl` from `{CLICK_WEB_BASE_URL}/api/livekit/token`. **Android:** `livekit-android` in `CallManager.android.kt`. **iOS:** native room in **Swift** (`ClickLiveKitBridge.swift`) with Compose driving state from shared Kotlin.  
-- **Presence** — Realtime subscriptions in home/chat/map-related ViewModels for online status and activity signals.  
+- **Real-time chat** — Supabase **Realtime** channels, `SupabaseChatRepository` / `ChatViewModel`, typing and presence-oriented state, push hooks for background delivery (Edge Function + FCM/APNs). - **Presence** — Realtime subscriptions in home/chat/map-related ViewModels for online status and activity signals.  
 - **Maps** — Map screens and Realtime channels (e.g. connection discovery) backed by Supabase-backed repositories.  
 - **Memory Capsules (opt-in)** — `rememberAmbientNoiseMonitor`, `rememberBarometricHeightMonitor`, and subjective tagging flows when the user opts in (settings + connection sheets).  
 - **Prior Connections** — Optional, skippable onboarding step. Contacts are hashed on-device (SHA-256 of E.164 / email) and matched via `POST /api/contacts/discover`. Self-reported edges use `source=prior` and never mint `connection_encounters` or handshake vanity metrics.
@@ -70,10 +68,9 @@ There is **no “hard lock”** or forced expiry that deletes relationships by t
 
 - **Kotlin Multiplatform** + **Compose Multiplatform**  
 - **Android:** Gradle, Jetpack lifecycle/viewmodel where used, **FCM** (`google-services.json` in `composeApp/`)  
-- **iOS:** Xcode project, **PushKit** (VoIP), **CallKit**, **APNs** (via backend—not Firebase for VoIP)  
+- **iOS:** Xcode project, **APNs** (via backend)  
 - **Supabase KMP:** Auth (with `SettingsSessionManager` + app `TokenStorage` sync in `SupabaseConfig`), Postgrest, Realtime  
-- **Ktor** client for companion HTTP APIs (QR, waitlist, LiveKit token)  
-- **LiveKit:** `io.livekit:livekit-android` (see `build.gradle.kts`); iOS via Swift Package in Xcode  
+- **Ktor** client for companion HTTP APIs (QR, waitlist)  
 
 ---
 
@@ -88,17 +85,17 @@ Edit [`composeApp/src/commonMain/kotlin/compose/project/click/click/data/Supabas
 
 `SupabaseConfig.startSessionSync(tokenStorage)` keeps the SDK session aligned with **`TokenStorage`** (Keychain / encrypted prefs). Cold boot imports TokenStorage when the SDK session is **empty or expired**. Access-token wall-clock headroom is not enough to skip GoTrue refresh: TestFlight updates and dual-store drift otherwise keep a JWT that click-web rejects as `401 Unauthorized` until the user signs out. Boot, 45-minute ticker, foreground resume, and HTTP 401/403 retries call `refreshSession(forceRefresh = true)` (which always hits `/token` unless another refresh is already in-flight), then drop/reconnect the Realtime socket so hub subscribe and sends use the new bearer. `connect()` is a no-op on an open socket — `rebindRealtimeSocket()` disconnects first.
 
-### Web base URL (QR, LiveKit token, waitlist)
+### Web base URL (QR, waitlist)
 
-[`composeApp/src/commonMain/kotlin/QRModels.kt`](./composeApp/src/commonMain/kotlin/QRModels.kt) defines **`CLICK_WEB_BASE_URL`**. Point it at your deployed or local companion app that exposes `/api/qr`, `/api/livekit/token`, etc. (typically the **click-web** project next to this repo).
+[`composeApp/src/commonMain/kotlin/QRModels.kt`](./composeApp/src/commonMain/kotlin/QRModels.kt) defines **`CLICK_WEB_BASE_URL`**. Point it at your deployed or local companion app that exposes `/api/qr`, etc. (typically the **click-web** project next to this repo).
 
 ### Android push (FCM)
 
-Place **`google-services.json`** in [`composeApp/`](./composeApp/) (package `compose.project.click.click`). The Supabase Edge Function uses a Firebase **service account** for server-side FCM—not a substitute for iOS VoIP pushes.
+Place **`google-services.json`** in [`composeApp/`](./composeApp/) (package `compose.project.click.click`). The Supabase Edge Function uses a Firebase **service account** for server-side FCM.
 
 ### iOS capabilities
 
-Enable Push Notifications, Background Modes (**Voice over IP**), and associated entitlements. VoIP token is cached in **UserDefaults** (`cached_voip_token`) before syncing to Kotlin; see `iosApp/iosApp/ClickVoipPushManager.swift` and `iOSApp.swift`.
+Enable Push Notifications, Background Modes (**Remote notifications**), and associated entitlements.
 
 ---
 
@@ -119,7 +116,7 @@ Create `local.properties` at the repo root with `sdk.dir` and `MAPS_API_KEY` (se
 ### iOS
 
 1. Open [`iosApp/iosApp.xcodeproj`](./iosApp/iosApp.xcodeproj) in Xcode.  
-2. Resolve Swift packages (**LiveKit** and transitive deps).  
+2. Resolve Swift packages (**GoogleSignIn**).  
 3. Select the **iosApp** scheme, set signing team, build and run.
 
 Xcode’s **Compile Kotlin Framework** phase runs `./gradlew :composeApp:embedAndSignAppleFrameworkForXcode`. That Gradle configure step needs `MAPS_API_KEY` via `local.properties` or the checked-in `local.defaults.properties` fallback (Xcode Cloud writes `local.properties` in [`iosApp/ci_scripts/ci_pre_xcodebuild.sh`](./iosApp/ci_scripts/ci_pre_xcodebuild.sh)).
@@ -154,7 +151,7 @@ Package id is `compose.project.click.click` on Android and iOS. Grant runtime pe
 
 ### Database and server-side setup
 
-SQL migrations and ordering: [`database/`](./database/). Full operator checklist (Edge Function secrets, APNs, FCM, LiveKit env): **[`EXTERNAL_SETUP.md`](./EXTERNAL_SETUP.md)**.
+SQL migrations and ordering: [`database/`](./database/). Full operator checklist (Edge Function secrets, APNs, FCM): **[`EXTERNAL_SETUP.md`](./EXTERNAL_SETUP.md)**.
 
 Optional: [`quick_start_chat.sh`](./quick_start_chat.sh) for guided prompts around Supabase config.
 
@@ -179,15 +176,14 @@ See [`docs/archive/PERFORMANCE.md`](docs/archive/PERFORMANCE.md) (archived July 
 | Auth & session | `data/SupabaseConfig.kt`, `viewmodel/AuthViewModel.kt`, `data/repository/AuthRepository.kt` |
 | Chat | `viewmodel/ChatViewModel.kt`, `data/repository/SupabaseChatRepository.kt` |
 | Connections / proximity / QR | `viewmodel/ConnectionViewModel.kt`, `ui/screens/ConnectionsScreen.kt`, `ui/components/QrCodeView.kt` |
-| Calls | `calls/CallSessionManager.kt`, `calls/CallCoordinator.kt`, `calls/CallApiClient.kt` |
 | Maps | `viewmodel/MapViewModel.kt` |
-| Push (Kotlin side) | `notifications/ChatPushNotifier.kt`, `notifications/CallPushNotifier.kt`, `data/repository/PushTokenRepository.kt` |
+| Push (Kotlin side) | `notifications/ChatPushNotifier.kt`, `data/repository/PushTokenRepository.kt` |
 
 ---
 
 ## Monorepo note (click-web companion)
 
-If your checkout includes **`click-web`** beside **`click/`**, run the Next.js app locally when developing QR, LiveKit token, waitlist, or widget-vibe flows:
+If your checkout includes **`click-web`** beside **`click/`**, run the Next.js app locally when developing QR, waitlist, or widget-vibe flows:
 
 ```bash
 # Terminal 1 — click-web
@@ -205,7 +201,6 @@ The KMP app does **not** embed click-web—it calls it over HTTP with the user's
 | Flow | Mobile entry | Web route |
 |------|--------------|-----------|
 | QR token issue / redeem | `ApiClient`, `QrCodeView` | `GET/POST /api/qr` |
-| LiveKit room token | `CallApiClient` | `GET /api/livekit/token` |
 | Waitlist | Marketing links | `POST /api/waitlist` |
 | Home widget vibe | `ApiClient.getWidgetVibe()` | `GET /api/insights/widget-vibe` |
 | Home activity recap | `ApiClient.getActivityRecap()` | `GET /api/me/recap?window=day\|week` |

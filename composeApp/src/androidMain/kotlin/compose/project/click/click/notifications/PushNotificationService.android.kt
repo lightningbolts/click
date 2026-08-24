@@ -26,8 +26,7 @@ private const val KEY_PUSH_USER_ID = "push_user_id"
 
 // Per-tokenType pending slots (R0.6 — Android now matches iOS semantics).
 // We intentionally do NOT use a single shared slot because FCM (standard)
-// and any secondary channel (e.g. voip) can both arrive before login and
-// must both be preserved.
+// can arrive before login and must be preserved.
 private const val PENDING_TOKEN_TYPES_KEY = "pending_push_token_types"
 private fun pendingTokenKey(type: String) = "pending_push_token_$type"
 private fun pendingPlatformKey(type: String) = "pending_push_platform_$type"

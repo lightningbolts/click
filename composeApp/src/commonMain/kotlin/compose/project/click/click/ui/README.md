@@ -106,7 +106,7 @@ Material host.
 Hosts the connection list (`ConnectionsListView`), inline chat push (`ChatView` with iOS swipe-back parallax), member picker sheets for verified cliques, profile bottom sheets, and deep-link `initialChatId` routing.
 
 **Chat (`ChatView` + `chat/*`)**  
-End-to-end encrypted thread UI: text composer, photo/file/voice pickers, emoji reactions, typing indicators, read receipts, voice/video call entry points, vibe check banner, icebreaker prompts, archive warning banner, and collaboration-session disposable-roll entry.
+End-to-end encrypted thread UI: text composer, photo/file/voice pickers, emoji reactions, typing indicators, read receipts, vibe check banner, icebreaker prompts, archive warning banner, and collaboration-session disposable-roll entry.
 
 **Map (`MapScreen` + `MapView`)**  
 Discovery map with beacon pins, community hub overlays, ghost-mode grayscale styling, tether compass toast, beacon drop sheets, and `MapDiscoveryLayout` for feed/map split.
@@ -175,7 +175,6 @@ Venue-scoped ephemeral chat for Community Hubs. Native header clearance grows fo
 | `viewmodel/ConnectionViewModel.kt` | Proximity handshake, QR, cliques |
 | `viewmodel/GlobalSearchViewModel.kt` | Search indexing |
 | `data/AppDataManager.kt` | App-wide SSOT flows |
-| `calls/CallSessionManager.kt` | In-call UI state |
 | `collaboration/CollaborationSessionManager.kt` | Disposable roll windows |
 | `deeplink/ConnectionDeepLinkRouter.kt` | Deep link parsing |
 
@@ -205,9 +204,6 @@ When 3+ people handshake together, `ConnectionMemberPickerSheet` / `GroupMembers
 
 ### Typing & read receipts
 `ChatDeliveryReceipt` and realtime-driven typing state in `ChatView` / `ChatMessageTimeline`.
-
-### Voice & video calls
-Call entry from chat chrome and connection sheets; in-call UI bridges to `CallSessionManager` (platform LiveKit in `calls/` and `iosApp`).
 
 ### Memory Capsules
 `MemoriesListSection`, `ConnectionContextSheet`, and sensor opt-in toggles in Settings capture **barometric height + ambient noise + subjective tags** when the user opts in.

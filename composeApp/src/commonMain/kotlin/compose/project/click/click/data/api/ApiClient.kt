@@ -29,7 +29,6 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
-import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -248,21 +247,6 @@ private data class SignAttachmentPostBody(
 @Serializable
 private data class SignAttachmentResponse(
     val url: String,
-)
-
-/** POST `/api/livekit/token` — matches [click-web/app/api/livekit/token/route.ts]. */
-@Serializable
-data class LiveKitTokenPostBody(
-    @SerialName("connection_id") val connectionId: String,
-    @SerialName("room_name") val roomName: String,
-    @SerialName("participant_name") val participantName: String,
-    @SerialName("group_id") val groupId: String? = null,
-)
-
-@Serializable
-data class LiveKitTokenResponse(
-    val token: String,
-    @SerialName("ws_url") val wsUrl: String,
 )
 
 /** POST `/api/user/push-tokens` — matches [click-web/app/api/user/push-tokens/route.ts]. */
@@ -1037,49 +1021,7 @@ class ApiClient {
         } catch (e: Exception) {
             Result.failure(e)
         }
-    }
-
-    /**
-     * POST `/api/livekit/token` on click-web (JWT via Ktor Auth bearer).
-     * [roomName] must be `click-{connectionId}-…` as issued for the in-flight call invite.
-     */
-    suspend fun postLiveKitToken(body: LiveKitTokenPostBody): Result<LiveKitTokenResponse> {
-        repeat(3) { attempt ->
-            try {
-                val response =
-                    clickWebClient.post("$clickWebAuthOrigin/api/livekit/token") {
-                        contentType(ContentType.Application.Json)
-                        setBody(body)
-                    }
-                when {
-                    response.status.value in 200..299 -> {
-                        return Result.success(response.body<LiveKitTokenResponse>())
-                    }
-                    response.status.value in 500..599 -> {
-                        val detail = readClickWebErrorMessage(response)
-                        if (attempt == 2) {
-                            return Result.failure(
-                                Exception(
-                                    detail.ifBlank {
-                                        "Failed to create call token (${response.status.value})"
-                                    },
-                                ),
-                            )
-                        }
-                    }
-                    else -> {
-                        return Result.failure(Exception(readClickWebErrorMessage(response)))
-                    }
-                }
-            } catch (e: Exception) {
-                if (attempt == 2) {
-                    return Result.failure(e)
-                }
-            }
-            delay(350L * (attempt + 1))
         }
-        return Result.failure(Exception("Failed to create call token"))
-    }
 
     /** POST `/api/user/push-tokens` — upserts the device token for the signed-in user. */
     suspend fun postPushToken(body: PushTokenRegisterBody): Result<PushTokenRegisterResponse> =

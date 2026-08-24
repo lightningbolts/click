@@ -50,7 +50,7 @@ import platform.Security.kSecValueData
  */
 
 private const val PUSH_KEYCHAIN_SERVICE = "com.click.push"
-private val SUPPORTED_TOKEN_TYPES: List<String> = listOf("standard", "voip")
+private val SUPPORTED_TOKEN_TYPES: List<String> = listOf("standard")
 
 private fun legacyPendingPushTokenKey(tokenType: String): String =
     "pending_push_token_$tokenType"

@@ -22,7 +22,6 @@
 		<string>fetch</string>
 		<string>location</string>
 		<string>remote-notification</string>
-		<string>voip</string>
 		<string>nearby-interaction</string>
 		<string>bluetooth-central</string>
 		<string>processing</string>

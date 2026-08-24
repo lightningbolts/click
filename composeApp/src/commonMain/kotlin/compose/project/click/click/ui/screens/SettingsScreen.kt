@@ -40,7 +40,6 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Shield
@@ -536,13 +535,6 @@ fun SettingsScreen(
                                             title = "Message notifications",
                                             checked = notificationPreferences.messagePushEnabled,
                                             onCheckedChange = { AppDataManager.setMessageNotificationsEnabled(it) },
-                                        )
-                                        SettingsDivider()
-                                        SettingsToggleRow(
-                                            icon = Icons.Default.PhoneInTalk,
-                                            title = "Call alerts",
-                                            checked = notificationPreferences.callPushEnabled,
-                                            onCheckedChange = { AppDataManager.setCallNotificationsEnabled(it) },
                                         )
                                         SettingsDivider()
                                         SettingsToggleRow(
@@ -1297,7 +1289,7 @@ private fun SettingsHubNavCard(onOpen: (SettingsPage) -> Unit) {
             SettingsHubNavRow(
                 icon = Icons.Default.Notifications,
                 title = "Alerts",
-                subtitle = "Messages, calls, events, hubs",
+                subtitle = "Messages, events, hubs",
                 onClick = { onOpen(SettingsPage.Alerts) },
                 accentSlot = 5,
             )

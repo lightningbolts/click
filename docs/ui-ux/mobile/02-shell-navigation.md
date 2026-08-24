@@ -608,72 +608,9 @@ Map/Connections hub select → `hubChatArgs = HubChatNavArgs(...)` → overlay �
 
 ---
 
-## 11. Call Overlay Z-Index Stack
+## 11. Call overlays (removed)
 
-### 11.1 Layout / Container
-
-- Parent `Box` **`zIndex(11_000f)`** above disposable camera (10_500) and tether (70).
-- `CallPreviewOverlay`: top card max width 324 dp, surface `#08101F` 94%, corner 28 dp.
-- `ActiveCallOverlay`: max width 380 dp (94% fill), draggable on iOS.
-
-### 11.2 Interactive Elements
-
-**Preview**:
-
-- Outgoing/Connecting: red end-call cancel.
-- Incoming: decline (red) + accept (gradient).
-- Ended: check dismiss.
-
-**Active**:
-
-- Mute, speaker, camera toggles; red end call.
-- Video: remote full + local PiP 96×136 dp.
-
-### 11.3 States
-
-| Layer | Visible when |
-|-------|--------------|
-| **CallPreviewOverlay** | Outgoing, Incoming, Connecting, Ended (unless suppressed after active call) |
-| **ActiveCallOverlay** | Connected or Ended tail while not preview-only |
-
-Alpha animations: 420 ms `LinearOutSlowInEasing` on preview scale 0.96↔1 and active alpha.
-
-### 11.4 Micro-copy
-
-**CallPreviewOverlay labels**:
-
-- **"Starting video ring"** / **"Starting voice ring"**
-- **"Incoming video call"** / **"Incoming voice call"**
-- **"Joining video call"** / **"Joining voice call"**
-- Ended: `overlayState.reason`
-- Subtitle: **"Video call"** / **"Voice call"**
-- Default name: **"Connection"**
-
-**ActiveCallOverlay labels**:
-
-- **"Connecting video…"** / **"Connecting…"**
-- **"Video call"** / **"Voice call"** (connected)
-- Ended: `state.reason` or **"Call ended"**
-- **"Waiting for remote video…"**
-- **"Local preview"**
-- **"Connecting audio…"** / **"Voice call in progress"**
-
-**Content descriptions**: `"Cancel call"`, `"Decline call"`, `"Accept call"`, `"Dismiss"`, `"Mute"` / `"Unmute"`, speaker, camera, `"End call"`.
-
-### 11.5 Flow Sequence
-
-```
-CallSessionManager.overlayState / callState
-    → compute callPreviewVisible vs activeCallVisible
-    → animate alpha/scale
-    → preview OR active in z-index 11000 box
-Ended tail: suppressEndedPreviewAfterActiveCall coordinates dismiss
-```
-
-### 11.6 A11y & Responsive
-
-- Status bar top padding on cards.
-- Active call card draggable within horizontal/vertical bounds.
+Voice and video call overlays are no longer part of the mobile shell. Historical `call_log` chat rows may still appear in threads.
 
 ---
 
@@ -822,7 +759,7 @@ Connections/Map open roll → opening flag → camera visible → capture or dis
 
 ### 15.6 A11y & Responsive
 
-- Full-screen; above tabs, below calls (11_000).
+- Full-screen; above tabs.
 
 ---
 
@@ -853,7 +790,6 @@ Connections/Map open roll → opening flag → camera visible → capture or dis
 | 70 | Tether toast | No |
 | 80 | Unified popup | No |
 | 10_500 | Disposable camera | **Yes** |
-| 11_000 | Call overlays | No (bar may show under preview card) |
 
 ---
 

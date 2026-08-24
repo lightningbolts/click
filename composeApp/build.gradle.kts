@@ -101,7 +101,6 @@ kotlin {
             implementation(libs.androidx.activity.compose)
             implementation("androidx.core:core-ktx:1.17.0")
             implementation("jp.co.cyberagent.android:gpuimage:2.1.0")
-            implementation("io.livekit:livekit-android:2.20.3")
 
             // Ktor OkHttp engine (WebSocket-capable; required for Supabase Realtime)
             implementation("io.ktor:ktor-client-okhttp:3.0.1")

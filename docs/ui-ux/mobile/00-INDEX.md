@@ -2,7 +2,7 @@
 
 **Status:** durable  
 **Product:** Click — Anti-doomscrolling · Stop scrolling, start living.  
-**Scope:** Kotlin Multiplatform mobile app (`click/`) — Android + iOS Compose UI, App Clip handshake, CallKit/PushKit overlays.  
+**Scope:** Kotlin Multiplatform mobile app (`click/`) — Android + iOS Compose UI, App Clip handshake.  
 **Out of scope:** Web companion (`click-web/`), B2B Insights, Admin, business signup, backend/APIs/Edge Functions/RLS. Network and permission failures appear only as **user-visible** states.  
 **Source of truth:** Functional Clarity target-state Compose UI — opaque surfaces, 1dp quiet outline-variant borders, primary `#630ed4`, secondary `#224CFF`. Design tokens: [../../design-assets/functional_clarity/DESIGN.md](../../design-assets/functional_clarity/DESIGN.md).  
 **Date:** 2026-07-17  
@@ -11,7 +11,7 @@
 
 **Continuation status (archived — addressed / open / Track C):** [../../archive/handoff/functional-clarity-continuation.md](../../archive/handoff/functional-clarity-continuation.md).  
 **Next Track C revamp handoff (archived):** [../../archive/handoff/track-c-next-revamps.md](../../archive/handoff/track-c-next-revamps.md) — suggested next: **Events discovery** (`MapDiscoveryLayout` / `MapScreen`).
-**Interaction polish (post-theme):** [../polish/00-INDEX.md](../polish/00-INDEX.md) — motion, IME, swipe-back continuity (**P0: Home back-gesture flicker still open**), liquid-glass tab bar, chat/calls/connect delight, component reuse. **One-shot Fable plan** → Grok implementation.
+**Interaction polish (post-theme):** [../polish/00-INDEX.md](../polish/00-INDEX.md) — motion, IME, swipe-back continuity (**P0: Home back-gesture flicker still open**), liquid-glass tab bar, chat/connect delight, component reuse. **One-shot Fable plan** → Grok implementation.
 
 ---
 
@@ -42,7 +42,6 @@ Touch platforms have no Hover; **Pressed/Highlighted** stands in for Hover.
 | [06-connect-handshake.md](06-connect-handshake.md) | Add Click, QR, Tap/NFC, App Clip, context sheet, reveal |
 | [07-connections-inbox.md](07-connections-inbox.md) | Clicks inbox, segments, action sheets, verified click create |
 | [08-chat.md](08-chat.md) | 1:1 & group chat, composer, bubbles, icebreaker, vibe check |
-| [09-calls.md](09-calls.md) | Preview & active call overlays, CallKit handoff |
 | [10-map-beacons-hubs.md](10-map-beacons-hubs.md) | Discovery, map, beacons, hubs, hub chat |
 | [11-search.md](11-search.md) | Unified search sheet |
 | [12-profile-memories.md](12-profile-memories.md) | Profile sheets, timeline, media, memories list |
@@ -56,13 +55,13 @@ Touch platforms have no Hover; **Pressed/Highlighted** stands in for Hover.
 
 ## Product map (mobile)
 
-Click is a proximity-first social utility. Users form **in-person connections** via Tri-Factor handshake (BLE + ultrasonic + GPS), QR, or App Clip; then chat (E2EE), call, drop map beacons, join ephemeral venue hubs, and manage a 48-hour gentle archive.
+Click is a proximity-first social utility. Users form **in-person connections** via Tri-Factor handshake (BLE + ultrasonic + GPS), QR, or App Clip; then chat (E2EE), drop map beacons, join ephemeral venue hubs, and manage a 48-hour gentle archive.
 
 ### Primary user goals
 
 1. Sign in / complete onboarding  
 2. Connect in person (Tap, QR, App Clip)  
-3. Message / react / call  
+3. Message / react  
 4. Discover hubs & beacons on map  
 5. Set availability intents  
 6. Manage privacy (ghost mode, permissions)  

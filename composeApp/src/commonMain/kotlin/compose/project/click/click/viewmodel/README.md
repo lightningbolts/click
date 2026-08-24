@@ -12,7 +12,7 @@ The `viewmodel/` package hosts **AndroidX `ViewModel` classes** for each major a
 - Own **coroutine scope** (`viewModelScope`) for async work.
 - Read and write through **`AppDataManager`** (app-wide SSOT) and **repositories** (`ConnectionRepository`, `ChatRepository`, `SupabaseRepository`, etc.).
 - Subscribe to **Supabase Realtime** channels where needed (chat messages, typing, connection updates).
-- Bridge **platform services** (location, proximity, calls, push) without importing UI composables.
+- Bridge **platform services** (location, proximity, push) without importing UI composables.
 
 ViewModels are the **orchestration layer** between `ui/` and `data/`.
 
@@ -53,7 +53,7 @@ ViewModels are the **orchestration layer** between `ui/` and `data/`.
 | ViewModel | Primary surface | Key responsibilities |
 |-----------|-----------------|----------------------|
 | `ConnectionViewModel` | Add Click, NFC, proximity | Tri-Factor handshake, QR redemption, Multi-Tap cliques, sensor capture, offline proximity queue |
-| `ChatViewModel` | Connections tab, ChatView | E2EE encrypt/decrypt, message send queue, reactions, typing, read receipts, media vault, archive, calls entry |
+| `ChatViewModel` | Connections tab, ChatView | E2EE encrypt/decrypt, message send queue, reactions, typing, read receipts, media vault, archive |
 | `GlobalSearchViewModel` | GlobalSearchScreen | Unified haystack search across connections, messages, beacons, intents |
 | `MapViewModel` | MapScreen | Beacon/hub discovery, layer filters, ghost mode, telemetry pan events |
 | `HubChatViewModel` | HubChatScreen | Ephemeral hub messages (non-E2EE venue chat) |
@@ -163,11 +163,10 @@ First-time multi-peer (≥3) returns server `awaiting_selection` → host picks 
 | `data/repository/SupabaseChatRepository.kt` | Chat CRUD + Realtime |
 | `data/repository/ConnectionRepository.kt` | Proximity bind, QR, connections |
 | `data/repository/SupabaseRepository.kt` | User profiles, unified search |
-| `data/api/ApiClient.kt` | REST BFF (profiles, beacons, LiveKit token) |
+| `data/api/ApiClient.kt` | REST BFF (profiles, beacons, telemetry) |
 | `data/api/ChatApiClient.kt` | Chat media upload, click-web message tunnel |
 | `domain/VerifiedCliqueCreation.kt` | Group clique key wrapping |
 | `proximity/ProximityManager.kt` | Tri-Factor hardware orchestration |
-| `calls/CallCoordinator.kt` | LiveKit token fetch |
 | `collaboration/CollaborationSessionManager.kt` | Disposable roll sessions |
 | `network/NetworkConnectivityMonitor.kt` | Online/offline signals |
 | `util/NetworkFailureUtil.kt` | Offline detection |
@@ -207,9 +206,6 @@ Realtime reaction events merged into message state; optimistic add/remove.
 
 ### Typing & read receipts
 Typing channel per chat; read cursor updates persisted and broadcast.
-
-### Voice & video calls
-`ChatViewModel` initiates calls via `CallCoordinator` → `ApiClient.postLiveKitToken`; state observed from `CallSessionManager`.
 
 ### Memory Capsules
 `ConnectionViewModel` attaches `AmbientNoiseMonitor` + `BarometricHeightMonitor` snapshots to encounter metadata when opted in.

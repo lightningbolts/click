@@ -13,7 +13,7 @@ import kotlinx.serialization.json.JsonPrimitive
  *
  * Extracted verbatim from ConnectionsScreen.kt so they're unit-testable
  * and so the screen file shrinks without changing behavior. None of
- * these touch the Supabase client, realtime channels, or LiveKit — they
+ * these touch the Supabase client, realtime channels, or native SDKs — they
  * are safe to call from any thread and from previews.
  */
 

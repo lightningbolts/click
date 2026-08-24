@@ -6,11 +6,11 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
-import compose.project.click.click.calls.AndroidCallRuntime
 import compose.project.click.click.data.repository.NativeGoogleSignInPayload
+import compose.project.click.click.platform.AndroidActivityRuntime
 
 suspend fun requestNativeGoogleSignInPayload(): Result<NativeGoogleSignInPayload?> {
-    val activity = AndroidCallRuntime.currentActivity()
+    val activity = AndroidActivityRuntime.currentActivity()
         ?: return Result.failure(IllegalStateException("Google sign-in requires an active activity."))
 
     return runCatching {

@@ -7,7 +7,7 @@ This file is **authoritative guidance** for future developers and AI assistants 
 ## 1. Kotlin Multiplatform architecture
 
 - **Default location for logic:** `click/composeApp/src/commonMain/kotlin/...`.
-- **Use `expect` / `actual` (or small platform-specific facades)** only when you must call **native APIs** or SDKs that are not available in common code—examples in this repo: **CallKit**, **PushKit**, **NFC**, secure **Keychain** / **EncryptedSharedPreferences**, **LiveKit Android** vs **LiveKit Swift**, location services, and crypto primitives (`PlatformCrypto`).
+- **Use `expect` / `actual` (or small platform-specific facades)** only when you must call **native APIs** or SDKs that are not available in common code—examples in this repo: **NFC**, secure **Keychain** / **EncryptedSharedPreferences**, location services, and crypto primitives (`PlatformCrypto`).
 - **Do not** duplicate business rules across `androidMain` and `iosMain` if they can live in `commonMain` behind a narrow interface.
 
 ---
@@ -21,28 +21,17 @@ This file is **authoritative guidance** for future developers and AI assistants 
 
 ---
 
-## 3. VoIP and notifications (iOS vs Android)
+## 3. Push notifications (iOS vs Android)
 
-### iOS VoIP — never Firebase
-
-- **Do not** route **iOS VoIP** pushes through Firebase. Incoming calls use **direct APNs** with **`apns-push-type: voip`** and topic **`<bundleId>.voip`**, implemented in the Supabase Edge Function **`send-push-notification`** (see `click/supabase/functions/send-push-notification/`).
-- **Standard** iOS notifications may still use APNs through the same function with appropriate headers; **Android** uses **FCM** via service account JSON configured as a Supabase secret.
-
-### VoIP race condition (PushKit ↔ Kotlin)
-
-- **PushKit** can deliver or refresh the VoIP token **before** the Kotlin runtime and `TokenStorage` are ready.
-- **Mitigation in this repo:** The native layer **caches the VoIP token in `UserDefaults`** (e.g. key `cached_voip_token`) **immediately** when `PKPushRegistry` updates credentials, **then** calls into Kotlin to persist when possible.
-- **On app wake / standard token sync**, Swift **replays** the cached VoIP token into Kotlin so the shared data layer and backend stay consistent. **AI-generated code must preserve this ordering**—do not remove UserDefaults caching or defer token registration only to Kotlin.
-
-### CallKit
-
-- **Incoming VoIP** must report to **CallKit** quickly on the main queue; completion handlers from PushKit must be invoked according to Apple’s contract (see `ClickCallKitManager` / `ClickVoipPushManager` in `click/iosApp/`).
+- **iOS:** standard APNs alerts through the Supabase Edge Function **`send-push-notification`**. Do **not** add VoIP / PushKit / CallKit — voice and video calls were removed from mobile.
+- **Android:** FCM via service account JSON configured as a Supabase secret.
+- `incoming_call` push payloads are rejected by the edge function and ignored by both clients.
 
 ---
 
 ## 4. Database and Supabase Auth metadata
 
-- Assume a **normalized PostgreSQL schema** with dedicated tables—patterns in `click/database/` include (among others) users-related data, **`user_interests`**, **connections**, **messages**, **chats**, **push_tokens** (unique on `(user_id, device_id, token_type)` for `standard` vs `voip` on the same device), notification preferences, and location/environment-related columns where used.
+- Assume a **normalized PostgreSQL schema** with dedicated tables—patterns in `click/database/` include (among others) users-related data, **`user_interests`**, **connections**, **messages**, **chats**, **push_tokens**, notification preferences, and location/environment-related columns where used.
 - **Do not** store **core application state** in `auth.users.raw_user_meta_data` as the primary source of truth. Use **first-class tables** and RPCs/views as the app does for profiles, interests, and connection graph data. Metadata may still be used for **display fallbacks** where the codebase already does—do not expand reliance on raw metadata for new features.
 
 ---
@@ -53,9 +42,7 @@ This file is **authoritative guidance** for future developers and AI assistants 
 |--------|----------------|
 | Supabase URL / anon key | `click/composeApp/src/commonMain/kotlin/compose/project/click/click/data/SupabaseConfig.kt` |
 | Web / QR / default API base | `click/composeApp/src/commonMain/kotlin/QRModels.kt` — `CLICK_WEB_BASE_URL` |
-| LiveKit token HTTP client | `click/composeApp/src/commonMain/kotlin/compose/project/click/click/calls/CallApiClient.kt` |
-| Push + APNs VoIP logic | `click/supabase/functions/send-push-notification/index.ts` |
-| iOS VoIP + cache | `click/iosApp/iosApp/ClickVoipPushManager.swift`, `iOSApp.swift` |
+| Push delivery | `click/supabase/functions/send-push-notification/index.ts` |
 | Operator checklist | `click/EXTERNAL_SETUP.md` |
 
 ---
@@ -64,6 +51,6 @@ This file is **authoritative guidance** for future developers and AI assistants 
 
 - **Match existing style** in the touched file: package names, coroutine usage, and repository patterns.
 - **Prefer small, focused diffs**—do not refactor unrelated modules when fixing a bug.
-- **Verify platform behavior** on both Android and iOS when changing shared call, push, or connection flows.
+- **Verify platform behavior** on both Android and iOS when changing shared push or connection flows.
 
 When in doubt, read the referenced files before proposing changes.

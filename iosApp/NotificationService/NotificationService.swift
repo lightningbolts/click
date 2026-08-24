@@ -18,10 +18,6 @@ final class NotificationService: UNNotificationServiceExtension {
         bestAttemptContent = mutable
 
         let userInfo = request.content.userInfo
-        if (userInfo["type"] as? String) == "incoming_call" {
-            contentHandler(mutable)
-            return
-        }
 
         let body = ChatPushNotificationBodyResolver.resolveBody(
             userInfo: userInfo,
