@@ -24,3 +24,5 @@ bash scripts/check-supabase-drift.sh
 ```
 
 Deploy shared migrations and `bind-proximity-connection` from **click-web**. Deploy mobile-only functions from this repo.
+
+Event-scaling migrations (`20260824010000`–`20260824060000`, plus guest RSVPs `20260823180000`) live only in **click-web**. This sync script copies overlapping filenames only — do not add those files here unless they already exist in both trees.

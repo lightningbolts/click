@@ -60,7 +60,7 @@ data class EventSchedule(
 | Helper | Role |
 |--------|------|
 | `validateEventSchedule(...)` | Returns `EventScheduleValidationError?` |
-| `eventScheduleMetadata(schedule)` | JSON keys `event_start_at`, `event_end_at` (ISO-8601) |
+| `eventScheduleMetadata(schedule)` | JSON keys `event_start_at`, `event_end_at` (ISO-8601). Backend also has unused `map_beacons.starts_at` / `ends_at` columns; this module does not write them. |
 | `parseEventScheduleFromMetadata(raw)` | Reverse parse from beacon metadata |
 | `isEnded(now)` / `isVisible(now)` | Lifecycle checks |
 | `formatEventScheduleRange(...)` | UI string e.g. `Jun 12, 7:00 PM – 9:00 PM` |
