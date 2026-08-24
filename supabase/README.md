@@ -25,4 +25,4 @@ bash scripts/check-supabase-drift.sh
 
 Deploy shared migrations and `bind-proximity-connection` from **click-web**. Deploy mobile-only functions from this repo.
 
-Event-scaling migrations (`20260824010000`–`20260824060000`, plus guest RSVPs `20260823180000`) live only in **click-web**. This sync script copies overlapping filenames only — do not add those files here unless they already exist in both trees.
+Event-scaling migrations (`20260824010000`–`20260824060000`, plus guest RSVPs `20260823180000`) live only in **click-web** and are **already applied** on the live database (2026-08-23). The click-web public-event microsite app was reverted on 2026-08-24 so the split-large-files refactor could merge; the additive schema remains. This sync script copies overlapping filenames only — do not add those files here unless they already exist in both trees.
