@@ -1021,7 +1021,7 @@ class ApiClient {
         } catch (e: Exception) {
             Result.failure(e)
         }
-        }
+    }
 
     /** POST `/api/user/push-tokens` — upserts the device token for the signed-in user. */
     suspend fun postPushToken(body: PushTokenRegisterBody): Result<PushTokenRegisterResponse> =

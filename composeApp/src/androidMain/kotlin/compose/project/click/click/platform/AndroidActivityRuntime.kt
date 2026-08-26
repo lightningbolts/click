@@ -9,7 +9,10 @@ object AndroidActivityRuntime {
     private var applicationContext: Context? = null
     private var currentActivityRef: WeakReference<Activity>? = null
 
-    fun init(context: Context, activity: Activity? = null) {
+    fun init(
+        context: Context,
+        activity: Activity? = null,
+    ) {
         applicationContext = context.applicationContext
         if (activity != null) {
             currentActivityRef = WeakReference(activity)

@@ -28,7 +28,9 @@ private const val KEY_PUSH_USER_ID = "push_user_id"
 // We intentionally do NOT use a single shared slot because FCM (standard)
 // can arrive before login and must be preserved.
 private const val PENDING_TOKEN_TYPES_KEY = "pending_push_token_types"
+
 private fun pendingTokenKey(type: String) = "pending_push_token_$type"
+
 private fun pendingPlatformKey(type: String) = "pending_push_platform_$type"
 
 // Legacy single-slot keys (kept for one-time migration).
@@ -43,7 +45,10 @@ internal object AndroidPushNotificationRuntime {
     private var currentActivityRef: WeakReference<Activity>? = null
     private var appInForeground: Boolean = false
 
-    fun init(context: Context, activity: Activity? = null) {
+    fun init(
+        context: Context,
+        activity: Activity? = null,
+    ) {
         applicationContext = context.applicationContext
         if (activity != null) {
             currentActivityRef = WeakReference(activity)
@@ -60,16 +65,16 @@ internal object AndroidPushNotificationRuntime {
 
     fun isAppInForeground(): Boolean = appInForeground
 
-    private fun encryptedPrefs(context: Context) =
-        createEncryptedSharedPreferences(context, PUSH_NOTIFICATION_PREFS_ENCRYPTED)
+    private fun encryptedPrefs(context: Context) = createEncryptedSharedPreferences(context, PUSH_NOTIFICATION_PREFS_ENCRYPTED)
 
     fun storeUserId(userId: String) {
-        val context = applicationContext ?: run {
-            // R0.6: surface the previously-silent drop; upload-on-login can't
-            // recover if the userId was never persisted.
-            println("AndroidPushNotificationRuntime: storeUserId skipped — context not initialized")
-            return
-        }
+        val context =
+            applicationContext ?: run {
+                // R0.6: surface the previously-silent drop; upload-on-login can't
+                // recover if the userId was never persisted.
+                println("AndroidPushNotificationRuntime: storeUserId skipped — context not initialized")
+                return
+            }
         encryptedPrefs(context)
             .edit()
             .putString(KEY_PUSH_USER_ID, userId)
@@ -81,15 +86,21 @@ internal object AndroidPushNotificationRuntime {
         return encryptedPrefs(context).getString(KEY_PUSH_USER_ID, null)
     }
 
-    fun savePendingToken(token: String, platform: String, tokenType: String) {
-        val context = applicationContext ?: run {
-            println("AndroidPushNotificationRuntime: savePendingToken dropped — context not initialized")
-            return
-        }
+    fun savePendingToken(
+        token: String,
+        platform: String,
+        tokenType: String,
+    ) {
+        val context =
+            applicationContext ?: run {
+                println("AndroidPushNotificationRuntime: savePendingToken dropped — context not initialized")
+                return
+            }
         val prefs = encryptedPrefs(context)
         val existingTypes = prefs.getStringSet(PENDING_TOKEN_TYPES_KEY, null).orEmpty().toMutableSet()
         existingTypes += tokenType
-        prefs.edit()
+        prefs
+            .edit()
             .putString(pendingTokenKey(tokenType), token)
             .putString(pendingPlatformKey(tokenType), platform)
             .putStringSet(PENDING_TOKEN_TYPES_KEY, existingTypes)
@@ -121,7 +132,10 @@ internal object AndroidPushNotificationRuntime {
         return result
     }
 
-    private fun migrateLegacyPendingTokensIfNeeded(context: Context, encrypted: SharedPreferences) {
+    private fun migrateLegacyPendingTokensIfNeeded(
+        context: Context,
+        encrypted: SharedPreferences,
+    ) {
         val legacyPrefs = context.getSharedPreferences(PUSH_NOTIFICATION_PREFS, Context.MODE_PRIVATE)
         val legacyToken = legacyPrefs.getString(LEGACY_KEY_PENDING_PUSH_TOKEN, null)
         val legacyPlatform = legacyPrefs.getString(LEGACY_KEY_PENDING_PUSH_PLATFORM, null)
@@ -131,7 +145,8 @@ internal object AndroidPushNotificationRuntime {
         if (legacyToken != null && legacyPlatform != null) {
             val existingTypes = encrypted.getStringSet(PENDING_TOKEN_TYPES_KEY, null).orEmpty().toMutableSet()
             existingTypes += legacyType
-            encrypted.edit()
+            encrypted
+                .edit()
                 .putString(pendingTokenKey(legacyType), legacyToken)
                 .putString(pendingPlatformKey(legacyType), legacyPlatform)
                 .putStringSet(PENDING_TOKEN_TYPES_KEY, existingTypes)
@@ -141,7 +156,8 @@ internal object AndroidPushNotificationRuntime {
             encrypted.edit().putString(KEY_PUSH_USER_ID, legacyUserId).apply()
         }
         if (legacyToken != null || legacyUserId != null) {
-            legacyPrefs.edit()
+            legacyPrefs
+                .edit()
                 .remove(LEGACY_KEY_PENDING_PUSH_TOKEN)
                 .remove(LEGACY_KEY_PENDING_PUSH_PLATFORM)
                 .remove(LEGACY_KEY_PENDING_PUSH_TOKEN_TYPE)
@@ -187,7 +203,7 @@ private class AndroidPushNotificationService : PushNotificationService {
                 pushTokenRepository.savePushToken(
                     userId = userId,
                     token = token,
-                    platform = "android"
+                    platform = "android",
                 )
             }
         }
@@ -205,7 +221,7 @@ private class AndroidPushNotificationService : PushNotificationService {
             ActivityCompat.requestPermissions(
                 activity,
                 arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                PUSH_PERMISSION_REQUEST_CODE
+                PUSH_PERMISSION_REQUEST_CODE,
             )
         }
     }
@@ -223,12 +239,15 @@ internal fun uploadAndroidPushToken(token: String) {
         PushTokenRepository().savePushToken(
             userId = userId,
             token = token,
-            platform = "android"
+            platform = "android",
         )
     }
 }
 
-fun initPushNotificationService(context: Context, activity: Activity? = null) {
+fun initPushNotificationService(
+    context: Context,
+    activity: Activity? = null,
+) {
     AndroidPushNotificationRuntime.init(context, activity)
 }
 
