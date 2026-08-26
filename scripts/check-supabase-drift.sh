@@ -53,6 +53,7 @@ compare_file() {
 }
 
 compare_file "supabase/functions/bind-proximity-connection/index.ts"
+compare_file "supabase/functions/bind-proximity-connection/bindSupport.ts"
 
 # Overlapping migration filenames must match click-web byte-for-byte.
 while IFS= read -r name; do

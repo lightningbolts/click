@@ -1,0 +1,404 @@
+package compose.project.click.click.data.api // pragma: allowlist secret
+
+import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
+import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.UserCore // pragma: allowlist secret
+import io.ktor.client.request.get
+import io.ktor.serialization.kotlinx.json.json
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
+
+/**
+ * JSON body for `GET /api/ping` on [ApiConfig.CLICK_WEB_BASE_URL] (verified Supabase JWT).
+ */
+@Serializable
+data class SecurePingResponse(
+    val status: String,
+    val message: String,
+    @SerialName("user_id") val userId: String,
+)
+
+@Serializable
+internal data class UserProfilePatchResponseDto(
+    val user: UserCore,
+)
+
+/**
+ * Response for `GET /api/users/{userId}/profile` — BFF-owned peer profile hydration
+ * (replaces the direct Supabase `users` + `user_interests` joins that used to live
+ * inside `SupabaseRepository.fetchUserPublicProfile`).
+ */
+@Serializable
+data class UserProfileGetResponse(
+    val user: UserCore,
+    val tags: List<String> = emptyList(),
+    @SerialName("personality_tags") val personalityTags: List<String> = emptyList(),
+    @SerialName("viewerInterestTags") val viewerInterestTags: List<String> = emptyList(),
+    @SerialName("sharedInterestTags") val sharedInterestTags: List<String> = emptyList(),
+    /** Full legacy shape (availability, sharedConnection) preserved as JSON. */
+    val availability: kotlinx.serialization.json.JsonElement? = null,
+    /** Typed so mobile can prefer BFF intents over a second Supabase round-trip. */
+    @SerialName("availabilityIntents")
+    val availabilityIntents: List<ProfileAvailabilityIntentBubble> = emptyList(),
+    @SerialName("sharedConnection") val sharedConnection: kotlinx.serialization.json.JsonElement? = null,
+)
+
+@Serializable
+data class ActivityRecapDto(
+    val window: String,
+    val since: String,
+    @SerialName("connections_formed") val connectionsFormed: Int = 0,
+    @SerialName("messages_sent") val messagesSent: Int = 0,
+    @SerialName("messages_received") val messagesReceived: Int = 0,
+    @SerialName("beacons_created") val beaconsCreated: Int = 0,
+    @SerialName("events_rsvped") val eventsRsvped: Int = 0,
+    @SerialName("events_checked_in") val eventsCheckedIn: Int = 0,
+    @SerialName("events_saved") val eventsSaved: Int = 0,
+) {
+    fun isAllZero(): Boolean =
+        connectionsFormed == 0 &&
+            messagesSent == 0 &&
+            messagesReceived == 0 &&
+            beaconsCreated == 0 &&
+            eventsRsvped == 0 &&
+            eventsCheckedIn == 0 &&
+            eventsSaved == 0
+
+    fun peakValue(): Int =
+        maxOf(
+            connectionsFormed,
+            messagesSent,
+            messagesReceived,
+            beaconsCreated,
+            eventsRsvped,
+            eventsCheckedIn,
+            eventsSaved,
+        )
+}
+
+@Serializable
+internal data class ActivityRecapResponseDto(
+    val recap: ActivityRecapDto,
+)
+
+/**
+ * Response for `GET /api/connections/{connectionId}/tabs` — returns the Media / Files
+ * collections used by the profile sheet's Media and Files subtabs. Links are derived
+ * client-side from locally-decrypted text messages (content is E2EE on the wire).
+ */
+@Serializable
+data class ConnectionTabsGetResponse(
+    @SerialName("chatId") val chatId: String,
+    val media: List<ConnectionTabMessage> = emptyList(),
+    val files: List<ConnectionTabMessage> = emptyList(),
+    val beacons: List<ConnectionTabMessage> = emptyList(),
+)
+
+@Serializable
+data class ConnectionTabMessage(
+    val id: String,
+    @SerialName("chat_id") val chatId: String,
+    @SerialName("user_id") val userId: String,
+    val content: String = "",
+    @SerialName("time_created") val timeCreated: Long,
+    @SerialName("message_type") val messageType: String,
+    val metadata: kotlinx.serialization.json.JsonElement? = null,
+)
+
+@Serializable
+internal data class AvatarUploadResponseDto(
+    val image: String,
+    val user: UserCore? = null,
+)
+
+@Serializable
+internal data class AvatarUploadBodyDto(
+    @SerialName("file_b64") val fileBase64: String,
+    @SerialName("mime_type") val mimeType: String,
+)
+
+@Serializable
+data class NotificationPreferencesPatchBody(
+    @SerialName("message_push_enabled")
+    val messagePushEnabled: Boolean,
+    @SerialName("call_push_enabled")
+    val callPushEnabled: Boolean,
+    @SerialName("event_reminder_push_enabled")
+    val eventReminderPushEnabled: Boolean = true,
+    @SerialName("availability_match_push_enabled")
+    val availabilityMatchPushEnabled: Boolean = true,
+    @SerialName("hub_message_push_enabled")
+    val hubMessagePushEnabled: Boolean = true,
+)
+
+@Serializable
+data class NotificationPreferencesPatchResponse(
+    val ok: Boolean,
+    val message: String,
+)
+
+@Serializable
+internal data class ProfileTimelinePostBody(
+    @SerialName("target_type") val targetType: String,
+    @SerialName("target_id") val targetId: String,
+    val body: String,
+    val visibility: String,
+)
+
+@Serializable
+internal data class ProfileTimelineMutateBody(
+    val id: String,
+    val body: String? = null,
+    val visibility: String? = null,
+)
+
+@Serializable
+internal data class ConnectionLifecyclePostBody(
+    @SerialName("connection_id") val connectionId: String,
+)
+
+@Serializable
+internal data class ConnectionCoreListResponse(
+    val core: List<String> = emptyList(),
+)
+
+@Serializable
+internal data class SafetyReportPostBody(
+    @SerialName("connection_id") val connectionId: String,
+    val reason: String,
+)
+
+@Serializable
+internal data class ContactsDiscoverBody(
+    @SerialName("hashed_contacts") val hashedContacts: List<String>,
+)
+
+@Serializable
+data class DiscoverProfileCard(
+    val id: String,
+    val name: String,
+    @SerialName("avatar_url") val avatarUrl: String? = null,
+    val tags: List<String> = emptyList(),
+)
+
+@Serializable
+internal data class ContactsDiscoverResponse(
+    val matches: List<DiscoverProfileCard> = emptyList(),
+)
+
+@Serializable
+internal data class PriorConnectionRequestBody(
+    @SerialName("target_user_id") val targetUserId: String,
+    @SerialName("known_since") val knownSince: String,
+    @SerialName("context_tag") val contextTag: String? = null,
+)
+
+@Serializable
+data class PriorConnectionMutationResponse(
+    @SerialName("connection_id") val connectionId: String,
+    val status: String,
+    val source: String? = null,
+    val action: String? = null,
+)
+
+@Serializable
+internal data class PriorConnectionRespondBody(
+    @SerialName("connection_id") val connectionId: String,
+    val action: String,
+)
+
+@Serializable
+internal data class SignAttachmentPostBody(
+    val path: String,
+)
+
+@Serializable
+internal data class SignAttachmentResponse(
+    val url: String,
+)
+
+/** POST `/api/user/push-tokens` — matches [click-web/app/api/user/push-tokens/route.ts]. */
+@Serializable
+data class PushTokenRegisterBody(
+    val token: String,
+    val platform: String,
+    @SerialName("token_type") val tokenType: String,
+    @SerialName("device_id") val deviceId: String? = null,
+)
+
+@Serializable
+data class PushTokenRegisterResponse(
+    val ok: Boolean,
+)
+
+/** GET `/api/users/[userId]/public-profile` — no JWT (App Clip / Instant preview). */
+@Serializable
+data class PublicProfileUnauthenticatedResponse(
+    @SerialName("display_name") val displayName: String,
+    @SerialName("avatar_url") val avatarUrl: String? = null,
+    @SerialName("aura_colors") val auraColors: List<String> = emptyList(),
+)
+
+@Serializable
+data class HubCreateLocationBody(
+    val latitude: Double,
+    val longitude: Double,
+    @SerialName("radius_meters") val radiusMeters: Int = 50,
+)
+
+@Serializable
+data class HubCreatePostBody(
+    val name: String,
+    val category: String,
+    val location: HubCreateLocationBody,
+)
+
+@Serializable
+data class HubCreateResponseDto(
+    @SerialName("hub_id") val hubId: String,
+    @SerialName("expires_at") val expiresAt: String? = null,
+)
+
+/** POST `/api/connections/proximity` — tri-factor bind (mirrors legacy bind-proximity-connection). */
+@Serializable
+data class ProximityHandshakePostBody(
+    @SerialName("my_token") val myToken: String,
+    val tokens: List<String> = emptyList(),
+    @SerialName("heard_tokens") val heardTokens: List<String> = emptyList(),
+    @SerialName("detected_devices") val detectedDevices: List<String> = emptyList(),
+    @SerialName("latitude") val latitude: Double? = null,
+    @SerialName("longitude") val longitude: Double? = null,
+    @SerialName("exact_barometric_elevation_m") val exactBarometricElevationM: Double? = null,
+    @SerialName("noise_level") val noiseLevel: String? = null,
+    @SerialName("exact_noise_level_db") val exactNoiseLevelDb: Double? = null,
+    @SerialName("context_tags") val contextTags: List<String>? = null,
+    @SerialName("height_category") val heightCategory: String? = null,
+    @SerialName("lux_level") val luxLevel: Double? = null,
+    @SerialName("motion_variance") val motionVariance: Double? = null,
+    @SerialName("compass_azimuth") val compassAzimuth: Double? = null,
+    @SerialName("battery_level") val batteryLevel: Int? = null,
+    @SerialName("client_context_first") val clientContextFirst: Boolean? = null,
+    @SerialName("weather_snapshot") val weatherSnapshot: String? = null,
+    @SerialName("simulator_mock") val simulatorMock: Boolean? = null,
+    @SerialName("timezone_offset_minutes") val timezoneOffsetMinutes: Int? = null,
+)
+
+@Serializable
+data class ProximityGroupCliqueCandidateDto(
+    @SerialName("member_user_ids") val memberUserIds: List<String> = emptyList(),
+)
+
+/** HTTP 200 — instant peer match from `POST /api/connections/proximity`. */
+@Serializable
+data class ProximityBindOkResponseDto(
+    val success: Boolean? = true,
+    @SerialName("encounter_logged") val encounterLogged: Boolean? = null,
+    @SerialName("connection_id") val connectionId: String? = null,
+    @SerialName("is_new_connection") val isNewConnection: Boolean? = null,
+    @SerialName("is_group") val isGroup: Boolean? = null,
+    val matches: List<User>? = null,
+    val error: String? = null,
+    @SerialName("group_clique_candidate") val groupCliqueCandidate: ProximityGroupCliqueCandidateDto? = null,
+    @SerialName("encounter_id") val encounterId: String? = null,
+    @SerialName("collaboration_ttl") val collaborationTtl: String? = null,
+    /** Multi-peer first-time bind: host must confirm selected members before create. */
+    @SerialName("awaiting_selection") val awaitingSelection: Boolean? = null,
+    @SerialName("pending_handshake_id") val pendingHandshakeId: String? = null,
+    @SerialName("expires_at") val expiresAt: String? = null,
+)
+
+/** JSON body for `POST /api/connections/proximity/confirm`. */
+@Serializable
+data class ProximityConfirmSelectionPostBody(
+    @SerialName("pending_handshake_id") val pendingHandshakeId: String,
+    @SerialName("selected_member_ids") val selectedMemberIds: List<String>,
+    @SerialName("context_tags") val contextTags: List<String>? = null,
+)
+
+/** HTTP 202 — peer offline; handshake stored server-side for async match. */
+@Serializable
+data class ProximityBindPendingResponseDto(
+    val success: Boolean = true,
+    val status: String = "pending",
+    @SerialName("pending_handshake_id") val pendingHandshakeId: String,
+    @SerialName("expires_at") val expiresAt: String = "",
+    @SerialName("encounter_logged") val encounterLogged: Boolean = false,
+    val matches: List<User> = emptyList(),
+)
+
+/** HTTP 503 — connection create failed; handshake left unmatched for GET recovery. */
+@Serializable
+internal data class ProximityBindUnavailableResponseDto(
+    val error: String? = null,
+    @SerialName("pending_handshake_id") val pendingHandshakeId: String? = null,
+    @SerialName("expires_at") val expiresAt: String? = null,
+)
+
+/** HTTP 200 — server ignored an empty peer-evidence payload (no DB row). */
+@Serializable
+data class ProximityBindIgnoredResponseDto(
+    val success: Boolean = false,
+    val status: String,
+    val message: String? = null,
+    @SerialName("encounter_logged") val encounterLogged: Boolean = false,
+    val matches: List<User> = emptyList(),
+)
+
+sealed class ProximityHandshakePostResult {
+    data class InstantMatch(
+        val body: ProximityBindOkResponseDto,
+    ) : ProximityHandshakePostResult()
+
+    data class PendingMatch(
+        val body: ProximityBindPendingResponseDto,
+    ) : ProximityHandshakePostResult()
+
+    data class IgnoredEmptyPayload(
+        val body: ProximityBindIgnoredResponseDto,
+    ) : ProximityHandshakePostResult()
+}
+
+@Serializable
+data class ConnectionEncounterPostBody(
+    @SerialName("user_id") val userId: String,
+    @SerialName("peer_id") val peerId: String,
+    @SerialName("sensor_data") val sensorData: JsonObject? = null,
+)
+
+@Serializable
+data class CollaborationSessionPostResponse(
+    val ok: Boolean = false,
+    @SerialName("encounter_id") val encounterId: String? = null,
+    @SerialName("collaboration_ttl") val collaborationTtl: String? = null,
+)
+
+/** Thrown for non-2xx click-web responses; carries HTTP status for fallback routing. */
+class ClickWebRequestException(
+    val statusCode: Int,
+    message: String,
+) : Exception(message)
+
+@Serializable
+data class WidgetVibePayloadDto(
+    @SerialName("status_text") val statusText: String,
+    @SerialName("density_hex_color") val densityHexColor: String,
+    @SerialName("active_counts") val activeCounts: Int,
+)
+
+@Serializable
+data class CommunityHubNearbyDto(
+    @SerialName("hub_id") val hubId: String,
+    val name: String,
+    val category: String = "general",
+    val latitude: Double,
+    val longitude: Double,
+    @SerialName("radius_meters") val radiusMeters: Int,
+    @SerialName("active_user_count") val activeUserCount: Int,
+    @SerialName("distance_meters") val distanceMeters: Double,
+)
+
+@Serializable
+internal data class CommunityHubNearbyEnvelope(
+    val hubs: List<CommunityHubNearbyDto> = emptyList(),
+)

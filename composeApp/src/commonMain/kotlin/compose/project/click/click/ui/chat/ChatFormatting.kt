@@ -57,11 +57,12 @@ internal fun formatMessageTime(timestamp: Long): String {
     val hour = dateTime.hour
     val minute = dateTime.minute.toString().padStart(2, '0')
     val amPm = if (hour < 12) "AM" else "PM"
-    val displayHour = when {
-        hour == 0 -> 12
-        hour > 12 -> hour - 12
-        else -> hour
-    }
+    val displayHour =
+        when {
+            hour == 0 -> 12
+            hour > 12 -> hour - 12
+            else -> hour
+        }
 
     return "$displayHour:$minute $amPm"
 }
@@ -87,12 +88,16 @@ internal fun formatCallDurationForLog(totalSeconds: Int): String {
  * player duration (ms) when it's positive; falls back to the cached
  * `duration_seconds` from message metadata; otherwise returns "0:00".
  */
-internal fun formatChatAudioDuration(durationMs: Long, fallbackSec: Int?): String {
-    val totalSec = when {
-        durationMs > 0 -> (durationMs / 1000).toInt()
-        fallbackSec != null && fallbackSec > 0 -> fallbackSec
-        else -> 0
-    }
+internal fun formatChatAudioDuration(
+    durationMs: Long,
+    fallbackSec: Int?,
+): String {
+    val totalSec =
+        when {
+            durationMs > 0 -> (durationMs / 1000).toInt()
+            fallbackSec != null && fallbackSec > 0 -> fallbackSec
+            else -> 0
+        }
     val m = totalSec / 60
     val s = totalSec % 60
     return "$m:${s.toString().padStart(2, '0')}"
@@ -150,10 +155,16 @@ internal fun formatConversationDayLabel(
         dayDifference == 0L -> "Today"
         dayDifference == 1L -> "Yesterday"
         dayDifference < 7L -> {
-            dateTime.date.dayOfWeek.name.lowercase().replaceFirstChar { it.uppercase() }
+            dateTime.date.dayOfWeek.name
+                .lowercase()
+                .replaceFirstChar { it.uppercase() }
         }
         else -> {
-            val month = dateTime.month.name.lowercase().replaceFirstChar { it.uppercase() }.take(3)
+            val month =
+                dateTime.month.name
+                    .lowercase()
+                    .replaceFirstChar { it.uppercase() }
+                    .take(3)
             if (dateTime.year == now.year) {
                 "$month ${dateTime.dayOfMonth}"
             } else {

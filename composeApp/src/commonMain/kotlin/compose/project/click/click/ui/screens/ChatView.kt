@@ -6,58 +6,27 @@
 
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.offset // pragma: allowlist secret
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.Edit // pragma: allowlist secret
-import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ripple
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.collaboration.CollaborationSessionManager // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
@@ -70,64 +39,20 @@ import compose.project.click.click.encounter.tetherCompassMessage // pragma: all
 import compose.project.click.click.notifications.NotificationRuntimeState // pragma: allowlist secret
 import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
-import compose.project.click.click.ui.chat.CHAT_SEARCH_FOCUS_HOLD_MS // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatBeaconDetailSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatChromeHorizontalPadding // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatChromeMotion // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatComposerStripReserve // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatExpandedPhotoPreview // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatHeaderIconButton // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatTypingDots // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatWarmLoadingView // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ConnectionActionSheet // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ConnectionChatMessageComposer // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ConnectionMenuAction // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ConnectionSheetDialog // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ConnectionSheetDialogs // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ForwardDialog // pragma: allowlist secret
 import compose.project.click.click.ui.chat.GroupMembersPickerContext // pragma: allowlist secret
-import compose.project.click.click.ui.chat.IcebreakerPanel // pragma: allowlist secret
-import compose.project.click.click.ui.chat.MessageActionSheet // pragma: allowlist secret
-import compose.project.click.click.ui.chat.applyTimestampPeekDragStep // pragma: allowlist secret
-import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
-import compose.project.click.click.ui.chat.chatBubbleReplySnippetStyle // pragma: allowlist secret
-import compose.project.click.click.ui.chat.chatBubbleScaledDp // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatDismissKeyboardAfterScrollConnection // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatPeerStatusSubtitle // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimelineFollowUsesAnimation // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimelineShouldFollowInbound // pragma: allowlist secret
-import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft // pragma: allowlist secret
-import compose.project.click.click.ui.chat.groupMembersPickerContextFrom // pragma: allowlist secret
-import compose.project.click.click.ui.chat.indexOfMessageId // pragma: allowlist secret
-import compose.project.click.click.ui.chat.isTimestampPeekRevealed // pragma: allowlist secret
-import compose.project.click.click.ui.chat.launchTimestampPeekReplyStyleSettle // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatNativeKeyboardInsets // pragma: allowlist secret
-import compose.project.click.click.ui.chat.rememberTimestampPeekRevealPx // pragma: allowlist secret
-import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx // pragma: allowlist secret
-import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay // pragma: allowlist secret
 import compose.project.click.click.ui.chat.scrollChatTimelineToLatest // pragma: allowlist secret
-import compose.project.click.click.ui.chat.scrollChatTimelineToMessage // pragma: allowlist secret
-import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
-import compose.project.click.click.ui.components.BindPlatformNativeNavigationBar // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
-import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
-import compose.project.click.click.ui.components.CoreConnectionAvatarFrame // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassToastHost // pragma: allowlist secret
-import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
-import compose.project.click.click.ui.components.NativeChromeAction // pragma: allowlist secret
-import compose.project.click.click.ui.components.NativeChromeIdentity // pragma: allowlist secret
-import compose.project.click.click.ui.components.TetherCompassToast // pragma: allowlist secret
-import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
-import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
-import compose.project.click.click.ui.components.groupAvatarClusterWidth // pragma: allowlist secret
 import compose.project.click.click.ui.components.platformNativeHeaderClearance // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberEdgeToEdgeBottomPadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberGlassToastState // pragma: allowlist secret
@@ -140,9 +65,7 @@ import compose.project.click.click.viewmodel.ChatListState // pragma: allowlist 
 import compose.project.click.click.viewmodel.ChatMessagesState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers // pragma: allowlist secret
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext // pragma: allowlist secret
 import kotlinx.serialization.json.JsonObject
 
@@ -258,21 +181,33 @@ fun ChatView(
     }
 
     // Connection action sheet (archive, delete, report, block)
-    var showConnectionSheet by remember { mutableStateOf(false) }
-    var showRenameGroupDialog by remember { mutableStateOf(false) }
-    var renameGroupDraft by remember { mutableStateOf("") }
+    val showConnectionSheetState = remember { mutableStateOf(false) }
+    var showConnectionSheet by showConnectionSheetState
+    val showRenameGroupDialogState = remember { mutableStateOf(false) }
+    var showRenameGroupDialog by showRenameGroupDialogState
+    val renameGroupDraftState = remember { mutableStateOf("") }
+    var renameGroupDraft by renameGroupDraftState
     // Message context sheet (reactions, edit, delete, copy)
-    var contextMenuMessage by remember { mutableStateOf<MessageWithUser?>(null) }
-    var forwardMessageId by remember { mutableStateOf<String?>(null) }
-    var expandedPhotoTarget by remember { mutableStateOf<MessageWithUser?>(null) }
-    var openBeaconDetailId by remember { mutableStateOf<String?>(null) }
-    var openBeaconDetailFallback by remember { mutableStateOf<compose.project.click.click.data.models.MapBeacon?>(null) }
-    var openBeaconDetailMetadata by remember { mutableStateOf<kotlinx.serialization.json.JsonObject?>(null) }
-    var openBeaconDetailContent by remember { mutableStateOf<String?>(null) }
+    val contextMenuMessageState = remember { mutableStateOf<MessageWithUser?>(null) }
+    var contextMenuMessage by contextMenuMessageState
+    val forwardMessageIdState = remember { mutableStateOf<String?>(null) }
+    var forwardMessageId by forwardMessageIdState
+    val expandedPhotoTargetState = remember { mutableStateOf<MessageWithUser?>(null) }
+    var expandedPhotoTarget by expandedPhotoTargetState
+    val openBeaconDetailIdState = remember { mutableStateOf<String?>(null) }
+    var openBeaconDetailId by openBeaconDetailIdState
+    val openBeaconDetailFallbackState = remember { mutableStateOf<compose.project.click.click.data.models.MapBeacon?>(null) }
+    var openBeaconDetailFallback by openBeaconDetailFallbackState
+    val openBeaconDetailMetadataState = remember { mutableStateOf<kotlinx.serialization.json.JsonObject?>(null) }
+    var openBeaconDetailMetadata by openBeaconDetailMetadataState
+    val openBeaconDetailContentState = remember { mutableStateOf<String?>(null) }
+    var openBeaconDetailContent by openBeaconDetailContentState
     val toastState = rememberGlassToastState()
     val tetherPayload by EncounterTetherManager.activeTetherPayload.collectAsState()
-    var tetherToastMessage by remember { mutableStateOf<String?>(null) }
-    var tetherSenderAck by remember { mutableStateOf<String?>(null) }
+    val tetherToastMessageState = remember { mutableStateOf<String?>(null) }
+    var tetherToastMessage by tetherToastMessageState
+    val tetherSenderAckState = remember { mutableStateOf<String?>(null) }
+    var tetherSenderAck by tetherSenderAckState
     val nativeNavChrome = LocalPlatformStyle.current.isIOS
     val hintedChatRow =
         (chatListState as? ChatListState.Success)
@@ -353,81 +288,23 @@ fun ChatView(
             hasSubtitle = chatNativeHasStackedSubtitle,
             stackSubtitle = chatNativeHasStackedSubtitle,
         )
-    if (nativeNavChrome) {
-        BindPlatformNativeNavigationBar(
-            title = bindTitle,
-            subtitle = bindStatusSubtitle,
-            presenceOnline = bindOnline,
-            identity =
-                NativeChromeIdentity(
-                    displayName = bindTitle,
-                    email =
-                        successChat
-                            ?.chatDetails
-                            ?.otherUser
-                            ?.email
-                            ?: hintedChatRow?.otherUser?.email,
-                    avatarUrl = bindAvatarUrl,
-                    userId =
-                        successChat
-                            ?.chatDetails
-                            ?.groupClique
-                            ?.groupId
-                            ?: successChat
-                                ?.chatDetails
-                                ?.otherUser
-                                ?.id
-                            ?: hintedChatRow?.groupClique?.groupId
-                            ?: hintedChatRow?.otherUser?.id
-                            ?: chatId,
-                    onClick = {
-                        if (bindIsGroup) {
-                            successChat?.chatDetails?.let { details ->
-                                groupMembersPickerContextFrom(details)?.let(onOpenGroupMembersPicker)
-                            }
-                        } else {
-                            val peerId =
-                                successChat
-                                    ?.chatDetails
-                                    ?.otherUser
-                                    ?.id
-                                    ?: hintedChatRow?.otherUser?.id
-                            if (peerId != null) onOpenUserProfile(peerId)
-                        }
-                    },
-                ),
-            onNavigateBack = onBackPressed,
-            nativeTrailingActions =
-                buildList {
-                    if (bindIsGroup) {
-                        add(
-                            NativeChromeAction(
-                                sfSymbol = "pencil",
-                                contentDescription = "Rename group",
-                                onClick = {
-                                    renameGroupDraft =
-                                        successChat
-                                            ?.chatDetails
-                                            ?.groupClique
-                                            ?.name
-                                            .orEmpty()
-                                            .ifBlank { bindTitle }
-                                    showRenameGroupDialog = true
-                                },
-                            ),
-                        )
-                    }
-                    add(
-                        NativeChromeAction(
-                            sfSymbol = "ellipsis.circle",
-                            contentDescription = "More options",
-                            onClick = { showConnectionSheet = true },
-                        ),
-                    )
-                },
-            collapseFraction = 1f,
-        )
-    }
+    ChatViewNativeNavBinding(
+        nativeNavChrome = nativeNavChrome,
+        chatId = chatId,
+        bindTitle = bindTitle,
+        bindStatusSubtitle = bindStatusSubtitle,
+        bindOnline = bindOnline,
+        bindIsGroup = bindIsGroup,
+        bindAvatarUrl = bindAvatarUrl,
+        successChat = successChat,
+        hintedChatRow = hintedChatRow,
+        onOpenUserProfile = onOpenUserProfile,
+        onOpenGroupMembersPicker = onOpenGroupMembersPicker,
+        onBackPressed = onBackPressed,
+        showConnectionSheetState = showConnectionSheetState,
+        showRenameGroupDialogState = showRenameGroupDialogState,
+        renameGroupDraftState = renameGroupDraftState,
+    )
 
     LaunchedEffect(nudgeResult) {
         val r = nudgeResult ?: return@LaunchedEffect
@@ -458,8 +335,10 @@ fun ChatView(
             ?.takeIf { !it.isSent }
             ?.message
             ?.id
-    var initialTimelineScrollDone by remember(chatId) { mutableStateOf(false) }
-    var focusedSearchMessageId by remember(chatId) { mutableStateOf<String?>(null) }
+    val initialTimelineScrollDoneState = remember(chatId) { mutableStateOf(false) }
+    var initialTimelineScrollDone by initialTimelineScrollDoneState
+    val focusedSearchMessageIdState = remember(chatId) { mutableStateOf<String?>(null) }
+    var focusedSearchMessageId by focusedSearchMessageIdState
 
     LaunchedEffect(listState) {
         snapshotFlow {
@@ -791,7 +670,8 @@ fun ChatView(
                      */
                     val reverseListNewestEdgePad = 6.dp
                     val showIcebreaker = showIcebreakerPanel && icebreakerPrompts.isNotEmpty() && messages.size < 5
-                    var icebreakerPanelHeightPx by remember { mutableIntStateOf(0) }
+                    val icebreakerPanelHeightPxState = remember { mutableIntStateOf(0) }
+                    var icebreakerPanelHeightPx by icebreakerPanelHeightPxState
                     val icebreakerTimelineTopReserve =
                         if (showIcebreaker) {
                             val measured = with(density) { icebreakerPanelHeightPx.toDp() }
@@ -808,669 +688,74 @@ fun ChatView(
                         modifier = Modifier.fillMaxSize(),
                     ) {
                         Column(modifier = Modifier.fillMaxSize()) {
-                            if (nativeNavChrome) {
-                                Spacer(
-                                    modifier =
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .height(chatNativeClearance)
-                                            .testTag(ChatGlassHeaderPlateTestTag),
-                                )
-                            } else {
-                                Column(
-                                    modifier =
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .padding(top = topInset)
-                                            .heightIn(min = 56.dp)
-                                            .padding(horizontal = ChatChromeHorizontalPadding, vertical = 6.dp)
-                                            .testTag(ChatGlassHeaderPlateTestTag),
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    ) {
-                                        ChatHeaderIconButton(
-                                            icon = Icons.AutoMirrored.Filled.ArrowBack,
-                                            contentDescription = "Back",
-                                            onClick = onBackPressed,
-                                            showBorder = true,
-                                        )
+                            ChatViewSuccessHeader(
+                                nativeNavChrome = nativeNavChrome,
+                                chatNativeClearance = chatNativeClearance,
+                                topInset = topInset,
+                                chatDetails = chatDetails,
+                                isGroupChat = isGroupChat,
+                                groupTitle = groupTitle,
+                                memberSummaryLine = memberSummaryLine,
+                                isPeerTyping = isPeerTyping,
+                                isPeerOnline = isPeerOnline,
+                                onlineUsers = onlineUsers,
+                                coreConnectionIds = coreConnectionIds,
+                                chatHasIntentOverlap = chatHasIntentOverlap,
+                                onBackPressed = onBackPressed,
+                                onOpenUserProfile = onOpenUserProfile,
+                                onOpenGroupMembersPicker = onOpenGroupMembersPicker,
+                                showConnectionSheetState = showConnectionSheetState,
+                                showRenameGroupDialogState = showRenameGroupDialogState,
+                                renameGroupDraftState = renameGroupDraftState,
+                            )
 
-                                        if (isGroupChat) {
-                                            val chatHeaderGroupAvatarSize = 34.dp
-                                            val groupAvatarUrl =
-                                                chatDetails.groupClique
-                                                    ?.avatarUrl
-                                                    ?.trim()
-                                                    ?.takeIf { it.isNotEmpty() }
-                                            val groupClusterWidth =
-                                                if (groupAvatarUrl != null) {
-                                                    chatHeaderGroupAvatarSize
-                                                } else {
-                                                    groupAvatarClusterWidth(
-                                                        chatDetails.groupMemberUsers.size,
-                                                        chatHeaderGroupAvatarSize,
-                                                    )
-                                                }
-                                            Box(
-                                                modifier =
-                                                    Modifier
-                                                        .width(groupClusterWidth)
-                                                        .heightIn(min = 40.dp)
-                                                        .clickable(
-                                                            interactionSource = remember { MutableInteractionSource() },
-                                                            indication = ripple(bounded = false, radius = 22.dp),
-                                                            onClick = {
-                                                                groupMembersPickerContextFrom(chatDetails)
-                                                                    ?.let(onOpenGroupMembersPicker)
-                                                            },
-                                                        ),
-                                                contentAlignment = Alignment.CenterStart,
-                                            ) {
-                                                GroupAvatar(
-                                                    members = chatDetails.groupMemberUsers,
-                                                    avatarSize = chatHeaderGroupAvatarSize,
-                                                    avatarUrl = groupAvatarUrl,
-                                                )
-                                            }
-                                        } else {
-                                            val isPeerCore = chatDetails.connection.id in coreConnectionIds
-                                            val peerOnline =
-                                                chatDetails.otherUser.id in onlineUsers || isPeerOnline
-                                            AvatarWithOnlineIndicator(
-                                                isOnline = peerOnline,
-                                                indicatorSize = 9.dp,
-                                                indicatorBorder = 1.25.dp,
-                                            ) {
-                                                CoreConnectionAvatarFrame(
-                                                    isCore = isPeerCore,
-                                                    avatarSize = 36.dp,
-                                                    onClick = { onOpenUserProfile(chatDetails.otherUser.id) },
-                                                ) {
-                                                    ConnectionListUserAvatarFace(
-                                                        displayName = chatDetails.otherUser.name,
-                                                        email = chatDetails.otherUser.email,
-                                                        avatarUrl = chatDetails.otherUser.image,
-                                                        userId = chatDetails.otherUser.id,
-                                                        modifier = Modifier.fillMaxSize(),
-                                                        useCompactTypography = true,
-                                                    )
-                                                }
-                                            }
-                                        }
-
-                                        Spacer(modifier = Modifier.width(12.dp))
-
-                                        Column(
-                                            modifier = Modifier.weight(1f),
-                                            verticalArrangement =
-                                                Arrangement.spacedBy(3.dp, Alignment.CenterVertically),
-                                        ) {
-                                            Text(
-                                                text = if (isGroupChat) groupTitle else (chatDetails.otherUser.name ?: "Unknown"),
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = MaterialTheme.colorScheme.onSurface,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                            )
-                                            if (isGroupChat && memberSummaryLine != null) {
-                                                Text(
-                                                    text = memberSummaryLine,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                                                    maxLines = 2,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                )
-                                            } else if (!isGroupChat) {
-                                                val subtitleOnline =
-                                                    chatDetails.otherUser.id in onlineUsers || isPeerOnline
-                                                val statusText =
-                                                    chatPeerStatusSubtitle(
-                                                        isTyping = isPeerTyping,
-                                                        isOnline = subtitleOnline,
-                                                    )
-                                                val showOnlineDot = subtitleOnline && !isPeerTyping
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                                ) {
-                                                    AnimatedVisibility(
-                                                        visible = showOnlineDot,
-                                                        enter = fadeIn() + expandVertically(),
-                                                        exit = fadeOut() + shrinkVertically(),
-                                                    ) {
-                                                        Box(
-                                                            modifier =
-                                                                Modifier
-                                                                    .size(8.dp)
-                                                                    .clip(CircleShape)
-                                                                    .background(Color(0xFF22C55E)),
-                                                        )
-                                                    }
-                                                    AnimatedContent(
-                                                        targetState = statusText,
-                                                        transitionSpec = {
-                                                            fadeIn(
-                                                                animationSpec =
-                                                                    spring(
-                                                                        dampingRatio = Spring.DampingRatioNoBouncy,
-                                                                        stiffness = Spring.StiffnessMedium,
-                                                                    ),
-                                                            ) togetherWith
-                                                                fadeOut(
-                                                                    animationSpec =
-                                                                        spring(
-                                                                            dampingRatio = Spring.DampingRatioNoBouncy,
-                                                                            stiffness = Spring.StiffnessMedium,
-                                                                        ),
-                                                                )
-                                                        },
-                                                        label = "peer_presence_subtitle",
-                                                    ) { label ->
-                                                        Text(
-                                                            text = label,
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            color =
-                                                                if (label == "Online") {
-                                                                    Color(0xFF16A34A)
-                                                                } else {
-                                                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                                                                },
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        if (!isGroupChat && chatHasIntentOverlap) {
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Icon(
-                                                Icons.Filled.Bolt,
-                                                contentDescription = "Shared availability",
-                                                tint = Color(0xFFFBBF24),
-                                                modifier = Modifier.size(22.dp),
-                                            )
-                                        }
-
-                                        if (isGroupChat) {
-                                            ChatHeaderIconButton(
-                                                icon = Icons.Outlined.Edit,
-                                                contentDescription = "Rename group",
-                                                onClick = {
-                                                    renameGroupDraft = groupTitle
-                                                    showRenameGroupDialog = true
-                                                },
-                                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                                            )
-                                        }
-
-                                        // Overflow / connection options
-                                        ChatHeaderIconButton(
-                                            icon = Icons.Filled.MoreVert,
-                                            contentDescription = "More options",
-                                            onClick = { showConnectionSheet = true },
-                                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                                        )
-                                    }
-                                }
-                            }
-
-                            Box(
-                                modifier =
-                                    Modifier
-                                        .weight(1f)
-                                        .fillMaxWidth()
-                                        .clipToBounds(),
-                            ) {
-                                Column(
-                                    modifier =
-                                        Modifier
-                                            .fillMaxSize()
-                                            .chatThreadKeyboardDock(
-                                                nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
-                                                clearNativeTabBar = true,
-                                            ),
-                                ) {
-                                    Box(
-                                        modifier =
-                                            Modifier
-                                                .weight(1f)
-                                                .fillMaxWidth(),
-                                    ) {
-                                        Box(modifier = Modifier.fillMaxSize()) {
-                                            if (showIcebreaker) {
-                                                Box(
-                                                    modifier =
-                                                        Modifier
-                                                            .align(Alignment.TopCenter)
-                                                            .fillMaxWidth()
-                                                            .onSizeChanged { icebreakerPanelHeightPx = it.height }
-                                                            .zIndex(2f),
-                                                ) {
-                                                    IcebreakerPanel(
-                                                        prompts = icebreakerPrompts,
-                                                        onPromptClick = { prompt -> viewModel.useIcebreakerPrompt(prompt) },
-                                                        onRefresh = { viewModel.refreshIcebreakerPrompts() },
-                                                        onDismiss = { viewModel.dismissIcebreakerPanel() },
-                                                        cooldownRemainingSec = icebreakerCooldownRemainingSec,
-                                                    )
-                                                }
-                                            }
-
-                                            // Messages
-                                            Box(
-                                                modifier =
-                                                    Modifier
-                                                        .fillMaxSize()
-                                                        .padding(top = icebreakerTimelineTopReserve)
-                                                        .clipToBounds()
-                                                        .zIndex(1f),
-                                            ) {
-                                                if (state.isLoadingMessages && messages.isEmpty()) {
-                                                    Box(
-                                                        modifier =
-                                                            messageContentModifier
-                                                                .fillMaxWidth()
-                                                                .padding(horizontal = 8.dp, vertical = 24.dp),
-                                                        contentAlignment = Alignment.Center,
-                                                    ) {
-                                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                                            CircularProgressIndicator(
-                                                                modifier = Modifier.size(36.dp),
-                                                                color = PrimaryBlue,
-                                                                strokeWidth = 3.dp,
-                                                            )
-                                                            Spacer(modifier = Modifier.height(12.dp))
-                                                            Text(
-                                                                "Loading messages…",
-                                                                style = MaterialTheme.typography.bodyMedium,
-                                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                            )
-                                                        }
-                                                    }
-                                                } else if (messages.isEmpty()) {
-                                                    Box(
-                                                        modifier =
-                                                            messageContentModifier
-                                                                .fillMaxWidth()
-                                                                .padding(horizontal = 8.dp),
-                                                        contentAlignment = Alignment.Center,
-                                                    ) {
-                                                        GlassCard(
-                                                            modifier = Modifier.fillMaxWidth(),
-                                                            usePrimaryBorder = true,
-                                                            contentPadding = 28.dp,
-                                                        ) {
-                                                            Column(
-                                                                modifier = Modifier.fillMaxWidth(),
-                                                                horizontalAlignment = Alignment.CenterHorizontally,
-                                                            ) {
-                                                                Icon(
-                                                                    Icons.Filled.ChatBubbleOutline,
-                                                                    contentDescription = null,
-                                                                    modifier = Modifier.size(48.dp),
-                                                                    tint = PrimaryBlue.copy(alpha = 0.85f),
-                                                                )
-                                                                Spacer(modifier = Modifier.height(16.dp))
-                                                                Text(
-                                                                    "No messages yet",
-                                                                    modifier = Modifier.fillMaxWidth(),
-                                                                    style = MaterialTheme.typography.titleMedium,
-                                                                    fontWeight = FontWeight.SemiBold,
-                                                                    color = MaterialTheme.colorScheme.onSurface,
-                                                                    textAlign = TextAlign.Center,
-                                                                )
-                                                                Spacer(modifier = Modifier.height(8.dp))
-                                                                Text(
-                                                                    if (isGroupChat) {
-                                                                        "Everyone here is in a verified click — say hello to the group."
-                                                                    } else {
-                                                                        "Say hi to ${chatDetails.otherUser.name}!"
-                                                                    },
-                                                                    modifier = Modifier.fillMaxWidth(),
-                                                                    style = MaterialTheme.typography.bodyMedium,
-                                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                                    textAlign = TextAlign.Center,
-                                                                )
-                                                            }
-                                                        }
-                                                    }
-                                                } else {
-                                                    val timelineEntries =
-                                                        remember(messages) {
-                                                            buildChatTimelineEntriesNewestFirst(messages)
-                                                        }
-                                                    LaunchedEffect(chatId, targetMessageId, timelineEntries) {
-                                                        val id =
-                                                            targetMessageId
-                                                                ?.trim()
-                                                                ?.takeIf { it.isNotEmpty() }
-                                                                ?: return@LaunchedEffect
-                                                        val index = timelineEntries.indexOfMessageId(id)
-                                                        if (index < 0) {
-                                                            val found = viewModel.ensureTargetMessageLoaded(id)
-                                                            if (!found) {
-                                                                initialTimelineScrollDone = true
-                                                            }
-                                                            return@LaunchedEffect
-                                                        }
-                                                        initialTimelineScrollDone = true
-                                                        scrollChatTimelineToMessage(
-                                                            listState = listState,
-                                                            suppressKeyboardDismiss =
-                                                            suppressKeyboardDismissWhileProgrammaticTimelineScroll,
-                                                            index = index,
-                                                        )
-                                                        focusedSearchMessageId = id
-                                                        delay(CHAT_SEARCH_FOCUS_HOLD_MS)
-                                                        if (focusedSearchMessageId == id) {
-                                                            focusedSearchMessageId = null
-                                                        }
-                                                    }
-                                                    val rawTimestampPeekTravelPx = remember { mutableFloatStateOf(0f) }
-                                                    val displayTimestampPeekVisualPx = remember { mutableFloatStateOf(0f) }
-                                                    val timestampPeekSettleJob = remember { mutableStateOf<Job?>(null) }
-                                                    val peekRevealPx = rememberTimestampPeekRevealPx()
-                                                    val timestampPeekSoftKneePx = rememberTimestampPeekSoftKneePx()
-                                                    DisposableEffect(
-                                                        integrateTimestampPeekWithSwipeBackContainer,
-                                                        peekRevealPx,
-                                                        timestampPeekSoftKneePx,
-                                                        coroutineScope,
-                                                    ) {
-                                                        val integrate = integrateTimestampPeekWithSwipeBackContainer
-                                                        if (integrate) {
-                                                            val integration =
-                                                                InteractiveSwipeBackRightToLeftPeek(
-                                                                    onGestureStart = {
-                                                                        timestampPeekSettleJob.value?.cancel()
-                                                                        timestampPeekSettleJob.value = null
-                                                                        restoreTimestampPeekRawFromDisplay(
-                                                                            rawLeftPx = rawTimestampPeekTravelPx,
-                                                                            displayVisualPx = displayTimestampPeekVisualPx,
-                                                                            maxRevealPx = peekRevealPx,
-                                                                            softKneePx = timestampPeekSoftKneePx,
-                                                                        )
-                                                                    },
-                                                                    onLeftDragDelta = { dLeft ->
-                                                                        applyTimestampPeekDragStep(
-                                                                            rawLeftPx = rawTimestampPeekTravelPx,
-                                                                            displayVisualPx = displayTimestampPeekVisualPx,
-                                                                            maxRevealPx = peekRevealPx,
-                                                                            softKneePx = timestampPeekSoftKneePx,
-                                                                            dLeftPx = dLeft,
-                                                                        )
-                                                                    },
-                                                                    onLeftDragEnd = {
-                                                                        coroutineScope.launchTimestampPeekReplyStyleSettle(
-                                                                            rawLeftPx = rawTimestampPeekTravelPx,
-                                                                            displayVisualPx = displayTimestampPeekVisualPx,
-                                                                            settleJobHolder = timestampPeekSettleJob,
-                                                                        )
-                                                                    },
-                                                                    isPeekRevealed = {
-                                                                        isTimestampPeekRevealed(displayTimestampPeekVisualPx.floatValue)
-                                                                    },
-                                                                    onRightDragDelta = { dRight ->
-                                                                        applyTimestampPeekDragStep(
-                                                                            rawLeftPx = rawTimestampPeekTravelPx,
-                                                                            displayVisualPx = displayTimestampPeekVisualPx,
-                                                                            maxRevealPx = peekRevealPx,
-                                                                            softKneePx = timestampPeekSoftKneePx,
-                                                                            dLeftPx = -dRight,
-                                                                        )
-                                                                    },
-                                                                    onRightDragFromRest = {
-                                                                        timestampPeekSettleJob.value?.cancel()
-                                                                        timestampPeekSettleJob.value = null
-                                                                        rawTimestampPeekTravelPx.floatValue = 0f
-                                                                        displayTimestampPeekVisualPx.floatValue = 0f
-                                                                    },
-                                                                )
-                                                            onRegisterSwipeBackRightToLeftPeek(integration)
-                                                        }
-                                                        onDispose {
-                                                            timestampPeekSettleJob.value?.cancel()
-                                                            timestampPeekSettleJob.value = null
-                                                            if (integrate) {
-                                                                onRegisterSwipeBackRightToLeftPeek(null)
-                                                            }
-                                                        }
-                                                    }
-                                                    val newestSentMessage =
-                                                        remember(messages) {
-                                                            messages
-                                                                .asSequence()
-                                                                .filter {
-                                                                    it.isSent
-                                                                }.maxByOrNull { it.message.timeCreated }
-                                                        }
-                                                    ChatMessageTimeline(
-                                                        timelineEntries = timelineEntries,
-                                                        listState = listState,
-                                                        newestSentMessage = newestSentMessage,
-                                                        listBottomPadding =
-                                                            PaddingValues(
-                                                                start = 12.dp,
-                                                                end = 12.dp,
-                                                                top = 24.dp + reverseListNewestEdgePad,
-                                                                bottom = 8.dp + ChatComposerStripReserve,
-                                                            ),
-                                                        dismissKeyboardOnUserMessageScroll = dismissKeyboardOnUserMessageScroll,
-                                                        displayTimestampPeekVisualPx = displayTimestampPeekVisualPx,
-                                                        peekRevealPx = peekRevealPx,
-                                                        meshConnection = chatDetails.connection,
-                                                        useHubNeutralMesh = isGroupChat,
-                                                        isGroupChat = isGroupChat,
-                                                        currentUserId = currentUserId,
-                                                        reactionsMap = reactionsMap,
-                                                        secureMediaHost = viewModel,
-                                                        activeChatId = activeApiChatId ?: chatDetails.chat.id,
-                                                        onToggleReaction = { messageId, reaction ->
-                                                            viewModel.toggleReaction(messageId, reaction)
-                                                        },
-                                                        onForward = { msgId -> forwardMessageId = msgId },
-                                                        onLongPress = { contextMenuMessage = it },
-                                                        onSwipeReply = { viewModel.startReplyTo(it) },
-                                                        onDownloadAttachment = { mwu, env ->
-                                                            viewModel.downloadChatAttachment(mwu.message.id, env)
-                                                        },
-                                                        onExpandPhoto = { expandedPhotoTarget = it },
-                                                        onOpenBeacon = { msg ->
-                                                            val beaconId =
-                                                                compose.project.click.click.data.models
-                                                                    .beaconIdFromMetadata(msg.metadata)
-                                                                    ?.trim()
-                                                                    .orEmpty()
-                                                            if (beaconId.isNotEmpty()) {
-                                                                openBeaconDetailId = beaconId
-                                                                val meta = msg.metadata as? kotlinx.serialization.json.JsonObject
-                                                                openBeaconDetailMetadata = meta
-                                                                openBeaconDetailContent = msg.content
-                                                                openBeaconDetailFallback =
-                                                                    compose.project.click.click.data.models.mapBeaconFromChatMetadata(
-                                                                        beaconId = beaconId,
-                                                                        metadata = meta,
-                                                                        contentFallback = msg.content,
-                                                                    )
-                                                            }
-                                                        },
-                                                        isLoadingOlderMessages = isLoadingOlderMessages,
-                                                        highlightedMessageId = focusedSearchMessageId,
-                                                        modifier =
-                                                            messageContentModifier
-                                                                .padding(horizontal = 4.dp)
-                                                                .then(
-                                                                    if (!integrateTimestampPeekWithSwipeBackContainer) {
-                                                                        Modifier.chatTimestampPeekOnSwipeLeft(
-                                                                            maxRevealPx = peekRevealPx,
-                                                                            softKneePx = timestampPeekSoftKneePx,
-                                                                            rawLeftPx = rawTimestampPeekTravelPx,
-                                                                            displayVisualPx = displayTimestampPeekVisualPx,
-                                                                            scope = coroutineScope,
-                                                                            settleJobHolder = timestampPeekSettleJob,
-                                                                        )
-                                                                    } else {
-                                                                        Modifier
-                                                                    },
-                                                                ),
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth(),
-                                    ) {
-                                        // Typing indicator — label + bouncing dots (Realtime Broadcast)
-                                        AnimatedVisibility(
-                                            visible = isPeerTyping,
-                                            enter =
-                                                fadeIn(ChatChromeMotion.ShortFade) +
-                                                    slideInVertically(
-                                                        animationSpec = ChatChromeMotion.ShortSlide,
-                                                        initialOffsetY = { it / 4 },
-                                                    ),
-                                            exit =
-                                                fadeOut(animationSpec = tween(160, easing = FastOutSlowInEasing)) +
-                                                    slideOutVertically(
-                                                        animationSpec = ChatChromeMotion.ShortSlide,
-                                                        targetOffsetY = { it / 4 },
-                                                    ),
-                                        ) {
-                                            Row(
-                                                modifier =
-                                                    Modifier
-                                                        .fillMaxWidth()
-                                                        .padding(start = 16.dp, end = 80.dp, bottom = 4.dp),
-                                                horizontalArrangement = Arrangement.Start,
-                                                verticalAlignment = Alignment.CenterVertically,
-                                            ) {
-                                                Box(
-                                                    modifier =
-                                                        Modifier
-                                                            .border(
-                                                                width = 1.dp,
-                                                                color = PrimaryBlue.copy(alpha = 0.15f),
-                                                                shape =
-                                                                    RoundedCornerShape(
-                                                                        topStart = chatBubbleScaledDp(6f),
-                                                                        topEnd = chatBubbleScaledDp(21f),
-                                                                        bottomStart = chatBubbleScaledDp(21f),
-                                                                        bottomEnd = chatBubbleScaledDp(21f),
-                                                                    ),
-                                                            ).clip(
-                                                                RoundedCornerShape(
-                                                                    topStart = chatBubbleScaledDp(6f),
-                                                                    topEnd = chatBubbleScaledDp(21f),
-                                                                    bottomStart = chatBubbleScaledDp(21f),
-                                                                    bottomEnd = chatBubbleScaledDp(21f),
-                                                                ),
-                                                            ).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f))
-                                                            .padding(
-                                                                horizontal = chatBubbleScaledDp(18f),
-                                                                vertical = chatBubbleScaledDp(12f),
-                                                            ),
-                                                ) {
-                                                    Row(
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.spacedBy(chatBubbleScaledDp(9f)),
-                                                    ) {
-                                                        Text(
-                                                            text = typingPeerLabel,
-                                                            style = chatBubbleReplySnippetStyle(),
-                                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                            fontStyle = FontStyle.Italic,
-                                                        )
-                                                        ChatTypingDots()
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        // Edit mode indicator strip
-                                        if (editingMessageId != null) {
-                                            Surface(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                color = PrimaryBlue.copy(alpha = 0.12f),
-                                            ) {
-                                                Row(
-                                                    modifier =
-                                                        Modifier
-                                                            .fillMaxWidth()
-                                                            .padding(horizontal = 16.dp, vertical = 6.dp),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                ) {
-                                                    Icon(
-                                                        Icons.Filled.Edit,
-                                                        contentDescription = null,
-                                                        modifier = Modifier.size(16.dp),
-                                                        tint = PrimaryBlue,
-                                                    )
-                                                    Spacer(modifier = Modifier.width(8.dp))
-                                                    Text(
-                                                        "Editing message",
-                                                        style = MaterialTheme.typography.labelMedium,
-                                                        color = PrimaryBlue,
-                                                    )
-                                                    Spacer(modifier = Modifier.weight(1f))
-                                                    IconButton(
-                                                        onClick = { viewModel.cancelEditMessage() },
-                                                        modifier = Modifier.size(28.dp),
-                                                    ) {
-                                                        Icon(
-                                                            Icons.Filled.Close,
-                                                            contentDescription = "Cancel edit",
-                                                            modifier = Modifier.size(16.dp),
-                                                            tint = PrimaryBlue,
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        Box(
-                                            modifier = Modifier.fillMaxWidth(),
-                                        ) {
-                                            ConnectionChatMessageComposer(
-                                                viewModel = viewModel,
-                                                chatDetails = chatDetails,
-                                                isGroupChat = isGroupChat,
-                                                editingMessageId = editingMessageId,
-                                                replyingTo = replyingTo,
-                                                mediaPickers = mediaPickers,
-                                                onOpenDisposableRoll = {
-                                                    if (isGroupChat) {
-                                                        chatDetails.chat.id
-                                                            ?.trim()
-                                                            ?.takeIf { it.isNotEmpty() }
-                                                            ?.let { onOpenDisposableRollForChat?.invoke(it) }
-                                                    } else {
-                                                        onOpenDisposableRoll?.invoke(chatDetails.connection.id)
-                                                    }
-                                                },
-                                                tetherPingEnabled = tetherChannelId.isNotBlank() && !currentUserId.isNullOrBlank(),
-                                                pingTetherLoading = tetherSenderAck != null,
-                                                onPingTether = {
-                                                    tetherSenderAck = "Ping tether sent"
-                                                    EncounterTetherManager.pingTether(
-                                                        encounterId = tetherChannelId,
-                                                        senderId = currentUserId!!,
-                                                    )
-                                                },
-                                                shareableBeacons = shareableBeacons,
-                                                onRefreshShareableBeacons = {
-                                                    mapViewModel?.refreshDiscoveryFeed()
-                                                },
-                                            )
-                                        }
-                                    }
-                                }
-                            }
+                            ChatViewTimelinePane(
+                                viewModel = viewModel,
+                                chatId = chatId,
+                                targetMessageId = targetMessageId,
+                                state = state,
+                                chatDetails = chatDetails,
+                                messages = messages,
+                                isGroupChat = isGroupChat,
+                                currentUserId = currentUserId,
+                                activeApiChatId = activeApiChatId,
+                                listState = listState,
+                                coroutineScope = coroutineScope,
+                                nativeKeyboardInsets = nativeKeyboardInsets,
+                                dismissKeyboardOnUserMessageScroll = dismissKeyboardOnUserMessageScroll,
+                                suppressKeyboardDismissWhileProgrammaticTimelineScroll = suppressKeyboardDismissWhileProgrammaticTimelineScroll,
+                                initialTimelineScrollDoneState = initialTimelineScrollDoneState,
+                                focusedSearchMessageIdState = focusedSearchMessageIdState,
+                                integrateTimestampPeekWithSwipeBackContainer = integrateTimestampPeekWithSwipeBackContainer,
+                                onRegisterSwipeBackRightToLeftPeek = onRegisterSwipeBackRightToLeftPeek,
+                                reverseListNewestEdgePad = reverseListNewestEdgePad,
+                                messageContentModifier = messageContentModifier,
+                                showIcebreaker = showIcebreaker,
+                                icebreakerPrompts = icebreakerPrompts,
+                                icebreakerCooldownRemainingSec = icebreakerCooldownRemainingSec,
+                                icebreakerPanelHeightPxState = icebreakerPanelHeightPxState,
+                                icebreakerTimelineTopReserve = icebreakerTimelineTopReserve,
+                                reactionsMap = reactionsMap,
+                                isLoadingOlderMessages = isLoadingOlderMessages,
+                                isPeerTyping = isPeerTyping,
+                                typingPeerLabel = typingPeerLabel,
+                                editingMessageId = editingMessageId,
+                                replyingTo = replyingTo,
+                                mediaPickers = mediaPickers,
+                                tetherChannelId = tetherChannelId,
+                                tetherSenderAckState = tetherSenderAckState,
+                                onOpenDisposableRoll = onOpenDisposableRoll,
+                                onOpenDisposableRollForChat = onOpenDisposableRollForChat,
+                                shareableBeacons = shareableBeacons,
+                                mapViewModel = mapViewModel,
+                                forwardMessageIdState = forwardMessageIdState,
+                                contextMenuMessageState = contextMenuMessageState,
+                                expandedPhotoTargetState = expandedPhotoTargetState,
+                                openBeaconDetailIdState = openBeaconDetailIdState,
+                                openBeaconDetailFallbackState = openBeaconDetailFallbackState,
+                                openBeaconDetailMetadataState = openBeaconDetailMetadataState,
+                                openBeaconDetailContentState = openBeaconDetailContentState,
+                            )
 
                             if (forwardMessageId != null) {
                                 ForwardDialog(
@@ -1494,203 +779,30 @@ fun ChatView(
             }
         }
 
-        TetherCompassToast(
-            message = tetherToastMessage,
-            modifier =
-                Modifier
-                    .align(Alignment.TopCenter)
-                    .zIndex(60f)
-                    .padding(top = topInset + 64.dp),
-            onDismissed = { tetherToastMessage = null },
-        )
-
-        TetherCompassToast(
-            message = tetherSenderAck,
-            visibleDurationMs = 2_400L,
-            modifier =
-                Modifier
-                    .align(Alignment.TopCenter)
-                    .zIndex(61f)
-                    .padding(top = topInset + 64.dp),
-            onDismissed = { tetherSenderAck = null },
-        )
-
-        Box(modifier = Modifier.fillMaxSize()) {
-            ChatExpandedPhotoPreview(
-                target = expandedPhotoTarget,
-                secureMediaHost = viewModel,
-                onDismiss = { expandedPhotoTarget = null },
-            )
-        }
-
-        val beaconDetailId = openBeaconDetailId
-        val mapVm = mapViewModel
-        if (beaconDetailId != null) {
-            if (mapVm != null) {
-                ChatBeaconDetailSheet(
-                    beaconId = beaconDetailId,
-                    mapViewModel = mapVm,
-                    knownBeacons = shareableBeacons,
-                    onDismissRequest = {
-                        openBeaconDetailId = null
-                        openBeaconDetailFallback = null
-                        openBeaconDetailMetadata = null
-                        openBeaconDetailContent = null
-                    },
-                    onShareBeaconToChats = onShareBeaconToChats,
-                    messageFallback = openBeaconDetailFallback,
-                    messageMetadata = openBeaconDetailMetadata,
-                    messageContent = openBeaconDetailContent,
-                )
-            } else {
-                LaunchedEffect(beaconDetailId) {
-                    compose.project.click.click.deeplink.EventDeepLinkRouter
-                        .setPendingBeaconId(beaconDetailId)
-                    openBeaconDetailId = null
-                }
-            }
-        }
-
-        GlassToastHost(
-            state = toastState,
-            opaque = true,
-            modifier =
-                Modifier
-                    .align(Alignment.BottomEnd)
-                    .zIndex(50f)
-                    .padding(end = 20.dp, bottom = edgeBottomInset + 16.dp),
-        )
-
-        // Message long-press context sheet
-        if (contextMenuMessage != null) {
-            MessageActionSheet(
-                messageWithUser = contextMenuMessage!!,
-                viewModel = viewModel,
-                onDismiss = { contextMenuMessage = null },
-            )
-        }
-
-        var pendingConnectionDialog by remember { mutableStateOf<ConnectionSheetDialog?>(null) }
-        var dialogGroupId by remember { mutableStateOf<String?>(null) }
-
-        // Connection action sheet
-        if (showConnectionSheet) {
-            val successState = chatMessagesState as? ChatMessagesState.Success
-            val sheetConn = successState?.chatDetails?.connection
-            ConnectionActionSheet(
-                chatDetails = successState?.chatDetails,
-                currentUserId = currentUserId,
-                isArchived = sheetConn != null && sheetConn.id in archivedConnectionIds,
-                isServerLifecycleArchived = sheetConn?.isServerLifecycleArchived() == true,
-                isCore = sheetConn != null && sheetConn.id in coreConnectionIds,
-                onDismiss = { showConnectionSheet = false },
-                onMenuAction = { action ->
-                    val details = successState?.chatDetails
-                    val connId = sheetConn?.id
-                    when (action) {
-                        ConnectionMenuAction.Nudge -> viewModel.sendNudge()
-                        ConnectionMenuAction.Archive -> {
-                            viewModel.archiveConnection { success ->
-                                if (success) onBackPressed()
-                            }
-                        }
-                        ConnectionMenuAction.Unarchive -> {
-                            if (connId != null) viewModel.unarchiveConnection(connId)
-                        }
-                        ConnectionMenuAction.AddToCore -> {
-                            if (connId != null) viewModel.addConnectionToCore(connId)
-                        }
-                        ConnectionMenuAction.RemoveFromCore -> {
-                            if (connId != null) viewModel.removeConnectionFromCore(connId)
-                        }
-                        ConnectionMenuAction.MarkUnread -> {
-                            if (connId != null) viewModel.markConversationUnread(connId)
-                        }
-                        ConnectionMenuAction.RequestRemove -> {
-                            pendingConnectionDialog = ConnectionSheetDialog.Remove
-                        }
-                        ConnectionMenuAction.RequestReport -> {
-                            pendingConnectionDialog = ConnectionSheetDialog.Report()
-                        }
-                        ConnectionMenuAction.RequestBlock -> {
-                            pendingConnectionDialog = ConnectionSheetDialog.Block
-                        }
-                        ConnectionMenuAction.RequestLeaveGroup -> {
-                            dialogGroupId = details?.groupClique?.groupId
-                            pendingConnectionDialog = ConnectionSheetDialog.LeaveGroup
-                        }
-                        ConnectionMenuAction.RequestDeleteGroup -> {
-                            dialogGroupId = details?.groupClique?.groupId
-                            pendingConnectionDialog = ConnectionSheetDialog.DeleteGroup
-                        }
-                    }
-                },
-            )
-        }
-
-        ConnectionSheetDialogs(
-            dialog = pendingConnectionDialog,
-            onDismiss = {
-                pendingConnectionDialog = null
-                dialogGroupId = null
-            },
-            onConfirmRemove = {
-                viewModel.deleteConnectionPermanently { success ->
-                    if (success) onBackPressed()
-                }
-            },
-            onConfirmBlock = {
-                viewModel.blockUser { success ->
-                    if (success) onBackPressed()
-                }
-            },
-            onConfirmReport = { reason ->
-                viewModel.reportConnection(reason) { }
-            },
-            onConfirmLeaveGroup = {
-                dialogGroupId?.let { gid ->
-                    viewModel.leaveVerifiedClique(gid) { ok -> if (ok) onBackPressed() }
-                }
-            },
-            onConfirmDeleteGroup = {
-                dialogGroupId?.let { gid ->
-                    viewModel.deleteVerifiedClique(gid) { ok -> if (ok) onBackPressed() }
-                }
-            },
-        )
-
-        val renameGroupId = (chatMessagesState as? ChatMessagesState.Success)?.chatDetails?.groupClique?.groupId
-        UnifiedPopupFormDialog(
-            visible = showRenameGroupDialog,
-            onDismissRequest = { showRenameGroupDialog = false },
-            title = "Rename group",
-            confirmLabel = "Save",
-            onConfirm = {
-                if (renameGroupDraft.isBlank()) return@UnifiedPopupFormDialog
-                renameGroupId?.let { gid ->
-                    viewModel.renameVerifiedClique(gid, renameGroupDraft) { }
-                }
-                showRenameGroupDialog = false
-            },
-            body = {
-                ClickOutlinedTextField(
-                    value = renameGroupDraft,
-                    onValueChange = { renameGroupDraft = it },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Group name", color = GlassSheetTokens.OnOledMuted()) },
-                    colors =
-                        OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = GlassSheetTokens.OnOled(),
-                            unfocusedTextColor = GlassSheetTokens.OnOled(),
-                            focusedBorderColor = PrimaryBlue,
-                            unfocusedBorderColor = GlassSheetTokens.GlassBorder(),
-                            cursorColor = PrimaryBlue,
-                            focusedLabelColor = GlassSheetTokens.OnOledMuted(),
-                            unfocusedLabelColor = GlassSheetTokens.OnOledMuted(),
-                        ),
-                )
-            },
+        ChatViewOverlays(
+            viewModel = viewModel,
+            chatMessagesState = chatMessagesState,
+            currentUserId = currentUserId,
+            archivedConnectionIds = archivedConnectionIds,
+            coreConnectionIds = coreConnectionIds,
+            topInset = topInset,
+            edgeBottomInset = edgeBottomInset,
+            toastState = toastState,
+            shareableBeacons = shareableBeacons,
+            mapViewModel = mapViewModel,
+            onShareBeaconToChats = onShareBeaconToChats,
+            onBackPressed = onBackPressed,
+            tetherToastMessageState = tetherToastMessageState,
+            tetherSenderAckState = tetherSenderAckState,
+            expandedPhotoTargetState = expandedPhotoTargetState,
+            openBeaconDetailIdState = openBeaconDetailIdState,
+            openBeaconDetailFallbackState = openBeaconDetailFallbackState,
+            openBeaconDetailMetadataState = openBeaconDetailMetadataState,
+            openBeaconDetailContentState = openBeaconDetailContentState,
+            contextMenuMessageState = contextMenuMessageState,
+            showConnectionSheetState = showConnectionSheetState,
+            showRenameGroupDialogState = showRenameGroupDialogState,
+            renameGroupDraftState = renameGroupDraftState,
         )
     } // End outer Box
 }

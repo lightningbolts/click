@@ -75,6 +75,21 @@ ViewModels are the **orchestration layer** between `ui/` and `data/`.
 
 `ChatViewModel` is the deepest integrator: it mirrors realtime message streams into per-chat caches while respecting `AppDataManager` connection and archive sets.
 
+### File organization (readability convention)
+
+Large ViewModels are kept under ~1000 lines per file by splitting them across
+same-package sibling files:
+
+- `<Name>ViewModelState.kt` holds the top-level state/sealed types.
+- `<Name>ViewModel<Category>.kt` files hold `internal fun <Name>ViewModel.…`
+  extension functions for one concern (e.g. `ChatViewModelSend.kt`,
+  `ChatViewModelInboxOps.kt`, `MapViewModelEngagement.kt`).
+- The main class keeps its state, public API, and one-line wrappers that
+  delegate to `…Impl` extensions, so external call sites and tests never change.
+
+When adding a member to one of these ViewModels, put the body in the matching
+category file and keep the public wrapper in the class.
+
 **Chat open / inbox preview (2026-07):**
 
 - `loadChatMessages` calls `subscribeToNewMessages` as soon as `persistedApiChatId` is known (before payload fetch), then bridges `Loading → Success`. Duplicate opens for the same connection are deduped via `inFlightLoadConnectionId`.

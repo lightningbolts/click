@@ -17,6 +17,8 @@ Shared schema (source of truth: `click-web/supabase/migrations/`) also includes:
 
 The mobile repo mirrors those two files under `click/supabase/migrations/`. Apply them from **click-web** (`supabase db push` or the SQL editor) so both apps stay in sync.
 
+Event schema (guest RSVPs, participation, first-class event times, orgs, engagement rollups) is owned by `click-web/supabase/migrations/` and is **already applied** on the live database (2026-08-23). The click-web microsite app was reverted on 2026-08-24 to land the split-large-files refactor; do not re-run or roll back those migrations. Apply new event SQL from click-web, not this numbered SQL-editor list.
+
 Before running the trigger SQL, enable the required extension:
 
 1. In Supabase Dashboard, open `Database > Extensions`.

@@ -435,7 +435,7 @@ flowchart TD
 
 ## 7. Event ↔ encounter integration
 
-When two users connect (Tap / QR / connection create / encounter log) while GPS is inside a **live** map event geofence, attach that event to the **reporting user’s** encounter when **they** have RSVPed (`beacon_attendees`) **and** an active check-in (`event_check_ins`, `checked_out_at IS NULL`). Peers who did not RSVP/check in do not get the attachment on their rows, and viewers who are not engaged do not see event fields on shared timelines.
+When two users connect (Tap / QR / connection create / encounter log) while GPS is inside a **live** map event geofence, attach that event to the **reporting user’s** encounter when **they** have RSVPed (`beacon_attendees`) **and** an active check-in (`event_check_ins`, `checked_out_at IS NULL`). Peers who did not RSVP/check in do not get the attachment on their rows, and viewers who are not engaged do not see event fields on shared timelines. `event_participation` is schema-only and is **not** this gate (see click-web `docs/event-schema-scaling-followups.md`).
 
 | Concern | Intent |
 |---------|--------|
