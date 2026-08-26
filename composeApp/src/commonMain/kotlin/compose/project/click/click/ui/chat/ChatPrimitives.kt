@@ -39,7 +39,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -459,104 +458,6 @@ internal fun CallLogSystemRow(message: Message) {
                 )
             }
         }
-    }
-}
-
-/**
- * iOS: Material [androidx.compose.material3.DropdownMenu] uses a
- * platform popup that can show white bands in dark mode; this surface
- * hosts Voice/Video call action rows with fully themed colors.
- */
-@Composable
-internal fun ChatCallOptionsIosSurface(
-    onVoice: () -> Unit,
-    onVideo: () -> Unit,
-    voiceLabel: String = "Voice call",
-    videoLabel: String = "Video call",
-) {
-    val bg = MaterialTheme.colorScheme.surfaceContainerHigh
-    val onSurface = MaterialTheme.colorScheme.onSurface
-    val outline = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-    Surface(
-        modifier = Modifier.widthIn(min = 200.dp),
-        shape = RoundedCornerShape(14.dp),
-        color = bg,
-        tonalElevation = 3.dp,
-        shadowElevation = 12.dp,
-        border = BorderStroke(0.5.dp, outline),
-    ) {
-        Column(Modifier.padding(vertical = 6.dp)) {
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = ripple(bounded = true),
-                            onClick = {
-                                PlatformHapticsPolicy.lightImpact()
-                                onVoice()
-                            },
-                        ).padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Filled.Call, contentDescription = null, tint = onSurface)
-                Spacer(Modifier.width(12.dp))
-                Text(voiceLabel, style = MaterialTheme.typography.bodyLarge, color = onSurface)
-            }
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = ripple(bounded = true),
-                            onClick = {
-                                PlatformHapticsPolicy.lightImpact()
-                                onVideo()
-                            },
-                        ).padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Filled.Videocam, contentDescription = null, tint = onSurface)
-                Spacer(Modifier.width(12.dp))
-                Text(videoLabel, style = MaterialTheme.typography.bodyLarge, color = onSurface)
-            }
-        }
-    }
-}
-
-@Composable
-internal fun ChatCallOptionsPopup(
-    expanded: Boolean,
-    onDismiss: () -> Unit,
-    onVoice: () -> Unit,
-    onVideo: () -> Unit,
-    voiceLabel: String = "Voice call",
-    videoLabel: String = "Video call",
-    alignment: Alignment = Alignment.TopEnd,
-    offset: IntOffset = IntOffset.Zero,
-) {
-    if (!expanded) return
-    Popup(
-        alignment = alignment,
-        offset = offset,
-        onDismissRequest = onDismiss,
-        properties =
-            PopupProperties(
-                focusable = true,
-                dismissOnBackPress = true,
-                dismissOnClickOutside = true,
-            ),
-    ) {
-        ChatCallOptionsIosSurface(
-            onVoice = onVoice,
-            onVideo = onVideo,
-            voiceLabel = voiceLabel,
-            videoLabel = videoLabel,
-        )
     }
 }
 

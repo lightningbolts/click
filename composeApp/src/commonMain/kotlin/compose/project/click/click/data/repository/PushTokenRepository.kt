@@ -29,8 +29,8 @@ class PushTokenRepository(
             }
         val normalizedType =
             when (tokenType.lowercase()) {
-                "voip" -> "voip"
-                else -> "standard"
+                "standard" -> "standard"
+                else -> return false
             }
         return apiClient
             .postPushToken(

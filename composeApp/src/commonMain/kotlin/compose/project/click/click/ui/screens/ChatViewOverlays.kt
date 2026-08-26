@@ -15,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import compose.project.click.click.calls.CallSessionManager // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatBeaconDetailSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatExpandedPhotoPreview // pragma: allowlist secret
@@ -276,31 +275,5 @@ internal fun BoxScope.ChatViewOverlays(
                     ),
             )
         },
-    )
-}
-
-internal fun startOutgoingChatCall(
-    details: ChatMessagesState.Success,
-    videoEnabled: Boolean,
-) {
-    val clique = details.chatDetails.groupClique
-    if (clique != null) {
-        val groupId = clique.groupId
-        val threadId = details.chatDetails.chat.id
-        if (!groupId.isNullOrBlank() && !threadId.isNullOrBlank()) {
-            CallSessionManager.startOutgoingGroupCall(
-                groupId = groupId,
-                chatId = threadId,
-                memberIds = clique.memberUserIds,
-                videoEnabled = videoEnabled,
-            )
-        }
-        return
-    }
-    CallSessionManager.startOutgoingCall(
-        connectionId = details.chatDetails.connection.id,
-        otherUserId = details.chatDetails.otherUser.id,
-        otherUserName = details.chatDetails.otherUser.name ?: "Connection",
-        videoEnabled = videoEnabled,
     )
 }

@@ -14,10 +14,6 @@ import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import compose.project.click.click.MainActivity // pragma: allowlist secret
-import compose.project.click.click.calls.CallInvite // pragma: allowlist secret
-import compose.project.click.click.calls.PlatformIncomingCallUi // pragma: allowlist secret
-import compose.project.click.click.calls.initCallManager // pragma: allowlist secret
-import compose.project.click.click.calls.parseIncomingCallPayload // pragma: allowlist secret
 import compose.project.click.click.crypto.MessageCrypto // pragma: allowlist secret
 
 private const val CLICK_MESSAGES_CHANNEL_ID = "click_messages"
@@ -26,8 +22,6 @@ private const val CLICK_MESSAGES_CHANNEL_NAME = "Click messages"
 class ClickFirebaseMessagingService : FirebaseMessagingService() {
     override fun onCreate() {
         super.onCreate()
-        // Incoming call notifications can arrive before MainActivity runs (cold start / killed process).
-        initCallManager(applicationContext)
         initPushNotificationService(applicationContext)
         ensureNotificationChannel(applicationContext)
     }
@@ -45,14 +39,6 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
         val type = message.data["type"]
         val prefs = NotificationRuntimeState.getNotificationPreferences()
         if (type == "incoming_call") {
-            if (!prefs.callNotificationsEnabled) {
-                return
-            }
-            message.toIncomingCallInvite()?.let { invite ->
-                PlatformIncomingCallUi.showIncomingCall(invite)
-                compose.project.click.click.calls.CallSessionManager // pragma: allowlist secret
-                    .receiveIncomingPush(invite) // pragma: allowlist secret
-            }
             return
         }
         val allowed =
@@ -227,8 +213,6 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
         }
     }
 }
-
-private fun RemoteMessage.toIncomingCallInvite(): CallInvite? = parseIncomingCallPayload(data)
 
 private fun ensureNotificationChannel(context: Context) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return

@@ -29,8 +29,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import compose.project.click.click.calls.CallSessionManager
-import compose.project.click.click.calls.CallState
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -166,13 +164,6 @@ actual fun rememberChatMediaPickers(
     }
 
     fun openVoiceRecorder() {
-        val activeCall = CallSessionManager.callState.value
-        if (activeCall is CallState.Connecting || activeCall is CallState.Connected) {
-            onMediaAccessBlockedState(
-                "Microphone is in use for a call. End the call before recording a voice message.",
-            )
-            return
-        }
         when {
             ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
                 PackageManager.PERMISSION_GRANTED -> {
@@ -302,13 +293,6 @@ private fun VoiceRecordDialog(
                     onRecord = {
                         if (recorder != null) {
                             detachAndReleaseRecorder()
-                        }
-                        val activeCall = CallSessionManager.callState.value
-                        if (activeCall is CallState.Connecting || activeCall is CallState.Connected) {
-                            onRecordBlocked(
-                                "Microphone is in use for a call. End the call before recording a voice message.",
-                            )
-                            return@VoiceMessageRecordDialogLayout
                         }
                         outputFile.parentFile?.mkdirs()
                         if (outputFile.exists()) outputFile.delete()

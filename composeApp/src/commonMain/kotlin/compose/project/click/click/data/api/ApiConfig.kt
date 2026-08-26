@@ -15,7 +15,7 @@ object ApiConfig {
     const val SUPABASE_REALTIME_ENABLED = true
 
     /**
-     * Next.js companion (`click-web`) — profile QR, secure API tunnel, LiveKit token, chat gatekeeper, etc.
+     * Next.js companion (`click-web`) — profile QR, secure API tunnel, chat gatekeeper, etc.
      * Single source of truth lives in [compose.project.click.click.qr.CLICK_WEB_BASE_URL].
      */
     val CLICK_WEB_BASE_URL: String get() = QrClickWebBaseUrl

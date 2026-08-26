@@ -41,7 +41,6 @@ interface PushTokenRow {
 
 interface NotificationPreferenceRow {
   message_push_enabled: boolean;
-  call_push_enabled: boolean;
   event_reminder_push_enabled?: boolean;
   availability_match_push_enabled?: boolean;
   hub_message_push_enabled?: boolean;
@@ -66,7 +65,6 @@ type PushError = {
 
 type PushCategory =
   | "chat_message"
-  | "incoming_call"
   | "archive_warning"
   | "disposable_reveal"
   | "event_reminder"
@@ -201,56 +199,32 @@ async function sendIosPush(
   }
 
   const tokenType = pushToken.token_type ?? "standard";
-  const isVoipToken = tokenType === "voip";
-  const isIncomingCall = category === "incoming_call";
-  // Apple VoIP pushes require push-type voip, topic <bundleId>.voip, and apns-expiration 0 (no delay).
-  const isVoipIncomingCall = isVoipToken && isIncomingCall;
+  if (tokenType === "voip") {
+    return;
+  }
 
   const headers: Record<string, string> = {
     authorization: `bearer ${apnsJwt}`,
     "content-type": "application/json",
     "apns-priority": "10",
+    "apns-topic": bundleId,
+    "apns-push-type": "alert",
   };
 
-  if (isVoipIncomingCall) {
-    headers["apns-topic"] = `${bundleId}.voip`;
-    headers["apns-push-type"] = "voip";
-    headers["apns-expiration"] = "0";
-  } else {
-    headers["apns-topic"] = bundleId;
-    headers["apns-push-type"] = "alert";
-  }
-
-  const body = isVoipIncomingCall
-    ? {
-        aps: {
-          "content-available": 1,
-        },
-        ...(requestBody.data ?? {}),
-      }
-    : {
-        aps: {
-          alert: {
-            title: requestBody.title,
-            body: requestBody.body,
-          },
-          sound: "default",
-          // Lets the Notification Service Extension decrypt E2EE `encrypted_content` for the banner body.
-          ...(category === "chat_message" ? { "mutable-content": 1 } : {}),
-          ...(isIncomingCall
-            ? {
-                category: "CLICK_INCOMING_CALL",
-                "interruption-level": "time-sensitive",
-              }
-            : {}),
-        },
-        ...(requestBody.data ?? {}),
-      };
+  const body = {
+    aps: {
+      alert: {
+        title: requestBody.title,
+        body: requestBody.body,
+      },
+      sound: "default",
+      // Lets the Notification Service Extension decrypt E2EE `encrypted_content` for the banner body.
+      ...(category === "chat_message" ? { "mutable-content": 1 } : {}),
+    },
+    ...(requestBody.data ?? {}),
+  };
 
   const apnsRequestUrl = `${APNS_URL}/${pushToken.token}`;
-  if (isVoipIncomingCall) {
-    console.log("[APNs VoIP] APNs request URL:", apnsRequestUrl);
-  }
 
   const response = await fetch(apnsRequestUrl, {
     method: "POST",
@@ -259,12 +233,6 @@ async function sendIosPush(
   });
 
   const responseText = await response.text();
-  if (isVoipIncomingCall) {
-    console.log(
-      `[APNs VoIP] Apple response: status=${response.status}, body=${responseText || "(empty)"}`,
-    );
-  }
-
   if (!response.ok) {
     throw new Error(`APNs send failed: ${response.status} ${responseText}`);
   }
@@ -272,7 +240,6 @@ async function sendIosPush(
 
 function getPushCategory(requestBody: PushRequestBody): PushCategory {
   const t = requestBody.data?.type;
-  if (t === "incoming_call") return "incoming_call";
   if (t === "archive_warning") return "archive_warning";
   if (t === "disposable_reveal") return "disposable_reveal";
   if (t === "event_reminder") return "event_reminder";
@@ -282,32 +249,14 @@ function getPushCategory(requestBody: PushRequestBody): PushCategory {
 }
 
 function shouldSendToToken(
-  requestBody: ResolvedPushRequestBody,
+  _requestBody: ResolvedPushRequestBody,
   pushToken: PushTokenRow,
 ): boolean {
-  const category = getPushCategory(requestBody);
-
   if (pushToken.platform !== "ios") {
     return true;
   }
 
   const tokenType = pushToken.token_type ?? "standard";
-  if (
-    category === "chat_message" ||
-    category === "archive_warning" ||
-    category === "disposable_reveal" ||
-    category === "event_reminder" ||
-    category === "availability_match" ||
-    category === "hub_message"
-  ) {
-    return tokenType != "voip";
-  }
-
-  // incoming_call: VoIP + standard are ordered in the send loop (VoIP first, standard fallback).
-  if (category === "incoming_call") {
-    return true;
-  }
-
   return tokenType != "voip";
 }
 
@@ -371,56 +320,6 @@ function encryptedContentForFcmPayload(raw: string): string {
 function getBearerToken(req: Request): string | null {
   const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
   return authHeader?.replace(/^Bearer\s+/i, "") ?? null;
-}
-
-async function validateIncomingCallRequest(
-  req: Request,
-  supabase: ReturnType<typeof createClient>,
-  requestBody: PushRequestBody,
-): Promise<void> {
-  if (getPushCategory(requestBody) !== "incoming_call") return;
-
-  const token = getBearerToken(req);
-  if (!token) {
-    throw new Error("Authorization header is required for incoming call pushes");
-  }
-
-  const { data: authData, error: authError } = await supabase.auth.getUser(token);
-  if (authError || !authData.user) {
-    throw new Error(`Unable to authenticate incoming call push: ${authError?.message ?? "missing user"}`);
-  }
-
-  const data = requestBody.data ?? {};
-  const connectionId = typeof data.connection_id === "string" ? data.connection_id : null;
-  const callerId = typeof data.caller_id === "string" ? data.caller_id : null;
-  const calleeId = typeof data.callee_id === "string" ? data.callee_id : null;
-
-  if (!connectionId || !callerId || !calleeId) {
-    throw new Error("incoming_call pushes require connection_id, caller_id, and callee_id");
-  }
-
-  if (authData.user.id !== callerId) {
-    throw new Error("Authenticated user does not match caller_id");
-  }
-
-  if (requestBody.recipient_user_id !== calleeId) {
-    throw new Error("recipient_user_id must match callee_id for incoming_call pushes");
-  }
-
-  const { data: connection, error: connectionError } = await supabase
-    .from("connections")
-    .select("id, user_ids")
-    .eq("id", connectionId)
-    .maybeSingle();
-
-  if (connectionError || !connection) {
-    throw new Error(`Unable to validate incoming call connection: ${connectionError?.message ?? "missing connection"}`);
-  }
-
-  const userIds = Array.isArray(connection.user_ids) ? connection.user_ids.map(String) : [];
-  if (!userIds.includes(callerId) || !userIds.includes(calleeId)) {
-    throw new Error("Connection does not contain caller/callee users");
-  }
 }
 
 function isServiceSecretRequest(req: Request): boolean {
@@ -641,6 +540,10 @@ async function resolvePushRequest(
   supabase: ReturnType<typeof createClient>,
   requestBody: PushRequestBody,
 ): Promise<ResolvedPushRequestBody> {
+  if (requestBody.data?.type === "incoming_call") {
+    throw new Error("incoming_call pushes are no longer supported");
+  }
+
   if (isArchiveWarningServiceRequest(req, requestBody)) {
     const recipientUserId = asNonEmptyString(requestBody.recipient_user_id);
     const title = asNonEmptyString(requestBody.title);
@@ -671,24 +574,6 @@ async function resolvePushRequest(
     };
   }
 
-  if (getPushCategory(requestBody) === "incoming_call") {
-    await validateIncomingCallRequest(req, supabase, requestBody);
-
-    const recipientUserId = asNonEmptyString(requestBody.recipient_user_id);
-    const title = asNonEmptyString(requestBody.title);
-    const body = asNonEmptyString(requestBody.body);
-    if (!recipientUserId || !title || !body) {
-      throw new Error("incoming_call pushes require recipient_user_id, title, and body");
-    }
-
-    return {
-      recipient_user_id: recipientUserId,
-      title,
-      body,
-      data: requestBody.data,
-    };
-  }
-
   return resolveChatMessageRequest(req, supabase, requestBody);
 }
 
@@ -699,7 +584,7 @@ async function recipientAllowsPush(
   const { data, error } = await supabase
     .from("notification_preferences")
     .select(
-      "message_push_enabled, call_push_enabled, event_reminder_push_enabled, availability_match_push_enabled, hub_message_push_enabled",
+      "message_push_enabled, event_reminder_push_enabled, availability_match_push_enabled, hub_message_push_enabled",
     )
     .eq("user_id", requestBody.recipient_user_id)
     .maybeSingle<NotificationPreferenceRow>();
@@ -709,9 +594,6 @@ async function recipientAllowsPush(
   }
 
   const cat = getPushCategory(requestBody);
-  if (cat === "incoming_call") {
-    return data.call_push_enabled !== false;
-  }
   if (cat === "event_reminder") {
     return data.event_reminder_push_enabled !== false;
   }
@@ -788,7 +670,6 @@ Deno.serve(async (req: Request) => {
     let sent = 0;
 
     const pushTokens = (tokens ?? []) as PushTokenRow[];
-    const category = getPushCategory(resolvedRequestBody);
 
     const ensureFcm = async () => {
       if (!fcmAccessToken || !fcmProjectId) {
@@ -815,22 +696,7 @@ Deno.serve(async (req: Request) => {
           await ensureFcm();
           await sendAndroidPush(token, resolvedRequestBody, fcmAccessToken!, fcmProjectId!);
         } else {
-          const isVoipCallPush =
-            (token.token_type ?? "standard") === "voip" && category === "incoming_call";
-          if (isVoipCallPush) {
-            console.log(
-              "[APNs VoIP] VoIP token loaded from database for recipient",
-              resolvedRequestBody.recipient_user_id,
-            );
-          }
-          try {
-            await ensureApns();
-          } catch (jwtError) {
-            if (isVoipCallPush) {
-              console.error("[APNs VoIP] JWT signing error:", jwtError);
-            }
-            throw jwtError;
-          }
+          await ensureApns();
           await sendIosPush(token, resolvedRequestBody, apnsJwt!);
         }
         sent += 1;
@@ -849,38 +715,8 @@ Deno.serve(async (req: Request) => {
       }
     };
 
-    if (category === "incoming_call") {
-      const byDevice = new Map<string, PushTokenRow[]>();
-      for (const token of pushTokens) {
-        const key = token.device_id?.trim()
-          ? `device:${token.device_id.trim()}`
-          : `token:${token.token}`;
-        const list = byDevice.get(key) ?? [];
-        list.push(token);
-        byDevice.set(key, list);
-      }
-      for (const group of byDevice.values()) {
-        const android = group.filter((t) => t.platform === "android");
-        const ios = group.filter((t) => t.platform === "ios");
-        for (const token of android) {
-          await deliverOne(token);
-        }
-        if (ios.length > 0) {
-          const voip = ios.find((t) => (t.token_type ?? "standard") === "voip");
-          const standard = ios.find((t) => (t.token_type ?? "standard") !== "voip");
-          let voipOk = false;
-          if (voip) {
-            voipOk = await deliverOne(voip);
-          }
-          if (!voipOk && standard) {
-            await deliverOne(standard);
-          }
-        }
-      }
-    } else {
-      for (const token of pushTokens) {
-        await deliverOne(token);
-      }
+    for (const token of pushTokens) {
+      await deliverOne(token);
     }
 
     return new Response(JSON.stringify({

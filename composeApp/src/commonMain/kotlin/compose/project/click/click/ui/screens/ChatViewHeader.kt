@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.outlined.Edit // pragma: allowlist secret
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.*
@@ -40,7 +39,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatChromeHorizontalPadding // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag // pragma: allowlist secret
@@ -50,16 +48,12 @@ import compose.project.click.click.ui.chat.chatPeerStatusSubtitle // pragma: all
 import compose.project.click.click.ui.chat.groupMembersPickerContextFrom // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
 import compose.project.click.click.ui.components.BindPlatformNativeNavigationBar // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickDropdownMenu // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickMenuItem // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.CoreConnectionAvatarFrame // pragma: allowlist secret
 import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
 import compose.project.click.click.ui.components.NativeChromeAction // pragma: allowlist secret
 import compose.project.click.click.ui.components.NativeChromeIdentity // pragma: allowlist secret
-import compose.project.click.click.ui.components.NativeChromeMenuItem // pragma: allowlist secret
 import compose.project.click.click.ui.components.groupAvatarClusterWidth // pragma: allowlist secret
-import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatMessagesState // pragma: allowlist secret
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -80,14 +74,10 @@ internal fun ChatViewSuccessHeader(
     onBackPressed: () -> Unit,
     onOpenUserProfile: (String) -> Unit,
     onOpenGroupMembersPicker: (GroupMembersPickerContext) -> Unit,
-    startVoiceCall: () -> Unit,
-    startVideoCall: () -> Unit,
-    showCallMenuState: MutableState<Boolean>,
     showConnectionSheetState: MutableState<Boolean>,
     showRenameGroupDialogState: MutableState<Boolean>,
     renameGroupDraftState: MutableState<String>,
 ) {
-    var showCallMenu by showCallMenuState
     var showConnectionSheet by showConnectionSheetState
     var showRenameGroupDialog by showRenameGroupDialogState
     var renameGroupDraft by renameGroupDraftState
@@ -290,37 +280,6 @@ internal fun ChatViewSuccessHeader(
                     )
                 }
 
-                Box {
-                    ChatHeaderIconButton(
-                        icon = Icons.Filled.Call,
-                        contentDescription = "Call options",
-                        onClick = { showCallMenu = true },
-                        tint = PrimaryBlue.copy(alpha = 0.85f),
-                    )
-                    ClickDropdownMenu(
-                        expanded = showCallMenu,
-                        onDismissRequest = { showCallMenu = false },
-                        items =
-                            listOf(
-                                ClickMenuItem(
-                                    label = if (isGroupChat) "Group voice call" else "Voice call",
-                                    onClick = {
-                                        PlatformHapticsPolicy.lightImpact()
-                                        startVoiceCall()
-                                    },
-                                    icon = Icons.Filled.Call,
-                                ),
-                                ClickMenuItem(
-                                    label = if (isGroupChat) "Group video call" else "Video call",
-                                    onClick = {
-                                        PlatformHapticsPolicy.lightImpact()
-                                        startVideoCall()
-                                    },
-                                    icon = Icons.Filled.Videocam,
-                                ),
-                            ),
-                    )
-                }
                 // Overflow / connection options
                 ChatHeaderIconButton(
                     icon = Icons.Filled.MoreVert,
@@ -418,26 +377,6 @@ internal fun ChatViewNativeNavBinding(
                             ),
                         )
                     }
-                    add(
-                        NativeChromeAction(
-                            sfSymbol = "phone.fill",
-                            contentDescription = "Call options",
-                            onClick = {},
-                            menuItems =
-                                listOf(
-                                    NativeChromeMenuItem(
-                                        title = if (bindIsGroup) "Group voice call" else "Voice call",
-                                        sfSymbol = "phone.fill",
-                                        onClick = { successChat?.let { startOutgoingChatCall(it, videoEnabled = false) } },
-                                    ),
-                                    NativeChromeMenuItem(
-                                        title = if (bindIsGroup) "Group video call" else "Video call",
-                                        sfSymbol = "video.fill",
-                                        onClick = { successChat?.let { startOutgoingChatCall(it, videoEnabled = true) } },
-                                    ),
-                                ),
-                        ),
-                    )
                     add(
                         NativeChromeAction(
                             sfSymbol = "ellipsis.circle",

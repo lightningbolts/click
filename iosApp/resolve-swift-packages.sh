@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Resolve Swift package dependencies for iosApp (LiveKit + GoogleSignIn).
+# Resolve Swift package dependencies for iosApp (GoogleSignIn).
 # Retries through common SPM failures: network drops, corrupt artifact caches,
 # and optional git submodule checkouts that are not required to build.
 set -euo pipefail
@@ -21,7 +21,7 @@ if [[ -z "${DEVELOPER_DIR:-}" ]]; then
   done
 fi
 
-# LiveKit / SwiftProtobuf ship .gitmodules that SPM does not need for the
+# Some Swift packages ship .gitmodules that SPM does not need for the
 # Swift products. Disabling recurse avoids "Couldn't update repository submodules".
 export GIT_CONFIG_COUNT=1
 export GIT_CONFIG_KEY_0=submodule.recurse
@@ -31,7 +31,7 @@ clear_spm_artifact_traps() {
   local artifacts="${HOME}/Library/Caches/org.swift.swiftpm/artifacts"
   [[ -d "$artifacts" ]] || return 0
   # SPM can leave empty/partial dirs that then fail with "already exists in file system".
-  find "$artifacts" -maxdepth 1 \( -iname '*livekit*' -o -iname '*webrtc*' -o -iname '*uniffi*' \) \
+  find "$artifacts" -maxdepth 1 \( -iname '*googlesignin*' -o -iname '*gtm*' \) \
     -exec rm -rf {} + 2>/dev/null || true
 }
 

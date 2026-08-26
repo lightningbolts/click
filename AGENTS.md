@@ -42,7 +42,7 @@ CI: Android job runs on Linux (`testDebugUnitTest` + `assembleDebug`); iOS job r
 
 - The `google-secrets` Gradle plugin reads `MAPS_API_KEY` from `local.properties`, with `local.defaults.properties` as a checked-in fallback for CI/Xcode when the gitignored file is absent. A placeholder value is sufficient for compilation but Google Maps features won't work at runtime without a real key.
 - iOS builds require Xcode (macOS only) and are not runnable in Cloud Agent VMs.
-- The `click-web` Next.js companion app (LiveKit token endpoint, QR flows, chat gatekeeper) is a **separate repository**. Prefer checking it out as a sibling `../click-web`.
+- The `click-web` Next.js companion app (QR flows, chat gatekeeper) is a **separate repository**. Prefer checking it out as a sibling `../click-web`.
 - **`click-web/supabase` is the source of truth** for shared migrations and `bind-proximity-connection`. Sync mirrors with `bash scripts/sync-supabase-from-click-web.sh`. Mobile-only functions (`send-push-notification`, `expire-*`, `verify-hub-proximity`) stay in this repo.
 - Supabase Edge Functions require the Supabase CLI to deploy/serve locally; they are not needed for basic mobile build testing.
 - `local.properties` is gitignored. Recreate it on each fresh checkout (or rely on `local.defaults.properties` for Gradle configure-only steps such as iOS framework embedding).

@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.ButtonDefaults
@@ -503,13 +502,6 @@ fun SettingsScreen(
                                             title = "Message notifications",
                                             checked = notificationPreferences.messagePushEnabled,
                                             onCheckedChange = { AppDataManager.setMessageNotificationsEnabled(it) },
-                                        )
-                                        SettingsDivider()
-                                        SettingsToggleRow(
-                                            icon = Icons.Default.PhoneInTalk,
-                                            title = "Call alerts",
-                                            checked = notificationPreferences.callPushEnabled,
-                                            onCheckedChange = { AppDataManager.setCallNotificationsEnabled(it) },
                                         )
                                         SettingsDivider()
                                         SettingsToggleRow(

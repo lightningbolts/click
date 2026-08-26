@@ -14,9 +14,6 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
-import compose.project.click.click.calls.CallOverlayState // pragma: allowlist secret
-import compose.project.click.click.calls.CallSessionManager // pragma: allowlist secret
-import compose.project.click.click.calls.CallState // pragma: allowlist secret
 import compose.project.click.click.collaboration.CollaborationSession // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.OpenMeteoWeatherService // pragma: allowlist secret
@@ -513,39 +510,6 @@ fun App() {
                         AppDataManager.initializeData()
                     }
                     val appDataUser by AppDataManager.currentUser.collectAsState()
-                    val globalCallOverlayState by CallSessionManager.overlayState.collectAsState()
-                    val globalCallState by CallSessionManager.callState.collectAsState()
-                    val activeInvite by CallSessionManager.activeInvite.collectAsState()
-                    var callOwnsNativeChrome by remember { mutableStateOf(false) }
-                    LaunchedEffect(globalCallOverlayState, globalCallState) {
-                        if (
-                            globalCallOverlayState !is CallOverlayState.Idle ||
-                            globalCallState !is CallState.Idle
-                        ) {
-                            callOwnsNativeChrome = true
-                        } else {
-                            // The native iOS tab bar sits outside Compose z-order. Keep it hidden until
-                            // the final call-card fade has cleared, then restore the preserved tab.
-                            delay(220)
-                            callOwnsNativeChrome = false
-                        }
-                    }
-                    // While [AnimatedVisibility] exits, [globalCallState] may already be [CallState.Idle]; keep the
-                    // last in-room state so [ActiveCallOverlay] does not snap to an empty Idle layout mid-fade.
-                    val lastActiveCallPresentedState = remember { mutableStateOf<CallState>(CallState.Idle) }
-                    val lastPreviewOverlayPresentedState = remember { mutableStateOf<CallOverlayState>(CallOverlayState.Idle) }
-                    val suppressEndedPreviewAfterActiveCallState = remember { mutableStateOf(false) }
-                    var suppressEndedPreviewAfterActiveCall by suppressEndedPreviewAfterActiveCallState
-                    SideEffect {
-                        if (globalCallState !is CallState.Idle) {
-                            lastActiveCallPresentedState.value = globalCallState
-                        }
-                        if (globalCallOverlayState !is CallOverlayState.Idle) {
-                            lastPreviewOverlayPresentedState.value = globalCallOverlayState
-                        }
-                    }
-                    val activeCallUiState =
-                        if (globalCallState !is CallState.Idle) globalCallState else lastActiveCallPresentedState.value
                     val profileApi = remember { ApiClient() }
                     var remoteAvatarPresent by remember { mutableStateOf<Boolean?>(null) }
                     var profileGateCheckReady by remember { mutableStateOf(false) }
@@ -601,10 +565,6 @@ fun App() {
                                 profileGateCheckReady = true
                             }
                         }
-                    }
-
-                    LaunchedEffect(appDataUser?.id, appDataUser?.name) {
-                        CallSessionManager.bindUser(appDataUser?.id, appDataUser?.name)
                     }
 
                     val supabaseRepo =
@@ -797,11 +757,6 @@ fun App() {
                             isInitialLoading = isInitialLoading,
                             pendingConnectionsCount = pendingConnectionsCount,
                             appError = appError,
-                            callOwnsNativeChrome = callOwnsNativeChrome,
-                            globalCallOverlayState = globalCallOverlayState,
-                            globalCallState = globalCallState,
-                            activeCallUiState = activeCallUiState,
-                            activeInvite = activeInvite,
                             hasPlayedHomeEntrance = hasPlayedHomeEntrance,
                             showHomeRevealOverlay = showHomeRevealOverlay,
                             onboardingHandoffActive = onboardingHandoffActive,
@@ -821,9 +776,6 @@ fun App() {
                             pendingRollSessionState = pendingRollSessionState,
                             disposableRollOpeningState = disposableRollOpeningState,
                             disposableRollExitWithScaleState = disposableRollExitWithScaleState,
-                            lastActiveCallPresentedState = lastActiveCallPresentedState,
-                            lastPreviewOverlayPresentedState = lastPreviewOverlayPresentedState,
-                            suppressEndedPreviewAfterActiveCallState = suppressEndedPreviewAfterActiveCallState,
                         )
                     } // End of onboarding gate
                 }

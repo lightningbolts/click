@@ -28,7 +28,6 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import compose.project.click.click.calls.CallSessionManager // pragma: allowlist secret
 import compose.project.click.click.collaboration.CollaborationSessionManager // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
@@ -209,8 +208,6 @@ fun ChatView(
     var tetherToastMessage by tetherToastMessageState
     val tetherSenderAckState = remember { mutableStateOf<String?>(null) }
     var tetherSenderAck by tetherSenderAckState
-    val showCallMenuState = remember { mutableStateOf(false) }
-    var showCallMenu by showCallMenuState
     val nativeNavChrome = LocalPlatformStyle.current.isIOS
     val hintedChatRow =
         (chatListState as? ChatListState.Success)
@@ -687,55 +684,6 @@ fun ChatView(
                             .weight(1f)
                             .fillMaxWidth()
 
-                    val groupCallMemberIds =
-                        remember(chatDetails.groupClique) {
-                            chatDetails.groupClique?.memberUserIds.orEmpty()
-                        }
-                    val startVoiceCall = {
-                        showCallMenu = false
-                        if (isGroupChat) {
-                            val groupId = chatDetails.groupClique?.groupId
-                            val threadId = chatDetails.chat.id
-                            if (!groupId.isNullOrBlank() && !threadId.isNullOrBlank()) {
-                                CallSessionManager.startOutgoingGroupCall(
-                                    groupId = groupId,
-                                    chatId = threadId,
-                                    memberIds = groupCallMemberIds,
-                                    videoEnabled = false,
-                                )
-                            }
-                        } else {
-                            CallSessionManager.startOutgoingCall(
-                                connectionId = chatDetails.connection.id,
-                                otherUserId = chatDetails.otherUser.id,
-                                otherUserName = chatDetails.otherUser.name ?: "Connection",
-                                videoEnabled = false,
-                            )
-                        }
-                    }
-                    val startVideoCall = {
-                        showCallMenu = false
-                        if (isGroupChat) {
-                            val groupId = chatDetails.groupClique?.groupId
-                            val threadId = chatDetails.chat.id
-                            if (!groupId.isNullOrBlank() && !threadId.isNullOrBlank()) {
-                                CallSessionManager.startOutgoingGroupCall(
-                                    groupId = groupId,
-                                    chatId = threadId,
-                                    memberIds = groupCallMemberIds,
-                                    videoEnabled = true,
-                                )
-                            }
-                        } else {
-                            CallSessionManager.startOutgoingCall(
-                                connectionId = chatDetails.connection.id,
-                                otherUserId = chatDetails.otherUser.id,
-                                otherUserName = chatDetails.otherUser.name ?: "Connection",
-                                videoEnabled = true,
-                            )
-                        }
-                    }
-
                     Box(
                         modifier = Modifier.fillMaxSize(),
                     ) {
@@ -756,9 +704,6 @@ fun ChatView(
                                 onBackPressed = onBackPressed,
                                 onOpenUserProfile = onOpenUserProfile,
                                 onOpenGroupMembersPicker = onOpenGroupMembersPicker,
-                                startVoiceCall = startVoiceCall,
-                                startVideoCall = startVideoCall,
-                                showCallMenuState = showCallMenuState,
                                 showConnectionSheetState = showConnectionSheetState,
                                 showRenameGroupDialogState = showRenameGroupDialogState,
                                 renameGroupDraftState = renameGroupDraftState,

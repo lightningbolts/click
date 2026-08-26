@@ -46,7 +46,6 @@ Make every user-facing interaction in Click feel **instant, continuous, and sati
 | 01 | [01-motion-performance.md](01-motion-performance.md) | Scroll, lists, IME/keyboard, springs, remount/flicker, frame budget |
 | 02 | [02-shell-nav-chrome.md](02-shell-nav-chrome.md) | Tab shell, **liquid glass nav**, swipe-back continuity, overlays |
 | 03 | [03-chat-messaging.md](03-chat-messaging.md) | Send/receive motion, composer, bubbles, chat element interactions |
-| 04 | [04-calls-connect.md](04-calls-connect.md) | Call UX delight, handshake / reconnect satisfaction |
 | 05 | [05-consistency-reuse-flow.md](05-consistency-reuse-flow.md) | Theme consistency, component unification, flow efficiency |
 
 **Do not rewrite** `docs/ui-ux/mobile/0x-*.md` as part of this work — those are target-state feature specs. This polish set is the **interaction quality** overlay.

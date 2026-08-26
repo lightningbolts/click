@@ -218,21 +218,6 @@ internal data class SignAttachmentResponse(
     val url: String,
 )
 
-/** POST `/api/livekit/token` — matches [click-web/app/api/livekit/token/route.ts]. */
-@Serializable
-data class LiveKitTokenPostBody(
-    @SerialName("connection_id") val connectionId: String,
-    @SerialName("room_name") val roomName: String,
-    @SerialName("participant_name") val participantName: String,
-    @SerialName("group_id") val groupId: String? = null,
-)
-
-@Serializable
-data class LiveKitTokenResponse(
-    val token: String,
-    @SerialName("ws_url") val wsUrl: String,
-)
-
 /** POST `/api/user/push-tokens` — matches [click-web/app/api/user/push-tokens/route.ts]. */
 @Serializable
 data class PushTokenRegisterBody(

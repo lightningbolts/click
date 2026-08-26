@@ -9,12 +9,12 @@
 
 The platform layer defines **where shared Kotlin ends and native code begins** in Click's Compose Multiplatform app. It provides:
 
-- **`expect`/`actual` facades** for OS services that have no portable API (haptics, keyboard height, crypto RNG, LiveKit, BLE, push, secure storage)
+- **`expect`/`actual` facades** for OS services that have no portable API (haptics, keyboard height, crypto RNG, BLE, push, secure storage)
 - **App bootstrap sequences** on Android (`MainActivity`) and iOS (`MainViewController` + Swift `iosApp`)
 - **Deep link and Universal Link routing** into shared navigation (`App.kt`, `ConnectionDeepLinkRouter`, `ChatDeepLinkManager`)
 - **Source-set conventions** so new features default to `commonMain` and only spill to platform code when necessary
 
-This README covers cross-cutting platform contracts. Feature-specific actuals are documented in sibling module READMEs ([`proximity/`](./proximity/README.md), [`crypto/`](./crypto/README.md), [`calls/`](./calls/README.md)).
+This README covers cross-cutting platform contracts. Feature-specific actuals are documented in sibling module READMEs ([`proximity/`](./proximity/README.md), [`crypto/`](./crypto/README.md)).
 
 ---
 
@@ -24,17 +24,15 @@ This README covers cross-cutting platform contracts. Feature-specific actuals ar
 
 | Source set | Owns | Does **not** own |
 |------------|------|------------------|
-| **`commonMain`** | Compose UI, ViewModels, repositories, Supabase client, business logic, `expect` declarations | Direct BLE, CallKit, Keychain, FCM SDK calls |
-| **`androidMain`** | `actual` for Android APIs, `MainActivity`, FCM service, LiveKit Android, EncryptedSharedPreferences token storage | Duplicate business rules already in commonMain |
-| **`iosMain`** | `actual` for iOS APIs, `MainViewController`, bridges to Swift | LiveKit room implementation (lives in Swift) |
-| **`iosApp/iosApp/` (Swift)** | PushKit, CallKit, `ClickLiveKitBridge`, Notification Service extension, Xcode lifecycle | Shared ViewModel logic |
+| **`commonMain`** | Compose UI, ViewModels, repositories, Supabase client, business logic, `expect` declarations | Direct BLE, Keychain, FCM SDK calls |
+| **`androidMain`** | `actual` for Android APIs, `MainActivity`, FCM service, EncryptedSharedPreferences token storage | Duplicate business rules already in commonMain |
+| **`iosMain`** | `actual` for iOS APIs, `MainViewController`, bridges to Swift | Shared ViewModel logic |
+| **`iosApp/iosApp/` (Swift)** | Notification Service extension, Google Sign-In, Xcode lifecycle | Shared ViewModel logic |
 
 **Rule of thumb:** Add features in **`commonMain` first**. Introduce `expect`/`actual` only when you must touch:
 
 - BLE / ultrasonic / GPS sensor pipelines
-- CallKit, PushKit, full-screen incoming call UI
 - Keychain, EncryptedSharedPreferences, Keystore
-- Platform LiveKit SDKs
 - OS permission dialogs and Settings deep links
 
 ### `Platform.kt`
@@ -80,7 +78,7 @@ App-level haptics **outside** Compose `LocalHapticFeedback`:
 `androidMain/.../MainActivity.kt` — ordered bootstrap in `onCreate`:
 
 ```text
-1. enableEdgeToEdge(), portrait lock, screen-wake for calls
+1. enableEdgeToEdge(), portrait lock
 2. passSupabaseAuthDeepLink(intent)     → click://login OAuth
 3. initTokenStorage(applicationContext)
 4. initLocationService(applicationContext)
@@ -88,16 +86,15 @@ App-level haptics **outside** Compose `LocalHapticFeedback`:
 6. initContactBook(applicationContext)
 7. initEncounterTetherWidgetBridge(applicationContext)
 8. initAppSystemSettings(applicationContext)
-9. initCallManager(applicationContext, this)
+9. AndroidActivityRuntime.init(applicationContext, this)
 10. initPushNotificationService(applicationContext, this)
-11. handleIncomingCallIntent(intent)
-12. handleChatDeepLinkIntent(intent)
-13. handleCommunityHubViewIntent(intent)   → click://hub
-14. handleConnectionUniversalLinkIntent(intent)
-15. setContent { App() }
+11. handleChatDeepLinkIntent(intent)
+12. handleCommunityHubViewIntent(intent)   → click://hub
+13. handleConnectionUniversalLinkIntent(intent)
+14. setContent { App() }
 ```
 
-`onNewIntent` repeats deep-link and call intent handlers for `singleTask` re-entry.
+`onNewIntent` repeats deep-link intent handlers for `singleTask` re-entry.
 
 `onResume` / `onPause` toggle `AndroidPushNotificationRuntime.setAppInForeground` and lifecycle hooks.
 
@@ -107,8 +104,7 @@ App-level haptics **outside** Compose `LocalHapticFeedback`:
 |-------|------|
 | **`MainViewController()`** | Compose host; `OnFocusBehavior.DoNothing` for IME; installs `IosUIKitHapticFeedback` |
 | **`handleSupabaseAuthDeepLink(url: NSURL)`** | Called from Swift when app opens `click://login…` — finishes PKCE via `SupabaseConfig.client.handleDeeplinks` |
-| **`iosApp/iosApp/iOSApp.swift`** | `@main` app, PushKit delegate, forwards URLs to Kotlin |
-| **`ClickLiveKitBridge.swift`** | LiveKit room; posts `NSNotificationCenter` events consumed by Kotlin call layer |
+| **`iosApp/iosApp/iOSApp.swift`** | `@main` app, APNs delegate, forwards URLs to Kotlin |
 | **`NotificationService` extension** | E2EE push preview decrypt (see [`crypto/README.md`](./crypto/README.md)) |
 
 ### Deep link schemes
@@ -135,7 +131,6 @@ Common pattern across the codebase:
 expect fun createTokenStorage(): TokenStorage
 expect fun createPushNotificationService(): PushNotificationService
 expect fun rememberProximityManager(): ProximityManager
-expect fun createCallManager(): CallManager
 ```
 
 Each `actual` in `androidMain` / `iosMain` wires the native SDK or stub (simulator mocks where applicable).
@@ -185,7 +180,6 @@ Each `actual` in `androidMain` / `iosMain` wires the native SDK or stub (simulat
 - **Send photos, files & voice notes:** Share media in chat; files are encrypted before upload.
 - **Emoji reactions:** React to messages with emoji.
 - **Typing indicators & read receipts:** See when someone is typing and when they've read your message.
-- **Voice & video calls:** Call any connection with high-quality audio/video.
 - **Memory Capsules:** Optionally save the "feel" of how you met—noise level, elevation, tags like "after class."
 - **48-hour gentle archive:** New connections you don't act on move to archive after 48 hours (not deleted).
 - **Connection map & timeline:** See where and when you met people on a map and journal timeline.
@@ -203,9 +197,9 @@ Each `actual` in `androidMain` / `iosMain` wires the native SDK or stub (simulat
 - **Profile & interests:** Set your display name, avatar, and interest tags.
 - **Onboarding:** Welcome flow with interest tagging after sign-up.
 - **Google sign-in & email auth:** Sign up with Google or email/password.
-- **Push notifications:** Alerts for messages, calls, matches, and reveals.
+- **Push notifications:** Alerts for messages, matches, and reveals.
 - **Deep links & App Clip:** Open connections and hubs from links without friction.
-- **Web dashboard:** Use click-web in a browser for chat, calls, and connection management.
+- **Web dashboard:** Use click-web in a browser for chat and connection management.
 - **Business insights (venues):** Venue operators see anonymized crowd analytics, Vibe Radar, and Social Sticky Score.
 - **Event reminders:** Calendar-linked reminders for upcoming events.
 - **Achievements & stats:** Track connection milestones on your profile.

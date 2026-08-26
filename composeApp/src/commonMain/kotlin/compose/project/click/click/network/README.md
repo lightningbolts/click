@@ -12,12 +12,10 @@ This folder contains the **platform connectivity monitor**. The heavier HTTP cli
 | Package / path | Responsibility |
 |----------------|----------------|
 | `network/NetworkConnectivityMonitor.kt` | `expect`/`actual` online/offline `StateFlow` |
-| `data/api/ApiClient.kt` | Primary Ktor client — auth, profiles, connections, beacons, hubs, LiveKit token, telemetry |
+| `data/api/ApiClient.kt` | Primary Ktor client — auth, profiles, connections, beacons, hubs, telemetry |
 | `data/api/ChatApiClient.kt` | Chat media upload/download, click-web message tunnel |
 | `data/api/ApiConfig.kt` | Environment URLs including `CLICK_WEB_BASE_URL` |
 | `qr/QRModels.kt` | Canonical `CLICK_WEB_BASE_URL` constant |
-
-There is no separate `CallApiClient` class — **voice/video token fetch** is `ApiClient.postLiveKitToken`, orchestrated by `calls/CallCoordinator.kt`.
 
 ---
 
@@ -85,7 +83,6 @@ Representative endpoints consumed by the app:
 | Profiles | `GET /api/users/{id}/profile`, patch profile |
 | Connections | Proximity bind, timeline, block/report |
 | Map | Beacon CRUD, RSVP, community hub nearby |
-| Calls | `POST` LiveKit token (`LiveKitTokenPostBody` → `LiveKitTokenResponse`) |
 | Business | Waitlist, venue hub setup |
 | Telemetry | Friction anomaly POST (also used by `TelemetryBatcher`) |
 
@@ -102,30 +99,11 @@ Dedicated client for **chat-heavy** operations:
 
 All routes use `CLICK_WEB_BASE_URL` (the legacy Flask `BASE_URL` was removed).
 
-### Call token flow (no `CallApiClient`)
-
-```
-ChatViewModel / CallSessionManager
-        │
-        ▼
-CallCoordinator.fetchCallToken()
-        │
-        ▼
-ApiClient.postLiveKitToken(body)
-        │
-        ▼
-CLICK_WEB_BASE_URL/api/livekit/token  →  { token, wsUrl }
-        │
-        ▼
-LiveKit Android SDK / iOS ClickLiveKitBridge
-```
-
 ### `CLICK_WEB_BASE_URL` usage map
 
 | Feature | Route / usage |
 |---------|---------------|
 | QR identity card | `/c/{userId}` Universal Links |
-| LiveKit calls | `/api/livekit/token` |
 | Secure API tunnel | `/api/ping`, profile BFF routes |
 | Friction telemetry | `/api/telemetry/friction` |
 | Unified search (messages) | `GET /api/chat/search` |
@@ -158,7 +136,6 @@ LiveKit Android SDK / iOS ClickLiveKitBridge
 | `data/api/ApiConfig.kt` | URL configuration |
 | `data/api/WaitlistApiClient.kt` | Waitlist-specific client |
 | `qr/QRModels.kt` | `CLICK_WEB_BASE_URL`, QR payload models |
-| `calls/CallCoordinator.kt` | LiveKit token orchestration |
 | `data/SupabaseConfig.kt` | Supabase Realtime (parallel to HTTP) |
 | `util/NetworkFailureUtil.kt` | Throwable → offline classification |
 | `telemetry/TelemetryBatcher.kt` | Friction POST client |
@@ -186,9 +163,6 @@ Encrypted multipart upload through `ChatApiClient`; download from Storage URLs.
 
 ### Emoji reactions / Typing & read receipts
 Supabase Realtime channels (not Ktor) — still gated on connectivity for initial hydrate.
-
-### Voice & video calls
-`ApiClient.postLiveKitToken` must succeed before LiveKit room join.
 
 ### Memory Capsules
 Sensor metadata uploaded with connection bind payload.

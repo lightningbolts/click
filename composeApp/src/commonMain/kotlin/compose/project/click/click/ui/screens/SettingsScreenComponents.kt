@@ -464,7 +464,7 @@ internal fun SettingsHubNavCard(onOpen: (SettingsPage) -> Unit) {
             SettingsHubNavRow(
                 icon = Icons.Default.Notifications,
                 title = "Alerts",
-                subtitle = "Messages, calls, events, hubs",
+                subtitle = "Messages, events, hubs",
                 onClick = { onOpen(SettingsPage.Alerts) },
                 accentSlot = 5,
             )

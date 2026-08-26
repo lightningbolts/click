@@ -1,6 +1,5 @@
 @file:OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
 
-import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Properties
 
@@ -14,11 +13,12 @@ plugins {
     id("com.google.gms.google-services") version "4.4.2" apply false
 }
 
-val hasGoogleServicesConfig = listOf(
-    file("google-services.json"),
-    file("src/debug/google-services.json"),
-    file("src/release/google-services.json")
-).any { it.exists() }
+val hasGoogleServicesConfig =
+    listOf(
+        file("google-services.json"),
+        file("src/debug/google-services.json"),
+        file("src/release/google-services.json"),
+    ).any { it.exists() }
 
 if (hasGoogleServicesConfig) {
     apply(plugin = "com.google.gms.google-services")
@@ -61,7 +61,7 @@ kotlin {
 
     listOf(
         iosArm64(),
-        iosSimulatorArm64()
+        iosSimulatorArm64(),
     ).forEach { iosTarget ->
         iosTarget.binaries.framework {
             baseName = "ComposeApp"
@@ -101,7 +101,6 @@ kotlin {
             implementation(libs.androidx.activity.compose)
             implementation("androidx.core:core-ktx:1.17.0")
             implementation("jp.co.cyberagent.android:gpuimage:2.1.0")
-            implementation("io.livekit:livekit-android:2.20.3")
 
             // Ktor OkHttp engine (WebSocket-capable; required for Supabase Realtime)
             implementation("io.ktor:ktor-client-okhttp:3.0.1")
@@ -208,8 +207,14 @@ android {
 
     defaultConfig {
         applicationId = "compose.project.click.click"
-        minSdk = libs.versions.android.minSdk.get().toInt()
-        targetSdk = libs.versions.android.targetSdk.get().toInt()
+        minSdk =
+            libs.versions.android.minSdk
+                .get()
+                .toInt()
+        targetSdk =
+            libs.versions.android.targetSdk
+                .get()
+                .toInt()
         versionCode = 8
         versionName = "grouchy"
     }
@@ -248,22 +253,23 @@ compose.resources {
     publicResClass = true
 }
 
-tasks.matching {
-    (it.name.startsWith("link") && it.name.contains("Framework")) ||
-        it.name == "embedAndSignAppleFrameworkForXcode"
-}.configureEach {
-    val buildDirectory = layout.buildDirectory
-    doLast {
-        val buildDir = buildDirectory.get().asFile
-        if (!buildDir.isDirectory) return@doLast
-        buildDir.walkTopDown()
-            .filter { it.isFile && it.name == "Info.plist" && it.parentFile.name == "ComposeApp.framework" }
-            .forEach { plist ->
-                fun runPlutil(vararg args: String): Int =
-                    ProcessBuilder(*args).redirectErrorStream(true).start().waitFor()
-                if (runPlutil("plutil", "-replace", "UIRequiresFullScreen", "-bool", "true", plist.absolutePath) != 0) {
-                    runPlutil("plutil", "-insert", "UIRequiresFullScreen", "-bool", "true", plist.absolutePath)
+tasks
+    .matching {
+        (it.name.startsWith("link") && it.name.contains("Framework")) ||
+            it.name == "embedAndSignAppleFrameworkForXcode"
+    }.configureEach {
+        val buildDirectory = layout.buildDirectory
+        doLast {
+            val buildDir = buildDirectory.get().asFile
+            if (!buildDir.isDirectory) return@doLast
+            buildDir
+                .walkTopDown()
+                .filter { it.isFile && it.name == "Info.plist" && it.parentFile.name == "ComposeApp.framework" }
+                .forEach { plist ->
+                    fun runPlutil(vararg args: String): Int = ProcessBuilder(*args).redirectErrorStream(true).start().waitFor()
+                    if (runPlutil("plutil", "-replace", "UIRequiresFullScreen", "-bool", "true", plist.absolutePath) != 0) {
+                        runPlutil("plutil", "-insert", "UIRequiresFullScreen", "-bool", "true", plist.absolutePath)
+                    }
                 }
-            }
+        }
     }
-}

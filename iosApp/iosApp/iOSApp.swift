@@ -7,7 +7,6 @@ private let clickNotificationPrefsSuite = "click_auth_prefs"
 private let clickRequestPushPermissionNotification = Notification.Name("ClickRequestNotificationPermission")
 private let clickRegisterRemoteNotificationsNotification = Notification.Name("ClickRegisterForRemoteNotifications")
 private let clickRuntimeMessageNotificationsKey = "runtime_message_notifications_enabled"
-private let clickRuntimeCallNotificationsKey = "runtime_call_notifications_enabled"
 private let clickRuntimeActiveChatIdKey = "runtime_active_chat_id"
 
 @main
@@ -35,15 +34,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
-        ClickLiveKitBridge.shared.start()
         ClickGoogleSignInBridge.shared.start()
-        ClickCallKitManager.shared.start()
-        ClickVoipPushManager.shared.start()
-
-        // Incoming call from notification tap / cold start: report CallKit immediately (no async deferral).
-        if let remote = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
-            _ = handleIncomingCallNotification(remote)
-        }
 
         let notificationCenter = UNUserNotificationCenter.current()
         notificationCenter.delegate = self
@@ -154,7 +145,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
 
     func applicationWillEnterForeground(_ application: UIApplication) {
-        // Re-register early when returning from background so APNs can refresh the device token if needed.
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             switch settings.authorizationStatus {
             case .authorized, .provisional, .ephemeral:
@@ -174,11 +164,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func applicationDidBecomeActive(_ application: UIApplication) {
         ClickKt.onApplicationDidBecomeActive()
 
-        // FORCE SYNC: Kotlin is definitely awake now. Push the cached VoIP token!
-        if let voipToken = UserDefaults.standard.string(forKey: "cached_voip_token") {
-            ClickKt.savePushToken(token: voipToken, platform: "ios", tokenType: "voip")
-        }
-        
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             switch settings.authorizationStatus {
             case .authorized, .provisional, .ephemeral:
@@ -197,11 +182,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     ) {
         let token = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
         ClickKt.savePushToken(token: token, platform: "ios", tokenType: "standard")
-        
-        // PIGGYBACK: Standard token worked. Push the VoIP token right behind it!
-        if let voipToken = UserDefaults.standard.string(forKey: "cached_voip_token") {
-            ClickKt.savePushToken(token: voipToken, platform: "ios", tokenType: "voip")
-        }
     }
 
     func application(
@@ -217,7 +197,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         let userInfo = notification.request.content.userInfo
-        if handleIncomingCallNotification(userInfo) {
+        if (userInfo["type"] as? String) == "incoming_call" {
             completionHandler([])
             return
         }
@@ -241,6 +221,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
+        if (userInfo["type"] as? String) == "incoming_call" {
+            completionHandler()
+            return
+        }
+
         let chatId = userInfo["chat_id"] as? String ?? ""
         let connectionId = userInfo["connection_id"] as? String ?? ""
         let deepLinkId = chatId.isEmpty ? connectionId : chatId
@@ -271,8 +256,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didReceiveRemoteNotification userInfo: [AnyHashable : Any],
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
-        if handleIncomingCallNotification(userInfo) {
-            completionHandler(.newData)
+        if (userInfo["type"] as? String) == "incoming_call" {
+            completionHandler(.noData)
             return
         }
         if let type = userInfo["type"] as? String, type == "chat_message" {
@@ -309,23 +294,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         return runtimeDefaults.bool(forKey: clickRuntimeMessageNotificationsKey)
     }
 
-    private var callNotificationsEnabled: Bool {
-        if runtimeDefaults.object(forKey: clickRuntimeCallNotificationsKey) == nil {
-            return true
-        }
-        return runtimeDefaults.bool(forKey: clickRuntimeCallNotificationsKey)
-    }
-
     private var activeChatId: String? {
         runtimeDefaults.string(forKey: clickRuntimeActiveChatIdKey)
-    }
-
-    private func handleIncomingCallNotification(_ userInfo: [AnyHashable: Any]) -> Bool {
-        guard callNotificationsEnabled else { return false }
-        guard let type = userInfo["type"] as? String, type == "incoming_call" else { return false }
-            guard let payload = ClickIncomingCallPayload(userInfo) else { return false }
-
-        ClickCallKitManager.shared.reportIncomingCall(payload, voipPushCompletion: nil)
-        return true
     }
 }

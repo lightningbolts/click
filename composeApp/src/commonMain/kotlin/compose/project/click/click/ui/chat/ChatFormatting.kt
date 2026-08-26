@@ -1,3 +1,11 @@
+/**
+ * Pure formatting helpers shared across the conversation UI.
+ *
+ * Extracted verbatim from ConnectionsScreen.kt so they're unit-testable
+ * and so the screen file shrinks without changing behavior. None of
+ * these touch the Supabase client, realtime channels, or native SDKs — they
+ * are safe to call from any thread and from previews.
+ */
 package compose.project.click.click.ui.chat
 
 import compose.project.click.click.data.models.Message
@@ -7,15 +15,6 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-
-/**
- * Pure formatting helpers shared across the conversation UI.
- *
- * Extracted verbatim from ConnectionsScreen.kt so they're unit-testable
- * and so the screen file shrinks without changing behavior. None of
- * these touch the Supabase client, realtime channels, or LiveKit — they
- * are safe to call from any thread and from previews.
- */
 
 /** Relative "Just now / Xm ago / Xh ago / Xd ago / Xw ago" timestamp used in connection lists. */
 internal fun formatConnectionListTimestamp(timestamp: Long): String {
@@ -58,11 +57,12 @@ internal fun formatMessageTime(timestamp: Long): String {
     val hour = dateTime.hour
     val minute = dateTime.minute.toString().padStart(2, '0')
     val amPm = if (hour < 12) "AM" else "PM"
-    val displayHour = when {
-        hour == 0 -> 12
-        hour > 12 -> hour - 12
-        else -> hour
-    }
+    val displayHour =
+        when {
+            hour == 0 -> 12
+            hour > 12 -> hour - 12
+            else -> hour
+        }
 
     return "$displayHour:$minute $amPm"
 }
@@ -88,12 +88,16 @@ internal fun formatCallDurationForLog(totalSeconds: Int): String {
  * player duration (ms) when it's positive; falls back to the cached
  * `duration_seconds` from message metadata; otherwise returns "0:00".
  */
-internal fun formatChatAudioDuration(durationMs: Long, fallbackSec: Int?): String {
-    val totalSec = when {
-        durationMs > 0 -> (durationMs / 1000).toInt()
-        fallbackSec != null && fallbackSec > 0 -> fallbackSec
-        else -> 0
-    }
+internal fun formatChatAudioDuration(
+    durationMs: Long,
+    fallbackSec: Int?,
+): String {
+    val totalSec =
+        when {
+            durationMs > 0 -> (durationMs / 1000).toInt()
+            fallbackSec != null && fallbackSec > 0 -> fallbackSec
+            else -> 0
+        }
     val m = totalSec / 60
     val s = totalSec % 60
     return "$m:${s.toString().padStart(2, '0')}"
@@ -151,10 +155,16 @@ internal fun formatConversationDayLabel(
         dayDifference == 0L -> "Today"
         dayDifference == 1L -> "Yesterday"
         dayDifference < 7L -> {
-            dateTime.date.dayOfWeek.name.lowercase().replaceFirstChar { it.uppercase() }
+            dateTime.date.dayOfWeek.name
+                .lowercase()
+                .replaceFirstChar { it.uppercase() }
         }
         else -> {
-            val month = dateTime.month.name.lowercase().replaceFirstChar { it.uppercase() }.take(3)
+            val month =
+                dateTime.month.name
+                    .lowercase()
+                    .replaceFirstChar { it.uppercase() }
+                    .take(3)
             if (dateTime.year == now.year) {
                 "$month ${dateTime.dayOfMonth}"
             } else {

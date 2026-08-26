@@ -114,17 +114,7 @@ ChatView (organism — full-screen thread)
 | Group avatar | `onOpenGroupMembersPicker(context)` |
 | Shared availability bolt | Decorative (no tap handler) |
 | Rename (`contentDescription = "Rename group"`) | Opens rename dialog |
-| Call (`contentDescription = "Call options"`) | Voice / video menu |
 | More (`contentDescription = "More options"`) | `ConnectionActionSheet` |
-
-### Call options menu
-
-| Platform | UI | Rows |
-|----------|-----|------|
-| **Android** | `DropdownMenu` | `"Group voice call"` / `"Voice call"`, `"Group video call"` / `"Video call"` |
-| **iOS** | `Popup` + `ChatCallOptionsIosSurface` | `"Voice call"`, `"Video call"` (no group prefix) |
-
-Both routes call `CallSessionManager.startOutgoingCall` or `startOutgoingGroupCall`.
 
 ### Timeline
 

@@ -22,9 +22,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
-import compose.project.click.click.calls.CallInvite // pragma: allowlist secret
-import compose.project.click.click.calls.CallOverlayState // pragma: allowlist secret
-import compose.project.click.click.calls.CallState // pragma: allowlist secret
 import compose.project.click.click.collaboration.CollaborationSession // pragma: allowlist secret
 import compose.project.click.click.collaboration.CollaborationSessionManager // pragma: allowlist secret
 import compose.project.click.click.data.ActiveHubEntry // pragma: allowlist secret
@@ -93,11 +90,6 @@ internal fun AppMainShell(
     isInitialLoading: Boolean,
     pendingConnectionsCount: Int,
     appError: String?,
-    callOwnsNativeChrome: Boolean,
-    globalCallOverlayState: CallOverlayState,
-    globalCallState: CallState,
-    activeCallUiState: CallState,
-    activeInvite: CallInvite?,
     hasPlayedHomeEntrance: Boolean,
     showHomeRevealOverlay: Boolean,
     onboardingHandoffActive: Boolean,
@@ -117,9 +109,6 @@ internal fun AppMainShell(
     pendingRollSessionState: MutableState<CollaborationSession?>,
     disposableRollOpeningState: MutableState<Boolean>,
     disposableRollExitWithScaleState: MutableState<Boolean>,
-    lastActiveCallPresentedState: MutableState<CallState>,
-    lastPreviewOverlayPresentedState: MutableState<CallOverlayState>,
-    suppressEndedPreviewAfterActiveCallState: MutableState<Boolean>,
 ) {
     var isDarkMode by isDarkModeState
     var lastHubGatekeeperFix by lastHubGatekeeperFixState
@@ -648,8 +637,7 @@ internal fun AppMainShell(
     val hideMainBottomBar =
         (!isIOS && connectionsChatSuppressesTabBar) ||
             (!isIOS && hubChatArgs != null) ||
-            (!isIOS && (showConnectionDisposableRoll || disposableRollOpening)) ||
-            callOwnsNativeChrome
+            (!isIOS && (showConnectionDisposableRoll || disposableRollOpening))
 
     // Wrap Scaffold in a Box to allow search overlay to be positioned at true screen bottom
     Box(modifier = Modifier.fillMaxSize()) {
@@ -770,18 +758,6 @@ internal fun AppMainShell(
                         pendingRollSessionState = pendingRollSessionState,
                         showConnectionDisposableRollState = showConnectionDisposableRollState,
                         disposableRollExitWithScaleState = disposableRollExitWithScaleState,
-                    )
-
-                    AppCallOverlays(
-                        globalCallOverlayState = globalCallOverlayState,
-                        globalCallState = globalCallState,
-                        activeCallUiState = activeCallUiState,
-                        activeInvite = activeInvite,
-                        appDataUser = appDataUser,
-                        reduceMotion = reduceMotion,
-                        lastActiveCallPresentedState = lastActiveCallPresentedState,
-                        lastPreviewOverlayPresentedState = lastPreviewOverlayPresentedState,
-                        suppressEndedPreviewAfterActiveCallState = suppressEndedPreviewAfterActiveCallState,
                     )
 
                     if (homeRevealAlpha > 0.01f) {

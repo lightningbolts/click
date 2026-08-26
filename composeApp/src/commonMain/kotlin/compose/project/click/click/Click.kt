@@ -1,17 +1,15 @@
 package compose.project.click.click
 
 import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.telemetry.TelemetryBatcher
 import compose.project.click.click.data.repository.AuthRepository
 import compose.project.click.click.data.repository.PushTokenRepository
-import compose.project.click.click.calls.CallInvite
-import compose.project.click.click.calls.CallSessionManager
 import compose.project.click.click.deeplink.ConnectionDeepLinkRouter
 import compose.project.click.click.deeplink.EventDeepLinkRouter
 import compose.project.click.click.notifications.ChatDeepLinkManager
 import compose.project.click.click.notifications.ChatNotificationDismisser
 import compose.project.click.click.notifications.ChatPushInboxBridge
 import compose.project.click.click.notifications.savePendingPushToken
+import compose.project.click.click.telemetry.TelemetryBatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -34,11 +32,18 @@ fun onApplicationDidEnterBackground() {
     TelemetryBatcher.onAppBackgrounded()
 }
 
-fun savePushToken(token: String, platform: String) {
+fun savePushToken(
+    token: String,
+    platform: String,
+) {
     savePushToken(token, platform, "standard")
 }
 
-fun savePushToken(token: String, platform: String, tokenType: String) {
+fun savePushToken(
+    token: String,
+    platform: String,
+    tokenType: String,
+) {
     pushTokenScope.launch {
         val currentUserId = AppDataManager.currentUser.value?.id ?: AuthRepository().getCurrentUser()?.id
         if (currentUserId.isNullOrBlank()) {
@@ -55,7 +60,10 @@ fun savePushToken(token: String, platform: String, tokenType: String) {
     }
 }
 
-fun setChatDeepLink(chatId: String, connectionId: String = "") {
+fun setChatDeepLink(
+    chatId: String,
+    connectionId: String = "",
+) {
     val resolvedConnectionId = connectionId.trim().ifBlank { chatId.trim() }
     if (resolvedConnectionId.isEmpty()) return
     ChatNotificationDismisser.dismissForThread(chatId, resolvedConnectionId)
@@ -90,8 +98,7 @@ fun setConnectionDeepLink(userId: String) {
 }
 
 /** Parse and queue a connection URL. Returns true when recognized. */
-fun handleConnectionUniversalLink(url: String): Boolean =
-    ConnectionDeepLinkRouter.handleIncomingUrl(url)
+fun handleConnectionUniversalLink(url: String): Boolean = ConnectionDeepLinkRouter.handleIncomingUrl(url)
 
 /** Universal Link / deep link for `/e/{beaconId}` — queues Map event focus in [App]. */
 fun setEventDeepLink(beaconId: String) {
@@ -99,35 +106,4 @@ fun setEventDeepLink(beaconId: String) {
 }
 
 /** Parse and queue an event URL. Returns true when recognized. */
-fun handleEventUniversalLink(url: String): Boolean =
-    EventDeepLinkRouter.handleIncomingUrl(url)
-
-fun handleIncomingCallPush(
-    callId: String,
-    connectionId: String,
-    roomName: String,
-    callerId: String,
-    callerName: String,
-    calleeId: String,
-    calleeName: String,
-    videoEnabled: Boolean,
-    createdAt: Long,
-    autoAnswer: Boolean = false,
-    autoDecline: Boolean = false,
-) {
-    CallSessionManager.receiveIncomingPush(
-        invite = CallInvite(
-            callId = callId,
-            connectionId = connectionId,
-            roomName = roomName,
-            callerId = callerId,
-            callerName = callerName,
-            calleeId = calleeId,
-            calleeName = calleeName,
-            videoEnabled = videoEnabled,
-            createdAt = createdAt,
-        ),
-        autoAnswer = autoAnswer,
-        autoDecline = autoDecline,
-    )
-}
+fun handleEventUniversalLink(url: String): Boolean = EventDeepLinkRouter.handleIncomingUrl(url)

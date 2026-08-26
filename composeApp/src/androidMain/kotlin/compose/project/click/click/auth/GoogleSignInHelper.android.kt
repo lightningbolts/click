@@ -6,28 +6,34 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
-import compose.project.click.click.calls.AndroidCallRuntime
 import compose.project.click.click.data.repository.NativeGoogleSignInPayload
+import compose.project.click.click.platform.AndroidActivityRuntime
 
 suspend fun requestNativeGoogleSignInPayload(): Result<NativeGoogleSignInPayload?> {
-    val activity = AndroidCallRuntime.currentActivity()
-        ?: return Result.failure(IllegalStateException("Google sign-in requires an active activity."))
+    val activity =
+        AndroidActivityRuntime.currentActivity()
+            ?: return Result.failure(IllegalStateException("Google sign-in requires an active activity."))
 
     return runCatching {
         val credentialManager = CredentialManager.create(activity)
-        val googleIdOption = GetGoogleIdOption.Builder()
-            .setFilterByAuthorizedAccounts(false)
-            .setServerClientId(GoogleOAuthConfig.WEB_CLIENT_ID)
-            .setAutoSelectEnabled(false)
-            .build()
-        val request = GetCredentialRequest.Builder()
-            .addCredentialOption(googleIdOption)
-            .build()
+        val googleIdOption =
+            GetGoogleIdOption
+                .Builder()
+                .setFilterByAuthorizedAccounts(false)
+                .setServerClientId(GoogleOAuthConfig.WEB_CLIENT_ID)
+                .setAutoSelectEnabled(false)
+                .build()
+        val request =
+            GetCredentialRequest
+                .Builder()
+                .addCredentialOption(googleIdOption)
+                .build()
 
-        val response = credentialManager.getCredential(
-            context = activity,
-            request = request,
-        )
+        val response =
+            credentialManager.getCredential(
+                context = activity,
+                request = request,
+            )
         val credential = response.credential
         if (credential is CustomCredential &&
             credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
