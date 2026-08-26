@@ -1,3 +1,11 @@
+/**
+ * Pure formatting helpers shared across the conversation UI.
+ *
+ * Extracted verbatim from ConnectionsScreen.kt so they're unit-testable
+ * and so the screen file shrinks without changing behavior. None of
+ * these touch the Supabase client, realtime channels, or native SDKs — they
+ * are safe to call from any thread and from previews.
+ */
 package compose.project.click.click.ui.chat
 
 import compose.project.click.click.data.models.Message
@@ -7,15 +15,6 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-
-/**
- * Pure formatting helpers shared across the conversation UI.
- *
- * Extracted verbatim from ConnectionsScreen.kt so they're unit-testable
- * and so the screen file shrinks without changing behavior. None of
- * these touch the Supabase client, realtime channels, or native SDKs — they
- * are safe to call from any thread and from previews.
- */
 
 /** Relative "Just now / Xm ago / Xh ago / Xd ago / Xw ago" timestamp used in connection lists. */
 internal fun formatConnectionListTimestamp(timestamp: Long): String {
