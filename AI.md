@@ -4,7 +4,7 @@ This file is **authoritative guidance** for future developers and AI assistants 
 
 ---
 
-## 1. Kotlin Multiplatform architecture
+## 1. Kotlin Multiplatform architecture 
 
 - **Default location for logic:** `click/composeApp/src/commonMain/kotlin/...`.
 - **Use `expect` / `actual` (or small platform-specific facades)** only when you must call **native APIs** or SDKs that are not available in common code—examples in this repo: **NFC**, secure **Keychain** / **EncryptedSharedPreferences**, location services, and crypto primitives (`PlatformCrypto`).
