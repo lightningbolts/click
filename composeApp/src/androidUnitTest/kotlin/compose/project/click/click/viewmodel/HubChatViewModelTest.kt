@@ -1,5 +1,6 @@
 package compose.project.click.click.viewmodel
 
+import compose.project.click.click.data.auth.SessionResumeGate // pragma: allowlist secret
 import compose.project.click.click.data.storage.FakeTokenStorage
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -12,6 +13,8 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
+import org.junit.After
+import org.junit.Before
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -19,6 +22,16 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HubChatViewModelTest {
+    @Before
+    fun markSessionResumed() {
+        SessionResumeGate.markCompleted()
+    }
+
+    @After
+    fun resetSessionGate() {
+        SessionResumeGate.resetForTests()
+    }
+
     private class FakeHubLifecycleGateway(
         private val leaveResult: Result<Unit> = Result.success(Unit),
         private val deleteResult: Result<Unit> = Result.success(Unit),
@@ -70,7 +83,11 @@ class HubChatViewModelTest {
             hubTitle = "Lobby",
             currentUserId = "user_1",
             creatorId = "user_1",
-            tokenStorage = FakeTokenStorage(jwt = "jwt"),
+            tokenStorage =
+                FakeTokenStorage(
+                    jwt = TEST_HUB_JWT,
+                    expiresAtEpochMs = TEST_HUB_JWT_EXPIRES_AT_MS,
+                ),
             hubLifecycleGateway = gateway,
             activeHubCache = cache,
             mutationDispatcher = mutationDispatcher,
@@ -105,7 +122,11 @@ class HubChatViewModelTest {
                         hubTitle = "Lobby",
                         currentUserId = "user_1",
                         creatorId = "user_1",
-                        tokenStorage = FakeTokenStorage(jwt = "jwt"),
+                        tokenStorage =
+                            FakeTokenStorage(
+                                jwt = TEST_HUB_JWT,
+                                expiresAtEpochMs = TEST_HUB_JWT_EXPIRES_AT_MS,
+                            ),
                         hubLifecycleGateway = FakeHubLifecycleGateway(),
                         activeHubCache = FakeActiveHubCache(),
                         mutationDispatcher = dispatcher,
@@ -183,4 +204,10 @@ class HubChatViewModelTest {
                 Dispatchers.resetMain()
             }
         }
+
+    private companion object {
+        /** `{"exp":4102444800}` (year 2100) so EnsureFreshAccessToken skips GoTrue. */
+        const val TEST_HUB_JWT = "hdr.eyJleHAiOjQxMDI0NDQ4MDB9.sig"
+        const val TEST_HUB_JWT_EXPIRES_AT_MS = 4_102_444_800L * 1_000L
+    }
 }
