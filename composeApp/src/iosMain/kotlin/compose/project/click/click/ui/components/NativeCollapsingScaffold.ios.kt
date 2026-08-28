@@ -28,8 +28,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -276,26 +278,41 @@ private fun rememberIosHostNavBar(
     val identityHandler by rememberUpdatedState(identity)
     val hasSubtitle = !subtitle.isNullOrBlank() || presenceOnline != null
     val layer = if (overlay) IosNavChrome.overlay else IosNavChrome.tab
+    // Snapshot read so chat rebinds when Click Drops clears exclusive ownership.
+    val exclusiveOwner = if (overlay) IosNavChrome.overlayExclusiveOwner else null
 
     DisposableEffect(viewController, overlay, leadingClose) {
         layer.attach(viewController)
+        if (overlay) {
+            IosNavChrome.registerOverlayBinder(owner)
+        }
         if (overlay && leadingClose) {
             IosNavChrome.overlayExclusiveOwner = owner
         }
         onDispose {
-            if (IosNavChrome.overlayExclusiveOwner === owner) {
+            val wasExclusive = IosNavChrome.overlayExclusiveOwner === owner
+            val othersRemain = overlay && IosNavChrome.otherOverlayBindersRemain(except = owner)
+            if (wasExclusive) {
                 IosNavChrome.overlayExclusiveOwner = null
             }
-            layer.release(owner, immediate = overlay)
+            if (overlay) {
+                IosNavChrome.unregisterOverlayBinder(owner)
+            }
+            val hideExclusive =
+                overlay &&
+                    leadingClose &&
+                    OverlayExclusiveBindPolicy.shouldHideOverlayOnExclusiveRelease(othersRemain)
+            if (overlay && leadingClose && !hideExclusive) {
+                layer.yieldExclusive(owner)
+            } else {
+                layer.release(owner, immediate = overlay)
+            }
         }
     }
 
     SideEffect {
-        if (overlay) {
-            val exclusive = IosNavChrome.overlayExclusiveOwner
-            if (exclusive != null && exclusive !== owner) {
-                return@SideEffect
-            }
+        if (overlay && OverlayExclusiveBindPolicy.shouldSkipOverlayBind(exclusiveOwner, owner)) {
+            return@SideEffect
         }
         if (!visible) {
             // Inactive underlays (Map swipe-back composing Home) must not unhide stale
@@ -394,8 +411,23 @@ internal object IosNavChrome {
     val overlay = IosHostNavBarLayer()
     val avatarPhotos = mutableMapOf<String, UIImage>()
 
-    /** Camera / sheet that rebinds overlay chrome while [overlay] coverCount > 0. */
-    var overlayExclusiveOwner: Any? = null
+    /**
+     * Camera / sheet that rebinds overlay chrome while [overlay] coverCount > 0.
+     * Snapshot state so the underlying conversation bind recomposes and restores titles
+     * when exclusive ownership clears.
+     */
+    var overlayExclusiveOwner by mutableStateOf<Any?>(null)
+    private val overlayBindOwners = mutableSetOf<Any>()
+
+    fun registerOverlayBinder(owner: Any) {
+        overlayBindOwners.add(owner)
+    }
+
+    fun unregisterOverlayBinder(owner: Any) {
+        overlayBindOwners.remove(owner)
+    }
+
+    fun otherOverlayBindersRemain(except: Any): Boolean = overlayBindOwners.any { it !== except }
 
     fun acquireCover() {
         tab.acquireCover()
