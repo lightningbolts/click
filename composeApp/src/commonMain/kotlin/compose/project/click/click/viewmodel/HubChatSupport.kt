@@ -135,7 +135,5 @@ internal suspend fun TokenStorage.requireFreshHubJwt(forceRefresh: Boolean = fal
             ?.trim()
             .orEmpty()
     if (fresh.isNotEmpty()) return fresh
-    val stored = getJwt()?.trim().orEmpty()
-    if (stored.isNotEmpty()) return stored
     throw IllegalStateException("Please sign in again.")
 }

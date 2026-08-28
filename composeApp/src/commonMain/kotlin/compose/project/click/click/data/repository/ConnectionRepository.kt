@@ -8,6 +8,7 @@ import compose.project.click.click.data.ContextTagTaxonomy
 import compose.project.click.click.data.OpenMeteoWeatherService
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.WeatherService
+import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.api.ClickWebRequestException
 import compose.project.click.click.data.api.CollaborationSessionPostResponse
 import compose.project.click.click.data.api.ProximityBindOkResponseDto
@@ -528,9 +529,9 @@ class ConnectionRepository(
 
     internal suspend fun refreshedJwtAfterAuthFailure(): String? {
         authRepository
-            .refreshSession()
+            .refreshSession(forceRefresh = true)
             .onFailure { println("ConnectionRepository: token refresh failed: ${it.redactedRestMessage()}") }
-        return tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+        return EnsureFreshAccessToken.get(tokenStorage, authRepository, forceRefresh = false) // pragma: allowlist secret
     }
 
     internal fun normalizeContextTag(

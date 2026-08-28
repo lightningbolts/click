@@ -255,7 +255,6 @@ internal suspend fun SupabaseChatRepository.sendMessageImpl(
                 .toEpochMilliseconds()
         val authToken =
             ensureFreshJwtForChat()
-                ?: tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
                 ?: return null
         val enrichedMetadata = enrichMediaEncryptionMetadata(messageType, metadata)
         val resolvedConnectionId =

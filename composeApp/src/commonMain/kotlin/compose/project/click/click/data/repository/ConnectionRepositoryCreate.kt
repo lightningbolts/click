@@ -3,6 +3,7 @@
 package compose.project.click.click.data.repository
 
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.models.Chat
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.ConnectionInsert
@@ -657,7 +658,7 @@ internal suspend fun ConnectionRepository.redeemQrToken(
 ): Result<ConnectionRepository.RedeemQrTokenResponse> {
     return try {
         val jwt =
-            tokenStorage.getJwt()?.takeIf { it.isNotBlank() }
+            EnsureFreshAccessToken.get(tokenStorage)?.takeIf { it.isNotBlank() } // pragma: allowlist secret
                 ?: return Result.failure(Exception("Please sign in again."))
 
         val trimmedWeather = weatherSnapshotLabel?.trim()?.takeIf { it.isNotEmpty() }

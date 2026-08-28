@@ -4,6 +4,7 @@ package compose.project.click.click.data // pragma: allowlist secret
 
 import com.russhwolf.settings.Settings
 import compose.project.click.click.auth.LocalSessionCache // pragma: allowlist secret
+import compose.project.click.click.auth.SessionHydrationPolicy // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.Auth
@@ -77,6 +78,9 @@ object SupabaseConfig {
      * SettingsSessionManager refresh token with a stale TokenStorage copy.
      */
     suspend fun importStoredSessionWithoutRefresh(tokenStorage: TokenStorage): Boolean {
+        if (!SessionHydrationPolicy.shouldImportStoredSession(client.auth.currentSessionOrNull() != null)) {
+            return false
+        }
         val accessToken = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() } ?: return false
         val refreshToken = tokenStorage.getRefreshToken()?.trim()?.takeIf { it.isNotEmpty() } ?: return false
         // TestFlight/app updates can drop the identity cache while JWT + refresh remain.

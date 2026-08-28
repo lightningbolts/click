@@ -29,6 +29,9 @@ object EnsureFreshAccessToken {
         authRepository: AuthRepository = AuthRepository(tokenStorage),
         forceRefresh: Boolean = false,
     ): String? {
+        if (!SessionResumeGate.isCompleted()) {
+            authRepository.refreshSession(forceRefresh = true)
+        }
         val now = Clock.System.now().toEpochMilliseconds()
         val supabase = SupabaseConfig.client
 
@@ -148,7 +151,17 @@ object EnsureFreshAccessToken {
             }
         }
 
-        return storedUsable
+        return null
+    }
+
+    /** True when [jwt] has a parseable `exp` strictly in the future. */
+    fun isAccessTokenFresh(
+        jwt: String?,
+        nowMs: Long = Clock.System.now().toEpochMilliseconds(),
+    ): Boolean {
+        val t = jwt?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+        val exp = jwtExpEpochMs(t) ?: return false
+        return exp > nowMs
     }
 
     /** Best-effort JWT `exp` (seconds) → epoch ms; null if unparseable. */

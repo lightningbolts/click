@@ -16,7 +16,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 
 internal suspend fun SupabaseChatRepository.ensureFreshJwtForChat(): String? =
-    compose.project.click.click.data.auth.EnsureFreshAccessToken.get(
+    compose.project.click.click.data.auth.EnsureFreshAccessToken.get( // pragma: allowlist secret
         tokenStorage = tokenStorage,
         authRepository = authRepository,
     )
@@ -35,20 +35,15 @@ internal suspend fun SupabaseChatRepository.refreshedJwtAfterAuthFailure(): Stri
             return null
         }
     }
-    return supabase.auth
-        .currentSessionOrNull()
-        ?.accessToken
-        ?.trim()
-        ?.takeIf { it.isNotEmpty() }
-        ?: tokenStorage.getJwt()?.trim()?.takeIf { jwt ->
-            jwt.isNotEmpty() &&
-                run {
-                    val exp =
-                        compose.project.click.click.data.auth.EnsureFreshAccessToken
-                            .jwtExpEpochMs(jwt)
-                    exp == null || exp > Clock.System.now().toEpochMilliseconds()
-                }
-        }
+    val sdk = supabase.auth.currentSessionOrNull()?.accessToken?.trim()?.takeIf { it.isNotEmpty() }
+    if (compose.project.click.click.data.auth.EnsureFreshAccessToken.isAccessTokenFresh(sdk)) { // pragma: allowlist secret
+        return sdk
+    }
+    return compose.project.click.click.data.auth.EnsureFreshAccessToken.get( // pragma: allowlist secret
+        tokenStorage = tokenStorage,
+        authRepository = authRepository,
+        forceRefresh = false,
+    )
 }
 
 internal fun Throwable.isAuthFailure(): Boolean {

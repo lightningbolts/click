@@ -164,7 +164,7 @@ First-time multi-peer (≥3) returns server `awaiting_selection` → host picks 
 1. **ViewModels must not import Compose UI** (except `@Composable` helpers like `SecureChatMediaHost` where unavoidable).
 2. **Never clear SSOT on transient network errors** — use `util/isOfflineNetworkFailure()` to preserve local state.
 3. **Ghost mode** — do not trigger `AppDataManager.refreshAll` or location/beacon uploads when ghost mode is enabled.
-4. **Token access** — use `EnsureFreshAccessToken.get` / `AuthRepository.refreshSession(forceRefresh = true)` on 401; never log raw JWTs (`util/redactedRestMessage`). After a refresh, `rebindRealtimeSocket()` so hub/chat sockets pick up the new bearer.
+4. **Token access** — outbound Bearer must come from `EnsureFreshAccessToken.get` (never raw `tokenStorage.getJwt()` or an expired SDK access token). `EnsureFreshAccessToken` never returns a JWT with `exp <= now`; failed refresh returns null. After idle/offline boot, `SessionResumeGate` stays closed until the first `refreshSession(forceRefresh = true)` finishes so writes are not “logged in” with a dead token. Dual-store: persist SDK + TokenStorage together after refresh; never `importStoredSessionWithoutRefresh` over a live SDK session (`SessionHydrationPolicy`). After a refresh, `rebindRealtimeSocket()` so hub/chat sockets pick up the new bearer. Never log raw JWTs (`util/redactedRestMessage`).
 5. **Threading** — heavy crypto and media on `Dispatchers.Default` / `chatMediaDispatcher`; UI state updates on Main via `StateFlow`.
 6. **Testability** — repositories are constructor-injectable in tests (see `androidUnitTest/.../ChatViewModelTest.kt`).
 
