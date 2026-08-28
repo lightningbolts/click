@@ -491,7 +491,14 @@ internal class IosHostNavBarLayer {
         onNavigateBack: (() -> Unit)?,
         trailingActions: List<NativeChromeAction>,
         collapseSearchIntoBar: Boolean,
+        leadingClose: Boolean = false,
     ) {
+        if (this === IosNavChrome.overlay) {
+            val exclusive = IosNavChrome.overlayExclusiveOwner
+            if (exclusive != null && exclusive !== owner) {
+                return
+            }
+        }
         if (attachedHost !== host) {
             attach(host)
         }
@@ -524,6 +531,8 @@ internal class IosHostNavBarLayer {
                 append(stackIdentity)
                 append('|')
                 append(onNavigateBack != null)
+                append('|')
+                append(leadingClose)
                 trailingActions.forEach { action ->
                     append('|')
                     append(action.sfSymbol)
@@ -531,7 +540,7 @@ internal class IosHostNavBarLayer {
                     append(action.contentDescription)
                 }
             }
-        bindRow(onOpenSearch, onNavigateBack, trailingActions, collapseSearchIntoBar, fraction)
+        bindRow(onOpenSearch, onNavigateBack, trailingActions, collapseSearchIntoBar, fraction, leadingClose)
         if (visualKey == lastVisualKey) {
             bindIdentity(
                 hasBack = onNavigateBack != null,
@@ -676,6 +685,7 @@ internal class IosHostNavBarLayer {
         trailingActions: List<NativeChromeAction>,
         collapseSearchIntoBar: Boolean,
         collapseFraction: Float,
+        leadingClose: Boolean,
     ) {
         val showSearch =
             when {
@@ -694,6 +704,7 @@ internal class IosHostNavBarLayer {
         val signature =
             buildString {
                 append(if (onNavigateBack != null) "B" else "-")
+                append(if (leadingClose) "X" else "C")
                 append(if (showSearch) "S" else "-")
                 trailingActions.forEach { action ->
                     append('|')
@@ -726,13 +737,22 @@ internal class IosHostNavBarLayer {
             lastButtonSignature = signature
             backButton.hidden = onNavigateBack == null
             rebuildTrailing(trailingActions, showSearch)
-            paintChromeButton(backButton, "chevron.backward", "Back", clustered = false)
+            paintChromeButton(
+                backButton,
+                if (leadingClose) "xmark" else "chevron.backward",
+                if (leadingClose) "Close" else "Back",
+                clustered = false,
+            )
         }
         applyTitleSlot(onNavigateBack != null, trailingActions.size + if (showSearch) 1 else 0)
     }
 
     private fun applyVisibility() {
-        val show = wantVisible && coverCount == 0
+        val exclusiveShow =
+            this === IosNavChrome.overlay &&
+                IosNavChrome.overlayExclusiveOwner != null &&
+                ownerToken === IosNavChrome.overlayExclusiveOwner
+        val show = wantVisible && (coverCount == 0 || exclusiveShow)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         bar.hidden = !show

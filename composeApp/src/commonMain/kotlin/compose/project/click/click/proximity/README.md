@@ -88,7 +88,7 @@ sequenceDiagram
 
 ### GPS warm-up
 
-`NfcScreen` and `ConnectionViewModel` call `locationService.getHighAccuracyLocation(4000L)` — a **4000 ms** progressive GPS refinement window that runs concurrently with the BLE/ultrasonic listen phase. `proximityBindLocationWaitMs()` in `ProximityRuntime.kt` further tunes wait time based on whether peer evidence was detected (1.8–2.5 s sensor waits).
+`NfcScreen` warms GPS with `getHighAccuracyLocation(4000L)` while the sheet is visible. Tap bind uses **`getTelemetryLocation(6500L)`** (≤100 m accepted immediately; coarse fallback at timeout) and **awaits that job before POST** — it does not truncate GPS with `proximityBindLocationWaitMs()` (that helper only remains for tests / sensor-side waits). Handshake BLE/audio still runs concurrently (~5 s hold). When GPS exists, the client also attaches Open-Meteo `weather_snapshot` so weather is not solely server-side. Ghost Mode / connection-snap off still skips GPS via `shouldCaptureLocationAtTap()`.
 
 ### Server: `bind-proximity-connection` Edge Function
 

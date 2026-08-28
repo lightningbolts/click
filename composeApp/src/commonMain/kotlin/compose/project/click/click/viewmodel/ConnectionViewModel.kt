@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import compose.project.click.click.collaboration.CollaborationSession // pragma: allowlist secret
 import compose.project.click.click.collaboration.CollaborationSessionManager // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.WeatherService // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.ContextTag // pragma: allowlist secret
 import compose.project.click.click.data.models.HeightCategory // pragma: allowlist secret
@@ -315,6 +316,7 @@ class ConnectionViewModel : ViewModel() {
         skipLocation: Boolean,
         ambientNoiseMonitor: AmbientNoiseMonitor? = null,
         barometricHeightMonitor: BarometricHeightMonitor? = null,
+        weatherService: WeatherService? = null,
     ) = startTapProximityHandshakeImpl(
         httpClient = httpClient,
         proximityManager = proximityManager,
@@ -324,6 +326,7 @@ class ConnectionViewModel : ViewModel() {
         skipLocation = skipLocation,
         ambientNoiseMonitor = ambientNoiseMonitor,
         barometricHeightMonitor = barometricHeightMonitor,
+        weatherService = weatherService,
     )
 
     fun onProximityHandshakeRecoveredFromBackground(

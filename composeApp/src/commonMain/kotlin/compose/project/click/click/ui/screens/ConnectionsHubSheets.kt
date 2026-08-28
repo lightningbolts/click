@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
@@ -316,11 +317,13 @@ internal fun ActiveHubFeedRow(
     val rowInteraction = remember { MutableInteractionSource() }
     val unresolved = hub.name.isBlank() || hub.name == hub.hubId
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+        val rowShape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner)
         if (unresolved) {
             ClickListRowShimmer(
                 modifier =
                     Modifier
+                        .clip(rowShape)
                         .platformPressScale(rowInteraction)
                         .connectionRowPressHighlight(rowInteraction)
                         .connectionRowPressGestures(
@@ -334,6 +337,7 @@ internal fun ActiveHubFeedRow(
                 modifier =
                     Modifier
                         .fillMaxWidth()
+                        .clip(rowShape)
                         .height(ClickPlatformListRowHeight)
                         .platformPressScale(rowInteraction)
                         .connectionRowPressHighlight(rowInteraction)

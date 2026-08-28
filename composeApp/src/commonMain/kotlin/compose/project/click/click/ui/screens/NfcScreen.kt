@@ -122,6 +122,7 @@ fun NfcScreen(
             skipLocation = skipLocation,
             ambientNoiseMonitor = ambientNoiseMonitor,
             barometricHeightMonitor = barometricHeightMonitor,
+            weatherService = openMeteoWeather,
         )
     }
 

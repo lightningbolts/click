@@ -5,10 +5,11 @@ package compose.project.click.click.data.repository // pragma: allowlist secret
 import compose.project.click.click.auth.GoogleOAuthConfig // pragma: allowlist secret
 import compose.project.click.click.auth.LocalSessionCache // pragma: allowlist secret
 import compose.project.click.click.auth.LocalSessionIdentity // pragma: allowlist secret
+import compose.project.click.click.auth.SessionHydrationPolicy // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
-import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.auth.SessionRefreshCoordinator // pragma: allowlist secret
+import compose.project.click.click.data.auth.SessionResumeGate // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.getPlatform // pragma: allowlist secret
@@ -38,6 +39,9 @@ class AuthRepository(
 
     private companion object {
         const val AUTH_TIMEOUT_MS = 12_000L
+
+        /** Idle / cold-resume refresh can wait longer than interactive sign-in. */
+        const val AUTH_RESUME_TIMEOUT_MS = 25_000L
         const val AUTH_INTERACTIVE_TIMEOUT_MS = 120_000L
         const val MAX_PROFILE_IMAGE_BYTES = 2_000_000
     }
@@ -475,13 +479,16 @@ class AuthRepository(
                     return@singleFlightRefresh Result.success(Unit)
                 }
                 hydrateGoTrueFromTokenStorageIfNeeded()
-                withTimeout(AUTH_TIMEOUT_MS) {
+                val timeoutMs = if (forceRefresh) AUTH_RESUME_TIMEOUT_MS else AUTH_TIMEOUT_MS
+                withTimeout(timeoutMs) {
                     supabase.auth.refreshCurrentSession()
                 }
                 persistCurrentSessionToTokenStorage()
                 SessionRefreshCoordinator.markSuccessfulRefresh()
+                SessionResumeGate.markCompleted()
                 Result.success(Unit)
             } catch (e: Exception) {
+                SessionResumeGate.markCompleted()
                 Result.failure(e)
             }
         }
@@ -506,26 +513,8 @@ class AuthRepository(
      * Import storage when the SDK session is missing/expired/near-expiry, or storage is newer.
      */
     private suspend fun shouldHydrateFromTokenStorage(): Boolean {
-        val storageRefresh = tokenStorage.getRefreshToken()?.trim()?.takeIf { it.isNotEmpty() } ?: return false
         val existing = supabase.auth.currentSessionOrNull()
-        if (existing == null) return true
-        val now = Clock.System.now().toEpochMilliseconds()
-        val sdkExp = existing.expiresAt?.toEpochMilliseconds()
-        if (sdkExp != null && sdkExp <= now + 90_000L) return true
-        if (supabase.auth
-                .currentUserOrNull()
-                ?.id
-                .isNullOrBlank()
-        ) {
-            return true
-        }
-        val storageExp =
-            tokenStorage.getExpiresAt()
-                ?: EnsureFreshAccessToken.jwtExpEpochMs(tokenStorage.getJwt())
-        return storageRefresh != existing.refreshToken &&
-            storageExp != null &&
-            sdkExp != null &&
-            storageExp > sdkExp + 2_000L
+        return SessionHydrationPolicy.shouldImportStoredSession(sdkHasSession = existing != null)
     }
 
     private suspend fun hydrateGoTrueFromTokenStorageIfNeeded() {
@@ -536,6 +525,15 @@ class AuthRepository(
 
     private suspend fun persistCurrentSessionToTokenStorage() {
         val session = supabase.auth.currentSessionOrNull() ?: return
+        if (
+            !SessionHydrationPolicy.shouldSyncSdkTokensToStorage(
+                storedRefresh = tokenStorage.getRefreshToken(),
+                sdkRefresh = session.refreshToken,
+            ) &&
+            tokenStorage.getJwt()?.trim() == session.accessToken
+        ) {
+            return
+        }
         tokenStorage.saveTokens(
             jwt = session.accessToken,
             refreshToken = session.refreshToken,

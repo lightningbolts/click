@@ -37,11 +37,13 @@ import compose.project.click.click.sensors.HardwareVibeMonitor // pragma: allowl
 import compose.project.click.click.sensors.captureConnectionSensorContext // pragma: allowlist secret
 import compose.project.click.click.ui.camera.DisposableCameraView // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenDefaults // pragma: allowlist secret
+import compose.project.click.click.ui.components.BindPlatformNativeNavigationBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionContextPresentation // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionContextSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionRevealOverlay // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionRevealPhase // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionRevealUiState // pragma: allowlist secret
+import compose.project.click.click.ui.components.CoverPlatformOverlayNavigationBar // pragma: allowlist secret
 import compose.project.click.click.ui.screens.* // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
@@ -412,6 +414,18 @@ internal fun AppConnectionOverlays(
     ) {
         val cameraSession = activeRollSession
         val cameraConnectionId = rollConnectionId
+        if (isIOS) {
+            CoverPlatformOverlayNavigationBar()
+            BindPlatformNativeNavigationBar(
+                title = "Click Drops",
+                onNavigateBack = {
+                    disposableRollExitWithScale = true
+                    showConnectionDisposableRoll = false
+                    pendingRollSession = null
+                },
+                leadingClose = true,
+            )
+        }
         DisposableCameraView(
             onPhotoConfirmed = { bytes ->
                 if (cameraSession != null && !cameraConnectionId.isNullOrBlank()) {

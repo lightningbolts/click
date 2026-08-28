@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.api.ChatApiClient // pragma: allowlist secret
+import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.domain.VerifiedCliqueCreation // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProfileSheetLocalMessage // pragma: allowlist secret
 import compose.project.click.click.util.chatMediaDispatcher // pragma: allowlist secret
@@ -347,7 +348,7 @@ internal fun ChatViewModel.fetchActiveHubDetailsImpl(
     onComplete: (Result<ChatApiClient.HubDetailsDto>) -> Unit,
 ) {
     viewModelScope.launch(chatMediaDispatcher) {
-        val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+        val jwt = EnsureFreshAccessToken.get(tokenStorage) // pragma: allowlist secret
         if (jwt == null) {
             onComplete(Result.failure(IllegalStateException("Please sign in again.")))
             return@launch
@@ -379,7 +380,7 @@ internal fun ChatViewModel.updateActiveHubImpl(
         return
     }
     viewModelScope.launch(chatMediaDispatcher) {
-        val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+        val jwt = EnsureFreshAccessToken.get(tokenStorage) // pragma: allowlist secret
         if (jwt == null) {
             _nudgeResult.value = "Please sign in again"
             onComplete(false)
@@ -408,7 +409,7 @@ internal fun ChatViewModel.leaveActiveHubImpl(
     onComplete: (Boolean) -> Unit = {},
 ) {
     viewModelScope.launch(chatMediaDispatcher) {
-        val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+        val jwt = EnsureFreshAccessToken.get(tokenStorage) // pragma: allowlist secret
         if (jwt == null) {
             _nudgeResult.value = "Please sign in again"
             onComplete(false)
@@ -431,7 +432,7 @@ internal fun ChatViewModel.deleteActiveHubImpl(
     onComplete: (Boolean) -> Unit = {},
 ) {
     viewModelScope.launch(chatMediaDispatcher) {
-        val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+        val jwt = EnsureFreshAccessToken.get(tokenStorage) // pragma: allowlist secret
         if (jwt == null) {
             _nudgeResult.value = "Please sign in again"
             onComplete(false)

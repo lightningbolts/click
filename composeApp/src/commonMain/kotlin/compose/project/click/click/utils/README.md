@@ -11,7 +11,8 @@ This package owns **high-accuracy location acquisition** used across Click's pro
 
 | Consumer | Usage |
 |----------|-------|
-| `NfcScreen` / `ConnectionViewModel` | `getHighAccuracyLocation(4000L)` GPS warm-up during tap-to-connect |
+| `NfcScreen` | `getHighAccuracyLocation(4000L)` GPS warm-up while the tap sheet is visible |
+| `ConnectionViewModel` tap bind | `getTelemetryLocation(6500L)` — ≤100 m immediately for city/weather/street; not 1/5/10 m survey buckets |
 | `QrCodeView` | Optional initiator GPS registration for QR proximity scoring (+15 confidence when ≤15 m) |
 | `ProgressiveLocationSession` | Refines accuracy over the handshake window instead of a single snapshot |
 | `HubGatekeeperLocation` | Client-side helpers for hub join flows that require live coordinates |
@@ -24,7 +25,7 @@ This package owns **high-accuracy location acquisition** used across Click's pro
 
 | Source set | Implementation |
 |------------|----------------|
-| `commonMain` | `expect` interface: permission state, `getHighAccuracyLocation(timeoutMs)`, last-known fallback |
+| `commonMain` | `expect` interface: permission state, `getHighAccuracyLocation(timeoutMs)`, `getTelemetryLocation(timeoutMs)`, last-known fallback |
 | `androidMain` | Fused Location Provider / `LocationManager` with runtime permission checks |
 | `iosMain` | Core Location with `CLLocationManager`, background modes when entitled |
 
@@ -32,7 +33,7 @@ This package owns **high-accuracy location acquisition** used across Click's pro
 
 ### `ProgressiveLocationSession`
 
-Samples location repeatedly during an active handshake and returns the **best accuracy fix** within the budget window. This avoids binding on a stale coarse cell-tower fix when the user is still indoors.
+High-accuracy mode samples repeatedly and returns the **best survey-grade fix** (1 m / 5 m / 10 m buckets, ≤15 m at timeout). Encounter telemetry uses a separate tier: accept ≤100 m immediately and keep a coarser fallback so indoor Bluetooth taps still geocode city, street, and weather.
 
 ### Permission display state
 

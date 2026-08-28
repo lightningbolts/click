@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Groups
@@ -43,6 +44,7 @@ import compose.project.click.click.ui.components.ClickPlatformListRowHeight // p
 import compose.project.click.click.ui.components.ClickUnreadDot // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.CoreConnectionAvatarFrame // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
 import compose.project.click.click.ui.components.groupAvatarClusterWidth // pragma: allowlist secret
 import compose.project.click.click.ui.components.platformPressScale // pragma: allowlist secret
@@ -108,11 +110,12 @@ fun ConnectionItem(
 
     val rowInteraction = remember { MutableInteractionSource() }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
         Row(
             modifier =
                 Modifier
                     .fillMaxWidth()
+                    .clip(RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner))
                     .height(ClickPlatformListRowHeight)
                     .platformPressScale(rowInteraction)
                     .connectionRowPressHighlight(rowInteraction)

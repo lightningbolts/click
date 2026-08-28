@@ -245,6 +245,9 @@ private fun NativeCollapsingTitle(
 actual fun HidePlatformNativeNavigationBar() = Unit
 
 @Composable
+actual fun CoverPlatformOverlayNavigationBar() = Unit
+
+@Composable
 @Suppress("UNUSED_PARAMETER")
 actual fun PlatformNativeNavigationBarSwipeReveal(revealPx: androidx.compose.runtime.MutableFloatState) = Unit
 
@@ -259,6 +262,7 @@ actual fun BindPlatformNativeNavigationBar(
     onOpenSearch: (() -> Unit)?,
     nativeTrailingActions: List<NativeChromeAction>,
     collapseFraction: Float,
+    leadingClose: Boolean,
 ) = Unit
 
 @Composable

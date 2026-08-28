@@ -497,7 +497,6 @@ internal suspend fun SupabaseChatRepository.markMessagesAsReadImpl(
     try {
         val jwt =
             ensureFreshJwtForChat()
-                ?: tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
                 ?: return
         apiClient.markChatAsRead(chatId, jwt).onFailure { e ->
             // Do not fall back to the legacy Flask /api/chats/:id/mark_read host — it often
@@ -512,7 +511,7 @@ internal suspend fun SupabaseChatRepository.markMessagesAsReadImpl(
 internal suspend fun SupabaseChatRepository.markChatAsUnreadImpl(chatId: String) {
     if (chatId.isBlank()) return
     try {
-        val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() } ?: return
+        val jwt = ensureFreshJwtForChat() ?: return
         apiClient.markChatAsUnread(chatId, jwt).onFailure { e ->
             println("markChatAsUnread failed: ${e.redactedRestMessage()}")
         }
@@ -527,7 +526,7 @@ internal suspend fun SupabaseChatRepository.markMessagesDeliveredImpl(
 ) {
     if (chatId.isBlank() || messageIds.isEmpty()) return
     try {
-        val jwt = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() } ?: return
+        val jwt = ensureFreshJwtForChat() ?: return
         apiClient.markMessagesDelivered(chatId, messageIds, jwt).onFailure { e ->
             println("markMessagesDelivered failed: ${e.redactedRestMessage()}")
         }

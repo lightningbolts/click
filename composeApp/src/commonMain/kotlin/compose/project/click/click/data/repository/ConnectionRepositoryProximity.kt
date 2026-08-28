@@ -5,6 +5,7 @@ package compose.project.click.click.data.repository
 import compose.project.click.click.data.api.ClickWebRequestException
 import compose.project.click.click.data.api.ProximityHandshakePostBody
 import compose.project.click.click.data.api.ProximityHandshakePostResult
+import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.models.HeightCategory
 import compose.project.click.click.data.models.NoiseLevelCategory
 import compose.project.click.click.proximity.PROXIMITY_NO_NEARBY_DEVICES_MESSAGE
@@ -205,7 +206,7 @@ internal suspend fun ConnectionRepository.confirmProximitySelectionImpl(
     }
     val jwt =
         bearerJwt?.trim()?.takeIf { it.isNotEmpty() }
-            ?: tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+            ?: EnsureFreshAccessToken.get(tokenStorage) // pragma: allowlist secret
     if (jwt.isNullOrBlank()) {
         return Result.failure(IllegalStateException("Please sign in again."))
     }

@@ -33,13 +33,16 @@ internal fun HttpClientConfig<*>.installClickWebBearerAuth(tokenStorage: TokenSt
                 val session = SupabaseConfig.client.auth.currentSessionOrNull()
                 if (session != null) {
                     val access = session.accessToken
-                    if (access.isNotBlank()) {
+                    if (EnsureFreshAccessToken.isAccessTokenFresh(access)) {
                         return@loadTokens BearerTokens(access, session.refreshToken.orEmpty())
                     }
                 }
                 val stored =
                     tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
                         ?: return@loadTokens null
+                if (!EnsureFreshAccessToken.isAccessTokenFresh(stored)) {
+                    return@loadTokens null
+                }
                 val refresh = tokenStorage.getRefreshToken()?.trim().orEmpty()
                 BearerTokens(stored, refresh)
             }
@@ -47,7 +50,7 @@ internal fun HttpClientConfig<*>.installClickWebBearerAuth(tokenStorage: TokenSt
                 runCatching { AuthRepository(tokenStorage).refreshSession(forceRefresh = true) }
                 val session = SupabaseConfig.client.auth.currentSessionOrNull()
                 val access = session?.accessToken?.trim().orEmpty()
-                if (access.isNotEmpty()) {
+                if (EnsureFreshAccessToken.isAccessTokenFresh(access)) {
                     return@refreshTokens BearerTokens(access, session?.refreshToken.orEmpty())
                 }
                 // Never replay a TokenStorage JWT that already 401'd.

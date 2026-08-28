@@ -260,6 +260,7 @@ private fun rememberIosHostNavBar(
     nativeTrailingActions: List<NativeChromeAction>,
     collapseSearchIntoBar: Boolean,
     identity: NativeChromeIdentity? = null,
+    leadingClose: Boolean = false,
 ) {
     val viewController = LocalUIViewController.current
     val isDarkMode = LocalIsDarkMode.current
@@ -276,12 +277,26 @@ private fun rememberIosHostNavBar(
     val hasSubtitle = !subtitle.isNullOrBlank() || presenceOnline != null
     val layer = if (overlay) IosNavChrome.overlay else IosNavChrome.tab
 
-    DisposableEffect(viewController, overlay) {
+    DisposableEffect(viewController, overlay, leadingClose) {
         layer.attach(viewController)
-        onDispose { layer.release(owner, immediate = overlay) }
+        if (overlay && leadingClose) {
+            IosNavChrome.overlayExclusiveOwner = owner
+        }
+        onDispose {
+            if (IosNavChrome.overlayExclusiveOwner === owner) {
+                IosNavChrome.overlayExclusiveOwner = null
+            }
+            layer.release(owner, immediate = overlay)
+        }
     }
 
     SideEffect {
+        if (overlay) {
+            val exclusive = IosNavChrome.overlayExclusiveOwner
+            if (exclusive != null && exclusive !== owner) {
+                return@SideEffect
+            }
+        }
         if (!visible) {
             // Inactive underlays (Map swipe-back composing Home) must not unhide stale
             // tab chrome. Only hide if this composition currently owns the layer.
@@ -309,6 +324,7 @@ private fun rememberIosHostNavBar(
             onNavigateBack = backHandler,
             trailingActions = trailingHandlers,
             collapseSearchIntoBar = collapseSearchIntoBar,
+            leadingClose = leadingClose,
         )
     }
 }
@@ -318,6 +334,14 @@ actual fun HidePlatformNativeNavigationBar() {
     DisposableEffect(Unit) {
         IosNavChrome.acquireCover()
         onDispose { IosNavChrome.releaseCover() }
+    }
+}
+
+@Composable
+actual fun CoverPlatformOverlayNavigationBar() {
+    DisposableEffect(Unit) {
+        IosNavChrome.overlay.acquireCover()
+        onDispose { IosNavChrome.overlay.releaseCover() }
     }
 }
 
@@ -347,6 +371,7 @@ actual fun BindPlatformNativeNavigationBar(
     onOpenSearch: (() -> Unit)?,
     nativeTrailingActions: List<NativeChromeAction>,
     collapseFraction: Float,
+    leadingClose: Boolean,
 ) {
     rememberIosHostNavBar(
         title = title,
@@ -360,6 +385,7 @@ actual fun BindPlatformNativeNavigationBar(
         nativeTrailingActions = nativeTrailingActions,
         collapseSearchIntoBar = false,
         identity = identity,
+        leadingClose = leadingClose,
     )
 }
 
@@ -367,6 +393,9 @@ internal object IosNavChrome {
     val tab = IosHostNavBarLayer()
     val overlay = IosHostNavBarLayer()
     val avatarPhotos = mutableMapOf<String, UIImage>()
+
+    /** Camera / sheet that rebinds overlay chrome while [overlay] coverCount > 0. */
+    var overlayExclusiveOwner: Any? = null
 
     fun acquireCover() {
         tab.acquireCover()

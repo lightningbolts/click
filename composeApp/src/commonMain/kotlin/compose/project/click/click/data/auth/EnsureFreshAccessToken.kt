@@ -29,8 +29,10 @@ object EnsureFreshAccessToken {
         authRepository: AuthRepository = AuthRepository(tokenStorage),
         forceRefresh: Boolean = false,
     ): String? {
+        if (!SessionResumeGate.isCompleted()) {
+            authRepository.refreshSession(forceRefresh = true)
+        }
         val now = Clock.System.now().toEpochMilliseconds()
-        val supabase = SupabaseConfig.client
 
         fun usable(
             token: String?,
@@ -41,6 +43,20 @@ object EnsureFreshAccessToken {
             if (exp != null && exp <= now) return null
             return t
         }
+
+        // Prefer a still-fresh TokenStorage JWT before touching the process-wide GoTrue
+        // client. Other unit tests may leave an SDK session that would otherwise force a
+        // network refresh (12–25s) and stall hub leave/delete tests at 1s.
+        if (!forceRefresh) {
+            val stored = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+            val storedExp = tokenStorage.getExpiresAt() ?: jwtExpEpochMs(stored)
+            val storedOk = usable(stored, storedExp)
+            if (storedOk != null && storedExp != null && storedExp > now + REFRESH_SKEW_MS) {
+                return storedOk
+            }
+        }
+
+        val supabase = SupabaseConfig.client
 
         suspend fun persistAndMaybeRefresh(
             accessToken: String,
@@ -148,7 +164,17 @@ object EnsureFreshAccessToken {
             }
         }
 
-        return storedUsable
+        return null
+    }
+
+    /** True when [jwt] has a parseable `exp` strictly in the future. */
+    fun isAccessTokenFresh(
+        jwt: String?,
+        nowMs: Long = Clock.System.now().toEpochMilliseconds(),
+    ): Boolean {
+        val t = jwt?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+        val exp = jwtExpEpochMs(t) ?: return false
+        return exp > nowMs
     }
 
     /** Best-effort JWT `exp` (seconds) → epoch ms; null if unparseable. */
