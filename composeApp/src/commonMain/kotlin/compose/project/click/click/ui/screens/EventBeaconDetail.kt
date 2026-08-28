@@ -31,14 +31,17 @@ import compose.project.click.click.data.api.EventTeaserDto // pragma: allowlist 
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.withPreservedEventScheduleFrom // pragma: allowlist secret
+import compose.project.click.click.events.EventRsvpRequestStatus // pragma: allowlist secret
 import compose.project.click.click.events.buildEventShareText // pragma: allowlist secret
 import compose.project.click.click.events.buildEventShareUrl // pragma: allowlist secret
 import compose.project.click.click.events.eventCheckInCtaLabel // pragma: allowlist secret
 import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.formatEventPostedAtLabel // pragma: allowlist secret
 import compose.project.click.click.events.formatEventScheduleRange // pragma: allowlist secret
+import compose.project.click.click.events.isEnded // pragma: allowlist secret
 import compose.project.click.click.events.isLive // pragma: allowlist secret
 import compose.project.click.click.events.openEventMapsRoute // pragma: allowlist secret
+import compose.project.click.click.events.parseEventListingOptions // pragma: allowlist secret
 import compose.project.click.click.platform.shareText // pragma: allowlist secret
 import compose.project.click.click.ui.components.AnimatedClickDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickDropdownMenu // pragma: allowlist secret
@@ -277,6 +280,12 @@ internal fun EventBeaconDetail(
         }
     val schedule = displayBeacon.eventSchedule()
     val live = schedule?.isLive() == true
+    val ended = schedule?.isEnded() == true
+    val rsvpRequestStatus = entry?.requestStatus
+    val listing = parseEventListingOptions(displayBeacon.metadata.raw)
+    val pendingOrWaitlisted =
+        rsvpRequestStatus == EventRsvpRequestStatus.PENDING ||
+            rsvpRequestStatus == EventRsvpRequestStatus.WAITLISTED
     val distanceLabel = distanceMeters?.let { formatBeaconDistance(it) }
     val scheduleRange = schedule?.let { formatEventScheduleRange(it) }
     val categories = displayBeacon.metadata.eventCategories
@@ -615,7 +624,7 @@ internal fun EventBeaconDetail(
                 viewModel.toggleBeaconCheckIn(displayBeacon.id)
             },
             enabled = !checkInPending,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
             shape = actionShape,
             border = BorderStroke(clickBorderWidth(), border),
             colors =
@@ -664,7 +673,7 @@ internal fun EventBeaconDetail(
                     label = displayBeacon.displayDynamicTitle(),
                 )
             },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
             shape = actionShape,
             border = BorderStroke(clickBorderWidth(), border),
             colors =
@@ -683,78 +692,96 @@ internal fun EventBeaconDetail(
             Text("Join Event Route", fontWeight = FontWeight.SemiBold)
         }
 
-        if (currentUserSignedUp) {
-            Button(
-                onClick = {
-                    if (rsvpPending) return@Button
-                    rsvpError = null
-                    viewModel.cancelRsvpToBeacon(displayBeacon.id) { ok ->
-                        if (!ok) {
-                            rsvpError = viewModel.engagementSnackbar.value
-                                ?: "Could not update RSVP. Please try again."
+        if (ended) {
+            EventEndedBanner()
+        }
+
+        if (!ended) {
+            if (currentUserSignedUp || pendingOrWaitlisted) {
+                Button(
+                    onClick = {
+                        if (rsvpPending) return@Button
+                        rsvpError = null
+                        viewModel.cancelRsvpToBeacon(displayBeacon.id) { ok ->
+                            if (!ok) {
+                                rsvpError = viewModel.engagementSnackbar.value
+                                    ?: "Could not update RSVP. Please try again."
+                            }
                         }
-                    }
-                },
-                enabled = !rsvpPending,
-                modifier = Modifier.fillMaxWidth(),
-                shape = actionShape,
-                border = BorderStroke(clickBorderWidth(), MaterialTheme.colorScheme.error),
-                colors =
-                    ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = Color.White,
-                        disabledContainerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.45f),
-                        disabledContentColor = Color.White.copy(alpha = 0.7f),
-                    ),
-                contentPadding = PaddingValues(vertical = 14.dp),
-            ) {
-                Text(
-                    text = if (rsvpPending) "Updating…" else "Cancel RSVP",
-                    fontWeight = FontWeight.SemiBold,
-                )
+                    },
+                    enabled = !rsvpPending,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    shape = actionShape,
+                    border = BorderStroke(clickBorderWidth(), MaterialTheme.colorScheme.error),
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = Color.White,
+                            disabledContainerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.45f),
+                            disabledContentColor = Color.White.copy(alpha = 0.7f),
+                        ),
+                    contentPadding = PaddingValues(vertical = 14.dp),
+                ) {
+                    Text(
+                        text =
+                            if (rsvpPending) {
+                                "Updating…"
+                            } else if (currentUserSignedUp) {
+                                "Cancel RSVP"
+                            } else {
+                                "Withdraw request"
+                            },
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            } else {
+                OutlinedButton(
+                    onClick = {
+                        if (rsvpPending) return@OutlinedButton
+                        rsvpError = null
+                        viewModel.rsvpToBeacon(displayBeacon.id) { ok ->
+                            if (!ok) {
+                                rsvpError = viewModel.engagementSnackbar.value
+                                    ?: "Could not update RSVP. Please try again."
+                            }
+                        }
+                    },
+                    enabled = !rsvpPending,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    shape = actionShape,
+                    border = BorderStroke(clickBorderWidth(), border),
+                    colors =
+                        ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                        ),
+                    contentPadding = PaddingValues(vertical = 14.dp),
+                ) {
+                    Text(
+                        text =
+                            if (rsvpPending) {
+                                "Updating…"
+                            } else if (listing.approvalRequired) {
+                                "Request to join"
+                            } else {
+                                "RSVP / Sign Up"
+                            },
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
             }
-        } else {
-            OutlinedButton(
-                onClick = {
-                    if (rsvpPending) return@OutlinedButton
-                    rsvpError = null
-                    viewModel.rsvpToBeacon(displayBeacon.id) { ok ->
-                        if (!ok) {
-                            rsvpError = viewModel.engagementSnackbar.value
-                                ?: "Could not update RSVP. Please try again."
-                        }
-                    }
-                },
-                enabled = !rsvpPending,
-                modifier = Modifier.fillMaxWidth(),
-                shape = actionShape,
-                border = BorderStroke(clickBorderWidth(), border),
-                colors =
-                    ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                    ),
-                contentPadding = PaddingValues(vertical = 14.dp),
-            ) {
+
+            if (rsvpPending) {
                 Text(
-                    text = if (rsvpPending) "Updating…" else "RSVP / Sign Up",
-                    fontWeight = FontWeight.SemiBold,
+                    text = "Saving in the background...",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
 
-        if (rsvpPending) {
-            Text(
-                text = "Saving in the background...",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        rsvpError?.let { msg ->
-            Text(
-                text = msg,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
+        EventRsvpStatusLine(
+            requestStatus = rsvpRequestStatus,
+            errorMessage = rsvpError,
+        )
     }
 }

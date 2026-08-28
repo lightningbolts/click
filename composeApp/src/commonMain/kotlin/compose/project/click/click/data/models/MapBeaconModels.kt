@@ -192,6 +192,12 @@ data class MapBeaconInsert(
     @SerialName("expires_at") val expiresAtIso: String? = null,
     @SerialName("show_creator_name") val showCreatorName: Boolean = false,
     @SerialName("visibility_audience") val visibilityAudience: String = BeaconVisibilityAudience.EVERYONE.apiValue,
+    /** Event listing visibility (separate from map pin audience). */
+    @SerialName("event_visibility") val eventVisibility: String? = null,
+    @SerialName("event_capacity") val eventCapacity: Int? = null,
+    @SerialName("approval_required") val approvalRequired: Boolean? = null,
+    @SerialName("guest_list_visibility") val guestListVisibility: String? = null,
+    @SerialName("cover_theme_id") val coverThemeId: String? = null,
     /** Active collaboration session — server applies Squad pin 2× radius/TTL when valid. */
     @SerialName("encounter_id") val encounterId: String? = null,
 )

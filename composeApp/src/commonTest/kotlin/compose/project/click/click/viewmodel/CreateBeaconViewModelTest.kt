@@ -1,5 +1,8 @@
 package compose.project.click.click.viewmodel // pragma: allowlist secret
 
+import compose.project.click.click.data.models.BeaconVisibilityAudience // pragma: allowlist secret
+import compose.project.click.click.events.EventVisibility // pragma: allowlist secret
+import compose.project.click.click.events.GuestListVisibility // pragma: allowlist secret
 import compose.project.click.click.ui.screens.BeaconDropCategory // pragma: allowlist secret
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -53,5 +56,34 @@ class CreateBeaconViewModelTest {
         assertEquals(BeaconDropCategory.SOUNDTRACK, state.category)
         assertEquals("", state.title)
         assertNull(state.stagedPhotoBytes)
+    }
+
+    @Test
+    fun setEventVisibility_autoBindsMapAudienceForPrivateListings() {
+        val vm = CreateBeaconViewModel()
+        vm.setEventVisibility(EventVisibility.UNLISTED)
+        assertEquals(EventVisibility.UNLISTED, vm.uiState.value.eventVisibility)
+        assertEquals(BeaconVisibilityAudience.CONNECTIONS, vm.uiState.value.visibilityAudience)
+
+        vm.setVisibilityAudience(BeaconVisibilityAudience.CORE_CONNECTIONS)
+        vm.setEventVisibility(EventVisibility.INVITE_ONLY)
+        assertEquals(BeaconVisibilityAudience.CORE_CONNECTIONS, vm.uiState.value.visibilityAudience)
+
+        vm.setVisibilityAudience(BeaconVisibilityAudience.EVERYONE)
+        vm.setEventVisibility(EventVisibility.PUBLIC)
+        assertEquals(BeaconVisibilityAudience.EVERYONE, vm.uiState.value.visibilityAudience)
+    }
+
+    @Test
+    fun eventListingFieldsPersistAcrossDraftEdits() {
+        val vm = CreateBeaconViewModel()
+        vm.setEventVisibility(EventVisibility.UNLISTED)
+        vm.setEventCapacityText("50")
+        vm.setApprovalRequired(true)
+        vm.setGuestListVisibility(GuestListVisibility.HOSTS_ONLY)
+        val state = vm.uiState.value
+        assertEquals("50", state.eventCapacityText)
+        assertTrue(state.approvalRequired)
+        assertEquals(GuestListVisibility.HOSTS_ONLY, state.guestListVisibility)
     }
 }

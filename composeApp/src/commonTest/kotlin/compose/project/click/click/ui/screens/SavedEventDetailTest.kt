@@ -22,6 +22,20 @@ class SavedEventDetailTest {
         assertEquals(MapBeaconKind.EVENT, resolved.kind)
         assertEquals("Picnic", resolved.metadata.title)
         assertEquals("Gas Works", resolved.metadata.locationName)
+        assertEquals(null, resolved.metadata.description)
+    }
+
+    @Test
+    fun syntheticBeaconDoesNotCopyTitleIntoDescription() {
+        val bookmark =
+            EventBookmarkItemDto(
+                beaconId = "evt-10",
+                title = "Sunset run",
+            )
+        val synthetic = bookmark.toSyntheticMapBeacon()
+        assertEquals("Sunset run", synthetic.metadata.title)
+        assertEquals(null, synthetic.metadata.description)
+        assertTrue(synthetic.metadata.raw?.containsKey("description") != true)
     }
 
     @Test

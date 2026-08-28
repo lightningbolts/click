@@ -233,7 +233,6 @@ internal fun EventBookmarkItemDto.toSyntheticMapBeacon(): MapBeacon {
     val raw =
         buildJsonObject {
             title?.let { put("title", JsonPrimitive(it)) }
-            title?.let { put("description", JsonPrimitive(it)) }
             eventStartAt?.takeIf { it.isNotBlank() }?.let { put("event_start_at", JsonPrimitive(it)) }
             eventEndAt?.takeIf { it.isNotBlank() }?.let { put("event_end_at", JsonPrimitive(it)) }
             locationName?.let { put("location_name", JsonPrimitive(locationName)) }
@@ -256,7 +255,6 @@ internal fun EventBookmarkItemDto.toSyntheticMapBeacon(): MapBeacon {
         metadata =
             MapBeaconMetadata(
                 title = title,
-                description = title,
                 locationName = locationName,
                 formattedAddress = formattedAddress,
                 eventCategories = categories,

@@ -15,8 +15,10 @@ import compose.project.click.click.data.api.EngagementTelemetryBody // pragma: a
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.storage.BeaconEngagementPersistence // pragma: allowlist secret
 import compose.project.click.click.data.storage.BeaconRsvpPersistence // pragma: allowlist secret
+import compose.project.click.click.events.EventRsvpRequestStatus // pragma: allowlist secret
 import compose.project.click.click.events.beaconCheckInFailureMessage // pragma: allowlist secret
 import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
+import compose.project.click.click.events.normalizeEventRsvpErrorMessage // pragma: allowlist secret
 import compose.project.click.click.events.resolveEventCheckInRadiusMeters // pragma: allowlist secret
 import compose.project.click.click.getPlatform // pragma: allowlist secret
 import compose.project.click.click.ui.utils.displayDynamicTitle // pragma: allowlist secret
@@ -222,6 +224,7 @@ internal fun MapViewModel.loadBeaconRsvpImpl(
                                 BeaconRsvpCacheEntry(
                                     attendees = payload.attendees,
                                     currentUserSignedUp = payload.currentUserSignedUp,
+                                    requestStatus = EventRsvpRequestStatus.fromRaw(payload.requestStatus),
                                 )
                         )
                     }
@@ -804,7 +807,8 @@ internal fun MapViewModel.rsvpToBeaconImpl(
                     restoreRsvpSnapshot(id, previous)
                     _beaconRsvpPendingIds.update { it - id }
                     _engagementSnackbar.value =
-                        e.message?.takeIf { it.isNotBlank() } ?: "Could not update RSVP. Please try again."
+                        normalizeEventRsvpErrorMessage(e.message?.takeIf { it.isNotBlank() })
+                            ?: "Could not update RSVP. Please try again."
                     onFinished(false)
                 },
             )
@@ -859,7 +863,8 @@ internal fun MapViewModel.cancelRsvpToBeaconImpl(
                 restoreRsvpSnapshot(id, previous)
                 _beaconRsvpPendingIds.update { it - id }
                 _engagementSnackbar.value =
-                    e.message?.takeIf { it.isNotBlank() } ?: "Could not update RSVP. Please try again."
+                    normalizeEventRsvpErrorMessage(e.message?.takeIf { it.isNotBlank() })
+                        ?: "Could not update RSVP. Please try again."
                 onFinished(false)
             },
         )

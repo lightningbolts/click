@@ -5,6 +5,8 @@ import compose.project.click.click.data.models.BeaconVisibilityAudience // pragm
 import compose.project.click.click.events.EventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.EventScheduleValidationError // pragma: allowlist secret
 import compose.project.click.click.events.EventVenueScale // pragma: allowlist secret
+import compose.project.click.click.events.EventVisibility // pragma: allowlist secret
+import compose.project.click.click.events.GuestListVisibility // pragma: allowlist secret
 import compose.project.click.click.events.defaultEventSchedule // pragma: allowlist secret
 import compose.project.click.click.ui.screens.BeaconDropCategory // pragma: allowlist secret
 import compose.project.click.click.ui.screens.BeaconDuration // pragma: allowlist secret
@@ -36,6 +38,10 @@ data class CreateBeaconUiState(
     val resolvingCurrentLocation: Boolean = false,
     val showCreatorName: Boolean = false,
     val visibilityAudience: BeaconVisibilityAudience = BeaconVisibilityAudience.EVERYONE,
+    val eventVisibility: EventVisibility = EventVisibility.PUBLIC,
+    val eventCapacityText: String = "",
+    val approvalRequired: Boolean = false,
+    val guestListVisibility: GuestListVisibility = GuestListVisibility.PUBLIC,
     val stagedPhotoBytes: ByteArray? = null,
     val stagedPhotoMime: String? = null,
     val isSubmitting: Boolean = false,
@@ -62,6 +68,10 @@ data class CreateBeaconUiState(
             resolvingCurrentLocation == other.resolvingCurrentLocation &&
             showCreatorName == other.showCreatorName &&
             visibilityAudience == other.visibilityAudience &&
+            eventVisibility == other.eventVisibility &&
+            eventCapacityText == other.eventCapacityText &&
+            approvalRequired == other.approvalRequired &&
+            guestListVisibility == other.guestListVisibility &&
             stagedPhotoMime == other.stagedPhotoMime &&
             isSubmitting == other.isSubmitting &&
             stagedPhotoBytes.contentEquals(other.stagedPhotoBytes)
@@ -85,6 +95,10 @@ data class CreateBeaconUiState(
         result = 31 * result + resolvingCurrentLocation.hashCode()
         result = 31 * result + showCreatorName.hashCode()
         result = 31 * result + visibilityAudience.hashCode()
+        result = 31 * result + eventVisibility.hashCode()
+        result = 31 * result + eventCapacityText.hashCode()
+        result = 31 * result + approvalRequired.hashCode()
+        result = 31 * result + guestListVisibility.hashCode()
         result = 31 * result + (stagedPhotoBytes?.contentHashCode() ?: 0)
         result = 31 * result + (stagedPhotoMime?.hashCode() ?: 0)
         result = 31 * result + isSubmitting.hashCode()
@@ -161,6 +175,37 @@ class CreateBeaconViewModel : ViewModel() {
 
     fun setVisibilityAudience(audience: BeaconVisibilityAudience) {
         _uiState.update { it.copy(visibilityAudience = audience) }
+    }
+
+    fun setEventVisibility(visibility: EventVisibility) {
+        _uiState.update { state ->
+            val nextAudience =
+                when (visibility) {
+                    EventVisibility.PUBLIC -> state.visibilityAudience
+                    EventVisibility.UNLISTED, EventVisibility.INVITE_ONLY ->
+                        if (state.visibilityAudience == BeaconVisibilityAudience.EVERYONE) {
+                            BeaconVisibilityAudience.CONNECTIONS
+                        } else {
+                            state.visibilityAudience
+                        }
+                }
+            state.copy(
+                eventVisibility = visibility,
+                visibilityAudience = nextAudience,
+            )
+        }
+    }
+
+    fun setEventCapacityText(text: String) {
+        _uiState.update { it.copy(eventCapacityText = text.filter { ch -> ch.isDigit() }.take(6)) }
+    }
+
+    fun setApprovalRequired(required: Boolean) {
+        _uiState.update { it.copy(approvalRequired = required) }
+    }
+
+    fun setGuestListVisibility(visibility: GuestListVisibility) {
+        _uiState.update { it.copy(guestListVisibility = visibility) }
     }
 
     fun setStagedPhoto(

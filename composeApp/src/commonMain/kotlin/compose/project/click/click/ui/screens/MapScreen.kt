@@ -647,6 +647,7 @@ fun MapScreen(
                     eventCategories,
                     venueScale,
                     eventLocation,
+                    eventListingOptions,
                     imageBytes,
                     imageMime,
                     onRejectedEarly,
@@ -663,6 +664,7 @@ fun MapScreen(
                         eventCategories = eventCategories,
                         venueScale = venueScale,
                         eventLocation = eventLocation,
+                        eventListingOptions = eventListingOptions,
                         imageBytes = imageBytes,
                         imageMime = imageMime,
                         onAcceptedLocally = {

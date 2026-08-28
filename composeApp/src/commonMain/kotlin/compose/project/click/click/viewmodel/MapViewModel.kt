@@ -19,6 +19,7 @@ import compose.project.click.click.data.repository.MapBeaconRepository // pragma
 import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.events.EventListingOptions // pragma: allowlist secret
 import compose.project.click.click.events.EventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.EventVenueScale // pragma: allowlist secret
 import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
@@ -463,6 +464,7 @@ class MapViewModel : ViewModel() {
         eventCategories: List<String> = emptyList(),
         venueScale: EventVenueScale = EventVenueScale.DEFAULT,
         eventLocation: GeocodedPlace? = null,
+        eventListingOptions: EventListingOptions? = null,
         imageBytes: ByteArray? = null,
         imageMime: String? = null,
         onAcceptedLocally: () -> Unit = {},
@@ -480,6 +482,7 @@ class MapViewModel : ViewModel() {
         eventCategories = eventCategories,
         venueScale = venueScale,
         eventLocation = eventLocation,
+        eventListingOptions = eventListingOptions,
         imageBytes = imageBytes,
         imageMime = imageMime,
         onAcceptedLocally = onAcceptedLocally,

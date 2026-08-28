@@ -805,6 +805,7 @@ data class BeaconRsvpGetResponseDto(
     @SerialName("beacon_id") val beaconId: String? = null,
     val attendees: List<BeaconAttendeeDto> = emptyList(),
     @SerialName("current_user_signed_up") val currentUserSignedUp: Boolean = false,
+    @SerialName("request_status") val requestStatus: String? = null,
 )
 
 @Serializable
