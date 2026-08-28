@@ -11,7 +11,6 @@ import androidx.core.content.ContextCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationResult as GmsLocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
@@ -20,6 +19,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
+import com.google.android.gms.location.LocationResult as GmsLocationResult
 
 /**
  * Android implementation of LocationService using FusedLocationProviderClient.
@@ -31,22 +31,24 @@ import kotlin.coroutines.resume
  * Context is initialized from MainActivity via [initLocationService].
  */
 actual class LocationService {
-
     private companion object {
         private const val FRESH_MAX_AGE_MS = 30_000L
         private const val LAST_KNOWN_MAX_AGE_MS = 10 * 60_000L
         private const val FRESH_MAX_ACCURACY_METERS = 80f
         private const val LAST_KNOWN_MAX_ACCURACY_METERS = 150f
+
         /** Discovery / beacon prefetch: match iOS coarse cache tolerance so Android still seeds the feed. */
         private const val DISCOVERY_LAST_KNOWN_MAX_AGE_MS = 60 * 60_000L
         private const val DISCOVERY_LAST_KNOWN_MAX_ACCURACY_METERS = 5_000f
+
         /** Bound cold-start fresh fix so discovery distance is not blocked indefinitely. */
         private const val FRESH_LOCATION_TIMEOUT_MS = 2_500L
     }
 
     private val context: Context
-        get() = locationContext
-            ?: throw IllegalStateException("LocationService not initialized. Call initLocationService() from MainActivity first.")
+        get() =
+            locationContext
+                ?: throw IllegalStateException("LocationService not initialized. Call initLocationService() from MainActivity first.")
 
     private val fusedClient: FusedLocationProviderClient
         get() = LocationServices.getFusedLocationProviderClient(context)
@@ -56,8 +58,7 @@ actual class LocationService {
         fetchProgressiveLocation(timeoutMs, telemetryTier = false)
 
     @SuppressLint("MissingPermission")
-    actual suspend fun getTelemetryLocation(timeoutMs: Long): LocationResult? =
-        fetchProgressiveLocation(timeoutMs, telemetryTier = true)
+    actual suspend fun getTelemetryLocation(timeoutMs: Long): LocationResult? = fetchProgressiveLocation(timeoutMs, telemetryTier = true)
 
     @SuppressLint("MissingPermission")
     private suspend fun fetchProgressiveLocation(
@@ -77,10 +78,12 @@ actual class LocationService {
         return withContext(Dispatchers.Main.immediate) {
             try {
                 val session = ProgressiveLocationSession.start()
-                val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 100L)
-                    .setMinUpdateIntervalMillis(100L)
-                    .setMaxUpdateDelayMillis(250L)
-                    .build()
+                val request =
+                    LocationRequest
+                        .Builder(Priority.PRIORITY_HIGH_ACCURACY, 100L)
+                        .setMinUpdateIntervalMillis(100L)
+                        .setMaxUpdateDelayMillis(250L)
+                        .build()
 
                 suspendCancellableCoroutine { continuation ->
                     var finished = false
@@ -98,32 +101,34 @@ actual class LocationService {
                         }
                     }
 
-                    val timeoutRunnable = Runnable {
-                        complete(
-                            if (telemetryTier) session.bestTelemetryAtTimeout() else session.bestAtTimeout(),
-                        )
-                    }
+                    val timeoutRunnable =
+                        Runnable {
+                            complete(
+                                if (telemetryTier) session.bestTelemetryAtTimeout() else session.bestAtTimeout(),
+                            )
+                        }
 
-                    callbackSlot[0] = object : LocationCallback() {
-                        override fun onLocationResult(result: GmsLocationResult) {
-                            if (finished) return
-                            for (loc in result.locations) {
-                                if (!loc.hasAccuracy()) continue
-                                val acc = loc.accuracy.toDouble()
-                                val alt = if (loc.hasAltitude()) loc.altitude else null
-                                val picked =
-                                    if (telemetryTier) {
-                                        session.onTelemetryReading(loc.latitude, loc.longitude, acc, alt)
-                                    } else {
-                                        session.onReading(loc.latitude, loc.longitude, acc, alt)
+                    callbackSlot[0] =
+                        object : LocationCallback() {
+                            override fun onLocationResult(result: GmsLocationResult) {
+                                if (finished) return
+                                for (loc in result.locations) {
+                                    if (!loc.hasAccuracy()) continue
+                                    val acc = loc.accuracy.toDouble()
+                                    val alt = if (loc.hasAltitude()) loc.altitude else null
+                                    val picked =
+                                        if (telemetryTier) {
+                                            session.onTelemetryReading(loc.latitude, loc.longitude, acc, alt)
+                                        } else {
+                                            session.onReading(loc.latitude, loc.longitude, acc, alt)
+                                        }
+                                    if (picked != null) {
+                                        complete(picked)
+                                        return
                                     }
-                                if (picked != null) {
-                                    complete(picked)
-                                    return
                                 }
                             }
                         }
-                    }
 
                     handler.postDelayed(timeoutRunnable, timeoutMs)
                     fused.requestLocationUpdates(request, callbackSlot[0]!!, Looper.getMainLooper())
@@ -157,10 +162,11 @@ actual class LocationService {
 
         return try {
             // Instant-then-refine: last-known / coarse first so Nearby distance paints immediately.
-            val lastLocation = getLastKnownLocation(
-                maxAgeMs = LAST_KNOWN_MAX_AGE_MS,
-                maxAccuracyMeters = LAST_KNOWN_MAX_ACCURACY_METERS,
-            )
+            val lastLocation =
+                getLastKnownLocation(
+                    maxAgeMs = LAST_KNOWN_MAX_AGE_MS,
+                    maxAccuracyMeters = LAST_KNOWN_MAX_ACCURACY_METERS,
+                )
             if (lastLocation != null) {
                 println(
                     "LocationService.android: Using last known location: " +
@@ -171,10 +177,11 @@ actual class LocationService {
 
             // Coarse discovery fallback (iOS allows up to ~5km cached accuracy). Without this,
             // Android beacon prefetch often exits with zero centers until the map reports bounds.
-            val coarse = getLastKnownLocation(
-                maxAgeMs = DISCOVERY_LAST_KNOWN_MAX_AGE_MS,
-                maxAccuracyMeters = DISCOVERY_LAST_KNOWN_MAX_ACCURACY_METERS,
-            )
+            val coarse =
+                getLastKnownLocation(
+                    maxAgeMs = DISCOVERY_LAST_KNOWN_MAX_AGE_MS,
+                    maxAccuracyMeters = DISCOVERY_LAST_KNOWN_MAX_ACCURACY_METERS,
+                )
             if (coarse != null) {
                 println(
                     "LocationService.android: Coarse last-known for discovery: " +
@@ -204,64 +211,62 @@ actual class LocationService {
     private suspend fun getLastKnownLocation(
         maxAgeMs: Long = LAST_KNOWN_MAX_AGE_MS,
         maxAccuracyMeters: Float = LAST_KNOWN_MAX_ACCURACY_METERS,
-    ): LocationResult? {
-        return suspendCancellableCoroutine { continuation ->
+    ): LocationResult? =
+        suspendCancellableCoroutine { continuation ->
             fusedClient.lastLocation
                 .addOnSuccessListener { location ->
-                    continuation.resume(location?.toValidatedLocationResult(
-                        maxAgeMs = maxAgeMs,
-                        maxAccuracyMeters = maxAccuracyMeters,
-                    ))
-                }
-                .addOnFailureListener {
+                    continuation.resume(
+                        location?.toValidatedLocationResult(
+                            maxAgeMs = maxAgeMs,
+                            maxAccuracyMeters = maxAccuracyMeters,
+                        ),
+                    )
+                }.addOnFailureListener {
                     println("LocationService.android: lastLocation failed: ${it.message}")
                     continuation.resume(null)
                 }
         }
-    }
 
     @SuppressLint("MissingPermission")
-    private suspend fun getFreshLocation(): LocationResult? {
-        return suspendCancellableCoroutine { continuation ->
+    private suspend fun getFreshLocation(): LocationResult? =
+        suspendCancellableCoroutine { continuation ->
             val cancellationTokenSource = CancellationTokenSource()
 
             continuation.invokeOnCancellation {
                 cancellationTokenSource.cancel()
             }
 
-            fusedClient.getCurrentLocation(
-                Priority.PRIORITY_HIGH_ACCURACY,
-                cancellationTokenSource.token
-            )
-                .addOnSuccessListener { location ->
-                    val validated = location?.toValidatedLocationResult(
-                        maxAgeMs = FRESH_MAX_AGE_MS,
-                        maxAccuracyMeters = FRESH_MAX_ACCURACY_METERS
-                    )
+            fusedClient
+                .getCurrentLocation(
+                    Priority.PRIORITY_HIGH_ACCURACY,
+                    cancellationTokenSource.token,
+                ).addOnSuccessListener { location ->
+                    val validated =
+                        location?.toValidatedLocationResult(
+                            maxAgeMs = FRESH_MAX_AGE_MS,
+                            maxAccuracyMeters = FRESH_MAX_ACCURACY_METERS,
+                        )
                     if (validated != null) {
                         println("LocationService.android: Fresh location accepted")
                     } else {
                         println("LocationService.android: Fresh location missing or not accurate enough")
                     }
                     continuation.resume(validated)
-                }
-                .addOnFailureListener { e ->
+                }.addOnFailureListener { e ->
                     println("LocationService.android: Fresh location failed: ${e.message}")
                     continuation.resume(null)
                 }
         }
-    }
 
-    actual fun hasLocationPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            context,
-            android.Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED ||
+    actual fun hasLocationPermission(): Boolean =
         ContextCompat.checkSelfPermission(
             context,
-            android.Manifest.permission.ACCESS_COARSE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-    }
+            android.Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.ACCESS_COARSE_LOCATION,
+            ) == PackageManager.PERMISSION_GRANTED
 
     actual fun requestLocationPermission() {
         // Permissions are requested via Accompanist or ActivityResultContracts
@@ -273,10 +278,13 @@ actual class LocationService {
     private fun isLocationEnabled(): Boolean {
         val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
         return locationManager?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true ||
-               locationManager?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true
+            locationManager?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true
     }
 
-    private fun Location.toValidatedLocationResult(maxAgeMs: Long, maxAccuracyMeters: Float): LocationResult? {
+    private fun Location.toValidatedLocationResult(
+        maxAgeMs: Long,
+        maxAccuracyMeters: Float,
+    ): LocationResult? {
         if (latitude == 0.0 && longitude == 0.0) return null
 
         val ageMs = (System.currentTimeMillis() - time).coerceAtLeast(0L)

@@ -38,12 +38,12 @@ import compose.project.click.click.sensors.captureConnectionSensorContext // pra
 import compose.project.click.click.ui.camera.DisposableCameraView // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenDefaults // pragma: allowlist secret
 import compose.project.click.click.ui.components.BindPlatformNativeNavigationBar // pragma: allowlist secret
-import compose.project.click.click.ui.components.CoverPlatformOverlayNavigationBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionContextPresentation // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionContextSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionRevealOverlay // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionRevealPhase // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionRevealUiState // pragma: allowlist secret
+import compose.project.click.click.ui.components.CoverPlatformOverlayNavigationBar // pragma: allowlist secret
 import compose.project.click.click.ui.screens.* // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret

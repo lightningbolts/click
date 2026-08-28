@@ -1,5 +1,7 @@
 package compose.project.click.click.data.auth // pragma: allowlist secret
 
+import kotlin.concurrent.Volatile
+
 /**
  * After idle/offline boot the UI may look signed-in from disk while GoTrue
  * still has a dead access token. Network writes wait until the first

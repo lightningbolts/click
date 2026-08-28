@@ -39,12 +39,12 @@ import androidx.compose.ui.unit.sp
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.previewLabel // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator
-import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickInsetDivider // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickPlatformListRowHeight // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickUnreadDot // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.CoreConnectionAvatarFrame // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
 import compose.project.click.click.ui.components.groupAvatarClusterWidth // pragma: allowlist secret
 import compose.project.click.click.ui.components.platformPressScale // pragma: allowlist secret

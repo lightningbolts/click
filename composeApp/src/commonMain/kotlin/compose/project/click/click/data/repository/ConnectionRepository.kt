@@ -8,10 +8,10 @@ import compose.project.click.click.data.ContextTagTaxonomy
 import compose.project.click.click.data.OpenMeteoWeatherService
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.WeatherService
-import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.api.ClickWebRequestException
 import compose.project.click.click.data.api.CollaborationSessionPostResponse
 import compose.project.click.click.data.api.ProximityBindOkResponseDto
+import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.ConnectionActivityStatus
 import compose.project.click.click.data.models.ConnectionRequest

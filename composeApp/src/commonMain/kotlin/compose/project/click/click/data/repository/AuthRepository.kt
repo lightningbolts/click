@@ -5,12 +5,11 @@ package compose.project.click.click.data.repository // pragma: allowlist secret
 import compose.project.click.click.auth.GoogleOAuthConfig // pragma: allowlist secret
 import compose.project.click.click.auth.LocalSessionCache // pragma: allowlist secret
 import compose.project.click.click.auth.LocalSessionIdentity // pragma: allowlist secret
+import compose.project.click.click.auth.SessionHydrationPolicy // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
-import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.auth.SessionRefreshCoordinator // pragma: allowlist secret
 import compose.project.click.click.data.auth.SessionResumeGate // pragma: allowlist secret
-import compose.project.click.click.auth.SessionHydrationPolicy // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.getPlatform // pragma: allowlist secret
@@ -530,7 +529,8 @@ class AuthRepository(
             !SessionHydrationPolicy.shouldSyncSdkTokensToStorage(
                 storedRefresh = tokenStorage.getRefreshToken(),
                 sdkRefresh = session.refreshToken,
-            ) && tokenStorage.getJwt()?.trim() == session.accessToken
+            ) &&
+            tokenStorage.getJwt()?.trim() == session.accessToken
         ) {
             return
         }

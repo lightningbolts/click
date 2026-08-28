@@ -9,8 +9,8 @@ package compose.project.click.click.viewmodel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
-import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.api.ChatApiClient // pragma: allowlist secret
+import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.domain.VerifiedCliqueCreation // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProfileSheetLocalMessage // pragma: allowlist secret
 import compose.project.click.click.util.chatMediaDispatcher // pragma: allowlist secret

@@ -15,8 +15,7 @@ data class ProximityHandshakeListenResult(
         get() = (heardTokens + detectedDevices).distinct().sorted()
 }
 
-fun ProximityHandshakeListenResult.hasNearbyPeerEvidence(): Boolean =
-    heardTokens.isNotEmpty() || detectedDevices.isNotEmpty()
+fun ProximityHandshakeListenResult.hasNearbyPeerEvidence(): Boolean = heardTokens.isNotEmpty() || detectedDevices.isNotEmpty()
 
 internal const val PROXIMITY_SENSOR_LOCATION_WAIT_MS: Long = 1_200L
 internal const val PROXIMITY_STRONG_EVIDENCE_LOCATION_WAIT_MS: Long = 2_500L
@@ -34,5 +33,4 @@ internal fun proximityBindLocationWaitMs(evidence: ProximityHandshakeListenResul
 const val PROXIMITY_NO_NEARBY_DEVICES_MESSAGE: String = "No nearby devices detected."
 
 /** @return null when the handshake should proceed; tap attempts are always sent to the API. */
-fun proximityHandshakeAbortMessage(evidence: ProximityHandshakeListenResult): String? =
-    null
+fun proximityHandshakeAbortMessage(evidence: ProximityHandshakeListenResult): String? = null

@@ -112,7 +112,6 @@ class ProgressiveLocationSession private constructor(
             return ProgressiveLocationSession { mark.elapsedNow().inWholeMilliseconds }
         }
 
-        internal fun forTest(elapsedMillis: () -> Long): ProgressiveLocationSession =
-            ProgressiveLocationSession(elapsedMillis)
+        internal fun forTest(elapsedMillis: () -> Long): ProgressiveLocationSession = ProgressiveLocationSession(elapsedMillis)
     }
 }

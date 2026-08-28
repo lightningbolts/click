@@ -7,10 +7,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import platform.CoreLocation.CLLocation
 import platform.CoreLocation.CLLocationManager
@@ -30,12 +30,19 @@ import kotlin.coroutines.resume
 private class LocationFetchDelegate(
     private val onUpdate: (List<CLLocation>) -> Unit,
     private val onFail: (NSError) -> Unit,
-) : NSObject(), CLLocationManagerDelegateProtocol {
-    override fun locationManager(manager: CLLocationManager, didUpdateLocations: List<*>) {
+) : NSObject(),
+    CLLocationManagerDelegateProtocol {
+    override fun locationManager(
+        manager: CLLocationManager,
+        didUpdateLocations: List<*>,
+    ) {
         onUpdate(didUpdateLocations.filterIsInstance<CLLocation>())
     }
 
-    override fun locationManager(manager: CLLocationManager, didFailWithError: NSError) {
+    override fun locationManager(
+        manager: CLLocationManager,
+        didFailWithError: NSError,
+    ) {
         onFail(didFailWithError)
     }
 }
@@ -47,7 +54,6 @@ private class LocationFetchDelegate(
  * All [CLLocationManager] mutations run on the main queue.
  */
 actual class LocationService {
-
     private companion object {
         val fetchMutex = Mutex()
 
@@ -63,8 +69,7 @@ actual class LocationService {
     actual suspend fun getHighAccuracyLocation(timeoutMs: Long): LocationResult? =
         fetchProgressiveLocation(timeoutMs, telemetryTier = false)
 
-    actual suspend fun getTelemetryLocation(timeoutMs: Long): LocationResult? =
-        fetchProgressiveLocation(timeoutMs, telemetryTier = true)
+    actual suspend fun getTelemetryLocation(timeoutMs: Long): LocationResult? = fetchProgressiveLocation(timeoutMs, telemetryTier = true)
 
     private suspend fun fetchProgressiveLocation(
         timeoutMs: Long,
@@ -104,32 +109,33 @@ actual class LocationService {
                         return@suspendCancellableCoroutine
                     }
 
-                    val delegate = LocationFetchDelegate(
-                        onUpdate = { candidates ->
-                            if (candidates.isEmpty()) return@LocationFetchDelegate
-                            for (loc in candidates) {
-                                val acc = loc.horizontalAccuracy
-                                if (acc <= 0.0 || !acc.isFinite()) continue
-                                val (lat, lon) = loc.latLonOrNull() ?: continue
-                                val alt = loc.altitude.takeIf { loc.verticalAccuracy >= 0.0 }
-                                val accepted =
-                                    if (telemetryTier) {
-                                        session.onTelemetryReading(lat, lon, acc, alt)
-                                    } else {
-                                        session.onReading(lat, lon, acc, alt)
+                    val delegate =
+                        LocationFetchDelegate(
+                            onUpdate = { candidates ->
+                                if (candidates.isEmpty()) return@LocationFetchDelegate
+                                for (loc in candidates) {
+                                    val acc = loc.horizontalAccuracy
+                                    if (acc <= 0.0 || !acc.isFinite()) continue
+                                    val (lat, lon) = loc.latLonOrNull() ?: continue
+                                    val alt = loc.altitude.takeIf { loc.verticalAccuracy >= 0.0 }
+                                    val accepted =
+                                        if (telemetryTier) {
+                                            session.onTelemetryReading(lat, lon, acc, alt)
+                                        } else {
+                                            session.onReading(lat, lon, acc, alt)
+                                        }
+                                    if (accepted != null) {
+                                        finishOnMain(accepted)
+                                        return@LocationFetchDelegate
                                     }
-                                if (accepted != null) {
-                                    finishOnMain(accepted)
-                                    return@LocationFetchDelegate
                                 }
-                            }
-                        },
-                        onFail = {
-                            finishOnMain(
-                                if (telemetryTier) session.bestTelemetryAtTimeout() else session.bestAtTimeout(),
-                            )
-                        },
-                    )
+                            },
+                            onFail = {
+                                finishOnMain(
+                                    if (telemetryTier) session.bestTelemetryAtTimeout() else session.bestAtTimeout(),
+                                )
+                            },
+                        )
 
                     continuation.invokeOnCancellation {
                         dispatch_async(dispatch_get_main_queue()) {
@@ -141,12 +147,13 @@ actual class LocationService {
                         }
                     }
 
-                    timeoutJob = launch {
-                        delay(timeoutMs)
-                        finishOnMain(
-                            if (telemetryTier) session.bestTelemetryAtTimeout() else session.bestAtTimeout(),
-                        )
-                    }
+                    timeoutJob =
+                        launch {
+                            delay(timeoutMs)
+                            finishOnMain(
+                                if (telemetryTier) session.bestTelemetryAtTimeout() else session.bestAtTimeout(),
+                            )
+                        }
 
                     launch(Dispatchers.Main.immediate) {
                         activeDelegate = delegate
@@ -190,17 +197,19 @@ actual class LocationService {
                         return@suspendCancellableCoroutine
                     }
 
-                    val delegate = LocationFetchDelegate(
-                        onUpdate = { candidates ->
-                            if (candidates.isEmpty()) return@LocationFetchDelegate
-                            val picked = pickBestLocation(candidates)
-                                ?: cachedLocationResult(maxAccuracyMeters = 5_000.0)
-                            finishOnMain(picked ?: cachedLocationResult(maxAccuracyMeters = 5_000.0))
-                        },
-                        onFail = {
-                            finishOnMain(cachedLocationResult(maxAccuracyMeters = 5_000.0))
-                        },
-                    )
+                    val delegate =
+                        LocationFetchDelegate(
+                            onUpdate = { candidates ->
+                                if (candidates.isEmpty()) return@LocationFetchDelegate
+                                val picked =
+                                    pickBestLocation(candidates)
+                                        ?: cachedLocationResult(maxAccuracyMeters = 5_000.0)
+                                finishOnMain(picked ?: cachedLocationResult(maxAccuracyMeters = 5_000.0))
+                            },
+                            onFail = {
+                                finishOnMain(cachedLocationResult(maxAccuracyMeters = 5_000.0))
+                            },
+                        )
 
                     continuation.invokeOnCancellation {
                         dispatch_async(dispatch_get_main_queue()) {
@@ -265,11 +274,12 @@ actual class LocationService {
     }
 
     @OptIn(ExperimentalForeignApi::class)
-    private fun CLLocation.latLonOrNull(): Pair<Double, Double>? = coordinate.useContents {
-        if (!latitude.isFinite() || !longitude.isFinite()) return@useContents null
-        if (latitude == 0.0 && longitude == 0.0) return@useContents null
-        latitude to longitude
-    }
+    private fun CLLocation.latLonOrNull(): Pair<Double, Double>? =
+        coordinate.useContents {
+            if (!latitude.isFinite() || !longitude.isFinite()) return@useContents null
+            if (latitude == 0.0 && longitude == 0.0) return@useContents null
+            latitude to longitude
+        }
 
     @OptIn(ExperimentalForeignApi::class)
     private fun CLLocation.toLocationResult(): LocationResult {

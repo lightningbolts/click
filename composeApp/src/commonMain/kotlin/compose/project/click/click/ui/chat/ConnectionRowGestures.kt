@@ -90,10 +90,11 @@ internal fun Modifier.connectionRowPressHighlight(interactionSource: MutableInte
         if (t > 0.001f) {
             drawRoundRect(
                 color = PrimaryBlue.copy(alpha = PressHighlightAlpha * t.coerceIn(0f, 1f)),
-                cornerRadius = CornerRadius(
-                    GlassSheetTokens.BentoExteriorCorner.toPx(),
-                    GlassSheetTokens.BentoExteriorCorner.toPx(),
-                ),
+                cornerRadius =
+                    CornerRadius(
+                        GlassSheetTokens.BentoExteriorCorner.toPx(),
+                        GlassSheetTokens.BentoExteriorCorner.toPx(),
+                    ),
             )
         }
     }

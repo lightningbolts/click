@@ -8,7 +8,6 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class EnsureFreshAccessTokenTest {
-
     @Test
     fun jwtExpEpochMs_parsesStandardPayload() {
         // {"exp":1700000000} base64url

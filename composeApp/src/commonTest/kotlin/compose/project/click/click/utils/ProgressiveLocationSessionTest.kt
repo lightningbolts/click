@@ -6,7 +6,6 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 class ProgressiveLocationSessionTest {
-
     @Test
     fun bucket1_acceptsUpTo1mInFirstWindow() {
         var t = 0L

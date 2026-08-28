@@ -5,6 +5,7 @@ package compose.project.click.click.data.repository
 import compose.project.click.click.crypto.MessageCrypto
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.SupabaseConfig
+import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.models.*
 import compose.project.click.click.util.isHardAuthFailure
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
@@ -13,10 +14,9 @@ import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.datetime.Clock
 
 internal suspend fun SupabaseChatRepository.ensureFreshJwtForChat(): String? =
-    compose.project.click.click.data.auth.EnsureFreshAccessToken.get( // pragma: allowlist secret
+    EnsureFreshAccessToken.get(
         tokenStorage = tokenStorage,
         authRepository = authRepository,
     )
@@ -35,11 +35,16 @@ internal suspend fun SupabaseChatRepository.refreshedJwtAfterAuthFailure(): Stri
             return null
         }
     }
-    val sdk = supabase.auth.currentSessionOrNull()?.accessToken?.trim()?.takeIf { it.isNotEmpty() }
-    if (compose.project.click.click.data.auth.EnsureFreshAccessToken.isAccessTokenFresh(sdk)) { // pragma: allowlist secret
+    val sdk =
+        supabase.auth
+            .currentSessionOrNull()
+            ?.accessToken
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+    if (EnsureFreshAccessToken.isAccessTokenFresh(sdk)) {
         return sdk
     }
-    return compose.project.click.click.data.auth.EnsureFreshAccessToken.get( // pragma: allowlist secret
+    return EnsureFreshAccessToken.get(
         tokenStorage = tokenStorage,
         authRepository = authRepository,
         forceRefresh = false,

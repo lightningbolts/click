@@ -177,7 +177,7 @@ internal fun ConnectionEncounter.metricElevationLabel(): String? {
                 } ?: raw.replace('_', ' ').lowercase().replaceFirstChar { it.titlecase() }
         parts.add(friendly)
     }
-    relativeAltitudeM?.takeIf { it.isFinite() }?.let { parts.add("${it.roundToInt()} m") } }
+    relativeAltitudeM?.takeIf { it.isFinite() }?.let { parts.add("${it.roundToInt()} m") }
     return parts.joinToString(" · ").takeIf { it.isNotEmpty() }
 }
 

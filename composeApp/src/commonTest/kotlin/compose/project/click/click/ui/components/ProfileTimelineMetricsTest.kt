@@ -6,7 +6,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class ProfileTimelineMetricsTest {
-
     private fun encounter(
         elevationCategory: String? = null,
         relativeAltitudeM: Double? = null,
