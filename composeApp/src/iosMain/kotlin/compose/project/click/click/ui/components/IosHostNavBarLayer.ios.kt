@@ -148,6 +148,10 @@ internal class IosHostNavBarLayer {
     private var lastCollapseFraction = 0f
     private var lastHeightPt = -1.0
     private var lastTitle: String? = null
+    private var lastHasSubtitle = false
+    private var lastStackTwoLine = false
+    private var lastGrowCompactSubtitle = false
+    private var overlayUnderlyingOwner: Any? = null
     private var lastBoundIdentityUserId: String? = null
     internal var lastAvatarUrl: String? = null
     internal var lastAvatarUserId: String? = null
@@ -235,6 +239,9 @@ internal class IosHostNavBarLayer {
             if (!visible) {
                 // Overlay is already hidden; identity is safe and unsticks the next present.
                 resetSlideTransformLocked()
+                if (NativeHeaderMetrics.shouldReapplyTabBarHeightOnOverlayHide()) {
+                    IosNavChrome.tab.reapplyLastBarHeight()
+                }
             }
         }
         CATransaction.commit()
@@ -343,6 +350,7 @@ internal class IosHostNavBarLayer {
         immediate: Boolean = false,
     ) {
         if (ownerToken !== owner) return
+        overlayUnderlyingOwner = null
         ownerToken = null
         if (immediate) {
             setWantVisible(false)
@@ -353,6 +361,23 @@ internal class IosHostNavBarLayer {
                 setWantVisible(false)
             }
         }
+    }
+
+    /**
+     * Exclusive overlay (Click Drops) is leaving while a conversation bind is still composed.
+     * Restore the prior owner token and keep the overlay visible so tab-root chrome cannot leak.
+     */
+    fun yieldExclusive(owner: Any) {
+        val restored =
+            OverlayExclusiveBindPolicy.restoredOwnerToken(
+                releasingOwner = owner,
+                currentOwner = ownerToken,
+                underlyingOwner = overlayUnderlyingOwner,
+            )
+        overlayUnderlyingOwner = null
+        ownerToken = restored
+        lastVisualKey = null
+        lastButtonSignature = null
     }
 
     fun attach(host: UIViewController) {
@@ -495,8 +520,11 @@ internal class IosHostNavBarLayer {
     ) {
         if (this === IosNavChrome.overlay) {
             val exclusive = IosNavChrome.overlayExclusiveOwner
-            if (exclusive != null && exclusive !== owner) {
+            if (OverlayExclusiveBindPolicy.shouldSkipOverlayBind(exclusive, owner)) {
                 return
+            }
+            if (OverlayExclusiveBindPolicy.shouldStashUnderlyingOwner(exclusive, owner, ownerToken)) {
+                overlayUnderlyingOwner = ownerToken
             }
         }
         if (attachedHost !== host) {
@@ -572,6 +600,9 @@ internal class IosHostNavBarLayer {
                 hasSubtitle = subtitleText.isNotEmpty(),
                 collapseFraction = fraction,
             )
+        lastHasSubtitle = hasSubtitle
+        lastStackTwoLine = stackTwoLine
+        lastGrowCompactSubtitle = growCompactSubtitle
         setBarHeight(
             NativeHeaderMetrics.barHeightPt(
                 fraction,
@@ -677,6 +708,25 @@ internal class IosHostNavBarLayer {
         }
         lastHeightPt = targetPt
         updateGlassFadeMask()
+    }
+
+    fun reapplyLastBarHeight() {
+        lastHeightPt = -1.0
+        lastVisualKey = null
+        setBarHeight(
+            NativeHeaderMetrics.barHeightPt(
+                lastCollapseFraction,
+                lastHasSubtitle,
+                stackSubtitle = lastStackTwoLine,
+                growCompactSubtitle = lastGrowCompactSubtitle,
+            ),
+        )
+        titleColumnTopConstraint?.constant =
+            NativeHeaderMetrics.titleColumnTopInsetPt(lastCollapseFraction)
+        titleColumnTopConstraint?.active = !lastStackTwoLine
+        titleColumnCenterYConstraint?.active = lastStackTwoLine
+        bar.superview?.layoutIfNeeded()
+        chromeRow.superview?.layoutIfNeeded()
     }
 
     private fun bindRow(

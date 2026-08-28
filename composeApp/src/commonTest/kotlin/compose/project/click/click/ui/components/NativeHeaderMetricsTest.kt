@@ -140,6 +140,7 @@ class NativeHeaderMetricsTest {
         assertTrue(!NativeHeaderMetrics.shouldHideMapFloatingChromeForNearbyCover(nearbyCovering = true))
         assertTrue(!NativeHeaderMetrics.shouldHideMapFloatingChromeForNearbyCover(nearbyCovering = false))
         assertTrue(!NativeHeaderMetrics.shouldRematerializeChromeOnUnsuppress())
+        assertTrue(NativeHeaderMetrics.shouldReapplyTabBarHeightOnOverlayHide())
     }
 
     @Test

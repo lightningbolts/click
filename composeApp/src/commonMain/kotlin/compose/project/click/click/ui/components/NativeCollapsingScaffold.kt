@@ -126,7 +126,9 @@ expect fun HidePlatformNativeNavigationBar()
 
 /**
  * Covers only the overlay `UINavigationBar` (chat header) so a camera / sheet can rebind it.
- * Does **not** hide the tab bar. No-op on Android.
+ * Does **not** hide the tab bar, unbind chat chrome, or flip `LocalNativeChromeActive`.
+ * Dismiss must yield exclusive overlay ownership so the conversation header restores.
+ * No-op on Android.
  */
 @Composable
 expect fun CoverPlatformOverlayNavigationBar()
