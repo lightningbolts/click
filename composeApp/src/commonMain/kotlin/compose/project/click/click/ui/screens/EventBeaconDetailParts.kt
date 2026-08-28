@@ -29,7 +29,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
 import compose.project.click.click.data.api.GuestListStatusDto // pragma: allowlist secret
+import compose.project.click.click.events.EventRsvpRequestStatus // pragma: allowlist secret
 import compose.project.click.click.events.EventSchedule // pragma: allowlist secret
+import compose.project.click.click.events.eventRsvpStatusMessage // pragma: allowlist secret
 import compose.project.click.click.events.formatEventEndDateLabel // pragma: allowlist secret
 import compose.project.click.click.events.formatEventEndTimeLabel // pragma: allowlist secret
 import compose.project.click.click.events.formatEventStartDateLabel // pragma: allowlist secret
@@ -40,6 +42,34 @@ import compose.project.click.click.ui.components.ConnectionListUserAvatarFace //
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
 import kotlinx.coroutines.launch
+
+@Composable
+internal fun EventRsvpStatusLine(
+    requestStatus: EventRsvpRequestStatus?,
+    errorMessage: String?,
+) {
+    val message = eventRsvpStatusMessage(requestStatus, errorMessage) ?: return
+    val isError = errorMessage != null && requestStatus == null
+    Text(
+        text = message,
+        style = MaterialTheme.typography.bodySmall,
+        color =
+            if (isError) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+    )
+}
+
+@Composable
+internal fun EventEndedBanner() {
+    Text(
+        text = "This event has ended.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
 
 @Composable
 internal fun EventLiveBadge() {

@@ -41,12 +41,11 @@ fun validateEventSchedule(
     return null
 }
 
-fun eventScheduleMetadata(
-    schedule: EventSchedule,
-): JsonObject =
+fun eventScheduleMetadata(schedule: EventSchedule): JsonObject =
     buildJsonObject {
         put("event_start_at", Instant.fromEpochMilliseconds(schedule.startEpochMs).toString())
         put("event_end_at", Instant.fromEpochMilliseconds(schedule.endEpochMs).toString())
+        put("event_timezone", TimeZone.currentSystemDefault().id)
     }
 
 /** Overlay [schedule] onto existing metadata without dropping other keys. */
@@ -61,11 +60,18 @@ fun mergeEventScheduleIntoRaw(
 
 fun parseEventScheduleFromMetadata(raw: JsonObject?): EventSchedule? {
     if (raw == null) return null
+
     fun parseInstant(key: String): Long? {
-        val text = raw[key]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
-            ?: return null
+        val text =
+            raw[key]
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?: return null
         // Same lenient path as beacon row timestamps (ISO + Postgres timestamptz forms).
-        return compose.project.click.click.data.models.parseEpochMs(text)
+        return compose.project.click.click.data.models
+            .parseEpochMs(text)
     }
     val start = parseInstant("event_start_at") ?: parseInstant("eventStartAt") ?: return null
     val end = parseInstant("event_end_at") ?: parseInstant("eventEndAt") ?: return null
@@ -73,11 +79,9 @@ fun parseEventScheduleFromMetadata(raw: JsonObject?): EventSchedule? {
     return EventSchedule(startEpochMs = start, endEpochMs = end)
 }
 
-fun EventSchedule.isEnded(nowEpochMs: Long = Clock.System.now().toEpochMilliseconds()): Boolean =
-    nowEpochMs >= endEpochMs
+fun EventSchedule.isEnded(nowEpochMs: Long = Clock.System.now().toEpochMilliseconds()): Boolean = nowEpochMs >= endEpochMs
 
-fun EventSchedule.isVisible(nowEpochMs: Long = Clock.System.now().toEpochMilliseconds()): Boolean =
-    !isEnded(nowEpochMs)
+fun EventSchedule.isVisible(nowEpochMs: Long = Clock.System.now().toEpochMilliseconds()): Boolean = !isEnded(nowEpochMs)
 
 /** True while the event window is in progress (`start ≤ now < end`). */
 fun EventSchedule.isLive(nowEpochMs: Long = Clock.System.now().toEpochMilliseconds()): Boolean =
@@ -100,11 +104,12 @@ fun formatEventScheduleRange(
     val start = Instant.fromEpochMilliseconds(schedule.startEpochMs).toLocalDateTime(timeZone)
     val end = Instant.fromEpochMilliseconds(schedule.endEpochMs).toLocalDateTime(timeZone)
     val startLabel = formatEventDateTimeLabel(start)
-    val endLabel = if (start.date == end.date) {
-        formatEventClockLabel(end)
-    } else {
-        formatEventDateTimeLabel(end)
-    }
+    val endLabel =
+        if (start.date == end.date) {
+            formatEventClockLabel(end)
+        } else {
+            formatEventDateTimeLabel(end)
+        }
     return "$startLabel – $endLabel"
 }
 
@@ -144,12 +149,15 @@ fun formatEventEndDateLabel(
     return formatEventDateOnlyLabel(end)
 }
 
-private fun formatEventDateTimeLabel(dt: kotlinx.datetime.LocalDateTime): String {
-    return "${formatEventDateOnlyLabel(dt)}, ${formatEventClockLabel(dt)}"
-}
+private fun formatEventDateTimeLabel(dt: kotlinx.datetime.LocalDateTime): String =
+    "${formatEventDateOnlyLabel(dt)}, ${formatEventClockLabel(dt)}"
 
 private fun formatEventDateOnlyLabel(dt: kotlinx.datetime.LocalDateTime): String {
-    val mon = dt.month.name.lowercase().replaceFirstChar { it.uppercase() }.take(3)
+    val mon =
+        dt.month.name
+            .lowercase()
+            .replaceFirstChar { it.uppercase() }
+            .take(3)
     return "$mon ${dt.dayOfMonth}"
 }
 
@@ -192,15 +200,23 @@ internal fun startOfLocalDayEpochMs(epochMs: Long): Long {
     return (epochMs / dayMs) * dayMs
 }
 
-fun eventReminderTitle(kind: EventReminderKind, eventDescription: String): String =
+fun eventReminderTitle(
+    kind: EventReminderKind,
+    eventDescription: String,
+): String =
     when (kind) {
         EventReminderKind.DayOf -> "Event today"
         EventReminderKind.OneHourBefore -> "Event starting soon"
     }
 
-fun eventReminderBody(kind: EventReminderKind, eventDescription: String, eventTitle: String? = null): String {
-    val label = eventTitle?.trim()?.take(80)?.takeIf { it.isNotEmpty() }
-        ?: eventDescription.trim().take(80).ifEmpty { "Your event" }
+fun eventReminderBody(
+    kind: EventReminderKind,
+    eventDescription: String,
+    eventTitle: String? = null,
+): String {
+    val label =
+        eventTitle?.trim()?.take(80)?.takeIf { it.isNotEmpty() }
+            ?: eventDescription.trim().take(80).ifEmpty { "Your event" }
     return when (kind) {
         EventReminderKind.DayOf -> "$label starts today — tap to view on the map."
         EventReminderKind.OneHourBefore -> "$label starts in about an hour."

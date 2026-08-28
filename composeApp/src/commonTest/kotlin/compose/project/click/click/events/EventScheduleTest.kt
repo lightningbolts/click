@@ -1,16 +1,17 @@
 package compose.project.click.click.events
 
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import kotlinx.datetime.Instant
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
 
 class EventScheduleTest {
-
     @Test
     fun validateEventSchedule_rejectsEndBeforeStart() {
         assertEquals(
@@ -55,10 +56,11 @@ class EventScheduleTest {
     @Test
     fun formatEventStartEndTimeLabels_useClockOnly() {
         val tz = TimeZone.UTC
-        val schedule = EventSchedule(
-            startEpochMs = Instant.parse("2026-06-12T19:00:00Z").toEpochMilliseconds(),
-            endEpochMs = Instant.parse("2026-06-13T00:00:00Z").toEpochMilliseconds(),
-        )
+        val schedule =
+            EventSchedule(
+                startEpochMs = Instant.parse("2026-06-12T19:00:00Z").toEpochMilliseconds(),
+                endEpochMs = Instant.parse("2026-06-13T00:00:00Z").toEpochMilliseconds(),
+            )
         assertEquals("7:00 PM", formatEventStartTimeLabel(schedule, tz))
         assertEquals("12:00 AM", formatEventEndTimeLabel(schedule, tz))
         assertEquals("Jun 12", formatEventStartDateLabel(schedule, tz))
@@ -102,14 +104,23 @@ class EventScheduleTest {
     @Test
     fun formatEventScheduleRange_sameDay_usesCompactEndTime() {
         val tz = TimeZone.UTC
-        val schedule = EventSchedule(
-            startEpochMs = Instant.parse("2026-06-12T19:00:00Z").toEpochMilliseconds(),
-            endEpochMs = Instant.parse("2026-06-12T21:00:00Z").toEpochMilliseconds(),
-        )
+        val schedule =
+            EventSchedule(
+                startEpochMs = Instant.parse("2026-06-12T19:00:00Z").toEpochMilliseconds(),
+                endEpochMs = Instant.parse("2026-06-12T21:00:00Z").toEpochMilliseconds(),
+            )
         val label = formatEventScheduleRange(schedule, tz)
         assertTrue(label.contains("Jun 12"))
         assertTrue(label.contains("7:00 PM"))
         assertTrue(label.contains("9:00 PM"))
         assertTrue(label.contains("–"))
+    }
+
+    @Test
+    fun eventScheduleMetadata_includesEventTimezone() {
+        val schedule = EventSchedule(startEpochMs = 1_000L, endEpochMs = 2_000L)
+        val meta = eventScheduleMetadata(schedule)
+        assertTrue(meta.containsKey("event_timezone"))
+        assertEquals(TimeZone.currentSystemDefault().id, meta["event_timezone"]?.jsonPrimitive?.contentOrNull)
     }
 }

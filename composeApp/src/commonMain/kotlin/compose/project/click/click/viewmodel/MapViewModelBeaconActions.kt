@@ -21,12 +21,14 @@ import compose.project.click.click.events.EVENT_CATEGORIES_METADATA_KEY // pragm
 import compose.project.click.click.events.EVENT_CATEGORY_OPTIONS // pragma: allowlist secret
 import compose.project.click.click.events.EVENT_CHECK_IN_RADIUS_METADATA_KEY // pragma: allowlist secret
 import compose.project.click.click.events.EVENT_VENUE_SCALE_METADATA_KEY // pragma: allowlist secret
+import compose.project.click.click.events.EventListingOptions // pragma: allowlist secret
 import compose.project.click.click.events.EventReminderCoordinator // pragma: allowlist secret
 import compose.project.click.click.events.EventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.EventVenueScale // pragma: allowlist secret
 import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.eventScheduleMetadata // pragma: allowlist secret
 import compose.project.click.click.events.mergeEventScheduleIntoRaw // pragma: allowlist secret
+import compose.project.click.click.events.toMetadataPatch // pragma: allowlist secret
 import compose.project.click.click.events.validateEventSchedule // pragma: allowlist secret
 import compose.project.click.click.ui.components.mapBeaconKindToLayerFilter // pragma: allowlist secret
 import compose.project.click.click.ui.utils.hasUsableMapCoordinates // pragma: allowlist secret
@@ -369,6 +371,7 @@ internal fun MapViewModel.submitBeaconDropImpl(
     eventCategories: List<String> = emptyList(),
     venueScale: EventVenueScale = EventVenueScale.DEFAULT,
     eventLocation: GeocodedPlace? = null,
+    eventListingOptions: EventListingOptions? = null,
     imageBytes: ByteArray? = null,
     imageMime: String? = null,
     onAcceptedLocally: () -> Unit = {},
@@ -462,10 +465,12 @@ internal fun MapViewModel.submitBeaconDropImpl(
                             onRemoteFinished(false)
                             return@launch
                         }
+                        val listingOptions = eventListingOptions ?: EventListingOptions()
                         buildJsonObject {
                             put("title", trimmedTitle)
                             trimmedDescription?.let { put("description", it) }
                             eventScheduleMetadata(schedule).forEach { (k, v) -> put(k, v) }
+                            listingOptions.toMetadataPatch().forEach { (k, v) -> put(k, v) }
                             val categories =
                                 eventCategories
                                     .map { it.trim() }
@@ -599,6 +604,12 @@ internal fun MapViewModel.submitBeaconDropImpl(
                         .fromEpochMilliseconds(it)
                         .toString()
                 }
+            val listingForInsert =
+                if (kind == MapBeaconKind.EVENT) {
+                    eventListingOptions ?: EventListingOptions()
+                } else {
+                    null
+                }
             val insert =
                 MapBeaconInsert(
                     kind = kind.apiValue,
@@ -614,6 +625,11 @@ internal fun MapViewModel.submitBeaconDropImpl(
                     expiresAtIso = eventExpiresIso,
                     showCreatorName = showCreatorName,
                     visibilityAudience = visibilityAudience.apiValue,
+                    eventVisibility = listingForInsert?.eventVisibility?.apiValue,
+                    eventCapacity = listingForInsert?.eventCapacity,
+                    approvalRequired = listingForInsert?.approvalRequired,
+                    guestListVisibility = listingForInsert?.guestListVisibility?.apiValue,
+                    coverThemeId = listingForInsert?.coverThemeId,
                     encounterId = squadSession?.encounterId,
                 )
             val optimisticId = "optimistic:${Clock.System.now().toEpochMilliseconds()}:${Random.Default.nextInt()}"

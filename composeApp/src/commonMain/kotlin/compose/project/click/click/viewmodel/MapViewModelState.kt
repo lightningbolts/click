@@ -67,6 +67,7 @@ sealed class MapSelection {
 data class BeaconRsvpCacheEntry(
     val attendees: List<BeaconAttendeeDto>,
     val currentUserSignedUp: Boolean,
+    val requestStatus: compose.project.click.click.events.EventRsvpRequestStatus? = null,
 )
 
 data class BeaconDirectoryCacheEntry(

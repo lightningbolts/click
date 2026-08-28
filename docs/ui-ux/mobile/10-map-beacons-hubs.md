@@ -88,7 +88,7 @@ Other beacon/hub kinds remain on the **map** via layer filters.
 | Non-hub | Title / soundtrack URL / event picker / duration chips / description |
 | Photo | **Optional for every type, encouraged in the sheet.** One image from photo library or in-app camera, auto-compressed to ≤ 2 MB (`compressOutgoingChatImageForUpload` + `POST /api/beacons/image`). Unencrypted public URL stored in metadata `image_url`. Offered via two shared `MediaSourceButton` tiles (`"Take photo"` / `"Photo library"`) plus a thumbnail with filled `ActionChipButton` **Replace** (Refresh icon, reopens camera) / **Remove** (Delete icon) once attached. Form drafts (`category`, title, description, staged bytes) live in `CreateBeaconViewModel` so returning from the native camera / picker does not reset the category to Soundtrack. Android `TakePicture` / gallery callbacks use `rememberUpdatedState` and hop to `Dispatchers.Main`; iOS camera stages JPEG bytes from `UIImagePickerControllerOriginalImage` on the main queue. A beacon without a photo renders with its generated `CardVisual` gradient everywhere it appears, so there is no submit gate (`beaconDropValidationError` covers title, music link, and event location only). |
 | Event extras | Start/end picker + multi-select **Categories** (`Promotional` / `Social` / `School Event`) + **Check-in area** venue scale (`Intimate` / `Neighborhood` / `Venue` / `Campus`) + **Event location** (address search via Nominatim **or** “Use my location”) → metadata `event_categories`, `venue_scale`, `check_in_radius_meters`, `location_name`, `formatted_address` |
-| Visibility | `"Who can see this"` chip row + `"Display my name"` switch |
+| Visibility | `"Who can see this"` chip row (map pin audience) + `"Display my name"` switch. Events also have a separate **Event page** block: Public / Unlisted / Invite-only, capacity, approval, guest-list visibility. Unlisted/invite-only auto-bind map audience to connections. |
 | CTA | Full-width `Button` — `"Drop pin"` |
 
 ### CreateHubModal / JoinCommunityHubSheet
@@ -328,6 +328,7 @@ All user-visible strings quoted below.
 - `"Title (max 80)"`, `"Description (optional, max 500)"`
 - `"Visible for"` + duration chips: `"15 min"`, `"30 min"`, `"45 min"`, `"1 hour"`, `"90 min"`, `"2 hours"`, `"3 hours"`, `"6 hours"`, `"24 hours"`, `"2 days"` … `"7 days"`
 - `"Who can see this"`: `"Everyone"`, `"Connections only"`, `"Core connections only"`
+- Event page (events only): `"Public"`, `"Unlisted"`, `"Invite-only"`, optional capacity, approval required, guest list public / hosts only
 - `"Display my name"` / `"Show your name on the map pin for others nearby."`
 - Validation: `"Please add a title."`, `"Please add a music link."`, `"Set an event location (search an address or use my location)."` — no photo requirement
 - CTA: `"Drop pin"`

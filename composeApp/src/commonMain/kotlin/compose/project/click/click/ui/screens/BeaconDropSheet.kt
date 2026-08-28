@@ -69,7 +69,10 @@ import compose.project.click.click.data.AppDataManager // pragma: allowlist secr
 import compose.project.click.click.data.models.BeaconVisibilityAudience // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.events.EVENT_CATEGORY_OPTIONS // pragma: allowlist secret
+import compose.project.click.click.events.EventListingOptions // pragma: allowlist secret
 import compose.project.click.click.events.EventVenueScale // pragma: allowlist secret
+import compose.project.click.click.events.EventVisibility // pragma: allowlist secret
+import compose.project.click.click.events.GuestListVisibility // pragma: allowlist secret
 import compose.project.click.click.events.validateEventSchedule // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 import compose.project.click.click.ui.components.ActionChipButton // pragma: allowlist secret
@@ -174,6 +177,7 @@ fun BeaconDropSheetContent(
         eventCategories: List<String>,
         venueScale: compose.project.click.click.events.EventVenueScale, // pragma: allowlist secret
         eventLocation: GeocodedPlace?,
+        eventListingOptions: EventListingOptions?,
         imageBytes: ByteArray?,
         imageMime: String?,
         onRejectedEarly: () -> Unit,
@@ -734,6 +738,13 @@ fun BeaconDropSheetContent(
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
+                if (isEvent) {
+                    Text(
+                        text = "Map pin — who sees this beacon on the map.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 LazyRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -762,6 +773,122 @@ fun BeaconDropSheetContent(
                                     selectedLabelColor = MaterialTheme.colorScheme.onSurface,
                                 ),
                         )
+                    }
+                }
+                if (isEvent) {
+                    Text(
+                        text = "Event page",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "Who can find and join this event in listings (separate from the map pin above).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        EventVisibility.entries.forEach { option ->
+                            FilterChip(
+                                selected = form.eventVisibility == option,
+                                onClick = { viewModel.setEventVisibility(option) },
+                                label = {
+                                    Text(
+                                        when (option) {
+                                            EventVisibility.PUBLIC -> "Public"
+                                            EventVisibility.UNLISTED -> "Unlisted"
+                                            EventVisibility.INVITE_ONLY -> "Invite-only"
+                                        },
+                                    )
+                                },
+                                colors =
+                                    FilterChipDefaults.filterChipColors(
+                                        containerColor = chipContainer,
+                                        selectedContainerColor = chipSelected,
+                                        labelColor = MaterialTheme.colorScheme.onSurface,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onSurface,
+                                    ),
+                            )
+                        }
+                    }
+                    Text(
+                        text = "Capacity",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "Leave blank for unlimited attendees.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    BeaconDropOutlinedField(
+                        value = form.eventCapacityText,
+                        onValueChange = { viewModel.setEventCapacityText(it) },
+                        placeholder = "Max attendees (optional)",
+                        singleLine = true,
+                        trailingIcon = null,
+                        colors = fieldColors,
+                        onDismissKeyboard = dismissKeyboard,
+                        keyboardType = KeyboardType.Number,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Approval required",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = "Guests request to join; you approve RSVPs.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = form.approvalRequired,
+                            onCheckedChange = { viewModel.setApprovalRequired(it) },
+                        )
+                    }
+                    Text(
+                        text = "Guest list on event page",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        GuestListVisibility.entries.forEach { option ->
+                            FilterChip(
+                                selected = form.guestListVisibility == option,
+                                onClick = { viewModel.setGuestListVisibility(option) },
+                                label = {
+                                    Text(
+                                        when (option) {
+                                            GuestListVisibility.PUBLIC -> "Public"
+                                            GuestListVisibility.HOSTS_ONLY -> "Hosts only"
+                                        },
+                                    )
+                                },
+                                colors =
+                                    FilterChipDefaults.filterChipColors(
+                                        containerColor = chipContainer,
+                                        selectedContainerColor = chipSelected,
+                                        labelColor = MaterialTheme.colorScheme.onSurface,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onSurface,
+                                    ),
+                            )
+                        }
                     }
                 }
                 Row(
@@ -853,6 +980,20 @@ fun BeaconDropSheetContent(
                             if (isEvent) form.eventCategories.toList() else emptyList(),
                             if (isEvent) form.venueScale else EventVenueScale.DEFAULT,
                             if (isEvent) form.selectedEventLocation else null,
+                            if (isEvent) {
+                                EventListingOptions(
+                                    eventVisibility = form.eventVisibility,
+                                    eventCapacity =
+                                        form.eventCapacityText
+                                            .trim()
+                                            .toIntOrNull()
+                                            ?.takeIf { it > 0 },
+                                    approvalRequired = form.approvalRequired,
+                                    guestListVisibility = form.guestListVisibility,
+                                )
+                            } else {
+                                null
+                            },
                             form.stagedPhotoBytes,
                             form.stagedPhotoMime,
                         ) {
