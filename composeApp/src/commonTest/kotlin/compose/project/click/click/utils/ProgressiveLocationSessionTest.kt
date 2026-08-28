@@ -71,4 +71,38 @@ class ProgressiveLocationSessionTest {
         session.onReading(1.0, 2.0, 16.0, null)
         assertNull(session.bestAtTimeout())
     }
+
+    @Test
+    fun telemetry_acceptsUpTo100mImmediately() {
+        var t = 0L
+        val session = ProgressiveLocationSession.forTest { t }
+        assertNull(session.onTelemetryReading(1.0, 2.0, 100.1, null))
+        val accepted = session.onTelemetryReading(1.0, 2.0, 100.0, 12.0)
+        assertNotNull(accepted)
+        assertEquals(100.0, accepted.accuracyMeters)
+        assertEquals(12.0, accepted.altitudeMeters)
+    }
+
+    @Test
+    fun bestTelemetryAtTimeout_prefersTightestUnder100() {
+        var t = 0L
+        val session = ProgressiveLocationSession.forTest { t }
+        session.onTelemetryReading(1.0, 2.0, 80.0, null)
+        session.onTelemetryReading(1.0, 2.0, 25.0, null)
+        session.onTelemetryReading(1.0, 2.0, 140.0, null)
+        val best = session.bestTelemetryAtTimeout()
+        assertNotNull(best)
+        assertEquals(25.0, best.accuracyMeters)
+    }
+
+    @Test
+    fun bestTelemetryAtTimeout_fallsBackToCoarseFix() {
+        var t = 0L
+        val session = ProgressiveLocationSession.forTest { t }
+        session.onTelemetryReading(47.6, -122.3, 250.0, null)
+        val best = session.bestTelemetryAtTimeout()
+        assertNotNull(best)
+        assertEquals(250.0, best.accuracyMeters)
+        assertEquals(47.6, best.latitude)
+    }
 }

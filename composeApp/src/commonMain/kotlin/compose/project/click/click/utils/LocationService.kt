@@ -31,6 +31,12 @@ expect class LocationService() {
     suspend fun getHighAccuracyLocation(timeoutMs: Long = 4000L): LocationResult?
 
     /**
+     * Encounter / weather geocode GPS: accept ≤100 m immediately and keep a coarser fallback.
+     * Handshake BLE/audio must not wait on survey-grade buckets.
+     */
+    suspend fun getTelemetryLocation(timeoutMs: Long = 6500L): LocationResult?
+
+    /**
      * Check if location permissions have been granted.
      */
     fun hasLocationPermission(): Boolean

@@ -3,6 +3,8 @@ package compose.project.click.click.viewmodel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.WeatherService // pragma: allowlist secret
+import compose.project.click.click.data.models.toConnectionPayloadWeatherJson // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.UserProfile // pragma: allowlist secret
@@ -20,7 +22,6 @@ import compose.project.click.click.proximity.ProximityHandshakeListenResult
 import compose.project.click.click.proximity.ProximityHardwarePermissionException // pragma: allowlist secret
 import compose.project.click.click.proximity.ProximityManager // pragma: allowlist secret
 import compose.project.click.click.proximity.isSimulatorOrEmulatorRuntime // pragma: allowlist secret
-import compose.project.click.click.proximity.proximityBindLocationWaitMs
 import compose.project.click.click.proximity.scheduleProximityHandshakeSync // pragma: allowlist secret
 import compose.project.click.click.sensors.AmbientNoiseMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.BarometricHeightMonitor // pragma: allowlist secret
@@ -278,6 +279,7 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
     skipLocation: Boolean,
     ambientNoiseMonitor: AmbientNoiseMonitor? = null,
     barometricHeightMonitor: BarometricHeightMonitor? = null,
+    weatherService: WeatherService? = null,
 ) {
     if (currentUserId.isBlank()) {
         _connectionState.value = ConnectionState.Error("User not logged in")
@@ -333,7 +335,28 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
                                 locationService.requestLocationPermission()
                                 delay(800L)
                             }
-                            runCatching { locationService.getHighAccuracyLocation(6500L) }.getOrNull()
+                            runCatching { locationService.getTelemetryLocation(6500L) }.getOrNull()
+                        }
+                    } else {
+                        null
+                    }
+
+                val weatherDeferred =
+                    if (shouldFetchLocation && weatherService != null) {
+                        async {
+                            val loc = locationDeferred?.await() ?: return@async null
+                            if (
+                                !loc.latitude.isFinite() ||
+                                !loc.longitude.isFinite() ||
+                                (loc.latitude == 0.0 && loc.longitude == 0.0)
+                            ) {
+                                return@async null
+                            }
+                            runCatching {
+                                weatherService
+                                    .fetchWeather(loc.latitude, loc.longitude)
+                                    ?.toConnectionPayloadWeatherJson()
+                            }.getOrNull()
                         }
                     } else {
                         null
@@ -388,10 +411,9 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
 
                 val heardTokensAudio = listenResult.heardTokens
                 val detectedDevicesBle = listenResult.detectedDevices
-                val locationWaitMs = proximityBindLocationWaitMs(listenResult)
 
                 val location =
-                    locationDeferred?.awaitWithin(locationWaitMs)
+                    locationDeferred?.await()
                         ?: if (shouldFetchLocation) {
                             runCatching { locationService.getCurrentLocation() }.getOrNull()
                                 ?: AppDataManager.lastKnownDeviceLocation.value?.let { (la, lo) ->
@@ -403,6 +425,7 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
                 lastProximityLat = location?.latitude
                 lastProximityLng = location?.longitude
                 lastProximityAltitudeMeters = location?.altitudeMeters
+                val weatherSnapshotLabel = weatherDeferred?.awaitWithin(2_500L)
 
                 val proximitySensorContext = sensorDeferred?.awaitWithin(PROXIMITY_SENSOR_WAIT_MS)
                 val vibe = vibeDeferred.awaitWithin(PROXIMITY_SENSOR_WAIT_MS)
@@ -428,6 +451,7 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
                                                 ?.takeIf { it.isFinite() },
                                         hardwareVibe = vibe,
                                         clientContextFirst = true,
+                                        weatherSnapshotLabel = weatherSnapshotLabel,
                                         bindNoiseLevelCategory = proximitySensorContext?.noiseLevelCategory,
                                         bindExactNoiseLevelDb = proximitySensorContext?.exactNoiseLevelDb,
                                         bindHeightCategory = proximitySensorContext?.heightCategory,

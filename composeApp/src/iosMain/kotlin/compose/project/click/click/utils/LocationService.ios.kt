@@ -60,7 +60,16 @@ actual class LocationService {
     private val locationManager = CLLocationManager()
     private var activeDelegate: LocationFetchDelegate? = null
 
-    actual suspend fun getHighAccuracyLocation(timeoutMs: Long): LocationResult? {
+    actual suspend fun getHighAccuracyLocation(timeoutMs: Long): LocationResult? =
+        fetchProgressiveLocation(timeoutMs, telemetryTier = false)
+
+    actual suspend fun getTelemetryLocation(timeoutMs: Long): LocationResult? =
+        fetchProgressiveLocation(timeoutMs, telemetryTier = true)
+
+    private suspend fun fetchProgressiveLocation(
+        timeoutMs: Long,
+        telemetryTier: Boolean,
+    ): LocationResult? {
         if (timeoutMs <= 0L) return null
         if (!withContext(Dispatchers.Default) { CLLocationManager.locationServicesEnabled() }) {
             return null
@@ -103,14 +112,23 @@ actual class LocationService {
                                 if (acc <= 0.0 || !acc.isFinite()) continue
                                 val (lat, lon) = loc.latLonOrNull() ?: continue
                                 val alt = loc.altitude.takeIf { loc.verticalAccuracy >= 0.0 }
-                                val accepted = session.onReading(lat, lon, acc, alt)
+                                val accepted =
+                                    if (telemetryTier) {
+                                        session.onTelemetryReading(lat, lon, acc, alt)
+                                    } else {
+                                        session.onReading(lat, lon, acc, alt)
+                                    }
                                 if (accepted != null) {
                                     finishOnMain(accepted)
                                     return@LocationFetchDelegate
                                 }
                             }
                         },
-                        onFail = { finishOnMain(session.bestAtTimeout()) },
+                        onFail = {
+                            finishOnMain(
+                                if (telemetryTier) session.bestTelemetryAtTimeout() else session.bestAtTimeout(),
+                            )
+                        },
                     )
 
                     continuation.invokeOnCancellation {
@@ -125,7 +143,9 @@ actual class LocationService {
 
                     timeoutJob = launch {
                         delay(timeoutMs)
-                        finishOnMain(session.bestAtTimeout())
+                        finishOnMain(
+                            if (telemetryTier) session.bestTelemetryAtTimeout() else session.bestAtTimeout(),
+                        )
                     }
 
                     launch(Dispatchers.Main.immediate) {

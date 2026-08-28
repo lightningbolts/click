@@ -52,7 +52,18 @@ actual class LocationService {
         get() = LocationServices.getFusedLocationProviderClient(context)
 
     @SuppressLint("MissingPermission")
-    actual suspend fun getHighAccuracyLocation(timeoutMs: Long): LocationResult? {
+    actual suspend fun getHighAccuracyLocation(timeoutMs: Long): LocationResult? =
+        fetchProgressiveLocation(timeoutMs, telemetryTier = false)
+
+    @SuppressLint("MissingPermission")
+    actual suspend fun getTelemetryLocation(timeoutMs: Long): LocationResult? =
+        fetchProgressiveLocation(timeoutMs, telemetryTier = true)
+
+    @SuppressLint("MissingPermission")
+    private suspend fun fetchProgressiveLocation(
+        timeoutMs: Long,
+        telemetryTier: Boolean,
+    ): LocationResult? {
         if (!hasLocationPermission()) {
             println("LocationService.android: No location permission (high accuracy)")
             return null
@@ -88,7 +99,9 @@ actual class LocationService {
                     }
 
                     val timeoutRunnable = Runnable {
-                        complete(session.bestAtTimeout())
+                        complete(
+                            if (telemetryTier) session.bestTelemetryAtTimeout() else session.bestAtTimeout(),
+                        )
                     }
 
                     callbackSlot[0] = object : LocationCallback() {
@@ -98,7 +111,12 @@ actual class LocationService {
                                 if (!loc.hasAccuracy()) continue
                                 val acc = loc.accuracy.toDouble()
                                 val alt = if (loc.hasAltitude()) loc.altitude else null
-                                val picked = session.onReading(loc.latitude, loc.longitude, acc, alt)
+                                val picked =
+                                    if (telemetryTier) {
+                                        session.onTelemetryReading(loc.latitude, loc.longitude, acc, alt)
+                                    } else {
+                                        session.onReading(loc.latitude, loc.longitude, acc, alt)
+                                    }
                                 if (picked != null) {
                                     complete(picked)
                                     return

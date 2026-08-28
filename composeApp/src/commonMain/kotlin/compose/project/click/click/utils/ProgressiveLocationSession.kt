@@ -6,6 +6,9 @@ import kotlin.time.TimeSource
  * Progressive acceptance for high-accuracy GPS: ≤1m for the first 3s, then ≤5m / ≤10m through 6.5s.
  * At timeout, [bestAtTimeout] returns the fix with the smallest horizontal accuracy among readings
  * that are at or below [FINAL_ACCURACY_THRESHOLD_METERS], or null if none qualify.
+ *
+ * Encounter telemetry uses a separate tier ([onTelemetryReading] / [bestTelemetryAtTimeout]) that
+ * accepts ≤100 m immediately so indoor Bluetooth taps still get city, weather, and street geocode.
  */
 class ProgressiveLocationSession private constructor(
     private val elapsedMillis: () -> Long,
@@ -21,18 +24,8 @@ class ProgressiveLocationSession private constructor(
         accuracyMeters: Double,
         altitudeMeters: Double?,
     ): LocationResult? {
-        if (latitude == 0.0 && longitude == 0.0) return null
-        if (!latitude.isFinite() || !longitude.isFinite()) return null
-        if (!accuracyMeters.isFinite() || accuracyMeters <= 0.0) return null
-
+        val result = record(latitude, longitude, accuracyMeters, altitudeMeters) ?: return null
         val elapsedMs = elapsedMillis()
-        val result = LocationResult(
-            latitude = latitude,
-            longitude = longitude,
-            altitudeMeters = altitudeMeters,
-            accuracyMeters = accuracyMeters,
-        )
-        buffer.add(result)
 
         // Mutually exclusive windows: 0–3s ≤1m, 3–4.8s ≤5m, 4.8–6.5s ≤10m.
         return when {
@@ -46,14 +39,65 @@ class ProgressiveLocationSession private constructor(
         }
     }
 
+    /**
+     * Encounter telemetry: accept any finite fix within [TELEMETRY_ACCURACY_THRESHOLD_METERS] immediately.
+     */
+    fun onTelemetryReading(
+        latitude: Double,
+        longitude: Double,
+        accuracyMeters: Double,
+        altitudeMeters: Double?,
+    ): LocationResult? {
+        val result = record(latitude, longitude, accuracyMeters, altitudeMeters) ?: return null
+        return if (accuracyMeters <= TELEMETRY_ACCURACY_THRESHOLD_METERS) result else null
+    }
+
     fun bestAtTimeout(): LocationResult? {
         val candidates = buffer.filter { (it.accuracyMeters ?: Double.MAX_VALUE) <= FINAL_ACCURACY_THRESHOLD_METERS }
         if (candidates.isEmpty()) return null
         return candidates.minBy { it.accuracyMeters ?: Double.MAX_VALUE }
     }
 
+    /**
+     * Prefers the tightest telemetry-tier fix (≤100 m). If none qualify, returns the tightest
+     * finite reading so weather/geocode still have coordinates.
+     */
+    fun bestTelemetryAtTimeout(): LocationResult? {
+        if (buffer.isEmpty()) return null
+        val under =
+            buffer.filter {
+                (it.accuracyMeters ?: Double.MAX_VALUE) <= TELEMETRY_ACCURACY_THRESHOLD_METERS
+            }
+        val pool = under.ifEmpty { buffer }
+        return pool.minBy { it.accuracyMeters ?: Double.MAX_VALUE }
+    }
+
+    private fun record(
+        latitude: Double,
+        longitude: Double,
+        accuracyMeters: Double,
+        altitudeMeters: Double?,
+    ): LocationResult? {
+        if (latitude == 0.0 && longitude == 0.0) return null
+        if (!latitude.isFinite() || !longitude.isFinite()) return null
+        if (!accuracyMeters.isFinite() || accuracyMeters <= 0.0) return null
+
+        val result =
+            LocationResult(
+                latitude = latitude,
+                longitude = longitude,
+                altitudeMeters = altitudeMeters,
+                accuracyMeters = accuracyMeters,
+            )
+        buffer.add(result)
+        return result
+    }
+
     companion object {
         const val FINAL_ACCURACY_THRESHOLD_METERS = 15.0
+
+        /** Street/weather geocode does not need survey-grade GPS. */
+        const val TELEMETRY_ACCURACY_THRESHOLD_METERS = 100.0
 
         private const val BUCKET1_ACCURACY_METERS = 1.0
         private const val BUCKET2_ACCURACY_METERS = 5.0
