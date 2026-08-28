@@ -58,6 +58,7 @@ class MainActivity : ComponentActivity() {
         initPushNotificationService(applicationContext, this)
 
         handleChatDeepLinkIntent(intent)
+        handleEventPushDeepLinkIntent(intent)
         handleCommunityHubViewIntent(intent)
         handleEventUniversalLinkIntent(intent)
         handleConnectionUniversalLinkIntent(intent)
@@ -87,6 +88,7 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         passSupabaseAuthDeepLink(intent)
         handleChatDeepLinkIntent(intent)
+        handleEventPushDeepLinkIntent(intent)
         handleCommunityHubViewIntent(intent)
         handleEventUniversalLinkIntent(intent)
         handleConnectionUniversalLinkIntent(intent)
@@ -129,6 +131,14 @@ class MainActivity : ComponentActivity() {
         ChatDeepLinkManager.setPendingChat(deepLinkId)
     }
 
+    private fun handleEventPushDeepLinkIntent(intent: Intent?) {
+        if (intent?.action != ACTION_VIEW_EVENT) return
+        val beaconId = intent.getStringExtra(EXTRA_EVENT_BEACON_ID)?.trim().orEmpty()
+        if (beaconId.isNotEmpty()) {
+            EventDeepLinkRouter.setPendingBeaconId(beaconId)
+        }
+    }
+
     /**
      * Prefer the display's highest refresh mode (90/120Hz) so Compose scroll/animation
      * is not stuck on the default 60Hz mode many OEMs leave unset until requested.
@@ -151,9 +161,11 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val ACTION_VIEW_CHAT = "compose.project.click.click.action.VIEW_CHAT" // pragma: allowlist secret
+        const val ACTION_VIEW_EVENT = "compose.project.click.click.action.VIEW_EVENT" // pragma: allowlist secret
 
         private const val EXTRA_CHAT_ID = "extra_chat_id"
         private const val EXTRA_CHAT_CONNECTION_ID = "extra_chat_connection_id"
+        private const val EXTRA_EVENT_BEACON_ID = "extra_event_beacon_id"
 
         fun createChatDeepLinkIntent(
             context: Context,
@@ -165,6 +177,16 @@ class MainActivity : ComponentActivity() {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 putExtra(EXTRA_CHAT_ID, chatId)
                 putExtra(EXTRA_CHAT_CONNECTION_ID, connectionId)
+            }
+
+        fun createEventDeepLinkIntent(
+            context: Context,
+            beaconId: String,
+        ): Intent =
+            Intent(context, MainActivity::class.java).apply {
+                action = ACTION_VIEW_EVENT
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(EXTRA_EVENT_BEACON_ID, beaconId)
             }
     }
 }

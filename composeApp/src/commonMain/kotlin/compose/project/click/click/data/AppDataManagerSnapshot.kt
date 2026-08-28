@@ -288,6 +288,8 @@ internal fun AppDataManager.updateNotificationPreferences(preferences: Notificat
         eventReminderEnabled = preferences.eventReminderPushEnabled,
         availabilityMatchEnabled = preferences.availabilityMatchPushEnabled,
         hubMessageEnabled = preferences.hubMessagePushEnabled,
+        eventTeaserEnabled = preferences.eventTeaserPushEnabled,
+        reconnectNudgeEnabled = preferences.reconnectNudgePushEnabled,
     )
 
     scope.launch {
@@ -302,6 +304,8 @@ internal fun AppDataManager.updateNotificationPreferences(preferences: Notificat
                 eventReminderEnabled = previousPreferences.eventReminderPushEnabled,
                 availabilityMatchEnabled = previousPreferences.availabilityMatchPushEnabled,
                 hubMessageEnabled = previousPreferences.hubMessagePushEnabled,
+                eventTeaserEnabled = previousPreferences.eventTeaserPushEnabled,
+                reconnectNudgeEnabled = previousPreferences.reconnectNudgePushEnabled,
             )
             tokenStorage.saveMessageNotificationsEnabled(previousPreferences.messagePushEnabled)
             tokenStorage.saveCallNotificationsEnabled(previousPreferences.callPushEnabled)

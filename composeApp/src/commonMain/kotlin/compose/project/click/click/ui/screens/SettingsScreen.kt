@@ -513,6 +513,22 @@ fun SettingsScreen(
                                         )
                                         SettingsDivider()
                                         SettingsToggleRow(
+                                            icon = Icons.Default.Notifications,
+                                            title = "Event teasers",
+                                            subtitle = "Anonymized counts of people going who share an interest or group.",
+                                            checked = notificationPreferences.eventTeaserPushEnabled,
+                                            onCheckedChange = { AppDataManager.setEventTeaserNotificationsEnabled(it) },
+                                        )
+                                        SettingsDivider()
+                                        SettingsToggleRow(
+                                            icon = Icons.Default.Notifications,
+                                            title = "Reconnect nudges",
+                                            subtitle = "When you and someone you Clicked haven't talked in a while, or you're both going to the same event.",
+                                            checked = notificationPreferences.reconnectNudgePushEnabled,
+                                            onCheckedChange = { AppDataManager.setReconnectNudgeNotificationsEnabled(it) },
+                                        )
+                                        SettingsDivider()
+                                        SettingsToggleRow(
                                             icon = Icons.Default.EventAvailable,
                                             title = "Availability matches",
                                             subtitle = "When a connection posts a matching intent and overlapping timeframe.",

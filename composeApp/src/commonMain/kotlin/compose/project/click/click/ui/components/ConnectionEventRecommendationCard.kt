@@ -37,6 +37,10 @@ fun ConnectionEventRecommendationCard(
     onDismiss: () -> Unit,
     rsvpInProgress: Boolean = false,
     modifier: Modifier = Modifier,
+    headline: String? = null,
+    chipLabel: String = "Go together?",
+    showRsvp: Boolean = true,
+    subtitle: String? = null,
 ) {
     Surface(
         modifier =
@@ -52,7 +56,7 @@ fun ConnectionEventRecommendationCard(
                 id = recommendation.beaconId,
                 kind = MapBeaconKind.EVENT,
                 imageUrl = EventReminderCoordinator.beaconById(recommendation.beaconId)?.metadata?.heroImageUrl(),
-                chipLabel = "Go together?",
+                chipLabel = chipLabel,
                 modifier =
                     Modifier
                         .fillMaxWidth()
@@ -63,19 +67,22 @@ fun ConnectionEventRecommendationCard(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
-                    text = "${recommendation.peerName} is going to ${recommendation.title}",
+                    text =
+                        headline
+                            ?: "${recommendation.peerName} is going to ${recommendation.title}",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
                 val whenWhere =
-                    listOfNotNull(
-                        recommendation.eventStartAt?.take(16)?.replace('T', ' '),
-                        recommendation.locationName
-                            ?.trim()
-                            ?.takeUnless {
-                                it.isEmpty() || it.equals("Current location", ignoreCase = true)
-                            },
-                    ).joinToString(" · ")
+                    subtitle
+                        ?: listOfNotNull(
+                            recommendation.eventStartAt?.take(16)?.replace('T', ' '),
+                            recommendation.locationName
+                                ?.trim()
+                                ?.takeUnless {
+                                    it.isEmpty() || it.equals("Current location", ignoreCase = true)
+                                },
+                        ).joinToString(" · ")
                 if (whenWhere.isNotBlank()) {
                     Text(
                         text = whenWhere,
@@ -87,12 +94,14 @@ fun ConnectionEventRecommendationCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Button(
-                        onClick = onRsvp,
-                        enabled = !rsvpInProgress,
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(if (rsvpInProgress) "RSVPing…" else "RSVP")
+                    if (showRsvp) {
+                        Button(
+                            onClick = onRsvp,
+                            enabled = !rsvpInProgress,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(if (rsvpInProgress) "RSVPing…" else "RSVP")
+                        }
                     }
                     TextButton(
                         onClick = onDismiss,

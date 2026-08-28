@@ -425,3 +425,147 @@ internal suspend fun ApiClient.getMyEventBookmarksImpl(
     } catch (e: Exception) {
         Result.failure(e)
     }
+
+internal suspend fun ApiClient.getEventTeaserImpl(beaconId: String): Result<EventTeaserResponseDto> {
+    val id = beaconId.trim()
+    if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+    return try {
+        val response: HttpResponse =
+            clickWebClient.get("${ApiClient.clickWebAuthOrigin}/api/me/event-bookmarks/$id/teaser")
+        if (response.status.value in 200..299) {
+            Result.success(response.body<EventTeaserResponseDto>())
+        } else {
+            Result.failure(Exception(readClickWebErrorMessage(response)))
+        }
+    } catch (e: ClientRequestException) {
+        Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+}
+
+internal suspend fun ApiClient.getBeaconGuestListImpl(beaconId: String): Result<GuestListStatusDto> {
+    val id = beaconId.trim()
+    if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+    return try {
+        val response: HttpResponse =
+            clickWebClient.get("${ApiClient.clickWebAuthOrigin}/api/beacons/$id/guest-list")
+        if (response.status.value in 200..299) {
+            Result.success(response.body<GuestListStatusDto>())
+        } else {
+            Result.failure(Exception(readClickWebErrorMessage(response)))
+        }
+    } catch (e: ClientRequestException) {
+        Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+}
+
+internal suspend fun ApiClient.postBeaconGuestListImpl(
+    beaconId: String,
+    source: String,
+    csvText: String,
+): Result<GuestListStatusDto> {
+    val id = beaconId.trim()
+    if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+    return try {
+        val response: HttpResponse =
+            clickWebClient.post("${ApiClient.clickWebAuthOrigin}/api/beacons/$id/guest-list") {
+                contentType(ContentType.Application.Json)
+                setBody(GuestListUploadBody(source = source, csvText = csvText))
+            }
+        if (response.status.value in 200..299) {
+            Result.success(response.body<GuestListStatusDto>())
+        } else {
+            Result.failure(Exception(readClickWebErrorMessage(response)))
+        }
+    } catch (e: ClientRequestException) {
+        Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+}
+
+internal suspend fun ApiClient.matchBeaconGuestListImpl(beaconId: String): Result<GuestListStatusDto> {
+    val id = beaconId.trim()
+    if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
+    return try {
+        val response: HttpResponse =
+            clickWebClient.post("${ApiClient.clickWebAuthOrigin}/api/beacons/$id/guest-list/match") {
+                contentType(ContentType.Application.Json)
+                setBody(Json.parseToJsonElement("{}"))
+            }
+        if (response.status.value in 200..299) {
+            Result.success(response.body<GuestListStatusDto>())
+        } else {
+            Result.failure(Exception(readClickWebErrorMessage(response)))
+        }
+    } catch (e: ClientRequestException) {
+        Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+}
+
+internal suspend fun ApiClient.getInboxNudgesImpl(): Result<InboxNudgesResponseDto> =
+    try {
+        val response: HttpResponse = clickWebClient.get("${ApiClient.clickWebAuthOrigin}/api/me/nudges")
+        if (response.status.value in 200..299) {
+            Result.success(response.body<InboxNudgesResponseDto>())
+        } else {
+            Result.failure(Exception(readClickWebErrorMessage(response)))
+        }
+    } catch (e: ClientRequestException) {
+        Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+internal suspend fun ApiClient.postInboxNudgeActionImpl(
+    nudgeId: String,
+    action: String,
+): Result<Unit> {
+    val id = nudgeId.trim()
+    if (id.isEmpty()) return Result.failure(IllegalArgumentException("nudgeId required"))
+    return try {
+        val response: HttpResponse =
+            clickWebClient.post("${ApiClient.clickWebAuthOrigin}/api/me/nudges/$id/$action") {
+                contentType(ContentType.Application.Json)
+                setBody(Json.parseToJsonElement("{}"))
+            }
+        if (response.status.value in 200..299) {
+            Result.success(Unit)
+        } else {
+            Result.failure(Exception(readClickWebErrorMessage(response)))
+        }
+    } catch (e: ClientRequestException) {
+        Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+}
+
+internal suspend fun ApiClient.snoozeInboxNudgeImpl(
+    nudgeId: String,
+    days: Int,
+): Result<Unit> {
+    val id = nudgeId.trim()
+    if (id.isEmpty()) return Result.failure(IllegalArgumentException("nudgeId required"))
+    return try {
+        val response: HttpResponse =
+            clickWebClient.post("${ApiClient.clickWebAuthOrigin}/api/me/nudges/$id/snooze") {
+                contentType(ContentType.Application.Json)
+                setBody(NudgeSnoozeBody(days = if (days == 30) 30 else 7))
+            }
+        if (response.status.value in 200..299) {
+            Result.success(Unit)
+        } else {
+            Result.failure(Exception(readClickWebErrorMessage(response)))
+        }
+    } catch (e: ClientRequestException) {
+        Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+}

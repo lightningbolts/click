@@ -130,6 +130,8 @@ internal suspend fun AppDataManager.clearDataImpl() {
         eventReminderEnabled = true,
         availabilityMatchEnabled = true,
         hubMessageEnabled = true,
+        eventTeaserEnabled = true,
+        reconnectNudgeEnabled = true,
     )
 }
 

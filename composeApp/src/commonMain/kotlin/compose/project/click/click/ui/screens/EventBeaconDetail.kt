@@ -25,6 +25,9 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
+import compose.project.click.click.data.api.ConnectionEventRecommendationDto // pragma: allowlist secret
+import compose.project.click.click.data.api.EventTeaserDto // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.withPreservedEventScheduleFrom // pragma: allowlist secret
@@ -38,6 +41,7 @@ import compose.project.click.click.events.isLive // pragma: allowlist secret
 import compose.project.click.click.events.openEventMapsRoute // pragma: allowlist secret
 import compose.project.click.click.platform.shareText // pragma: allowlist secret
 import compose.project.click.click.ui.components.AnimatedClickDialog // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionEventRecommendationCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickDropdownMenu // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickMenuItem // pragma: allowlist secret
@@ -306,8 +310,13 @@ internal fun EventBeaconDetail(
     var showPeopleDirectory by remember(beacon.id) { mutableStateOf(false) }
     var directoryProfileUserId by remember(beacon.id) { mutableStateOf<String?>(null) }
     var pendingDirectoryProfileUserId by remember(beacon.id) { mutableStateOf<String?>(null) }
+    var seedTeaser by remember(beacon.id) { mutableStateOf<EventTeaserDto?>(null) }
+    var seedTeaserDismissed by remember(beacon.id) { mutableStateOf(false) }
+    val seedApi = remember { ApiClient() }
+
 
     LaunchedEffect(displayBeacon.id) {
+        seedTeaser = seedApi.getEventTeaser(displayBeacon.id).getOrNull()?.teaser
         viewModel.loadBeaconRsvp(displayBeacon.id, forceRefresh = true)
         viewModel.loadBeaconEngagement(displayBeacon.id, forceRefresh = true)
         viewModel.recordEventImpression(displayBeacon.id)
@@ -499,6 +508,37 @@ internal fun EventBeaconDetail(
             directoryEnriched = directoryEntry != null,
             onOpenDirectory = { showPeopleDirectory = true },
         )
+
+        if (!seedTeaserDismissed) {
+            seedTeaser?.let { teaser ->
+                ConnectionEventRecommendationCard(
+                    recommendation =
+                        ConnectionEventRecommendationDto(
+                            beaconId = displayBeacon.id,
+                            title = displayBeacon.displayDynamicTitle(),
+                            peerName = "",
+                            peerUserId = "",
+                        ),
+                    onRsvp = {},
+                    onDismiss = { seedTeaserDismissed = true },
+                    headline = teaser.headline,
+                    chipLabel = "Seed a Room",
+                    showRsvp = false,
+                    subtitle = "Names stay private until you Click.",
+                )
+            }
+        }
+
+        if (
+            isCreator ||
+                (!currentUser?.id.isNullOrBlank() && displayBeacon.createdByUserId == currentUser?.id)
+        ) {
+            EventGuestListPasteCard(
+                beaconId = displayBeacon.id,
+                border = border,
+                cardSurface = cardSurface,
+            )
+        }
 
         if (showPeopleDirectory) {
             ClickFormBottomSheet(

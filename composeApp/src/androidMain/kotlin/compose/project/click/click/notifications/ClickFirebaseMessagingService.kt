@@ -44,6 +44,8 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
         val allowed =
             when (type) {
                 "event_reminder" -> prefs.eventReminderNotificationsEnabled
+                "event_teaser" -> prefs.eventTeaserNotificationsEnabled
+                "reconnect_nudge", "shared_upcoming_event" -> prefs.reconnectNudgeNotificationsEnabled
                 "availability_match" -> prefs.availabilityMatchNotificationsEnabled
                 "hub_message" -> prefs.hubMessageNotificationsEnabled
                 else -> prefs.messageNotificationsEnabled
@@ -99,6 +101,55 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
                 chatNotificationTag(deepLinkId) ?: "disposable_reveal",
                 0,
                 notification,
+            )
+            return
+        }
+
+        if (type == "event_teaser" || type == "event_reminder") {
+            val beaconId = message.data["beacon_id"].orEmpty()
+            val title = message.data["title"] ?: message.notification?.title ?: "Click event"
+            val body = message.data["body"] ?: message.notification?.body ?: "Open Click to view this event"
+            val launchIntent =
+                if (beaconId.isNotBlank()) {
+                    MainActivity.createEventDeepLinkIntent(this, beaconId)
+                } else {
+                    packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    } ?: return
+                }
+            showSimplePush(
+                tag = beaconId.ifBlank { type ?: "event" },
+                title = title,
+                body = body,
+                launchIntent = launchIntent,
+            )
+            return
+        }
+
+        if (type == "reconnect_nudge" || type == "shared_upcoming_event") {
+            val connectionId = message.data["connection_id"].orEmpty()
+            val beaconId = message.data["beacon_id"].orEmpty()
+            val title = message.data["title"] ?: message.notification?.title ?: "Click"
+            val body = message.data["body"] ?: message.notification?.body ?: "Open Click"
+            val launchIntent =
+                if (type == "shared_upcoming_event" && beaconId.isNotBlank()) {
+                    MainActivity.createEventDeepLinkIntent(this, beaconId)
+                } else if (connectionId.isNotBlank()) {
+                    MainActivity.createChatDeepLinkIntent(
+                        context = this,
+                        chatId = "",
+                        connectionId = connectionId,
+                    )
+                } else {
+                    packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    } ?: return
+                }
+            showSimplePush(
+                tag = connectionId.ifBlank { beaconId.ifBlank { type ?: "nudge" } },
+                title = title,
+                body = body,
+                launchIntent = launchIntent,
             )
             return
         }
@@ -211,6 +262,39 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
         } catch (_: Exception) {
             fallback
         }
+    }
+
+    private fun showSimplePush(
+        tag: String,
+        title: String,
+        body: String,
+        launchIntent: Intent,
+    ) {
+        val pendingIntent =
+            PendingIntent.getActivity(
+                this,
+                tag.hashCode(),
+                launchIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+        val notification =
+            NotificationCompat
+                .Builder(this, CLICK_MESSAGES_CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle(title)
+                .setContentText(body)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .build()
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ActivityCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        NotificationManagerCompat.from(this).notify(tag, 0, notification)
     }
 }
 

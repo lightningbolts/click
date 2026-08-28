@@ -699,6 +699,29 @@ class ApiClient {
         cursor: String? = null,
     ): Result<EventBookmarksResponseDto> = getMyEventBookmarksImpl(limit = limit, cursor = cursor)
 
+    suspend fun getEventTeaser(beaconId: String): Result<EventTeaserResponseDto> = getEventTeaserImpl(beaconId)
+
+    suspend fun getBeaconGuestList(beaconId: String): Result<GuestListStatusDto> = getBeaconGuestListImpl(beaconId)
+
+    suspend fun postBeaconGuestList(
+        beaconId: String,
+        source: String,
+        csvText: String,
+    ): Result<GuestListStatusDto> = postBeaconGuestListImpl(beaconId, source, csvText)
+
+    suspend fun matchBeaconGuestList(beaconId: String): Result<GuestListStatusDto> = matchBeaconGuestListImpl(beaconId)
+
+    suspend fun getInboxNudges(): Result<InboxNudgesResponseDto> = getInboxNudgesImpl()
+
+    suspend fun dismissInboxNudge(nudgeId: String): Result<Unit> = postInboxNudgeActionImpl(nudgeId, "dismiss")
+
+    suspend fun snoozeInboxNudge(
+        nudgeId: String,
+        days: Int = 7,
+    ): Result<Unit> = snoozeInboxNudgeImpl(nudgeId, days)
+
+    suspend fun markInboxNudgeActed(nudgeId: String): Result<Unit> = postInboxNudgeActionImpl(nudgeId, "acted")
+
     fun close() {
         if (clickWebClientLazy.isInitialized()) clickWebClientLazy.value.close()
         if (clickWebPlainClientLazy.isInitialized()) clickWebPlainClientLazy.value.close()

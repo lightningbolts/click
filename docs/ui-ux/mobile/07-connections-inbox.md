@@ -24,6 +24,7 @@ ConnectionsScreen (organism — tab shell + chat overlay)
 │   │   └── compact: ConnectionsTabFilterMenuChip dropdown
 │   ├── LazyColumn
 │   │   ├── RememberMeStrip (Active tab, no search, Core 1:1s non-empty)
+│   │   ├── InboxNudgeBanner[] (Active tab, 1–2 reconnect / shared-event rows)
 │   │   │   ├── label: "Remember Me"
 │   │   │   ├── LazyRow chips (avatar + time badge + first name)
 │   │   │   └── label: "Clicks"
@@ -78,6 +79,10 @@ ConnectionsScreen (organism — tab shell + chat overlay)
 | Hit target | Circular on avatar (`AvatarWithOnlineIndicator` wraps `CoreConnectionAvatarFrame` so the green online dot sits **outside** the circular clip); name label **pill** |
 | Online | Green online indicator on 1:1 row avatars **and** Remember Me chips when peer is in `onlineUsers` |
 | Duplication | Core people still appear in `ConnectionItem` rows below |
+
+### InboxNudgeBanner
+
+Encounter reconnect + shared-upcoming-event rows from `GET /api/me/nudges`. Pin at most two **below Remember Me**, **above** `ConnectionItem`. Chrome matches `ConnectionArchiveWarningBanner` (16dp pad, 16dp radius, 2px border, 48dp icon). Tap Open chat/event with **no prefilled message**; Dismiss persists via `POST /api/me/nudges/{id}/dismiss`. Do **not** reuse `viewModel.nudgeResult` (chat ping). Copy: `"You and Sam haven't talked since you Clicked 3 weeks ago"` / `"You and Sam are both going to {event}"`.
 
 ### ConnectionItem
 

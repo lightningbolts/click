@@ -838,6 +838,18 @@ object AppDataManager {
         )
     }
 
+    fun setEventTeaserNotificationsEnabled(enabled: Boolean) {
+        updateNotificationPreferences(
+            _notificationPreferences.value.copy(eventTeaserPushEnabled = enabled),
+        )
+    }
+
+    fun setReconnectNudgeNotificationsEnabled(enabled: Boolean) {
+        updateNotificationPreferences(
+            _notificationPreferences.value.copy(reconnectNudgePushEnabled = enabled),
+        )
+    }
+
     fun setMessageNotificationsEnabled(enabled: Boolean) {
         updateNotificationPreferences(
             _notificationPreferences.value.copy(messagePushEnabled = enabled),

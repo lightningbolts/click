@@ -7,6 +7,9 @@ private let clickNotificationPrefsSuite = "click_auth_prefs"
 private let clickRequestPushPermissionNotification = Notification.Name("ClickRequestNotificationPermission")
 private let clickRegisterRemoteNotificationsNotification = Notification.Name("ClickRegisterForRemoteNotifications")
 private let clickRuntimeMessageNotificationsKey = "runtime_message_notifications_enabled"
+private let clickRuntimeEventTeaserNotificationsKey = "runtime_event_teaser_notifications_enabled"
+private let clickRuntimeReconnectNudgeNotificationsKey = "runtime_reconnect_nudge_notifications_enabled"
+private let clickRuntimeEventReminderNotificationsKey = "runtime_event_reminder_notifications_enabled"
 private let clickRuntimeActiveChatIdKey = "runtime_active_chat_id"
 
 @main
@@ -202,7 +205,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             return
         }
 
-        guard messageNotificationsEnabled else {
+        guard pushAllowed(for: userInfo["type"] as? String) else {
             completionHandler([])
             return
         }
@@ -224,6 +227,26 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         if (userInfo["type"] as? String) == "incoming_call" {
             completionHandler()
             return
+        }
+
+        let type = userInfo["type"] as? String ?? ""
+        if type == "event_teaser" || type == "event_reminder" {
+            if let beaconId = userInfo["beacon_id"] as? String, !beaconId.isEmpty {
+                DispatchQueue.main.async {
+                    ClickKt.setEventDeepLink(beaconId: beaconId)
+                }
+            }
+            completionHandler()
+            return
+        }
+        if type == "shared_upcoming_event" {
+            if let beaconId = userInfo["beacon_id"] as? String, !beaconId.isEmpty {
+                DispatchQueue.main.async {
+                    ClickKt.setEventDeepLink(beaconId: beaconId)
+                }
+                completionHandler()
+                return
+            }
         }
 
         let chatId = userInfo["chat_id"] as? String ?? ""
@@ -292,6 +315,26 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             return true
         }
         return runtimeDefaults.bool(forKey: clickRuntimeMessageNotificationsKey)
+    }
+
+    private func boolPref(_ key: String) -> Bool {
+        if runtimeDefaults.object(forKey: key) == nil {
+            return true
+        }
+        return runtimeDefaults.bool(forKey: key)
+    }
+
+    private func pushAllowed(for type: String?) -> Bool {
+        switch type {
+        case "event_teaser":
+            return boolPref(clickRuntimeEventTeaserNotificationsKey)
+        case "event_reminder":
+            return boolPref(clickRuntimeEventReminderNotificationsKey)
+        case "reconnect_nudge", "shared_upcoming_event":
+            return boolPref(clickRuntimeReconnectNudgeNotificationsKey)
+        default:
+            return messageNotificationsEnabled
+        }
     }
 
     private var activeChatId: String? {

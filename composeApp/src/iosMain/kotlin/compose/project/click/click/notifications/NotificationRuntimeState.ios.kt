@@ -8,6 +8,8 @@ private const val KEY_RUNTIME_CALL_NOTIFICATIONS = "runtime_call_notifications_e
 private const val KEY_RUNTIME_EVENT_REMINDER_NOTIFICATIONS = "runtime_event_reminder_notifications_enabled"
 private const val KEY_RUNTIME_AVAILABILITY_MATCH_NOTIFICATIONS = "runtime_availability_match_notifications_enabled"
 private const val KEY_RUNTIME_HUB_MESSAGE_NOTIFICATIONS = "runtime_hub_message_notifications_enabled"
+private const val KEY_RUNTIME_EVENT_TEASER_NOTIFICATIONS = "runtime_event_teaser_notifications_enabled"
+private const val KEY_RUNTIME_RECONNECT_NUDGE_NOTIFICATIONS = "runtime_reconnect_nudge_notifications_enabled"
 private const val KEY_RUNTIME_ACTIVE_CHAT_ID = "runtime_active_chat_id"
 
 actual object NotificationRuntimeState {
@@ -19,12 +21,16 @@ actual object NotificationRuntimeState {
         eventReminderEnabled: Boolean,
         availabilityMatchEnabled: Boolean,
         hubMessageEnabled: Boolean,
+        eventTeaserEnabled: Boolean,
+        reconnectNudgeEnabled: Boolean,
     ) {
         defaults.setBool(messageEnabled, KEY_RUNTIME_MESSAGE_NOTIFICATIONS)
         defaults.setBool(callEnabled, KEY_RUNTIME_CALL_NOTIFICATIONS)
         defaults.setBool(eventReminderEnabled, KEY_RUNTIME_EVENT_REMINDER_NOTIFICATIONS)
         defaults.setBool(availabilityMatchEnabled, KEY_RUNTIME_AVAILABILITY_MATCH_NOTIFICATIONS)
         defaults.setBool(hubMessageEnabled, KEY_RUNTIME_HUB_MESSAGE_NOTIFICATIONS)
+        defaults.setBool(eventTeaserEnabled, KEY_RUNTIME_EVENT_TEASER_NOTIFICATIONS)
+        defaults.setBool(reconnectNudgeEnabled, KEY_RUNTIME_RECONNECT_NUDGE_NOTIFICATIONS)
         defaults.synchronize()
     }
 
@@ -49,6 +55,14 @@ actual object NotificationRuntimeState {
             hubMessageNotificationsEnabled =
                 defaults.objectForKey(KEY_RUNTIME_HUB_MESSAGE_NOTIFICATIONS)?.let {
                     defaults.boolForKey(KEY_RUNTIME_HUB_MESSAGE_NOTIFICATIONS)
+                } ?: true,
+            eventTeaserNotificationsEnabled =
+                defaults.objectForKey(KEY_RUNTIME_EVENT_TEASER_NOTIFICATIONS)?.let {
+                    defaults.boolForKey(KEY_RUNTIME_EVENT_TEASER_NOTIFICATIONS)
+                } ?: true,
+            reconnectNudgeNotificationsEnabled =
+                defaults.objectForKey(KEY_RUNTIME_RECONNECT_NUDGE_NOTIFICATIONS)?.let {
+                    defaults.boolForKey(KEY_RUNTIME_RECONNECT_NUDGE_NOTIFICATIONS)
                 } ?: true,
         )
 

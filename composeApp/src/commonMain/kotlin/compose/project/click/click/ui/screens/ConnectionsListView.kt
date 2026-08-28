@@ -34,6 +34,9 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import compose.project.click.click.data.ActiveHubEntry // pragma: allowlist secret
+import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
+import compose.project.click.click.data.api.InboxNudgeDto // pragma: allowlist secret
+import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
@@ -53,6 +56,7 @@ import compose.project.click.click.ui.chat.GroupMembersPickerContext // pragma: 
 import compose.project.click.click.ui.chat.RememberMeStrip // pragma: allowlist secret
 import compose.project.click.click.ui.chat.connectionListActivityTs // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
+import compose.project.click.click.ui.components.InboxNudgeBanner // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppEmptyState // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickCircularGlassIconButton // pragma: allowlist secret
@@ -143,6 +147,8 @@ fun ConnectionsListView(
     var cliqueSheetVisible by remember { mutableStateOf(false) }
     var selectedCliqueFriendIds by remember { mutableStateOf(setOf<String>()) }
     val listScope = rememberCoroutineScope()
+    val inboxNudgeApi = remember { ApiClient() }
+    var inboxNudges by remember { mutableStateOf<List<InboxNudgeDto>>(emptyList()) }
     var proximityCliqueHintUsers by remember { mutableStateOf<List<User>>(emptyList()) }
     var cliqueProximityAutofillLoading by remember { mutableStateOf(false) }
 
@@ -254,6 +260,12 @@ fun ConnectionsListView(
         }
     val showRememberMeStrip =
         selectedTabIndex == 0 && searchQuery.isBlank() && rememberMeChats.isNotEmpty()
+
+    LaunchedEffect(currentUserId, selectedTabIndex) {
+        if (currentUserId.isNullOrBlank() || selectedTabIndex != 0) return@LaunchedEffect
+        inboxNudges = inboxNudgeApi.getInboxNudges().getOrNull()?.nudges.orEmpty().take(2)
+    }
+
     val rememberMeConnectionIds =
         remember(rememberMeChats) {
             rememberMeChats.map { it.connection.id }.toSet()
@@ -610,6 +622,38 @@ fun ConnectionsListView(
                                     chats = rememberMeChats,
                                     onChatSelected = onChatSelected,
                                     onlineUserIds = onlineUsers,
+                                    modifier = Modifier.padding(bottom = 4.dp),
+                                )
+                            }
+                        }
+                        if (selectedTabIndex == 0 && searchQuery.isBlank() && inboxNudges.isNotEmpty()) {
+                            items(
+                                inboxNudges,
+                                key = { "inbox_nudge_${it.id}" },
+                                contentType = { "inbox_nudge" },
+                            ) { nudge ->
+                                InboxNudgeBanner(
+                                    nudge = nudge,
+                                    onOpen = {
+                                        listScope.launch { inboxNudgeApi.markInboxNudgeActed(nudge.id) }
+                                        inboxNudges = inboxNudges.filterNot { it.id == nudge.id }
+                                        val eventId = nudge.beaconId?.trim().orEmpty()
+                                        if (nudge.nudgeType == "shared_upcoming_event" && eventId.isNotEmpty()) {
+                                            EventDeepLinkRouter.setPendingBeaconId(eventId)
+                                        } else {
+                                            val connectionId = nudge.connectionId?.trim().orEmpty()
+                                            val chatId =
+                                                displayedChats.firstOrNull { it.connection.id == connectionId }
+                                                    ?.chat
+                                                    ?.id
+                                                    ?: connectionId
+                                            if (chatId.isNotBlank()) onChatSelected(chatId)
+                                        }
+                                    },
+                                    onDismiss = {
+                                        listScope.launch { inboxNudgeApi.dismissInboxNudge(nudge.id) }
+                                        inboxNudges = inboxNudges.filterNot { it.id == nudge.id }
+                                    },
                                     modifier = Modifier.padding(bottom = 4.dp),
                                 )
                             }

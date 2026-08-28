@@ -130,6 +130,73 @@ data class NotificationPreferencesPatchBody(
     val availabilityMatchPushEnabled: Boolean = true,
     @SerialName("hub_message_push_enabled")
     val hubMessagePushEnabled: Boolean = true,
+    @SerialName("event_teaser_push_enabled")
+    val eventTeaserPushEnabled: Boolean = true,
+    @SerialName("reconnect_nudge_push_enabled")
+    val reconnectNudgePushEnabled: Boolean = true,
+)
+
+@Serializable
+data class EventTeaserDto(
+    val id: String,
+    @SerialName("teaser_type") val teaserType: String,
+    val count: Int,
+    val label: String,
+    @SerialName("shared_tag") val sharedTag: String? = null,
+    val headline: String,
+    @SerialName("generated_at") val generatedAt: String? = null,
+)
+
+@Serializable
+data class EventTeaserResponseDto(
+    val teaser: EventTeaserDto? = null,
+)
+
+@Serializable
+data class GuestListEntryDto(
+    val id: String,
+    @SerialName("email_truncated") val emailTruncated: String? = null,
+    @SerialName("instagram_handle") val instagramHandle: String? = null,
+    val matched: Boolean = false,
+    @SerialName("match_confidence") val matchConfidence: String = "none",
+)
+
+@Serializable
+data class GuestListStatusDto(
+    @SerialName("guest_list_id") val guestListId: String? = null,
+    val uploaded: Int = 0,
+    val matched: Int = 0,
+    val teasers: Int = 0,
+    @SerialName("matched_at") val matchedAt: String? = null,
+    val entries: List<GuestListEntryDto> = emptyList(),
+)
+
+@Serializable
+data class GuestListUploadBody(
+    val source: String,
+    @SerialName("csv_text") val csvText: String? = null,
+)
+
+@Serializable
+data class InboxNudgeDto(
+    val id: String,
+    @SerialName("nudge_type") val nudgeType: String,
+    @SerialName("connection_id") val connectionId: String? = null,
+    @SerialName("beacon_id") val beaconId: String? = null,
+    val headline: String,
+    val body: String,
+    val payload: JsonObject? = null,
+    @SerialName("sent_at") val sentAt: String? = null,
+)
+
+@Serializable
+data class InboxNudgesResponseDto(
+    val nudges: List<InboxNudgeDto> = emptyList(),
+)
+
+@Serializable
+data class NudgeSnoozeBody(
+    val days: Int = 7,
 )
 
 @Serializable

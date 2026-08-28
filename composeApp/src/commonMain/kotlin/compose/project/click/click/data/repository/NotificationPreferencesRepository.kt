@@ -14,6 +14,8 @@ data class NotificationPreferences(
     val eventReminderPushEnabled: Boolean = true,
     val availabilityMatchPushEnabled: Boolean = true,
     val hubMessagePushEnabled: Boolean = true,
+    val eventTeaserPushEnabled: Boolean = true,
+    val reconnectNudgePushEnabled: Boolean = true,
 )
 
 class NotificationPreferencesRepository {
@@ -33,6 +35,8 @@ class NotificationPreferencesRepository {
                                 "event_reminder_push_enabled",
                                 "availability_match_push_enabled",
                                 "hub_message_push_enabled",
+                                "event_teaser_push_enabled",
+                                "reconnect_nudge_push_enabled",
                             ),
                     ) {
                         filter {
@@ -61,6 +65,8 @@ class NotificationPreferencesRepository {
                     eventReminderPushEnabled = preferences.eventReminderPushEnabled,
                     availabilityMatchPushEnabled = preferences.availabilityMatchPushEnabled,
                     hubMessagePushEnabled = preferences.hubMessagePushEnabled,
+                    eventTeaserPushEnabled = preferences.eventTeaserPushEnabled,
+                    reconnectNudgePushEnabled = preferences.reconnectNudgePushEnabled,
                 ),
             ).map { }
             .onFailure { error ->
@@ -80,6 +86,10 @@ class NotificationPreferencesRepository {
         val availabilityMatchPushEnabled: Boolean = true,
         @SerialName("hub_message_push_enabled")
         val hubMessagePushEnabled: Boolean = true,
+        @SerialName("event_teaser_push_enabled")
+        val eventTeaserPushEnabled: Boolean = true,
+        @SerialName("reconnect_nudge_push_enabled")
+        val reconnectNudgePushEnabled: Boolean = true,
     ) {
         fun toNotificationPreferences(): NotificationPreferences =
             NotificationPreferences(
@@ -88,6 +98,8 @@ class NotificationPreferencesRepository {
                 eventReminderPushEnabled = eventReminderPushEnabled,
                 availabilityMatchPushEnabled = availabilityMatchPushEnabled,
                 hubMessagePushEnabled = hubMessagePushEnabled,
+                eventTeaserPushEnabled = eventTeaserPushEnabled,
+                reconnectNudgePushEnabled = reconnectNudgePushEnabled,
             )
     }
 }
