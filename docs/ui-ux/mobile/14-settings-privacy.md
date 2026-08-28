@@ -70,6 +70,8 @@ SettingsScreen (tab route "settings")
 | Section header | `"Alerts"` |
 | Toggle 1 | `"Message notifications"` (no subtitle) |
 | Toggle 2 | `"Event reminders"` |
+| Toggle 2b | `"Event teasers"` — anonymized pre-event counts |
+| Toggle 2c | `"Reconnect nudges"` — chat lull + shared upcoming event |
 | Toggle 4 | `"Availability matches"` |
 | Toggle 5 | `"Hub messages"` |
 | Toggle 6 | `"Ambient sound enrichment"` |
@@ -210,6 +212,9 @@ Bottom button: `"System Settings"`.
 | **Edit** (active intent) | Opens sheet prefilled | Time window resets from now on save |
 | **Remove** (active intent) | Opens confirm dialog | Deletes intent on confirm |
 | **Message notifications** toggle | `AppDataManager.setMessageNotificationsEnabled` | Reverts + global snackbar on save fail |
+| **Event reminders** toggle | `AppDataManager.setEventReminderNotificationsEnabled` | Same |
+| **Event teasers** toggle | `AppDataManager.setEventTeaserNotificationsEnabled` | Same |
+| **Reconnect nudges** toggle | `AppDataManager.setReconnectNudgeNotificationsEnabled` | Same |
 | **Ambient sound enrichment** toggle | Saves opt-in; requests mic permission if enabling | Default loads from token storage (`true`) |
 | **Ghost Mode** toggle | `AppDataManager.toggleGhostMode()` | Session-scoped; halts sync/presence |
 | **Location snap** toggle | `AppDataManager.setConnectionSnapEnabled`; requests location if enabling | Shows permission hints when ON |
@@ -361,6 +366,9 @@ Bottom button: `"System Settings"`.
 |-----|--------|
 | Section | `"Alerts"` |
 | Messages | `"Message notifications"` |
+| Event reminders | `"Event reminders"` |
+| Event teasers | `"Event teasers"` |
+| Reconnect nudges | `"Reconnect nudges"` |
 | Ambient toggle | `"Ambient sound enrichment"` |
 | Ambient subtitle | `"Short mic sample at connect time for a noise category only. No recordings stored."` |
 | Mic off error | `"Microphone access is off — enable it in system settings to use ambient enrichment."` |

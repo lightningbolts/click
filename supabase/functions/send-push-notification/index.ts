@@ -42,6 +42,8 @@ interface PushTokenRow {
 interface NotificationPreferenceRow {
   message_push_enabled: boolean;
   event_reminder_push_enabled?: boolean;
+  event_teaser_push_enabled?: boolean;
+  reconnect_nudge_push_enabled?: boolean;
   availability_match_push_enabled?: boolean;
   hub_message_push_enabled?: boolean;
 }
@@ -68,6 +70,9 @@ type PushCategory =
   | "archive_warning"
   | "disposable_reveal"
   | "event_reminder"
+  | "event_teaser"
+  | "reconnect_nudge"
+  | "shared_upcoming_event"
   | "availability_match"
   | "hub_message";
 
@@ -243,6 +248,9 @@ function getPushCategory(requestBody: PushRequestBody): PushCategory {
   if (t === "archive_warning") return "archive_warning";
   if (t === "disposable_reveal") return "disposable_reveal";
   if (t === "event_reminder") return "event_reminder";
+  if (t === "event_teaser") return "event_teaser";
+  if (t === "reconnect_nudge") return "reconnect_nudge";
+  if (t === "shared_upcoming_event") return "shared_upcoming_event";
   if (t === "availability_match") return "availability_match";
   if (t === "hub_message") return "hub_message";
   return "chat_message";
@@ -584,7 +592,7 @@ async function recipientAllowsPush(
   const { data, error } = await supabase
     .from("notification_preferences")
     .select(
-      "message_push_enabled, event_reminder_push_enabled, availability_match_push_enabled, hub_message_push_enabled",
+      "message_push_enabled, event_reminder_push_enabled, event_teaser_push_enabled, reconnect_nudge_push_enabled, availability_match_push_enabled, hub_message_push_enabled",
     )
     .eq("user_id", requestBody.recipient_user_id)
     .maybeSingle<NotificationPreferenceRow>();
@@ -596,6 +604,12 @@ async function recipientAllowsPush(
   const cat = getPushCategory(requestBody);
   if (cat === "event_reminder") {
     return data.event_reminder_push_enabled !== false;
+  }
+  if (cat === "event_teaser") {
+    return data.event_teaser_push_enabled !== false;
+  }
+  if (cat === "reconnect_nudge" || cat === "shared_upcoming_event") {
+    return data.reconnect_nudge_push_enabled !== false;
   }
   if (cat === "availability_match") {
     return data.availability_match_push_enabled !== false;

@@ -230,6 +230,8 @@ internal suspend fun AppDataManager.loadAllData() {
                 eventReminderEnabled = localNotificationPreferences.eventReminderPushEnabled,
                 availabilityMatchEnabled = localNotificationPreferences.availabilityMatchPushEnabled,
                 hubMessageEnabled = localNotificationPreferences.hubMessagePushEnabled,
+                eventTeaserEnabled = localNotificationPreferences.eventTeaserPushEnabled,
+                reconnectNudgeEnabled = localNotificationPreferences.reconnectNudgePushEnabled,
             )
 
             // Push registration is non-critical for first paint. Keep it off the main
@@ -252,6 +254,8 @@ internal suspend fun AppDataManager.loadAllData() {
                     eventReminderEnabled = remotePreferences.eventReminderPushEnabled,
                     availabilityMatchEnabled = remotePreferences.availabilityMatchPushEnabled,
                     hubMessageEnabled = remotePreferences.hubMessagePushEnabled,
+                    eventTeaserEnabled = remotePreferences.eventTeaserPushEnabled,
+                    reconnectNudgeEnabled = remotePreferences.reconnectNudgePushEnabled,
                 )
                 tokenStorage.saveMessageNotificationsEnabled(remotePreferences.messagePushEnabled)
                 tokenStorage.saveCallNotificationsEnabled(remotePreferences.callPushEnabled)

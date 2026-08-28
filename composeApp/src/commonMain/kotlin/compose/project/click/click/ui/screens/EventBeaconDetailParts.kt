@@ -27,6 +27,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
+import compose.project.click.click.data.api.GuestListStatusDto // pragma: allowlist secret
 import compose.project.click.click.events.EventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.formatEventEndDateLabel // pragma: allowlist secret
 import compose.project.click.click.events.formatEventEndTimeLabel // pragma: allowlist secret
@@ -37,6 +39,7 @@ import compose.project.click.click.ui.components.ClickMenuItem // pragma: allowl
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
+import kotlinx.coroutines.launch
 
 @Composable
 internal fun EventLiveBadge() {
@@ -406,6 +409,100 @@ internal fun EventAttendeeStack(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+internal fun EventGuestListPasteCard(
+    beaconId: String,
+    border: Color,
+    cardSurface: Color,
+) {
+    val api = remember { ApiClient() }
+    var paste by remember(beaconId) { mutableStateOf("") }
+    var status by remember(beaconId) { mutableStateOf<GuestListStatusDto?>(null) }
+    var error by remember(beaconId) { mutableStateOf<String?>(null) }
+    var busy by remember(beaconId) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(beaconId) {
+        status = api.getBeaconGuestList(beaconId).getOrNull()
+    }
+
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .border(clickBorderWidth(), border, RoundedCornerShape(12.dp))
+                .background(cardSurface, RoundedCornerShape(12.dp))
+                .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            text = "Seed this room",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = "Paste emails (one per line). Click matches people who already have an account.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedTextField(
+            value = paste,
+            onValueChange = { paste = it },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 3,
+            maxLines = 8,
+            placeholder = { Text("one@email.com") },
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = {
+                    if (busy || paste.isBlank()) return@Button
+                    busy = true
+                    error = null
+                    scope.launch {
+                        val result = api.postBeaconGuestList(beaconId, "manual", paste)
+                        busy = false
+                        result
+                            .onSuccess {
+                                status = it
+                                paste = ""
+                            }.onFailure { error = it.message ?: "Upload failed" }
+                    }
+                },
+                enabled = !busy && paste.isNotBlank(),
+            ) {
+                Text(if (busy) "Working…" else "Add emails")
+            }
+            if ((status?.uploaded ?: 0) > 0) {
+                OutlinedButton(
+                    onClick = {
+                        if (busy) return@OutlinedButton
+                        busy = true
+                        error = null
+                        scope.launch {
+                            val result = api.matchBeaconGuestList(beaconId)
+                            busy = false
+                            result.onSuccess { status = it }.onFailure { error = it.message ?: "Match failed" }
+                        }
+                    },
+                    enabled = !busy,
+                ) {
+                    Text("Rematch")
+                }
+            }
+        }
+        error?.let {
+            Text(text = it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+        }
+        status?.let {
+            Text(
+                text = "${it.uploaded} uploaded · ${it.matched} matched · ${it.teasers} teasers",
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }

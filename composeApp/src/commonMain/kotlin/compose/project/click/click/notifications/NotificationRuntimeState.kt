@@ -6,6 +6,8 @@ data class LocalNotificationPreferences(
     val eventReminderNotificationsEnabled: Boolean = true,
     val availabilityMatchNotificationsEnabled: Boolean = true,
     val hubMessageNotificationsEnabled: Boolean = true,
+    val eventTeaserNotificationsEnabled: Boolean = true,
+    val reconnectNudgeNotificationsEnabled: Boolean = true,
 )
 
 expect object NotificationRuntimeState {
@@ -15,6 +17,8 @@ expect object NotificationRuntimeState {
         eventReminderEnabled: Boolean = true,
         availabilityMatchEnabled: Boolean = true,
         hubMessageEnabled: Boolean = true,
+        eventTeaserEnabled: Boolean = true,
+        reconnectNudgeEnabled: Boolean = true,
     )
 
     fun getNotificationPreferences(): LocalNotificationPreferences

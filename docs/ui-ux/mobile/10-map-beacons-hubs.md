@@ -116,6 +116,8 @@ Creator toolbar: `"Edit beacon"` / `"Delete beacon"` icon buttons (creator only)
 | Categories | Chips from metadata `event_categories`; hidden when empty |
 | Host card | When `showCreatorName`; avatar from `AppDataManager` current/connected user image when available; initials fallback |
 | Description | Body copy |
+| Seed a Room teaser | `GET /api/me/event-bookmarks/{id}/teaser` — anonymized count via `ConnectionEventRecommendationCard` chrome (hero + dismiss, **no RSVP**). Copy like `"3 people going who share an interest"`. Never names for unmatched strangers. |
+| Creator guest list | Paste-emails panel (`EventGuestListPasteCard`) when viewer is organizer; same guest-list APIs as web manage. |
 | Active Clicks | Overlapping avatar stack + `+N`; count in section label |
 | Primary CTA | `"Join Event Route"` → HTTPS Google Maps (Apple Maps fallback). Do **not** use `geo:` as primary on iOS (NSOSStatus -10814) |
 | Secondary CTA | `"RSVP / Sign Up"` / `"Cancel RSVP"` via `MapViewModel` |
