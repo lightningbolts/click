@@ -282,8 +282,7 @@ object NativeHeaderMetrics {
      * After an overlay cover (Click Drops) hides, re-apply the tab bar's last expanded height so
      * the subtitle is not clipped to a sliver while the large title stays 34pt.
      */
-    fun shouldReapplyTabBarHeightOnOverlayHide(): Boolean =
-        OverlayExclusiveBindPolicy.shouldReapplyTabBarHeightOnOverlayHide()
+    fun shouldReapplyTabBarHeightOnOverlayHide(): Boolean = OverlayExclusiveBindPolicy.shouldReapplyTabBarHeightOnOverlayHide()
 
     /**
      * Visible width of a host-view control that is not left-aligned, given a leading uncover
