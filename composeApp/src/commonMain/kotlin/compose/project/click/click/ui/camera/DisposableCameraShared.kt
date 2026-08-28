@@ -100,9 +100,10 @@ internal fun DisposableCameraChrome(
     )
 
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color.Black),
+        modifier =
+            modifier
+                .fillMaxSize()
+                .background(Color.Black),
     ) {
         if (capturedImage == null) {
             previewContent()
@@ -116,41 +117,46 @@ internal fun DisposableCameraChrome(
         }
 
         Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .height(120.dp)
-                .background(Color.Black.copy(alpha = 0.65f)),
+            modifier =
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .height(120.dp)
+                    .background(Color.Black.copy(alpha = 0.65f)),
         )
 
         Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(220.dp)
-                .background(Color.Black.copy(alpha = 0.72f)),
+            modifier =
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    .background(Color.Black.copy(alpha = 0.72f)),
         )
 
         GlassIconButton(
             onClick = onDismiss,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .statusBarsPadding()
-                .padding(start = 16.dp, top = 12.dp),
+            modifier =
+                Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(start = 16.dp, top = 12.dp),
             contentDescription = if (hasCapture) "Retake photo" else "Close camera",
         )
 
         Surface(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .statusBarsPadding()
-                .padding(top = 18.dp),
+            modifier =
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 18.dp),
             shape = RoundedCornerShape(999.dp),
             color = Color.Black,
-            border = androidx.compose.foundation.BorderStroke(
-                width = 1.dp,
-                color = BorderHardDark,
-            ),
+            border =
+                androidx.compose.foundation.BorderStroke(
+                    width = 1.dp,
+                    color = BorderHardDark,
+                ),
         ) {
             Text(
                 text = "Click Drops",
@@ -161,20 +167,22 @@ internal fun DisposableCameraChrome(
         }
 
         Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = 36.dp + extraBottomPadding)
-                .fillMaxWidth(),
+            modifier =
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 36.dp + extraBottomPadding)
+                    .fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (hasCapture) {
                 DisposableRollFilterSlider(
                     selectedIndex = selectedFilterIndex,
                     onSelectedIndexChange = onFilterIndexChange,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp),
                 )
                 Spacer(modifier = Modifier.height(14.dp))
             }
@@ -203,9 +211,10 @@ internal fun DisposableCameraChrome(
         }
 
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.White.copy(alpha = flashAlpha.value)),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.White.copy(alpha = flashAlpha.value)),
         )
     }
 }
@@ -220,19 +229,21 @@ private fun DisposableCameraStatusChip(
     Surface(
         shape = RoundedCornerShape(999.dp),
         color = Color.Black.copy(alpha = 0.26f),
-        border = androidx.compose.foundation.BorderStroke(
-            width = 1.dp,
-            color = Color.White.copy(alpha = 0.16f),
-        ),
+        border =
+            androidx.compose.foundation.BorderStroke(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.16f),
+            ),
     ) {
         Text(
-            text = when {
-                capturedImage != null -> "Ready for the roll"
-                isCapturingPhoto -> "Capturing..."
-                isFlippingCamera -> "Flipping..."
-                isShutterEnabled -> "Snap once"
-                else -> "Preparing..."
-            },
+            text =
+                when {
+                    capturedImage != null -> "Ready for the roll"
+                    isCapturingPhoto -> "Capturing..."
+                    isFlippingCamera -> "Flipping..."
+                    isShutterEnabled -> "Snap once"
+                    else -> "Preparing..."
+                },
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
             style = MaterialTheme.typography.labelMedium,
             color = Color.White.copy(alpha = 0.88f),
@@ -251,9 +262,10 @@ private fun DisposableCameraCaptureControls(
 ) {
     if (capturedImage == null) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 36.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 36.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -298,62 +310,64 @@ private fun DisposableRollFilterSlider(
         )
         Spacer(modifier = Modifier.height(10.dp))
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .background(Color.Black.copy(alpha = 0.28f))
-                .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(999.dp))
-                .pointerInput(Unit) {
-                    val thresholdPx = with(density) { 28.dp.toPx() }
-                    detectHorizontalDragGestures { _, dragAmount ->
-                        dragAccumulator += dragAmount
-                        while (dragAccumulator <= -thresholdPx) {
-                            dragAccumulator += thresholdPx
-                            val next = DisposableRollFilters.clampIndex(dragIndex - 1)
-                            if (next != dragIndex) {
-                                dragIndex = next
-                                PlatformHapticsPolicy.lightImpact()
-                                onSelectedIndexChange(next)
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Color.Black.copy(alpha = 0.28f))
+                    .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(999.dp))
+                    .pointerInput(Unit) {
+                        val thresholdPx = with(density) { 28.dp.toPx() }
+                        detectHorizontalDragGestures { _, dragAmount ->
+                            dragAccumulator += dragAmount
+                            while (dragAccumulator <= -thresholdPx) {
+                                dragAccumulator += thresholdPx
+                                val next = DisposableRollFilters.clampIndex(dragIndex - 1)
+                                if (next != dragIndex) {
+                                    dragIndex = next
+                                    PlatformHapticsPolicy.lightImpact()
+                                    onSelectedIndexChange(next)
+                                }
+                            }
+                            while (dragAccumulator >= thresholdPx) {
+                                dragAccumulator -= thresholdPx
+                                val next = DisposableRollFilters.clampIndex(dragIndex + 1)
+                                if (next != dragIndex) {
+                                    dragIndex = next
+                                    PlatformHapticsPolicy.lightImpact()
+                                    onSelectedIndexChange(next)
+                                }
                             }
                         }
-                        while (dragAccumulator >= thresholdPx) {
-                            dragAccumulator -= thresholdPx
-                            val next = DisposableRollFilters.clampIndex(dragIndex + 1)
-                            if (next != dragIndex) {
-                                dragIndex = next
-                                PlatformHapticsPolicy.lightImpact()
-                                onSelectedIndexChange(next)
-                            }
-                        }
-                    }
-                },
+                    },
             contentAlignment = Alignment.Center,
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 18.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 18.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 DisposableRollFilters.all.forEachIndexed { index, _ ->
                     val selected = index == clampedIndex
                     Box(
-                        modifier = Modifier
-                            .size(if (selected) 14.dp else 10.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (selected) PrimaryBlue else Color.White.copy(alpha = 0.42f),
-                            )
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                            ) {
-                                PlatformHapticsPolicy.lightImpact()
-                                dragIndex = index
-                                onSelectedIndexChange(index)
-                            },
+                        modifier =
+                            Modifier
+                                .size(if (selected) 14.dp else 10.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (selected) PrimaryBlue else Color.White.copy(alpha = 0.42f),
+                                ).clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                ) {
+                                    PlatformHapticsPolicy.lightImpact()
+                                    dragIndex = index
+                                    onSelectedIndexChange(index)
+                                },
                     )
                 }
             }
@@ -364,19 +378,20 @@ private fun DisposableRollFilterSlider(
 @Composable
 private fun FlipCameraButton(onClick: () -> Unit) {
     Box(
-        modifier = Modifier
-            .size(52.dp)
-            .clip(CircleShape)
-            .background(Color.Black.copy(alpha = 0.28f))
-            .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = {
-                    PlatformHapticsPolicy.lightImpact()
-                    onClick()
-                },
-            ),
+        modifier =
+            Modifier
+                .size(52.dp)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.28f))
+                .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {
+                        PlatformHapticsPolicy.lightImpact()
+                        onClick()
+                    },
+                ),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
@@ -398,23 +413,26 @@ internal fun DisposableCameraFallback(
     onPrimaryAction: (() -> Unit)? = null,
 ) {
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color.Black),
+        modifier =
+            modifier
+                .fillMaxSize()
+                .background(Color.Black),
     ) {
         GlassIconButton(
             onClick = onDismiss,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .statusBarsPadding()
-                .padding(start = 16.dp, top = 12.dp),
+            modifier =
+                Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(start = 16.dp, top = 12.dp),
             contentDescription = "Close camera",
         )
 
         GlassCard(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .padding(horizontal = 28.dp),
+            modifier =
+                Modifier
+                    .align(Alignment.Center)
+                    .padding(horizontal = 28.dp),
             usePrimaryBorder = true,
             contentPadding = 22.dp,
         ) {
@@ -469,22 +487,24 @@ private fun SendRollButton(
     onClick: () -> Unit,
 ) {
     Box(
-        modifier = Modifier
-            .size(96.dp)
-            .clip(CircleShape)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            ),
+        modifier =
+            Modifier
+                .size(96.dp)
+                .clip(CircleShape)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onClick,
+                ),
         contentAlignment = Alignment.Center,
     ) {
         Box(
-            modifier = Modifier
-                .size(78.dp)
-                .clip(CircleShape)
-                .background(PrimaryBlue)
-                .border(4.dp, BorderHardDark, CircleShape),
+            modifier =
+                Modifier
+                    .size(78.dp)
+                    .clip(CircleShape)
+                    .background(PrimaryBlue)
+                    .border(4.dp, BorderHardDark, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -510,34 +530,36 @@ private fun ShutterButton(
     )
 
     Box(
-        modifier = Modifier
-            .size(96.dp)
-            .graphicsLayer {
-                scaleX = shutterScale
-                scaleY = shutterScale
-            }
-            .clip(CircleShape)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                enabled = enabled,
-                onClick = onClick,
-            ),
+        modifier =
+            Modifier
+                .size(96.dp)
+                .graphicsLayer {
+                    scaleX = shutterScale
+                    scaleY = shutterScale
+                }.clip(CircleShape)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    enabled = enabled,
+                    onClick = onClick,
+                ),
         contentAlignment = Alignment.Center,
     ) {
         Box(
-            modifier = Modifier
-                .size(78.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = if (enabled) 0.22f else 0.10f))
-                .border(5.dp, BorderHardDark, CircleShape),
+            modifier =
+                Modifier
+                    .size(78.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = if (enabled) 0.22f else 0.10f))
+                    .border(5.dp, BorderHardDark, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Box(
-                modifier = Modifier
-                    .size(58.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = if (enabled) 0.32f else 0.14f)),
+                modifier =
+                    Modifier
+                        .size(58.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = if (enabled) 0.32f else 0.14f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
