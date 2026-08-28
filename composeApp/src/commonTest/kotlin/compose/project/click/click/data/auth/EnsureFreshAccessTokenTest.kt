@@ -1,5 +1,7 @@
-package compose.project.click.click.data.auth
+package compose.project.click.click.data.auth // pragma: allowlist secret
 
+import compose.project.click.click.data.storage.FakeTokenStorage // pragma: allowlist secret
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -43,4 +45,21 @@ class EnsureFreshAccessTokenTest {
         assertTrue(EnsureFreshAccessToken.REFRESH_SKEW_MS > 0L)
         assertNotNull(EnsureFreshAccessToken.REFRESH_SKEW_MS)
     }
+
+    @Test
+    fun get_returnsStoredJwtWhenExpiresAtHasHeadroom() =
+        runTest {
+            SessionResumeGate.markCompleted()
+            try {
+                val jwt = "hdr.eyJleHAiOjQxMDI0NDQ4MDB9.sig"
+                val storage =
+                    FakeTokenStorage(
+                        jwt = jwt,
+                        expiresAtEpochMs = 4_102_444_800_000L,
+                    )
+                assertEquals(jwt, EnsureFreshAccessToken.get(storage))
+            } finally {
+                SessionResumeGate.resetForTests()
+            }
+        }
 }
