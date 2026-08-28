@@ -34,10 +34,9 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import compose.project.click.click.data.ActiveHubEntry // pragma: allowlist secret
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
 import compose.project.click.click.data.api.InboxNudgeDto // pragma: allowlist secret
-import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
-import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
@@ -46,6 +45,7 @@ import compose.project.click.click.data.models.isActiveForUser // pragma: allowl
 import compose.project.click.click.data.models.isArchivedChannelForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.previewLabel // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionActionSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionItem // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionMemberPickerSheet // pragma: allowlist secret
@@ -56,7 +56,6 @@ import compose.project.click.click.ui.chat.GroupMembersPickerContext // pragma: 
 import compose.project.click.click.ui.chat.RememberMeStrip // pragma: allowlist secret
 import compose.project.click.click.ui.chat.connectionListActivityTs // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
-import compose.project.click.click.ui.components.InboxNudgeBanner // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppEmptyState // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickCircularGlassIconButton // pragma: allowlist secret
@@ -64,6 +63,7 @@ import compose.project.click.click.ui.components.ClickListRowShimmer // pragma: 
 import compose.project.click.click.ui.components.ConnectionsSegmentBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassToastHost // pragma: allowlist secret
+import compose.project.click.click.ui.components.InboxNudgeBanner // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberGlassToastState // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
@@ -263,7 +263,13 @@ fun ConnectionsListView(
 
     LaunchedEffect(currentUserId, selectedTabIndex) {
         if (currentUserId.isNullOrBlank() || selectedTabIndex != 0) return@LaunchedEffect
-        inboxNudges = inboxNudgeApi.getInboxNudges().getOrNull()?.nudges.orEmpty().take(2)
+        inboxNudges =
+            inboxNudgeApi
+                .getInboxNudges()
+                .getOrNull()
+                ?.nudges
+                .orEmpty()
+                .take(2)
     }
 
     val rememberMeConnectionIds =
@@ -643,7 +649,8 @@ fun ConnectionsListView(
                                         } else {
                                             val connectionId = nudge.connectionId?.trim().orEmpty()
                                             val chatId =
-                                                displayedChats.firstOrNull { it.connection.id == connectionId }
+                                                displayedChats
+                                                    .firstOrNull { it.connection.id == connectionId }
                                                     ?.chat
                                                     ?.id
                                                     ?: connectionId

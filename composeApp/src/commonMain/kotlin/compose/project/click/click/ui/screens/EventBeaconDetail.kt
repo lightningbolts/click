@@ -41,11 +41,11 @@ import compose.project.click.click.events.isLive // pragma: allowlist secret
 import compose.project.click.click.events.openEventMapsRoute // pragma: allowlist secret
 import compose.project.click.click.platform.shareText // pragma: allowlist secret
 import compose.project.click.click.ui.components.AnimatedClickDialog // pragma: allowlist secret
-import compose.project.click.click.ui.components.ConnectionEventRecommendationCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickDropdownMenu // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickMenuItem // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
+import compose.project.click.click.ui.components.ConnectionEventRecommendationCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.EventDirectoryUserProfileSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.EventPeopleDirectorySection // pragma: allowlist secret
 import compose.project.click.click.ui.components.EventPeopleDirectorySheetContent // pragma: allowlist secret
@@ -314,7 +314,6 @@ internal fun EventBeaconDetail(
     var seedTeaserDismissed by remember(beacon.id) { mutableStateOf(false) }
     val seedApi = remember { ApiClient() }
 
-
     LaunchedEffect(displayBeacon.id) {
         seedTeaser = seedApi.getEventTeaser(displayBeacon.id).getOrNull()?.teaser
         viewModel.loadBeaconRsvp(displayBeacon.id, forceRefresh = true)
@@ -531,7 +530,7 @@ internal fun EventBeaconDetail(
 
         if (
             isCreator ||
-                (!currentUser?.id.isNullOrBlank() && displayBeacon.createdByUserId == currentUser?.id)
+            (!currentUser?.id.isNullOrBlank() && displayBeacon.createdByUserId == currentUser?.id)
         ) {
             EventGuestListPasteCard(
                 beaconId = displayBeacon.id,

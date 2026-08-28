@@ -2,14 +2,13 @@ package compose.project.click.click.events // pragma: allowlist secret
 
 import compose.project.click.click.data.api.EventTeaserDto // pragma: allowlist secret
 import compose.project.click.click.data.api.EventTeaserResponseDto // pragma: allowlist secret
-import compose.project.click.click.data.api.InboxNudgeDto // pragma: allowlist secret
 import compose.project.click.click.data.api.InboxNudgesResponseDto // pragma: allowlist secret
+import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import kotlinx.serialization.json.Json
 
 class SeedRoomCopyTest {
     private val json = Json { ignoreUnknownKeys = true }
