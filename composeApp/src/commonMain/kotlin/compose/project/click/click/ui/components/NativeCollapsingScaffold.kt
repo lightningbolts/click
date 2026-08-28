@@ -117,10 +117,19 @@ expect fun NativeCollapsingScrollScaffold(
 
 /**
  * Hides the iOS host-view `UINavigationBar` while a screen draws its own header (chat, Tap to
- * Connect). No-op on Android.
+ * Connect). Covers **tab + overlay**. Do not use for Click Drops — that must keep `UITabBar`
+ * and replace overlay chrome via [CoverPlatformOverlayNavigationBar] + [BindPlatformNativeNavigationBar]
+ * with `leadingClose`. No-op on Android.
  */
 @Composable
 expect fun HidePlatformNativeNavigationBar()
+
+/**
+ * Covers only the overlay `UINavigationBar` (chat header) so a camera / sheet can rebind it.
+ * Does **not** hide the tab bar. No-op on Android.
+ */
+@Composable
+expect fun CoverPlatformOverlayNavigationBar()
 
 /**
  * While a covering sub-screen is interactively sliding away, translate the native bar with it
@@ -144,6 +153,7 @@ expect fun BindPlatformNativeNavigationBar(
     onOpenSearch: (() -> Unit)? = null,
     nativeTrailingActions: List<NativeChromeAction> = emptyList(),
     collapseFraction: Float = 1f,
+    leadingClose: Boolean = false,
 )
 
 data class NativeMapLayerOption(

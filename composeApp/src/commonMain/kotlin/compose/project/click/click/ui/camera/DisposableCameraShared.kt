@@ -52,7 +52,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.PlatformHapticsPolicy
+import compose.project.click.click.ui.components.ClickCircularGlassIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassCard
+import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.theme.BorderHardDark
 import compose.project.click.click.ui.theme.PrimaryBlue
 
@@ -448,26 +450,15 @@ private fun GlassIconButton(
     modifier: Modifier,
     contentDescription: String,
 ) {
-    Box(
-        modifier = modifier
-            .size(46.dp)
-            .clip(CircleShape)
-            .background(Color.Black)
-            .border(1.dp, BorderHardDark, CircleShape)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Filled.Close,
-            contentDescription = contentDescription,
-            tint = Color.White,
-            modifier = Modifier.size(24.dp),
-        )
-    }
+    // iOS: native overlay UINavigationBar leading xmark is the only hit target.
+    if (LocalPlatformStyle.current.isIOS) return
+    ClickCircularGlassIconButton(
+        icon = Icons.Filled.Close,
+        contentDescription = contentDescription,
+        onClick = onClick,
+        modifier = modifier,
+        size = 46.dp,
+    )
 }
 
 @Composable
