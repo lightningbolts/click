@@ -18,7 +18,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 
 /**
@@ -86,7 +88,13 @@ internal fun Modifier.connectionRowPressHighlight(interactionSource: MutableInte
         drawContent()
         val t = wash.value
         if (t > 0.001f) {
-            drawRect(color = PrimaryBlue.copy(alpha = PressHighlightAlpha * t.coerceIn(0f, 1f)))
+            drawRoundRect(
+                color = PrimaryBlue.copy(alpha = PressHighlightAlpha * t.coerceIn(0f, 1f)),
+                cornerRadius = CornerRadius(
+                    GlassSheetTokens.BentoExteriorCorner.toPx(),
+                    GlassSheetTokens.BentoExteriorCorner.toPx(),
+                ),
+            )
         }
     }
 }

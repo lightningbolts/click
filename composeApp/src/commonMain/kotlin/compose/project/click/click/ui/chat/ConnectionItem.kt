@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Groups
@@ -38,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.previewLabel // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickInsetDivider // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickPlatformListRowHeight // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickUnreadDot // pragma: allowlist secret
@@ -108,11 +110,12 @@ fun ConnectionItem(
 
     val rowInteraction = remember { MutableInteractionSource() }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
         Row(
             modifier =
                 Modifier
                     .fillMaxWidth()
+                    .clip(RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner))
                     .height(ClickPlatformListRowHeight)
                     .platformPressScale(rowInteraction)
                     .connectionRowPressHighlight(rowInteraction)
