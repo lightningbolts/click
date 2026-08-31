@@ -80,7 +80,9 @@ class ChatApiClient(
         val id: String,
         val name: String,
         val category: String = "general",
-        @SerialName("creator_id") val creatorId: String,
+        @SerialName("creator_id") val creatorId: String? = null,
+        @SerialName("event_beacon_id") val eventBeaconId: String? = null,
+        @SerialName("expires_at") val expiresAt: String? = null,
     )
 
     /** Canonical outcome of a successful encrypted attachment upload. */

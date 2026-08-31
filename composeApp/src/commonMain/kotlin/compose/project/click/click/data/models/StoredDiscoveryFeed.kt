@@ -37,6 +37,7 @@ data class StoredMapBeacon(
     /** Event venue labels — previously dropped on disk, delaying address text after cold start. */
     val locationName: String? = null,
     val formattedAddress: String? = null,
+    val hubId: String? = null,
 )
 
 @Serializable
@@ -76,6 +77,7 @@ fun MapBeacon.toStoredMapBeacon(): StoredMapBeacon {
         originalUrl = metadata.originalUrl,
         locationName = metadata.locationName,
         formattedAddress = metadata.formattedAddress,
+        hubId = hubId,
     )
 }
 
@@ -122,6 +124,7 @@ fun StoredMapBeacon.toMapBeacon(): MapBeacon {
         showCreatorName = showCreatorName,
         creatorDisplayName = creatorDisplayName,
         visibilityAudience = BeaconVisibilityAudience.fromRaw(visibilityAudience),
+        hubId = hubId,
     )
 }
 
@@ -244,6 +247,7 @@ internal fun MapBeacon.withPreservedEventScheduleFrom(existing: MapBeacon?): Map
             } else {
                 visibilityAudience
             },
+        hubId = hubId ?: existing.hubId,
     )
 }
 

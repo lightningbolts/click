@@ -33,9 +33,11 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.ui.zIndex
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -70,6 +72,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.ui.camera.DisposableCameraView // pragma: allowlist secret
 import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.ui.chat.CHAT_SEARCH_FOCUS_HOLD_MS // pragma: allowlist secret
@@ -132,6 +135,7 @@ data class HubChatNavArgs(
     val hubTitle: String,
     val creatorId: String? = null,
     val hubCategory: String = "general",
+    val isEventHub: Boolean = false,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -160,6 +164,7 @@ fun HubChatScreen(
                 currentUserId = currentUserId,
                 hubCategory = args.hubCategory,
                 creatorId = args.creatorId,
+                isEventHub = args.isEventHub,
                 hubLocationResolver = resolveHubGatekeeperLocation,
             )
         }
@@ -167,6 +172,8 @@ fun HubChatScreen(
     val messages by viewModel.messages.collectAsState()
     val occupantCount by viewModel.occupantCount.collectAsState()
     val outOfBounds by viewModel.outOfBounds.collectAsState()
+    val isEventHub by viewModel.isEventHubFlow.collectAsState()
+    var showClickDropsCamera by remember { mutableStateOf(false) }
 
     val isCreator by viewModel.isCreator.collectAsState()
     val resolvedCreatorId by viewModel.resolvedCreatorId.collectAsState()
@@ -617,14 +624,29 @@ fun HubChatScreen(
                                 HubChatInputBar(
                                     viewModel = viewModel,
                                     inLobby = inLobby,
-                                    isOutOfBounds = outOfBounds,
+                                    isOutOfBounds = outOfBounds && !isEventHub,
                                     mediaPickers = mediaPickers,
+                                    onOpenClickDrops = { showClickDropsCamera = true },
                                 )
                             }
                         }
                     }
                 }
             }
+        }
+
+        if (showClickDropsCamera) {
+            DisposableCameraView(
+                onPhotoConfirmed = { bytes ->
+                    viewModel.sendHubDisposableRoll(bytes)
+                    showClickDropsCamera = false
+                },
+                onDismiss = { showClickDropsCamera = false },
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .zIndex(10_500f),
+            )
         }
     }
 
@@ -836,6 +858,7 @@ private fun HubChatInputBar(
     inLobby: Boolean,
     isOutOfBounds: Boolean = false,
     mediaPickers: ChatMediaPickerHandles,
+    onOpenClickDrops: () -> Unit = {},
 ) {
     val draft by viewModel.draft.collectAsState()
     val isSending by viewModel.isSending.collectAsState()
@@ -900,6 +923,19 @@ private fun HubChatInputBar(
                 onAttachmentMenuExpandedChange = { attachmentMenuExpanded = it },
                 attachmentMenuContent = {
                     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                        ChatAttachmentMenuRow(
+                            label = "Click Drops",
+                            icon = Icons.Filled.PhotoCamera,
+                            enabled = enabled,
+                            onClick = {
+                                PlatformHapticsPolicy.heavyImpact()
+                                PlatformHapticsPolicy.successNotification()
+                                attachmentMenuExpanded = false
+                                keyboardController?.hide()
+                                focusManager.clearFocus()
+                                onOpenClickDrops()
+                            },
+                        )
                         ChatAttachmentMenuRow(
                             label = "Photo library",
                             icon = Icons.Outlined.Image,

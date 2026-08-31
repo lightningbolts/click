@@ -34,7 +34,9 @@ import compose.project.click.click.data.models.withPreservedEventScheduleFrom //
 import compose.project.click.click.events.EventRsvpRequestStatus // pragma: allowlist secret
 import compose.project.click.click.events.buildEventShareText // pragma: allowlist secret
 import compose.project.click.click.events.buildEventShareUrl // pragma: allowlist secret
+import compose.project.click.click.events.canOpenEventHub // pragma: allowlist secret
 import compose.project.click.click.events.eventCheckInCtaLabel // pragma: allowlist secret
+import compose.project.click.click.notifications.ChatDeepLinkManager // pragma: allowlist secret
 import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.formatEventPostedAtLabel // pragma: allowlist secret
 import compose.project.click.click.events.formatEventScheduleRange // pragma: allowlist secret
@@ -662,6 +664,51 @@ internal fun EventBeaconDetail(
                 Spacer(modifier = Modifier.width(8.dp))
             }
             Text(checkInLabel, fontWeight = FontWeight.SemiBold)
+        }
+
+        val eventHubId = displayBeacon.hubId
+        val canOpenHub =
+            canOpenEventHub(
+                hubId = eventHubId,
+                isCreator = isCreator,
+                checkedIn = checkedIn,
+                hasRsvp = currentUserSignedUp,
+            )
+        if (!eventHubId.isNullOrBlank()) {
+            if (canOpenHub) {
+                Button(
+                    onClick = {
+                        ChatDeepLinkManager.setPendingEventHub(
+                            hubId = eventHubId,
+                            title = displayBeacon.displayDynamicTitle(),
+                            creatorId = displayBeacon.createdByUserId,
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    shape = actionShape,
+                    border = BorderStroke(clickBorderWidth(), border),
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                        ),
+                    contentPadding = PaddingValues(vertical = 14.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Chat,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Open event hub", fontWeight = FontWeight.SemiBold)
+                }
+            } else {
+                Text(
+                    text = "Check in to join the event hub",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                )
+            }
         }
 
         Button(

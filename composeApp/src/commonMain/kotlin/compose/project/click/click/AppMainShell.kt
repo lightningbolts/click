@@ -417,6 +417,7 @@ internal fun AppMainShell(
                                 realtimeChannel = outcome.channel,
                                 hubTitle = outcome.name,
                                 creatorId = creatorId,
+                                isEventHub = false,
                             )
                         lastHubChatArgs = args
                         hubChatArgs = args
@@ -441,6 +442,87 @@ internal fun AppMainShell(
                 hubVerifyInProgress = false
             }
         }
+    }
+
+    fun launchEventHubJoin(
+        hubId: String,
+        title: String,
+        knownCreatorId: String? = null,
+    ) {
+        if (hubId.isBlank() || currentUser.id.isBlank()) return
+        hubChatCloseJob?.cancel()
+        hubChatCloseJob = null
+        val cached = lastHubChatArgs
+        if (cached != null && cached.hubId == hubId) {
+            hubChatArgs =
+                cached.copy(
+                    creatorId = cached.creatorId ?: knownCreatorId,
+                    isEventHub = true,
+                    hubTitle = title.ifBlank { cached.hubTitle },
+                )
+            return
+        }
+        connectionScope.launch {
+            hubVerifyInProgress = true
+            try {
+                val jwt =
+                    EnsureFreshAccessToken
+                        .get(tokenStorage)
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() }
+                if (jwt.isNullOrBlank()) {
+                    toastState.show(connectionScope, "Please sign in again to join the hub.")
+                    return@launch
+                }
+                when (
+                    val outcome =
+                        HubConnectionManager.joinEventHub(
+                            httpClient = client,
+                            hubId = hubId,
+                            bearerJwt = jwt,
+                        )
+                ) {
+                    is HubVerifyResult.Success -> {
+                        val creatorId = outcome.creatorId ?: knownCreatorId
+                        val args =
+                            HubChatNavArgs(
+                                hubId = outcome.hubId,
+                                realtimeChannel = outcome.channel,
+                                hubTitle = outcome.name.ifBlank { title },
+                                creatorId = creatorId,
+                                isEventHub = true,
+                            )
+                        lastHubChatArgs = args
+                        hubChatArgs = args
+                        AppDataManager.registerActiveHub(
+                            ActiveHubEntry(
+                                hubId = outcome.hubId,
+                                name = outcome.name.ifBlank { title },
+                                realtimeChannel = outcome.channel,
+                                joinedAtMs =
+                                    kotlinx.datetime.Clock.System
+                                        .now()
+                                        .toEpochMilliseconds(),
+                                creatorId = creatorId,
+                            ),
+                        )
+                    }
+                    is HubVerifyResult.Failure -> {
+                        toastState.show(connectionScope, outcome.userMessage)
+                    }
+                }
+            } finally {
+                hubVerifyInProgress = false
+            }
+        }
+    }
+
+    val pendingEventHub by ChatDeepLinkManager.pendingEventHub.collectAsState()
+    LaunchedEffect(pendingEventHub, currentUser.id) {
+        val pending = pendingEventHub ?: return@LaunchedEffect
+        if (currentUser.id.isBlank()) return@LaunchedEffect
+        ChatDeepLinkManager.consumePendingEventHub()
+        launchEventHubJoin(pending.hubId, pending.title, pending.creatorId)
     }
 
     LaunchedEffect(pendingCommunityHubId, currentUser.id) {
