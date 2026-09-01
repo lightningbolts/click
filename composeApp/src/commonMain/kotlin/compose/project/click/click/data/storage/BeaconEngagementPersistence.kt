@@ -20,6 +20,7 @@ object BeaconEngagementPersistence {
         @SerialName("checked_in_at") val checkedInAt: String? = null,
         @SerialName("check_in_count") val checkInCount: Int = 0,
         @SerialName("local_early_check_in") val localEarlyCheckIn: Boolean = false,
+        @SerialName("hub_id") val hubId: String? = null,
         @SerialName("updated_at_ms") val updatedAtEpochMs: Long = 0L,
     )
 
@@ -44,6 +45,7 @@ object BeaconEngagementPersistence {
                     checkedInAt = entry.checkedInAt,
                     checkInCount = entry.checkInCount,
                     localEarlyCheckIn = entry.localEarlyCheckIn,
+                    hubId = entry.hubId,
                 )
             }
         }.getOrDefault(emptyMap())
@@ -65,6 +67,7 @@ object BeaconEngagementPersistence {
                     checkedInAt = entry.checkedInAt,
                     checkInCount = entry.checkInCount,
                     localEarlyCheckIn = entry.localEarlyCheckIn,
+                    hubId = entry.hubId,
                     updatedAtEpochMs = now,
                 )
             },

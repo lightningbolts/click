@@ -1,5 +1,7 @@
 package compose.project.click.click.events
 
+import compose.project.click.click.data.ActiveHubEntry
+import compose.project.click.click.data.opensAsEventHub
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -82,5 +84,42 @@ class EventHubAccessTest {
         assertTrue(canOpenEventHub(hubId = "hub_1", isCreator = true, checkedIn = false))
         assertTrue(canOpenEventHub(hubId = "hub_1", isCreator = false, checkedIn = true))
         assertFalse(canOpenEventHub(hubId = "hub_1", isCreator = false, checkedIn = false))
+    }
+
+    @Test
+    fun eventCategoryMarksLinkedHub() {
+        assertTrue(isEventLinkedHubCategory("event"))
+        assertTrue(isEventLinkedHubCategory("Event"))
+        assertFalse(isEventLinkedHubCategory("social"))
+        assertFalse(isEventLinkedHubCategory(null))
+    }
+
+    @Test
+    fun persistedHubReopensWithoutGpsWhenMarkedOrCategorized() {
+        val flagged =
+            ActiveHubEntry(
+                hubId = "hub_1",
+                name = "Picnic",
+                realtimeChannel = "hub:hub_1",
+                category = "general",
+                isEventHub = true,
+            )
+        val categorized =
+            ActiveHubEntry(
+                hubId = "hub_2",
+                name = "Picnic",
+                realtimeChannel = "hub:hub_2",
+                category = "event",
+            )
+        val community =
+            ActiveHubEntry(
+                hubId = "hub_3",
+                name = "Cafe",
+                realtimeChannel = "hub:hub_3",
+                category = "social",
+            )
+        assertTrue(flagged.opensAsEventHub())
+        assertTrue(categorized.opensAsEventHub())
+        assertFalse(community.opensAsEventHub())
     }
 }

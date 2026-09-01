@@ -219,7 +219,7 @@ data class MapBeacon(
     val showCreatorName: Boolean = false,
     val creatorDisplayName: String? = null,
     val visibilityAudience: BeaconVisibilityAudience = BeaconVisibilityAudience.EVERYONE,
-    /** Auto-created event hub (`map_beacons.hub_id` or metadata `hub_id`). */
+    /** Event hub id from API JSON or metadata `hub_id` (not a map_beacons column). */
     val hubId: String? = null,
 )
 

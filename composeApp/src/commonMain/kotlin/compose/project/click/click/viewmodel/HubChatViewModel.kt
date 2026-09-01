@@ -179,6 +179,13 @@ class HubChatViewModel(
                             _isCreator.value = ownsHub
                             if (!details.eventBeaconId.isNullOrBlank()) {
                                 _isEventHub.value = true
+                                AppDataManager.updateActiveHubDetails(
+                                    hubId = hubId,
+                                    name = details.name,
+                                    category = details.category,
+                                    creatorId = creator,
+                                    isEventHub = true,
+                                )
                             }
                             _hubDetails.update { current ->
                                 current.copy(
@@ -210,6 +217,13 @@ class HubChatViewModel(
                     _isCreator.value = ownsHub
                     if (!row?.eventBeaconId.isNullOrBlank()) {
                         _isEventHub.value = true
+                        AppDataManager.updateActiveHubDetails(
+                            hubId = hubId,
+                            name = row?.name.orEmpty(),
+                            category = row?.category.orEmpty(),
+                            creatorId = creator,
+                            isEventHub = true,
+                        )
                     }
                     _hubDetails.update { current ->
                         current.copy(

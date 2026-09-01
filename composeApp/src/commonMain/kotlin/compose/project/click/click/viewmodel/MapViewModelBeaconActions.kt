@@ -109,6 +109,7 @@ internal fun MapViewModel.ensureEventBeaconDetailImpl(
         current.hasUsableMapCoordinates() &&
             current.metadata.locationName.isNullOrBlank() &&
             current.metadata.formattedAddress.isNullOrBlank()
+    val needsHub = current.kind == MapBeaconKind.EVENT && current.hubId.isNullOrBlank()
     val alreadyHydrated = id in eventDetailHydratedIds
     // Hydrate whenever any detail field is still missing — including host display name.
     if (
@@ -117,7 +118,8 @@ internal fun MapViewModel.ensureEventBeaconDetailImpl(
         !needsPosted &&
         !needsCreator &&
         !needsHostName &&
-        !needsVenueLabel
+        !needsVenueLabel &&
+        !needsHub
     ) {
         return
     }
@@ -207,6 +209,7 @@ internal suspend fun MapViewModel.hydrateBeaconDetailFromNetwork(
                     showCreatorName = showCreatorName || full.showCreatorName,
                     creatorDisplayName = creatorDisplayName.orHydrated(full.creatorDisplayName),
                     sourceBeaconType = sourceBeaconType ?: full.sourceBeaconType,
+                    hubId = hubId?.takeIf { it.isNotBlank() } ?: full.hubId,
                 )
             }
             _mapBeacons.update { list ->
@@ -242,6 +245,34 @@ internal suspend fun MapViewModel.hydrateBeaconDetailFromNetwork(
         },
         onFailure = { /* keep sheet open with whatever we have */ },
     )
+}
+
+internal fun MapViewModel.applyBeaconHubId(
+    beaconId: String,
+    hubId: String,
+) {
+    val id = beaconId.trim()
+    val hid = hubId.trim()
+    if (id.isEmpty() || hid.isEmpty()) return
+    fun MapBeacon.withHub(): MapBeacon = if (this.hubId == hid) this else copy(hubId = hid)
+    val base =
+        _mapBeacons.value.firstOrNull { it.id == id }
+            ?: (_selection.value as? MapSelection.BeaconSelected)?.beacon?.takeIf { it.id == id }
+            ?: AppDataManager.prefetchedMapBeacons.value.firstOrNull { it.id == id }
+            ?: return
+    val patched = base.withHub()
+    _mapBeacons.update { list ->
+        if (list.none { it.id == id }) {
+            list
+        } else {
+            list.map { if (it.id == id) patched else it }
+        }
+    }
+    AppDataManager.mergeCachedMapBeacons(listOf(patched))
+    val sel = _selection.value as? MapSelection.BeaconSelected
+    if (sel != null && sel.beacon.id == id) {
+        _selection.value = sel.copy(beacon = patched)
+    }
 }
 
 /** @deprecated Use [ensureEventBeaconDetail]. */

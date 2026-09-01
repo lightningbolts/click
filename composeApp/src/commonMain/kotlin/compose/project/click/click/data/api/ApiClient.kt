@@ -858,6 +858,7 @@ data class BeaconEngagementDto(
     @SerialName("checked_in") val checkedIn: Boolean = false,
     @SerialName("checked_in_at") val checkedInAt: String? = null,
     @SerialName("check_in_count") val checkInCount: Int = 0,
+    @SerialName("hub_id") val hubId: String? = null,
 )
 
 @Serializable

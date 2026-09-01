@@ -666,7 +666,7 @@ internal fun EventBeaconDetail(
             Text(checkInLabel, fontWeight = FontWeight.SemiBold)
         }
 
-        val eventHubId = displayBeacon.hubId
+        val eventHubId = displayBeacon.hubId ?: engagement?.hubId
         val canOpenHub =
             canOpenEventHub(
                 hubId = eventHubId,
@@ -683,6 +683,7 @@ internal fun EventBeaconDetail(
                             title = displayBeacon.displayDynamicTitle(),
                             creatorId = displayBeacon.createdByUserId,
                         )
+                        viewModel.clearSelection()
                     },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                     shape = actionShape,

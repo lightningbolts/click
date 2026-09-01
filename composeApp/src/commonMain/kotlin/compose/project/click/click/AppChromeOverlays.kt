@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import compose.project.click.click.events.isEventLinkedHubCategory // pragma: allowlist secret
 import compose.project.click.click.navigation.NavigationItem // pragma: allowlist secret
 import compose.project.click.click.navigation.bottomNavItems // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlobalTetherOverlay // pragma: allowlist secret
@@ -170,6 +171,7 @@ internal fun BoxScope.AppBottomChrome(
                                 hubTitle = target.hubTitle?.ifBlank { "Hub" } ?: "Hub",
                                 creatorId = target.hubCreatorId,
                                 hubCategory = target.hubCategory,
+                                isEventHub = isEventLinkedHubCategory(target.hubCategory),
                             )
                     } else {
                         pendingChatId = target.connectionId

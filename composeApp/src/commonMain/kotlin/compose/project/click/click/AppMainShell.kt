@@ -458,6 +458,7 @@ internal fun AppMainShell(
                 cached.copy(
                     creatorId = cached.creatorId ?: knownCreatorId,
                     isEventHub = true,
+                    hubCategory = if (cached.hubCategory.isBlank()) "event" else cached.hubCategory,
                     hubTitle = title.ifBlank { cached.hubTitle },
                 )
             return
@@ -490,6 +491,7 @@ internal fun AppMainShell(
                                 realtimeChannel = outcome.channel,
                                 hubTitle = outcome.name.ifBlank { title },
                                 creatorId = creatorId,
+                                hubCategory = "event",
                                 isEventHub = true,
                             )
                         lastHubChatArgs = args
@@ -504,6 +506,8 @@ internal fun AppMainShell(
                                         .now()
                                         .toEpochMilliseconds(),
                                 creatorId = creatorId,
+                                category = "event",
+                                isEventHub = true,
                             ),
                         )
                     }

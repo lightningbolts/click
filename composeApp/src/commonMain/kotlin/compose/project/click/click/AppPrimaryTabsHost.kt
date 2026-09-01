@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.opensAsEventHub // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.navigation.NavigationItem // pragma: allowlist secret
 import compose.project.click.click.navigation.shouldRenderHomeSwipeUnderlay // pragma: allowlist secret
@@ -269,6 +270,7 @@ internal fun AppPrimaryTabsHost(
                                             hubTitle = hub.name,
                                             creatorId = hub.creatorId,
                                             hubCategory = hub.category,
+                                            isEventHub = hub.opensAsEventHub(),
                                         )
                                 },
                                 viewModel = chatViewModel,
