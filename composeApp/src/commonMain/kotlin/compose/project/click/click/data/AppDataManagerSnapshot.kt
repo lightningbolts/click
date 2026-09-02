@@ -135,16 +135,15 @@ internal fun AppDataManager.schedulePersistSnapshot() {
         }
 }
 
-internal suspend fun AppDataManager.restoreCachedSnapshot(): Boolean {
-    _hubAccessStateRestored.value = false
-    return snapshotRestoreMutex.withLock {
+internal suspend fun AppDataManager.restoreCachedSnapshot(): Boolean =
+    snapshotRestoreMutex.withLock {
+        _hubAccessStateRestored.value = false
         try {
             restoreCachedSnapshotUnlocked()
         } finally {
             _hubAccessStateRestored.value = true
         }
     }
-}
 
 private suspend fun AppDataManager.restoreCachedSnapshotUnlocked(): Boolean {
     val snapshotJson = tokenStorage.getCachedAppSnapshot()

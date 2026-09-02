@@ -185,16 +185,18 @@ private class IosKeychainSettings : Settings {
 
     private fun read(): KeychainSettingsPayload = readForMutation() ?: KeychainSettingsPayload()
 
+    private fun decodeKeychainPayload(value: String): KeychainSettingsPayload? =
+        runCatching { json.decodeFromString(KeychainSettingsPayload.serializer(), value.trim()) }
+            .getOrNull()
+            ?.takeIf { it.version == 1 }
+
     /** Returns null only when Keychain is unavailable; missing means an empty mutable payload. */
     private fun readForMutation(): KeychainSettingsPayload? =
         when (val result = keychainGet()) {
             KeychainReadResult.Missing -> KeychainSettingsPayload()
             KeychainReadResult.Unavailable -> null
             is KeychainReadResult.Found ->
-                runCatching { json.decodeFromString(KeychainSettingsPayload.serializer(), result.value.trim()) }
-                    .getOrNull()
-                    ?.takeIf { it.version == 1 }
-                    ?: KeychainSettingsPayload()
+                decodeKeychainPayload(result.value) ?: KeychainSettingsPayload()
         }
 
     private fun write(values: Map<String, String>) {
@@ -203,10 +205,14 @@ private class IosKeychainSettings : Settings {
     }
 
     private fun migrateLegacySettings() {
-        when (keychainGet()) {
+        when (val result = keychainGet()) {
             is KeychainReadResult.Found -> {
-                purgeLegacySettings()
-                return
+                if (decodeKeychainPayload(result.value) != null) {
+                    purgeLegacySettings()
+                    return
+                }
+                // Preserve legacy values when the existing item is malformed or unsupported.
+                // It is replaced only after a verified write below.
             }
             KeychainReadResult.Unavailable -> return
             KeychainReadResult.Missing -> Unit
