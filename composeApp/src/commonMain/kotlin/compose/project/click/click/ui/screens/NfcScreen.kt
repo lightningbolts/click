@@ -267,8 +267,8 @@ fun NfcScreen(
                                                             null
                                                         }
                                                     }
-                                                val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
-                                                val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
+                                                val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false
+                                                val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: false
                                                 val sensors =
                                                     captureConnectionSensorContext(
                                                         ambientNoiseMonitor = ambientNoiseMonitor,
@@ -411,8 +411,8 @@ fun NfcScreen(
                                 connectionViewModel.resetConnectionState()
                                 return@launch
                             }
-                            val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
-                            val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
+                            val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false
+                            val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: false
                             val sensors =
                                 captureConnectionSensorContext(
                                     ambientNoiseMonitor = ambientNoiseMonitor,
@@ -486,7 +486,7 @@ fun NfcScreen(
                             scope.launch {
                                 ambientNoiseOptIn = noiseOptIn
                                 tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
-                                val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
+                                val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: false
                                 val sensors =
                                     captureConnectionSensorContext(
                                         ambientNoiseMonitor = ambientNoiseMonitor,

@@ -48,6 +48,16 @@ private const val SUPABASE_AUTH_SUITE_NAME = "click_supabase_auth_settings"
 private const val SUPABASE_AUTH_KEYCHAIN_SERVICE = "com.click.supabase.auth"
 private const val SUPABASE_AUTH_KEYCHAIN_ACCOUNT = "settings_v1"
 
+private sealed interface KeychainReadResult {
+    data class Found(
+        val value: String,
+    ) : KeychainReadResult
+
+    data object Missing : KeychainReadResult
+
+    data object Unavailable : KeychainReadResult
+}
+
 /**
  * Keychain-backed [Settings] used by GoTrue. The legacy UserDefaults suite is consulted only for
  * a one-time migration, then erased so session JSON and refresh tokens are never stored plaintext.
@@ -75,10 +85,14 @@ private class IosKeychainSettings : Settings {
         migrateLegacySettings()
     }
 
-    override fun clear() = write(emptyMap())
+    override fun clear() {
+        if (keychainGet() is KeychainReadResult.Unavailable) return
+        write(emptyMap())
+    }
 
     override fun remove(key: String) {
-        write(read().values - key)
+        val current = readForMutation() ?: return
+        write(current.values - key)
     }
 
     override fun hasKey(key: String): Boolean = read().values.containsKey(key)
@@ -160,7 +174,8 @@ private class IosKeychainSettings : Settings {
         value: String,
     ) {
         require(key.isNotBlank()) { "Settings key must not be blank" }
-        write(read().values + (key to value))
+        val current = readForMutation() ?: return
+        write(current.values + (key to value))
     }
 
     private fun readTyped(
@@ -168,23 +183,33 @@ private class IosKeychainSettings : Settings {
         type: String,
     ): String? = read().values[key]?.takeIf { it.startsWith("$type:") }?.removePrefix("$type:")
 
-    private fun read(): KeychainSettingsPayload {
-        val raw = keychainGet()?.trim().orEmpty()
-        return runCatching { json.decodeFromString(KeychainSettingsPayload.serializer(), raw) }
-            .getOrNull()
-            ?.takeIf { it.version == 1 }
-            ?: KeychainSettingsPayload()
-    }
+    private fun read(): KeychainSettingsPayload = readForMutation() ?: KeychainSettingsPayload()
+
+    /** Returns null only when Keychain is unavailable; missing means an empty mutable payload. */
+    private fun readForMutation(): KeychainSettingsPayload? =
+        when (val result = keychainGet()) {
+            KeychainReadResult.Missing -> KeychainSettingsPayload()
+            KeychainReadResult.Unavailable -> null
+            is KeychainReadResult.Found ->
+                runCatching { json.decodeFromString(KeychainSettingsPayload.serializer(), result.value.trim()) }
+                    .getOrNull()
+                    ?.takeIf { it.version == 1 }
+                    ?: KeychainSettingsPayload()
+        }
 
     private fun write(values: Map<String, String>) {
         val encoded = json.encodeToString(KeychainSettingsPayload.serializer(), KeychainSettingsPayload(values = values))
-        check(keychainSet(encoded)) { "Unable to persist secure Supabase session settings" }
+        keychainSet(encoded)
     }
 
     private fun migrateLegacySettings() {
-        if (keychainGet() != null) {
-            purgeLegacySettings()
-            return
+        when (keychainGet()) {
+            is KeychainReadResult.Found -> {
+                purgeLegacySettings()
+                return
+            }
+            KeychainReadResult.Unavailable -> return
+            KeychainReadResult.Missing -> Unit
         }
         // SettingsSessionManager's documented key is `session`; copy every legacy string in its
         // dedicated suite so a future auth helper cannot strand a verifier under a derived key.
@@ -210,73 +235,85 @@ private class IosKeychainSettings : Settings {
     }
 
     private fun keychainSet(value: String): Boolean =
-        memScoped {
-            val account = CFBridgingRetain(SUPABASE_AUTH_KEYCHAIN_ACCOUNT)
-            val service = CFBridgingRetain(SUPABASE_AUTH_KEYCHAIN_SERVICE)
-            val valueData = (value as NSString).dataUsingEncoding(NSUTF8StringEncoding) ?: return false
-            val cfValue = CFBridgingRetain(valueData)
-            try {
-                val base =
-                    cfDictionaryOf(
-                        mapOf(
-                            kSecClass to kSecClassGenericPassword,
-                            kSecAttrService to service,
-                            kSecAttrAccount to account,
-                        ),
-                    )
-                val update = cfDictionaryOf(mapOf(kSecValueData to cfValue))
-                var status = SecItemUpdate(base, update)
-                CFBridgingRelease(update)
-                if (status == errSecItemNotFound) {
-                    val add =
+        runCatching {
+            memScoped {
+                val valueData =
+                    NSString.create(string = value).dataUsingEncoding(NSUTF8StringEncoding)
+                        ?: return@memScoped false
+                val account = CFBridgingRetain(SUPABASE_AUTH_KEYCHAIN_ACCOUNT)
+                val service = CFBridgingRetain(SUPABASE_AUTH_KEYCHAIN_SERVICE)
+                val cfValue = CFBridgingRetain(valueData)
+                try {
+                    val base =
                         cfDictionaryOf(
                             mapOf(
                                 kSecClass to kSecClassGenericPassword,
                                 kSecAttrService to service,
                                 kSecAttrAccount to account,
-                                kSecValueData to cfValue,
-                                kSecAttrAccessible to
-                                    kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
                             ),
                         )
-                    status = SecItemAdd(add, null)
-                    CFBridgingRelease(add)
+                    val update = cfDictionaryOf(mapOf(kSecValueData to cfValue))
+                    var status = SecItemUpdate(base, update)
+                    CFBridgingRelease(update)
+                    if (status == errSecItemNotFound) {
+                        val add =
+                            cfDictionaryOf(
+                                mapOf(
+                                    kSecClass to kSecClassGenericPassword,
+                                    kSecAttrService to service,
+                                    kSecAttrAccount to account,
+                                    kSecValueData to cfValue,
+                                    kSecAttrAccessible to
+                                        kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+                                ),
+                            )
+                        status = SecItemAdd(add, null)
+                        CFBridgingRelease(add)
+                    }
+                    CFBridgingRelease(base)
+                    status == errSecSuccess
+                } finally {
+                    CFBridgingRelease(account)
+                    CFBridgingRelease(service)
+                    CFBridgingRelease(cfValue)
                 }
-                CFBridgingRelease(base)
-                status == errSecSuccess
-            } finally {
-                CFBridgingRelease(account)
-                CFBridgingRelease(service)
-                CFBridgingRelease(cfValue)
             }
-        }
+        }.getOrDefault(false)
 
-    private fun keychainGet(): String? =
-        memScoped {
-            val account = CFBridgingRetain(SUPABASE_AUTH_KEYCHAIN_ACCOUNT)
-            val service = CFBridgingRetain(SUPABASE_AUTH_KEYCHAIN_SERVICE)
-            try {
-                val query =
-                    cfDictionaryOf(
-                        mapOf(
-                            kSecClass to kSecClassGenericPassword,
-                            kSecAttrService to service,
-                            kSecAttrAccount to account,
-                            kSecReturnData to kCFBooleanTrue,
-                            kSecMatchLimit to kSecMatchLimitOne,
-                        ),
-                    )
-                val result = alloc<CFTypeRefVar>()
-                val status = SecItemCopyMatching(query, result.ptr)
-                CFBridgingRelease(query)
-                if (status != errSecSuccess) return null
-                val data = CFBridgingRelease(result.value) as? NSData ?: return null
-                NSString.create(data = data, encoding = NSUTF8StringEncoding)?.toString()
-            } finally {
-                CFBridgingRelease(account)
-                CFBridgingRelease(service)
+    private fun keychainGet(): KeychainReadResult =
+        runCatching {
+            memScoped {
+                val account = CFBridgingRetain(SUPABASE_AUTH_KEYCHAIN_ACCOUNT)
+                val service = CFBridgingRetain(SUPABASE_AUTH_KEYCHAIN_SERVICE)
+                try {
+                    val query =
+                        cfDictionaryOf(
+                            mapOf(
+                                kSecClass to kSecClassGenericPassword,
+                                kSecAttrService to service,
+                                kSecAttrAccount to account,
+                                kSecReturnData to kCFBooleanTrue,
+                                kSecMatchLimit to kSecMatchLimitOne,
+                            ),
+                        )
+                    val result = alloc<CFTypeRefVar>()
+                    val status = SecItemCopyMatching(query, result.ptr)
+                    CFBridgingRelease(query)
+                    if (status == errSecItemNotFound) return@memScoped KeychainReadResult.Missing
+                    if (status != errSecSuccess) return@memScoped KeychainReadResult.Unavailable
+                    val data =
+                        CFBridgingRelease(result.value) as? NSData
+                            ?: return@memScoped KeychainReadResult.Unavailable
+                    val value =
+                        NSString.create(data = data, encoding = NSUTF8StringEncoding)?.toString()
+                            ?: return@memScoped KeychainReadResult.Unavailable
+                    KeychainReadResult.Found(value)
+                } finally {
+                    CFBridgingRelease(account)
+                    CFBridgingRelease(service)
+                }
             }
-        }
+        }.getOrDefault(KeychainReadResult.Unavailable)
 
     private fun MemScope.cfDictionaryOf(map: Map<CFStringRef?, CFTypeRef?>): CFDictionaryRef? {
         val keys = allocArrayOf(*map.keys.toTypedArray())

@@ -93,6 +93,7 @@ class IosTokenStorage : TokenStorage {
             ignoreUnknownKeys = true
             encodeDefaults = true
         }
+    private var legacyCredentialStoragePurged = false
 
     @Serializable
     private data class SecureSession(
@@ -122,8 +123,7 @@ class IosTokenStorage : TokenStorage {
         if (writeSecureSession(session)) {
             purgeLegacyCredentialStorage()
         } else {
-            // A failed secure write must never leave an old credential available for fallback.
-            deleteKeychainItem(KEY_SECURE_SESSION_V2)
+            // Preserve any previously valid secure item when replacing it fails.
             purgeLegacyCredentialStorage()
             println("IosTokenStorage: Keychain session write failed; credentials were not persisted")
         }
@@ -422,11 +422,14 @@ class IosTokenStorage : TokenStorage {
 
     /** Removes every historical plaintext/per-field credential copy after a verified Keychain write. */
     private fun purgeLegacyCredentialStorage() {
-        listOf(KEY_JWT, KEY_REFRESH_TOKEN, KEY_EXPIRES_AT, KEY_TOKEN_TYPE, KEY_USER_ID).forEach {
-            userDefaults.removeObjectForKey(it)
-            deleteKeychainItem(it)
-        }
+        if (legacyCredentialStoragePurged) return
+        val purgeSucceeded =
+            listOf(KEY_JWT, KEY_REFRESH_TOKEN, KEY_EXPIRES_AT, KEY_TOKEN_TYPE, KEY_USER_ID).all {
+                userDefaults.removeObjectForKey(it)
+                deleteKeychainItem(it)
+            }
         userDefaults.synchronize()
+        if (purgeSucceeded) legacyCredentialStoragePurged = true
     }
 
     // ============ Keychain Helpers ============
@@ -441,8 +444,7 @@ class IosTokenStorage : TokenStorage {
     ): Boolean =
         memScoped {
             if (value.isEmpty()) return false
-            @Suppress("CAST_NEVER_SUCCEEDS")
-            val nsString = value as NSString
+            val nsString = NSString.create(string = value)
             val valueData =
                 nsString.dataUsingEncoding(NSUTF8StringEncoding) ?: run {
                     println("IosTokenStorage: Failed to encode value for key '$key'")

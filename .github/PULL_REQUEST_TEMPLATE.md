@@ -6,15 +6,17 @@
 
 Attach a screen recording **or** screenshots covering **every tab and its nested screens**, showing real content (not empty black bodies). CI green is not sufficient.
 
-- [ ] Home (pile or list with visible cards)
-- [ ] Add Click (+ My QR or Tap if opened)
-- [ ] Clicks (+ an open chat if reachable)
-- [ ] Map (+ at least one uploaded-photo beacon pin, clipped to the marker shape)
-- [ ] Settings (+ one sub-screen)
+- [ ] iOS — Home (pile or list with visible cards)
+- [ ] iOS — Add Click (+ My QR or Tap if opened)
+- [ ] iOS — Clicks, including an open chat if reachable
+- [ ] iOS — Map, including at least one uploaded-photo beacon pin clipped to the marker shape
+- [ ] iOS — Settings, including a nested sub-screen
+- [ ] iOS — UIKit `UITabBar` and `UINavigationBar` are siblings of `ComposeUIViewController.view`
+- [ ] iOS — No full-screen `UIKitViewController` / `UIKitView` overlay is used for native chrome, and touches reach Compose content
 
 ## Native chrome (iOS)
 
-Host-view `UITabBar` + `UINavigationBar` siblings on `ComposeUIViewController.view`. **Never** `UIKitViewController(fillMaxSize)` / `UIKitView` overlays for chrome — that paints an opaque full-screen layer while touches pass through.
+Host-view `UITabBar` + `UINavigationBar` siblings on `ComposeUIViewController.view`. **Never** `UIKitViewController(fillMaxSize)` / `UIKitView` overlays for chrome — that paints an opaque full-screen layer while touches pass through. The iOS evidence above must show both the sibling relationship and the absence of an overlay.
 
 Future native-header / Liquid Glass work stays on a branch (or behind a flag) until the visual-proof checklist above is attached.
 

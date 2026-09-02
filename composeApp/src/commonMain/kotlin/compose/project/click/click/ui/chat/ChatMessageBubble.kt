@@ -73,6 +73,29 @@ import compose.project.click.click.viewmodel.SecureChatMediaLoadState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
+internal data class ChatAudioPlaybackSource(
+    /** A public/legacy media URL. Private hub object paths must never be used here. */
+    val mediaUrl: String,
+    /** Decrypted local file path, when available. */
+    val localFilePath: String?,
+)
+
+internal fun chatAudioPlaybackSource(
+    mediaUrl: String?,
+    hubMediaPath: String?,
+    decryptedLocalPath: String?,
+): ChatAudioPlaybackSource? {
+    val hasReference =
+        !mediaUrl.isNullOrBlank() || !hubMediaPath.isNullOrBlank()
+    if (!hasReference) return null
+    return ChatAudioPlaybackSource(
+        // A hub path is only a gatekeeper reference; ChatAudioBubble must receive an empty
+        // network URL and wait for the decrypted local file instead.
+        mediaUrl = mediaUrl?.trim().orEmpty(),
+        localFilePath = decryptedLocalPath?.trim()?.takeIf { it.isNotEmpty() },
+    )
+}
+
 @Composable
 fun ChatMessageBubble(
     messageWithUser: MessageWithUser,
@@ -147,6 +170,14 @@ fun ChatMessageBubble(
         }
     }
     val secureSt = secureMediaState ?: secureStFromHost
+    val audioPlaybackSource =
+        remember(mediaUrl, hubMediaPath, secureSt?.audioLocalPath) {
+            chatAudioPlaybackSource(
+                mediaUrl = mediaUrl,
+                hubMediaPath = hubMediaPath,
+                decryptedLocalPath = secureSt?.audioLocalPath,
+            )
+        }
     val isImageMessage =
         mt == ChatMessageType.IMAGE &&
             (!mediaReference.isNullOrBlank() || secureSt?.imageBytes != null)
@@ -523,14 +554,14 @@ fun ChatMessageBubble(
                                             }
                                         }
                                         when {
-                                            mt == ChatMessageType.AUDIO && mediaUrl != null -> {
+                                            mt == ChatMessageType.AUDIO && audioPlaybackSource != null -> {
                                                 ChatAudioBubble(
-                                                    mediaUrl = mediaUrl,
+                                                    mediaUrl = audioPlaybackSource.mediaUrl,
                                                     durationSeconds = audioDurSec,
                                                     contentColor = Color.White,
                                                     accentColor = Color.White,
                                                     isEncrypted = encryptedMedia,
-                                                    localFilePathForPlayback = secureSt?.audioLocalPath,
+                                                    localFilePathForPlayback = audioPlaybackSource.localFilePath,
                                                     secureLoading = encryptedMedia && secureSt?.loading == true,
                                                     secureError = if (encryptedMedia) secureSt?.error else null,
                                                     onRequestDecrypt = onRequestSecureAudio,
@@ -701,14 +732,14 @@ fun ChatMessageBubble(
                                         val onBody = MaterialTheme.colorScheme.onSurface
                                         val linkC = MaterialTheme.colorScheme.primary
                                         when {
-                                            mt == ChatMessageType.AUDIO && mediaUrl != null -> {
+                                            mt == ChatMessageType.AUDIO && audioPlaybackSource != null -> {
                                                 ChatAudioBubble(
-                                                    mediaUrl = mediaUrl,
+                                                    mediaUrl = audioPlaybackSource.mediaUrl,
                                                     durationSeconds = audioDurSec,
                                                     contentColor = onBody,
                                                     accentColor = linkC,
                                                     isEncrypted = encryptedMedia,
-                                                    localFilePathForPlayback = secureSt?.audioLocalPath,
+                                                    localFilePathForPlayback = audioPlaybackSource.localFilePath,
                                                     secureLoading = encryptedMedia && secureSt?.loading == true,
                                                     secureError = if (encryptedMedia) secureSt?.error else null,
                                                     onRequestDecrypt = onRequestSecureAudio,

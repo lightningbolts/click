@@ -127,6 +127,8 @@ internal data class ChatMediaUploadUrlResponse(
     val path: String? = null,
 )
 
+internal fun ChatMediaUploadUrlResponse.trimmedUrlOrNull(): String? = url?.trim()?.takeIf { it.isNotEmpty() }
+
 @Serializable
 internal data class ChatMediaUploadJsonBody(
     @SerialName("chat_id") val chatId: String,

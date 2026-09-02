@@ -138,12 +138,7 @@ internal suspend fun ChatApiClient.resolveHubMediaUrlImpl(
                 parameter("path", path)
             }
         if (response.status.value in 200..299) {
-            val url =
-                response
-                    .body<ChatMediaUploadPathResponse>()
-                    .url
-                    ?.trim()
-                    .orEmpty()
+            val url = response.body<ChatMediaUploadUrlResponse>().trimmedUrlOrNull().orEmpty()
             if (url.isNotEmpty()) Result.success(url) else Result.failure(Exception("Hub media response missing URL"))
         } else {
             Result.failure(Exception("Failed to access hub media: ${response.status}"))

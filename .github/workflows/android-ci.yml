@@ -25,6 +25,7 @@ jobs:
         with:
           # Spotless ratchetFrom("origin/main") needs full history / base ref.
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Require click-web read token
         env:
@@ -44,6 +45,7 @@ jobs:
           path: _click-web
           fetch-depth: 0
           token: ${{ secrets.CLICK_WEB_READ_TOKEN }}
+          persist-credentials: false
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4

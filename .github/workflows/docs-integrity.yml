@@ -19,6 +19,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Require click-web read token
         env:
@@ -37,6 +38,7 @@ jobs:
           path: _click-web
           fetch-depth: 0
           token: ${{ secrets.CLICK_WEB_READ_TOKEN }}
+          persist-credentials: false
 
       - name: Verify source-of-truth migration delegate
         run: |
@@ -73,8 +75,8 @@ jobs:
           const root = process.cwd();
           const failures = [];
           const forbiddenClaims = [
-            /messages, photos, and files are encrypted on your device.*we (?:can't|cannot) read them/i,
-            /end-to-end encrypted.*only you and your connection can read them/i,
+            /messages, photos, and files are encrypted on your device[\s\S]*we (?:can't|cannot) read them/i,
+            /end-to-end encrypted[\s\S]*only you and your connection can read them/i,
           ];
 
           for (const file of changed) {

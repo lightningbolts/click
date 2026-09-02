@@ -124,9 +124,9 @@ class AuthViewModel(
             // Offline-first: admit immediately from local cache; never block UI on network.
             val cachedBoot = AuthBootFastPath.resolveLoggedInState(tokenStorage)
             if (cachedBoot != null) {
+                AppDataManager.primeOfflineBootCache()
                 isAuthenticated = true
                 authState = cachedBoot
-                AppDataManager.primeOfflineBootCache()
                 // Prefer live GoTrue session. Blind TokenStorage import overwrites a good refresh.
                 runCatching { SupabaseConfig.importStoredSessionIfSdkEmpty(tokenStorage) }
                 ensureSupabaseObserversStarted()
@@ -147,6 +147,7 @@ class AuthViewModel(
 
                 userResult.fold(
                     onSuccess = { user ->
+                        AppDataManager.primeOfflineBootCache()
                         isAuthenticated = true
                         authState =
                             AuthState.Success(
@@ -154,27 +155,32 @@ class AuthViewModel(
                                 email = user.email ?: "",
                                 name = user.displayNameFromMetadata(),
                             )
-                        AppDataManager.primeOfflineBootCache()
                         launch(Dispatchers.IO) { refreshSessionAndProfileInBackground() }
                     },
                     onFailure = { error ->
-                        val restoredOffline = restoreOfflineSessionIfPossible(error)
+                        val restoredOffline =
+                            restoreOfflineSessionIfPossible(
+                                error,
+                                primeCacheBeforeAuthState = true,
+                            )
                         if (!restoredOffline) {
                             isAuthenticated = false
                             authState = AuthState.Idle
                         } else {
-                            AppDataManager.primeOfflineBootCache()
                             launch(Dispatchers.IO) { refreshSessionAndProfileInBackground() }
                         }
                     },
                 )
             } catch (e: Exception) {
-                val restoredOffline = restoreOfflineSessionIfPossible(e)
+                val restoredOffline =
+                    restoreOfflineSessionIfPossible(
+                        e,
+                        primeCacheBeforeAuthState = true,
+                    )
                 if (!restoredOffline) {
                     isAuthenticated = false
                     authState = AuthState.Idle
                 } else {
-                    AppDataManager.primeOfflineBootCache()
                     launch(Dispatchers.IO) { refreshSessionAndProfileInBackground() }
                 }
             }
@@ -467,11 +473,17 @@ class AuthViewModel(
         }
     }
 
-    private suspend fun restoreOfflineSessionIfPossible(error: Throwable?): Boolean {
+    private suspend fun restoreOfflineSessionIfPossible(
+        error: Throwable?,
+        primeCacheBeforeAuthState: Boolean = false,
+    ): Boolean {
         if (!isLikelyNetworkFailure(error)) return false
 
         val cachedBoot = AuthBootFastPath.resolveLoggedInState(tokenStorage) ?: return false
 
+        if (primeCacheBeforeAuthState) {
+            AppDataManager.primeOfflineBootCache()
+        }
         isAuthenticated = true
         authState = cachedBoot
         println("AuthViewModel: Using cached offline auth state from persisted tokens")

@@ -56,7 +56,7 @@ There is **no “hard lock”** or forced expiry that deletes relationships by t
 ## Features (app scope)
 
 - **Tri-Factor proximity mesh + QR** — In-person discovery and connection via **BLE + ultrasonic + progressive GPS**; **QR** remains a fallback path that uses HTTP against the configured web base URL (see `QRModels.kt` / `QrCodeView.kt`). Connection metadata can record `connectionMethod` (e.g. `"qr"`, `"tri_factor"`).  
-- **Multi-Tap verified cliques** — Simultaneous 3+ person handshakes validated server-side; E2EE group chat on success.  
+- **Multi-Tap verified cliques** — Simultaneous 3+ person handshakes validated server-side; client-side encrypted group chat on success.
 - **Real-time chat** — Supabase **Realtime** channels, `SupabaseChatRepository` / `ChatViewModel`, typing and presence-oriented state, push hooks for background delivery (Edge Function + FCM/APNs). - **Presence** — Realtime subscriptions in home/chat/map-related ViewModels for online status and activity signals.  
 - **Maps** — Map screens and Realtime channels (e.g. connection discovery) backed by Supabase-backed repositories.  
 - **Memory Capsules (opt-in)** — `rememberAmbientNoiseMonitor`, `rememberBarometricHeightMonitor`, and subjective tagging flows when the user opts in (settings + connection sheets).  
@@ -215,7 +215,7 @@ Mobile does **not** host the B2B insights dashboard—that is web-only (`click-w
 
 - Consumer dashboard parity: `click-web/lib/dashboard/README.md`
 - Connection / QR / proximity: `click-web/lib/connections/README.md`
-- Payload contracts (push, E2EE): `click-web/AI.md` §2, `click-web/lib/chat/README.md`
+- Payload contracts (push, encrypted chat): `click-web/AI.md` §2, `click-web/lib/chat/README.md`
 - Insights testing playbook: `click-web/lib/insights/README.md` § Real-world testing
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/lightningbolts/click)

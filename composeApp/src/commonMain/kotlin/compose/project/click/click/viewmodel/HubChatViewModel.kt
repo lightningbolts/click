@@ -164,6 +164,25 @@ class HubChatViewModel(
     internal var participantDenied: Boolean = false
 
     init {
+        viewModelScope.launch {
+            AppDataManager.awaitHubAccessStateRestored()
+            initializeHubIfAllowed()
+        }
+        viewModelScope.launch {
+            hubAccessRevocations.collect { revokedHubId ->
+                if (revokedHubId == hubId) {
+                    handleHubAccessRevoked()
+                }
+            }
+        }
+    }
+
+    private fun initializeHubIfAllowed() {
+        if (AppDataManager.isHubAccessRevoked(hubId)) {
+            handleHubAccessRevoked()
+            return
+        }
+
         hydrateFromDiskCache()
         if (loadHubDetails) {
             viewModelScope.launch(Dispatchers.Default) {
@@ -240,15 +259,6 @@ class HubChatViewModel(
             launchRealtimeSession()
         }
         viewModelScope.launch {
-            hubAccessRevocations.collect { revokedHubId ->
-                if (revokedHubId == hubId) {
-                    participantDenied = true
-                    clearLocalHubState(clearDiskCache = true)
-                    navigationEventChannel.send(HubChatNavigationEvent.PopBackToConnections)
-                }
-            }
-        }
-        viewModelScope.launch {
             runCatching { hubLocationResolver() }.getOrNull()?.let { loc ->
                 if (loc.latitude.isFinite() && loc.longitude.isFinite()) {
                     cachedGatekeeperLocation = loc
@@ -258,12 +268,24 @@ class HubChatViewModel(
         }
     }
 
+    private fun handleHubAccessRevoked() {
+        if (participantDenied) return
+        participantDenied = true
+        clearLocalHubState(clearDiskCache = true)
+        _realtimeState.value = HubRealtimeState.Error("You no longer have access to this hub.")
+        navigationEventChannel.trySend(HubChatNavigationEvent.PopBackToConnections)
+    }
+
     fun updateDraft(text: String) {
         _draft.value = text.take(HUB_CHAT_DRAFT_MAX_LENGTH)
     }
 
     fun retryRealtime() {
         if (!startRealtime) return
+        if (AppDataManager.isHubAccessRevoked(hubId)) {
+            handleHubAccessRevoked()
+            return
+        }
         launchRealtimeSession()
     }
 

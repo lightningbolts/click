@@ -113,6 +113,7 @@ internal suspend fun AppDataManager.clearDataImpl() {
     _connectedUsers.value = emptyMap()
     _cachedChatThreads.value = emptyMap()
     _cachedHubThreads.value = emptyMap()
+    _revokedHubIds.value = emptySet()
     _inboxFeedChats.value = emptyList()
     groupInboxHydratedThisSession = false
     supabaseRepository.clearCachedUserPublicProfiles()

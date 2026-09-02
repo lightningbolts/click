@@ -44,8 +44,11 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -67,6 +70,23 @@ data class ActiveHubEntry(
 )
 
 fun ActiveHubEntry.opensAsEventHub(): Boolean = isEventHub || category.equals("event", ignoreCase = true)
+
+/** Keep replayable hub revocations well above the historical 16-event flow buffer. */
+internal const val MAX_PERSISTED_HUB_ACCESS_REVOCATIONS = 256
+
+internal fun boundedHubAccessRevocationIds(ids: Collection<String>): Set<String> {
+    val bounded = LinkedHashSet<String>(minOf(ids.size, MAX_PERSISTED_HUB_ACCESS_REVOCATIONS))
+    ids.forEach { rawId ->
+        val hubId = rawId.trim()
+        if (hubId.isEmpty()) return@forEach
+        bounded.remove(hubId)
+        bounded.add(hubId)
+        if (bounded.size > MAX_PERSISTED_HUB_ACCESS_REVOCATIONS) {
+            bounded.remove(bounded.first())
+        }
+    }
+    return bounded
+}
 
 /**
  * Singleton app state manager that loads data once at app startup.
@@ -92,6 +112,18 @@ object AppDataManager {
 
     /** Single shared instance; lazy so JVM/Robolectric tests can reference [AppDataManager] before [initTokenStorage]. */
     internal val tokenStorage by lazy { createTokenStorage() }
+
+    /** Production bootstrap flips this false before disk restore; direct VM tests remain ready. */
+    internal val _hubAccessStateRestored = MutableStateFlow(true)
+    val hubAccessStateRestored: StateFlow<Boolean> = _hubAccessStateRestored.asStateFlow()
+    internal val snapshotRestoreMutex = Mutex()
+
+    internal suspend fun awaitHubAccessStateRestored() {
+        if (!_hubAccessStateRestored.value) {
+            _hubAccessStateRestored.filter { it }.first()
+        }
+    }
+
     internal val authRepository by lazy { AuthRepository(tokenStorage = tokenStorage) }
     internal val supabaseRepository by lazy { SupabaseRepository() }
     internal val chatRepository by lazy { SupabaseChatRepository(tokenStorage = tokenStorage) }
@@ -378,14 +410,17 @@ object AppDataManager {
     // ── Active Community Hubs (persisted across cold starts) ───
     internal val _activeHubs = MutableStateFlow<List<ActiveHubEntry>>(emptyList())
     val activeHubs: StateFlow<List<ActiveHubEntry>> = _activeHubs.asStateFlow()
+    internal val _revokedHubIds = MutableStateFlow<Set<String>>(emptySet())
+    val revokedHubIds: StateFlow<Set<String>> = _revokedHubIds.asStateFlow()
     private val _hubAccessRevocations =
         MutableSharedFlow<String>(
-            extraBufferCapacity = 16,
+            extraBufferCapacity = MAX_PERSISTED_HUB_ACCESS_REVOCATIONS,
             onBufferOverflow = BufferOverflow.DROP_OLDEST,
         )
     val hubAccessRevocations: SharedFlow<String> = _hubAccessRevocations.asSharedFlow()
 
     fun registerActiveHub(entry: ActiveHubEntry) {
+        clearHubAccessRevocation(entry.hubId)
         _activeHubs.value =
             (_activeHubs.value.filterNot { it.hubId == entry.hubId } + entry)
                 .sortedByDescending { it.joinedAtMs }
@@ -404,8 +439,25 @@ object AppDataManager {
     fun revokeHubAccess(hubId: String) {
         val trimmed = hubId.trim()
         if (trimmed.isEmpty()) return
+        _revokedHubIds.value = boundedHubAccessRevocationIds(_revokedHubIds.value + trimmed)
         clearHubAccessState(trimmed)
+        // Record the durable state before publishing the one-shot event. A new VM can therefore
+        // reject a stale cached hub even if it starts after this flow emission was missed.
+        scope.launch { persistSnapshot() }
         _hubAccessRevocations.tryEmit(trimmed)
+    }
+
+    /** Successful hub verification/join is the only local reauthorization signal we have. */
+    private fun clearHubAccessRevocation(hubId: String) {
+        val trimmed = hubId.trim()
+        if (trimmed.isEmpty() || trimmed !in _revokedHubIds.value) return
+        _revokedHubIds.value = _revokedHubIds.value - trimmed
+        scope.launch { persistSnapshot() }
+    }
+
+    internal fun isHubAccessRevoked(hubId: String): Boolean {
+        val trimmed = hubId.trim()
+        return trimmed.isNotEmpty() && trimmed in _revokedHubIds.value
     }
 
     /** Clears cached state without rebroadcasting an already-handled revocation. */

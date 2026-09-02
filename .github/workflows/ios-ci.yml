@@ -27,6 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Require click-web read token
         env:
@@ -45,6 +46,7 @@ jobs:
           path: _click-web
           fetch-depth: 0
           token: ${{ secrets.CLICK_WEB_READ_TOKEN }}
+          persist-credentials: false
 
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
