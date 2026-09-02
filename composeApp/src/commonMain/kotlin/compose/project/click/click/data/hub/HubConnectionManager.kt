@@ -26,7 +26,9 @@ sealed class HubVerifyResult {
         val creatorId: String? = null,
     ) : HubVerifyResult()
 
-    data class Failure(val userMessage: String) : HubVerifyResult()
+    data class Failure(
+        val userMessage: String,
+    ) : HubVerifyResult()
 }
 
 @Serializable
@@ -59,7 +61,6 @@ private data class HubJoinRequestBody(
  * Calls the Supabase Edge Function [verify-hub-proximity] with the user's coordinates.
  */
 object HubConnectionManager {
-
     private val json = Json { ignoreUnknownKeys = true }
 
     suspend fun verifyProximity(
@@ -71,24 +72,26 @@ object HubConnectionManager {
     ): HubVerifyResult {
         val url = SupabaseConfig.functionUrl("verify-hub-proximity")
         return try {
-            val response = httpClient.post(url) {
-                contentType(ContentType.Application.Json)
-                headers {
-                    append("apikey", SupabaseConfig.supabaseAnonApiKey)
-                    append(HttpHeaders.Authorization, "Bearer $bearerJwt")
+            val response =
+                httpClient.post(url) {
+                    contentType(ContentType.Application.Json)
+                    headers {
+                        append("apikey", SupabaseConfig.supabaseAnonApiKey)
+                        append(HttpHeaders.Authorization, "Bearer $bearerJwt")
+                    }
+                    setBody(
+                        HubVerifyRequestBody(
+                            hubId = hubId,
+                            userLat = userLat,
+                            userLong = userLong,
+                        ),
+                    )
                 }
-                setBody(
-                    HubVerifyRequestBody(
-                        hubId = hubId,
-                        userLat = userLat,
-                        userLong = userLong,
-                    ),
-                )
-            }
             if (response.status.isSuccess()) {
                 val text = response.bodyAsText()
-                val dto = runCatching { json.decodeFromString(HubVerifyOkResponse.serializer(), text) }
-                    .getOrNull()
+                val dto =
+                    runCatching { json.decodeFromString(HubVerifyOkResponse.serializer(), text) }
+                        .getOrNull()
                 if (dto?.success == true && !dto.hubId.isNullOrBlank() && !dto.channel.isNullOrBlank()) {
                     HubVerifyResult.Success(
                         hubId = dto.hubId,
@@ -101,9 +104,10 @@ object HubConnectionManager {
                 }
             } else {
                 val errText = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
-                val errMsg = runCatching {
-                    json.decodeFromString(HubVerifyErrBody.serializer(), errText).error
-                }.getOrNull()
+                val errMsg =
+                    runCatching {
+                        json.decodeFromString(HubVerifyErrBody.serializer(), errText).error
+                    }.getOrNull()
                 when (response.status) {
                     HttpStatusCode.Forbidden ->
                         HubVerifyResult.Failure(

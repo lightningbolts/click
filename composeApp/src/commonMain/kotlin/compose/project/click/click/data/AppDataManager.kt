@@ -65,8 +65,7 @@ data class ActiveHubEntry(
     val isEventHub: Boolean = false,
 )
 
-fun ActiveHubEntry.opensAsEventHub(): Boolean =
-    isEventHub || category.equals("event", ignoreCase = true)
+fun ActiveHubEntry.opensAsEventHub(): Boolean = isEventHub || category.equals("event", ignoreCase = true)
 
 /**
  * Singleton app state manager that loads data once at app startup.

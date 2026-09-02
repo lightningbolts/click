@@ -254,6 +254,7 @@ internal fun MapViewModel.applyBeaconHubId(
     val id = beaconId.trim()
     val hid = hubId.trim()
     if (id.isEmpty() || hid.isEmpty()) return
+
     fun MapBeacon.withHub(): MapBeacon = if (this.hubId == hid) this else copy(hubId = hid)
     val base =
         _mapBeacons.value.firstOrNull { it.id == id }

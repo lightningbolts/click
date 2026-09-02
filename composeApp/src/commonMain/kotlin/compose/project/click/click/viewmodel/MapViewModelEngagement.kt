@@ -393,7 +393,10 @@ internal fun MapViewModel.loadBeaconEngagementImpl(
                             )
                     )
                 }
-                payload.hubId?.trim()?.takeIf { it.isNotEmpty() }?.let { applyBeaconHubId(id, it) }
+                payload.hubId
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { applyBeaconHubId(id, it) }
             },
             onFailure = { /* keep disk cache */ },
         )
@@ -432,7 +435,10 @@ internal fun MapViewModel.hydrateEventEngagementFromServerImpl() {
                                 )
                         )
                     }
-                    payload.hubId?.trim()?.takeIf { it.isNotEmpty() }?.let { applyBeaconHubId(id, it) }
+                    payload.hubId
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() }
+                        ?.let { applyBeaconHubId(id, it) }
                 },
                 onFailure = { /* ignore per-beacon */ },
             )
@@ -694,7 +700,10 @@ internal fun MapViewModel.toggleBeaconCheckInImpl(beaconId: String) {
                         )
                     }
                     _beaconCheckInPendingIds.update { it - id }
-                    payload.hubId?.trim()?.takeIf { it.isNotEmpty() }?.let { applyBeaconHubId(id, it) }
+                    payload.hubId
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() }
+                        ?.let { applyBeaconHubId(id, it) }
                     invalidateBeaconAttendeeDirectory(id)
                     if (payload.checkedIn || _beaconRsvpById.value[id]?.currentUserSignedUp == true) {
                         loadBeaconAttendeeDirectory(id, forceRefresh = true)

@@ -32,8 +32,7 @@ fun evaluateEventHubAccess(
     return true
 }
 
-fun isEventLinkedHubCategory(category: String?): Boolean =
-    category?.trim()?.equals("event", ignoreCase = true) == true
+fun isEventLinkedHubCategory(category: String?): Boolean = category?.trim()?.equals("event", ignoreCase = true) == true
 
 fun canOpenEventHub(
     hubId: String?,
