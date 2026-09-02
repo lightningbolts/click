@@ -151,6 +151,7 @@ internal fun MapViewModel.mergeEngagementFromServer(
     checkedInAt: String?,
     checkInCount: Int,
     preferServer: Boolean = false,
+    hubId: String? = null,
 ): BeaconEngagementCacheEntry {
     // On force refresh, trust the server so a device-local early check-in (or poisoned
     // far-away optimistic state) cannot override a real server row across kills/devices.
@@ -170,6 +171,7 @@ internal fun MapViewModel.mergeEngagementFromServer(
         checkedInAt = checkedInAt ?: existing?.checkedInAt,
         checkInCount = checkInCount,
         localEarlyCheckIn = keepEarly,
+        hubId = hubId?.trim()?.takeIf { it.isNotEmpty() } ?: existing?.hubId,
     )
 }
 
@@ -387,9 +389,14 @@ internal fun MapViewModel.loadBeaconEngagementImpl(
                                 checkedInAt = payload.checkedInAt,
                                 checkInCount = payload.checkInCount,
                                 preferServer = forceRefresh,
+                                hubId = payload.hubId,
                             )
                     )
                 }
+                payload.hubId
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { applyBeaconHubId(id, it) }
             },
             onFailure = { /* keep disk cache */ },
         )
@@ -424,9 +431,14 @@ internal fun MapViewModel.hydrateEventEngagementFromServerImpl() {
                                     checkedInAt = payload.checkedInAt,
                                     checkInCount = payload.checkInCount,
                                     preferServer = true,
+                                    hubId = payload.hubId,
                                 )
                         )
                     }
+                    payload.hubId
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() }
+                        ?.let { applyBeaconHubId(id, it) }
                 },
                 onFailure = { /* ignore per-beacon */ },
             )
@@ -681,10 +693,17 @@ internal fun MapViewModel.toggleBeaconCheckInImpl(beaconId: String) {
                                     checkedInAt = payload.checkedInAt,
                                     checkInCount = payload.checkInCount,
                                     localEarlyCheckIn = false,
+                                    hubId =
+                                        payload.hubId?.trim()?.takeIf { it.isNotEmpty() }
+                                            ?: current[id]?.hubId,
                                 )
                         )
                     }
                     _beaconCheckInPendingIds.update { it - id }
+                    payload.hubId
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() }
+                        ?.let { applyBeaconHubId(id, it) }
                     invalidateBeaconAttendeeDirectory(id)
                     if (payload.checkedIn || _beaconRsvpById.value[id]?.currentUserSignedUp == true) {
                         loadBeaconAttendeeDirectory(id, forceRefresh = true)

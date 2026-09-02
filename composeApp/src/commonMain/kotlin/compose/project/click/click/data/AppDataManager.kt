@@ -62,7 +62,10 @@ data class ActiveHubEntry(
     val joinedAtMs: Long = 0L,
     val category: String = "general",
     val creatorId: String? = null,
+    val isEventHub: Boolean = false,
 )
+
+fun ActiveHubEntry.opensAsEventHub(): Boolean = isEventHub || category.equals("event", ignoreCase = true)
 
 /**
  * Singleton app state manager that loads data once at app startup.
@@ -404,18 +407,25 @@ object AppDataManager {
         name: String,
         category: String,
         creatorId: String? = null,
+        isEventHub: Boolean? = null,
     ) {
         val trimmedId = hubId.trim()
         if (trimmedId.isEmpty()) return
+        val nextCategory = category.trim().ifBlank { null }
         _activeHubs.value =
             _activeHubs.value.map { entry ->
                 if (entry.hubId != trimmedId) {
                     entry
                 } else {
+                    val resolvedCategory = nextCategory ?: entry.category
                     entry.copy(
                         name = name.trim().ifBlank { entry.name },
-                        category = category.trim().ifBlank { entry.category },
+                        category = resolvedCategory,
                         creatorId = creatorId ?: entry.creatorId,
+                        isEventHub =
+                            isEventHub
+                                ?: entry.isEventHub ||
+                                resolvedCategory.equals("event", ignoreCase = true),
                     )
                 }
             }

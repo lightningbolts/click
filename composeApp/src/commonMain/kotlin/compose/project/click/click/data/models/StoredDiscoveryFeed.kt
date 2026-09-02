@@ -37,6 +37,7 @@ data class StoredMapBeacon(
     /** Event venue labels — previously dropped on disk, delaying address text after cold start. */
     val locationName: String? = null,
     val formattedAddress: String? = null,
+    val hubId: String? = null,
 )
 
 @Serializable
@@ -76,6 +77,7 @@ fun MapBeacon.toStoredMapBeacon(): StoredMapBeacon {
         originalUrl = metadata.originalUrl,
         locationName = metadata.locationName,
         formattedAddress = metadata.formattedAddress,
+        hubId = hubId,
     )
 }
 
@@ -122,6 +124,7 @@ fun StoredMapBeacon.toMapBeacon(): MapBeacon {
         showCreatorName = showCreatorName,
         creatorDisplayName = creatorDisplayName,
         visibilityAudience = BeaconVisibilityAudience.fromRaw(visibilityAudience),
+        hubId = hubId,
     )
 }
 
@@ -143,7 +146,10 @@ private fun storedEventScheduleRaw(
         listOf(trackName, artistName, previewUrl, albumArtUrl, musicUrl, originalUrl)
             .any { !it.isNullOrBlank() }
     val hasVenue = !locationName.isNullOrBlank() || !formattedAddress.isNullOrBlank()
-    if (title == null && description == null && !hasSoundtrack && !hasVenue &&
+    if (title == null &&
+        description == null &&
+        !hasSoundtrack &&
+        !hasVenue &&
         (eventStartAtEpochMs == null || eventEndAtEpochMs == null)
     ) {
         return null
@@ -162,7 +168,8 @@ private fun storedEventScheduleRaw(
         originalUrl?.takeIf { it.isNotBlank() }?.let { put("original_url", JsonPrimitive(it)) }
         locationName?.takeIf { it.isNotBlank() }?.let { put("location_name", JsonPrimitive(it)) }
         formattedAddress?.takeIf { it.isNotBlank() }?.let { put("formatted_address", JsonPrimitive(it)) }
-        if (eventStartAtEpochMs != null && eventEndAtEpochMs != null &&
+        if (eventStartAtEpochMs != null &&
+            eventEndAtEpochMs != null &&
             eventEndAtEpochMs > eventStartAtEpochMs
         ) {
             put(
@@ -244,6 +251,7 @@ internal fun MapBeacon.withPreservedEventScheduleFrom(existing: MapBeacon?): Map
             } else {
                 visibilityAudience
             },
+        hubId = hubId ?: existing.hubId,
     )
 }
 

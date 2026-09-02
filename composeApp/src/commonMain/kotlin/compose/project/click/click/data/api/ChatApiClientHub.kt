@@ -59,6 +59,8 @@ internal suspend fun ChatApiClient.sendHubMessageImpl(
                     errorBody.contains("HUB_EXPIRED") ||
                         errorBody.contains("Hub expired", ignoreCase = true) ||
                         response.status.value == 410 -> "HUB_EXPIRED"
+                    errorBody.contains("EVENT_HUB_ACCESS_DENIED") ->
+                        "Check in to this event to join the hub."
                     else -> "Failed to send hub message: ${response.status}"
                 }
             Result.failure(Exception(message))
@@ -109,6 +111,8 @@ internal suspend fun ChatApiClient.uploadHubMediaImpl(
                     errorBody.contains("HUB_EXPIRED") ||
                         errorBody.contains("Hub expired", ignoreCase = true) ||
                         response.status.value == 410 -> "HUB_EXPIRED"
+                    errorBody.contains("EVENT_HUB_ACCESS_DENIED") ->
+                        "Check in to this event to join the hub."
                     else -> "Failed to upload hub media: ${response.status}"
                 }
             Result.failure(Exception(message))

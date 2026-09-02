@@ -22,6 +22,7 @@ internal data class HubDetailsRow(
     val name: String? = null,
     val category: String? = null,
     @SerialName("creator_id") val creatorId: String,
+    @SerialName("event_beacon_id") val eventBeaconId: String? = null,
 )
 
 data class HubDetailsState(

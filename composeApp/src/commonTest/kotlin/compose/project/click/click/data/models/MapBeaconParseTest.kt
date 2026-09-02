@@ -6,6 +6,7 @@ import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class MapBeaconParseTest {
@@ -73,6 +74,66 @@ class MapBeaconParseTest {
         assertEquals(parseEpochMs("2026-07-22 16:00:00+00"), schedule.startEpochMs)
         assertEquals(parseEpochMs("2026-07-22 23:00:00+00"), schedule.endEpochMs)
         assertTrue(schedule.startEpochMs != beacon.createdAtEpochMs)
+    }
+
+    @Test
+    fun parseMapBeaconRows_readsHubIdFromColumnAndMetadata() {
+        val json =
+            Json.parseToJsonElement(
+                """
+                [{
+                  "id": "124c10f4-f72a-4dba-97e7-9c6f10daf700",
+                  "beacon_type": "event",
+                  "lat": 47.6062,
+                  "lon": -122.3321,
+                  "hub_id": "hub_abc123",
+                  "metadata": {"title": "party", "hub_id": "hub_from_meta"},
+                  "created_at": "2026-06-12T02:33:00Z",
+                  "expires_at": "2026-07-22T23:00:00Z"
+                }]
+                """.trimIndent(),
+            )
+        val beacon = parseMapBeaconRows(json).single()
+        assertEquals("hub_abc123", beacon.hubId)
+    }
+
+    @Test
+    fun parseMapBeaconRows_nullHubIdDoesNotFallBackToMetadata() {
+        val json =
+            Json.parseToJsonElement(
+                """
+                [{
+                  "id": "124c10f4-f72a-4dba-97e7-9c6f10daf700",
+                  "beacon_type": "event",
+                  "lat": 47.6062,
+                  "lon": -122.3321,
+                  "hub_id": null,
+                  "metadata": {"title": "party", "hub_id": "hub_stale"},
+                  "created_at": "2026-06-12T02:33:00Z",
+                  "expires_at": "2026-07-22T23:00:00Z"
+                }]
+                """.trimIndent(),
+            )
+        assertNull(parseMapBeaconRows(json).single().hubId)
+    }
+
+    @Test
+    fun parseMapBeaconRows_readsHubIdFromMetadataWhenColumnMissing() {
+        val json =
+            Json.parseToJsonElement(
+                """
+                [{
+                  "id": "124c10f4-f72a-4dba-97e7-9c6f10daf700",
+                  "beacon_type": "event",
+                  "lat": 47.6062,
+                  "lon": -122.3321,
+                  "metadata": {"title": "party", "hub_id": "hub_from_meta"},
+                  "created_at": "2026-06-12T02:33:00Z",
+                  "expires_at": "2026-07-22T23:00:00Z"
+                }]
+                """.trimIndent(),
+            )
+        assertEquals("hub_from_meta", parseMapBeaconRows(json).single().hubId)
     }
 
     @Test

@@ -87,6 +87,7 @@ data class BeaconEngagementCacheEntry(
      * and process death until the server reports checkedIn or the user checks out.
      */
     val localEarlyCheckIn: Boolean = false,
+    val hubId: String? = null,
 )
 
 /**

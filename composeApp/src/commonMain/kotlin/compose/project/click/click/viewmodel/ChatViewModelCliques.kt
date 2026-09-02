@@ -360,6 +360,7 @@ internal fun ChatViewModel.fetchActiveHubDetailsImpl(
                 name = details.name,
                 category = details.category,
                 creatorId = details.creatorId,
+                isEventHub = !details.eventBeaconId.isNullOrBlank(),
             )
         }
         onComplete(result)

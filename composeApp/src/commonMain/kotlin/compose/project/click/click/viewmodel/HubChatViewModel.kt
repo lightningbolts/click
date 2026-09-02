@@ -4,6 +4,7 @@ package compose.project.click.click.viewmodel // pragma: allowlist secret
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import compose.project.click.click.collaboration.computeClickDropRevealTtlIso // pragma: allowlist secret
 import compose.project.click.click.crypto.MessageCrypto // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.CHAT_MEDIA_BUCKET // pragma: allowlist secret
@@ -75,6 +76,7 @@ class HubChatViewModel(
     internal val currentUserId: String,
     internal val hubCategory: String = "general",
     internal val creatorId: String? = null,
+    internal val isEventHub: Boolean = false,
     internal val hubLocationResolver: suspend () -> LocationResult? = { null },
     internal val tokenStorage: TokenStorage = createTokenStorage(),
     internal val chatApi: ChatApiClient = ChatApiClient(tokenStorage = tokenStorage),
@@ -106,6 +108,9 @@ class HubChatViewModel(
 
     internal val _outOfBounds = MutableStateFlow(false)
     val outOfBounds: StateFlow<Boolean> = _outOfBounds.asStateFlow()
+
+    internal val _isEventHub = MutableStateFlow(isEventHub)
+    val isEventHubFlow: StateFlow<Boolean> = _isEventHub.asStateFlow()
 
     internal val _secureChatMediaLoadState = MutableStateFlow<Map<String, SecureChatMediaLoadState>>(emptyMap())
     override val secureChatMediaLoadState: StateFlow<Map<String, SecureChatMediaLoadState>> =
@@ -163,13 +168,42 @@ class HubChatViewModel(
         if (loadHubDetails) {
             viewModelScope.launch(Dispatchers.Default) {
                 try {
+                    val jwt = runCatching { tokenStorage.requireFreshHubJwt() }.getOrNull()
+                    if (!jwt.isNullOrBlank()) {
+                        chatApi.getHubDetails(hubId, jwt).getOrNull()?.let { details ->
+                            val creator = details.creatorId?.trim()?.takeIf { it.isNotEmpty() }
+                            if (creator != null) {
+                                _resolvedCreatorId.value = creator
+                            }
+                            val ownsHub = creator == currentUserId
+                            _isCreator.value = ownsHub
+                            if (!details.eventBeaconId.isNullOrBlank()) {
+                                _isEventHub.value = true
+                                AppDataManager.updateActiveHubDetails(
+                                    hubId = hubId,
+                                    name = details.name,
+                                    category = details.category,
+                                    creatorId = creator,
+                                    isEventHub = true,
+                                )
+                            }
+                            _hubDetails.update { current ->
+                                current.copy(
+                                    name = details.name.takeIf { it.isNotBlank() } ?: current.name,
+                                    category = details.category.takeIf { it.isNotBlank() } ?: current.category,
+                                    isCreator = ownsHub,
+                                )
+                            }
+                            return@launch
+                        }
+                    }
                     val rows =
                         supabase
                             .from("hub_venues")
                             .select(
                                 columns =
                                     io.github.jan.supabase.postgrest.query.Columns
-                                        .list("name", "category", "creator_id"),
+                                        .list("name", "category", "creator_id", "event_beacon_id"),
                             ) {
                                 filter { eq("id", hubId) }
                                 limit(1)
@@ -181,6 +215,16 @@ class HubChatViewModel(
                     }
                     val ownsHub = creator == currentUserId
                     _isCreator.value = ownsHub
+                    if (!row?.eventBeaconId.isNullOrBlank()) {
+                        _isEventHub.value = true
+                        AppDataManager.updateActiveHubDetails(
+                            hubId = hubId,
+                            name = row?.name.orEmpty(),
+                            category = row?.category.orEmpty(),
+                            creatorId = creator,
+                            isEventHub = true,
+                        )
+                    }
                     _hubDetails.update { current ->
                         current.copy(
                             name = row?.name?.takeIf { it.isNotBlank() } ?: current.name,
@@ -223,20 +267,25 @@ class HubChatViewModel(
     }
 
     internal suspend fun resolveGatekeeperLocationOrThrow(): LocationResult {
+        if (_isEventHub.value) {
+            return LocationResult(latitude = 0.0, longitude = 0.0)
+        }
         val now = Clock.System.now().toEpochMilliseconds()
         cachedGatekeeperLocation
             ?.takeIf { now - cachedGatekeeperLocationAtMs < HUB_GATEKEEPER_LOCATION_CACHE_TTL_MS }
             ?.let { return it }
 
-        val loc =
-            hubLocationResolver()
-                ?: throw IllegalStateException("Location is required to send hub messages.")
-        if (!loc.latitude.isFinite() || !loc.longitude.isFinite()) {
-            throw IllegalStateException("Invalid location.")
+        val loc = hubLocationResolver()
+        if (loc != null && loc.latitude.isFinite() && loc.longitude.isFinite()) {
+            cachedGatekeeperLocation = loc
+            cachedGatekeeperLocationAtMs = now
+            return loc
         }
-        cachedGatekeeperLocation = loc
-        cachedGatekeeperLocationAtMs = now
-        return loc
+        // Event hubs skip geofence; 0,0 lets a send proceed before hub details load.
+        if (_isEventHub.value) {
+            return LocationResult(latitude = 0.0, longitude = 0.0)
+        }
+        throw IllegalStateException("Location is required to send hub messages.")
     }
 
     fun sendMessage() {
@@ -283,7 +332,7 @@ class HubChatViewModel(
                 _draft.value = text
                 if (isHubExpired(e)) {
                     _sendError.value = HUB_EXPIRED_MESSAGE
-                } else if (isHubOutOfRange(e)) {
+                } else if (isHubOutOfRange(e) && !_isEventHub.value) {
                     _outOfBounds.value = true
                     _sendError.value = HUB_OUT_OF_RANGE_MESSAGE
                 } else {
@@ -343,11 +392,72 @@ class HubChatViewModel(
             } catch (e: Exception) {
                 if (isHubExpired(e)) {
                     _sendError.value = HUB_EXPIRED_MESSAGE
-                } else if (isHubOutOfRange(e)) {
+                } else if (isHubOutOfRange(e) && !_isEventHub.value) {
                     _outOfBounds.value = true
                     _sendError.value = HUB_OUT_OF_RANGE_MESSAGE
                 } else {
                     _sendError.value = e.redactedRestMessage().ifBlank { "Could not send image" }
+                }
+            } finally {
+                _isSending.value = false
+            }
+        }
+    }
+
+    fun sendHubDisposableRoll(
+        imageBytes: ByteArray,
+        mimeType: String = "image/jpeg",
+    ) {
+        if (imageBytes.isEmpty() || _isSending.value) return
+        viewModelScope.launch {
+            _isSending.value = true
+            _sendError.value = null
+            try {
+                val loc = resolveGatekeeperLocationOrThrow()
+                val jwt = tokenStorage.requireFreshHubJwt()
+                val keys = MessageCrypto.deriveKeysForHub(hubId)
+                val cipher = MessageCrypto.encryptMediaBytes(imageBytes, keys)
+                val leaf = randomHubMediaLeaf()
+                val objectPath = "$currentUserId/hub/$hubId/$leaf.bin"
+                val path =
+                    chatApi
+                        .uploadHubMedia(
+                            fileBytes = cipher,
+                            hubId = hubId,
+                            mimeType = "application/octet-stream",
+                            objectPath = objectPath,
+                            authToken = jwt,
+                            userLat = loc.latitude,
+                            userLong = loc.longitude,
+                        ).getOrElse { e -> throw e }
+                val publicUrl = supabase.storage.from(CHAT_MEDIA_BUCKET).publicUrl(path)
+                val revealTtlIso = computeClickDropRevealTtlIso()
+                val metadata: JsonObject =
+                    buildJsonObject {
+                        put("media_url", JsonPrimitive(publicUrl))
+                        put("is_encrypted_media", JsonPrimitive(true))
+                        put("original_mime_type", JsonPrimitive(mimeType.ifBlank { "image/jpeg" }))
+                        put("disposable_roll", JsonPrimitive(true))
+                        put("collaboration_ttl", JsonPrimitive(revealTtlIso))
+                    }
+                chatApi
+                    .sendHubMessage(
+                        hubId = hubId,
+                        body = "Click Drop",
+                        userLat = loc.latitude,
+                        userLong = loc.longitude,
+                        authToken = jwt,
+                        messageType = ChatMessageType.IMAGE,
+                        metadata = metadata,
+                    ).getOrElse { e -> throw e }
+            } catch (e: Exception) {
+                if (isHubExpired(e)) {
+                    _sendError.value = HUB_EXPIRED_MESSAGE
+                } else if (isHubOutOfRange(e) && !_isEventHub.value) {
+                    _outOfBounds.value = true
+                    _sendError.value = HUB_OUT_OF_RANGE_MESSAGE
+                } else {
+                    _sendError.value = e.redactedRestMessage().ifBlank { "Could not send Click Drop" }
                 }
             } finally {
                 _isSending.value = false
