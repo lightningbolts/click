@@ -51,7 +51,7 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install Android SDK packages
-        run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
+        run: sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools" "emulator" "system-images;android-30;google_apis;x86_64"
 
       - name: Create local.properties
         env:
@@ -72,18 +72,42 @@ jobs:
           "$HOME/.maestro/bin/maestro" --version
 
       - name: Run local Maestro Android smoke flows
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 34
-          target: google_apis
-          arch: x86_64
-          profile: pixel_2
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
-          emulator-boot-timeout: 900
-          disable-animations: true
-          script: |
-            adb install composeApp/build/outputs/apk/debug/composeApp-debug.apk
-            maestro test .maestro --include-tags smoke
+        env:
+          ANDROID_AVD_NAME: maestro-api-30
+        run: |
+          set -euo pipefail
+          echo no | avdmanager create avd \
+            --force \
+            --name "$ANDROID_AVD_NAME" \
+            --package "system-images;android-30;google_apis;x86_64" \
+            --device pixel_2
+          adb start-server
+          "$ANDROID_HOME/emulator/emulator" \
+            -avd "$ANDROID_AVD_NAME" \
+            -no-window \
+            -no-audio \
+            -no-boot-anim \
+            -no-snapshot \
+            -gpu swiftshader_indirect \
+            -camera-back none > "$RUNNER_TEMP/maestro-emulator.log" 2>&1 &
+          EMULATOR_PID=$!
+          cleanup() {
+            adb -s emulator-5554 emu kill >/dev/null 2>&1 || true
+            kill "$EMULATOR_PID" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          adb -s emulator-5554 wait-for-device
+          timeout 900 bash -c '
+            until [ "$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do
+              sleep 5
+            done
+          '
+          adb -s emulator-5554 shell input keyevent 82 || true
+          adb -s emulator-5554 shell settings put global window_animation_scale 0 || true
+          adb -s emulator-5554 shell settings put global transition_animation_scale 0 || true
+          adb -s emulator-5554 shell settings put global animator_duration_scale 0 || true
+          adb -s emulator-5554 install composeApp/build/outputs/apk/debug/composeApp-debug.apk
+          maestro test .maestro --include-tags smoke
 
   ios:
     if: github.event_name != 'workflow_dispatch' || inputs.platform == 'ios' || inputs.platform == 'both'
