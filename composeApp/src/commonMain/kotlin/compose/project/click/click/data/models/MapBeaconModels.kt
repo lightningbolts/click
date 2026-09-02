@@ -219,7 +219,7 @@ data class MapBeacon(
     val showCreatorName: Boolean = false,
     val creatorDisplayName: String? = null,
     val visibilityAudience: BeaconVisibilityAudience = BeaconVisibilityAudience.EVERYONE,
-    /** Event hub id from API JSON or metadata `hub_id` (not a map_beacons column). */
+    /** Event hub id from `map_beacons.hub_id`, API JSON, or legacy metadata `hub_id`. */
     val hubId: String? = null,
 )
 
@@ -297,9 +297,12 @@ private fun parseMapBeaconRow(element: JsonElement): MapBeacon? {
     val creatorDisplayName = strKey("creator_name", "creatorName")
     val visibilityAudience = BeaconVisibilityAudience.fromRaw(strKey("visibility_audience", "visibilityAudience"))
     val hubId =
-        strKey("hub_id", "hubId")
-            ?: (meta.raw?.get("hub_id") as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
-            ?: (meta.raw?.get("hubId") as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+        if (obj.containsKey("hub_id") || obj.containsKey("hubId")) {
+            strKey("hub_id", "hubId")
+        } else {
+            (meta.raw?.get("hub_id") as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+                ?: (meta.raw?.get("hubId") as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+        }
     return MapBeacon(
         id = id,
         kind = kind,
