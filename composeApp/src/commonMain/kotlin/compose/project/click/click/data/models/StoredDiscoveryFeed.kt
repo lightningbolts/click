@@ -146,7 +146,10 @@ private fun storedEventScheduleRaw(
         listOf(trackName, artistName, previewUrl, albumArtUrl, musicUrl, originalUrl)
             .any { !it.isNullOrBlank() }
     val hasVenue = !locationName.isNullOrBlank() || !formattedAddress.isNullOrBlank()
-    if (title == null && description == null && !hasSoundtrack && !hasVenue &&
+    if (title == null &&
+        description == null &&
+        !hasSoundtrack &&
+        !hasVenue &&
         (eventStartAtEpochMs == null || eventEndAtEpochMs == null)
     ) {
         return null
@@ -165,7 +168,8 @@ private fun storedEventScheduleRaw(
         originalUrl?.takeIf { it.isNotBlank() }?.let { put("original_url", JsonPrimitive(it)) }
         locationName?.takeIf { it.isNotBlank() }?.let { put("location_name", JsonPrimitive(it)) }
         formattedAddress?.takeIf { it.isNotBlank() }?.let { put("formatted_address", JsonPrimitive(it)) }
-        if (eventStartAtEpochMs != null && eventEndAtEpochMs != null &&
+        if (eventStartAtEpochMs != null &&
+            eventEndAtEpochMs != null &&
             eventEndAtEpochMs > eventStartAtEpochMs
         ) {
             put(
