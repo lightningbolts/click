@@ -156,8 +156,8 @@ fun App() {
         if (persisted != null) {
             isDarkMode = persisted
         }
-        ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
-        barometricContextOptIn = tokenStorage.getBarometricContextOptIn() ?: true
+        ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false
+        barometricContextOptIn = tokenStorage.getBarometricContextOptIn() ?: false
     }
 
     suspend fun persistOnboardingState(state: OnboardingState) {

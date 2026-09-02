@@ -24,7 +24,7 @@ Together, these factors **mathematically verify** that two (or more) phones were
 
 ### Verified Group Cliques (Multi-Tap)
 
-When **three or more people** connect **at the same time** (**Multi-Tap**), the app coordinates a **verified group clique**: the backend performs **O(1)** validation so the cohort forms a **fully connected subgraph** (everyone mutually verified with everyone else). On success, participants drop into an **end-to-end encrypted (E2EE) group chat**—a real clique, not a loose list of pairwise guesses.
+When **three or more people** connect **at the same time** (**Multi-Tap**), the app coordinates a **verified group clique**: the backend performs **O(1)** validation so the cohort forms a **fully connected subgraph** (everyone mutually verified with everyone else). On success, participants drop into a private group chat—a real clique, not a loose list of pairwise guesses. The current chat threat model is documented in `composeApp/src/commonMain/kotlin/compose/project/click/click/crypto/CRYPTO_README.md`; product copy must not overstate it.
 
 ### Memory Capsules
 
@@ -83,7 +83,7 @@ Edit [`composeApp/src/commonMain/kotlin/compose/project/click/click/data/Supabas
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`  
 - Auth redirect scheme/host (`click` / `login`) must match Supabase Auth and the iOS/Android URL handlers.
 
-`SupabaseConfig.startSessionSync(tokenStorage)` keeps the SDK session aligned with **`TokenStorage`** (Keychain / encrypted prefs). Cold boot imports TokenStorage when the SDK session is **empty or expired**. Access-token wall-clock headroom is not enough to skip GoTrue refresh: TestFlight updates and dual-store drift otherwise keep a JWT that click-web rejects as `401 Unauthorized` until the user signs out. Boot, 45-minute ticker, foreground resume, and HTTP 401/403 retries call `refreshSession(forceRefresh = true)` (which always hits `/token` unless another refresh is already in-flight), then drop/reconnect the Realtime socket so hub subscribe and sends use the new bearer. `connect()` is a no-op on an open socket — `rebindRealtimeSocket()` disconnects first.
+`SupabaseConfig.startSessionSync(tokenStorage)` keeps the SDK session aligned with **`TokenStorage`** (Keychain on iOS / encrypted prefs on Android). iOS migrates the previous plaintext session once into Keychain and purges it after the secure write succeeds. Cold boot imports TokenStorage when the SDK session is **empty or expired**. Access-token wall-clock headroom is not enough to skip GoTrue refresh: TestFlight updates and dual-store drift otherwise keep a JWT that click-web rejects as `401 Unauthorized` until the user signs out. Boot, 45-minute ticker, foreground resume, and HTTP 401/403 retries call `refreshSession(forceRefresh = true)` (which always hits `/token` unless another refresh is already in-flight), then drop/reconnect the Realtime socket so hub subscribe and sends use the new bearer. `connect()` is a no-op on an open socket — `rebindRealtimeSocket()` disconnects first.
 
 ### Web base URL (QR, waitlist)
 

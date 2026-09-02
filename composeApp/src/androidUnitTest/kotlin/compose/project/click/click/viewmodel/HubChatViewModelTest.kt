@@ -6,6 +6,8 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -93,6 +95,7 @@ class HubChatViewModelTest {
             mutationDispatcher = mutationDispatcher,
             startRealtime = false,
             loadHubDetails = false,
+            hubAccessRevocations = emptyFlow(),
         )
 
     @Test
@@ -133,13 +136,14 @@ class HubChatViewModelTest {
                         startRealtime = true,
                         loadHubDetails = false,
                         realtimeSessionOverride = { error("subscribe failed") },
+                        hubAccessRevocations = emptyFlow(),
                     )
                 val error =
                     withTimeout(1_000) {
                         viewModel.realtimeState.first { it is HubRealtimeState.Error }
                     }
                 assertTrue(error is HubRealtimeState.Error)
-                assertEquals("subscribe failed", (error as HubRealtimeState.Error).message)
+                assertEquals("subscribe failed", error.message)
                 assertFalse(viewModel.channelReady.value)
             } finally {
                 Dispatchers.resetMain()
@@ -200,6 +204,45 @@ class HubChatViewModelTest {
                 assertEquals("network down", error)
                 assertTrue(cache.removedHubIds.isEmpty())
                 assertFalse(viewModel.messages.value.isNotEmpty())
+            } finally {
+                Dispatchers.resetMain()
+            }
+        }
+
+    @Test
+    fun externalRevocation_clearsStateAndClosesOpenHub() =
+        runTest {
+            val dispatcher = UnconfinedTestDispatcher(testScheduler)
+            Dispatchers.setMain(dispatcher)
+            try {
+                val revocations = MutableSharedFlow<String>(extraBufferCapacity = 1)
+                val cache = FakeActiveHubCache()
+                val viewModel =
+                    HubChatViewModel(
+                        hubId = "hub_1",
+                        realtimeChannelName = "hub:hub_1",
+                        hubTitle = "Lobby",
+                        currentUserId = "user_1",
+                        tokenStorage =
+                            FakeTokenStorage(
+                                jwt = TEST_HUB_JWT,
+                                expiresAtEpochMs = TEST_HUB_JWT_EXPIRES_AT_MS,
+                            ),
+                        hubLifecycleGateway = FakeHubLifecycleGateway(),
+                        activeHubCache = cache,
+                        mutationDispatcher = dispatcher,
+                        startRealtime = false,
+                        loadHubDetails = false,
+                        hubAccessRevocations = revocations,
+                    )
+                viewModel.updateDraft("must be cleared")
+                val eventDeferred = async { withTimeout(1_000) { viewModel.navigationEvents.first() } }
+
+                revocations.emit("hub_1")
+
+                assertEquals(HubChatNavigationEvent.PopBackToConnections, eventDeferred.await())
+                assertEquals("", viewModel.draft.value)
+                assertEquals(listOf("hub_1"), cache.removedHubIds)
             } finally {
                 Dispatchers.resetMain()
             }

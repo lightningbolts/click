@@ -92,7 +92,7 @@ fun NfcScreen(
     val requestProximityHardwarePermissions = rememberProximityHardwarePermissionRequester()
 
     LaunchedEffect(Unit) {
-        ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
+        ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false
     }
 
     LaunchedEffect(authToken) {
@@ -452,8 +452,8 @@ fun NfcScreen(
                                     currentUserId = userId,
                                     ambientNoiseMonitor = ambientNoiseMonitor,
                                     barometricHeightMonitor = barometricHeightMonitor,
-                                    ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true,
-                                    barometricContextOptIn = tokenStorage.getBarometricContextOptIn() ?: true,
+                                    ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false,
+                                    barometricContextOptIn = tokenStorage.getBarometricContextOptIn() ?: false,
                                 )
                             }
                         },

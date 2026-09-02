@@ -7,7 +7,6 @@ import androidx.lifecycle.viewModelScope
 import compose.project.click.click.collaboration.computeClickDropRevealTtlIso // pragma: allowlist secret
 import compose.project.click.click.crypto.MessageCrypto // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
-import compose.project.click.click.data.CHAT_MEDIA_BUCKET // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.api.ChatApiClient // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
@@ -16,6 +15,7 @@ import compose.project.click.click.data.models.MessageDeliveryState // pragma: a
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.audioCacheFileExtension // pragma: allowlist secret
 import compose.project.click.click.data.models.hasLocalMediaUri // pragma: allowlist secret
+import compose.project.click.click.data.models.hubMediaPathOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
 import compose.project.click.click.data.realtime.subscribeWithTimeout // pragma: allowlist secret
@@ -42,7 +42,6 @@ import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.decodeRecordOrNull
 import io.github.jan.supabase.realtime.postgresChangeFlow
-import io.github.jan.supabase.storage.storage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -86,6 +85,7 @@ class HubChatViewModel(
     internal val startRealtime: Boolean = true,
     internal val loadHubDetails: Boolean = true,
     internal val realtimeSessionOverride: (suspend CoroutineScope.() -> Unit)? = null,
+    internal val hubAccessRevocations: Flow<String> = AppDataManager.hubAccessRevocations,
 ) : ViewModel(),
     SecureChatMediaHost {
     internal val supabase by lazy { SupabaseConfig.client }
@@ -240,6 +240,15 @@ class HubChatViewModel(
             launchRealtimeSession()
         }
         viewModelScope.launch {
+            hubAccessRevocations.collect { revokedHubId ->
+                if (revokedHubId == hubId) {
+                    participantDenied = true
+                    clearLocalHubState(clearDiskCache = true)
+                    navigationEventChannel.send(HubChatNavigationEvent.PopBackToConnections)
+                }
+            }
+        }
+        viewModelScope.launch {
             runCatching { hubLocationResolver() }.getOrNull()?.let { loc ->
                 if (loc.latitude.isFinite() && loc.longitude.isFinite()) {
                     cachedGatekeeperLocation = loc
@@ -372,10 +381,10 @@ class HubChatViewModel(
                             userLat = loc.latitude,
                             userLong = loc.longitude,
                         ).getOrElse { e -> throw e }
-                val publicUrl = supabase.storage.from(CHAT_MEDIA_BUCKET).publicUrl(path)
                 val metadata: JsonObject =
                     buildJsonObject {
-                        put("media_url", JsonPrimitive(publicUrl))
+                        put("media_path", JsonPrimitive(path))
+                        put("media_bucket", JsonPrimitive("hub-media"))
                         put("is_encrypted_media", JsonPrimitive(true))
                         put("original_mime_type", JsonPrimitive(mimeType.ifBlank { "image/jpeg" }))
                     }
@@ -430,11 +439,11 @@ class HubChatViewModel(
                             userLat = loc.latitude,
                             userLong = loc.longitude,
                         ).getOrElse { e -> throw e }
-                val publicUrl = supabase.storage.from(CHAT_MEDIA_BUCKET).publicUrl(path)
                 val revealTtlIso = computeClickDropRevealTtlIso()
                 val metadata: JsonObject =
                     buildJsonObject {
-                        put("media_url", JsonPrimitive(publicUrl))
+                        put("media_path", JsonPrimitive(path))
+                        put("media_bucket", JsonPrimitive("hub-media"))
                         put("is_encrypted_media", JsonPrimitive(true))
                         put("original_mime_type", JsonPrimitive(mimeType.ifBlank { "image/jpeg" }))
                         put("disposable_roll", JsonPrimitive(true))
@@ -465,6 +474,21 @@ class HubChatViewModel(
         }
     }
 
+    /**
+     * New hub media stores a path, not a bearer URL. Resolve it immediately before download so the
+     * server can enforce current check-in/event membership. Older records keep their media_url.
+     */
+    private suspend fun resolveHubMediaUrl(message: Message): String? {
+        val objectPath = message.hubMediaPathOrNull()
+        if (objectPath == null) return message.mediaUrlOrNull()?.takeIf { it.isNotBlank() }
+        val jwt = tokenStorage.requireFreshHubJwt()
+        return chatApi
+            .resolveHubMediaUrl(hubId = hubId, path = objectPath, authToken = jwt)
+            .getOrNull()
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
     override fun ensureSecureChatImageLoaded(
         scopeId: String,
         viewerUserId: String,
@@ -473,8 +497,6 @@ class HubChatViewModel(
         if (scopeId != hubId) return
         if (!message.isEncryptedMedia()) return
         if (message.messageType.lowercase() != ChatMessageType.IMAGE) return
-        val url = message.mediaUrlOrNull() ?: return
-        if (url.isBlank()) return
         val cachedBytes = secureImageBytesCache.get(message.id)
         if (cachedBytes != null && cachedBytes.isNotEmpty()) {
             _secureChatMediaLoadState.update {
@@ -488,6 +510,7 @@ class HubChatViewModel(
             _secureChatMediaLoadState.update { it + (message.id to SecureChatMediaLoadState(loading = true)) }
             val bytes =
                 runCatching {
+                    val url = resolveHubMediaUrl(message) ?: return@runCatching null
                     val raw = chatApi.downloadUrlBytes(url).getOrElse { return@runCatching null }
                     val normalized = normalizeEncryptedMediaPayload(raw)
                     if (normalized !== raw) {
@@ -518,8 +541,8 @@ class HubChatViewModel(
     ) {
         if (scopeId != hubId) return
         if (message.messageType.lowercase() != ChatMessageType.AUDIO) return
-        val url = message.mediaUrlOrNull() ?: return
-        if (url.isBlank() && !message.hasLocalMediaUri()) return
+        val mediaReference = message.hubMediaPathOrNull() ?: message.mediaUrlOrNull()
+        if (mediaReference.isNullOrBlank() && !message.hasLocalMediaUri()) return
         val extension = chatMediaVaultExtensionForMessage(message)
         val cachedPath = secureAudioPathCache.get(message.id)
         if (!cachedPath.isNullOrBlank()) {
@@ -531,7 +554,7 @@ class HubChatViewModel(
         readChatMediaVaultLocalPathForMessage(
             messageId = message.id,
             preferredExtension = extension,
-            mediaUrl = message.mediaUrlOrNull(),
+            mediaUrl = mediaReference,
         )?.let { localPath ->
             secureAudioPathCache.put(message.id, localPath)
             _secureChatMediaLoadState.update {
@@ -546,6 +569,7 @@ class HubChatViewModel(
             _secureChatMediaLoadState.update { it + (message.id to SecureChatMediaLoadState(loading = true)) }
             val bytes =
                 runCatching {
+                    val url = resolveHubMediaUrl(message) ?: return@runCatching null
                     val raw = chatApi.downloadUrlBytes(url).getOrElse { return@runCatching null }
                     val normalized = normalizeEncryptedMediaPayload(raw)
                     if (normalized !== raw) {

@@ -194,8 +194,8 @@ internal fun AppConnectionOverlays(
                         currentUserId = currentUser.id,
                         ambientNoiseMonitor = ambientMonitor,
                         barometricHeightMonitor = baroMonitor,
-                        ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true,
-                        barometricContextOptIn = tokenStorage.getBarometricContextOptIn() ?: true,
+                        ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false,
+                        barometricContextOptIn = tokenStorage.getBarometricContextOptIn() ?: false,
                     )
                 }
             },

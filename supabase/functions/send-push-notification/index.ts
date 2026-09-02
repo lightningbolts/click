@@ -60,9 +60,8 @@ interface FcmServiceAccount {
 }
 
 type PushError = {
-  token: string;
   platform: string;
-  error: string;
+  code: "delivery_failed";
 };
 
 type PushCategory =
@@ -716,11 +715,15 @@ Deno.serve(async (req: Request) => {
         sent += 1;
         return true;
       } catch (tokenError) {
-        console.error("Push send failed", token.platform, token.token, tokenError);
-        errors.push({
-          token: token.token,
+        // Device tokens are credentials. Keep the caller response and logs free of them.
+        console.error("Push send failed", {
           platform: token.platform,
-          error: String(tokenError),
+          pushTokenId: token.id,
+          deadToken: isDeadPushTokenError(tokenError),
+        });
+        errors.push({
+          platform: token.platform,
+          code: "delivery_failed",
         });
         if (isDeadPushTokenError(tokenError)) {
           await pruneDeadToken(supabase, token.token);
@@ -736,14 +739,15 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({
       success: errors.length === 0,
       sent,
-      errors,
+      failed: errors.length,
     }), {
       status: 200,
       headers: { "Content-Type": "application/json", ...corsHeaders },
     });
   } catch (error) {
-    console.error("Fatal error in send-push-notification", error);
-    return new Response(JSON.stringify({ success: false, sent: 0, error: String(error) }), {
+    // The caller only needs a stable error; provider/database details stay out of the response.
+    console.error("Fatal error in send-push-notification", { type: error instanceof Error ? error.name : "unknown" });
+    return new Response(JSON.stringify({ success: false, sent: 0, error: "PUSH_DELIVERY_UNAVAILABLE" }), {
       status: 500,
       headers: { "Content-Type": "application/json", ...corsHeaders },
     });

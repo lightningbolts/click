@@ -18,14 +18,28 @@ cp "${WEB_ROOT}/supabase/functions/bind-proximity-connection/bindSupport.ts" \
   "${ROOT}/supabase/functions/bind-proximity-connection/bindSupport.ts"
 echo "Synced bind-proximity-connection/index.ts + bindSupport.ts"
 
-# Sync every migration that already exists in both trees (mobile mirror subset).
+# Never rewrite the audited, already-applied historical divergence. It is
+# reconciled by a later migration and hash-locked by check-supabase-drift.sh.
+HISTORICAL_DIVERGENCE="20260831000000_event_auto_hubs.sql"
+MIRROR_REQUIRED_AFTER="20260831000000"
+
+# Sync the existing mirror subset plus every source migration after the
+# historical divergence. New shared migration history therefore flows only
+# from click-web to click.
 synced=0
 while IFS= read -r name; do
-  if [[ -f "${WEB_ROOT}/supabase/migrations/${name}" ]]; then
-    cp "${WEB_ROOT}/supabase/migrations/${name}" "${ROOT}/supabase/migrations/${name}"
+  version="${name%%_*}"
+  destination="${ROOT}/supabase/migrations/${name}"
+
+  if [[ "$name" == "$HISTORICAL_DIVERGENCE" ]]; then
+    echo "Skipped hash-locked historical divergence: ${name}"
+    continue
+  fi
+  if [[ -f "$destination" || "$version" > "$MIRROR_REQUIRED_AFTER" ]]; then
+    cp "${WEB_ROOT}/supabase/migrations/${name}" "$destination"
     synced=$((synced + 1))
   fi
-done < <(ls "${ROOT}/supabase/migrations" 2>/dev/null | sort)
+done < <(ls "${WEB_ROOT}/supabase/migrations" 2>/dev/null | sort)
 
-echo "Synced ${synced} overlapping migration file(s) from ${WEB_ROOT}"
+echo "Synced ${synced} mirrored migration file(s) from ${WEB_ROOT}"
 echo "Done. Prefer deploying migrations / shared functions from click-web."

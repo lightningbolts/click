@@ -28,6 +28,7 @@ import compose.project.click.click.data.repository.SupabaseChatRepository // pra
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.network.NetworkConnectivityMonitor // pragma: allowlist secret
+import compose.project.click.click.notifications.ChatDeepLinkManager // pragma: allowlist secret
 import compose.project.click.click.notifications.createPushNotificationService // pragma: allowlist secret
 import compose.project.click.click.ui.utils.mergeMapBeaconLists // pragma: allowlist secret
 import compose.project.click.click.util.dedupeOneToOneChatsByPeer // pragma: allowlist secret
@@ -377,6 +378,12 @@ object AppDataManager {
     // ── Active Community Hubs (persisted across cold starts) ───
     internal val _activeHubs = MutableStateFlow<List<ActiveHubEntry>>(emptyList())
     val activeHubs: StateFlow<List<ActiveHubEntry>> = _activeHubs.asStateFlow()
+    private val _hubAccessRevocations =
+        MutableSharedFlow<String>(
+            extraBufferCapacity = 16,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
+    val hubAccessRevocations: SharedFlow<String> = _hubAccessRevocations.asSharedFlow()
 
     fun registerActiveHub(entry: ActiveHubEntry) {
         _activeHubs.value =
@@ -388,6 +395,30 @@ object AppDataManager {
     fun removeActiveHub(hubId: String) {
         _activeHubs.value = _activeHubs.value.filterNot { it.hubId == hubId }
         persistActiveHubs()
+    }
+
+    /**
+     * Atomically clear client state that could otherwise reopen a hub after check-out or server
+     * revocation. This is deliberately shared by map, chat, and deep-link flows.
+     */
+    fun revokeHubAccess(hubId: String) {
+        val trimmed = hubId.trim()
+        if (trimmed.isEmpty()) return
+        clearHubAccessState(trimmed)
+        _hubAccessRevocations.tryEmit(trimmed)
+    }
+
+    /** Clears cached state without rebroadcasting an already-handled revocation. */
+    internal fun clearHubAccessState(hubId: String) {
+        val trimmed = hubId.trim()
+        if (trimmed.isEmpty()) return
+        // Avoid an unnecessary encrypted-storage write when this process never registered the
+        // hub (for example, after a server-side access denial during cold deep-link handling).
+        if (_activeHubs.value.any { it.hubId == trimmed }) {
+            removeActiveHub(trimmed)
+        }
+        clearHubThreadCache(trimmed)
+        ChatDeepLinkManager.clearPendingHub(trimmed)
     }
 
     internal val _dismissedCommunityHubIds = MutableStateFlow<Set<String>>(emptySet())

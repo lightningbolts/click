@@ -116,6 +116,9 @@ internal data class ClickWebReactionDeleteBody(
 @Serializable
 internal data class ChatMediaUploadPathResponse(
     val path: String,
+    val bucket: String? = null,
+    val url: String? = null,
+    @SerialName("ttl_seconds") val ttlSeconds: Long? = null,
 )
 
 @Serializable

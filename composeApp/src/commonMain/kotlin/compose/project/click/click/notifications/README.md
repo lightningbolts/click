@@ -99,7 +99,7 @@ When the app is foregrounded:
 
 ## Constraints
 
-- **Permission-gated** — no token upload until user grants notification permission (platform-specific).
+- **Contextual permission-gated** — login and preference hydration never request OS notification permission. The user-initiated Settings toggle is the registration entry point.
 - **Pre-login token queue** — tokens received before auth are persisted and flushed on `registerToken(userId)`.
 - **JWT required for client-initiated pushes** — `ChatPushNotifier` fails without `TokenStorage.getJwt()`.
 - **Retry policy** — `ChatPushNotifier` retries 3× with backoff on 5xx only.

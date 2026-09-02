@@ -17,6 +17,11 @@ import io.ktor.http.isSuccess
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 
 sealed class HubVerifyResult {
     data class Success(
@@ -28,6 +33,7 @@ sealed class HubVerifyResult {
 
     data class Failure(
         val userMessage: String,
+        val code: String? = null,
     ) : HubVerifyResult()
 }
 
@@ -42,7 +48,9 @@ private data class HubVerifyOkResponse(
 
 @Serializable
 private data class HubVerifyErrBody(
-    val error: String? = null,
+    val error: JsonElement? = null,
+    val code: String? = null,
+    val message: String? = null,
 )
 
 @Serializable
@@ -104,19 +112,16 @@ object HubConnectionManager {
                 }
             } else {
                 val errText = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
-                val errMsg =
-                    runCatching {
-                        json.decodeFromString(HubVerifyErrBody.serializer(), errText).error
-                    }.getOrNull()
+                val structuredError = parseHubError(json, errText)
+                val errMsg = structuredError.message
                 when (response.status) {
                     HttpStatusCode.Forbidden ->
                         HubVerifyResult.Failure(
                             errMsg ?: "Check in to this event to join the hub.",
+                            structuredError.code,
                         )
-                    HttpStatusCode.NotFound ->
-                        HubVerifyResult.Failure(errMsg ?: "This hub is not available.")
-                    else ->
-                        HubVerifyResult.Failure(errMsg ?: "Could not verify location (${response.status.value}).")
+                    HttpStatusCode.NotFound -> HubVerifyResult.Failure(errMsg ?: "This hub is not available.", structuredError.code)
+                    else -> HubVerifyResult.Failure(errMsg ?: "Could not verify location (${response.status.value}).", structuredError.code)
                 }
             }
         } catch (_: ClientRequestException) {
@@ -164,19 +169,16 @@ object HubConnectionManager {
                 }
             } else {
                 val errText = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
-                val errMsg =
-                    runCatching {
-                        json.decodeFromString(HubVerifyErrBody.serializer(), errText).error
-                    }.getOrNull()
+                val structuredError = parseHubError(json, errText)
+                val errMsg = structuredError.message
                 when (response.status) {
                     HttpStatusCode.Forbidden ->
-                        HubVerifyResult.Failure(errMsg ?: "Check in to this event to join the hub.")
+                        HubVerifyResult.Failure(errMsg ?: "Check in to this event to join the hub.", structuredError.code)
                     HttpStatusCode.Gone ->
-                        HubVerifyResult.Failure(errMsg ?: "This hub is no longer active.")
+                        HubVerifyResult.Failure(errMsg ?: "This hub is no longer active.", structuredError.code)
                     HttpStatusCode.NotFound ->
-                        HubVerifyResult.Failure(errMsg ?: "This hub is not available.")
-                    else ->
-                        HubVerifyResult.Failure(errMsg ?: "Could not join hub (${response.status.value}).")
+                        HubVerifyResult.Failure(errMsg ?: "This hub is not available.", structuredError.code)
+                    else -> HubVerifyResult.Failure(errMsg ?: "Could not join hub (${response.status.value}).", structuredError.code)
                 }
             }
         } catch (_: ClientRequestException) {
@@ -187,4 +189,44 @@ object HubConnectionManager {
             HubVerifyResult.Failure(e.message ?: "Could not join hub.")
         }
     }
+}
+
+internal data class HubStructuredError(
+    val code: String? = null,
+    val message: String? = null,
+)
+
+/** Supports both legacy `{ error: "..." }` and v2 `{ error: { code, message } }` responses. */
+internal fun parseHubError(
+    json: Json,
+    body: String,
+): HubStructuredError {
+    val payload =
+        runCatching { json.decodeFromString(HubVerifyErrBody.serializer(), body) }.getOrNull()
+            ?: return HubStructuredError()
+    val nested = payload.error as? JsonObject
+    val code =
+        payload.code?.trim()?.takeIf { it.isNotEmpty() }
+            ?: nested
+                ?.get("code")
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+    val rawMessage =
+        payload.message?.trim()?.takeIf { it.isNotEmpty() }
+            ?: nested
+                ?.get("message")
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+            ?: (payload.error as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+    val message =
+        when (code) {
+            "HUB_EXPIRED" -> "This hub is no longer active."
+            "EVENT_HUB_ACCESS_DENIED", "NOT_A_PARTICIPANT" -> "Check in to this event to join the hub."
+            else -> rawMessage?.take(280)
+        }
+    return HubStructuredError(code = code, message = message)
 }

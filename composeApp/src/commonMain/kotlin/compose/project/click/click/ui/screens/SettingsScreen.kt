@@ -211,7 +211,7 @@ fun SettingsScreen(
     }
 
     LaunchedEffect(Unit) {
-        ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
+        ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false
     }
 
     LaunchedEffect(currentUser?.id) {

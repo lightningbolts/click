@@ -244,11 +244,11 @@ fun isResolvedDisplayName(value: String?): Boolean =
 @Serializable
 data class LocationPreferences(
     @SerialName("location_connection_snap_enabled")
-    val connectionSnapEnabled: Boolean = true,
+    val connectionSnapEnabled: Boolean = false,
     @SerialName("location_show_on_map_enabled")
-    val showOnMapEnabled: Boolean = true,
+    val showOnMapEnabled: Boolean = false,
     @SerialName("location_include_in_insights_enabled")
-    val includeInInsightsEnabled: Boolean = true,
+    val includeInInsightsEnabled: Boolean = false,
 )
 
 /** One row per user in `public.user_interests`; canonical source for interest tags and onboarding completion. */

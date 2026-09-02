@@ -59,9 +59,9 @@ Session tokens are persisted in two places:
 | Platform | Implementation | Storage backend |
 |----------|----------------|-----------------|
 | Android | `AndroidTokenStorage` | `EncryptedSharedPreferences` (`auth_prefs`) |
-| iOS | `IosTokenStorage` | Keychain **and** `NSUserDefaults` suite `click_auth_prefs` (write both, read Keychain first) |
+| iOS | `IosTokenStorage` | One versioned Keychain session record (`WhenUnlockedThisDeviceOnly`) |
 
-`SupabaseConfig.startSessionSync()` keeps both copies aligned on every `SessionStatus.Authenticated` / refresh event, eliminating stale-Keychain "random logouts."
+`SupabaseConfig.startSessionSync()` keeps the SDK session and app-owned Keychain record aligned on every `SessionStatus.Authenticated` / refresh event. Legacy plaintext credentials migrate only after a verified Keychain write, then are purged.
 
 `TokenStorage` also persists onboarding state, `CachedAppSnapshot`, pending encounter/connection queues, notification prefs, sensor opt-ins, and ghost-mode-adjacent prefs.
 
@@ -106,7 +106,7 @@ Onboarding state is persisted in `TokenStorage.saveOnboardingState()` as JSON (`
 
 - **No network on cold boot for auth admission** — UI must not block on `restoreSession()` when local tokens exist.
 - **Never auto-clear tokens** on SDK `NotAuthenticated` transitions; only explicit sign-out clears storage.
-- **Dual-storage consistency** — any SDK refresh must propagate to `TokenStorage` via `startSessionSync`.
+- **Session consistency** — any SDK refresh must propagate to `TokenStorage` via `startSessionSync`; neither GoTrue nor `TokenStorage` may persist credentials in `NSUserDefaults` on iOS.
 - **Google OAuth** — iOS native sign-in fails at runtime if `IOS_CLIENT_ID` is from a different GCP project than `WEB_CLIENT_ID`.
 - **JWT parsing is client-side only** — used for offline identity display; server validation remains authoritative for API calls.
 - **Onboarding flow version** — bump `ONBOARDING_FLOW_VERSION_COMPLETE` when gating rules change so legacy installs re-run the flow once.
@@ -126,7 +126,7 @@ Onboarding state is persisted in `TokenStorage.saveOnboardingState()` as JSON (`
 | `data/SupabaseConfig.kt` | Supabase client, session sync, `importStoredSessionWithoutRefresh` |
 | `data/storage/TokenStorage.kt` | expect interface |
 | `data/storage/TokenStorage.android.kt` | EncryptedSharedPreferences |
-| `data/storage/TokenStorage.ios.kt` | Keychain + NSUserDefaults |
+| `data/storage/TokenStorage.ios.kt` | Keychain-only versioned session + one-time legacy migration |
 | `data/models/AuthModels.kt` | Auth DTOs |
 | `data/models/LocalStateModels.kt` | `OnboardingState`, `CachedAppSnapshot` |
 | `ui/screens/WelcomeScreen.kt` | Onboarding welcome step |

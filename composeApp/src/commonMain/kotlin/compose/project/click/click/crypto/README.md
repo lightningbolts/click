@@ -147,7 +147,7 @@ Android parity: `ClickFirebaseMessagingService` performs the same preview decryp
 
 | Constraint | Detail |
 |------------|--------|
-| **Keys in memory only** | `chatCryptoCache` in `SupabaseChatRepository` — no Keychain/Keystore backing in v1 |
+| **Keys in memory only** | `chatCryptoCache` in `SupabaseChatRepository` — no Keychain/Keystore backing in v1; do not describe v1 as zero-knowledge E2EE |
 | **Sign-out wipe** | `clearSessionCaches()` must run on logout and foreground-recovery transitions |
 | **Deterministic pairwise keys** | Backend with `connectionId` + `userIds` + public salt can derive keys — accepted trade-off for UX (see `CRYPTO_README.md` §4.1) |
 | **No forward secrecy** | Static pairwise key per connection; Double-Ratchet planned |

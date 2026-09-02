@@ -607,6 +607,9 @@ internal fun MapViewModel.toggleBeaconCheckInImpl(beaconId: String) {
             }
             mapBeaconRepository.checkOutBeacon(id).fold(
                 onSuccess = {
+                    // A successful event check-out revokes hub eligibility. Do not leave a cached
+                    // conversation or notification deep link that can reopen stale chat state.
+                    previous?.hubId?.let(AppDataManager::revokeHubAccess)
                     _beaconCheckInPendingIds.update { it - id }
                     invalidateBeaconAttendeeDirectory(id)
                     if (_beaconRsvpById.value[id]?.currentUserSignedUp == true) {

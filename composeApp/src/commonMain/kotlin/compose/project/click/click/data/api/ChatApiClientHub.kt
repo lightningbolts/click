@@ -71,7 +71,9 @@ internal suspend fun ChatApiClient.sendHubMessageImpl(
     }
 
 /**
- * Upload hub ciphertext to chat-media; [objectPath] must be `{userId}/hub/{hubId}/...`.
+ * Upload hub ciphertext to the private hub-media bucket; [objectPath] must be
+ * `{userId}/hub/{hubId}/...`. The returned path is stable; signed URLs are deliberately not
+ * persisted in chat message metadata.
  * Same rule as [uploadMedia]: never set request-level `multipart/form-data` without boundary.
  */
 internal suspend fun ChatApiClient.uploadHubMediaImpl(
@@ -121,6 +123,34 @@ internal suspend fun ChatApiClient.uploadHubMediaImpl(
         Result.failure(e)
     }
 }
+
+/** Resolves a five-minute URL after the server rechecks current hub access. */
+internal suspend fun ChatApiClient.resolveHubMediaUrlImpl(
+    hubId: String,
+    path: String,
+    authToken: String,
+): Result<String> =
+    try {
+        val response =
+            client.get("$clickWebBaseUrl/api/hub/media") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                parameter("hubId", hubId)
+                parameter("path", path)
+            }
+        if (response.status.value in 200..299) {
+            val url =
+                response
+                    .body<ChatMediaUploadPathResponse>()
+                    .url
+                    ?.trim()
+                    .orEmpty()
+            if (url.isNotEmpty()) Result.success(url) else Result.failure(Exception("Hub media response missing URL"))
+        } else {
+            Result.failure(Exception("Failed to access hub media: ${response.status}"))
+        }
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
 
 internal suspend fun ChatApiClient.addCliqueMemberImpl(
     groupId: String,
