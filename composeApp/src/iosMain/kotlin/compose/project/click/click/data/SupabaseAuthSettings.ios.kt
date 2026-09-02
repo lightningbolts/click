@@ -23,6 +23,7 @@ import platform.CoreFoundation.kCFBooleanTrue
 import platform.Foundation.CFBridgingRelease
 import platform.Foundation.CFBridgingRetain
 import platform.Foundation.NSData
+import platform.Foundation.NSLock
 import platform.Foundation.NSString
 import platform.Foundation.NSUTF8StringEncoding
 import platform.Foundation.NSUserDefaults
@@ -47,6 +48,19 @@ import platform.Security.kSecValueData
 private const val SUPABASE_AUTH_SUITE_NAME = "click_supabase_auth_settings"
 private const val SUPABASE_AUTH_KEYCHAIN_SERVICE = "com.click.supabase.auth"
 private const val SUPABASE_AUTH_KEYCHAIN_ACCOUNT = "settings_v1"
+
+private object IosKeychainSettingsLock {
+    private val lock = NSLock()
+
+    inline fun <T> withLock(block: () -> T): T {
+        lock.lock()
+        return try {
+            block()
+        } finally {
+            lock.unlock()
+        }
+    }
+}
 
 private sealed interface KeychainReadResult {
     data class Found(
@@ -86,13 +100,17 @@ private class IosKeychainSettings : Settings {
     }
 
     override fun clear() {
-        if (keychainGet() is KeychainReadResult.Unavailable) return
-        write(emptyMap())
+        IosKeychainSettingsLock.withLock {
+            if (readForMutation() == null) return@withLock
+            write(emptyMap())
+        }
     }
 
     override fun remove(key: String) {
-        val current = readForMutation() ?: return
-        write(current.values - key)
+        IosKeychainSettingsLock.withLock {
+            val current = readForMutation() ?: return@withLock
+            write(current.values - key)
+        }
     }
 
     override fun hasKey(key: String): Boolean = read().values.containsKey(key)
@@ -174,8 +192,10 @@ private class IosKeychainSettings : Settings {
         value: String,
     ) {
         require(key.isNotBlank()) { "Settings key must not be blank" }
-        val current = readForMutation() ?: return
-        write(current.values + (key to value))
+        IosKeychainSettingsLock.withLock {
+            val current = readForMutation() ?: return@withLock
+            write(current.values + (key to value))
+        }
     }
 
     private fun readTyped(
@@ -183,20 +203,19 @@ private class IosKeychainSettings : Settings {
         type: String,
     ): String? = read().values[key]?.takeIf { it.startsWith("$type:") }?.removePrefix("$type:")
 
-    private fun read(): KeychainSettingsPayload = readForMutation() ?: KeychainSettingsPayload()
+    private fun read(): KeychainSettingsPayload = IosKeychainSettingsLock.withLock { readForMutation() ?: KeychainSettingsPayload() }
 
     private fun decodeKeychainPayload(value: String): KeychainSettingsPayload? =
         runCatching { json.decodeFromString(KeychainSettingsPayload.serializer(), value.trim()) }
             .getOrNull()
             ?.takeIf { it.version == 1 }
 
-    /** Returns null only when Keychain is unavailable; missing means an empty mutable payload. */
+    /** Returns null when Keychain is unavailable or the stored payload is malformed/unsupported. */
     private fun readForMutation(): KeychainSettingsPayload? =
         when (val result = keychainGet()) {
             KeychainReadResult.Missing -> KeychainSettingsPayload()
             KeychainReadResult.Unavailable -> null
-            is KeychainReadResult.Found ->
-                decodeKeychainPayload(result.value) ?: KeychainSettingsPayload()
+            is KeychainReadResult.Found -> decodeKeychainPayload(result.value)
         }
 
     private fun write(values: Map<String, String>) {
@@ -205,33 +224,35 @@ private class IosKeychainSettings : Settings {
     }
 
     private fun migrateLegacySettings() {
-        when (val result = keychainGet()) {
-            is KeychainReadResult.Found -> {
-                if (decodeKeychainPayload(result.value) != null) {
-                    purgeLegacySettings()
-                    return
+        IosKeychainSettingsLock.withLock {
+            when (val result = keychainGet()) {
+                is KeychainReadResult.Found -> {
+                    if (decodeKeychainPayload(result.value) != null) {
+                        purgeLegacySettings()
+                        return@withLock
+                    }
+                    // Preserve legacy values when the existing item is malformed or unsupported.
+                    // It is replaced only after a verified write below.
                 }
-                // Preserve legacy values when the existing item is malformed or unsupported.
-                // It is replaced only after a verified write below.
+                KeychainReadResult.Unavailable -> return@withLock
+                KeychainReadResult.Missing -> Unit
             }
-            KeychainReadResult.Unavailable -> return
-            KeychainReadResult.Missing -> Unit
-        }
-        // SettingsSessionManager's documented key is `session`; copy every legacy string in its
-        // dedicated suite so a future auth helper cannot strand a verifier under a derived key.
-        val legacyValues =
-            legacyDefaults
-                .dictionaryRepresentation()
-                .entries
-                .mapNotNull { (key, rawValue) ->
-                    val normalizedKey = key?.toString()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                    val value = rawValue.toString()
-                    value.takeIf { it.isNotBlank() }?.let { normalizedKey to "s:$it" }
-                }.toMap()
-        if (legacyValues.isNotEmpty() &&
-            keychainSet(json.encodeToString(KeychainSettingsPayload.serializer(), KeychainSettingsPayload(values = legacyValues)))
-        ) {
-            purgeLegacySettings()
+            // SettingsSessionManager's documented key is `session`; copy every legacy string in its
+            // dedicated suite so a future auth helper cannot strand a verifier under a derived key.
+            val legacyValues =
+                legacyDefaults
+                    .dictionaryRepresentation()
+                    .entries
+                    .mapNotNull { (key, rawValue) ->
+                        val normalizedKey = key?.toString()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                        val value = rawValue.toString()
+                        value.takeIf { it.isNotBlank() }?.let { normalizedKey to "s:$it" }
+                    }.toMap()
+            if (legacyValues.isNotEmpty() &&
+                keychainSet(json.encodeToString(KeychainSettingsPayload.serializer(), KeychainSettingsPayload(values = legacyValues)))
+            ) {
+                purgeLegacySettings()
+            }
         }
     }
 
