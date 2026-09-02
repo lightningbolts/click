@@ -23,7 +23,7 @@ jobs:
 
       - name: Require click-web read token
         env:
-          CLICK_WEB_READ_TOKEN: ${{ secrets.CLICK_WEB_READ_TOKEN }}
+          CLICK_WEB_READ_TOKEN: ${{ secrets.CLICK_WEB_READ_TOKEN || github.token }}
         run: |
           test -n "$CLICK_WEB_READ_TOKEN" || {
             echo "CLICK_WEB_READ_TOKEN must grant read access to lightningbolts/click-web."
@@ -37,7 +37,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
           path: _click-web
           fetch-depth: 0
-          token: ${{ secrets.CLICK_WEB_READ_TOKEN }}
+          token: ${{ secrets.CLICK_WEB_READ_TOKEN || github.token }}
           persist-credentials: false
 
       - name: Verify source-of-truth migration delegate
