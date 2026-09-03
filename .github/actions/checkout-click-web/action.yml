@@ -20,6 +20,7 @@ runs:
       shell: bash
       env:
         CLICK_WEB_READ_TOKEN: ${{ inputs.token }}
+        GH_TOKEN: ${{ inputs.token }}
         CLICK_WEB_CANDIDATE_REF: ${{ github.event.pull_request.head.ref || github.ref_name }}
       run: |
         set -euo pipefail
