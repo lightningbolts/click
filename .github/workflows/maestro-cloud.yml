@@ -96,7 +96,12 @@ jobs:
             kill "$EMULATOR_PID" >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
-          adb -s emulator-5554 wait-for-device
+          if ! timeout 1200 adb -s emulator-5554 wait-for-device; then
+            echo "Android emulator did not connect to adb within 20 minutes."
+            adb devices || true
+            tail -100 "$RUNNER_TEMP/maestro-emulator.log" || true
+            exit 1
+          fi
           timeout 900 bash -c '
             until [ "$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do
               sleep 5
