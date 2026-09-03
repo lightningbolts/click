@@ -74,13 +74,18 @@ jobs:
       - name: Run local Maestro Android smoke flows
         env:
           ANDROID_AVD_NAME: maestro-api-30
+          ANDROID_AVD_HOME: ${{ runner.temp }}/android-avd
+          ANDROID_USER_HOME: ${{ runner.temp }}/android-user-home
         run: |
           set -euo pipefail
+          mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_USER_HOME"
           echo no | avdmanager create avd \
             --force \
             --name "$ANDROID_AVD_NAME" \
             --package "system-images;android-30;google_apis;x86_64" \
             --device pixel_2
+          avdmanager list avd
+          test -f "$ANDROID_AVD_HOME/$ANDROID_AVD_NAME.ini"
           adb start-server
           "$ANDROID_HOME/emulator/emulator" \
             -avd "$ANDROID_AVD_NAME" \
