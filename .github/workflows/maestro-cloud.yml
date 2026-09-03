@@ -81,6 +81,7 @@ jobs:
           ANDROID_USER_HOME: ${{ runner.temp }}/android-user-home
         run: |
           set -euo pipefail
+          test "$(uname -m)" = "arm64"
           mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_USER_HOME"
           echo no | avdmanager create avd \
             --force \
@@ -96,7 +97,8 @@ jobs:
             -no-audio \
             -no-boot-anim \
             -no-snapshot \
-            -gpu swiftshader_indirect \
+            -accel on \
+            -gpu host \
             -camera-back none > "$RUNNER_TEMP/maestro-emulator.log" 2>&1 &
           EMULATOR_PID=$!
           diagnostics() {
