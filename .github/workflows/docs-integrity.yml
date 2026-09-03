@@ -31,14 +31,9 @@ jobs:
           }
 
       - name: Checkout click-web Supabase source of truth
-        uses: actions/checkout@v4
+        uses: ./.github/actions/checkout-click-web
         with:
-          repository: lightningbolts/click-web
-          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
-          path: _click-web
-          fetch-depth: 0
           token: ${{ secrets.CLICK_WEB_READ_TOKEN || github.token }}
-          persist-credentials: false
 
       - name: Verify source-of-truth migration delegate
         run: |
