@@ -24,7 +24,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: maestro-local-${{ github.ref }}-${{ inputs.platform || 'both' }}
+  group: maestro-local-${{ github.ref }}-${{ github.sha }}-${{ inputs.platform || 'both' }}
   cancel-in-progress: true
 
 jobs:
