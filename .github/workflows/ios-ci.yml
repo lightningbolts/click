@@ -2,6 +2,7 @@ name: iOS CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
@@ -17,7 +18,9 @@ jobs:
     # which only exists in the Xcode 26 / iOS 26 SDK. macos-14's latest-stable
     # is still Xcode 16.2 and fails at linkDebugTestIosSimulatorArm64.
     runs-on: macos-26
-    timeout-minutes: 90
+    # Gradle tests plus Debug/Release simulator and unsigned device xcodebuild
+    # do not finish in 90 minutes on a cold macos-26 runner.
+    timeout-minutes: 150
     env:
       CLICK_WEB_ROOT: ${{ github.workspace }}/_click-web
       REQUIRE_CLICK_WEB: "1"
@@ -76,9 +79,6 @@ jobs:
           bash scripts/check-supabase-drift.sh
           bash scripts/test_map_beacons_hub_id.sh
           bash scripts/check-production-security-guards.sh
-
-      - name: Compile Kotlin iOS simulator target
-        run: ./gradlew :composeApp:compileKotlinIosSimulatorArm64 --no-daemon --stacktrace
 
       - name: iOS simulator unit / UI tests
         run: ./gradlew :composeApp:iosSimulatorArm64Test --no-daemon --stacktrace
