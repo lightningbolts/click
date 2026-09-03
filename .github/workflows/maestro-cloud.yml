@@ -159,9 +159,9 @@ jobs:
       - name: Locate Simulator .app
         id: app
         run: |
-          APP=$(find derivedData -path '*Debug-iphonesimulator/iosApp.app' -type d | head -n 1)
+          APP=$(find derivedData -path '*Debug-iphonesimulator/click.app' -type d | head -n 1)
           if [ -z "$APP" ]; then
-            echo "Could not find iosApp.app under derivedData"
+            echo "Could not find click.app under derivedData"
             find derivedData -name '*.app' -type d | head -50
             exit 1
           fi
