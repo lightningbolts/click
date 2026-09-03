@@ -93,7 +93,8 @@ jobs:
             -no-audio \
             -no-boot-anim \
             -no-snapshot \
-            -gpu swiftshader_indirect \
+            -no-accel \
+            -gpu software \
             -camera-back none > "$RUNNER_TEMP/maestro-emulator.log" 2>&1 &
           EMULATOR_PID=$!
           cleanup() {
