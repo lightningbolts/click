@@ -30,7 +30,10 @@ concurrency:
 jobs:
   android:
     if: github.event_name != 'workflow_dispatch' || inputs.platform == 'android' || inputs.platform == 'both'
-    runs-on: ubuntu-latest
+    # macos-26 is an arm64 runner with Apple virtualization, so the arm64
+    # system image can boot with hardware acceleration. Ubuntu's hosted
+    # runners do not expose the acceleration required by the x86_64 image.
+    runs-on: macos-26
     timeout-minutes: 60
 
     steps:
@@ -51,7 +54,7 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install Android SDK packages
-        run: sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools" "emulator" "system-images;android-30;google_apis;x86_64"
+        run: sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools" "emulator" "system-images;android-30;google_apis;arm64-v8a"
 
       - name: Create local.properties
         env:
@@ -82,7 +85,7 @@ jobs:
           echo no | avdmanager create avd \
             --force \
             --name "$ANDROID_AVD_NAME" \
-            --package "system-images;android-30;google_apis;x86_64" \
+            --package "system-images;android-30;google_apis;arm64-v8a" \
             --device pixel_2
           avdmanager list avd
           test -f "$ANDROID_AVD_HOME/$ANDROID_AVD_NAME.ini"
@@ -93,26 +96,46 @@ jobs:
             -no-audio \
             -no-boot-anim \
             -no-snapshot \
-            -no-accel \
-            -gpu software \
+            -gpu swiftshader_indirect \
             -camera-back none > "$RUNNER_TEMP/maestro-emulator.log" 2>&1 &
           EMULATOR_PID=$!
+          diagnostics() {
+            adb devices || true
+            tail -100 "$RUNNER_TEMP/maestro-emulator.log" || true
+            adb -s emulator-5554 logcat -d -t 200 2>/dev/null || true
+          }
           cleanup() {
             adb -s emulator-5554 emu kill >/dev/null 2>&1 || true
             kill "$EMULATOR_PID" >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
-          if ! timeout 1200 adb -s emulator-5554 wait-for-device; then
-            echo "Android emulator did not connect to adb within 20 minutes."
-            adb devices || true
-            tail -100 "$RUNNER_TEMP/maestro-emulator.log" || true
-            exit 1
-          fi
-          timeout 900 bash -c '
-            until [ "$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do
-              sleep 5
-            done
-          '
+          device_deadline=$((SECONDS + 1200))
+          until adb -s emulator-5554 get-state 2>/dev/null | grep -q '^device$'; do
+            if [ "$SECONDS" -ge "$device_deadline" ]; then
+              echo "Android emulator did not connect to adb within 20 minutes."
+              diagnostics
+              exit 1
+            fi
+            sleep 5
+          done
+          boot_deadline=$((SECONDS + 900))
+          until [ "$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do
+            if [ "$SECONDS" -ge "$boot_deadline" ]; then
+              echo "Android emulator did not finish booting within 15 minutes."
+              diagnostics
+              exit 1
+            fi
+            sleep 5
+          done
+          service_deadline=$((SECONDS + 300))
+          until adb -s emulator-5554 shell cmd package list packages >/dev/null 2>&1; do
+            if [ "$SECONDS" -ge "$service_deadline" ]; then
+              echo "Android package manager did not become ready within 5 minutes."
+              diagnostics
+              exit 1
+            fi
+            sleep 5
+          done
           adb -s emulator-5554 shell input keyevent 82 || true
           adb -s emulator-5554 shell settings put global window_animation_scale 0 || true
           adb -s emulator-5554 shell settings put global transition_animation_scale 0 || true
