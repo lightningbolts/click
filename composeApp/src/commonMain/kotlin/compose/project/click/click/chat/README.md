@@ -214,7 +214,7 @@ Path: `data/chat/PendingMessageQueue.kt`
 - **Connect in person (Tri-Factor):** Tap phones together using Bluetooth, inaudible sound, and GPS to prove you're in the same room.
 - **Scan a QR code:** Point your camera at someone's Click QR to connect instantly.
 - **Group connect (Multi-Tap):** Three or more people can connect at once and land in a verified group chat.
-- **Private encrypted chat:** Messages are end-to-end encrypted—only you and your connection can read them.
+- **Private encrypted chat:** Upgraded conversations use device-bound E2EE v2; pre-upgrade rows remain legacy-compatible.
 - **Send photos, files & voice notes:** Share media in chat; files are encrypted before upload.
 - **Emoji reactions:** React to messages with emoji.
 - **Typing indicators & read receipts:** See when someone is typing and when they've read your message.
