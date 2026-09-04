@@ -21,6 +21,11 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
+internal const val EVENT_HUB_ACCESS_DENIED_MARKER = "EVENT_HUB_ACCESS_DENIED"
+internal const val HUB_ACCESS_DENIED_USER_MESSAGE = "Check in to this event to join the hub."
+
+internal fun eventHubAccessDeniedMessage(): String = "$EVENT_HUB_ACCESS_DENIED_MARKER: $HUB_ACCESS_DENIED_USER_MESSAGE"
+
 /**
  * Insert a hub message via Next.js gatekeeper (JWT + geofence). Realtime still delivers rows to clients.
  */
@@ -59,8 +64,7 @@ internal suspend fun ChatApiClient.sendHubMessageImpl(
                     errorBody.contains("HUB_EXPIRED") ||
                         errorBody.contains("Hub expired", ignoreCase = true) ||
                         response.status.value == 410 -> "HUB_EXPIRED"
-                    errorBody.contains("EVENT_HUB_ACCESS_DENIED") ->
-                        "Check in to this event to join the hub."
+                    errorBody.contains(EVENT_HUB_ACCESS_DENIED_MARKER) -> eventHubAccessDeniedMessage()
                     else -> "Failed to send hub message: ${response.status}"
                 }
             Result.failure(Exception(message))
@@ -84,6 +88,7 @@ internal suspend fun ChatApiClient.uploadHubMediaImpl(
     authToken: String,
     userLat: Double,
     userLong: Double,
+    v2: E2eeV2MediaUploadRequest? = null,
 ): Result<String> {
     if (fileBytes.isEmpty()) return Result.failure(IllegalArgumentException("Empty media"))
     return try {
@@ -98,6 +103,13 @@ internal suspend fun ChatApiClient.uploadHubMediaImpl(
                             append("mime_type", mimeType.ifBlank { "application/octet-stream" })
                             append("user_lat", userLat.toString())
                             append("user_long", userLong.toString())
+                            v2?.let {
+                                append("e2ee_v2_envelope", it.envelope)
+                                append("media_ciphertext_sha256", it.mediaCiphertextSha256)
+                                append("epoch", it.epoch.toString())
+                                append("sender_device_id", it.senderDeviceId)
+                                append("client_message_id", it.clientMessageId)
+                            }
                             append("file", fileBytes, encryptedUploadFileHeaders())
                         },
                     ),
@@ -113,8 +125,7 @@ internal suspend fun ChatApiClient.uploadHubMediaImpl(
                     errorBody.contains("HUB_EXPIRED") ||
                         errorBody.contains("Hub expired", ignoreCase = true) ||
                         response.status.value == 410 -> "HUB_EXPIRED"
-                    errorBody.contains("EVENT_HUB_ACCESS_DENIED") ->
-                        "Check in to this event to join the hub."
+                    errorBody.contains(EVENT_HUB_ACCESS_DENIED_MARKER) -> eventHubAccessDeniedMessage()
                     else -> "Failed to upload hub media: ${response.status}"
                 }
             Result.failure(Exception(message))

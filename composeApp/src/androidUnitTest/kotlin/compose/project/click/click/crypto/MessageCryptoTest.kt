@@ -1,13 +1,14 @@
 package compose.project.click.click.crypto
 
+import org.junit.Test
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import org.junit.Test
 
 /**
  * Deterministic test vectors for E2EE. These exist because refactors to
@@ -20,6 +21,22 @@ import org.junit.Test
  */
 @OptIn(ExperimentalEncodingApi::class)
 class MessageCryptoTest {
+    private val v2Metadata =
+        MessageCryptoV2.MessageMetadata(
+            chatId = "11111111-1111-4111-8111-111111111111",
+            epoch = 7,
+            senderDeviceId = "sender-device-01",
+            clientMessageId = "22222222-2222-4222-8222-222222222222",
+        )
+
+    private val v2MediaMetadata =
+        MessageCryptoV2.MediaMetadata(
+            chatId = v2Metadata.chatId,
+            epoch = v2Metadata.epoch,
+            senderDeviceId = v2Metadata.senderDeviceId,
+            clientMessageId = v2Metadata.clientMessageId,
+            mediaCiphertextSha256 = "",
+        )
 
     // ── Deterministic derivation vectors ────────────────────────────────────
     //
@@ -86,12 +103,13 @@ class MessageCryptoTest {
     @Test
     fun encryptThenDecrypt_returnsOriginalPlaintext() {
         val keys = MessageCrypto.deriveKeysForConnection(fixedConnectionId, fixedUserIds)
-        val plaintexts = listOf(
-            "",
-            "hello",
-            "multi\nline\ntext with unicode \uD83D\uDE80",
-            "a".repeat(4096),
-        )
+        val plaintexts =
+            listOf(
+                "",
+                "hello",
+                "multi\nline\ntext with unicode \uD83D\uDE80",
+                "a".repeat(4096),
+            )
         for (pt in plaintexts) {
             val wire = MessageCrypto.encryptContent(pt, keys)
             assertTrue(wire.startsWith("e2e:"), "plaintext must be wrapped with e2e: prefix")
@@ -253,4 +271,149 @@ class MessageCryptoTest {
         assertTrue(MessageCrypto.isAnyE2eeWireContent("e2e_grp:AAAAAAAA"))
         assertFalse(MessageCrypto.isEncrypted("e2e_grp:AAAAAAAA"))
     }
+
+    @Test
+    fun v2_roundTripAuthenticatesMetadataAndUsesFreshNonce() {
+        val key = ByteArray(MessageCryptoV2.EPOCH_KEY_BYTES) { (it + 9).toByte() }
+        val first = MessageCryptoV2.encryptMessage(v2Metadata, key, "secret")
+        val second = MessageCryptoV2.encryptMessage(v2Metadata, key, "secret")
+        assertTrue(first.startsWith(MessageCryptoV2.PREFIX))
+        assertNotEquals(first, second)
+        assertEquals("secret", MessageCryptoV2.decryptMessage(v2Metadata, key, first))
+        assertFailsWith<IllegalStateException> {
+            MessageCryptoV2.decryptMessage(v2Metadata.copy(epoch = 8), key, first)
+        }
+    }
+
+    @Test
+    fun v2_tamperingAndReplayFailClosed() {
+        val key = ByteArray(MessageCryptoV2.EPOCH_KEY_BYTES) { it.toByte() }
+        val wire = MessageCryptoV2.encryptMessage(v2Metadata, key, "secret")
+        val body = wire.removePrefix(MessageCryptoV2.PREFIX)
+        val changed = if (body[0] == 'A') 'B' else 'A'
+        val tampered = MessageCryptoV2.PREFIX + changed + body.substring(1)
+        assertFailsWith<IllegalStateException> { MessageCryptoV2.decryptMessage(v2Metadata, key, tampered) }
+
+        val guard = MessageCryptoV2.ReplayGuard()
+        assertEquals("secret", MessageCryptoV2.decryptMessage(v2Metadata, key, wire, guard))
+        assertEquals("secret", MessageCryptoV2.decryptMessage(v2Metadata, key, wire, guard))
+        val nonceGuard = MessageCryptoV2.ReplayGuard()
+        nonceGuard.reserve("same-nonce", "first-envelope")
+        assertFailsWith<IllegalStateException> { nonceGuard.reserve("same-nonce", "different-envelope") }
+    }
+
+    @Test
+    fun v2_parserRejectsWrongNonceLengthAndExtraFields() {
+        val key = ByteArray(MessageCryptoV2.EPOCH_KEY_BYTES) { 1 }
+        val wire = MessageCryptoV2.encryptMessage(v2Metadata, key, "x")
+        val parsedJson = Base64.decode(wire.removePrefix(MessageCryptoV2.PREFIX)).decodeToString()
+        val nonceShort = parsedJson.replace(Regex("\"nonce\":\"[^\"]+\""), "\"nonce\":\"AAAA\"")
+        val shortWire = MessageCryptoV2.PREFIX + Base64.encode(nonceShort.encodeToByteArray())
+        assertFailsWith<IllegalArgumentException> { MessageCryptoV2.parseE2eeV2Envelope(shortWire) }
+        val extraWire = MessageCryptoV2.PREFIX + Base64.encode((parsedJson.dropLast(1) + ",\"extra\":1}").encodeToByteArray())
+        assertFailsWith<IllegalArgumentException> { MessageCryptoV2.parseE2eeV2Envelope(extraWire) }
+    }
+
+    @Test
+    fun v2_legacyCompatibilityLeavesV1Opaque() {
+        val legacy = "e2e:legacy-v1-wire"
+        assertEquals(legacy, MessageCryptoV2.decryptContentCompatible(legacy, v2Metadata, ByteArray(32)))
+        assertFalse(MessageCryptoV2.isEncrypted(legacy))
+    }
+
+    @Test
+    fun v2_rejectsInvalidKeyAndIdentifierBoundaries() {
+        assertFailsWith<IllegalArgumentException> {
+            MessageCryptoV2.encryptMessage(v2Metadata, ByteArray(31), "x")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            MessageCryptoV2.encryptMessage(v2Metadata.copy(chatId = "bad id"), ByteArray(32), "x")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            MessageCryptoV2.encryptMessage(v2Metadata.copy(epoch = 0), ByteArray(32), "x")
+        }
+    }
+
+    @Test
+    fun v2_mediaRoundTripUsesUploadedBytesDigestAndAuthorizationEnvelope() {
+        val key = ByteArray(MessageCryptoV2.EPOCH_KEY_BYTES) { (it * 3 + 1).toByte() }
+        val plaintext = "opaque media payload".encodeToByteArray()
+        val encrypted = MessageCryptoV2.encryptMedia(v2MediaMetadata, key, plaintext)
+
+        assertEquals(MessageCryptoV2.NONCE_BYTES + plaintext.size + MessageCryptoV2.GCM_TAG_BYTES, encrypted.uploadedBytes.size)
+        assertEquals(
+            plaintext.toList(),
+            MessageCryptoV2
+                .decryptMedia(
+                    v2MediaMetadata.copy(mediaCiphertextSha256 = encrypted.mediaCiphertextSha256),
+                    key,
+                    encrypted.uploadedBytes,
+                ).toList(),
+        )
+        val authorization =
+            MessageCryptoV2.parseE2eeV2Envelope(encrypted.authorizationEnvelope)
+                as MessageCryptoV2.MediaAuthorizationEnvelope
+        assertEquals(encrypted.mediaCiphertextSha256, authorization.mediaCiphertextSha256)
+        MessageCryptoV2.verifyMediaAuthorization(
+            v2MediaMetadata.copy(mediaCiphertextSha256 = encrypted.mediaCiphertextSha256),
+            key,
+            encrypted.authorizationEnvelope,
+        )
+    }
+
+    @Test
+    fun v2_mediaTamperingWrongDigestAndShortPayloadFailClosed() {
+        val key = ByteArray(MessageCryptoV2.EPOCH_KEY_BYTES) { it.toByte() }
+        val encrypted = MessageCryptoV2.encryptMedia(v2MediaMetadata, key, byteArrayOf(1, 2, 3, 4))
+        val tampered = encrypted.uploadedBytes.copyOf().also { it[it.lastIndex] = (it.last().toInt() xor 1).toByte() }
+        assertFailsWith<IllegalStateException> {
+            MessageCryptoV2.decryptMedia(
+                v2MediaMetadata.copy(mediaCiphertextSha256 = encrypted.mediaCiphertextSha256),
+                key,
+                tampered,
+            )
+        }
+        assertFailsWith<IllegalStateException> {
+            MessageCryptoV2.decryptMedia(
+                v2MediaMetadata.copy(mediaCiphertextSha256 = Base64.encode(ByteArray(32) { 1 })),
+                key,
+                encrypted.uploadedBytes,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            MessageCryptoV2.decryptMedia(v2MediaMetadata.copy(mediaCiphertextSha256 = "bad"), key, encrypted.uploadedBytes)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            MessageCryptoV2.decryptMedia(
+                v2MediaMetadata.copy(mediaCiphertextSha256 = encrypted.mediaCiphertextSha256),
+                key,
+                ByteArray(MessageCryptoV2.NONCE_BYTES + MessageCryptoV2.GCM_TAG_BYTES - 1),
+            )
+        }
+    }
+
+    @Test
+    fun pureAesGcm_matchesNistEmptyPlaintextVector() {
+        val result = PureKotlinAesGcm.encrypt(ByteArray(32), ByteArray(12), ByteArray(0), ByteArray(0))
+        assertEquals("530f8afbc74536b9a963b4f1c4cb738b", result.toHex())
+        assertTrue(PureKotlinAesGcm.decrypt(ByteArray(32), ByteArray(12), ByteArray(0), result).isEmpty())
+
+        val block = PureKotlinAesGcm.encrypt(ByteArray(32), ByteArray(12), ByteArray(0), ByteArray(16))
+        assertEquals("cea7403d4d606b6e074ec5d3baf39d18d0d1c8a799996bf0265b98b5d48ab919", block.toHex())
+        assertTrue(PureKotlinAesGcm.decrypt(ByteArray(32), ByteArray(12), ByteArray(0), block).contentEquals(ByteArray(16)))
+    }
+
+    @Test
+    fun pureX25519_matchesRfc7748AlicePublicKeyVector() {
+        val alicePrivate = "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a".hexToBytes()
+        assertEquals("8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a", X25519.publicKey(alicePrivate).toHex())
+    }
+
+    private fun String.hexToBytes(): ByteArray = ByteArray(length / 2) { index -> substring(index * 2, index * 2 + 2).toInt(16).toByte() }
+
+    private fun ByteArray.toHex(): String =
+        joinToString("") { byte ->
+            val value = byte.toInt() and 0xff
+            "0123456789abcdef"[value ushr 4].toString() + "0123456789abcdef"[value and 0x0f]
+        }
 }

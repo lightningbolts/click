@@ -1,6 +1,7 @@
 package compose.project.click.click.viewmodel // pragma: allowlist secret
 
 import androidx.lifecycle.viewModelScope
+import compose.project.click.click.crypto.MessageCryptoV2 // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.api.ChatApiClient // pragma: allowlist secret
@@ -109,7 +110,7 @@ internal fun HubChatViewModel.rowToMessageWithUser(row: HubMessageRow): MessageW
         Message(
             id = row.id,
             user_id = row.userId,
-            content = row.body,
+            content = decryptHubBody(row),
             timeCreated = hubCreatedAtToEpoch(row.createdAt),
             timeEdited = null,
             isRead = false,
@@ -143,7 +144,13 @@ internal fun HubChatViewModel.messageWithUserFromCached(
         } else {
             User(id = message.user_id, name = label, image = avatar, createdAt = 0L)
         }
-    return MessageWithUser(message = message, user = user, isSent = mine)
+    val safeMessage =
+        if (MessageCryptoV2.isEncrypted(message.content)) {
+            message.copy(content = HUB_E2EE_V2_UNAVAILABLE_MESSAGE)
+        } else {
+            message
+        }
+    return MessageWithUser(message = safeMessage, user = user, isSent = mine)
 }
 
 internal fun HubChatViewModel.hydrateFromDiskCache() {
@@ -369,6 +376,7 @@ internal fun HubChatViewModel.clearHubSecureMediaCache(purgePersistentCache: Boo
 internal fun HubChatViewModel.clearLocalHubState(clearDiskCache: Boolean = false) {
     sessionJob?.cancel()
     sessionJob = null
+    hubE2eeV2Session = null
     _messages.value = emptyList()
     _draft.value = ""
     _occupantCount.value = 1
@@ -408,6 +416,12 @@ internal suspend fun HubChatViewModel.loadInitialMessages() {
             val thread = chatApi.fetchHubThread(hubId, token)
             thread.fold(
                 onSuccess = { snapshot ->
+                    hubParticipantIds = snapshot.participantIds.toSet()
+                    runCatching { ensureHubE2eeV2Session(hubParticipantIds) }
+                        .onFailure { error ->
+                            hubE2eeV2Session = null
+                            println("HubChatViewModel: E2EE v2 session unavailable: ${error.redactedRestMessage()}")
+                        }
                     if (snapshot.occupantCount > 0) {
                         _occupantCount.value = snapshot.occupantCount.coerceAtLeast(1)
                     }
@@ -449,6 +463,12 @@ internal suspend fun HubChatViewModel.loadInitialMessages() {
                         limit(HUB_INITIAL_MESSAGE_LIMIT)
                     }.decodeList<HubMessageRow>()
                     .asReversed()
+            hubParticipantIds = rows.map { it.userId }.toSet() + currentUserId
+            runCatching { ensureHubE2eeV2Session(hubParticipantIds) }
+                .onFailure { error ->
+                    hubE2eeV2Session = null
+                    println("HubChatViewModel: fallback E2EE v2 session unavailable: ${error.redactedRestMessage()}")
+                }
             mergeMessages(rows)
         } catch (e: CancellationException) {
             throw e

@@ -9,7 +9,6 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AttachmentCryptoTest {
-
     private val plaintext: ByteArray = "%PDF-1.7 hello world".encodeToByteArray()
 
     @Test
@@ -84,19 +83,47 @@ class AttachmentCryptoTest {
 
     @Test
     fun envelope_encodeAndDecode_roundTrip() {
-        val env = AttachmentCrypto.Envelope(
-            name = "spec.pdf",
-            mime = "application/pdf",
-            size = 12345L,
-            path = "chat-xyz/me/abc.enc",
-            key = "a".repeat(44),
-            sha256 = "b".repeat(44),
-        )
+        val env =
+            AttachmentCrypto.Envelope(
+                name = "spec.pdf",
+                mime = "application/pdf",
+                size = 12345L,
+                path = "chat-xyz/me/abc.enc",
+                key = "a".repeat(44),
+                sha256 = "b".repeat(44),
+            )
         val wire = AttachmentCrypto.encodeEnvelope(env)
         assertTrue(wire.startsWith(AttachmentCrypto.ENVELOPE_PREFIX))
         val decoded = AttachmentCrypto.tryDecodeEnvelope(wire)
         assertNotNull(decoded)
         assertEquals(env, decoded)
+    }
+
+    @Test
+    fun v2Descriptor_encodeAndDecode_roundTrip() {
+        val descriptor =
+            AttachmentCrypto.V2Descriptor(
+                name = "spec.pdf",
+                mime = "application/pdf",
+                size = 12345L,
+                path = "chat-xyz/me/abc.enc",
+                mediaCiphertextSha256 = AttachmentCrypto.sha256Base64(plaintext),
+            )
+        val wire = AttachmentCrypto.encodeV2AttachmentDescriptor(descriptor)
+        assertTrue(wire.startsWith(AttachmentCrypto.E2EE_V2_ENVELOPE_PREFIX))
+        assertEquals(descriptor, AttachmentCrypto.tryDecodeV2AttachmentDescriptor(wire))
+        assertEquals(2, AttachmentCrypto.resolveEnvelope(wire, null)?.v)
+    }
+
+    @Test
+    fun v2Descriptor_rejectsUnknownFieldsAndUnsafePaths() {
+        val digest = AttachmentCrypto.sha256Base64(plaintext)
+        val prefix =
+            "ccx:v2:{\"v\":2,\"type\":\"file\",\"name\":\"a\",\"mime\":\"text/plain\",\"size\":1,\"path\":"
+        val unknown = "$prefix\"a\",\"mediaCiphertextSha256\":\"$digest\",\"extra\":true}"
+        val unsafe = "$prefix\"../a\",\"mediaCiphertextSha256\":\"$digest\"}"
+        assertNull(AttachmentCrypto.tryDecodeV2AttachmentDescriptor(unknown))
+        assertNull(AttachmentCrypto.tryDecodeV2AttachmentDescriptor(unsafe))
     }
 
     @Test
@@ -112,6 +139,7 @@ class AttachmentCryptoTest {
     @Test
     fun isAttachmentEnvelope_checksPrefixOnly() {
         assertTrue(AttachmentCrypto.isAttachmentEnvelope("ccx:v1:{}"))
+        assertTrue(AttachmentCrypto.isAttachmentEnvelope("ccx:v2:{}"))
         assertTrue(!AttachmentCrypto.isAttachmentEnvelope("hi"))
         assertTrue(!AttachmentCrypto.isAttachmentEnvelope("e2e:xxx"))
     }

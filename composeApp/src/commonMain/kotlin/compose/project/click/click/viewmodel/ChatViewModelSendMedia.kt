@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import compose.project.click.click.chat.attachments.AttachmentCrypto // pragma: allowlist secret
 import compose.project.click.click.chat.attachments.ChatAttachmentValidator // pragma: allowlist secret
 import compose.project.click.click.collaboration.computeClickDropRevealTtlIso
+import compose.project.click.click.crypto.MessageCryptoV2 // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.CHAT_ATTACHMENTS_BUCKET // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
@@ -258,8 +259,9 @@ internal fun ChatViewModel.sendChatAudioImpl(
 /**
  * Send an encrypted arbitrary attachment (C4). Generates a fresh per-file master key inside
  * [ChatRepository.uploadEncryptedBlob], uploads the ciphertext to the `chat-attachments`
- * bucket, then sends a `message_type = file` message whose body is the `ccx:v1:` envelope —
- * so the per-file key travels entirely inside the existing E2EE wire format.
+ * bucket, then sends a `message_type = file` message whose body is a `ccx:v1:` or `ccx:v2:`
+ * descriptor. V2 stores no file key in the descriptor; the chat epoch key authenticates the
+ * uploaded nonce-prefixed AES-GCM payload.
  */
 internal fun ChatViewModel.sendChatFileImpl(
     bytes: ByteArray,
@@ -337,7 +339,7 @@ internal fun ChatViewModel.sendChatFileImpl(
                     }
                 val envelope =
                     AttachmentCrypto.Envelope(
-                        v = 1,
+                        v = if (uploaded.fileMasterKeyBase64.isBlank()) 2 else 1,
                         type = "file",
                         name = uploaded.fileName,
                         mime = uploaded.mimeType,
@@ -397,8 +399,11 @@ internal fun ChatViewModel.sendChatFileImpl(
 internal suspend fun ChatViewModel.downloadChatAttachmentImpl(
     messageId: String,
     envelope: AttachmentCrypto.Envelope,
+    v2Metadata: MessageCryptoV2.MediaMetadata? = null,
+    v2StoragePath: String? = null,
 ): ChatAttachmentDownloadOutcome {
-    if (envelope.path.isBlank() || envelope.key.isBlank() || envelope.sha256.isBlank()) {
+    val isV2 = v2Metadata != null || envelope.v == 2
+    if (envelope.path.isBlank() || envelope.sha256.isBlank() || (!isV2 && envelope.key.isBlank())) {
         return ChatAttachmentDownloadOutcome.Failure("Attachment envelope is invalid.")
     }
     val extension = envelope.vaultCacheExtension()
@@ -408,11 +413,26 @@ internal suspend fun ChatViewModel.downloadChatAttachmentImpl(
             ?.let { readChatMediaVaultBytesForMessage(it, preferredExtension = extension) }
             ?.takeIf { it.isNotEmpty() }
     val plaintext =
-        vaultedBytes ?: chatRepository.downloadAttachmentPlaintext(
-            path = envelope.path,
-            fileMasterKeyBase64 = envelope.key,
-            expectedSha256Base64 = envelope.sha256,
-        ) ?: return ChatAttachmentDownloadOutcome.Failure(
+        vaultedBytes ?: if (isV2) {
+            val metadata = v2Metadata ?: return ChatAttachmentDownloadOutcome.Failure("Attachment metadata is unavailable.")
+            val chatId = (currentApiChatId ?: metadata.chatId).trim()
+            val viewerUserId = _currentUserId.value?.trim().orEmpty()
+            if (chatId.isBlank() || viewerUserId.isBlank()) {
+                return ChatAttachmentDownloadOutcome.Failure("Attachment chat context is unavailable.")
+            }
+            chatRepository.downloadAndDecryptChatAttachment(
+                chatId = chatId,
+                viewerUserId = viewerUserId,
+                path = v2StoragePath?.takeIf { it.isNotBlank() } ?: envelope.path,
+                metadata = metadata,
+            )
+        } else {
+            chatRepository.downloadAttachmentPlaintext(
+                path = envelope.path,
+                fileMasterKeyBase64 = envelope.key,
+                expectedSha256Base64 = envelope.sha256,
+            )
+        } ?: return ChatAttachmentDownloadOutcome.Failure(
             "Download failed — integrity check did not pass.",
         )
     if (vaultedBytes == null && messageId.isNotBlank()) {

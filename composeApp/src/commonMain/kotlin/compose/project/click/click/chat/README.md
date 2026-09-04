@@ -167,7 +167,7 @@ Path: `data/chat/PendingMessageQueue.kt`
 | Component | Role |
 |-----------|------|
 | `ChatViewModel` | Thread state, send, reactions, typing, call overlay hooks |
-| `HubChatViewModel` | Ephemeral hub broadcasts (`deriveKeysForHub`) |
+| `HubChatViewModel` | Legacy fallback plus device-bound E2EE v2 event-hub broadcasts |
 | `ChatView.kt` / `ChatMessageBubble.kt` | Compose UI |
 | `ConnectionChatMessageComposer.kt` | Input bar, attachments, voice note capture |
 
@@ -180,7 +180,7 @@ Path: `data/chat/PendingMessageQueue.kt`
 | **Encrypt-before-upload** | All message bodies and attachment blobs are encrypted in `commonMain` via `MessageCrypto` / `AttachmentCrypto` before PostgREST insert or Storage upload |
 | **No keys in Keystore** | `chatCryptoCache` is process memory only; wiped on logout — see crypto threat model |
 | **Group routing** | Messages prefixed `e2e_grp:` use group master from cache; 1:1 uses `e2e:` + pairwise derivation |
-| **Hub chats** | `deriveKeysForHub(hubId)` — access control is geofence/RLS, not pairwise secrecy |
+| **Hub chats** | Pre-upgrade reads may use `deriveKeysForHub(hubId)`; upgraded hubs use per-device E2EE v2 epochs and reject legacy writes |
 | **Platform crypto** | `PlatformCrypto` expect/actual supplies `secureRandomBytes`, AES-CBC, HMAC-SHA256 |
 | **Push preview** | iOS `NotificationService` extension + Android FCM service decrypt previews using same KDF — see [`crypto/README.md`](../crypto/README.md) |
 | **KMP boundary** | Chat **logic** stays in `commonMain`; platform code only for image compression (`compressOutgoingChatImageForUpload`), vault paths, and push services |
@@ -214,7 +214,7 @@ Path: `data/chat/PendingMessageQueue.kt`
 - **Connect in person (Tri-Factor):** Tap phones together using Bluetooth, inaudible sound, and GPS to prove you're in the same room.
 - **Scan a QR code:** Point your camera at someone's Click QR to connect instantly.
 - **Group connect (Multi-Tap):** Three or more people can connect at once and land in a verified group chat.
-- **Private encrypted chat:** Messages are end-to-end encrypted—only you and your connection can read them.
+- **Private encrypted chat:** Upgraded conversations use device-bound E2EE v2; pre-upgrade rows remain legacy-compatible.
 - **Send photos, files & voice notes:** Share media in chat; files are encrypted before upload.
 - **Emoji reactions:** React to messages with emoji.
 - **Typing indicators & read receipts:** See when someone is typing and when they've read your message.

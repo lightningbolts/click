@@ -4,6 +4,7 @@
 
 package compose.project.click.click.data.api // pragma: allowlist secret
 
+import compose.project.click.click.crypto.MessageCryptoV2
 import compose.project.click.click.data.models.* // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
@@ -90,6 +91,12 @@ class ChatApiClient(
         val path: String,
         /** Short-lived signed URL. May be null if the server couldn't mint one. */
         val initialSignedUrl: String?,
+    )
+
+    /** Media upload result retaining the canonical private storage path for future re-signing. */
+    data class UploadedMedia(
+        val url: String,
+        val path: String?,
     )
 
     /** Row returned from POST /api/hub/messages (matches public.hub_messages). */
@@ -328,6 +335,199 @@ class ChatApiClient(
         authToken: String,
     ): Result<List<Message>> = Result.failure(Exception("getChatMessages is no longer served; use click-web /api/chat/messages"))
 
+    /** Register the public half of the locally persisted v2 device identity. */
+    internal suspend fun registerE2eeV2Device(
+        deviceId: String,
+        identityPublicKey: String,
+        authToken: String,
+    ): Result<ClickWebChatDeviceDto> =
+        try {
+            require(deviceId.isNotBlank() && identityPublicKey.isNotBlank()) { "device identity is required" }
+            val response =
+                client.post("$clickWebBaseUrl/api/chat/devices") {
+                    header(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                    contentType(ContentType.Application.Json)
+                    setBody(ClickWebRegisterChatDeviceBody(deviceId, identityPublicKey))
+                }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<ClickWebChatDeviceEnvelope>().device)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+
+    /** Discover active v2 device public identities for a persisted chat. */
+    internal suspend fun discoverE2eeV2Devices(
+        chatId: String,
+        authToken: String,
+    ): Result<List<ClickWebChatDeviceDto>> =
+        try {
+            require(chatId.isNotBlank()) { "chatId is required" }
+            val response =
+                client.get("$clickWebBaseUrl/api/chat/devices") {
+                    header(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                    parameter("chat_id", chatId)
+                }
+            if (response.status.value in 200..299) {
+                Result.success(
+                    response.body<ClickWebChatDevicesEnvelope>().devices.filter {
+                        it.keyAlgorithm == "X25519" && it.cryptoVersion == MessageCryptoV2.CRYPTO_VERSION
+                    },
+                )
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+
+    /** Retrieve v2 epoch envelopes for a persisted chat and registered device row. */
+    internal suspend fun getE2eeV2State(
+        chatId: String,
+        authToken: String,
+        deviceId: String,
+    ): Result<ClickWebChatE2eeV2StateEnvelope> =
+        try {
+            require(chatId.isNotBlank() && deviceId.isNotBlank()) { "chatId and deviceId are required" }
+            val response =
+                client.get("$clickWebBaseUrl/api/chat/epochs") {
+                    header(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                    parameter("chat_id", chatId)
+                    parameter("device_id", deviceId)
+                }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<ClickWebChatE2eeV2StateEnvelope>())
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+
+    /** Atomically initialize or rotate the server-side epoch and its complete recipient set. */
+    internal suspend fun createE2eeV2Epoch(
+        chatId: String,
+        epoch: Int,
+        senderDeviceId: String,
+        membershipFingerprint: String,
+        envelopes: List<ClickWebChatEpochWriteEnvelope>,
+        authToken: String,
+    ): Result<Unit> =
+        try {
+            require(chatId.isNotBlank() && senderDeviceId.isNotBlank() && membershipFingerprint.isNotBlank()) {
+                "chat epoch metadata is required"
+            }
+            require(epoch > 0 && envelopes.isNotEmpty()) { "chat epoch payload is invalid" }
+            val response =
+                client.post("$clickWebBaseUrl/api/chat/epochs") {
+                    header(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        ClickWebChatEpochWriteBody(
+                            chatId = chatId,
+                            epoch = epoch,
+                            senderDeviceId = senderDeviceId,
+                            membershipFingerprint = membershipFingerprint,
+                            envelopes = envelopes,
+                        ),
+                    )
+                }
+            if (response.status.value in 200..299) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+
+    /** Discover active v2 device identities for the members of an event/community hub. */
+    internal suspend fun discoverHubE2eeV2Devices(
+        hubId: String,
+        authToken: String,
+    ): Result<List<ClickWebChatDeviceDto>> =
+        try {
+            require(hubId.isNotBlank()) { "hubId is required" }
+            val response =
+                client.get("$clickWebBaseUrl/api/hub/devices") {
+                    header(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                    parameter("hub_id", hubId)
+                }
+            if (response.status.value in 200..299) {
+                Result.success(
+                    response.body<ClickWebChatDevicesEnvelope>().devices.filter {
+                        it.keyAlgorithm == "X25519" && it.cryptoVersion == MessageCryptoV2.CRYPTO_VERSION
+                    },
+                )
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+
+    /** Retrieve the current hub epoch and this device's opaque key envelopes. */
+    internal suspend fun getHubE2eeV2State(
+        hubId: String,
+        authToken: String,
+        deviceId: String,
+    ): Result<ClickWebHubE2eeV2StateEnvelope> =
+        try {
+            require(hubId.isNotBlank() && deviceId.isNotBlank()) { "hubId and deviceId are required" }
+            val response =
+                client.get("$clickWebBaseUrl/api/hub/epochs") {
+                    header(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                    parameter("hub_id", hubId)
+                    parameter("device_id", deviceId)
+                }
+            if (response.status.value in 200..299) {
+                Result.success(response.body<ClickWebHubE2eeV2StateEnvelope>())
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+
+    /** Atomically initialize or rotate the hub epoch and its complete recipient set. */
+    internal suspend fun createHubE2eeV2Epoch(
+        hubId: String,
+        epoch: Int,
+        senderDeviceId: String,
+        membershipFingerprint: String,
+        envelopes: List<ClickWebHubEpochWriteEnvelope>,
+        authToken: String,
+    ): Result<Unit> =
+        try {
+            require(hubId.isNotBlank() && senderDeviceId.isNotBlank() && membershipFingerprint.isNotBlank()) {
+                "hub epoch metadata is required"
+            }
+            require(epoch > 0 && envelopes.isNotEmpty()) { "hub epoch payload is invalid" }
+            val response =
+                client.post("$clickWebBaseUrl/api/hub/epochs") {
+                    header(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        ClickWebHubEpochWriteBody(
+                            hubId = hubId,
+                            epoch = epoch,
+                            senderDeviceId = senderDeviceId,
+                            membershipFingerprint = membershipFingerprint,
+                            envelopes = envelopes,
+                        ),
+                    )
+                }
+            if (response.status.value in 200..299) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+
     /**
      * Insert an encrypted (or plaintext) message row via [clickWebBaseUrl]/api/chat/messages (gatekeeper).
      */
@@ -558,7 +758,18 @@ class ChatApiClient(
         chatId: String,
         mimeType: String,
         authToken: String,
-    ): Result<String> = uploadMediaImpl(fileBytes = fileBytes, chatId = chatId, mimeType = mimeType, authToken = authToken)
+        v2: E2eeV2MediaUploadRequest? = null,
+    ): Result<String> =
+        uploadMediaImpl(fileBytes = fileBytes, chatId = chatId, mimeType = mimeType, authToken = authToken, v2 = v2)
+            .map { it.url }
+
+    suspend fun uploadMediaWithPath(
+        fileBytes: ByteArray,
+        chatId: String,
+        mimeType: String,
+        authToken: String,
+        v2: E2eeV2MediaUploadRequest? = null,
+    ): Result<UploadedMedia> = uploadMediaImpl(fileBytes = fileBytes, chatId = chatId, mimeType = mimeType, authToken = authToken, v2 = v2)
 
     suspend fun uploadAttachment(
         fileBytes: ByteArray,
@@ -566,8 +777,16 @@ class ChatApiClient(
         mimeType: String,
         fileName: String,
         authToken: String,
+        v2: E2eeV2MediaUploadRequest? = null,
     ): Result<UploadedAttachment> =
-        uploadAttachmentImpl(fileBytes = fileBytes, chatId = chatId, mimeType = mimeType, fileName = fileName, authToken = authToken)
+        uploadAttachmentImpl(
+            fileBytes = fileBytes,
+            chatId = chatId,
+            mimeType = mimeType,
+            fileName = fileName,
+            authToken = authToken,
+            v2 = v2,
+        )
 
     suspend fun signAttachmentUrl(
         path: String,
@@ -603,6 +822,7 @@ class ChatApiClient(
         authToken: String,
         userLat: Double,
         userLong: Double,
+        v2: E2eeV2MediaUploadRequest? = null,
     ): Result<String> =
         uploadHubMediaImpl(
             fileBytes = fileBytes,
@@ -612,6 +832,7 @@ class ChatApiClient(
             authToken = authToken,
             userLat = userLat,
             userLong = userLong,
+            v2 = v2,
         )
 
     /** Gets a short-lived, authorized URL for a private hub-media object. */

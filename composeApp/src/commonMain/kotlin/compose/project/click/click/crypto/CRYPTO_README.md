@@ -1,13 +1,16 @@
-# Click Platforms — E2EE Threat Model (internal)
+# Click Platforms — Legacy v1 Threat Model (internal)
 
 Audience: Click engineers, external security reviewers. Not user-facing.
 
 Last updated: 2026-04-16. Owner: platform security lead.
 
-This document captures **what the end-to-end encryption (E2EE) stack in
+This document captures **what the legacy v1 application-encryption stack in
 `compose.project.click.click.crypto.MessageCrypto` protects against, what it
-does NOT, and the explicit trade-offs baked into the design.** It is the
-single source of truth when a reviewer asks _"is this really E2EE?"_
+does NOT, and the explicit trade-offs baked into that compatibility design.**
+It is not the specification for Release Train C E2EE v2. The v2 protocol is
+implemented by `MessageCryptoV2`, `DeviceIdentityStorage`, and the matching
+web/server gates; it uses device-bound X25519 identities, per-epoch AES-GCM,
+and authenticated `e2e2:` envelopes.
 
 ---
 
@@ -87,7 +90,7 @@ changes (add/remove). Old masters are retained in memory for backfill
 decrypt; they are NOT persisted and NOT zero-filled on logout beyond
 `clearSessionCaches()`.
 
-### 2.3 Hub broadcasts
+### 2.3 Hub broadcasts (legacy compatibility)
 
 ```
 master = SHA-256( SALT || "hub-broadcast:" || hubId )
@@ -95,8 +98,20 @@ encKey / macKey derived identically to §2.1
 ```
 
 Geofence / gatekeeper RLS policies on `hub_messages` limit **who can read
-or post**; the crypto layer guarantees that the _server operator_ cannot
-read content without also knowing `hubId`.
+or post**, but this legacy format is not a zero-knowledge boundary because
+the key is derived from `hubId`. It is retained only for pre-upgrade rows and
+is not accepted for writes after a v2 hub epoch exists.
+
+### 2.4 E2EE v2 boundary
+
+Release Train C moves upgraded direct, clique, and event-hub chats to
+`MessageCryptoV2`. Each device has an X25519 identity protected by Android
+Keystore-backed storage or iOS Keychain. Clients generate random 256-bit
+epoch keys and wrap them to active devices using ephemeral X25519,
+HKDF-SHA256, and AES-256-GCM. `e2e2:` message/media envelopes authenticate
+chat or hub id, epoch, sender device, client message id, nonce, and media
+digest. The server stores only public identities, epoch metadata, and opaque
+envelopes, and rejects stale device sets and legacy writes after upgrade.
 
 ## 3. What this scheme protects against
 
@@ -145,9 +160,10 @@ app foreground-recovery transitions. There is no secure-enclave-backed
 storage; this is acceptable because the master keys are already
 server-derivable via §4.1.
 
-### 4.4 Hub broadcasts are "anyone with hubId"
+### 4.4 Legacy hub broadcasts are "anyone with hubId"
 §2.3 keys are effectively public: the server enforces access control,
-not the crypto layer. This is by design for ephemeral/geo-scoped hubs.
+not the legacy crypto layer. This limitation does not apply to upgraded hubs,
+which use the device-bound v2 epoch protocol described in §2.4.
 
 ### 4.5 Ciphertext-at-rest on device
 This module does NOT handle at-rest DB encryption. If the app uses a

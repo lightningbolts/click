@@ -1,4 +1,4 @@
-# Crypto — Legacy Application Encryption
+# Crypto — Legacy Compatibility and E2EE v2
 
 > Architectural reference for the `compose.project.click.click.crypto` package.  
 > Sourced from the Click Platforms KMP codebase and DeepWiki index (July 1, 2026).
@@ -9,7 +9,7 @@ For the full **threat model** (limitations, salt rotation, audit checklist), see
 
 ## Module Purpose
 
-The crypto module is Click's **client-side legacy application-encryption layer**. It encrypts eligible chat message bodies, group broadcasts, and attachment blobs before they reach Supabase Postgres or Storage. This is not zero-knowledge or end-to-end encryption: key derivation in v1 uses public identifiers, and hub content or metadata may be server-readable. Decryption happens in the app (and in platform push extensions for notification previews) when the applicable key is available.
+The `MessageCrypto` APIs documented below are Click's **legacy v1 application-encryption layer** and remain for backward-compatible reads and pre-upgrade chats. V1 is not zero-knowledge or end-to-end encryption: key derivation uses public identifiers, and legacy hub content may be server-readable. Upgraded direct, clique, and event-hub chats use `MessageCryptoV2`, device-bound X25519 identities, per-epoch AES-256-GCM keys, and authenticated `e2e2:` envelopes. Decryption happens in the app when the applicable key is available.
 
 Design goals:
 
@@ -61,7 +61,7 @@ flowchart LR
 | API | Purpose |
 |-----|---------|
 | `deriveKeysForConnection(connectionId, userIds)` | 1:1 pairwise `DerivedKeys(encKey, macKey)` |
-| `deriveKeysForHub(hubId)` | Ephemeral hub broadcast keys |
+| `deriveKeysForHub(hubId)` | Legacy pre-upgrade hub broadcast keys |
 | `deriveMessageKeysFromGroupMaster(masterKey32)` | Per-message keys from 32-byte group master |
 | `generateGroupMasterKey()` | CSPRNG 32-byte group master |
 | `wrapGroupMasterKeyForMembers(...)` | Seal master to each member via 1:1 encrypt |
@@ -116,7 +116,15 @@ master = SHA-256( SALT || "hub-broadcast:" || hubId )
 encKey / macKey derived identically to 1:1
 ```
 
-Geofence / gatekeeper RLS on `hub_messages` limits who can read or post. Hub keys are derived from the public hub ID, so this layer is not a zero-knowledge boundary; server authorization and RLS remain the primary access controls.
+This is the legacy pre-upgrade format only. Geofence / gatekeeper RLS limits who can read or post, but a legacy hub key is derived from the public hub ID and is not a zero-knowledge boundary. Once a hub has an E2EE v2 epoch, the API rejects legacy writes and `HubChatViewModel` uses the device-bound epoch protocol below.
+
+### E2EE v2 (`MessageCryptoV2`)
+
+- Each Android device stores its X25519 private identity through Android Keystore-backed encrypted preferences; iOS stores it in Keychain with `ThisDeviceOnly` and `WhenUnlocked` protection.
+- A random 256-bit epoch key is wrapped to every active device with ephemeral X25519, HKDF-SHA256, and AES-256-GCM. The server stores only public identities, epoch metadata, and opaque envelopes.
+- Message and media envelopes authenticate the chat/hub id, client message id, sender device, epoch, crypto version, nonce, and ciphertext digest. Replays and nonce reuse are rejected client-side; server gates bind uploads to the exact opaque bytes.
+- Membership and device-set changes require a new epoch. Legacy rows remain readable, but upgraded chats and hubs do not accept legacy client writes.
+- New devices receive historical direct-chat keys only through an approved key-transfer flow; hub rotations scope a new device to epochs created after it joins.
 
 ### `PlatformCrypto` — expect/actual
 
@@ -147,11 +155,11 @@ Android parity: `ClickFirebaseMessagingService` performs the same preview decryp
 
 | Constraint | Detail |
 |------------|--------|
-| **Keys in memory only** | `chatCryptoCache` in `SupabaseChatRepository` — no Keychain/Keystore backing in v1; do not describe v1 as zero-knowledge E2EE |
+| **Keys in memory only** | `chatCryptoCache` applies to v1; v2 private identities use platform secure storage and epoch keys are retained only for the active session |
 | **Sign-out wipe** | `clearSessionCaches()` must run on logout and foreground-recovery transitions |
 | **Deterministic pairwise keys** | Backend with `connectionId` + `userIds` + public salt can derive keys — accepted trade-off for UX (see `CRYPTO_README.md` §4.1) |
 | **No forward secrecy** | Static pairwise key per connection; Double-Ratchet planned |
-| **Hub keys are hubId-derived** | Anyone with `hubId` + RLS access can decrypt hub broadcasts — by design |
+| **Legacy hub keys are hubId-derived** | Only pre-upgrade legacy hub rows use this compatibility format; upgraded hubs use v2 per-device epoch keys |
 | **Attachment isolation** | `AttachmentCrypto` uses a **fresh** 32-byte master per file — compromise of one file does not leak chat keys |
 | **Test vectors required** | New wire prefixes must ship with golden ciphertext tests (`MessageCryptoVectorsTest`) |
 | **Platform boundary** | Only `PlatformCrypto` and push extensions touch OS CSPRNG/cipher APIs; all key logic stays in `commonMain` |
@@ -163,7 +171,7 @@ Android parity: `ClickFirebaseMessagingService` performs the same preview decryp
 | [`chat/README.md`](../chat/README.md) | `chatCryptoCache`, Realtime decrypt, attachment upload |
 | [`proximity/README.md`](../proximity/README.md) | Post-handshake `cacheEncryptionKeys` |
 | `domain/VerifiedCliqueCreation.kt` | Group master wrapping |
-| `viewmodel/HubChatViewModel.kt` | `deriveKeysForHub` |
+| `viewmodel/HubChatViewModel.kt` | Legacy fallback plus v2 event-hub messaging |
 
 ---
 
@@ -192,7 +200,7 @@ Android parity: `ClickFirebaseMessagingService` performs the same preview decryp
 - **Connect in person (Tri-Factor):** Tap phones together using Bluetooth, inaudible sound, and GPS to prove you're in the same room.
 - **Scan a QR code:** Point your camera at someone's Click QR to connect instantly.
 - **Group connect (Multi-Tap):** Three or more people can connect at once and land in a verified group chat.
-- **Encrypted chat:** Eligible direct and group message bodies use legacy application encryption; this is not zero-knowledge end-to-end encryption, and hub content may be server-readable.
+- **Encrypted chat:** Pre-upgrade rows remain legacy-readable. Upgraded direct, clique, and event-hub messages and media use device-bound E2EE v2; legacy writes are rejected after an epoch is established.
 - **Send photos, files & voice notes:** Share media in chat; files are encrypted before upload.
 - **Emoji reactions:** React to messages with emoji.
 - **Typing indicators & read receipts:** See when someone is typing and when they've read your message.

@@ -3,6 +3,7 @@
 package compose.project.click.click.data.repository
 
 import compose.project.click.click.crypto.MessageCrypto
+import compose.project.click.click.crypto.MessageCryptoV2
 import compose.project.click.click.data.models.*
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.github.jan.supabase.postgrest.from
@@ -12,6 +13,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.map
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -239,9 +241,43 @@ internal suspend fun SupabaseChatRepository.sendMessageImpl(
 ): Message? {
     return try {
         val crypto = resolveChatCrypto(chatId, userId)
-        val wireContent =
+        var v2Crypto = resolveE2eeV2ChatCrypto(chatId, userId, allowLifecycle = true)
+        val mediaReference =
+            (metadata as? JsonObject)?.let { root ->
+                listOf("media_url", "mediaUrl", "attachment_path", "attachmentPath", "path", "storage_path", "object_path")
+                    .asSequence()
+                    .mapNotNull { root[it]?.toString()?.trim('"')?.takeIf(String::isNotBlank) }
+                    .firstOrNull()
+            }
+        val mediaUpload = e2eeV2MediaRecordForReference(mediaReference)
+        if (mediaUpload != null &&
+            (
+                v2Crypto == null ||
+                    mediaUpload.metadata.chatId != chatId ||
+                    mediaUpload.metadata.epoch != v2Crypto.epoch ||
+                    mediaUpload.metadata.senderDeviceId != v2Crypto.senderDeviceId
+            )
+        ) {
+            throw E2eeV2RequiredException()
+        }
+        var clientMessageId =
+            v2Crypto?.let {
+                mediaUpload?.metadata?.clientMessageId ?: MessageCryptoV2.generateClientMessageId()
+            }
+        var wireContent =
             when {
-                messageType == "call_log" || messageType == "beacon" -> content
+                v2Crypto != null ->
+                    MessageCryptoV2.encryptMessage(
+                        metadata =
+                            MessageCryptoV2.MessageMetadata(
+                                chatId = chatId,
+                                epoch = v2Crypto!!.epoch,
+                                senderDeviceId = v2Crypto!!.senderDeviceId,
+                                clientMessageId = clientMessageId!!,
+                            ),
+                        epochKey = v2Crypto!!.epochKey,
+                        plaintext = content,
+                    )
                 crypto is ChatSessionCaches.ResolvedChatCrypto.GroupMaster ->
                     MessageCrypto.encryptGroupMessageContent(content, crypto.masterKey)
                 crypto is ChatSessionCaches.ResolvedChatCrypto.Pairwise ->
@@ -257,6 +293,18 @@ internal suspend fun SupabaseChatRepository.sendMessageImpl(
             ensureFreshJwtForChat()
                 ?: return null
         val enrichedMetadata = enrichMediaEncryptionMetadata(messageType, metadata)
+
+        fun v2OutboundMetadata(): JsonElement? =
+            v2Crypto?.let { session ->
+                buildJsonObject {
+                    (enrichedMetadata as? JsonObject)?.forEach { (key, value) -> put(key, value) }
+                    put("crypto_version", MessageCryptoV2.CRYPTO_VERSION)
+                    put("epoch", session.epoch)
+                    put("sender_device_id", session.senderDeviceId)
+                    put("client_message_id", clientMessageId ?: error("v2 client message id is missing"))
+                }
+            } ?: enrichedMetadata
+        var outboundMetadata = v2OutboundMetadata()
         val resolvedConnectionId =
             connectionId
                 ?: ChatSessionCaches.peekConnectionIdForChat(chatId)
@@ -276,20 +324,56 @@ internal suspend fun SupabaseChatRepository.sendMessageImpl(
             content = wireContent,
             authToken = token,
             messageType = messageType,
-            metadata = enrichedMetadata,
+            metadata = outboundMetadata,
             localSentAtMs = clientLocalSentAtMs,
             connectionId = resolvedConnectionId,
         )
 
+        suspend fun refreshV2WireContent() {
+            v2Crypto = resolveE2eeV2ChatCrypto(chatId, userId, forceRefresh = true, allowLifecycle = true)
+                ?: throw E2eeV2RequiredException()
+            if (mediaUpload != null &&
+                (
+                    mediaUpload.metadata.chatId != chatId ||
+                        mediaUpload.metadata.epoch != v2Crypto!!.epoch ||
+                        mediaUpload.metadata.senderDeviceId != v2Crypto.senderDeviceId
+                )
+            ) {
+                throw E2eeV2RequiredException()
+            }
+            clientMessageId = clientMessageId ?: MessageCryptoV2.generateClientMessageId()
+            wireContent =
+                MessageCryptoV2.encryptMessage(
+                    metadata =
+                        MessageCryptoV2.MessageMetadata(
+                            chatId = chatId,
+                            epoch = v2Crypto!!.epoch,
+                            senderDeviceId = v2Crypto!!.senderDeviceId,
+                            clientMessageId = clientMessageId!!,
+                        ),
+                    epochKey = v2Crypto!!.epochKey,
+                    plaintext = content,
+                )
+            outboundMetadata = v2OutboundMetadata()
+        }
+
         var activeToken = authToken
-        val firstSend = postOnce(activeToken, persistedChatId)
+        var firstSend = postOnce(activeToken, persistedChatId)
+        if (firstSend.isFailure && firstSend.exceptionOrNull()?.isE2eeV2Required() == true) {
+            refreshV2WireContent()
+            firstSend = postOnce(activeToken, persistedChatId)
+        }
         val insertedWire =
             firstSend.getOrElse { firstError ->
                 println(
                     "ChatRepository: sendMessage failed chatId=$chatId: ${firstError.redactedRestMessage()}",
                 )
                 var lastError: Throwable = firstError
-                if (firstError.isAuthFailure()) {
+                if (firstError.isE2eeV2Required()) {
+                    refreshV2WireContent()
+                    postOnce(activeToken, persistedChatId)
+                        .getOrElse { throw it }
+                } else if (firstError.isAuthFailure()) {
                     val refreshed = refreshedJwtAfterAuthFailure()
                     if (refreshed != null) {
                         activeToken = refreshed
