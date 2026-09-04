@@ -19,13 +19,12 @@ private const val ATTACHMENT_ENVELOPE_PREFIX: String = "ccx:v1:"
 private const val ATTACHMENT_V2_ENVELOPE_PREFIX: String = "ccx:v2:"
 private const val ATTACHMENT_PLACEHOLDER: String = "\uD83D\uDCCE Attachment" // 📎 Attachment
 
-fun maskAttachmentEnvelope(content: String): String {
-    return if (content.startsWith(ATTACHMENT_ENVELOPE_PREFIX) || content.startsWith(ATTACHMENT_V2_ENVELOPE_PREFIX)) {
+fun maskAttachmentEnvelope(content: String): String =
+    if (content.startsWith(ATTACHMENT_ENVELOPE_PREFIX) || content.startsWith(ATTACHMENT_V2_ENVELOPE_PREFIX)) {
         ATTACHMENT_PLACEHOLDER
     } else {
         content
     }
-}
 
 fun Message.replyRef(): MessageReplyRef? {
     val root = metadata as? JsonObject ?: return null
@@ -34,7 +33,10 @@ fun Message.replyRef(): MessageReplyRef? {
     return MessageReplyRef(replyToId = id, replyToContent = maskAttachmentEnvelope(snippet))
 }
 
-fun replySnippetForMetadata(content: String, maxLen: Int = 140): String {
+fun replySnippetForMetadata(
+    content: String,
+    maxLen: Int = 140,
+): String {
     val masked = maskAttachmentEnvelope(content)
     val oneLine = masked.replace("\n", " ").trim()
     if (oneLine.length <= maxLen) return oneLine

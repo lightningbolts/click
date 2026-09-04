@@ -1,12 +1,12 @@
 package compose.project.click.click.data.repository
 
+import compose.project.click.click.crypto.MessageCryptoV2
 import compose.project.click.click.data.models.Chat
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.User
-import compose.project.click.click.crypto.MessageCryptoV2
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.JsonElement

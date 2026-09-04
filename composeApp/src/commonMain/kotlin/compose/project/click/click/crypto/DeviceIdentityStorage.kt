@@ -15,7 +15,13 @@ expect class DeviceIdentity {
 /** Per-installation X25519 identity storage and key-agreement boundary. */
 expect object DeviceIdentityStorage {
     fun loadOrCreate(): DeviceIdentity
+
     fun generateEphemeral(): DeviceIdentity
-    fun deriveSharedSecret(identity: DeviceIdentity, peerPublicKeySpkiBase64: String): ByteArray
+
+    fun deriveSharedSecret(
+        identity: DeviceIdentity,
+        peerPublicKeySpkiBase64: String,
+    ): ByteArray
+
     fun destroyEphemeral(identity: DeviceIdentity)
 }

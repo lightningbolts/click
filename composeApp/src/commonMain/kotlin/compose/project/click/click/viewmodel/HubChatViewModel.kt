@@ -11,7 +11,6 @@ import compose.project.click.click.data.AppDataManager // pragma: allowlist secr
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.api.ChatApiClient // pragma: allowlist secret
 import compose.project.click.click.data.api.E2eeV2MediaUploadRequest // pragma: allowlist secret
-import compose.project.click.click.data.api.EVENT_HUB_ACCESS_DENIED_MARKER // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageDeliveryState // pragma: allowlist secret
@@ -342,12 +341,13 @@ class HubChatViewModel(
                 val outgoingBody =
                     if (e2ee != null) {
                         MessageCryptoV2.encryptMessage(
-                            metadata = MessageCryptoV2.MessageMetadata(
-                                chatId = hubId,
-                                epoch = e2ee.epoch,
-                                senderDeviceId = e2ee.senderDeviceId,
-                                clientMessageId = clientMessageId!!,
-                            ),
+                            metadata =
+                                MessageCryptoV2.MessageMetadata(
+                                    chatId = hubId,
+                                    epoch = e2ee.epoch,
+                                    senderDeviceId = e2ee.senderDeviceId,
+                                    clientMessageId = clientMessageId!!,
+                                ),
                             epochKey = e2ee.epochKey,
                             plaintext = text,
                             replayGuard = e2ee.replayGuard,
@@ -425,13 +425,14 @@ class HubChatViewModel(
                 val encryptedV2 =
                     e2ee?.let {
                         MessageCryptoV2.encryptMedia(
-                            metadata = MessageCryptoV2.MediaMetadata(
-                                chatId = hubId,
-                                epoch = it.epoch,
-                                senderDeviceId = it.senderDeviceId,
-                                clientMessageId = clientMessageId!!,
-                                mediaCiphertextSha256 = "",
-                            ),
+                            metadata =
+                                MessageCryptoV2.MediaMetadata(
+                                    chatId = hubId,
+                                    epoch = it.epoch,
+                                    senderDeviceId = it.senderDeviceId,
+                                    clientMessageId = clientMessageId!!,
+                                    mediaCiphertextSha256 = "",
+                                ),
                             epochKey = it.epochKey,
                             plaintext = imageBytes,
                             replayGuard = it.replayGuard,
@@ -451,15 +452,16 @@ class HubChatViewModel(
                             authToken = jwt,
                             userLat = loc.latitude,
                             userLong = loc.longitude,
-                            v2 = encryptedV2?.let {
-                                E2eeV2MediaUploadRequest(
-                                    envelope = it.authorizationEnvelope,
-                                    mediaCiphertextSha256 = it.mediaCiphertextSha256,
-                                    epoch = e2ee!!.epoch,
-                                    senderDeviceId = e2ee.senderDeviceId,
-                                    clientMessageId = clientMessageId!!,
-                                )
-                            },
+                            v2 =
+                                encryptedV2?.let {
+                                    E2eeV2MediaUploadRequest(
+                                        envelope = it.authorizationEnvelope,
+                                        mediaCiphertextSha256 = it.mediaCiphertextSha256,
+                                        epoch = e2ee!!.epoch,
+                                        senderDeviceId = e2ee.senderDeviceId,
+                                        clientMessageId = clientMessageId!!,
+                                    )
+                                },
                         ).getOrElse { e -> throw e }
                 val metadata: JsonObject =
                     buildJsonObject {
@@ -549,15 +551,16 @@ class HubChatViewModel(
                             authToken = jwt,
                             userLat = loc.latitude,
                             userLong = loc.longitude,
-                            v2 = encryptedV2?.let {
-                                E2eeV2MediaUploadRequest(
-                                    envelope = it.authorizationEnvelope,
-                                    mediaCiphertextSha256 = it.mediaCiphertextSha256,
-                                    epoch = e2ee!!.epoch,
-                                    senderDeviceId = e2ee.senderDeviceId,
-                                    clientMessageId = clientMessageId!!,
-                                )
-                            },
+                            v2 =
+                                encryptedV2?.let {
+                                    E2eeV2MediaUploadRequest(
+                                        envelope = it.authorizationEnvelope,
+                                        mediaCiphertextSha256 = it.mediaCiphertextSha256,
+                                        epoch = e2ee!!.epoch,
+                                        senderDeviceId = e2ee.senderDeviceId,
+                                        clientMessageId = clientMessageId!!,
+                                    )
+                                },
                         ).getOrElse { e -> throw e }
                 val revealTtlIso = computeClickDropRevealTtlIso()
                 val metadata: JsonObject =

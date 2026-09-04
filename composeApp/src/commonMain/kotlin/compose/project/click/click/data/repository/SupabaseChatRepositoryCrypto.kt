@@ -36,8 +36,15 @@ private object E2eeV2SessionCache {
 
     fun get(chatId: String): E2eeV2ChatSession? = sessions[chatId]
 
-    fun put(chatId: String, session: E2eeV2ChatSession) {
-        sessions[chatId]?.epochKeys?.values?.distinct()?.forEach { it.fill(0) }
+    fun put(
+        chatId: String,
+        session: E2eeV2ChatSession,
+    ) {
+        sessions[chatId]
+            ?.epochKeys
+            ?.values
+            ?.distinct()
+            ?.forEach { it.fill(0) }
         sessions[chatId] = session
     }
 }
@@ -206,16 +213,18 @@ internal suspend fun SupabaseChatRepository.resolveE2eeV2ChatCrypto(
 ): E2eeV2ChatSession? {
     if (!forceRefresh && !allowLifecycle) E2eeV2SessionCache.get(chatId)?.let { return it }
     val token = ensureFreshJwtForChat() ?: return null
-    val identity = try {
-        MessageCryptoV2.loadOrCreateDeviceIdentity()
-    } catch (_: Exception) {
-        throw E2eeV2RequiredException()
-    }
+    val identity =
+        try {
+            MessageCryptoV2.loadOrCreateDeviceIdentity()
+        } catch (_: Exception) {
+            throw E2eeV2RequiredException()
+        }
     apiClient.registerE2eeV2Device(identity.info.deviceId, identity.info.publicKeySpkiBase64, token)
     val devices =
         apiClient.discoverE2eeV2Devices(chatId, token).getOrElse { throw E2eeV2RequiredException() }
-    val registered = devices.firstOrNull { it.deviceId == identity.info.deviceId }
-        ?: throw E2eeV2RequiredException()
+    val registered =
+        devices.firstOrNull { it.deviceId == identity.info.deviceId }
+            ?: throw E2eeV2RequiredException()
     val logicalDeviceId = identity.info.deviceId
     var state =
         apiClient.getE2eeV2State(chatId, token, logicalDeviceId).getOrElse {
@@ -265,23 +274,26 @@ internal suspend fun SupabaseChatRepository.resolveE2eeV2ChatCrypto(
     if (currentEpoch <= 0) throw E2eeV2RequiredException()
     // The epoch route returns recipient_device_id as the persisted row UUID. The request/query
     // contract and the envelope AAD use the logical identity.deviceId instead.
-    val epochKeys = state.envelopes
-        .filter { it.recipientDeviceId == registered.id }
-        .mapNotNull { envelope ->
-            val key = runCatching {
-                MessageCryptoV2.unwrapEpochKey(
-                    metadata = MessageCryptoV2.EpochKeyWrapMetadata(
-                        chatId = chatId,
-                        epoch = envelope.epoch,
-                        senderDeviceId = envelope.senderDeviceId,
-                        recipientDeviceId = logicalDeviceId,
-                    ),
-                    recipientIdentity = identity,
-                    envelope = envelope.envelope,
-                )
-            }.getOrNull() ?: return@mapNotNull null
-            envelope.epoch to key
-        }.toMap()
+    val epochKeys =
+        state.envelopes
+            .filter { it.recipientDeviceId == registered.id }
+            .mapNotNull { envelope ->
+                val key =
+                    runCatching {
+                        MessageCryptoV2.unwrapEpochKey(
+                            metadata =
+                                MessageCryptoV2.EpochKeyWrapMetadata(
+                                    chatId = chatId,
+                                    epoch = envelope.epoch,
+                                    senderDeviceId = envelope.senderDeviceId,
+                                    recipientDeviceId = logicalDeviceId,
+                                ),
+                            recipientIdentity = identity,
+                            envelope = envelope.envelope,
+                        )
+                    }.getOrNull() ?: return@mapNotNull null
+                envelope.epoch to key
+            }.toMap()
     if (!epochKeys.containsKey(currentEpoch)) throw E2eeV2RequiredException()
     return E2eeV2ChatSession(
         epoch = currentEpoch,
@@ -332,20 +344,22 @@ private suspend fun SupabaseChatRepository.participantUserIdsForE2eeUpgrade(chat
     }
 
 private fun membershipFingerprintForDevices(devices: List<compose.project.click.click.data.api.ClickWebChatDeviceDto>): String {
-    val canonical = devices
-        .map { "${it.userId.orEmpty()}:${it.deviceId}" }
-        .sorted()
-        .joinToString("|")
+    val canonical =
+        devices
+            .map { "${it.userId.orEmpty()}:${it.deviceId}" }
+            .sorted()
+            .joinToString("|")
     return PlatformCrypto.sha256(canonical.encodeToByteArray()).toHexString()
 }
 
-private fun ByteArray.toHexString(): String = buildString(size * 2) {
-    for (value in this@toHexString) {
-        val byte = value.toInt() and 0xff
-        append("0123456789abcdef"[byte ushr 4])
-        append("0123456789abcdef"[byte and 0x0f])
+private fun ByteArray.toHexString(): String =
+    buildString(size * 2) {
+        for (value in this@toHexString) {
+            val byte = value.toInt() and 0xff
+            append("0123456789abcdef"[byte ushr 4])
+            append("0123456789abcdef"[byte and 0x0f])
+        }
     }
-}
 
 private suspend fun SupabaseChatRepository.createE2eeV2EpochWithFreshKey(
     chatId: String,
@@ -360,12 +374,13 @@ private suspend fun SupabaseChatRepository.createE2eeV2EpochWithFreshKey(
         devices.map { recipient ->
             val envelope =
                 MessageCryptoV2.wrapEpochKey(
-                    metadata = MessageCryptoV2.EpochKeyWrapMetadata(
-                        chatId = chatId,
-                        epoch = epoch,
-                        senderDeviceId = identity.info.deviceId,
-                        recipientDeviceId = recipient.deviceId,
-                    ),
+                    metadata =
+                        MessageCryptoV2.EpochKeyWrapMetadata(
+                            chatId = chatId,
+                            epoch = epoch,
+                            senderDeviceId = identity.info.deviceId,
+                            recipientDeviceId = recipient.deviceId,
+                        ),
                     epochKey = epochKey,
                     recipientPublicKeySpkiBase64 = recipient.identityPublicKey,
                 )
@@ -454,7 +469,13 @@ internal fun SupabaseChatRepository.decryptMessageOnCurrentThread(
             when (crypto) {
                 is ChatSessionCaches.ResolvedChatCrypto.GroupMaster -> {
                     if (MessageCrypto.isV2Encrypted(message.content)) {
-                        if (effectiveV2Crypto != null) decryptV2Message(message, effectiveV2Crypto) else message.copy(content = "New message")
+                        if (effectiveV2Crypto !=
+                            null
+                        ) {
+                            decryptV2Message(message, effectiveV2Crypto)
+                        } else {
+                            message.copy(content = "New message")
+                        }
                     } else if (!MessageCrypto.isGroupMessageEncrypted(message.content)) {
                         if (MessageCrypto.isEncrypted(message.content)) {
                             message.copy(content = "New message")
@@ -469,7 +490,13 @@ internal fun SupabaseChatRepository.decryptMessageOnCurrentThread(
                 }
                 is ChatSessionCaches.ResolvedChatCrypto.Pairwise -> {
                     if (MessageCrypto.isV2Encrypted(message.content)) {
-                        if (effectiveV2Crypto != null) decryptV2Message(message, effectiveV2Crypto) else message.copy(content = "New message")
+                        if (effectiveV2Crypto !=
+                            null
+                        ) {
+                            decryptV2Message(message, effectiveV2Crypto)
+                        } else {
+                            message.copy(content = "New message")
+                        }
                     } else if (!MessageCrypto.isEncrypted(message.content)) {
                         message
                     } else {
@@ -481,16 +508,21 @@ internal fun SupabaseChatRepository.decryptMessageOnCurrentThread(
     return decrypted.withCoercedBeaconType().withDbDerivedDeliveryState()
 }
 
-private fun decryptV2Message(message: Message, session: E2eeV2ChatSession): Message =
+private fun decryptV2Message(
+    message: Message,
+    session: E2eeV2ChatSession,
+): Message =
     runCatching {
-        val envelope = MessageCryptoV2.parseE2eeV2Envelope(message.content) as? MessageCryptoV2.MessageEnvelope
-            ?: error("not a message envelope")
-        val metadata = MessageCryptoV2.MessageMetadata(
-            chatId = envelope.chatId,
-            epoch = envelope.epoch,
-            senderDeviceId = envelope.senderDeviceId,
-            clientMessageId = envelope.clientMessageId,
-        )
+        val envelope =
+            MessageCryptoV2.parseE2eeV2Envelope(message.content) as? MessageCryptoV2.MessageEnvelope
+                ?: error("not a message envelope")
+        val metadata =
+            MessageCryptoV2.MessageMetadata(
+                chatId = envelope.chatId,
+                epoch = envelope.epoch,
+                senderDeviceId = envelope.senderDeviceId,
+                clientMessageId = envelope.clientMessageId,
+            )
         val epochKey = session.epochKeys[envelope.epoch] ?: error("E2EE v2 epoch key is unavailable")
         message.copy(content = MessageCryptoV2.decryptMessage(metadata, epochKey, message.content, session.replayGuard))
     }.getOrElse { message.copy(content = "New message") }
@@ -502,8 +534,9 @@ internal suspend fun SupabaseChatRepository.decryptMessage(
     withContext(Dispatchers.Default) {
         val v2 =
             if (MessageCrypto.isV2Encrypted(message.content)) {
-                val envelope = runCatching { MessageCryptoV2.parseE2eeV2Envelope(message.content) }
-                    .getOrNull() as? MessageCryptoV2.MessageEnvelope
+                val envelope =
+                    runCatching { MessageCryptoV2.parseE2eeV2Envelope(message.content) }
+                        .getOrNull() as? MessageCryptoV2.MessageEnvelope
                 resolveE2eeV2ChatCrypto(
                     chatId = envelope?.chatId ?: return@withContext message.copy(content = "New message"),
                     viewerUserId = supabase.auth.currentUserOrNull()?.id ?: "",

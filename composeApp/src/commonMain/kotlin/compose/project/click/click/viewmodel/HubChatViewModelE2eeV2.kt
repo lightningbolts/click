@@ -28,17 +28,17 @@ internal data class HubE2eeV2Session(
 internal const val HUB_E2EE_V2_UNAVAILABLE_MESSAGE = "Encrypted hub message unavailable"
 
 /** Resolve, initialize, or rotate the hub epoch without ever sending a legacy write after upgrade. */
-internal suspend fun HubChatViewModel.ensureHubE2eeV2Session(
-    participantUserIds: Set<String>,
-): HubE2eeV2Session? {
+internal suspend fun HubChatViewModel.ensureHubE2eeV2Session(participantUserIds: Set<String>): HubE2eeV2Session? {
     val token = tokenStorage.requireFreshHubJwt()
-    val identity = runCatching { MessageCryptoV2.loadOrCreateDeviceIdentity() }
-        .getOrElse { throw IllegalStateException("E2EE v2 device identity is unavailable") }
+    val identity =
+        runCatching { MessageCryptoV2.loadOrCreateDeviceIdentity() }
+            .getOrElse { throw IllegalStateException("E2EE v2 device identity is unavailable") }
     // Registration is idempotent from the caller's perspective: an existing identity returns 409.
     chatApi.registerE2eeV2Device(identity.info.deviceId, identity.info.publicKeySpkiBase64, token)
     var devices = chatApi.discoverHubE2eeV2Devices(hubId, token).getOrElse { throw it }
-    val own = devices.firstOrNull { it.deviceId == identity.info.deviceId }
-        ?: throw IllegalStateException("The current E2EE v2 device is not registered in this hub")
+    val own =
+        devices.firstOrNull { it.deviceId == identity.info.deviceId }
+            ?: throw IllegalStateException("The current E2EE v2 device is not registered in this hub")
     var state = chatApi.getHubE2eeV2State(hubId, token, identity.info.deviceId).getOrElse { throw it }
 
     if (state.currentEpoch == null) {
@@ -46,26 +46,28 @@ internal suspend fun HubChatViewModel.ensureHubE2eeV2Session(
             participantUserIds.isNotEmpty() &&
                 participantUserIds.all { userId -> devices.any { device -> device.userId == userId } }
         if (!allParticipantsHaveV2) return null
-        state = createHubE2eeV2EpochWithFreshKey(
-            identity = identity,
-            devices = devices,
-            epoch = 1,
-            membershipFingerprint = membershipFingerprintForHubDevices(devices),
-            authToken = token,
-        )
+        state =
+            createHubE2eeV2EpochWithFreshKey(
+                identity = identity,
+                devices = devices,
+                epoch = 1,
+                membershipFingerprint = membershipFingerprintForHubDevices(devices),
+                authToken = token,
+            )
     } else {
         // The service RPC independently verifies that every current participant has a v2 device.
         // That keeps privacy-preserving guest-list mode safe while still rotating when a device
         // is added or revoked and the participant ids are intentionally hidden from this client.
         val fingerprint = membershipFingerprintForHubDevices(devices)
         if (state.membershipFingerprint != fingerprint) {
-            state = createHubE2eeV2EpochWithFreshKey(
-                identity = identity,
-                devices = devices,
-                epoch = state.currentEpoch + 1,
-                membershipFingerprint = fingerprint,
-                authToken = token,
-            )
+            state =
+                createHubE2eeV2EpochWithFreshKey(
+                    identity = identity,
+                    devices = devices,
+                    epoch = state.currentEpoch + 1,
+                    membershipFingerprint = fingerprint,
+                    authToken = token,
+                )
             devices = chatApi.discoverHubE2eeV2Devices(hubId, token).getOrElse { throw it }
         }
     }
@@ -78,18 +80,20 @@ internal suspend fun HubChatViewModel.ensureHubE2eeV2Session(
     state.envelopes
         .filter { it.hubId == hubId && it.recipientDeviceId == own.id }
         .forEach { envelope ->
-            val key = runCatching {
-                MessageCryptoV2.unwrapEpochKey(
-                    metadata = MessageCryptoV2.EpochKeyWrapMetadata(
-                        chatId = hubId,
-                        epoch = envelope.epoch,
-                        senderDeviceId = envelope.senderDeviceId,
-                        recipientDeviceId = identity.info.deviceId,
-                    ),
-                    recipientIdentity = identity,
-                    envelope = envelope.envelope,
-                )
-            }.getOrNull()
+            val key =
+                runCatching {
+                    MessageCryptoV2.unwrapEpochKey(
+                        metadata =
+                            MessageCryptoV2.EpochKeyWrapMetadata(
+                                chatId = hubId,
+                                epoch = envelope.epoch,
+                                senderDeviceId = envelope.senderDeviceId,
+                                recipientDeviceId = identity.info.deviceId,
+                            ),
+                        recipientIdentity = identity,
+                        envelope = envelope.envelope,
+                    )
+                }.getOrNull()
             if (key != null) keys[envelope.epoch] = key
         }
     if (!keys.containsKey(currentEpoch)) {
@@ -112,29 +116,33 @@ private suspend fun HubChatViewModel.createHubE2eeV2EpochWithFreshKey(
     authToken: String,
 ): compose.project.click.click.data.api.ClickWebHubE2eeV2StateEnvelope {
     val epochKey = MessageCryptoV2.generateEpochKey()
-    val envelopes = devices.map { recipient ->
-        ClickWebHubEpochWriteEnvelope(
-            recipientDeviceId = recipient.deviceId,
-            envelope = MessageCryptoV2.wrapEpochKey(
-                metadata = MessageCryptoV2.EpochKeyWrapMetadata(
-                    chatId = hubId,
-                    epoch = epoch,
-                    senderDeviceId = identity.info.deviceId,
-                    recipientDeviceId = recipient.deviceId,
-                ),
-                epochKey = epochKey,
-                recipientPublicKeySpkiBase64 = recipient.identityPublicKey,
-            ),
+    val envelopes =
+        devices.map { recipient ->
+            ClickWebHubEpochWriteEnvelope(
+                recipientDeviceId = recipient.deviceId,
+                envelope =
+                    MessageCryptoV2.wrapEpochKey(
+                        metadata =
+                            MessageCryptoV2.EpochKeyWrapMetadata(
+                                chatId = hubId,
+                                epoch = epoch,
+                                senderDeviceId = identity.info.deviceId,
+                                recipientDeviceId = recipient.deviceId,
+                            ),
+                        epochKey = epochKey,
+                        recipientPublicKeySpkiBase64 = recipient.identityPublicKey,
+                    ),
+            )
+        }
+    val write =
+        chatApi.createHubE2eeV2Epoch(
+            hubId = hubId,
+            epoch = epoch,
+            senderDeviceId = identity.info.deviceId,
+            membershipFingerprint = membershipFingerprint,
+            envelopes = envelopes,
+            authToken = authToken,
         )
-    }
-    val write = chatApi.createHubE2eeV2Epoch(
-        hubId = hubId,
-        epoch = epoch,
-        senderDeviceId = identity.info.deviceId,
-        membershipFingerprint = membershipFingerprint,
-        envelopes = envelopes,
-        authToken = authToken,
-    )
     if (write.isFailure) {
         val concurrent = chatApi.getHubE2eeV2State(hubId, authToken, identity.info.deviceId).getOrNull()
         if (concurrent?.currentEpoch == epoch && concurrent.membershipFingerprint == membershipFingerprint) return concurrent
@@ -148,29 +156,32 @@ private fun membershipFingerprintForHubDevices(devices: List<ClickWebChatDeviceD
     return PlatformCrypto.sha256(canonical.encodeToByteArray()).toHexString()
 }
 
-private fun ByteArray.toHexString(): String = buildString(size * 2) {
-    for (value in this@toHexString) {
-        val byte = value.toInt() and 0xff
-        append("0123456789abcdef"[byte ushr 4])
-        append("0123456789abcdef"[byte and 0x0f])
+private fun ByteArray.toHexString(): String =
+    buildString(size * 2) {
+        for (value in this@toHexString) {
+            val byte = value.toInt() and 0xff
+            append("0123456789abcdef"[byte ushr 4])
+            append("0123456789abcdef"[byte and 0x0f])
+        }
     }
-}
 
 internal fun HubChatViewModel.decryptHubBody(row: HubMessageRow): String {
     if (!MessageCryptoV2.isEncrypted(row.body)) return row.body
     val session = hubE2eeV2Session ?: return HUB_E2EE_V2_UNAVAILABLE_MESSAGE
-    val envelope = runCatching { MessageCryptoV2.parseE2eeV2Envelope(row.body) }
-        .getOrNull() as? MessageCryptoV2.MessageEnvelope
-        ?: return HUB_E2EE_V2_UNAVAILABLE_MESSAGE
+    val envelope =
+        runCatching { MessageCryptoV2.parseE2eeV2Envelope(row.body) }
+            .getOrNull() as? MessageCryptoV2.MessageEnvelope
+            ?: return HUB_E2EE_V2_UNAVAILABLE_MESSAGE
     val key = session.keyForEpoch(envelope.epoch) ?: return HUB_E2EE_V2_UNAVAILABLE_MESSAGE
     return runCatching {
         MessageCryptoV2.decryptMessage(
-            metadata = MessageCryptoV2.MessageMetadata(
-                chatId = envelope.chatId,
-                epoch = envelope.epoch,
-                senderDeviceId = envelope.senderDeviceId,
-                clientMessageId = envelope.clientMessageId,
-            ),
+            metadata =
+                MessageCryptoV2.MessageMetadata(
+                    chatId = envelope.chatId,
+                    epoch = envelope.epoch,
+                    senderDeviceId = envelope.senderDeviceId,
+                    clientMessageId = envelope.clientMessageId,
+                ),
             epochKey = key,
             envelope = row.body,
         )
@@ -179,12 +190,18 @@ internal fun HubChatViewModel.decryptHubBody(row: HubMessageRow): String {
 
 internal fun Message.hubE2eeV2MediaMetadataOrNull(): MessageCryptoV2.MediaMetadata? {
     val root = metadata as? JsonObject ?: return null
-    fun string(vararg names: String): String? = names.asSequence()
-        .mapNotNull { root[it]?.jsonPrimitive?.contentOrNull }
-        .firstOrNull { it.isNotBlank() }
-    fun int(vararg names: String): Int? = names.asSequence()
-        .mapNotNull { root[it]?.jsonPrimitive?.intOrNull }
-        .firstOrNull()
+
+    fun string(vararg names: String): String? =
+        names
+            .asSequence()
+            .mapNotNull { root[it]?.jsonPrimitive?.contentOrNull }
+            .firstOrNull { it.isNotBlank() }
+
+    fun int(vararg names: String): Int? =
+        names
+            .asSequence()
+            .mapNotNull { root[it]?.jsonPrimitive?.intOrNull }
+            .firstOrNull()
     val chatId = string("media_chat_id", "mediaChatId") ?: return null
     val epoch = int("media_epoch", "mediaEpoch") ?: return null
     val sender = string("media_sender_device_id", "mediaSenderDeviceId") ?: return null

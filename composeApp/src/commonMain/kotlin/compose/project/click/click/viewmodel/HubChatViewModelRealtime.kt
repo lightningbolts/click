@@ -1,6 +1,7 @@
 package compose.project.click.click.viewmodel // pragma: allowlist secret
 
 import androidx.lifecycle.viewModelScope
+import compose.project.click.click.crypto.MessageCryptoV2 // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.api.ChatApiClient // pragma: allowlist secret
@@ -10,7 +11,6 @@ import compose.project.click.click.data.models.Message // pragma: allowlist secr
 import compose.project.click.click.data.models.MessageDeliveryState // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
-import compose.project.click.click.crypto.MessageCryptoV2 // pragma: allowlist secret
 import compose.project.click.click.data.realtime.rebindRealtimeSocket // pragma: allowlist secret
 import compose.project.click.click.ui.chat.deleteSecureChatAudioTempFile // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
@@ -414,7 +414,7 @@ internal suspend fun HubChatViewModel.loadInitialMessages() {
         try {
             val token = tokenStorage.requireFreshHubJwt()
             val thread = chatApi.fetchHubThread(hubId, token)
-                thread.fold(
+            thread.fold(
                 onSuccess = { snapshot ->
                     hubParticipantIds = snapshot.participantIds.toSet()
                     runCatching { ensureHubE2eeV2Session(hubParticipantIds) }

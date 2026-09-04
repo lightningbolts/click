@@ -250,7 +250,8 @@ internal suspend fun SupabaseChatRepository.sendMessageImpl(
                     .firstOrNull()
             }
         val mediaUpload = e2eeV2MediaRecordForReference(mediaReference)
-        if (mediaUpload != null && (
+        if (mediaUpload != null &&
+            (
                 v2Crypto == null ||
                     mediaUpload.metadata.chatId != chatId ||
                     mediaUpload.metadata.epoch != v2Crypto.epoch ||
@@ -265,16 +266,18 @@ internal suspend fun SupabaseChatRepository.sendMessageImpl(
             }
         var wireContent =
             when {
-                v2Crypto != null -> MessageCryptoV2.encryptMessage(
-                    metadata = MessageCryptoV2.MessageMetadata(
-                        chatId = chatId,
-                        epoch = v2Crypto!!.epoch,
-                        senderDeviceId = v2Crypto!!.senderDeviceId,
-                        clientMessageId = clientMessageId!!,
-                    ),
-                    epochKey = v2Crypto!!.epochKey,
-                    plaintext = content,
-                )
+                v2Crypto != null ->
+                    MessageCryptoV2.encryptMessage(
+                        metadata =
+                            MessageCryptoV2.MessageMetadata(
+                                chatId = chatId,
+                                epoch = v2Crypto!!.epoch,
+                                senderDeviceId = v2Crypto!!.senderDeviceId,
+                                clientMessageId = clientMessageId!!,
+                            ),
+                        epochKey = v2Crypto!!.epochKey,
+                        plaintext = content,
+                    )
                 crypto is ChatSessionCaches.ResolvedChatCrypto.GroupMaster ->
                     MessageCrypto.encryptGroupMessageContent(content, crypto.masterKey)
                 crypto is ChatSessionCaches.ResolvedChatCrypto.Pairwise ->
@@ -290,6 +293,7 @@ internal suspend fun SupabaseChatRepository.sendMessageImpl(
             ensureFreshJwtForChat()
                 ?: return null
         val enrichedMetadata = enrichMediaEncryptionMetadata(messageType, metadata)
+
         fun v2OutboundMetadata(): JsonElement? =
             v2Crypto?.let { session ->
                 buildJsonObject {
@@ -328,7 +332,8 @@ internal suspend fun SupabaseChatRepository.sendMessageImpl(
         suspend fun refreshV2WireContent() {
             v2Crypto = resolveE2eeV2ChatCrypto(chatId, userId, forceRefresh = true, allowLifecycle = true)
                 ?: throw E2eeV2RequiredException()
-            if (mediaUpload != null && (
+            if (mediaUpload != null &&
+                (
                     mediaUpload.metadata.chatId != chatId ||
                         mediaUpload.metadata.epoch != v2Crypto!!.epoch ||
                         mediaUpload.metadata.senderDeviceId != v2Crypto.senderDeviceId
@@ -337,16 +342,18 @@ internal suspend fun SupabaseChatRepository.sendMessageImpl(
                 throw E2eeV2RequiredException()
             }
             clientMessageId = clientMessageId ?: MessageCryptoV2.generateClientMessageId()
-            wireContent = MessageCryptoV2.encryptMessage(
-                metadata = MessageCryptoV2.MessageMetadata(
-                    chatId = chatId,
-                    epoch = v2Crypto!!.epoch,
-                    senderDeviceId = v2Crypto!!.senderDeviceId,
-                    clientMessageId = clientMessageId!!,
-                ),
-                epochKey = v2Crypto!!.epochKey,
-                plaintext = content,
-            )
+            wireContent =
+                MessageCryptoV2.encryptMessage(
+                    metadata =
+                        MessageCryptoV2.MessageMetadata(
+                            chatId = chatId,
+                            epoch = v2Crypto!!.epoch,
+                            senderDeviceId = v2Crypto!!.senderDeviceId,
+                            clientMessageId = clientMessageId!!,
+                        ),
+                    epochKey = v2Crypto!!.epochKey,
+                    plaintext = content,
+                )
             outboundMetadata = v2OutboundMetadata()
         }
 
@@ -370,8 +377,8 @@ internal suspend fun SupabaseChatRepository.sendMessageImpl(
                     val refreshed = refreshedJwtAfterAuthFailure()
                     if (refreshed != null) {
                         activeToken = refreshed
-                            postOnce(activeToken, persistedChatId)
-                                .getOrElse { authRetryError ->
+                        postOnce(activeToken, persistedChatId)
+                            .getOrElse { authRetryError ->
                                 lastError = authRetryError
                                 null
                             }?.let { return@getOrElse it }

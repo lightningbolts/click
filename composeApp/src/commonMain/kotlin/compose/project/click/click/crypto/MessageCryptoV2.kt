@@ -1,15 +1,14 @@
 package compose.project.click.click.crypto
 
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 /** Protocol-compatible v2 message and epoch-key cryptography. */
 object MessageCryptoV2 {
@@ -21,7 +20,11 @@ object MessageCryptoV2 {
 
     private const val HKDF_SALT = "click-platforms-e2ee-v2-hkdf-sha256"
     private val identifierPattern = Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
-    private val json = Json { isLenient = false; ignoreUnknownKeys = false }
+    private val json =
+        Json {
+            isLenient = false
+            ignoreUnknownKeys = false
+        }
 
     data class MessageMetadata(
         val chatId: String,
@@ -88,7 +91,10 @@ object MessageCryptoV2 {
 
         val size: Int get() = envelopeIdentities.size
 
-        fun reserve(nonce: String, envelopeIdentity: String) {
+        fun reserve(
+            nonce: String,
+            envelopeIdentity: String,
+        ) {
             if (envelopeIdentities.contains(envelopeIdentity)) {
                 check(nonces.contains(nonce)) { "E2EE v2 replay identity mismatch" }
                 return
@@ -150,9 +156,10 @@ object MessageCryptoV2 {
         plaintext: ByteArray,
         replayGuard: ReplayGuard? = null,
     ): EncryptedMedia {
-        val checkedBase = validateMessageMetadata(
-            MessageMetadata(metadata.chatId, metadata.epoch, metadata.senderDeviceId, metadata.clientMessageId),
-        )
+        val checkedBase =
+            validateMessageMetadata(
+                MessageMetadata(metadata.chatId, metadata.epoch, metadata.senderDeviceId, metadata.clientMessageId),
+            )
         require(epochKey.size == EPOCH_KEY_BYTES) { "epochKey must be exactly $EPOCH_KEY_BYTES bytes" }
         val nonce = PlatformCrypto.secureRandomBytes(NONCE_BYTES)
         val nonceB64 = nonce.toB64()
@@ -249,13 +256,15 @@ object MessageCryptoV2 {
         replayGuard: ReplayGuard? = null,
     ) {
         val expected = validateMediaMetadata(metadata)
-        val parsed = try {
-            parseMediaAuthorizationEnvelope(envelope)
-        } catch (error: IllegalArgumentException) {
-            throw IllegalStateException("E2EE v2 media authorization envelope is invalid", error)
-        }
+        val parsed =
+            try {
+                parseMediaAuthorizationEnvelope(envelope)
+            } catch (error: IllegalArgumentException) {
+                throw IllegalStateException("E2EE v2 media authorization envelope is invalid", error)
+            }
         check(
-            parsed.chatId == expected.chatId && parsed.epoch == expected.epoch &&
+            parsed.chatId == expected.chatId &&
+                parsed.epoch == expected.epoch &&
                 parsed.senderDeviceId == expected.senderDeviceId &&
                 parsed.clientMessageId == expected.clientMessageId &&
                 parsed.mediaCiphertextSha256 == expected.mediaCiphertextSha256,
@@ -263,12 +272,13 @@ object MessageCryptoV2 {
         require(epochKey.size == EPOCH_KEY_BYTES) { "epochKey must be exactly $EPOCH_KEY_BYTES bytes" }
         try {
             val plaintext =
-                PlatformCrypto.aesGcmDecrypt(
-                    epochKey,
-                    parsed.nonce.decodeB64("nonce"),
-                    canonicalMediaAuthorizationMetadata(expected),
-                    parsed.ciphertext.decodeB64("ciphertext"),
-                ).decodeToString()
+                PlatformCrypto
+                    .aesGcmDecrypt(
+                        epochKey,
+                        parsed.nonce.decodeB64("nonce"),
+                        canonicalMediaAuthorizationMetadata(expected),
+                        parsed.ciphertext.decodeB64("ciphertext"),
+                    ).decodeToString()
             check(plaintext == MEDIA_AUTHORIZATION_PLAINTEXT) {
                 "E2EE v2 media authorization plaintext mismatch"
             }
@@ -287,21 +297,33 @@ object MessageCryptoV2 {
         replayGuard: ReplayGuard? = null,
     ): String {
         val expected = validateMessageMetadata(metadata)
-        val parsed = try {
-            parseMessageEnvelope(envelope)
-        } catch (error: IllegalArgumentException) {
-            throw IllegalStateException("E2EE v2 message envelope is invalid", error)
-        }
-        check(parsed.chatId == expected.chatId && parsed.epoch == expected.epoch &&
-            parsed.senderDeviceId == expected.senderDeviceId && parsed.clientMessageId == expected.clientMessageId) {
+        val parsed =
+            try {
+                parseMessageEnvelope(envelope)
+            } catch (error: IllegalArgumentException) {
+                throw IllegalStateException("E2EE v2 message envelope is invalid", error)
+            }
+        check(
+            parsed.chatId == expected.chatId &&
+                parsed.epoch == expected.epoch &&
+                parsed.senderDeviceId == expected.senderDeviceId &&
+                parsed.clientMessageId == expected.clientMessageId,
+        ) {
             "E2EE v2 authenticated metadata mismatch"
         }
         require(epochKey.size == EPOCH_KEY_BYTES) { "epochKey must be exactly $EPOCH_KEY_BYTES bytes" }
-        val plaintext = try {
-            PlatformCrypto.aesGcmDecrypt(epochKey, parsed.nonce.decodeB64("nonce"), canonicalMessageMetadata(expected), parsed.ciphertext.decodeB64("ciphertext")).decodeToString()
-        } catch (_: Exception) {
-            throw IllegalStateException("E2EE v2 message authentication failed")
-        }
+        val plaintext =
+            try {
+                PlatformCrypto
+                    .aesGcmDecrypt(
+                        epochKey,
+                        parsed.nonce.decodeB64("nonce"),
+                        canonicalMessageMetadata(expected),
+                        parsed.ciphertext.decodeB64("ciphertext"),
+                    ).decodeToString()
+            } catch (_: Exception) {
+                throw IllegalStateException("E2EE v2 message authentication failed")
+            }
         replayGuard?.reserve(parsed.nonce, messageIdentity(expected, parsed.nonce))
         return plaintext
     }
@@ -349,15 +371,25 @@ object MessageCryptoV2 {
     ): ByteArray {
         val expected = validateWrapMetadata(metadata)
         val parsed = parseWrapEnvelope(envelope)
-        check(parsed.chatId == expected.chatId && parsed.epoch == expected.epoch &&
-            parsed.senderDeviceId == expected.senderDeviceId && parsed.recipientDeviceId == expected.recipientDeviceId) {
+        check(
+            parsed.chatId == expected.chatId &&
+                parsed.epoch == expected.epoch &&
+                parsed.senderDeviceId == expected.senderDeviceId &&
+                parsed.recipientDeviceId == expected.recipientDeviceId,
+        ) {
             "E2EE v2 epoch-key metadata mismatch"
         }
         replayGuard?.reserve(parsed.nonce, wrapIdentity(expected, parsed.nonce))
         return try {
             val sharedSecret = DeviceIdentityStorage.deriveSharedSecret(recipientIdentity, parsed.ephemeralPublicKey)
             val wrappingKey = hkdfSha256(sharedSecret, canonicalWrapMetadata(expected))
-            val key = PlatformCrypto.aesGcmDecrypt(wrappingKey, parsed.nonce.decodeB64("nonce"), canonicalWrapMetadata(expected), parsed.ciphertext.decodeB64("ciphertext"))
+            val key =
+                PlatformCrypto.aesGcmDecrypt(
+                    wrappingKey,
+                    parsed.nonce.decodeB64("nonce"),
+                    canonicalWrapMetadata(expected),
+                    parsed.ciphertext.decodeB64("ciphertext"),
+                )
             require(key.size == EPOCH_KEY_BYTES) { "unwrapped epoch key must be exactly $EPOCH_KEY_BYTES bytes" }
             key
         } catch (_: Exception) {
@@ -387,17 +419,46 @@ object MessageCryptoV2 {
 
     private fun parseMessageEnvelope(wire: String): MessageEnvelope {
         val value = parseEnvelopeJson(wire)
-        requireExactKeys(value, setOf("v", "type", "chatId", "epoch", "senderDeviceId", "cryptoVersion", "clientMessageId", "nonce", "ciphertext"))
+        requireExactKeys(
+            value,
+            setOf("v", "type", "chatId", "epoch", "senderDeviceId", "cryptoVersion", "clientMessageId", "nonce", "ciphertext"),
+        )
         validateCommon(value, "message")
-        val metadata = validateMessageMetadata(MessageMetadata(value.string("chatId"), value.positiveEpoch(), value.string("senderDeviceId"), value.string("clientMessageId")))
-        return MessageEnvelope(metadata.chatId, metadata.epoch, metadata.senderDeviceId, metadata.clientMessageId, value.string("nonce"), value.string("ciphertext"))
+        val metadata =
+            validateMessageMetadata(
+                MessageMetadata(
+                    value.string("chatId"),
+                    value.positiveEpoch(),
+                    value.string("senderDeviceId"),
+                    value.string("clientMessageId"),
+                ),
+            )
+        return MessageEnvelope(
+            metadata.chatId,
+            metadata.epoch,
+            metadata.senderDeviceId,
+            metadata.clientMessageId,
+            value.string("nonce"),
+            value.string("ciphertext"),
+        )
     }
 
     private fun parseMediaAuthorizationEnvelope(wire: String): MediaAuthorizationEnvelope {
         val value = parseEnvelopeJson(wire)
         requireExactKeys(
             value,
-            setOf("v", "type", "chatId", "epoch", "senderDeviceId", "cryptoVersion", "clientMessageId", "mediaCiphertextSha256", "nonce", "ciphertext"),
+            setOf(
+                "v",
+                "type",
+                "chatId",
+                "epoch",
+                "senderDeviceId",
+                "cryptoVersion",
+                "clientMessageId",
+                "mediaCiphertextSha256",
+                "nonce",
+                "ciphertext",
+            ),
         )
         validateCommon(value, "media")
         val metadata =
@@ -423,12 +484,42 @@ object MessageCryptoV2 {
 
     private fun parseWrapEnvelope(wire: String): EpochKeyWrapEnvelope {
         val value = parseEnvelopeJson(wire)
-        requireExactKeys(value, setOf("v", "type", "chatId", "epoch", "senderDeviceId", "recipientDeviceId", "cryptoVersion", "ephemeralPublicKey", "nonce", "ciphertext"))
+        requireExactKeys(
+            value,
+            setOf(
+                "v",
+                "type",
+                "chatId",
+                "epoch",
+                "senderDeviceId",
+                "recipientDeviceId",
+                "cryptoVersion",
+                "ephemeralPublicKey",
+                "nonce",
+                "ciphertext",
+            ),
+        )
         validateCommon(value, "epoch-key-wrap")
-        val metadata = validateWrapMetadata(EpochKeyWrapMetadata(value.string("chatId"), value.positiveEpoch(), value.string("senderDeviceId"), value.string("recipientDeviceId")))
+        val metadata =
+            validateWrapMetadata(
+                EpochKeyWrapMetadata(
+                    value.string("chatId"),
+                    value.positiveEpoch(),
+                    value.string("senderDeviceId"),
+                    value.string("recipientDeviceId"),
+                ),
+            )
         val publicKey = value.string("ephemeralPublicKey").decodeB64("ephemeral public key")
         require(publicKey.size == 44) { "ephemeral X25519 public key must be 44 bytes" }
-        return EpochKeyWrapEnvelope(metadata.chatId, metadata.epoch, metadata.senderDeviceId, metadata.recipientDeviceId, value.string("ephemeralPublicKey"), value.string("nonce"), value.string("ciphertext"))
+        return EpochKeyWrapEnvelope(
+            metadata.chatId,
+            metadata.epoch,
+            metadata.senderDeviceId,
+            metadata.recipientDeviceId,
+            value.string("ephemeralPublicKey"),
+            value.string("nonce"),
+            value.string("ciphertext"),
+        )
     }
 
     private fun parseEnvelopeJson(wire: String): JsonObject {
@@ -438,8 +529,13 @@ object MessageCryptoV2 {
             .getOrElse { throw IllegalArgumentException("Malformed e2e2 envelope JSON") }
     }
 
-    private fun validateCommon(value: JsonObject, type: String) {
-        require(value.int("v") == CRYPTO_VERSION && value.string("type") == type && value.int("cryptoVersion") == CRYPTO_VERSION) { "Malformed e2e2 envelope" }
+    private fun validateCommon(
+        value: JsonObject,
+        type: String,
+    ) {
+        require(value.int("v") == CRYPTO_VERSION && value.string("type") == type && value.int("cryptoVersion") == CRYPTO_VERSION) {
+            "Malformed e2e2 envelope"
+        }
         require(value.string("nonce").decodeB64("nonce").size == NONCE_BYTES) { "Malformed nonce" }
         require(value.string("ciphertext").decodeB64("ciphertext").size >= GCM_TAG_BYTES) { "Malformed ciphertext" }
     }
@@ -470,7 +566,10 @@ object MessageCryptoV2 {
         return value
     }
 
-    private fun validateIdentifier(value: String, field: String) {
+    private fun validateIdentifier(
+        value: String,
+        field: String,
+    ) {
         require(value.trim() == value && identifierPattern.matches(value)) { "$field must be a strict identifier" }
     }
 
@@ -479,25 +578,47 @@ object MessageCryptoV2 {
     }
 
     private fun canonicalMessageMetadata(value: MessageMetadata): ByteArray =
-        "{\"chatId\":\"${value.chatId}\",\"epoch\":${value.epoch},\"senderDeviceId\":\"${value.senderDeviceId}\",\"cryptoVersion\":2,\"clientMessageId\":\"${value.clientMessageId}\"}".encodeToByteArray()
+        "{\"chatId\":\"${value.chatId}\",\"epoch\":${value.epoch},\"senderDeviceId\":\"${value.senderDeviceId}\",\"cryptoVersion\":2,\"clientMessageId\":\"${value.clientMessageId}\"}"
+            .encodeToByteArray()
 
     private fun canonicalMediaAuthorizationMetadata(value: MediaMetadata): ByteArray =
-        "{\"chatId\":\"${value.chatId}\",\"epoch\":${value.epoch},\"senderDeviceId\":\"${value.senderDeviceId}\",\"cryptoVersion\":2,\"clientMessageId\":\"${value.clientMessageId}\",\"mediaCiphertextSha256\":\"${value.mediaCiphertextSha256}\",\"purpose\":\"media-authorization\"}".encodeToByteArray()
+        "{\"chatId\":\"${value.chatId}\",\"epoch\":${value.epoch},\"senderDeviceId\":\"${value.senderDeviceId}\",\"cryptoVersion\":2,\"clientMessageId\":\"${value.clientMessageId}\",\"mediaCiphertextSha256\":\"${value.mediaCiphertextSha256}\",\"purpose\":\"media-authorization\"}"
+            .encodeToByteArray()
 
     private fun canonicalMediaPayloadMetadata(value: MessageMetadata): ByteArray =
-        "{\"chatId\":\"${value.chatId}\",\"epoch\":${value.epoch},\"senderDeviceId\":\"${value.senderDeviceId}\",\"cryptoVersion\":2,\"clientMessageId\":\"${value.clientMessageId}\",\"purpose\":\"media-payload\"}".encodeToByteArray()
+        "{\"chatId\":\"${value.chatId}\",\"epoch\":${value.epoch},\"senderDeviceId\":\"${value.senderDeviceId}\",\"cryptoVersion\":2,\"clientMessageId\":\"${value.clientMessageId}\",\"purpose\":\"media-payload\"}"
+            .encodeToByteArray()
 
     private fun canonicalWrapMetadata(value: EpochKeyWrapMetadata): ByteArray =
-        "{\"chatId\":\"${value.chatId}\",\"epoch\":${value.epoch},\"senderDeviceId\":\"${value.senderDeviceId}\",\"recipientDeviceId\":\"${value.recipientDeviceId}\",\"cryptoVersion\":2,\"purpose\":\"epoch-key-wrap\"}".encodeToByteArray()
+        "{\"chatId\":\"${value.chatId}\",\"epoch\":${value.epoch},\"senderDeviceId\":\"${value.senderDeviceId}\",\"recipientDeviceId\":\"${value.recipientDeviceId}\",\"cryptoVersion\":2,\"purpose\":\"epoch-key-wrap\"}"
+            .encodeToByteArray()
 
-    private fun messageIdentity(value: MessageMetadata, nonce: String) = "${value.chatId}|${value.epoch}|${value.senderDeviceId}|${value.clientMessageId}|$nonce"
-    private fun mediaPayloadIdentity(value: MediaMetadata, nonce: String) = "media-payload|${value.chatId}|${value.epoch}|${value.senderDeviceId}|${value.clientMessageId}|$nonce"
-    private fun mediaAuthorizationIdentity(value: MediaMetadata, nonce: String) = "media-authorization|${value.chatId}|${value.epoch}|${value.senderDeviceId}|${value.clientMessageId}|$nonce"
-    private fun wrapIdentity(value: EpochKeyWrapMetadata, nonce: String) = "${value.chatId}|${value.epoch}|${value.senderDeviceId}|${value.recipientDeviceId}|$nonce"
+    private fun messageIdentity(
+        value: MessageMetadata,
+        nonce: String,
+    ) = "${value.chatId}|${value.epoch}|${value.senderDeviceId}|${value.clientMessageId}|$nonce"
+
+    private fun mediaPayloadIdentity(
+        value: MediaMetadata,
+        nonce: String,
+    ) = "media-payload|${value.chatId}|${value.epoch}|${value.senderDeviceId}|${value.clientMessageId}|$nonce"
+
+    private fun mediaAuthorizationIdentity(
+        value: MediaMetadata,
+        nonce: String,
+    ) = "media-authorization|${value.chatId}|${value.epoch}|${value.senderDeviceId}|${value.clientMessageId}|$nonce"
+
+    private fun wrapIdentity(
+        value: EpochKeyWrapMetadata,
+        nonce: String,
+    ) = "${value.chatId}|${value.epoch}|${value.senderDeviceId}|${value.recipientDeviceId}|$nonce"
 
     private fun ByteArray.sha256B64(): String = Base64.encode(PlatformCrypto.sha256(this))
 
-    private fun constantTimeEquals(left: ByteArray, right: ByteArray): Boolean {
+    private fun constantTimeEquals(
+        left: ByteArray,
+        right: ByteArray,
+    ): Boolean {
         if (left.size != right.size) return false
         var difference = 0
         for (index in left.indices) difference = difference or (left[index].toInt() xor right[index].toInt())
@@ -506,13 +627,17 @@ object MessageCryptoV2 {
 
     private const val MEDIA_AUTHORIZATION_PLAINTEXT = "click-e2ee-v2-media-authorization"
 
-    private fun hkdfSha256(sharedSecret: ByteArray, info: ByteArray): ByteArray {
+    private fun hkdfSha256(
+        sharedSecret: ByteArray,
+        info: ByteArray,
+    ): ByteArray {
         val prk = PlatformCrypto.hmacSha256(HKDF_SALT.encodeToByteArray(), sharedSecret)
         return PlatformCrypto.hmacSha256(prk, info + byteArrayOf(1)).copyOf(EPOCH_KEY_BYTES)
     }
 
     @OptIn(ExperimentalEncodingApi::class)
-    private fun encodeEnvelope(value: JsonElement): String = PREFIX + Base64.encode(json.encodeToString(JsonElement.serializer(), value).encodeToByteArray())
+    private fun encodeEnvelope(value: JsonElement): String =
+        PREFIX + Base64.encode(json.encodeToString(JsonElement.serializer(), value).encodeToByteArray())
 
     @OptIn(ExperimentalEncodingApi::class)
     private fun ByteArray.toB64(): String = Base64.encode(this)
@@ -524,13 +649,17 @@ object MessageCryptoV2 {
         return value.toHex(0, 4) + "-" + value.toHex(4, 6) + "-" + value.toHex(6, 8) + "-" + value.toHex(8, 10) + "-" + value.toHex(10, 16)
     }
 
-    private fun ByteArray.toHex(from: Int, until: Int): String = buildString((until - from) * 2) {
-        for (index in from until until) {
-            val byte = this@toHex[index].toInt() and 0xff
-            append("0123456789abcdef"[byte ushr 4])
-            append("0123456789abcdef"[byte and 0x0f])
+    private fun ByteArray.toHex(
+        from: Int,
+        until: Int,
+    ): String =
+        buildString((until - from) * 2) {
+            for (index in from until until) {
+                val byte = this@toHex[index].toInt() and 0xff
+                append("0123456789abcdef"[byte ushr 4])
+                append("0123456789abcdef"[byte and 0x0f])
+            }
         }
-    }
 
     @OptIn(ExperimentalEncodingApi::class)
     private fun String.decodeB64(field: String): ByteArray {
@@ -539,15 +668,25 @@ object MessageCryptoV2 {
     }
 
     private fun isStrictBase64(value: String): Boolean =
-        value.isNotEmpty() && value.matches(Regex("^[A-Za-z0-9+/]*={0,2}$")) &&
-            (value.indexOf('=') == -1 && value.length % 4 != 1 ||
-                value.indexOf('=') >= value.length - 2 && value.length % 4 == 0)
+        value.isNotEmpty() &&
+            value.matches(Regex("^[A-Za-z0-9+/]*={0,2}$")) &&
+            (
+                value.indexOf('=') == -1 &&
+                    value.length % 4 != 1 ||
+                    value.indexOf('=') >= value.length - 2 &&
+                    value.length % 4 == 0
+            )
 
-    private fun requireExactKeys(value: JsonObject, expected: Set<String>) {
+    private fun requireExactKeys(
+        value: JsonObject,
+        expected: Set<String>,
+    ) {
         require(value.keys == expected) { "Malformed e2e2 envelope fields" }
     }
 
     private fun JsonObject.string(name: String): String = (this[name] as? JsonPrimitive)?.content ?: error("Malformed e2e2 envelope")
+
     private fun JsonObject.int(name: String): Int = (this[name] as? JsonPrimitive)?.intOrNull ?: error("Malformed e2e2 envelope")
+
     private fun JsonObject.positiveEpoch(): Int = int("epoch").also(::validateEpoch)
 }

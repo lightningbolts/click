@@ -8,10 +8,37 @@ package compose.project.click.click.crypto
  */
 expect object PlatformCrypto {
     fun sha256(data: ByteArray): ByteArray
-    fun hmacSha256(key: ByteArray, data: ByteArray): ByteArray
-    fun aesCbcEncrypt(key: ByteArray, iv: ByteArray, plaintext: ByteArray): ByteArray
-    fun aesCbcDecrypt(key: ByteArray, iv: ByteArray, ciphertext: ByteArray): ByteArray
+
+    fun hmacSha256(
+        key: ByteArray,
+        data: ByteArray,
+    ): ByteArray
+
+    fun aesCbcEncrypt(
+        key: ByteArray,
+        iv: ByteArray,
+        plaintext: ByteArray,
+    ): ByteArray
+
+    fun aesCbcDecrypt(
+        key: ByteArray,
+        iv: ByteArray,
+        ciphertext: ByteArray,
+    ): ByteArray
+
     fun secureRandomBytes(count: Int): ByteArray
-    fun aesGcmEncrypt(key: ByteArray, nonce: ByteArray, additionalData: ByteArray, plaintext: ByteArray): ByteArray
-    fun aesGcmDecrypt(key: ByteArray, nonce: ByteArray, additionalData: ByteArray, ciphertextAndTag: ByteArray): ByteArray
+
+    fun aesGcmEncrypt(
+        key: ByteArray,
+        nonce: ByteArray,
+        additionalData: ByteArray,
+        plaintext: ByteArray,
+    ): ByteArray
+
+    fun aesGcmDecrypt(
+        key: ByteArray,
+        nonce: ByteArray,
+        additionalData: ByteArray,
+        ciphertextAndTag: ByteArray,
+    ): ByteArray
 }

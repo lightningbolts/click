@@ -8,8 +8,8 @@ package compose.project.click.click.viewmodel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.chat.attachments.AttachmentCrypto // pragma: allowlist secret
 import compose.project.click.click.chat.attachments.ChatAttachmentValidator // pragma: allowlist secret
-import compose.project.click.click.crypto.MessageCryptoV2 // pragma: allowlist secret
 import compose.project.click.click.collaboration.computeClickDropRevealTtlIso
+import compose.project.click.click.crypto.MessageCryptoV2 // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.CHAT_ATTACHMENTS_BUCKET // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
@@ -18,8 +18,6 @@ import compose.project.click.click.data.models.MessageDeliveryState // pragma: a
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.replySnippetForMessage // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
-import compose.project.click.click.data.repository.e2eeV2MediaMetadataOrNull // pragma: allowlist secret
-import compose.project.click.click.data.repository.e2eeV2MediaStoragePathOrNull // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
 import compose.project.click.click.ui.chat.saveDecryptedAttachmentToDownloads // pragma: allowlist secret
 import compose.project.click.click.util.readChatMediaVaultBytesForMessage // pragma: allowlist secret

@@ -924,12 +924,13 @@ class SupabaseChatRepository(
         viewerUserId: String,
         path: String,
         metadata: compose.project.click.click.crypto.MessageCryptoV2.MediaMetadata,
-    ): ByteArray? = downloadAndDecryptV2Attachment(
-        chatId = chatId,
-        viewerUserId = viewerUserId,
-        path = path,
-        metadata = metadata,
-    )
+    ): ByteArray? =
+        downloadAndDecryptV2Attachment(
+            chatId = chatId,
+            viewerUserId = viewerUserId,
+            path = path,
+            metadata = metadata,
+        )
 }
 
 internal class SupabaseMessageSubscription(

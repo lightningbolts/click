@@ -1,14 +1,14 @@
 package compose.project.click.click.crypto
 
+import org.junit.Test
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import kotlin.test.assertFailsWith
-import org.junit.Test
 
 /**
  * Deterministic test vectors for E2EE. These exist because refactors to
@@ -21,21 +21,22 @@ import org.junit.Test
  */
 @OptIn(ExperimentalEncodingApi::class)
 class MessageCryptoTest {
+    private val v2Metadata =
+        MessageCryptoV2.MessageMetadata(
+            chatId = "11111111-1111-4111-8111-111111111111",
+            epoch = 7,
+            senderDeviceId = "sender-device-01",
+            clientMessageId = "22222222-2222-4222-8222-222222222222",
+        )
 
-    private val v2Metadata = MessageCryptoV2.MessageMetadata(
-        chatId = "11111111-1111-4111-8111-111111111111",
-        epoch = 7,
-        senderDeviceId = "sender-device-01",
-        clientMessageId = "22222222-2222-4222-8222-222222222222",
-    )
-
-    private val v2MediaMetadata = MessageCryptoV2.MediaMetadata(
-        chatId = v2Metadata.chatId,
-        epoch = v2Metadata.epoch,
-        senderDeviceId = v2Metadata.senderDeviceId,
-        clientMessageId = v2Metadata.clientMessageId,
-        mediaCiphertextSha256 = "",
-    )
+    private val v2MediaMetadata =
+        MessageCryptoV2.MediaMetadata(
+            chatId = v2Metadata.chatId,
+            epoch = v2Metadata.epoch,
+            senderDeviceId = v2Metadata.senderDeviceId,
+            clientMessageId = v2Metadata.clientMessageId,
+            mediaCiphertextSha256 = "",
+        )
 
     // ── Deterministic derivation vectors ────────────────────────────────────
     //
@@ -102,12 +103,13 @@ class MessageCryptoTest {
     @Test
     fun encryptThenDecrypt_returnsOriginalPlaintext() {
         val keys = MessageCrypto.deriveKeysForConnection(fixedConnectionId, fixedUserIds)
-        val plaintexts = listOf(
-            "",
-            "hello",
-            "multi\nline\ntext with unicode \uD83D\uDE80",
-            "a".repeat(4096),
-        )
+        val plaintexts =
+            listOf(
+                "",
+                "hello",
+                "multi\nline\ntext with unicode \uD83D\uDE80",
+                "a".repeat(4096),
+            )
         for (pt in plaintexts) {
             val wire = MessageCrypto.encryptContent(pt, keys)
             assertTrue(wire.startsWith("e2e:"), "plaintext must be wrapped with e2e: prefix")
@@ -339,13 +341,18 @@ class MessageCryptoTest {
         val encrypted = MessageCryptoV2.encryptMedia(v2MediaMetadata, key, plaintext)
 
         assertEquals(MessageCryptoV2.NONCE_BYTES + plaintext.size + MessageCryptoV2.GCM_TAG_BYTES, encrypted.uploadedBytes.size)
-        assertEquals(plaintext.toList(), MessageCryptoV2.decryptMedia(
-            v2MediaMetadata.copy(mediaCiphertextSha256 = encrypted.mediaCiphertextSha256),
-            key,
-            encrypted.uploadedBytes,
-        ).toList())
-        val authorization = MessageCryptoV2.parseE2eeV2Envelope(encrypted.authorizationEnvelope)
-            as MessageCryptoV2.MediaAuthorizationEnvelope
+        assertEquals(
+            plaintext.toList(),
+            MessageCryptoV2
+                .decryptMedia(
+                    v2MediaMetadata.copy(mediaCiphertextSha256 = encrypted.mediaCiphertextSha256),
+                    key,
+                    encrypted.uploadedBytes,
+                ).toList(),
+        )
+        val authorization =
+            MessageCryptoV2.parseE2eeV2Envelope(encrypted.authorizationEnvelope)
+                as MessageCryptoV2.MediaAuthorizationEnvelope
         assertEquals(encrypted.mediaCiphertextSha256, authorization.mediaCiphertextSha256)
         MessageCryptoV2.verifyMediaAuthorization(
             v2MediaMetadata.copy(mediaCiphertextSha256 = encrypted.mediaCiphertextSha256),
@@ -404,8 +411,9 @@ class MessageCryptoTest {
 
     private fun String.hexToBytes(): ByteArray = ByteArray(length / 2) { index -> substring(index * 2, index * 2 + 2).toInt(16).toByte() }
 
-    private fun ByteArray.toHex(): String = joinToString("") { byte ->
-        val value = byte.toInt() and 0xff
-        "0123456789abcdef"[value ushr 4].toString() + "0123456789abcdef"[value and 0x0f]
-    }
+    private fun ByteArray.toHex(): String =
+        joinToString("") { byte ->
+            val value = byte.toInt() and 0xff
+            "0123456789abcdef"[value ushr 4].toString() + "0123456789abcdef"[value and 0x0f]
+        }
 }

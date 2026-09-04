@@ -1,10 +1,10 @@
 package compose.project.click.click.crypto
 
 import compose.project.click.click.util.redactedRestMessage
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
  * High-level message encryption utilities for Click E2EE.
@@ -26,7 +26,6 @@ import kotlinx.coroutines.withContext
  *   mac_key = SHA-256( master || 0x02 )   — 32 bytes for HMAC-SHA256
  */
 object MessageCrypto {
-
     private const val E2EE_PREFIX = "e2e:"
     private const val E2EE_GROUP_MSG_PREFIX = "e2e_grp:"
     private const val IV_LENGTH = 16
@@ -38,9 +37,15 @@ object MessageCrypto {
 
     // ── Key derivation ──────────────────────────────────────────────────────
 
-    data class DerivedKeys(val encKey: ByteArray, val macKey: ByteArray)
+    data class DerivedKeys(
+        val encKey: ByteArray,
+        val macKey: ByteArray,
+    )
 
-    fun deriveKeysForConnection(connectionId: String, userIds: List<String>): DerivedKeys {
+    fun deriveKeysForConnection(
+        connectionId: String,
+        userIds: List<String>,
+    ): DerivedKeys {
         val sorted = userIds.sorted()
         val input = "$E2EE_SALT:${sorted.joinToString(":")}:$connectionId"
         val master = PlatformCrypto.sha256(input.encodeToByteArray())
@@ -77,7 +82,10 @@ object MessageCrypto {
     fun generateGroupMasterKey(): ByteArray = PlatformCrypto.secureRandomBytes(GROUP_MASTER_KEY_BYTES)
 
     /** Offloads AES/HMAC key derivation for new-connection handshakes off the main thread. */
-    suspend fun deriveKeysForConnectionAsync(connectionId: String, userIds: List<String>): DerivedKeys =
+    suspend fun deriveKeysForConnectionAsync(
+        connectionId: String,
+        userIds: List<String>,
+    ): DerivedKeys =
         withContext(Dispatchers.Default) {
             deriveKeysForConnection(connectionId, userIds)
         }
@@ -97,25 +105,27 @@ object MessageCrypto {
         groupConnectionId: String?,
         groupMemberIds: List<String>,
         resolveEdge: (memberId: String, wrapPeerId: String) -> Pair<String, List<String>>?,
-    ): Map<String, String> = withContext(Dispatchers.Default) {
-        val b64 = encodeGroupMasterKeyBase64(masterKey32)
-        val encrypted = mutableMapOf<String, String>()
-        if (groupConnectionId != null) {
-            val keys = deriveKeysForConnection(groupConnectionId, groupMemberIds)
-            for (member in members) {
-                encrypted[member] = encryptContent(b64, keys)
+    ): Map<String, String> =
+        withContext(Dispatchers.Default) {
+            val b64 = encodeGroupMasterKeyBase64(masterKey32)
+            val encrypted = mutableMapOf<String, String>()
+            if (groupConnectionId != null) {
+                val keys = deriveKeysForConnection(groupConnectionId, groupMemberIds)
+                for (member in members) {
+                    encrypted[member] = encryptContent(b64, keys)
+                }
+            } else {
+                for (member in members) {
+                    val wrapPeer = if (member == creator) anchor else creator
+                    val edge =
+                        resolveEdge(member, wrapPeer)
+                            ?: throw IllegalStateException("Missing verified connection for a member")
+                    val keys = deriveKeysForConnection(edge.first, edge.second)
+                    encrypted[member] = encryptContent(b64, keys)
+                }
             }
-        } else {
-            for (member in members) {
-                val wrapPeer = if (member == creator) anchor else creator
-                val edge = resolveEdge(member, wrapPeer)
-                    ?: throw IllegalStateException("Missing verified connection for a member")
-                val keys = deriveKeysForConnection(edge.first, edge.second)
-                encrypted[member] = encryptContent(b64, keys)
-            }
+            encrypted
         }
-        encrypted
-    }
 
     @OptIn(ExperimentalEncodingApi::class)
     fun encodeGroupMasterKeyBase64(key: ByteArray): String {
@@ -145,7 +155,11 @@ object MessageCrypto {
     // ── Encrypt / Decrypt ───────────────────────────────────────────────────
 
     @OptIn(ExperimentalEncodingApi::class)
-    private fun encryptWithPrefix(plaintext: String, keys: DerivedKeys, prefix: String): String {
+    private fun encryptWithPrefix(
+        plaintext: String,
+        keys: DerivedKeys,
+        prefix: String,
+    ): String {
         val iv = PlatformCrypto.secureRandomBytes(IV_LENGTH)
         val ciphertext = PlatformCrypto.aesCbcEncrypt(keys.encKey, iv, plaintext.encodeToByteArray())
         val hmac = PlatformCrypto.hmacSha256(keys.macKey, iv + ciphertext)
@@ -154,7 +168,11 @@ object MessageCrypto {
     }
 
     @OptIn(ExperimentalEncodingApi::class)
-    private fun decryptWithPrefix(content: String, keys: DerivedKeys, prefix: String): String {
+    private fun decryptWithPrefix(
+        content: String,
+        keys: DerivedKeys,
+        prefix: String,
+    ): String {
         if (!content.startsWith(prefix)) return content
         return try {
             val payload = Base64.decode(content.removePrefix(prefix))
@@ -178,18 +196,29 @@ object MessageCrypto {
     }
 
     @OptIn(ExperimentalEncodingApi::class)
-    fun encryptContent(plaintext: String, keys: DerivedKeys): String =
-        encryptWithPrefix(plaintext, keys, E2EE_PREFIX)
+    fun encryptContent(
+        plaintext: String,
+        keys: DerivedKeys,
+    ): String = encryptWithPrefix(plaintext, keys, E2EE_PREFIX)
 
-    fun encryptGroupMessageContent(plaintext: String, groupMasterKey32: ByteArray): String {
+    fun encryptGroupMessageContent(
+        plaintext: String,
+        groupMasterKey32: ByteArray,
+    ): String {
         val keys = deriveMessageKeysFromGroupMaster(groupMasterKey32)
         return encryptWithPrefix(plaintext, keys, E2EE_GROUP_MSG_PREFIX)
     }
 
-    class MessageEncryptionException(message: String, cause: Throwable? = null) : Exception(message, cause)
+    class MessageEncryptionException(
+        message: String,
+        cause: Throwable? = null,
+    ) : Exception(message, cause)
 
     @OptIn(ExperimentalEncodingApi::class)
-    fun decryptContent(content: String, keys: DerivedKeys): String {
+    fun decryptContent(
+        content: String,
+        keys: DerivedKeys,
+    ): String {
         if (!content.startsWith(E2EE_PREFIX)) return content
 
         return try {
@@ -213,7 +242,10 @@ object MessageCrypto {
         }
     }
 
-    fun decryptGroupMessageContent(content: String, groupMasterKey32: ByteArray): String {
+    fun decryptGroupMessageContent(
+        content: String,
+        groupMasterKey32: ByteArray,
+    ): String {
         val keys = deriveMessageKeysFromGroupMaster(groupMasterKey32)
         return decryptWithPrefix(content, keys, E2EE_GROUP_MSG_PREFIX)
     }
@@ -229,17 +261,25 @@ object MessageCrypto {
 
     // ── Binary media (AES-256-CBC + HMAC-SHA256, same primitive as text; wire is raw bytes: IV||HMAC||ciphertext) ──
 
-    fun encryptMediaBytes(plain: ByteArray, keys: DerivedKeys): ByteArray {
+    fun encryptMediaBytes(
+        plain: ByteArray,
+        keys: DerivedKeys,
+    ): ByteArray {
         val iv = PlatformCrypto.secureRandomBytes(IV_LENGTH)
         val ciphertext = PlatformCrypto.aesCbcEncrypt(keys.encKey, iv, plain)
         val hmac = PlatformCrypto.hmacSha256(keys.macKey, iv + ciphertext)
         return iv + hmac + ciphertext
     }
 
-    fun encryptMediaBytes(plain: ByteArray, groupMasterKey32: ByteArray): ByteArray =
-        encryptMediaBytes(plain, deriveMessageKeysFromGroupMaster(groupMasterKey32))
+    fun encryptMediaBytes(
+        plain: ByteArray,
+        groupMasterKey32: ByteArray,
+    ): ByteArray = encryptMediaBytes(plain, deriveMessageKeysFromGroupMaster(groupMasterKey32))
 
-    fun decryptMediaBytes(blob: ByteArray, keys: DerivedKeys): ByteArray {
+    fun decryptMediaBytes(
+        blob: ByteArray,
+        keys: DerivedKeys,
+    ): ByteArray {
         if (blob.size < IV_LENGTH + HMAC_LENGTH + 1) {
             throw MessageEncryptionException("Encrypted media blob too short")
         }
@@ -253,6 +293,8 @@ object MessageCrypto {
         return PlatformCrypto.aesCbcDecrypt(keys.encKey, iv, ciphertext)
     }
 
-    fun decryptMediaBytes(blob: ByteArray, groupMasterKey32: ByteArray): ByteArray =
-        decryptMediaBytes(blob, deriveMessageKeysFromGroupMaster(groupMasterKey32))
+    fun decryptMediaBytes(
+        blob: ByteArray,
+        groupMasterKey32: ByteArray,
+    ): ByteArray = decryptMediaBytes(blob, deriveMessageKeysFromGroupMaster(groupMasterKey32))
 }

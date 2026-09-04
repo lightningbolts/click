@@ -4,8 +4,8 @@
 
 package compose.project.click.click.data.api // pragma: allowlist secret
 
-import compose.project.click.click.data.models.* // pragma: allowlist secret
 import compose.project.click.click.crypto.MessageCryptoV2
+import compose.project.click.click.data.models.* // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
@@ -371,9 +371,11 @@ class ChatApiClient(
                     parameter("chat_id", chatId)
                 }
             if (response.status.value in 200..299) {
-                Result.success(response.body<ClickWebChatDevicesEnvelope>().devices.filter {
-                    it.keyAlgorithm == "X25519" && it.cryptoVersion == MessageCryptoV2.CRYPTO_VERSION
-                })
+                Result.success(
+                    response.body<ClickWebChatDevicesEnvelope>().devices.filter {
+                        it.keyAlgorithm == "X25519" && it.cryptoVersion == MessageCryptoV2.CRYPTO_VERSION
+                    },
+                )
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }
@@ -454,9 +456,11 @@ class ChatApiClient(
                     parameter("hub_id", hubId)
                 }
             if (response.status.value in 200..299) {
-                Result.success(response.body<ClickWebChatDevicesEnvelope>().devices.filter {
-                    it.keyAlgorithm == "X25519" && it.cryptoVersion == MessageCryptoV2.CRYPTO_VERSION
-                })
+                Result.success(
+                    response.body<ClickWebChatDevicesEnvelope>().devices.filter {
+                        it.keyAlgorithm == "X25519" && it.cryptoVersion == MessageCryptoV2.CRYPTO_VERSION
+                    },
+                )
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }
@@ -765,8 +769,7 @@ class ChatApiClient(
         mimeType: String,
         authToken: String,
         v2: E2eeV2MediaUploadRequest? = null,
-    ): Result<UploadedMedia> =
-        uploadMediaImpl(fileBytes = fileBytes, chatId = chatId, mimeType = mimeType, authToken = authToken, v2 = v2)
+    ): Result<UploadedMedia> = uploadMediaImpl(fileBytes = fileBytes, chatId = chatId, mimeType = mimeType, authToken = authToken, v2 = v2)
 
     suspend fun uploadAttachment(
         fileBytes: ByteArray,
@@ -776,7 +779,14 @@ class ChatApiClient(
         authToken: String,
         v2: E2eeV2MediaUploadRequest? = null,
     ): Result<UploadedAttachment> =
-        uploadAttachmentImpl(fileBytes = fileBytes, chatId = chatId, mimeType = mimeType, fileName = fileName, authToken = authToken, v2 = v2)
+        uploadAttachmentImpl(
+            fileBytes = fileBytes,
+            chatId = chatId,
+            mimeType = mimeType,
+            fileName = fileName,
+            authToken = authToken,
+            v2 = v2,
+        )
 
     suspend fun signAttachmentUrl(
         path: String,

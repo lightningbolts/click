@@ -5,11 +5,11 @@ import compose.project.click.click.crypto.PlatformCrypto
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -31,7 +31,6 @@ import kotlin.io.encoding.ExperimentalEncodingApi
  *     in the envelope so the receiver can detect a swapped object at download time.
  */
 object AttachmentCrypto {
-
     /**
      * Envelope prefix used inside the decrypted E2EE message body. Only messages that begin with
      * this prefix are attachments; everything else is a normal text message. The version tag lets
@@ -42,15 +41,17 @@ object AttachmentCrypto {
 
     private const val FILE_MASTER_KEY_BYTES = 32
 
-    private val json = Json {
-        ignoreUnknownKeys = true
-        encodeDefaults = true
-    }
-    private val v2Json = Json {
-        ignoreUnknownKeys = false
-        isLenient = false
-        encodeDefaults = true
-    }
+    private val json =
+        Json {
+            ignoreUnknownKeys = true
+            encodeDefaults = true
+        }
+    private val v2Json =
+        Json {
+            ignoreUnknownKeys = false
+            isLenient = false
+            encodeDefaults = true
+        }
 
     @Serializable
     data class Envelope(
@@ -82,7 +83,10 @@ object AttachmentCrypto {
      * Encrypt attachment bytes. Wire format is identical to [MessageCrypto.encryptMediaBytes]:
      * `IV[16] || HMAC[32] || ciphertext`.
      */
-    fun encryptFileBytes(plain: ByteArray, fileMasterKey32: ByteArray): ByteArray {
+    fun encryptFileBytes(
+        plain: ByteArray,
+        fileMasterKey32: ByteArray,
+    ): ByteArray {
         require(fileMasterKey32.size == FILE_MASTER_KEY_BYTES) {
             "File master key must be $FILE_MASTER_KEY_BYTES bytes"
         }
@@ -90,7 +94,10 @@ object AttachmentCrypto {
     }
 
     /** Decrypt attachment bytes. Throws [MessageCrypto.MessageEncryptionException] on HMAC failure. */
-    fun decryptFileBytes(blob: ByteArray, fileMasterKey32: ByteArray): ByteArray {
+    fun decryptFileBytes(
+        blob: ByteArray,
+        fileMasterKey32: ByteArray,
+    ): ByteArray {
         require(fileMasterKey32.size == FILE_MASTER_KEY_BYTES) {
             "File master key must be $FILE_MASTER_KEY_BYTES bytes"
         }
@@ -189,31 +196,40 @@ object AttachmentCrypto {
      * Metadata fields are used as a fallback for malformed/legacy envelopes and to fill
      * missing display details safely.
      */
-    fun resolveEnvelope(content: String, metadata: JsonElement?): Envelope? {
+    fun resolveEnvelope(
+        content: String,
+        metadata: JsonElement?,
+    ): Envelope? {
         val base = tryDecodeEnvelope(content) ?: tryDecodeV2AttachmentDescriptor(content)?.toEnvelope()
         val meta = metadata as? JsonObject
         if (base == null && meta == null) return null
 
-        val fileName = meta.stringAt("attachment_name")
-            ?: meta.stringAt("file_name")
-            ?: meta.stringAt("filename")
-            ?: meta.stringAt("name")
-        val mimeType = meta.stringAt("attachment_mime")
-            ?: meta.stringAt("mime_type")
-            ?: meta.stringAt("content_type")
-        val size = meta.longAt("attachment_size")
-            ?: meta.longAt("file_size")
-            ?: meta.longAt("size_bytes")
-            ?: meta.longAt("size")
-        val path = meta.stringAt("attachment_path")
-            ?: meta.stringAt("path")
-            ?: meta.stringAt("storage_path")
-            ?: meta.stringAt("object_path")
-        val key = meta.stringAt("key")
-            ?: meta.stringAt("file_key")
-            ?: meta.stringAt("file_master_key")
-        val sha = meta.stringAt("sha256")
-            ?: meta.stringAt("sha256_base64")
+        val fileName =
+            meta.stringAt("attachment_name")
+                ?: meta.stringAt("file_name")
+                ?: meta.stringAt("filename")
+                ?: meta.stringAt("name")
+        val mimeType =
+            meta.stringAt("attachment_mime")
+                ?: meta.stringAt("mime_type")
+                ?: meta.stringAt("content_type")
+        val size =
+            meta.longAt("attachment_size")
+                ?: meta.longAt("file_size")
+                ?: meta.longAt("size_bytes")
+                ?: meta.longAt("size")
+        val path =
+            meta.stringAt("attachment_path")
+                ?: meta.stringAt("path")
+                ?: meta.stringAt("storage_path")
+                ?: meta.stringAt("object_path")
+        val key =
+            meta.stringAt("key")
+                ?: meta.stringAt("file_key")
+                ?: meta.stringAt("file_master_key")
+        val sha =
+            meta.stringAt("sha256")
+                ?: meta.stringAt("sha256_base64")
 
         if (base != null) {
             return base.copy(
@@ -251,8 +267,7 @@ object AttachmentCrypto {
         )
     }
 
-    fun isAttachmentEnvelope(content: String): Boolean =
-        content.startsWith(ENVELOPE_PREFIX) || content.startsWith(E2EE_V2_ENVELOPE_PREFIX)
+    fun isAttachmentEnvelope(content: String): Boolean = content.startsWith(ENVELOPE_PREFIX) || content.startsWith(E2EE_V2_ENVELOPE_PREFIX)
 
     private fun V2Descriptor.toEnvelope(): Envelope =
         Envelope(
@@ -273,7 +288,11 @@ object AttachmentCrypto {
     }
 
     private fun JsonObject?.stringAt(key: String): String? =
-        this?.get(key)?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+        this
+            ?.get(key)
+            ?.jsonPrimitive
+            ?.contentOrNull
+            ?.takeIf { it.isNotBlank() }
 
     private fun JsonObject?.longAt(key: String): Long? {
         val primitive = this?.get(key)?.jsonPrimitive ?: return null

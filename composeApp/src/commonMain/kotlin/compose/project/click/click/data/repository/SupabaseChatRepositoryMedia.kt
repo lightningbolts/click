@@ -37,7 +37,10 @@ private object E2eeV2MediaUploadCache {
     private const val MAX_ENTRIES = 256
     private val records = linkedMapOf<String, E2eeV2MediaUploadRecord>()
 
-    fun put(reference: String, record: E2eeV2MediaUploadRecord) {
+    fun put(
+        reference: String,
+        record: E2eeV2MediaUploadRecord,
+    ) {
         val key = reference.trim()
         if (key.isEmpty()) return
         records[key] = record
@@ -51,12 +54,14 @@ internal fun SupabaseChatRepository.e2eeV2MediaRecordForReference(reference: Str
     E2eeV2MediaUploadCache.get(reference)
 
 private fun JsonObject.stringField(vararg names: String): String? =
-    names.asSequence()
+    names
+        .asSequence()
         .mapNotNull { name -> this[name]?.jsonPrimitive?.contentOrNull }
         .firstOrNull { it.isNotBlank() }
 
 private fun JsonObject.intField(vararg names: String): Int? =
-    names.asSequence()
+    names
+        .asSequence()
         .mapNotNull { name -> this[name]?.jsonPrimitive?.intOrNull }
         .firstOrNull()
 
@@ -64,8 +69,10 @@ internal fun Message.e2eeV2MediaMetadataOrNull(chatIdFallback: String? = null): 
     val root = metadata as? JsonObject ?: return null
     val digest = root.stringField("media_ciphertext_sha256", "mediaCiphertextSha256") ?: return null
     val epoch = root.intField("media_epoch", "mediaEpoch", "epoch") ?: return null
-    val senderDeviceId = root.stringField("media_sender_device_id", "mediaSenderDeviceId", "sender_device_id", "senderDeviceId") ?: return null
-    val clientMessageId = root.stringField("media_client_message_id", "mediaClientMessageId", "client_message_id", "clientMessageId") ?: return null
+    val senderDeviceId =
+        root.stringField("media_sender_device_id", "mediaSenderDeviceId", "sender_device_id", "senderDeviceId") ?: return null
+    val clientMessageId =
+        root.stringField("media_client_message_id", "mediaClientMessageId", "client_message_id", "clientMessageId") ?: return null
     return MessageCryptoV2.MediaMetadata(
         chatId = root.stringField("media_chat_id", "mediaChatId") ?: chatIdFallback ?: return null,
         epoch = epoch,
@@ -144,8 +151,9 @@ internal suspend fun SupabaseChatRepository.uploadEncryptedMediaBlob(
             ChatRepository.EncryptedAttachmentUpload(
                 path = publicUrl,
                 fileMasterKeyBase64 = "",
-                sha256Base64 = e2eeV2MediaRecordForReference(publicUrl)?.metadata?.mediaCiphertextSha256
-                    ?: AttachmentCrypto.sha256Base64(plainBytes),
+                sha256Base64 =
+                    e2eeV2MediaRecordForReference(publicUrl)?.metadata?.mediaCiphertextSha256
+                        ?: AttachmentCrypto.sha256Base64(plainBytes),
                 sizeBytes = plainBytes.size.toLong(),
                 mimeType = mimeType.ifBlank { "application/octet-stream" },
                 fileName = fileName,
@@ -182,13 +190,14 @@ internal suspend fun SupabaseChatRepository.uploadEncryptedAttachmentBlob(
         val v2 =
             v2Crypto?.let { session ->
                 MessageCryptoV2.encryptMedia(
-                    metadata = MessageCryptoV2.MediaMetadata(
-                        chatId = chatId,
-                        epoch = session.epoch,
-                        senderDeviceId = session.senderDeviceId,
-                        clientMessageId = mediaClientMessageId!!,
-                        mediaCiphertextSha256 = "",
-                    ),
+                    metadata =
+                        MessageCryptoV2.MediaMetadata(
+                            chatId = chatId,
+                            epoch = session.epoch,
+                            senderDeviceId = session.senderDeviceId,
+                            clientMessageId = mediaClientMessageId!!,
+                            mediaCiphertextSha256 = "",
+                        ),
                     epochKey = session.epochKey,
                     plaintext = plainBytes,
                     replayGuard = session.replayGuard,
@@ -200,13 +209,14 @@ internal suspend fun SupabaseChatRepository.uploadEncryptedAttachmentBlob(
         val v2Record =
             v2?.let { encrypted ->
                 E2eeV2MediaUploadRecord(
-                    metadata = MessageCryptoV2.MediaMetadata(
-                        chatId = chatId,
-                        epoch = v2Crypto!!.epoch,
-                        senderDeviceId = v2Crypto.senderDeviceId,
-                        clientMessageId = mediaClientMessageId!!,
-                        mediaCiphertextSha256 = encrypted.mediaCiphertextSha256,
-                    ),
+                    metadata =
+                        MessageCryptoV2.MediaMetadata(
+                            chatId = chatId,
+                            epoch = v2Crypto!!.epoch,
+                            senderDeviceId = v2Crypto.senderDeviceId,
+                            clientMessageId = mediaClientMessageId!!,
+                            mediaCiphertextSha256 = encrypted.mediaCiphertextSha256,
+                        ),
                     authorizationEnvelope = encrypted.authorizationEnvelope,
                 )
             }
@@ -237,20 +247,21 @@ internal suspend fun SupabaseChatRepository.uploadEncryptedAttachmentBlob(
                     println("ChatRepository: attachment upload failed: ${err.redactedRestMessage()}")
                     return null
                 }
-        ChatRepository.EncryptedAttachmentUpload(
-            path = uploaded.path,
-            fileMasterKeyBase64 = fileMasterKey?.let(AttachmentCrypto::encodeFileMasterKeyBase64).orEmpty(),
-            sha256Base64 = sha,
-            sizeBytes = plainBytes.size.toLong(),
-            mimeType = mimeType.ifBlank { "application/octet-stream" },
-            fileName = fileName,
-        ).also {
-            v2Record?.let { record ->
-                val withPath = record.copy(storagePath = uploaded.path)
-                E2eeV2MediaUploadCache.put(uploaded.path, withPath)
-                uploaded.initialSignedUrl?.let { url -> E2eeV2MediaUploadCache.put(url, withPath) }
+        ChatRepository
+            .EncryptedAttachmentUpload(
+                path = uploaded.path,
+                fileMasterKeyBase64 = fileMasterKey?.let(AttachmentCrypto::encodeFileMasterKeyBase64).orEmpty(),
+                sha256Base64 = sha,
+                sizeBytes = plainBytes.size.toLong(),
+                mimeType = mimeType.ifBlank { "application/octet-stream" },
+                fileName = fileName,
+            ).also {
+                v2Record?.let { record ->
+                    val withPath = record.copy(storagePath = uploaded.path)
+                    E2eeV2MediaUploadCache.put(uploaded.path, withPath)
+                    uploaded.initialSignedUrl?.let { url -> E2eeV2MediaUploadCache.put(url, withPath) }
+                }
             }
-        }
     } catch (e: Exception) {
         println("ChatRepository: uploadEncryptedBlob(attachments) failed: ${e.redactedRestMessage()}")
         null
@@ -303,8 +314,7 @@ internal suspend fun SupabaseChatRepository.vaultRemoteEncryptedMediaMessage(
             mediaUrl = remoteUrl.orEmpty(),
             v2Metadata = v2Metadata,
             v2StoragePath = v2StoragePath,
-        )
-            ?.takeIf { it.isNotEmpty() }
+        )?.takeIf { it.isNotEmpty() }
             ?: return message
     val localUri = writeChatMediaVaultFile(message.id, plain, extension) ?: return message
     return message.withLocalMediaUri(localUri)
@@ -358,18 +368,21 @@ internal suspend fun SupabaseChatRepository.downloadAndDecryptChatMediaImpl(
         if (v2Metadata != null) {
             val session = resolveE2eeV2ChatCrypto(chatId, viewerUserId) ?: return null
             check(v2Metadata.chatId == chatId) { "E2EE v2 media chat mismatch" }
-            val epochKey = session.epochKeys[v2Metadata.epoch]
-                ?: return null
+            val epochKey =
+                session.epochKeys[v2Metadata.epoch]
+                    ?: return null
             val downloadUrl =
                 v2StoragePath?.takeIf { it.isNotBlank() }?.let { path ->
                     val jwt = ensureFreshJwtForChat() ?: return null
-                    apiClient.signAttachmentUrl(path, jwt).recoverCatching { firstErr ->
-                        val retry = refreshedJwtAfterAuthFailure() ?: throw firstErr
-                        apiClient.signAttachmentUrl(path, retry).getOrThrow()
-                    }.getOrElse { err ->
-                        println("ChatRepository: v2 media sign failed: ${err.redactedRestMessage()}")
-                        return null
-                    }
+                    apiClient
+                        .signAttachmentUrl(path, jwt)
+                        .recoverCatching { firstErr ->
+                            val retry = refreshedJwtAfterAuthFailure() ?: throw firstErr
+                            apiClient.signAttachmentUrl(path, retry).getOrThrow()
+                        }.getOrElse { err ->
+                            println("ChatRepository: v2 media sign failed: ${err.redactedRestMessage()}")
+                            return null
+                        }
                 } ?: mediaUrl
             val raw = downloadMediaBytesWithAuthRetry(downloadUrl) ?: return null
             return withContext(Dispatchers.Default) {
@@ -430,17 +443,20 @@ internal suspend fun SupabaseChatRepository.downloadAndDecryptV2Attachment(
         val epochKey = session.epochKeys[metadata.epoch] ?: return null
         val jwt = ensureFreshJwtForChat() ?: return null
         val signedUrl =
-            apiClient.signAttachmentUrl(path, jwt).recoverCatching { firstErr ->
-                val retry = refreshedJwtAfterAuthFailure() ?: throw firstErr
-                apiClient.signAttachmentUrl(path, retry).getOrThrow()
-            }.getOrElse { err ->
-                println("ChatRepository: v2 attachment sign failed: ${err.redactedRestMessage()}")
+            apiClient
+                .signAttachmentUrl(path, jwt)
+                .recoverCatching { firstErr ->
+                    val retry = refreshedJwtAfterAuthFailure() ?: throw firstErr
+                    apiClient.signAttachmentUrl(path, retry).getOrThrow()
+                }.getOrElse { err ->
+                    println("ChatRepository: v2 attachment sign failed: ${err.redactedRestMessage()}")
+                    return null
+                }
+        val bytes =
+            apiClient.downloadAttachmentBytes(signedUrl).getOrElse { err ->
+                println("ChatRepository: v2 attachment download failed: ${err.redactedRestMessage()}")
                 return null
             }
-        val bytes = apiClient.downloadAttachmentBytes(signedUrl).getOrElse { err ->
-            println("ChatRepository: v2 attachment download failed: ${err.redactedRestMessage()}")
-            return null
-        }
         withContext(Dispatchers.Default) {
             MessageCryptoV2.decryptMedia(metadata, epochKey, bytes)
         }
@@ -480,13 +496,14 @@ internal suspend fun SupabaseChatRepository.uploadChatMediaImpl(
         val v2 =
             v2Crypto?.let { session ->
                 MessageCryptoV2.encryptMedia(
-                    metadata = MessageCryptoV2.MediaMetadata(
-                        chatId = chatId,
-                        epoch = session.epoch,
-                        senderDeviceId = session.senderDeviceId,
-                        clientMessageId = mediaClientMessageId!!,
-                        mediaCiphertextSha256 = "",
-                    ),
+                    metadata =
+                        MessageCryptoV2.MediaMetadata(
+                            chatId = chatId,
+                            epoch = session.epoch,
+                            senderDeviceId = session.senderDeviceId,
+                            clientMessageId = mediaClientMessageId!!,
+                            mediaCiphertextSha256 = "",
+                        ),
                     epochKey = session.epochKey,
                     plaintext = plainBytes,
                     replayGuard = session.replayGuard,
@@ -502,38 +519,40 @@ internal suspend fun SupabaseChatRepository.uploadChatMediaImpl(
         val v2Record =
             v2?.let { encrypted ->
                 E2eeV2MediaUploadRecord(
-                    metadata = MessageCryptoV2.MediaMetadata(
-                        chatId = chatId,
-                        epoch = v2Crypto!!.epoch,
-                        senderDeviceId = v2Crypto.senderDeviceId,
-                        clientMessageId = mediaClientMessageId!!,
-                        mediaCiphertextSha256 = encrypted.mediaCiphertextSha256,
-                    ),
+                    metadata =
+                        MessageCryptoV2.MediaMetadata(
+                            chatId = chatId,
+                            epoch = v2Crypto!!.epoch,
+                            senderDeviceId = v2Crypto.senderDeviceId,
+                            clientMessageId = mediaClientMessageId!!,
+                            mediaCiphertextSha256 = encrypted.mediaCiphertextSha256,
+                        ),
                     authorizationEnvelope = encrypted.authorizationEnvelope,
                 )
             }
         val jwt = ensureFreshJwtForChat() ?: return null
-        val uploaded = apiClient
-            .uploadMediaWithPath(
-                fileBytes = cipher,
-                chatId = chatId,
-                mimeType = uploadMime,
-                authToken = jwt,
-                v2 = v2Record?.toRequest(),
-            ).getOrElse { firstErr ->
-                val retriedJwt = refreshedJwtAfterAuthFailure() ?: return null
-                apiClient
-                    .uploadMediaWithPath(
-                        fileBytes = cipher,
-                        chatId = chatId,
-                        mimeType = uploadMime,
-                        authToken = retriedJwt,
-                        v2 = v2Record?.toRequest(),
-                    ).getOrElse {
-                        println("ChatRepository: uploadChatMedia failed: ${firstErr.redactedRestMessage()}")
-                        return null
-                    }
-            }
+        val uploaded =
+            apiClient
+                .uploadMediaWithPath(
+                    fileBytes = cipher,
+                    chatId = chatId,
+                    mimeType = uploadMime,
+                    authToken = jwt,
+                    v2 = v2Record?.toRequest(),
+                ).getOrElse { firstErr ->
+                    val retriedJwt = refreshedJwtAfterAuthFailure() ?: return null
+                    apiClient
+                        .uploadMediaWithPath(
+                            fileBytes = cipher,
+                            chatId = chatId,
+                            mimeType = uploadMime,
+                            authToken = retriedJwt,
+                            v2 = v2Record?.toRequest(),
+                        ).getOrElse {
+                            println("ChatRepository: uploadChatMedia failed: ${firstErr.redactedRestMessage()}")
+                            return null
+                        }
+                }
         if (v2Record != null && uploaded.path.isNullOrBlank()) {
             println("ChatRepository: v2 media upload response missing storage path")
             return null

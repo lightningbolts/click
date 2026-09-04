@@ -5,7 +5,12 @@ internal object PureKotlinAesGcm {
     private const val BLOCK_BYTES = 16
     private const val R = 0xe100000000000000uL
 
-    fun encrypt(key: ByteArray, nonce: ByteArray, aad: ByteArray, plaintext: ByteArray): ByteArray {
+    fun encrypt(
+        key: ByteArray,
+        nonce: ByteArray,
+        aad: ByteArray,
+        plaintext: ByteArray,
+    ): ByteArray {
         require(key.size == 32) { "AES-256 requires a 32-byte key" }
         require(nonce.size == 12) { "GCM requires a 12-byte nonce" }
         val roundKeys = expandKey(key)
@@ -16,7 +21,12 @@ internal object PureKotlinAesGcm {
         return ciphertext + tag
     }
 
-    fun decrypt(key: ByteArray, nonce: ByteArray, aad: ByteArray, ciphertextAndTag: ByteArray): ByteArray {
+    fun decrypt(
+        key: ByteArray,
+        nonce: ByteArray,
+        aad: ByteArray,
+        ciphertextAndTag: ByteArray,
+    ): ByteArray {
         require(key.size == 32) { "AES-256 requires a 32-byte key" }
         require(nonce.size == 12) { "GCM requires a 12-byte nonce" }
         require(ciphertextAndTag.size >= 16) { "GCM ciphertext is missing its tag" }
@@ -30,7 +40,11 @@ internal object PureKotlinAesGcm {
         return cryptCtr(roundKeys, j0.copyOf(), ciphertext)
     }
 
-    private fun cryptCtr(roundKeys: IntArray, counter: ByteArray, input: ByteArray): ByteArray {
+    private fun cryptCtr(
+        roundKeys: IntArray,
+        counter: ByteArray,
+        input: ByteArray,
+    ): ByteArray {
         val output = ByteArray(input.size)
         var offset = 0
         var blockCounter = 2
@@ -48,8 +62,13 @@ internal object PureKotlinAesGcm {
         return output
     }
 
-    private fun ghash(hashSubkey: ByteArray, aad: ByteArray, ciphertext: ByteArray): ByteArray {
+    private fun ghash(
+        hashSubkey: ByteArray,
+        aad: ByteArray,
+        ciphertext: ByteArray,
+    ): ByteArray {
         var state = ByteArray(16)
+
         fun absorb(bytes: ByteArray) {
             var offset = 0
             while (offset < bytes.size) {
@@ -67,7 +86,10 @@ internal object PureKotlinAesGcm {
         return multiplyGf128(xor(state, lengths), hashSubkey)
     }
 
-    private fun multiplyGf128(x: ByteArray, y: ByteArray): ByteArray {
+    private fun multiplyGf128(
+        x: ByteArray,
+        y: ByteArray,
+    ): ByteArray {
         var z = 0uL to 0uL
         var v = readLongPair(y)
         for (bit in 0 until 128) {
@@ -86,14 +108,20 @@ internal object PureKotlinAesGcm {
         var rcon = 1
         for (i in 8 until 60) {
             var temp = words[i - 1]
-            if (i % 8 == 0) temp = subWord(rotWord(temp)) xor (rcon shl 24).also { rcon = gfMulByte(rcon, 2) }
-            else if (i % 8 == 4) temp = subWord(temp)
+            if (i % 8 == 0) {
+                temp = subWord(rotWord(temp)) xor (rcon shl 24).also { rcon = gfMulByte(rcon, 2) }
+            } else if (i % 8 == 4) {
+                temp = subWord(temp)
+            }
             words[i] = words[i - 8] xor temp
         }
         return words
     }
 
-    private fun encryptBlock(roundKeys: IntArray, input: ByteArray): ByteArray {
+    private fun encryptBlock(
+        roundKeys: IntArray,
+        input: ByteArray,
+    ): ByteArray {
         val state = input.copyOf()
         addRoundKey(state, roundKeys, 0)
         for (round in 1 until 14) {
@@ -108,7 +136,11 @@ internal object PureKotlinAesGcm {
         return state
     }
 
-    private fun addRoundKey(state: ByteArray, keys: IntArray, round: Int) {
+    private fun addRoundKey(
+        state: ByteArray,
+        keys: IntArray,
+        round: Int,
+    ) {
         repeat(4) { word ->
             val value = keys[round * 4 + word]
             repeat(4) { byte -> state[word * 4 + byte] = (state[word * 4 + byte].toInt() xor (value ushr (24 - byte * 8))).toByte() }
@@ -142,10 +174,15 @@ internal object PureKotlinAesGcm {
             rotateLeftByte(inverse, 3) xor rotateLeftByte(inverse, 4) xor 0x63
     }
 
-    private fun rotateLeftByte(value: Int, count: Int): Int =
-        ((value shl count) or (value ushr (8 - count))) and 0xff
+    private fun rotateLeftByte(
+        value: Int,
+        count: Int,
+    ): Int = ((value shl count) or (value ushr (8 - count))) and 0xff
 
-    private fun gfPow(value: Int, exponent: Int): Int {
+    private fun gfPow(
+        value: Int,
+        exponent: Int,
+    ): Int {
         var result = 1
         var base = value
         var power = exponent
@@ -157,7 +194,10 @@ internal object PureKotlinAesGcm {
         return result
     }
 
-    private fun gfMulByte(left: Int, right: Int): Int {
+    private fun gfMulByte(
+        left: Int,
+        right: Int,
+    ): Int {
         var a = left
         var b = right
         var result = 0
@@ -177,32 +217,52 @@ internal object PureKotlinAesGcm {
         return result
     }
 
-    private fun readInt(bytes: ByteArray, offset: Int): Int =
+    private fun readInt(
+        bytes: ByteArray,
+        offset: Int,
+    ): Int =
         (bytes[offset].toInt() and 0xff shl 24) or
             (bytes[offset + 1].toInt() and 0xff shl 16) or
             (bytes[offset + 2].toInt() and 0xff shl 8) or
             (bytes[offset + 3].toInt() and 0xff)
 
-    private fun writeLongBits(target: ByteArray, offset: Int, value: Long) {
+    private fun writeLongBits(
+        target: ByteArray,
+        offset: Int,
+        value: Long,
+    ) {
         for (i in 0 until 8) target[offset + i] = (value ushr (56 - i * 8)).toByte()
     }
 
     private fun readLongPair(bytes: ByteArray): Pair<ULong, ULong> {
-        fun read(offset: Int): ULong = (0 until 8).fold(0uL) { value, i -> (value shl 8) or (bytes[offset + i].toInt().toUByte().toULong()) }
+        fun read(offset: Int): ULong =
+            (0 until 8).fold(0uL) { value, i -> (value shl 8) or (bytes[offset + i].toInt().toUByte().toULong()) }
         return read(0) to read(8)
     }
 
     private fun writeLongPair(value: Pair<ULong, ULong>): ByteArray {
         val output = ByteArray(16)
-        fun write(offset: Int, number: ULong) { for (i in 0 until 8) output[offset + i] = (number shr (56 - i * 8)).toByte() }
+
+        fun write(
+            offset: Int,
+            number: ULong,
+        ) {
+            for (i in 0 until 8) output[offset + i] = (number shr (56 - i * 8)).toByte()
+        }
         write(0, value.first)
         write(8, value.second)
         return output
     }
 
-    private fun xor(left: ByteArray, right: ByteArray): ByteArray = ByteArray(left.size) { left[it] xor right[it] }
+    private fun xor(
+        left: ByteArray,
+        right: ByteArray,
+    ): ByteArray = ByteArray(left.size) { left[it] xor right[it] }
 
-    private fun constantTimeEquals(left: ByteArray, right: ByteArray): Boolean {
+    private fun constantTimeEquals(
+        left: ByteArray,
+        right: ByteArray,
+    ): Boolean {
         if (left.size != right.size) return false
         var difference = 0
         for (i in left.indices) difference = difference or (left[i].toInt() xor right[i].toInt())
