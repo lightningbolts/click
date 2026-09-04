@@ -220,9 +220,12 @@ object MessageCrypto {
 
     fun isEncrypted(content: String): Boolean = content.startsWith(E2EE_PREFIX)
 
+    /** V2 is intentionally classified separately so legacy callers cannot accidentally decrypt it with v1. */
+    fun isV2Encrypted(content: String): Boolean = MessageCryptoV2.isEncrypted(content)
+
     fun isGroupMessageEncrypted(content: String): Boolean = content.startsWith(E2EE_GROUP_MSG_PREFIX)
 
-    fun isAnyE2eeWireContent(content: String): Boolean = isEncrypted(content) || isGroupMessageEncrypted(content)
+    fun isAnyE2eeWireContent(content: String): Boolean = isEncrypted(content) || isGroupMessageEncrypted(content) || isV2Encrypted(content)
 
     // ── Binary media (AES-256-CBC + HMAC-SHA256, same primitive as text; wire is raw bytes: IV||HMAC||ciphertext) ──
 

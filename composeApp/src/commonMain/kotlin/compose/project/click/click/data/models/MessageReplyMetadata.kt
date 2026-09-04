@@ -16,10 +16,15 @@ data class MessageReplyRef(
  * collapses it to a single `"📎 Attachment"` marker.
  */
 private const val ATTACHMENT_ENVELOPE_PREFIX: String = "ccx:v1:"
+private const val ATTACHMENT_V2_ENVELOPE_PREFIX: String = "ccx:v2:"
 private const val ATTACHMENT_PLACEHOLDER: String = "\uD83D\uDCCE Attachment" // 📎 Attachment
 
 fun maskAttachmentEnvelope(content: String): String {
-    return if (content.startsWith(ATTACHMENT_ENVELOPE_PREFIX)) ATTACHMENT_PLACEHOLDER else content
+    return if (content.startsWith(ATTACHMENT_ENVELOPE_PREFIX) || content.startsWith(ATTACHMENT_V2_ENVELOPE_PREFIX)) {
+        ATTACHMENT_PLACEHOLDER
+    } else {
+        content
+    }
 }
 
 fun Message.replyRef(): MessageReplyRef? {

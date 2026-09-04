@@ -132,7 +132,7 @@ internal fun ProfileSheetLocalMessage.toProfileSheetMedia(): ProfileSheetMedia? 
         mediaType = mediaType,
         captionedAt =
             content
-                .takeUnless { it.isLikelyWireEncrypted() || it.startsWith("ccx:v1:") }
+                .takeUnless { it.isLikelyWireEncrypted() || AttachmentCrypto.isAttachmentEnvelope(it) }
                 ?.takeIf { it.isNotBlank() },
         sortEpochMs = sortEpochMs,
         durationSeconds =
@@ -186,7 +186,7 @@ internal fun ConnectionTabMessage.toProfileSheetMediaFromTab(): ProfileSheetMedi
         mediaType = if (lowerType == "audio") ProfileSheetMediaType.Audio else ProfileSheetMediaType.Image,
         captionedAt =
             content
-                .takeUnless { it.isLikelyWireEncrypted() || it.startsWith("ccx:v1:") }
+                .takeUnless { it.isLikelyWireEncrypted() || AttachmentCrypto.isAttachmentEnvelope(it) }
                 ?.takeIf { it.isNotBlank() },
         sortEpochMs = timeCreated,
         durationSeconds =
@@ -228,7 +228,7 @@ internal fun buildProfileSheetFile(
         envelope?.name?.takeIf { it.isNotBlank() }
             ?: meta?.firstString("attachment_name", "file_name", "filename", "name")
             ?: content
-                .takeUnless { it.isLikelyWireEncrypted() || it.startsWith("ccx:v1:") }
+                .takeUnless { it.isLikelyWireEncrypted() || AttachmentCrypto.isAttachmentEnvelope(it) }
                 ?.takeIf { it.isNotBlank() }
             ?: "Attachment"
     val size =

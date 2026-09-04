@@ -140,6 +140,20 @@ actual object PlatformCrypto {
         return output.copyOfRange(0, written)
     }
 
+    actual fun aesGcmEncrypt(
+        key: ByteArray,
+        nonce: ByteArray,
+        additionalData: ByteArray,
+        plaintext: ByteArray,
+    ): ByteArray = PureKotlinAesGcm.encrypt(key, nonce, additionalData, plaintext)
+
+    actual fun aesGcmDecrypt(
+        key: ByteArray,
+        nonce: ByteArray,
+        additionalData: ByteArray,
+        ciphertextAndTag: ByteArray,
+    ): ByteArray = PureKotlinAesGcm.decrypt(key, nonce, additionalData, ciphertextAndTag)
+
     actual fun secureRandomBytes(count: Int): ByteArray {
         val bytes = ByteArray(count)
         bytes.usePinned { pinned ->

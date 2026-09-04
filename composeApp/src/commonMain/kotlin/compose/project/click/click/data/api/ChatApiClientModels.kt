@@ -52,6 +52,102 @@ internal data class ClickWebMessageEnvelope(
 )
 
 @Serializable
+internal data class ClickWebChatDeviceDto(
+    val id: String,
+    @SerialName("device_id") val deviceId: String,
+    @SerialName("identity_public_key") val identityPublicKey: String,
+    @SerialName("key_algorithm") val keyAlgorithm: String,
+    @SerialName("crypto_version") val cryptoVersion: Int,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("last_seen_at") val lastSeenAt: String? = null,
+    @SerialName("user_id") val userId: String? = null,
+)
+
+@Serializable
+internal data class ClickWebChatDeviceEnvelope(
+    val device: ClickWebChatDeviceDto,
+)
+
+@Serializable
+internal data class ClickWebChatDevicesEnvelope(
+    val devices: List<ClickWebChatDeviceDto> = emptyList(),
+)
+
+@Serializable
+internal data class ClickWebRegisterChatDeviceBody(
+    @SerialName("device_id") val deviceId: String,
+    @SerialName("identity_public_key") val identityPublicKey: String,
+)
+
+@Serializable
+internal data class ClickWebChatEpochEnvelopeDto(
+    @SerialName("chat_id") val chatId: String,
+    val epoch: Int,
+    /** The response exposes the persisted recipient row UUID, not the logical device id. */
+    @SerialName("recipient_device_id") val recipientDeviceId: String,
+    @SerialName("sender_device_id") val senderDeviceId: String,
+    val envelope: String,
+)
+
+@Serializable
+internal data class ClickWebChatE2eeV2StateEnvelope(
+    @SerialName("chat_id") val chatId: String,
+    @SerialName("device_id") val deviceId: String,
+    @SerialName("current_epoch") val currentEpoch: Int? = null,
+    @SerialName("membership_fingerprint") val membershipFingerprint: String? = null,
+    val envelopes: List<ClickWebChatEpochEnvelopeDto> = emptyList(),
+)
+
+@Serializable
+internal data class ClickWebHubEpochEnvelopeDto(
+    @SerialName("hub_id") val hubId: String,
+    val epoch: Int,
+    /** The response exposes the persisted recipient row UUID, not the logical device id. */
+    @SerialName("recipient_device_id") val recipientDeviceId: String,
+    @SerialName("sender_device_id") val senderDeviceId: String,
+    val envelope: String,
+)
+
+@Serializable
+internal data class ClickWebHubE2eeV2StateEnvelope(
+    @SerialName("hub_id") val hubId: String,
+    @SerialName("device_id") val deviceId: String,
+    @SerialName("current_epoch") val currentEpoch: Int? = null,
+    @SerialName("membership_fingerprint") val membershipFingerprint: String? = null,
+    val envelopes: List<ClickWebHubEpochEnvelopeDto> = emptyList(),
+)
+
+@Serializable
+internal data class ClickWebHubEpochWriteEnvelope(
+    @SerialName("recipient_device_id") val recipientDeviceId: String,
+    val envelope: String,
+)
+
+@Serializable
+internal data class ClickWebHubEpochWriteBody(
+    @SerialName("hub_id") val hubId: String,
+    val epoch: Int,
+    @SerialName("sender_device_id") val senderDeviceId: String,
+    @SerialName("membership_fingerprint") val membershipFingerprint: String,
+    val envelopes: List<ClickWebHubEpochWriteEnvelope>,
+)
+
+@Serializable
+internal data class ClickWebChatEpochWriteEnvelope(
+    @SerialName("recipient_device_id") val recipientDeviceId: String,
+    val envelope: String,
+)
+
+@Serializable
+internal data class ClickWebChatEpochWriteBody(
+    @SerialName("chat_id") val chatId: String,
+    val epoch: Int,
+    @SerialName("sender_device_id") val senderDeviceId: String,
+    @SerialName("membership_fingerprint") val membershipFingerprint: String,
+    val envelopes: List<ClickWebChatEpochWriteEnvelope>,
+)
+
+@Serializable
 internal data class HubDetailsEnvelope(
     val hub: ChatApiClient.HubDetailsDto,
 )
@@ -134,6 +230,11 @@ internal data class ChatMediaUploadJsonBody(
     @SerialName("chat_id") val chatId: String,
     @SerialName("mime_type") val mimeType: String,
     @SerialName("file_b64") val fileBase64: String,
+    @SerialName("e2ee_v2_envelope") val e2eeV2Envelope: String? = null,
+    @SerialName("media_ciphertext_sha256") val mediaCiphertextSha256: String? = null,
+    val epoch: Int? = null,
+    @SerialName("sender_device_id") val senderDeviceId: String? = null,
+    @SerialName("client_message_id") val clientMessageId: String? = null,
 )
 
 @Serializable
@@ -142,6 +243,20 @@ internal data class ChatAttachmentUploadJsonBody(
     @SerialName("mime_type") val mimeType: String,
     @SerialName("file_name") val fileName: String,
     @SerialName("file_b64") val fileBase64: String,
+    @SerialName("e2ee_v2_envelope") val e2eeV2Envelope: String? = null,
+    @SerialName("media_ciphertext_sha256") val mediaCiphertextSha256: String? = null,
+    val epoch: Int? = null,
+    @SerialName("sender_device_id") val senderDeviceId: String? = null,
+    @SerialName("client_message_id") val clientMessageId: String? = null,
+)
+
+/** The v2 metadata sent alongside an opaque media upload. */
+data class E2eeV2MediaUploadRequest(
+    val envelope: String,
+    val mediaCiphertextSha256: String,
+    val epoch: Int,
+    val senderDeviceId: String,
+    val clientMessageId: String,
 )
 
 @Serializable

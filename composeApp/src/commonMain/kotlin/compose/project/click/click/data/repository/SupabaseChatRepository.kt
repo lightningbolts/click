@@ -918,6 +918,18 @@ class SupabaseChatRepository(
         viewerUserId: String,
         mediaUrl: String,
     ): ByteArray? = downloadAndDecryptChatMediaImpl(chatId = chatId, viewerUserId = viewerUserId, mediaUrl = mediaUrl)
+
+    override suspend fun downloadAndDecryptChatAttachment(
+        chatId: String,
+        viewerUserId: String,
+        path: String,
+        metadata: compose.project.click.click.crypto.MessageCryptoV2.MediaMetadata,
+    ): ByteArray? = downloadAndDecryptV2Attachment(
+        chatId = chatId,
+        viewerUserId = viewerUserId,
+        path = path,
+        metadata = metadata,
+    )
 }
 
 internal class SupabaseMessageSubscription(

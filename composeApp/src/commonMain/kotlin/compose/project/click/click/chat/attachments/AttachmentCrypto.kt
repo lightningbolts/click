@@ -10,6 +10,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlin.io.encoding.Base64
@@ -37,11 +38,17 @@ object AttachmentCrypto {
      * us evolve the envelope without breaking old clients.
      */
     const val ENVELOPE_PREFIX: String = "ccx:v1:"
+    const val E2EE_V2_ENVELOPE_PREFIX: String = "ccx:v2:"
 
     private const val FILE_MASTER_KEY_BYTES = 32
 
     private val json = Json {
         ignoreUnknownKeys = true
+        encodeDefaults = true
+    }
+    private val v2Json = Json {
+        ignoreUnknownKeys = false
+        isLenient = false
         encodeDefaults = true
     }
 
@@ -55,6 +62,17 @@ object AttachmentCrypto {
         val path: String,
         val key: String,
         val sha256: String,
+    )
+
+    @Serializable
+    data class V2Descriptor(
+        val v: Int = 2,
+        val type: String = "file",
+        val name: String,
+        val mime: String,
+        val size: Long,
+        val path: String,
+        val mediaCiphertextSha256: String,
     )
 
     /** Fresh 32-byte per-file master key. Caller must never reuse this across attachments. */
@@ -95,8 +113,36 @@ object AttachmentCrypto {
     @OptIn(ExperimentalEncodingApi::class)
     fun sha256Base64(bytes: ByteArray): String = Base64.encode(PlatformCrypto.sha256(bytes))
 
-    /** Serialise an envelope to the wire form `ccx:v1:<json>`. */
-    fun encodeEnvelope(env: Envelope): String = ENVELOPE_PREFIX + json.encodeToString(env)
+    /** Serialise a legacy envelope or a v2 descriptor, depending on the supplied key. */
+    fun encodeEnvelope(env: Envelope): String =
+        if (env.v == 2) {
+            encodeV2AttachmentDescriptor(
+                V2Descriptor(
+                    name = env.name,
+                    mime = env.mime,
+                    size = env.size,
+                    path = env.path,
+                    mediaCiphertextSha256 = env.sha256,
+                ),
+            )
+        } else {
+            ENVELOPE_PREFIX + json.encodeToString(env)
+        }
+
+    /** Serialise a cross-platform v2 file descriptor. */
+    fun encodeV2AttachmentDescriptor(descriptor: V2Descriptor): String {
+        require(descriptor.v == 2 && descriptor.type == "file") { "Invalid E2EE v2 file descriptor" }
+        require(descriptor.name.length in 1..256) { "Invalid attachment name" }
+        require(descriptor.mime.length in 1..256) { "Invalid attachment MIME type" }
+        require(descriptor.path.isNotEmpty() && !descriptor.path.startsWith("/") && ".." !in descriptor.path) {
+            "Invalid attachment path"
+        }
+        require(descriptor.size >= 0) { "Invalid attachment size" }
+        require(isStrictSha256Base64(descriptor.mediaCiphertextSha256)) {
+            "Invalid media ciphertext digest"
+        }
+        return E2EE_V2_ENVELOPE_PREFIX + v2Json.encodeToString(descriptor)
+    }
 
     /**
      * Try to parse an envelope. Returns `null` if [content] is not an attachment payload — the
@@ -112,13 +158,39 @@ object AttachmentCrypto {
         }
     }
 
+    /** Strictly parse a cross-platform v2 file descriptor. */
+    @OptIn(ExperimentalEncodingApi::class)
+    fun tryDecodeV2AttachmentDescriptor(content: String): V2Descriptor? {
+        if (!content.startsWith(E2EE_V2_ENVELOPE_PREFIX)) return null
+        return try {
+            val body = content.substring(E2EE_V2_ENVELOPE_PREFIX.length)
+            val root = v2Json.parseToJsonElement(body).jsonObject
+            val expectedKeys = setOf("mediaCiphertextSha256", "mime", "name", "path", "size", "type", "v")
+            require(root.keys == expectedKeys) { "Unexpected E2EE v2 descriptor fields" }
+            val descriptor = v2Json.decodeFromString<V2Descriptor>(body)
+            require(descriptor.v == 2 && descriptor.type == "file") { "Invalid E2EE v2 descriptor type" }
+            require(descriptor.name.length in 1..256) { "Invalid attachment name" }
+            require(descriptor.mime.length in 1..256) { "Invalid attachment MIME type" }
+            require(descriptor.path.isNotEmpty() && !descriptor.path.startsWith("/") && ".." !in descriptor.path) {
+                "Invalid attachment path"
+            }
+            require(descriptor.size >= 0) { "Invalid attachment size" }
+            require(isStrictSha256Base64(descriptor.mediaCiphertextSha256)) {
+                "Invalid media ciphertext digest"
+            }
+            descriptor
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     /**
      * Resolves an attachment envelope from encrypted [content] and optional [metadata].
      * Metadata fields are used as a fallback for malformed/legacy envelopes and to fill
      * missing display details safely.
      */
     fun resolveEnvelope(content: String, metadata: JsonElement?): Envelope? {
-        val base = tryDecodeEnvelope(content)
+        val base = tryDecodeEnvelope(content) ?: tryDecodeV2AttachmentDescriptor(content)?.toEnvelope()
         val meta = metadata as? JsonObject
         if (base == null && meta == null) return null
 
@@ -179,7 +251,26 @@ object AttachmentCrypto {
         )
     }
 
-    fun isAttachmentEnvelope(content: String): Boolean = content.startsWith(ENVELOPE_PREFIX)
+    fun isAttachmentEnvelope(content: String): Boolean =
+        content.startsWith(ENVELOPE_PREFIX) || content.startsWith(E2EE_V2_ENVELOPE_PREFIX)
+
+    private fun V2Descriptor.toEnvelope(): Envelope =
+        Envelope(
+            v = 2,
+            type = type,
+            name = name,
+            mime = mime,
+            size = size,
+            path = path,
+            key = "",
+            sha256 = mediaCiphertextSha256,
+        )
+
+    @OptIn(ExperimentalEncodingApi::class)
+    private fun isStrictSha256Base64(value: String): Boolean {
+        if (!Regex("^[A-Za-z0-9+/]{43}=$").matches(value)) return false
+        return runCatching { Base64.decode(value).size == 32 }.getOrDefault(false)
+    }
 
     private fun JsonObject?.stringAt(key: String): String? =
         this?.get(key)?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }

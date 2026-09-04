@@ -516,9 +516,9 @@ fun ProfileBottomSheet(
         remember(profileLocalMessages) {
             profileLocalMessages.filter {
                 val type = it.messageType.lowercase()
-                type == "file" ||
+                    type == "file" ||
                     it.hasMetadataAttachmentV1() ||
-                    it.content.startsWith(AttachmentCrypto.ENVELOPE_PREFIX)
+                    AttachmentCrypto.isAttachmentEnvelope(it.content)
             }
         }
     val localLinkMessages =

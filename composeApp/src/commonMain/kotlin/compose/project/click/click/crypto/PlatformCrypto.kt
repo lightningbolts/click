@@ -12,4 +12,6 @@ expect object PlatformCrypto {
     fun aesCbcEncrypt(key: ByteArray, iv: ByteArray, plaintext: ByteArray): ByteArray
     fun aesCbcDecrypt(key: ByteArray, iv: ByteArray, ciphertext: ByteArray): ByteArray
     fun secureRandomBytes(count: Int): ByteArray
+    fun aesGcmEncrypt(key: ByteArray, nonce: ByteArray, additionalData: ByteArray, plaintext: ByteArray): ByteArray
+    fun aesGcmDecrypt(key: ByteArray, nonce: ByteArray, additionalData: ByteArray, ciphertextAndTag: ByteArray): ByteArray
 }

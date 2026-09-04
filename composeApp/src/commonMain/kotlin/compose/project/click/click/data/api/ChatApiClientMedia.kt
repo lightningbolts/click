@@ -22,7 +22,8 @@ internal suspend fun ChatApiClient.uploadMediaImpl(
     chatId: String,
     mimeType: String,
     authToken: String,
-): Result<String> {
+    v2: E2eeV2MediaUploadRequest? = null,
+): Result<ChatApiClient.UploadedMedia> {
     if (fileBytes.isEmpty()) return Result.failure(IllegalArgumentException("Empty media"))
     return try {
         val encoded = Base64.encode(fileBytes)
@@ -35,6 +36,11 @@ internal suspend fun ChatApiClient.uploadMediaImpl(
                         chatId = chatId,
                         mimeType = mimeType.ifBlank { "application/octet-stream" },
                         fileBase64 = encoded,
+                        e2eeV2Envelope = v2?.envelope,
+                        mediaCiphertextSha256 = v2?.mediaCiphertextSha256,
+                        epoch = v2?.epoch,
+                        senderDeviceId = v2?.senderDeviceId,
+                        clientMessageId = v2?.clientMessageId,
                     ),
                 )
             }
@@ -42,7 +48,7 @@ internal suspend fun ChatApiClient.uploadMediaImpl(
             val payload = response.body<ChatMediaUploadUrlResponse>()
             val url = payload.url?.trim().orEmpty()
             if (url.isNotEmpty()) {
-                Result.success(url)
+                Result.success(ChatApiClient.UploadedMedia(url = url, path = payload.path?.trim()?.takeIf { it.isNotEmpty() }))
             } else {
                 Result.failure(Exception("Upload response missing media url"))
             }
@@ -67,6 +73,7 @@ internal suspend fun ChatApiClient.uploadAttachmentImpl(
     mimeType: String,
     fileName: String,
     authToken: String,
+    v2: E2eeV2MediaUploadRequest? = null,
 ): Result<ChatApiClient.UploadedAttachment> {
     if (fileBytes.isEmpty()) return Result.failure(IllegalArgumentException("Empty attachment"))
     if (fileName.isBlank()) return Result.failure(IllegalArgumentException("file_name is required"))
@@ -82,6 +89,11 @@ internal suspend fun ChatApiClient.uploadAttachmentImpl(
                         mimeType = mimeType.ifBlank { "application/octet-stream" },
                         fileName = fileName,
                         fileBase64 = encoded,
+                        e2eeV2Envelope = v2?.envelope,
+                        mediaCiphertextSha256 = v2?.mediaCiphertextSha256,
+                        epoch = v2?.epoch,
+                        senderDeviceId = v2?.senderDeviceId,
+                        clientMessageId = v2?.clientMessageId,
                     ),
                 )
             }

@@ -6,6 +6,7 @@ import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.User
+import compose.project.click.click.crypto.MessageCryptoV2
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.JsonElement
@@ -375,6 +376,14 @@ interface ChatRepository {
         viewerUserId: String,
         mediaUrl: String,
     ): ByteArray?
+
+    /** Downloads, authenticates, and decrypts a v2 attachment from its canonical storage path. */
+    suspend fun downloadAndDecryptChatAttachment(
+        chatId: String,
+        viewerUserId: String,
+        path: String,
+        metadata: MessageCryptoV2.MediaMetadata,
+    ): ByteArray? = null
 
     /**
      * Background-only media worker: downloads/decrypts recent encrypted media and rewrites message

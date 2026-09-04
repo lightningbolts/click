@@ -84,6 +84,7 @@ internal suspend fun ChatApiClient.uploadHubMediaImpl(
     authToken: String,
     userLat: Double,
     userLong: Double,
+    v2: E2eeV2MediaUploadRequest? = null,
 ): Result<String> {
     if (fileBytes.isEmpty()) return Result.failure(IllegalArgumentException("Empty media"))
     return try {
@@ -98,6 +99,13 @@ internal suspend fun ChatApiClient.uploadHubMediaImpl(
                             append("mime_type", mimeType.ifBlank { "application/octet-stream" })
                             append("user_lat", userLat.toString())
                             append("user_long", userLong.toString())
+                            v2?.let {
+                                append("e2ee_v2_envelope", it.envelope)
+                                append("media_ciphertext_sha256", it.mediaCiphertextSha256)
+                                append("epoch", it.epoch.toString())
+                                append("sender_device_id", it.senderDeviceId)
+                                append("client_message_id", it.clientMessageId)
+                            }
                             append("file", fileBytes, encryptedUploadFileHeaders())
                         },
                     ),

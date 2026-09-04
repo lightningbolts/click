@@ -8,6 +8,7 @@ package compose.project.click.click.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.chat.attachments.AttachmentCrypto // pragma: allowlist secret
+import compose.project.click.click.crypto.MessageCryptoV2 // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.api.ChatApiClient // pragma: allowlist secret
@@ -25,6 +26,8 @@ import compose.project.click.click.data.repository.ChatMessageSubscription // pr
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.e2eeV2MediaMetadataOrNull // pragma: allowlist secret
+import compose.project.click.click.data.repository.e2eeV2MediaStoragePathOrNull // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.network.ConnectivityMonitor
@@ -568,7 +571,14 @@ class ChatViewModel(
     suspend fun downloadChatAttachment(
         messageId: String,
         envelope: AttachmentCrypto.Envelope,
-    ): ChatAttachmentDownloadOutcome = downloadChatAttachmentImpl(messageId = messageId, envelope = envelope)
+        message: Message? = null,
+    ): ChatAttachmentDownloadOutcome =
+        downloadChatAttachmentImpl(
+            messageId = messageId,
+            envelope = envelope,
+            v2Metadata = message?.e2eeV2MediaMetadataOrNull(currentApiChatId),
+            v2StoragePath = message?.e2eeV2MediaStoragePathOrNull(),
+        )
 
     fun clearMessageSendError() = clearMessageSendErrorImpl()
 

@@ -393,7 +393,7 @@ internal fun ColumnScope.ChatViewTimelinePane(
                                 onLongPress = { contextMenuMessage = it },
                                 onSwipeReply = { viewModel.startReplyTo(it) },
                                 onDownloadAttachment = { mwu, env ->
-                                    viewModel.downloadChatAttachment(mwu.message.id, env)
+                                    viewModel.downloadChatAttachment(mwu.message.id, env, mwu.message)
                                 },
                                 onExpandPhoto = { expandedPhotoTarget = it },
                                 onOpenBeacon = { msg ->

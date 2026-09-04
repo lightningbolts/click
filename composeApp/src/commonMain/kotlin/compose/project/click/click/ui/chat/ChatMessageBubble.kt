@@ -183,7 +183,7 @@ fun ChatMessageBubble(
             (!mediaReference.isNullOrBlank() || secureSt?.imageBytes != null)
     val attachmentEnvelope =
         remember(message.id, message.content, message.metadata) {
-            if (mt == ChatMessageType.FILE || message.content.startsWith(AttachmentCrypto.ENVELOPE_PREFIX)) {
+            if (mt == ChatMessageType.FILE || AttachmentCrypto.isAttachmentEnvelope(message.content)) {
                 AttachmentCrypto.resolveEnvelope(message.content, message.metadata)
             } else {
                 null
