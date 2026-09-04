@@ -69,4 +69,16 @@ object ChatDeepLinkManager {
         _pendingEventHub.value = null
         return value
     }
+
+    /** Drops pending navigation after check-out, expiry, removal, or a server access revocation. */
+    fun clearPendingHub(hubId: String) {
+        val trimmed = hubId.trim()
+        if (trimmed.isEmpty()) return
+        if (_pendingCommunityHubId.value == trimmed) {
+            _pendingCommunityHubId.value = null
+        }
+        if (_pendingEventHub.value?.hubId == trimmed) {
+            _pendingEventHub.value = null
+        }
+    }
 }

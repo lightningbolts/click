@@ -10,6 +10,8 @@ import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
 import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.value
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import platform.CoreFoundation.CFDictionaryCreate
 import platform.CoreFoundation.CFDictionaryRef
 import platform.CoreFoundation.CFStringRef
@@ -33,7 +35,7 @@ import platform.Security.errSecDuplicateItem
 import platform.Security.errSecItemNotFound
 import platform.Security.errSecSuccess
 import platform.Security.kSecAttrAccessible
-import platform.Security.kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+import platform.Security.kSecAttrAccessibleWhenUnlockedThisDeviceOnly
 import platform.Security.kSecAttrAccount
 import platform.Security.kSecAttrService
 import platform.Security.kSecClass
@@ -45,15 +47,11 @@ import platform.Security.kSecValueData
 import platform.darwin.OSStatus
 
 /**
- * iOS TokenStorage that uses BOTH NSUserDefaults AND Keychain for redundancy.
+ * iOS TokenStorage stores credentials exclusively in a single, versioned Keychain record.
  *
- * Strategy:
- * - WRITE: Save to NSUserDefaults first (authoritative for the active session), then best-effort Keychain
- * - READ: Prefer NSUserDefaults, then Keychain (avoids stale Keychain JWT poisoning fresh Defaults tokens
- *   when Keychain writes fail with errSecParam)
- *
- * Historical bug: Keychain-first reads + failed Keychain overwrites left an expired JWT in Keychain while
- * Defaults held a valid session → endless "JWT expired" / "Refresh Token Not Found" loops.
+ * Older releases wrote credential fields to [NSUserDefaults]. On the first secure read we atomically
+ * copy a complete legacy session into Keychain, verify that write, then purge every plaintext and
+ * per-field Keychain legacy value. Preferences continue using UserDefaults; credentials do not.
  */
 @OptIn(ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)
 class IosTokenStorage : TokenStorage {
@@ -65,6 +63,8 @@ class IosTokenStorage : TokenStorage {
         private const val KEY_EXPIRES_AT = "expires_at"
         private const val KEY_TOKEN_TYPE = "token_type"
         private const val KEY_USER_ID = "user_id"
+        private const val KEY_SECURE_SESSION_V2 = "session_v2"
+        private const val SECURE_SESSION_VERSION = 2
         private const val KEY_FREE_THIS_WEEK = "free_this_week"
         private const val KEY_TAGS_INITIALIZED = "tags_initialized"
         private const val KEY_DARK_MODE_ENABLED = "dark_mode_enabled"
@@ -88,6 +88,22 @@ class IosTokenStorage : TokenStorage {
     }
 
     private val userDefaults = NSUserDefaults(suiteName = PREFS_SUITE_NAME) ?: NSUserDefaults.standardUserDefaults
+    private val sessionJson =
+        Json {
+            ignoreUnknownKeys = true
+            encodeDefaults = true
+        }
+    private var legacyCredentialStoragePurged = false
+
+    @Serializable
+    private data class SecureSession(
+        val version: Int = SECURE_SESSION_VERSION,
+        val jwt: String,
+        val refreshToken: String,
+        val expiresAt: Long? = null,
+        val tokenType: String? = null,
+        val userId: String? = null,
+    )
 
     override suspend fun saveTokens(
         jwt: String,
@@ -95,101 +111,37 @@ class IosTokenStorage : TokenStorage {
         expiresAt: Long?,
         tokenType: String?,
     ) {
-        // Defaults are the live session source of truth.
         val userId = LocalSessionCache.parseIdentityFromJwt(jwt)?.userId
-        userDefaults.setObject(jwt, KEY_JWT)
-        userDefaults.setObject(refreshToken, KEY_REFRESH_TOKEN)
-        if (expiresAt != null) {
-            userDefaults.setDouble(expiresAt.toDouble(), KEY_EXPIRES_AT)
-        } else {
-            userDefaults.removeObjectForKey(KEY_EXPIRES_AT)
-        }
-        if (tokenType != null) {
-            userDefaults.setObject(tokenType, KEY_TOKEN_TYPE)
-        } else {
-            userDefaults.removeObjectForKey(KEY_TOKEN_TYPE)
-        }
-        if (userId != null) {
-            userDefaults.setObject(userId, KEY_USER_ID)
-        } else {
-            userDefaults.removeObjectForKey(KEY_USER_ID)
-        }
-        userDefaults.synchronize()
-
-        // Update-or-add Keychain; delete stale entries when writes fail so empty Defaults
-        // cannot resurrect an expired refresh token on fallback read.
-        val jwtOk = setKeychainItem(KEY_JWT, jwt)
-        val refreshOk = setKeychainItem(KEY_REFRESH_TOKEN, refreshToken)
-        val expiresOk =
-            if (expiresAt != null) {
-                setKeychainItem(KEY_EXPIRES_AT, expiresAt.toString())
-            } else {
-                deleteKeychainItem(KEY_EXPIRES_AT)
-                true
-            }
-        val typeOk =
-            if (tokenType != null) {
-                setKeychainItem(KEY_TOKEN_TYPE, tokenType)
-            } else {
-                deleteKeychainItem(KEY_TOKEN_TYPE)
-                true
-            }
-        if (!jwtOk || !refreshOk || !expiresOk || !typeOk) {
-            println(
-                "IosTokenStorage: NSUserDefaults saved; Keychain write failed, purging stale entries " +
-                    "(jwt=$jwtOk refresh=$refreshOk expires=$expiresOk type=$typeOk)",
+        val session =
+            SecureSession(
+                jwt = jwt,
+                refreshToken = refreshToken,
+                expiresAt = expiresAt,
+                tokenType = tokenType,
+                userId = userId,
             )
-            if (!jwtOk) deleteKeychainItem(KEY_JWT)
-            if (!refreshOk) deleteKeychainItem(KEY_REFRESH_TOKEN)
-            if (!expiresOk) deleteKeychainItem(KEY_EXPIRES_AT)
-            if (!typeOk) deleteKeychainItem(KEY_TOKEN_TYPE)
+        if (writeSecureSession(session)) {
+            purgeLegacyCredentialStorage()
+        } else {
+            // Preserve any previously valid secure item when replacing it fails.
+            purgeLegacyCredentialStorage()
+            println("IosTokenStorage: Keychain session write failed; credentials were not persisted")
         }
     }
 
-    override suspend fun getJwt(): String? {
-        userDefaults.stringForKey(KEY_JWT)?.takeIf { it.isNotBlank() }?.let { return it }
-        return getKeychainItem(KEY_JWT)?.takeIf { it.isNotBlank() }?.also { recovered ->
-            userDefaults.setObject(recovered, KEY_JWT)
-            userDefaults.synchronize()
-        }
-    }
+    override suspend fun getJwt(): String? = secureSessionOrMigrate()?.jwt?.takeIf { it.isNotBlank() }
 
-    override suspend fun getRefreshToken(): String? {
-        userDefaults.stringForKey(KEY_REFRESH_TOKEN)?.takeIf { it.isNotBlank() }?.let { return it }
-        return getKeychainItem(KEY_REFRESH_TOKEN)?.takeIf { it.isNotBlank() }?.also { recovered ->
-            userDefaults.setObject(recovered, KEY_REFRESH_TOKEN)
-            userDefaults.synchronize()
-        }
-    }
+    override suspend fun getRefreshToken(): String? = secureSessionOrMigrate()?.refreshToken?.takeIf { it.isNotBlank() }
 
-    override suspend fun getExpiresAt(): Long? {
-        val expiry = userDefaults.doubleForKey(KEY_EXPIRES_AT)
-        if (expiry > 0) return expiry.toLong()
-        return getKeychainItem(KEY_EXPIRES_AT)?.toLongOrNull()?.also { recovered ->
-            userDefaults.setDouble(recovered.toDouble(), KEY_EXPIRES_AT)
-            userDefaults.synchronize()
-        }
-    }
+    override suspend fun getExpiresAt(): Long? = secureSessionOrMigrate()?.expiresAt
 
-    override suspend fun getTokenType(): String? {
-        userDefaults.stringForKey(KEY_TOKEN_TYPE)?.takeIf { it.isNotBlank() }?.let { return it }
-        return getKeychainItem(KEY_TOKEN_TYPE)?.takeIf { it.isNotBlank() }
-    }
+    override suspend fun getTokenType(): String? = secureSessionOrMigrate()?.tokenType?.takeIf { it.isNotBlank() }
 
-    override suspend fun getUserId(): String? = userDefaults.stringForKey(KEY_USER_ID)
+    override suspend fun getUserId(): String? = secureSessionOrMigrate()?.userId?.takeIf { it.isNotBlank() }
 
     override suspend fun clearTokens() {
-        userDefaults.removeObjectForKey(KEY_JWT)
-        userDefaults.removeObjectForKey(KEY_REFRESH_TOKEN)
-        userDefaults.removeObjectForKey(KEY_EXPIRES_AT)
-        userDefaults.removeObjectForKey(KEY_TOKEN_TYPE)
-        userDefaults.removeObjectForKey(KEY_USER_ID)
-        userDefaults.synchronize()
-
-        deleteKeychainItem(KEY_JWT)
-        deleteKeychainItem(KEY_REFRESH_TOKEN)
-        deleteKeychainItem(KEY_EXPIRES_AT)
-        deleteKeychainItem(KEY_TOKEN_TYPE)
+        deleteKeychainItem(KEY_SECURE_SESSION_V2)
+        purgeLegacyCredentialStorage()
     }
 
     override suspend fun saveFreeThisWeek(isFree: Boolean) {
@@ -410,10 +362,74 @@ class IosTokenStorage : TokenStorage {
         sessionKeys.forEach { userDefaults.removeObjectForKey(it) }
         userDefaults.synchronize()
 
-        deleteKeychainItem(KEY_JWT)
-        deleteKeychainItem(KEY_REFRESH_TOKEN)
-        deleteKeychainItem(KEY_EXPIRES_AT)
-        deleteKeychainItem(KEY_TOKEN_TYPE)
+        deleteKeychainItem(KEY_SECURE_SESSION_V2)
+        purgeLegacyCredentialStorage()
+    }
+
+    /** Returns a complete v2 record, migrating a complete legacy record once when necessary. */
+    private fun secureSessionOrMigrate(): SecureSession? {
+        readSecureSession()?.let {
+            // A previous app version can leave duplicate credential copies behind; remove them now.
+            purgeLegacyCredentialStorage()
+            return it
+        }
+
+        val jwt = userDefaults.stringForKey(KEY_JWT)?.trim().orEmpty()
+        val refreshToken = userDefaults.stringForKey(KEY_REFRESH_TOKEN)?.trim().orEmpty()
+        if (jwt.isEmpty() || refreshToken.isEmpty()) {
+            // Incomplete legacy credentials must never be used to construct a session.
+            purgeLegacyCredentialStorage()
+            return null
+        }
+        val expiry = userDefaults.doubleForKey(KEY_EXPIRES_AT).takeIf { it > 0 }?.toLong()
+        val legacy =
+            SecureSession(
+                jwt = jwt,
+                refreshToken = refreshToken,
+                expiresAt = expiry,
+                tokenType = userDefaults.stringForKey(KEY_TOKEN_TYPE)?.trim()?.takeIf { it.isNotEmpty() },
+                userId =
+                    userDefaults.stringForKey(KEY_USER_ID)?.trim()?.takeIf { it.isNotEmpty() }
+                        ?: LocalSessionCache.parseIdentityFromJwt(jwt)?.userId,
+            )
+        return if (writeSecureSession(legacy)) {
+            purgeLegacyCredentialStorage()
+            legacy
+        } else {
+            // Credentials must not continue to live in plaintext when Keychain is unavailable.
+            // The user will authenticate again after the device can persist a secure session.
+            purgeLegacyCredentialStorage()
+            println("IosTokenStorage: Legacy credential migration could not write Keychain")
+            null
+        }
+    }
+
+    private fun readSecureSession(): SecureSession? {
+        val raw = getKeychainItem(KEY_SECURE_SESSION_V2)?.trim().orEmpty()
+        if (raw.isEmpty()) return null
+        val session = runCatching { sessionJson.decodeFromString(SecureSession.serializer(), raw) }.getOrNull()
+        if (session == null || session.version != SECURE_SESSION_VERSION || session.jwt.isBlank() || session.refreshToken.isBlank()) {
+            deleteKeychainItem(KEY_SECURE_SESSION_V2)
+            return null
+        }
+        return session
+    }
+
+    private fun writeSecureSession(session: SecureSession): Boolean {
+        if (session.jwt.isBlank() || session.refreshToken.isBlank()) return false
+        return setKeychainItem(KEY_SECURE_SESSION_V2, sessionJson.encodeToString(SecureSession.serializer(), session))
+    }
+
+    /** Removes every historical plaintext/per-field credential copy after a verified Keychain write. */
+    private fun purgeLegacyCredentialStorage() {
+        if (legacyCredentialStoragePurged) return
+        val purgeSucceeded =
+            listOf(KEY_JWT, KEY_REFRESH_TOKEN, KEY_EXPIRES_AT, KEY_TOKEN_TYPE, KEY_USER_ID).all {
+                userDefaults.removeObjectForKey(it)
+                deleteKeychainItem(it)
+            }
+        userDefaults.synchronize()
+        if (purgeSucceeded) legacyCredentialStoragePurged = true
     }
 
     // ============ Keychain Helpers ============
@@ -428,8 +444,7 @@ class IosTokenStorage : TokenStorage {
     ): Boolean =
         memScoped {
             if (value.isEmpty()) return false
-            @Suppress("CAST_NEVER_SUCCEEDS")
-            val nsString = value as NSString
+            val nsString = NSString.create(string = value)
             val valueData =
                 nsString.dataUsingEncoding(NSUTF8StringEncoding) ?: run {
                     println("IosTokenStorage: Failed to encode value for key '$key'")
@@ -454,7 +469,7 @@ class IosTokenStorage : TokenStorage {
                     basePairs +
                         mapOf(
                             kSecValueData to cfValue,
-                            kSecAttrAccessible to kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+                            kSecAttrAccessible to kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
                         )
 
                 val cfBase = cfDictionaryOf(basePairs)
@@ -519,7 +534,7 @@ class IosTokenStorage : TokenStorage {
                 CFBridgingRelease(query)
                 if (status != errSecSuccess) return null
                 val data = CFBridgingRelease(result.value) as? NSData ?: return null
-                NSString.create(data = data, encoding = NSUTF8StringEncoding) as? String
+                NSString.create(data = data, encoding = NSUTF8StringEncoding)?.toString()
             } finally {
                 CFBridgingRelease(cfAccount)
                 CFBridgingRelease(cfService)

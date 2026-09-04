@@ -234,16 +234,8 @@ internal suspend fun AppDataManager.loadAllData() {
                 reconnectNudgeEnabled = localNotificationPreferences.reconnectNudgePushEnabled,
             )
 
-            // Push registration is non-critical for first paint. Keep it off the main
-            // startup path so chats/connections do not wait on permission or token work.
-            if (localNotificationPreferences.messagePushEnabled || localNotificationPreferences.callPushEnabled) {
-                scope.launch {
-                    runCatching { pushNotificationService.requestPermission() }
-                        .onFailure { println("AppDataManager: Push permission request failed: ${it.message}") }
-                    runCatching { pushNotificationService.registerToken(user.id) }
-                        .onFailure { println("AppDataManager: Push token registration failed: ${it.message}") }
-                }
-            }
+            // Never trigger an OS permission prompt or device-token registration at login. The
+            // Settings toggle is the intentional, contextual entry point for notification setup.
 
             scope.launch {
                 val remotePreferences = notificationPreferencesRepository.fetchPreferences(user.id)
@@ -260,12 +252,8 @@ internal suspend fun AppDataManager.loadAllData() {
                 tokenStorage.saveMessageNotificationsEnabled(remotePreferences.messagePushEnabled)
                 tokenStorage.saveCallNotificationsEnabled(remotePreferences.callPushEnabled)
 
-                if (remotePreferences.messagePushEnabled || remotePreferences.callPushEnabled) {
-                    runCatching { pushNotificationService.requestPermission() }
-                        .onFailure { println("AppDataManager: Push permission request failed after sync: ${it.message}") }
-                    runCatching { pushNotificationService.registerToken(user.id) }
-                        .onFailure { println("AppDataManager: Push token registration failed after sync: ${it.message}") }
-                }
+                // Remote preference hydration is not user intent. Do not turn it into an OS
+                // notification prompt or an implicit token-registration side effect.
             }
 
             // Load availability from local storage first for immediate display

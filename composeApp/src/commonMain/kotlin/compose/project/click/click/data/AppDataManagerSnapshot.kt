@@ -20,6 +20,7 @@ import compose.project.click.click.util.dedupeOneToOneChatsByPeer // pragma: all
 import compose.project.click.click.util.dedupeOneToOneConnectionsByPeer // pragma: allowlist secret
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -134,7 +135,17 @@ internal fun AppDataManager.schedulePersistSnapshot() {
         }
 }
 
-internal suspend fun AppDataManager.restoreCachedSnapshot(): Boolean {
+internal suspend fun AppDataManager.restoreCachedSnapshot(): Boolean =
+    snapshotRestoreMutex.withLock {
+        _hubAccessStateRestored.value = false
+        try {
+            restoreCachedSnapshotUnlocked()
+        } finally {
+            _hubAccessStateRestored.value = true
+        }
+    }
+
+private suspend fun AppDataManager.restoreCachedSnapshotUnlocked(): Boolean {
     val snapshotJson = tokenStorage.getCachedAppSnapshot()
     if (snapshotJson.isNullOrBlank()) return false
 
@@ -152,6 +163,7 @@ internal suspend fun AppDataManager.restoreCachedSnapshot(): Boolean {
         _archivedConnectionIds.value = snapshot.archivedConnectionIds
         _hiddenConnectionIds.value = snapshot.hiddenConnectionIds
         _coreConnectionIds.value = snapshot.coreConnectionIds
+        _revokedHubIds.value = boundedHubAccessRevocationIds(snapshot.revokedHubIds)
         _cachedChatThreads.value = snapshot.cachedChatThreads.associateBy { it.connectionId }
         _cachedHubThreads.value = snapshot.cachedHubThreads.associateBy { it.hubId }
         _inboxFeedChats.value = dedupeOneToOneChatsByPeer(snapshot.inboxFeedChats)
@@ -224,6 +236,7 @@ internal suspend fun AppDataManager.persistSnapshot() {
             coreConnectionIds = _coreConnectionIds.value,
             cachedChatThreads = _cachedChatThreads.value.values.toList(),
             cachedHubThreads = _cachedHubThreads.value.values.toList(),
+            revokedHubIds = _revokedHubIds.value,
             cachedUserPublicProfiles = supabaseRepository.snapshotCachedUserPublicProfiles(),
             cachedProfileTimelines = supabaseRepository.snapshotCachedProfileTimelines(),
             inboxFeedChats = _inboxFeedChats.value,
@@ -258,7 +271,8 @@ internal fun AppDataManager.persistActiveHubs() {
             } else {
                 Json.encodeToString(_activeHubs.value)
             }
-        tokenStorage.saveActiveHubs(json)
+        runCatching { tokenStorage.saveActiveHubs(json) }
+            .onFailure { println("AppDataManager: Failed to persist active hubs: ${it.message}") }
     }
 }
 

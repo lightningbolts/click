@@ -1,15 +1,19 @@
-# Optional Maestro Cloud upload. Requires repo secrets:
-#   MAESTRO_API_KEY, MAESTRO_PROJECT_ID
-# Run from Actions → Maestro Cloud → Run workflow.
+# Free local release-validation smoke tests.
+# iOS runs on a GitHub-hosted simulator; Android device execution stays local
+# because GitHub-hosted runners do not provide nested virtualization. Nothing
+# in this workflow uploads to Maestro Cloud.
 # Smoke flows only (auth journeys stay local until a dedicated test user is configured).
 
-name: Maestro Cloud
+name: Mobile Maestro Release Validation
 
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
     inputs:
       platform:
-        description: Platform to upload
+        description: Platform to test
         required: true
         default: both
         type: choice
@@ -18,13 +22,16 @@ on:
           - android
           - ios
 
+permissions:
+  contents: read
+
 concurrency:
-  group: maestro-cloud-${{ github.ref }}-${{ github.event.inputs.platform }}
+  group: maestro-local-${{ github.ref }}-${{ github.sha }}-${{ inputs.platform || 'both' }}
   cancel-in-progress: true
 
 jobs:
   android:
-    if: inputs.platform == 'android' || inputs.platform == 'both'
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'android' || inputs.platform == 'both'
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -33,16 +40,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Require Maestro Cloud secrets
-        env:
-          MAESTRO_API_KEY: ${{ secrets.MAESTRO_API_KEY }}
-          MAESTRO_PROJECT_ID: ${{ secrets.MAESTRO_PROJECT_ID }}
-        run: |
-          if [ -z "$MAESTRO_API_KEY" ] || [ -z "$MAESTRO_PROJECT_ID" ]; then
-            echo "Set MAESTRO_API_KEY and MAESTRO_PROJECT_ID repository secrets, then re-run."
-            exit 1
-          fi
+          persist-credentials: false
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -55,7 +53,7 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install Android SDK packages
-        run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
+        run: sdkmanager "platforms;android-36" "build-tools;35.0.0" "platform-tools"
 
       - name: Create local.properties
         env:
@@ -69,34 +67,45 @@ jobs:
       - name: Build debug APK
         run: ./gradlew :composeApp:assembleDebug --no-daemon --stacktrace
 
-      - name: Upload to Maestro Cloud
-        uses: mobile-dev-inc/action-maestro-cloud@v2.0.2
-        with:
-          api-key: ${{ secrets.MAESTRO_API_KEY }}
-          project-id: ${{ secrets.MAESTRO_PROJECT_ID }}
-          app-file: composeApp/build/outputs/apk/debug/*.apk
-          workspace: .maestro
-          include-tags: smoke
-          name: click-android-${{ github.sha }}
+      - name: Install Maestro CLI
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+          "$HOME/.maestro/bin/maestro" --version
+
+      - name: Validate Android Maestro smoke flow definitions
+        run: |
+          set -euo pipefail
+          ruby -ryaml -e '
+            files = Dir[".maestro/**/*.yaml"].sort
+            abort "No Maestro YAML files found" if files.empty?
+            files.each do |file|
+              documents = YAML.load_stream(File.read(file))
+              if file == ".maestro/config.yaml"
+                config = documents.fetch(0)
+                abort "#{file}: missing appId" unless config["appId"] == "compose.project.click.click"
+                abort "#{file}: missing smoke flow pattern" unless config.fetch("flows").include?("smoke/*")
+              else
+                header, commands = documents
+                abort "#{file}: expected flow header and command list" unless header.is_a?(Hash) && commands.is_a?(Array)
+                abort "#{file}: wrong appId" unless header["appId"] == "compose.project.click.click"
+                abort "#{file}: missing tags" unless header.fetch("tags", []).is_a?(Array)
+              end
+              puts "validated #{file}"
+            end
+          '
+          echo "Android device execution is local-only; run scripts/maestro-smoke-android.sh on an accelerated device for release evidence."
 
   ios:
-    if: inputs.platform == 'ios' || inputs.platform == 'both'
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'ios' || inputs.platform == 'both'
     runs-on: macos-26
     timeout-minutes: 90
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Require Maestro Cloud secrets
-        env:
-          MAESTRO_API_KEY: ${{ secrets.MAESTRO_API_KEY }}
-          MAESTRO_PROJECT_ID: ${{ secrets.MAESTRO_PROJECT_ID }}
-        run: |
-          if [ -z "$MAESTRO_API_KEY" ] || [ -z "$MAESTRO_PROJECT_ID" ]; then
-            echo "Set MAESTRO_API_KEY and MAESTRO_PROJECT_ID repository secrets, then re-run."
-            exit 1
-          fi
+        with:
+          persist-credentials: false
 
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
@@ -118,6 +127,12 @@ jobs:
           MAPS_API_KEY=${MAPS_API_KEY:-dummy_key_for_ci}
           EOF
 
+      - name: Install Maestro CLI
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+          "$HOME/.maestro/bin/maestro" --version
+
       - name: Build iOS Simulator app
         run: |
           xcodebuild build \
@@ -131,20 +146,25 @@ jobs:
       - name: Locate Simulator .app
         id: app
         run: |
-          APP=$(find derivedData -path '*Debug-iphonesimulator/iosApp.app' -type d | head -n 1)
+          APP=$(find derivedData -path '*Debug-iphonesimulator/click.app' -type d | head -n 1)
           if [ -z "$APP" ]; then
-            echo "Could not find iosApp.app under derivedData"
+            echo "Could not find click.app under derivedData"
             find derivedData -name '*.app' -type d | head -50
             exit 1
           fi
           echo "path=$APP" >> "$GITHUB_OUTPUT"
 
-      - name: Upload to Maestro Cloud
-        uses: mobile-dev-inc/action-maestro-cloud@v2.0.2
-        with:
-          api-key: ${{ secrets.MAESTRO_API_KEY }}
-          project-id: ${{ secrets.MAESTRO_PROJECT_ID }}
-          app-file: ${{ steps.app.outputs.path }}
-          workspace: .maestro
-          include-tags: smoke
-          name: click-ios-${{ github.sha }}
+      - name: Boot local iOS Simulator and run Maestro smoke flows
+        env:
+          APP_PATH: ${{ steps.app.outputs.path }}
+        run: |
+          DEVICE_UDID=$(xcrun simctl list devices available | awk -F '[()]' '/iPhone .*Shutdown/{print $2; exit}')
+          test -n "$DEVICE_UDID" || {
+            echo "No available iPhone simulator found."
+            xcrun simctl list devices available
+            exit 1
+          }
+          xcrun simctl boot "$DEVICE_UDID" || true
+          xcrun simctl bootstatus "$DEVICE_UDID" -b
+          xcrun simctl install "$DEVICE_UDID" "$APP_PATH"
+          maestro --platform ios --device "$DEVICE_UDID" test .maestro --include-tags smoke

@@ -426,8 +426,8 @@ class ConnectionViewModel : ViewModel() {
         currentUserId: String,
         ambientNoiseMonitor: AmbientNoiseMonitor? = null,
         barometricHeightMonitor: BarometricHeightMonitor? = null,
-        ambientNoiseOptIn: Boolean = true,
-        barometricContextOptIn: Boolean = true,
+        ambientNoiseOptIn: Boolean = false,
+        barometricContextOptIn: Boolean = false,
     ) = saveReconnectEncounterImpl(
         tagging = tagging,
         currentUserId = currentUserId,
@@ -481,8 +481,8 @@ class ConnectionViewModel : ViewModel() {
         exactBarometricElevationMeters: Double?,
         ambientNoiseMonitor: AmbientNoiseMonitor? = null,
         barometricHeightMonitor: BarometricHeightMonitor? = null,
-        ambientNoiseOptIn: Boolean = true,
-        barometricContextOptIn: Boolean = true,
+        ambientNoiseOptIn: Boolean = false,
+        barometricContextOptIn: Boolean = false,
     ) = saveContextTagsImpl(
         tagging = tagging,
         contextTag = contextTag,

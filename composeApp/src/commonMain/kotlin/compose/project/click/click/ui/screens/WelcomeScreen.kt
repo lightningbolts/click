@@ -157,8 +157,10 @@ fun WelcomeScreen(
             Spacer(Modifier.height(12.dp))
             WelcomePill(
                 icon = Icons.Outlined.Lock,
-                title = "End-to-end encrypted",
-                body = "Messages, photos, and files are encrypted on your device — we can't read them.",
+                title = "Private by design",
+                body =
+                    "Click encrypts supported private chats and protects your account data. " +
+                        "We're continuing to strengthen message privacy.",
             )
             Spacer(Modifier.height(12.dp))
             WelcomePill(

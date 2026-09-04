@@ -195,6 +195,8 @@ data class CachedAppSnapshot(
     val cachedChatThreads: List<CachedChatThread> = emptyList(),
     /** Hub venue chat timelines restored on cold start for instant hub navigation paint. */
     val cachedHubThreads: List<CachedHubThread> = emptyList(),
+    /** Hub IDs whose access was revoked locally; replayed before opening a cached hub. */
+    val revokedHubIds: Set<String> = emptySet(),
     /** Hydrated user profiles restored on cold start so profile sheets can open without a network wait. */
     val cachedUserPublicProfiles: List<UserPublicProfile> = emptyList(),
     /** Profile/group timeline payloads restored on cold start for instant timeline tab paint. */

@@ -92,7 +92,7 @@ fun NfcScreen(
     val requestProximityHardwarePermissions = rememberProximityHardwarePermissionRequester()
 
     LaunchedEffect(Unit) {
-        ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
+        ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false
     }
 
     LaunchedEffect(authToken) {
@@ -267,8 +267,8 @@ fun NfcScreen(
                                                             null
                                                         }
                                                     }
-                                                val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
-                                                val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
+                                                val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false
+                                                val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: false
                                                 val sensors =
                                                     captureConnectionSensorContext(
                                                         ambientNoiseMonitor = ambientNoiseMonitor,
@@ -411,8 +411,8 @@ fun NfcScreen(
                                 connectionViewModel.resetConnectionState()
                                 return@launch
                             }
-                            val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
-                            val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
+                            val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false
+                            val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: false
                             val sensors =
                                 captureConnectionSensorContext(
                                     ambientNoiseMonitor = ambientNoiseMonitor,
@@ -452,8 +452,8 @@ fun NfcScreen(
                                     currentUserId = userId,
                                     ambientNoiseMonitor = ambientNoiseMonitor,
                                     barometricHeightMonitor = barometricHeightMonitor,
-                                    ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true,
-                                    barometricContextOptIn = tokenStorage.getBarometricContextOptIn() ?: true,
+                                    ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false,
+                                    barometricContextOptIn = tokenStorage.getBarometricContextOptIn() ?: false,
                                 )
                             }
                         },
@@ -486,7 +486,7 @@ fun NfcScreen(
                             scope.launch {
                                 ambientNoiseOptIn = noiseOptIn
                                 tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
-                                val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
+                                val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: false
                                 val sensors =
                                     captureConnectionSensorContext(
                                         ambientNoiseMonitor = ambientNoiseMonitor,

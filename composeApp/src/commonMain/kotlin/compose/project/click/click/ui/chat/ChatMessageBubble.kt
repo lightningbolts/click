@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.chat
 
 import androidx.compose.animation.core.Spring
@@ -29,7 +31,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +60,7 @@ import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.hasLocalMediaUri
+import compose.project.click.click.data.models.hubMediaPathOrNull
 import compose.project.click.click.data.models.isBeaconChatMessage
 import compose.project.click.click.data.models.isEncryptedMedia
 import compose.project.click.click.data.models.mediaUrlOrNull
@@ -70,6 +72,29 @@ import compose.project.click.click.viewmodel.SecureChatMediaHost
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+
+internal data class ChatAudioPlaybackSource(
+    /** A public/legacy media URL. Private hub object paths must never be used here. */
+    val mediaUrl: String,
+    /** Decrypted local file path, when available. */
+    val localFilePath: String?,
+)
+
+internal fun chatAudioPlaybackSource(
+    mediaUrl: String?,
+    hubMediaPath: String?,
+    decryptedLocalPath: String?,
+): ChatAudioPlaybackSource? {
+    val hasReference =
+        !mediaUrl.isNullOrBlank() || !hubMediaPath.isNullOrBlank()
+    if (!hasReference) return null
+    return ChatAudioPlaybackSource(
+        // A hub path is only a gatekeeper reference; ChatAudioBubble must receive an empty
+        // network URL and wait for the decrypted local file instead.
+        mediaUrl = mediaUrl?.trim().orEmpty(),
+        localFilePath = decryptedLocalPath?.trim()?.takeIf { it.isNotEmpty() },
+    )
+}
 
 @Composable
 fun ChatMessageBubble(
@@ -124,6 +149,8 @@ fun ChatMessageBubble(
     val replyRef = message.replyRef()
     val mt = message.messageType.lowercase()
     val mediaUrl = message.mediaUrlOrNull()
+    val hubMediaPath = message.hubMediaPathOrNull()
+    val mediaReference = mediaUrl ?: hubMediaPath
     val audioDurSec = message.parsedMediaMetadata()?.durationSeconds
     val encryptedMedia = message.isEncryptedMedia()
     val mediaLoadFlow = secureMediaHost?.secureChatMediaLoadState
@@ -143,32 +170,43 @@ fun ChatMessageBubble(
         }
     }
     val secureSt = secureMediaState ?: secureStFromHost
-    val isImageMessage = mt == ChatMessageType.IMAGE &&
-        (!mediaUrl.isNullOrBlank() || secureSt?.imageBytes != null)
-    val attachmentEnvelope = remember(message.id, message.content, message.metadata) {
-        if (mt == ChatMessageType.FILE || message.content.startsWith(AttachmentCrypto.ENVELOPE_PREFIX)) {
-            AttachmentCrypto.resolveEnvelope(message.content, message.metadata)
-        } else {
-            null
+    val audioPlaybackSource =
+        remember(mediaUrl, hubMediaPath, secureSt?.audioLocalPath) {
+            chatAudioPlaybackSource(
+                mediaUrl = mediaUrl,
+                hubMediaPath = hubMediaPath,
+                decryptedLocalPath = secureSt?.audioLocalPath,
+            )
         }
-    }
-    val isAttachment = attachmentEnvelope != null
-
-    val onRequestSecureAudio = remember(message.id, activeChatId, currentUserId, secureMediaHost) {
-        {
-            val scopeId = activeChatId
-            val viewerId = currentUserId
-            if (scopeId != null && viewerId != null) {
-                secureMediaHost?.ensureSecureChatAudioLoaded(scopeId, viewerId, message)
+    val isImageMessage =
+        mt == ChatMessageType.IMAGE &&
+            (!mediaReference.isNullOrBlank() || secureSt?.imageBytes != null)
+    val attachmentEnvelope =
+        remember(message.id, message.content, message.metadata) {
+            if (mt == ChatMessageType.FILE || message.content.startsWith(AttachmentCrypto.ENVELOPE_PREFIX)) {
+                AttachmentCrypto.resolveEnvelope(message.content, message.metadata)
+            } else {
+                null
             }
         }
-    }
+    val isAttachment = attachmentEnvelope != null
 
-    LaunchedEffect(message.id, mediaUrl, encryptedMedia, secureSt?.imageBytes, activeChatId, currentUserId) {
+    val onRequestSecureAudio =
+        remember(message.id, activeChatId, currentUserId, secureMediaHost) {
+            {
+                val scopeId = activeChatId
+                val viewerId = currentUserId
+                if (scopeId != null && viewerId != null) {
+                    secureMediaHost?.ensureSecureChatAudioLoaded(scopeId, viewerId, message)
+                }
+            }
+        }
+
+    LaunchedEffect(message.id, mediaReference, encryptedMedia, secureSt?.imageBytes, activeChatId, currentUserId) {
         if (!isImageMessage) return@LaunchedEffect
         if (secureSt?.imageBytes != null) return@LaunchedEffect
         if (secureChatImageBitmapCache.get(message.id) != null) return@LaunchedEffect
-        val url = mediaUrl?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        if (mediaReference.isNullOrBlank()) return@LaunchedEffect
         val scopeId = activeChatId ?: return@LaunchedEffect
         val viewerId = currentUserId ?: return@LaunchedEffect
         secureMediaHost?.ensureSecureChatImageLoaded(scopeId, viewerId, message)
@@ -176,7 +214,7 @@ fun ChatMessageBubble(
 
     LaunchedEffect(
         message.id,
-        mediaUrl,
+        mediaReference,
         encryptedMedia,
         secureSt?.audioLocalPath,
         activeChatId,
@@ -185,8 +223,7 @@ fun ChatMessageBubble(
         if (mt != ChatMessageType.AUDIO) return@LaunchedEffect
         if (secureSt?.audioLocalPath != null) return@LaunchedEffect
         if (!encryptedMedia && !message.hasLocalMediaUri()) return@LaunchedEffect
-        val url = mediaUrl?.takeIf { it.isNotBlank() } ?: message.mediaUrlOrNull()?.takeIf { it.isNotBlank() }
-        if (url.isNullOrBlank() && !message.hasLocalMediaUri()) return@LaunchedEffect
+        if (mediaReference.isNullOrBlank() && !message.hasLocalMediaUri()) return@LaunchedEffect
         val scopeId = activeChatId ?: return@LaunchedEffect
         val viewerId = currentUserId ?: return@LaunchedEffect
         secureMediaHost?.ensureSecureChatAudioLoaded(scopeId, viewerId, message)
@@ -196,10 +233,12 @@ fun ChatMessageBubble(
     val sentShape = bubblePillShape
     val receivedShape = bubblePillShape
 
-    val reactionGroups = reactions.groupBy { it.reactionType }
-        .mapValues { (_, list) -> list.size }
-        .entries
-        .sortedByDescending { it.value }
+    val reactionGroups =
+        reactions
+            .groupBy { it.reactionType }
+            .mapValues { (_, list) -> list.size }
+            .entries
+            .sortedByDescending { it.value }
 
     val density = LocalDensity.current
     val swipeThresholdPx = remember(density) { with(density) { 60.dp.toPx() } }
@@ -216,71 +255,77 @@ fun ChatMessageBubble(
     var swipeSettleJob by remember(message.id) { mutableStateOf<Job?>(null) }
     var replyThresholdHapticFired by remember(message.id) { mutableStateOf(false) }
 
-    val draggableState = rememberDraggableState { delta ->
-        swipeSettleJob?.cancel()
-        swipeSettleJob = null
-        rawSwipeTravelPx.floatValue =
-            (rawSwipeTravelPx.floatValue + delta).coerceIn(-ChatGestureMotion.RawTravelCapPx, ChatGestureMotion.RawTravelCapPx)
-        displayVisualPx.floatValue = swipeVisualFromRawTravel(
-            rawTravelPx = rawSwipeTravelPx.floatValue,
-            isSent = isSent,
-            maxVisualPx = maxSwipeVisualPx,
-            softKneePx = swipeSoftKneePx,
-            trackGain = swipeTrackGain,
-            overflowRubberGain = swipeOverflowRubberGain,
-        )
-        val directed =
-            if (isSent) (-rawSwipeTravelPx.floatValue).coerceAtLeast(0f) else rawSwipeTravelPx.floatValue.coerceAtLeast(0f)
-        if (directed >= swipeThresholdPx && !replyThresholdHapticFired) {
-            replyThresholdHapticFired = true
-            PlatformHapticsPolicy.heavyImpact()
-        }
-    }
-
-    val swipeDragModifier = Modifier.draggable(
-        state = draggableState,
-        orientation = Orientation.Horizontal,
-        onDragStarted = {
+    val draggableState =
+        rememberDraggableState { delta ->
             swipeSettleJob?.cancel()
             swipeSettleJob = null
-            replyThresholdHapticFired = false
-            if (displayVisualPx.floatValue != 0f) {
-                rawSwipeTravelPx.floatValue = swipeRawTravelFromVisual(
-                    visualPx = displayVisualPx.floatValue,
+            rawSwipeTravelPx.floatValue =
+                (rawSwipeTravelPx.floatValue + delta).coerceIn(-ChatGestureMotion.RawTravelCapPx, ChatGestureMotion.RawTravelCapPx)
+            displayVisualPx.floatValue =
+                swipeVisualFromRawTravel(
+                    rawTravelPx = rawSwipeTravelPx.floatValue,
                     isSent = isSent,
                     maxVisualPx = maxSwipeVisualPx,
                     softKneePx = swipeSoftKneePx,
                     trackGain = swipeTrackGain,
                     overflowRubberGain = swipeOverflowRubberGain,
-                ).coerceIn(-ChatGestureMotion.RawTravelCapPx, ChatGestureMotion.RawTravelCapPx)
-            }
-        },
-        onDragStopped = {
-            val raw = rawSwipeTravelPx.floatValue
-            val shouldReply = if (isSent) raw <= -swipeThresholdPx else raw >= swipeThresholdPx
-            if (shouldReply) {
+                )
+            val directed =
+                if (isSent) (-rawSwipeTravelPx.floatValue).coerceAtLeast(0f) else rawSwipeTravelPx.floatValue.coerceAtLeast(0f)
+            if (directed >= swipeThresholdPx && !replyThresholdHapticFired) {
+                replyThresholdHapticFired = true
                 PlatformHapticsPolicy.heavyImpact()
-                onSwipeReplyState.value(messageWithUserState.value)
             }
-            rawSwipeTravelPx.floatValue = 0f
-            swipeSettleJob = scope.launch {
-                try {
-                    animate(
-                        initialValue = displayVisualPx.floatValue,
-                        targetValue = 0f,
-                        animationSpec = spring(
-                            dampingRatio = 0.75f,
-                            stiffness = Spring.StiffnessLow,
-                        ),
-                    ) { v, _ ->
-                        displayVisualPx.floatValue = v
-                    }
-                } finally {
-                    swipeSettleJob = null
+        }
+
+    val swipeDragModifier =
+        Modifier.draggable(
+            state = draggableState,
+            orientation = Orientation.Horizontal,
+            onDragStarted = {
+                swipeSettleJob?.cancel()
+                swipeSettleJob = null
+                replyThresholdHapticFired = false
+                if (displayVisualPx.floatValue != 0f) {
+                    rawSwipeTravelPx.floatValue =
+                        swipeRawTravelFromVisual(
+                            visualPx = displayVisualPx.floatValue,
+                            isSent = isSent,
+                            maxVisualPx = maxSwipeVisualPx,
+                            softKneePx = swipeSoftKneePx,
+                            trackGain = swipeTrackGain,
+                            overflowRubberGain = swipeOverflowRubberGain,
+                        ).coerceIn(-ChatGestureMotion.RawTravelCapPx, ChatGestureMotion.RawTravelCapPx)
                 }
-            }
-        },
-    )
+            },
+            onDragStopped = {
+                val raw = rawSwipeTravelPx.floatValue
+                val shouldReply = if (isSent) raw <= -swipeThresholdPx else raw >= swipeThresholdPx
+                if (shouldReply) {
+                    PlatformHapticsPolicy.heavyImpact()
+                    onSwipeReplyState.value(messageWithUserState.value)
+                }
+                rawSwipeTravelPx.floatValue = 0f
+                swipeSettleJob =
+                    scope.launch {
+                        try {
+                            animate(
+                                initialValue = displayVisualPx.floatValue,
+                                targetValue = 0f,
+                                animationSpec =
+                                    spring(
+                                        dampingRatio = 0.75f,
+                                        stiffness = Spring.StiffnessLow,
+                                    ),
+                            ) { v, _ ->
+                                displayVisualPx.floatValue = v
+                            }
+                        } finally {
+                            swipeSettleJob = null
+                        }
+                    }
+            },
+        )
 
     val messageLongPressModifier =
         if (enableMessageContextMenu && !isImageMessage) {
@@ -317,12 +362,13 @@ fun ChatMessageBubble(
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = if (isSent) Alignment.End else Alignment.Start
+        horizontalAlignment = if (isSent) Alignment.End else Alignment.Start,
     ) {
         BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = ChatBubbleTokens.bubbleRowHorizontalInset)
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = ChatBubbleTokens.bubbleRowHorizontalInset),
         ) {
             val bubbleContentMaxWidth =
                 (maxWidth * ChatBubbleTokens.messageMaxWidthToParentFraction).coerceAtLeast(120.dp)
@@ -334,30 +380,34 @@ fun ChatMessageBubble(
                         isSent = false,
                         swipeThresholdPx = swipeThresholdPx,
                         maxSwipeVisualPx = maxSwipeVisualPx,
-                        modifier = Modifier
-                            .align(Alignment.CenterStart)
-                            .zIndex(0f),
+                        modifier =
+                            Modifier
+                                .align(Alignment.CenterStart)
+                                .zIndex(0f),
                     )
                 }
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .zIndex(1f),
-                    verticalAlignment = if (!isSent && showPeerAvatarInGroup) {
-                        Alignment.Bottom
-                    } else {
-                        Alignment.CenterVertically
-                    },
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .zIndex(1f),
+                    verticalAlignment =
+                        if (!isSent && showPeerAvatarInGroup) {
+                            Alignment.Bottom
+                        } else {
+                            Alignment.CenterVertically
+                        },
                     horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start,
                 ) {
                     if (!isSent && showPeerAvatarInGroup) {
                         val peer = messageWithUser.user
                         Box(
-                            modifier = Modifier
-                                .padding(end = ChatBubbleTokens.peerAvatarEndPad, bottom = ChatBubbleTokens.peerAvatarBottomPad)
-                                .size(ChatBubbleTokens.peerAvatarSize)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            modifier =
+                                Modifier
+                                    .padding(end = ChatBubbleTokens.peerAvatarEndPad, bottom = ChatBubbleTokens.peerAvatarBottomPad)
+                                    .size(ChatBubbleTokens.peerAvatarSize)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
                             contentAlignment = Alignment.Center,
                         ) {
                             if (!peer.image.isNullOrBlank()) {
@@ -365,13 +415,19 @@ fun ChatMessageBubble(
                                     model = peer.image,
                                     contentDescription = null,
                                     contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .clip(CircleShape),
+                                    modifier =
+                                        Modifier
+                                            .fillMaxSize()
+                                            .clip(CircleShape),
                                 )
                             } else {
                                 Text(
-                                    text = peer.name?.trim()?.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+                                    text =
+                                        peer.name
+                                            ?.trim()
+                                            ?.firstOrNull()
+                                            ?.uppercaseChar()
+                                            ?.toString() ?: "?",
                                     style = chatBubbleReplyLabelStyle(),
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -383,403 +439,414 @@ fun ChatMessageBubble(
                         horizontalAlignment = if (isSent) Alignment.End else Alignment.Start,
                         // Cap width to the bubble — fillMaxWidth photos otherwise expand this
                         // Column across the row and steal interactive-back in attachment bands.
-                        modifier = Modifier
-                            .widthIn(max = bubbleContentMaxWidth)
-                            .graphicsLayer { translationX = displayVisualPx.floatValue }
-                            .then(swipeDragModifier)
-                            .then(messageLongPressModifier),
+                        modifier =
+                            Modifier
+                                .widthIn(max = bubbleContentMaxWidth)
+                                .graphicsLayer { translationX = displayVisualPx.floatValue }
+                                .then(swipeDragModifier)
+                                .then(messageLongPressModifier),
                     ) {
-                if (isSent) {
-                    if (isImageMessage) {
-                        Column(
-                            modifier = Modifier.widthIn(max = bubbleContentMaxWidth),
-                            horizontalAlignment = Alignment.Start,
-                        ) {
-                            replyRef?.let { r ->
+                        if (isSent) {
+                            if (isImageMessage) {
                                 Column(
-                                    modifier = Modifier
-                                        .widthIn(max = bubbleContentMaxWidth)
-                                        .padding(bottom = ChatBubbleTokens.replyAboveMediaSpacing)
-                                        .clip(RoundedCornerShape(ChatBubbleTokens.replyBlockCorner))
-                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f))
-                                        .padding(
-                                            horizontal = ChatBubbleTokens.replyBlockPaddingH,
-                                            vertical = ChatBubbleTokens.replyBlockPaddingV,
-                                        )
-                                        .then(imageCaptionLongPressModifier),
+                                    modifier = Modifier.widthIn(max = bubbleContentMaxWidth),
+                                    horizontalAlignment = Alignment.Start,
                                 ) {
-                                    Text(
-                                        text = "Reply",
-                                        style = chatBubbleReplyLabelStyle(),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-                                    )
-                                    Text(
-                                        text = r.replyToContent.ifBlank { "Message" },
-                                        style = chatBubbleReplySnippetStyle(),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 3,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
-                            ChatBubblePhotoContent(
-                                mediaUrl = mediaUrl,
-                                message = message,
-                                isEncrypted = encryptedMedia,
-                                secureState = secureSt,
-                                borderIfReceived = false,
-                                onPhotoClick = { onExpandPhoto(messageWithUser) },
-                                onPhotoLongPress = if (enableMessageContextMenu) openPhotoContextMenu else null,
-                            )
-                            val capImg = message.content.trim()
-                            if (capImg.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(ChatBubbleTokens.captionBelowImageSpacing))
-                                ChatBubbleSelectableText(
-                                    allowNativeSelection = !enableMessageContextMenu,
-                                    modifier = imageCaptionLongPressModifier,
-                                ) {
-                                    ChatLinkifyText(
-                                        text = capImg,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        linkColor = MaterialTheme.colorScheme.primary,
-                                        style = chatBubbleMessageTextStyle(),
-                                    )
-                                }
-                            }
-                            if (message.timeEdited != null) {
-                                Text(
-                                    text = "(edited)",
-                                    style = chatBubbleEditedFootnoteStyle(),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
-                                )
-                            }
-                        }
-                    } else {
-                    Box(
-                        modifier = Modifier
-                            .widthIn(max = bubbleContentMaxWidth)
-                            .clip(sentShape)
-                            .background(PrimaryBlue)
-                            .padding(
-                                horizontal = ChatBubbleTokens.bubblePaddingHorizontal,
-                                vertical = ChatBubbleTokens.bubblePaddingVertical,
-                            ),
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.Start,
-                        ) {
-                            replyRef?.let { r ->
-                                Column(
-                                    modifier = Modifier
-                                        .widthIn(max = bubbleContentMaxWidth)
-                                        .padding(bottom = ChatBubbleTokens.replyAboveMediaSpacing)
-                                        .clip(RoundedCornerShape(ChatBubbleTokens.replyBlockCorner))
-                                        .background(Color.Black.copy(alpha = 0.12f))
-                                        .padding(
-                                            horizontal = ChatBubbleTokens.replyBlockPaddingH,
-                                            vertical = ChatBubbleTokens.replyBlockPaddingV,
-                                        ),
-                                ) {
-                                    Text(
-                                        text = "Reply",
-                                        style = chatBubbleReplyLabelStyle(),
-                                        color = Color.White.copy(alpha = 0.55f),
-                                    )
-                                    Text(
-                                        text = r.replyToContent.ifBlank { "Message" },
-                                        style = chatBubbleReplySnippetStyle(),
-                                        color = Color.White.copy(alpha = 0.78f),
-                                        maxLines = 3,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
-                            when {
-                                mt == ChatMessageType.AUDIO && mediaUrl != null -> {
-                                    ChatAudioBubble(
+                                    replyRef?.let { r ->
+                                        Column(
+                                            modifier =
+                                                Modifier
+                                                    .widthIn(max = bubbleContentMaxWidth)
+                                                    .padding(bottom = ChatBubbleTokens.replyAboveMediaSpacing)
+                                                    .clip(RoundedCornerShape(ChatBubbleTokens.replyBlockCorner))
+                                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f))
+                                                    .padding(
+                                                        horizontal = ChatBubbleTokens.replyBlockPaddingH,
+                                                        vertical = ChatBubbleTokens.replyBlockPaddingV,
+                                                    ).then(imageCaptionLongPressModifier),
+                                        ) {
+                                            Text(
+                                                text = "Reply",
+                                                style = chatBubbleReplyLabelStyle(),
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                                            )
+                                            Text(
+                                                text = r.replyToContent.ifBlank { "Message" },
+                                                style = chatBubbleReplySnippetStyle(),
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 3,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
+                                    ChatBubblePhotoContent(
                                         mediaUrl = mediaUrl,
-                                        durationSeconds = audioDurSec,
-                                        contentColor = Color.White,
-                                        accentColor = Color.White,
+                                        message = message,
                                         isEncrypted = encryptedMedia,
-                                        localFilePathForPlayback = secureSt?.audioLocalPath,
-                                        secureLoading = encryptedMedia && secureSt?.loading == true,
-                                        secureError = if (encryptedMedia) secureSt?.error else null,
-                                        onRequestDecrypt = onRequestSecureAudio,
-                                        mimeTypeHint = message.originalMimeTypeOrNull(),
-                                        chromeKind = ChatAudioChromeKind.SentBubble,
-                                        messageBubbleMaxWidth = bubbleContentMaxWidth,
+                                        secureState = secureSt,
+                                        borderIfReceived = false,
+                                        onPhotoClick = { onExpandPhoto(messageWithUser) },
+                                        onPhotoLongPress = if (enableMessageContextMenu) openPhotoContextMenu else null,
                                     )
-                                    val cap = message.content.trim()
-                                    if (cap.isNotEmpty()) {
+                                    val capImg = message.content.trim()
+                                    if (capImg.isNotEmpty()) {
                                         Spacer(modifier = Modifier.height(ChatBubbleTokens.captionBelowImageSpacing))
                                         ChatBubbleSelectableText(
                                             allowNativeSelection = !enableMessageContextMenu,
+                                            modifier = imageCaptionLongPressModifier,
                                         ) {
                                             ChatLinkifyText(
-                                                text = cap,
-                                                color = Color.White,
-                                                linkColor = Color(0xFFB7E0FF),
+                                                text = capImg,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                linkColor = MaterialTheme.colorScheme.primary,
                                                 style = chatBubbleMessageTextStyle(),
                                             )
                                         }
                                     }
+                                    if (message.timeEdited != null) {
+                                        Text(
+                                            text = "(edited)",
+                                            style = chatBubbleEditedFootnoteStyle(),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                                        )
+                                    }
                                 }
-                                isAttachment && attachmentEnvelope != null -> {
-                                    ChatAttachmentBubble(
-                                        envelope = attachmentEnvelope,
-                                        isSent = true,
-                                        onDownload = { onDownloadAttachment(messageWithUser, attachmentEnvelope) },
-                                        maxCardWidth = bubbleContentMaxWidth,
-                                    )
-                                }
-                                else -> {
-                                    ChatBubbleSelectableText(
-                                        allowNativeSelection = !enableMessageContextMenu,
+                            } else {
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .widthIn(max = bubbleContentMaxWidth)
+                                            .clip(sentShape)
+                                            .background(PrimaryBlue)
+                                            .padding(
+                                                horizontal = ChatBubbleTokens.bubblePaddingHorizontal,
+                                                vertical = ChatBubbleTokens.bubblePaddingVertical,
+                                            ),
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.Start,
                                     ) {
-                                        Column {
-                                            if (message.content.isNotBlank()) {
-                                                ChatLinkifyText(
-                                                    text = message.content,
-                                                    color = Color.White,
-                                                    linkColor = Color(0xFFB7E0FF),
-                                                    style = chatBubbleMessageTextStyle(),
+                                        replyRef?.let { r ->
+                                            Column(
+                                                modifier =
+                                                    Modifier
+                                                        .widthIn(max = bubbleContentMaxWidth)
+                                                        .padding(bottom = ChatBubbleTokens.replyAboveMediaSpacing)
+                                                        .clip(RoundedCornerShape(ChatBubbleTokens.replyBlockCorner))
+                                                        .background(Color.Black.copy(alpha = 0.12f))
+                                                        .padding(
+                                                            horizontal = ChatBubbleTokens.replyBlockPaddingH,
+                                                            vertical = ChatBubbleTokens.replyBlockPaddingV,
+                                                        ),
+                                            ) {
+                                                Text(
+                                                    text = "Reply",
+                                                    style = chatBubbleReplyLabelStyle(),
+                                                    color = Color.White.copy(alpha = 0.55f),
+                                                )
+                                                Text(
+                                                    text = r.replyToContent.ifBlank { "Message" },
+                                                    style = chatBubbleReplySnippetStyle(),
+                                                    color = Color.White.copy(alpha = 0.78f),
+                                                    maxLines = 3,
+                                                    overflow = TextOverflow.Ellipsis,
                                                 )
                                             }
+                                        }
+                                        when {
+                                            mt == ChatMessageType.AUDIO && audioPlaybackSource != null -> {
+                                                ChatAudioBubble(
+                                                    mediaUrl = audioPlaybackSource.mediaUrl,
+                                                    durationSeconds = audioDurSec,
+                                                    contentColor = Color.White,
+                                                    accentColor = Color.White,
+                                                    isEncrypted = encryptedMedia,
+                                                    localFilePathForPlayback = audioPlaybackSource.localFilePath,
+                                                    secureLoading = encryptedMedia && secureSt?.loading == true,
+                                                    secureError = if (encryptedMedia) secureSt?.error else null,
+                                                    onRequestDecrypt = onRequestSecureAudio,
+                                                    mimeTypeHint = message.originalMimeTypeOrNull(),
+                                                    chromeKind = ChatAudioChromeKind.SentBubble,
+                                                    messageBubbleMaxWidth = bubbleContentMaxWidth,
+                                                )
+                                                val cap = message.content.trim()
+                                                if (cap.isNotEmpty()) {
+                                                    Spacer(modifier = Modifier.height(ChatBubbleTokens.captionBelowImageSpacing))
+                                                    ChatBubbleSelectableText(
+                                                        allowNativeSelection = !enableMessageContextMenu,
+                                                    ) {
+                                                        ChatLinkifyText(
+                                                            text = cap,
+                                                            color = Color.White,
+                                                            linkColor = Color(0xFFB7E0FF),
+                                                            style = chatBubbleMessageTextStyle(),
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            isAttachment && attachmentEnvelope != null -> {
+                                                ChatAttachmentBubble(
+                                                    envelope = attachmentEnvelope,
+                                                    isSent = true,
+                                                    onDownload = { onDownloadAttachment(messageWithUser, attachmentEnvelope) },
+                                                    maxCardWidth = bubbleContentMaxWidth,
+                                                )
+                                            }
+                                            else -> {
+                                                ChatBubbleSelectableText(
+                                                    allowNativeSelection = !enableMessageContextMenu,
+                                                ) {
+                                                    Column {
+                                                        if (message.content.isNotBlank()) {
+                                                            ChatLinkifyText(
+                                                                text = message.content,
+                                                                color = Color.White,
+                                                                linkColor = Color(0xFFB7E0FF),
+                                                                style = chatBubbleMessageTextStyle(),
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        if (message.timeEdited != null) {
+                                            Text(
+                                                text = "(edited)",
+                                                style = chatBubbleEditedFootnoteStyle(),
+                                                color = Color.White.copy(alpha = 0.5f),
+                                            )
                                         }
                                     }
                                 }
                             }
-                            if (message.timeEdited != null) {
-                                Text(
-                                    text = "(edited)",
-                                    style = chatBubbleEditedFootnoteStyle(),
-                                    color = Color.White.copy(alpha = 0.5f),
-                                )
-                            }
-                        }
-                    }
-                    }
-                } else {
-                    if (isImageMessage) {
-                        Column(
-                            modifier = Modifier.widthIn(max = bubbleContentMaxWidth),
-                            horizontalAlignment = Alignment.Start,
-                        ) {
-                            replyRef?.let { r ->
+                        } else {
+                            if (isImageMessage) {
                                 Column(
-                                    modifier = Modifier
-                                        .widthIn(max = bubbleContentMaxWidth)
-                                        .padding(bottom = ChatBubbleTokens.replyAboveMediaSpacing)
-                                        .clip(RoundedCornerShape(ChatBubbleTokens.replyBlockCorner))
-                                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
-                                        .padding(
-                                            horizontal = ChatBubbleTokens.replyBlockPaddingH,
-                                            vertical = ChatBubbleTokens.replyBlockPaddingV,
-                                        )
-                                        .then(imageCaptionLongPressModifier),
+                                    modifier = Modifier.widthIn(max = bubbleContentMaxWidth),
+                                    horizontalAlignment = Alignment.Start,
                                 ) {
-                                    Text(
-                                        text = "Reply",
-                                        style = chatBubbleReplyLabelStyle(),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                    )
-                                    Text(
-                                        text = r.replyToContent.ifBlank { "Message" },
-                                        style = chatBubbleReplySnippetStyle(),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 3,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
-                            val onBody = MaterialTheme.colorScheme.onSurface
-                            val linkC = MaterialTheme.colorScheme.primary
-                            ChatBubblePhotoContent(
-                                mediaUrl = mediaUrl,
-                                message = message,
-                                isEncrypted = encryptedMedia,
-                                secureState = secureSt,
-                                borderIfReceived = true,
-                                onPhotoClick = { onExpandPhoto(messageWithUser) },
-                                onPhotoLongPress = if (enableMessageContextMenu) openPhotoContextMenu else null,
-                            )
-                            val capRx = message.content.trim()
-                            if (capRx.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(ChatBubbleTokens.captionBelowImageSpacing))
-                                ChatBubbleSelectableText(
-                                    allowNativeSelection = !enableMessageContextMenu,
-                                    modifier = imageCaptionLongPressModifier,
-                                ) {
-                                    ChatLinkifyText(
-                                        text = capRx,
-                                        color = onBody,
-                                        linkColor = linkC,
-                                        style = chatBubbleMessageTextStyle(),
-                                    )
-                                }
-                            }
-                            if (message.timeEdited != null) {
-                                Text(
-                                    text = "(edited)",
-                                    style = chatBubbleEditedFootnoteStyle(),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                )
-                            }
-                        }
-                    } else {
-                    Box(
-                        modifier = Modifier
-                            .widthIn(max = bubbleContentMaxWidth)
-                            .border(width = 1.dp, color = PrimaryBlue.copy(alpha = 0.18f), shape = receivedShape)
-                            .clip(receivedShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))
-                            .padding(
-                                horizontal = ChatBubbleTokens.bubblePaddingHorizontal,
-                                vertical = ChatBubbleTokens.bubblePaddingVertical,
-                            ),
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.Start,
-                        ) {
-                            replyRef?.let { r ->
-                                Column(
-                                    modifier = Modifier
-                                        .widthIn(max = bubbleContentMaxWidth)
-                                        .padding(bottom = ChatBubbleTokens.replyAboveMediaSpacing)
-                                        .clip(RoundedCornerShape(ChatBubbleTokens.replyBlockCorner))
-                                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
-                                        .padding(
-                                            horizontal = ChatBubbleTokens.replyBlockPaddingH,
-                                            vertical = ChatBubbleTokens.replyBlockPaddingV,
-                                        ),
-                                ) {
-                                    Text(
-                                        text = "Reply",
-                                        style = chatBubbleReplyLabelStyle(),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                    )
-                                    Text(
-                                        text = r.replyToContent.ifBlank { "Message" },
-                                        style = chatBubbleReplySnippetStyle(),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 3,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
-                            val onBody = MaterialTheme.colorScheme.onSurface
-                            val linkC = MaterialTheme.colorScheme.primary
-                            when {
-                                mt == ChatMessageType.AUDIO && mediaUrl != null -> {
-                                    ChatAudioBubble(
+                                    replyRef?.let { r ->
+                                        Column(
+                                            modifier =
+                                                Modifier
+                                                    .widthIn(max = bubbleContentMaxWidth)
+                                                    .padding(bottom = ChatBubbleTokens.replyAboveMediaSpacing)
+                                                    .clip(RoundedCornerShape(ChatBubbleTokens.replyBlockCorner))
+                                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+                                                    .padding(
+                                                        horizontal = ChatBubbleTokens.replyBlockPaddingH,
+                                                        vertical = ChatBubbleTokens.replyBlockPaddingV,
+                                                    ).then(imageCaptionLongPressModifier),
+                                        ) {
+                                            Text(
+                                                text = "Reply",
+                                                style = chatBubbleReplyLabelStyle(),
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                            )
+                                            Text(
+                                                text = r.replyToContent.ifBlank { "Message" },
+                                                style = chatBubbleReplySnippetStyle(),
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 3,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
+                                    val onBody = MaterialTheme.colorScheme.onSurface
+                                    val linkC = MaterialTheme.colorScheme.primary
+                                    ChatBubblePhotoContent(
                                         mediaUrl = mediaUrl,
-                                        durationSeconds = audioDurSec,
-                                        contentColor = onBody,
-                                        accentColor = linkC,
+                                        message = message,
                                         isEncrypted = encryptedMedia,
-                                        localFilePathForPlayback = secureSt?.audioLocalPath,
-                                        secureLoading = encryptedMedia && secureSt?.loading == true,
-                                        secureError = if (encryptedMedia) secureSt?.error else null,
-                                        onRequestDecrypt = onRequestSecureAudio,
-                                        mimeTypeHint = message.originalMimeTypeOrNull(),
-                                        chromeKind = ChatAudioChromeKind.ReceivedBubble,
-                                        messageBubbleMaxWidth = bubbleContentMaxWidth,
+                                        secureState = secureSt,
+                                        borderIfReceived = true,
+                                        onPhotoClick = { onExpandPhoto(messageWithUser) },
+                                        onPhotoLongPress = if (enableMessageContextMenu) openPhotoContextMenu else null,
                                     )
-                                    val cap = message.content.trim()
-                                    if (cap.isNotEmpty()) {
+                                    val capRx = message.content.trim()
+                                    if (capRx.isNotEmpty()) {
                                         Spacer(modifier = Modifier.height(ChatBubbleTokens.captionBelowImageSpacing))
                                         ChatBubbleSelectableText(
                                             allowNativeSelection = !enableMessageContextMenu,
+                                            modifier = imageCaptionLongPressModifier,
                                         ) {
                                             ChatLinkifyText(
-                                                text = cap,
+                                                text = capRx,
                                                 color = onBody,
                                                 linkColor = linkC,
                                                 style = chatBubbleMessageTextStyle(),
                                             )
                                         }
                                     }
+                                    if (message.timeEdited != null) {
+                                        Text(
+                                            text = "(edited)",
+                                            style = chatBubbleEditedFootnoteStyle(),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                        )
+                                    }
                                 }
-                                isAttachment && attachmentEnvelope != null -> {
-                                    ChatAttachmentBubble(
-                                        envelope = attachmentEnvelope,
-                                        isSent = false,
-                                        onDownload = { onDownloadAttachment(messageWithUser, attachmentEnvelope) },
-                                        maxCardWidth = bubbleContentMaxWidth,
-                                    )
-                                }
-                                else -> {
-                                    ChatBubbleSelectableText(
-                                        allowNativeSelection = !enableMessageContextMenu,
+                            } else {
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .widthIn(max = bubbleContentMaxWidth)
+                                            .border(width = 1.dp, color = PrimaryBlue.copy(alpha = 0.18f), shape = receivedShape)
+                                            .clip(receivedShape)
+                                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))
+                                            .padding(
+                                                horizontal = ChatBubbleTokens.bubblePaddingHorizontal,
+                                                vertical = ChatBubbleTokens.bubblePaddingVertical,
+                                            ),
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.Start,
                                     ) {
-                                        Column {
-                                            if (message.content.isNotBlank()) {
-                                                ChatLinkifyText(
-                                                    text = message.content,
-                                                    color = onBody,
-                                                    linkColor = linkC,
-                                                    style = chatBubbleMessageTextStyle(),
+                                        replyRef?.let { r ->
+                                            Column(
+                                                modifier =
+                                                    Modifier
+                                                        .widthIn(max = bubbleContentMaxWidth)
+                                                        .padding(bottom = ChatBubbleTokens.replyAboveMediaSpacing)
+                                                        .clip(RoundedCornerShape(ChatBubbleTokens.replyBlockCorner))
+                                                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+                                                        .padding(
+                                                            horizontal = ChatBubbleTokens.replyBlockPaddingH,
+                                                            vertical = ChatBubbleTokens.replyBlockPaddingV,
+                                                        ),
+                                            ) {
+                                                Text(
+                                                    text = "Reply",
+                                                    style = chatBubbleReplyLabelStyle(),
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                                )
+                                                Text(
+                                                    text = r.replyToContent.ifBlank { "Message" },
+                                                    style = chatBubbleReplySnippetStyle(),
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 3,
+                                                    overflow = TextOverflow.Ellipsis,
                                                 )
                                             }
+                                        }
+                                        val onBody = MaterialTheme.colorScheme.onSurface
+                                        val linkC = MaterialTheme.colorScheme.primary
+                                        when {
+                                            mt == ChatMessageType.AUDIO && audioPlaybackSource != null -> {
+                                                ChatAudioBubble(
+                                                    mediaUrl = audioPlaybackSource.mediaUrl,
+                                                    durationSeconds = audioDurSec,
+                                                    contentColor = onBody,
+                                                    accentColor = linkC,
+                                                    isEncrypted = encryptedMedia,
+                                                    localFilePathForPlayback = audioPlaybackSource.localFilePath,
+                                                    secureLoading = encryptedMedia && secureSt?.loading == true,
+                                                    secureError = if (encryptedMedia) secureSt?.error else null,
+                                                    onRequestDecrypt = onRequestSecureAudio,
+                                                    mimeTypeHint = message.originalMimeTypeOrNull(),
+                                                    chromeKind = ChatAudioChromeKind.ReceivedBubble,
+                                                    messageBubbleMaxWidth = bubbleContentMaxWidth,
+                                                )
+                                                val cap = message.content.trim()
+                                                if (cap.isNotEmpty()) {
+                                                    Spacer(modifier = Modifier.height(ChatBubbleTokens.captionBelowImageSpacing))
+                                                    ChatBubbleSelectableText(
+                                                        allowNativeSelection = !enableMessageContextMenu,
+                                                    ) {
+                                                        ChatLinkifyText(
+                                                            text = cap,
+                                                            color = onBody,
+                                                            linkColor = linkC,
+                                                            style = chatBubbleMessageTextStyle(),
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            isAttachment && attachmentEnvelope != null -> {
+                                                ChatAttachmentBubble(
+                                                    envelope = attachmentEnvelope,
+                                                    isSent = false,
+                                                    onDownload = { onDownloadAttachment(messageWithUser, attachmentEnvelope) },
+                                                    maxCardWidth = bubbleContentMaxWidth,
+                                                )
+                                            }
+                                            else -> {
+                                                ChatBubbleSelectableText(
+                                                    allowNativeSelection = !enableMessageContextMenu,
+                                                ) {
+                                                    Column {
+                                                        if (message.content.isNotBlank()) {
+                                                            ChatLinkifyText(
+                                                                text = message.content,
+                                                                color = onBody,
+                                                                linkColor = linkC,
+                                                                style = chatBubbleMessageTextStyle(),
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        if (message.timeEdited != null) {
+                                            Text(
+                                                text = "(edited)",
+                                                style = chatBubbleEditedFootnoteStyle(),
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                            )
                                         }
                                     }
                                 }
                             }
-                            if (message.timeEdited != null) {
-                                Text(
-                                    text = "(edited)",
-                                    style = chatBubbleEditedFootnoteStyle(),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                )
-                            }
                         }
-                    }
-                    }
-                }
 
-                if (reactionGroups.isNotEmpty()) {
-                    Row(
-                        modifier = Modifier.padding(
-                            horizontal = ChatBubbleTokens.reactionRowPadH,
-                            vertical = ChatBubbleTokens.reactionRowPadV,
-                        ),
-                        horizontalArrangement = Arrangement.spacedBy(ChatBubbleTokens.reactionChipGap),
-                    ) {
-                        reactionGroups.forEach { (emoji, count) ->
-                            val isOwnReaction = reactions.any { it.reactionType == emoji && it.userId == currentUserId }
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(ChatBubbleTokens.reactionChipCorner))
-                                    .background(
-                                        if (isOwnReaction) PrimaryBlue.copy(alpha = 0.25f)
-                                        else Color.White.copy(alpha = 0.08f),
-                                    )
-                                    .border(
-                                        width = 1.dp,
-                                        color = if (isOwnReaction) PrimaryBlue.copy(alpha = 0.5f)
-                                        else Color.White.copy(alpha = 0.12f),
-                                        shape = RoundedCornerShape(ChatBubbleTokens.reactionChipCorner),
-                                    )
-                                    .clickable {
-                                        PlatformHapticsPolicy.lightImpact()
-                                        onToggleReaction(emoji)
-                                    }
-                                    .padding(
-                                        horizontal = ChatBubbleTokens.reactionChipPadH,
-                                        vertical = ChatBubbleTokens.reactionChipPadV,
+                        if (reactionGroups.isNotEmpty()) {
+                            Row(
+                                modifier =
+                                    Modifier.padding(
+                                        horizontal = ChatBubbleTokens.reactionRowPadH,
+                                        vertical = ChatBubbleTokens.reactionRowPadV,
                                     ),
+                                horizontalArrangement = Arrangement.spacedBy(ChatBubbleTokens.reactionChipGap),
                             ) {
-                                Text(
-                                    text = if (count > 1) "$emoji $count" else emoji,
-                                    fontSize = ChatBubbleTokens.reactionFontSp.sp,
-                                    color = Color.White,
-                                )
+                                reactionGroups.forEach { (emoji, count) ->
+                                    val isOwnReaction = reactions.any { it.reactionType == emoji && it.userId == currentUserId }
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .clip(RoundedCornerShape(ChatBubbleTokens.reactionChipCorner))
+                                                .background(
+                                                    if (isOwnReaction) {
+                                                        PrimaryBlue.copy(alpha = 0.25f)
+                                                    } else {
+                                                        Color.White.copy(alpha = 0.08f)
+                                                    },
+                                                ).border(
+                                                    width = 1.dp,
+                                                    color =
+                                                        if (isOwnReaction) {
+                                                            PrimaryBlue.copy(alpha = 0.5f)
+                                                        } else {
+                                                            Color.White.copy(alpha = 0.12f)
+                                                        },
+                                                    shape = RoundedCornerShape(ChatBubbleTokens.reactionChipCorner),
+                                                ).clickable {
+                                                    PlatformHapticsPolicy.lightImpact()
+                                                    onToggleReaction(emoji)
+                                                }.padding(
+                                                    horizontal = ChatBubbleTokens.reactionChipPadH,
+                                                    vertical = ChatBubbleTokens.reactionChipPadV,
+                                                ),
+                                    ) {
+                                        Text(
+                                            text = if (count > 1) "$emoji $count" else emoji,
+                                            fontSize = ChatBubbleTokens.reactionFontSp.sp,
+                                            color = Color.White,
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
-                    }
-                }
                 }
                 if (isSent) {
                     ReplySwipeSideIcon(
@@ -788,9 +855,10 @@ fun ChatMessageBubble(
                         isSent = true,
                         swipeThresholdPx = swipeThresholdPx,
                         maxSwipeVisualPx = maxSwipeVisualPx,
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .zIndex(0f),
+                        modifier =
+                            Modifier
+                                .align(Alignment.CenterEnd)
+                                .zIndex(0f),
                     )
                 }
             }
@@ -825,71 +893,77 @@ private fun BeaconChatMessageBubble(
     var swipeSettleJob by remember(message.id) { mutableStateOf<Job?>(null) }
     var replyThresholdHapticFired by remember(message.id) { mutableStateOf(false) }
 
-    val draggableState = rememberDraggableState { delta ->
-        swipeSettleJob?.cancel()
-        swipeSettleJob = null
-        rawSwipeTravelPx.floatValue =
-            (rawSwipeTravelPx.floatValue + delta).coerceIn(-ChatGestureMotion.RawTravelCapPx, ChatGestureMotion.RawTravelCapPx)
-        displayVisualPx.floatValue = swipeVisualFromRawTravel(
-            rawTravelPx = rawSwipeTravelPx.floatValue,
-            isSent = isSent,
-            maxVisualPx = maxSwipeVisualPx,
-            softKneePx = swipeSoftKneePx,
-            trackGain = swipeTrackGain,
-            overflowRubberGain = swipeOverflowRubberGain,
-        )
-        val directed =
-            if (isSent) (-rawSwipeTravelPx.floatValue).coerceAtLeast(0f) else rawSwipeTravelPx.floatValue.coerceAtLeast(0f)
-        if (directed >= swipeThresholdPx && !replyThresholdHapticFired) {
-            replyThresholdHapticFired = true
-            PlatformHapticsPolicy.heavyImpact()
-        }
-    }
-
-    val swipeDragModifier = Modifier.draggable(
-        state = draggableState,
-        orientation = Orientation.Horizontal,
-        onDragStarted = {
+    val draggableState =
+        rememberDraggableState { delta ->
             swipeSettleJob?.cancel()
             swipeSettleJob = null
-            replyThresholdHapticFired = false
-            if (displayVisualPx.floatValue != 0f) {
-                rawSwipeTravelPx.floatValue = swipeRawTravelFromVisual(
-                    visualPx = displayVisualPx.floatValue,
+            rawSwipeTravelPx.floatValue =
+                (rawSwipeTravelPx.floatValue + delta).coerceIn(-ChatGestureMotion.RawTravelCapPx, ChatGestureMotion.RawTravelCapPx)
+            displayVisualPx.floatValue =
+                swipeVisualFromRawTravel(
+                    rawTravelPx = rawSwipeTravelPx.floatValue,
                     isSent = isSent,
                     maxVisualPx = maxSwipeVisualPx,
                     softKneePx = swipeSoftKneePx,
                     trackGain = swipeTrackGain,
                     overflowRubberGain = swipeOverflowRubberGain,
-                ).coerceIn(-ChatGestureMotion.RawTravelCapPx, ChatGestureMotion.RawTravelCapPx)
-            }
-        },
-        onDragStopped = {
-            val raw = rawSwipeTravelPx.floatValue
-            val shouldReply = if (isSent) raw <= -swipeThresholdPx else raw >= swipeThresholdPx
-            if (shouldReply) {
+                )
+            val directed =
+                if (isSent) (-rawSwipeTravelPx.floatValue).coerceAtLeast(0f) else rawSwipeTravelPx.floatValue.coerceAtLeast(0f)
+            if (directed >= swipeThresholdPx && !replyThresholdHapticFired) {
+                replyThresholdHapticFired = true
                 PlatformHapticsPolicy.heavyImpact()
-                onSwipeReplyState.value(messageWithUserState.value)
             }
-            rawSwipeTravelPx.floatValue = 0f
-            swipeSettleJob = scope.launch {
-                try {
-                    animate(
-                        initialValue = displayVisualPx.floatValue,
-                        targetValue = 0f,
-                        animationSpec = spring(
-                            dampingRatio = 0.75f,
-                            stiffness = Spring.StiffnessLow,
-                        ),
-                    ) { v, _ ->
-                        displayVisualPx.floatValue = v
-                    }
-                } finally {
-                    swipeSettleJob = null
+        }
+
+    val swipeDragModifier =
+        Modifier.draggable(
+            state = draggableState,
+            orientation = Orientation.Horizontal,
+            onDragStarted = {
+                swipeSettleJob?.cancel()
+                swipeSettleJob = null
+                replyThresholdHapticFired = false
+                if (displayVisualPx.floatValue != 0f) {
+                    rawSwipeTravelPx.floatValue =
+                        swipeRawTravelFromVisual(
+                            visualPx = displayVisualPx.floatValue,
+                            isSent = isSent,
+                            maxVisualPx = maxSwipeVisualPx,
+                            softKneePx = swipeSoftKneePx,
+                            trackGain = swipeTrackGain,
+                            overflowRubberGain = swipeOverflowRubberGain,
+                        ).coerceIn(-ChatGestureMotion.RawTravelCapPx, ChatGestureMotion.RawTravelCapPx)
                 }
-            }
-        },
-    )
+            },
+            onDragStopped = {
+                val raw = rawSwipeTravelPx.floatValue
+                val shouldReply = if (isSent) raw <= -swipeThresholdPx else raw >= swipeThresholdPx
+                if (shouldReply) {
+                    PlatformHapticsPolicy.heavyImpact()
+                    onSwipeReplyState.value(messageWithUserState.value)
+                }
+                rawSwipeTravelPx.floatValue = 0f
+                swipeSettleJob =
+                    scope.launch {
+                        try {
+                            animate(
+                                initialValue = displayVisualPx.floatValue,
+                                targetValue = 0f,
+                                animationSpec =
+                                    spring(
+                                        dampingRatio = 0.75f,
+                                        stiffness = Spring.StiffnessLow,
+                                    ),
+                            ) { v, _ ->
+                                displayVisualPx.floatValue = v
+                            }
+                        } finally {
+                            swipeSettleJob = null
+                        }
+                    }
+            },
+        )
 
     Box(modifier = Modifier.fillMaxWidth()) {
         if (!isSent) {
@@ -899,23 +973,26 @@ private fun BeaconChatMessageBubble(
                 isSent = false,
                 swipeThresholdPx = swipeThresholdPx,
                 maxSwipeVisualPx = maxSwipeVisualPx,
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .zIndex(0f),
+                modifier =
+                    Modifier
+                        .align(Alignment.CenterStart)
+                        .zIndex(0f),
             )
         }
         // Match normal bubbles: reply-drag only on the card, not the full row width.
         // A full-width draggable steals the chat→connections back gesture in this Y band.
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .zIndex(1f),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .zIndex(1f),
             horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start,
         ) {
             Box(
-                modifier = Modifier
-                    .graphicsLayer { translationX = displayVisualPx.floatValue }
-                    .then(swipeDragModifier),
+                modifier =
+                    Modifier
+                        .graphicsLayer { translationX = displayVisualPx.floatValue }
+                        .then(swipeDragModifier),
             ) {
                 BeaconChatCard(
                     message = message,
@@ -933,9 +1010,10 @@ private fun BeaconChatMessageBubble(
                 isSent = true,
                 swipeThresholdPx = swipeThresholdPx,
                 maxSwipeVisualPx = maxSwipeVisualPx,
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .zIndex(0f),
+                modifier =
+                    Modifier
+                        .align(Alignment.CenterEnd)
+                        .zIndex(0f),
             )
         }
     }

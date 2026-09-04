@@ -1,0 +1,39 @@
+name: Checkout click-web source of truth
+description: >
+  Check out lightningbolts/click-web. Prefer a branch with the same name as
+  this mobile ref so paired PRs stay in lockstep; otherwise use main.
+
+inputs:
+  token:
+    description: Token with read access to lightningbolts/click-web
+    required: true
+  path:
+    description: Destination path relative to github.workspace
+    required: false
+    default: _click-web
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve click-web ref
+      id: resolve
+      shell: bash
+      env:
+        CLICK_WEB_READ_TOKEN: ${{ inputs.token }}
+        GH_TOKEN: ${{ inputs.token }}
+        CLICK_WEB_CANDIDATE_REF: ${{ github.event.pull_request.head.ref || github.ref_name }}
+      run: |
+        set -euo pipefail
+        ref="$(bash "$GITHUB_WORKSPACE/scripts/resolve-click-web-ref.sh" "$CLICK_WEB_CANDIDATE_REF" main)"
+        echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+        echo "Using lightningbolts/click-web@${ref}"
+
+    - name: Checkout click-web
+      uses: actions/checkout@v4
+      with:
+        repository: lightningbolts/click-web
+        ref: ${{ steps.resolve.outputs.ref }}
+        path: ${{ inputs.path }}
+        fetch-depth: 0
+        token: ${{ inputs.token }}
+        persist-credentials: false

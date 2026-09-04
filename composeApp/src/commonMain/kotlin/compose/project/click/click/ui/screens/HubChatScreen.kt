@@ -290,7 +290,8 @@ fun HubChatScreen(
         }
     }
 
-    val inLobby = false // TODO: restore `occupantCount < 3` after testing
+    // Keep the send affordance aligned with the server's three-person lobby threshold.
+    val inLobby = occupantCount < 3
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val hubHasSubtitle = true
     val hubNativeClearance =

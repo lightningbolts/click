@@ -153,8 +153,8 @@ internal fun AppConnectionOverlays(
                     connectionViewModel.resetConnectionState()
                     return@launch
                 }
-                val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
-                val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
+                val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false
+                val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: false
                 val sensors =
                     captureConnectionSensorContext(
                         ambientNoiseMonitor = ambientMonitor,
@@ -194,8 +194,8 @@ internal fun AppConnectionOverlays(
                         currentUserId = currentUser.id,
                         ambientNoiseMonitor = ambientMonitor,
                         barometricHeightMonitor = baroMonitor,
-                        ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true,
-                        barometricContextOptIn = tokenStorage.getBarometricContextOptIn() ?: true,
+                        ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false,
+                        barometricContextOptIn = tokenStorage.getBarometricContextOptIn() ?: false,
                     )
                 }
             },
@@ -232,7 +232,7 @@ internal fun AppConnectionOverlays(
                 connectionScope.launch {
                     ambientNoiseOptIn = noiseOptIn
                     tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
-                    val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
+                    val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: false
                     val sensors =
                         captureConnectionSensorContext(
                             ambientNoiseMonitor = ambientMonitor,
@@ -291,7 +291,7 @@ internal fun AppConnectionOverlays(
                     ambientNoiseOptIn = noiseOptIn
                     tokenStorage.saveAmbientNoiseOptIn(noiseOptIn)
                     val venue = awaiting.venueId
-                    val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
+                    val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: false
                     coroutineScope {
                         val vibeDeferred =
                             async(Dispatchers.Default) {

@@ -614,6 +614,13 @@ class ChatApiClient(
             userLong = userLong,
         )
 
+    /** Gets a short-lived, authorized URL for a private hub-media object. */
+    suspend fun resolveHubMediaUrl(
+        hubId: String,
+        path: String,
+        authToken: String,
+    ): Result<String> = resolveHubMediaUrlImpl(hubId = hubId, path = path, authToken = authToken)
+
     suspend fun addCliqueMember(
         groupId: String,
         newMemberUserId: String,

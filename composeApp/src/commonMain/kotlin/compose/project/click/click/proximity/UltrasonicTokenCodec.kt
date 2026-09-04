@@ -6,9 +6,8 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-/** Base tone for the mandatory 18.5 kHz proximity chirp. */
-// TODO: REVERT TO 18500 BEFORE PRODUCTION
-const val HANDSHAKE_CARRIER_HZ: Double = 440.0
+/** Base tone for the mandatory 18.5 kHz proximity chirp. Audible development carriers must never ship. */
+const val HANDSHAKE_CARRIER_HZ: Double = 18_500.0
 
 private const val SAMPLE_RATE = 44_100
 private const val DIGIT_STEP_HZ = 120.0
@@ -16,7 +15,12 @@ private const val TONE_MS = 55
 private const val GAP_MS = 22
 private const val CHIRP_MS = 140
 
-private fun goertzelMagnitudeSq(samples: ShortArray, offset: Int, len: Int, targetHz: Double): Double {
+private fun goertzelMagnitudeSq(
+    samples: ShortArray,
+    offset: Int,
+    len: Int,
+    targetHz: Double,
+): Double {
     if (len < 8) return 0.0
     val k = ((0.5 + (len * targetHz) / SAMPLE_RATE).toInt()).coerceAtLeast(1)
     val omega = (2.0 * PI * k) / len
@@ -35,15 +39,21 @@ private fun goertzelMagnitudeSq(samples: ShortArray, offset: Int, len: Int, targ
     return real * real + imag * imag
 }
 
-private fun digitFrequency(digit: Int): Double =
-    HANDSHAKE_CARRIER_HZ + digit.coerceIn(0, 9) * DIGIT_STEP_HZ
+private fun digitFrequency(digit: Int): Double = HANDSHAKE_CARRIER_HZ + digit.coerceIn(0, 9) * DIGIT_STEP_HZ
 
-private fun appendSinePcm(dst: MutableList<Short>, freqHz: Double, durationMs: Int, amplitude: Double = 0.55) {
+private fun appendSinePcm(
+    dst: MutableList<Short>,
+    freqHz: Double,
+    durationMs: Int,
+    amplitude: Double = 0.55,
+) {
     val samples = (SAMPLE_RATE * durationMs / 1000.0).roundToInt().coerceAtLeast(1)
     for (i in 0 until samples) {
         val t = i / SAMPLE_RATE.toDouble()
-        val v = (amplitude * 32767.0 * sin(2.0 * PI * freqHz * t)).roundToInt()
-            .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+        val v =
+            (amplitude * 32767.0 * sin(2.0 * PI * freqHz * t))
+                .roundToInt()
+                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
         dst.add(v.toShort())
     }
 }
@@ -61,15 +71,14 @@ internal fun buildHandshakeAudioPcm(token: String): ShortArray {
     return out.toShortArray()
 }
 
-private fun appendSilence(dst: MutableList<Short>, durationMs: Int) {
+private fun appendSilence(
+    dst: MutableList<Short>,
+    durationMs: Int,
+) {
     val samples = (SAMPLE_RATE * durationMs / 1000.0).roundToInt().coerceAtLeast(1)
     repeat(samples) { dst.add(0) }
 }
 
-/**
- * Best-effort decode of a 4-digit token from microphone PCM (mono).
- * Returns null when no confident digit sequence is found.
- */
 /**
  * Decodes every distinct 4-digit handshake token found in a longer recording by sliding a decode
  * window. Used when several peers play ultrasonic tokens back-to-back in one capture window.
@@ -107,9 +116,11 @@ internal fun decodeTokenFromPcmMono(samples: ShortArray): String? {
                 bestD = d
             }
         }
-        val noise = (0..9).map { goertzelMagnitudeSq(samples, i, window, HANDSHAKE_CARRIER_HZ + it * DIGIT_STEP_HZ + 60.0) }
-            .sortedDescending()
-            .getOrNull(2) ?: 0.0
+        val noise =
+            (0..9)
+                .map { goertzelMagnitudeSq(samples, i, window, HANDSHAKE_CARRIER_HZ + it * DIGIT_STEP_HZ + 60.0) }
+                .sortedDescending()
+                .getOrNull(2) ?: 0.0
         val threshold = noise * 6.0 + 1e-6
         if (bestMag > threshold && bestMag > 5e-5) {
             if (bestD == lastDigit) {

@@ -36,8 +36,8 @@ internal fun ConnectionViewModel.saveReconnectEncounterImpl(
     currentUserId: String,
     ambientNoiseMonitor: AmbientNoiseMonitor? = null,
     barometricHeightMonitor: BarometricHeightMonitor? = null,
-    ambientNoiseOptIn: Boolean = true,
-    barometricContextOptIn: Boolean = true,
+    ambientNoiseOptIn: Boolean = false,
+    barometricContextOptIn: Boolean = false,
 ) {
     if (currentUserId.isBlank()) return
     val peersNeedingInsert =
@@ -514,8 +514,8 @@ internal fun ConnectionViewModel.saveContextTagsImpl(
     exactBarometricElevationMeters: Double?,
     ambientNoiseMonitor: AmbientNoiseMonitor? = null,
     barometricHeightMonitor: BarometricHeightMonitor? = null,
-    ambientNoiseOptIn: Boolean = true,
-    barometricContextOptIn: Boolean = true,
+    ambientNoiseOptIn: Boolean = false,
+    barometricContextOptIn: Boolean = false,
 ) {
     viewModelScope.launch {
         val connections = tagging.newConnections

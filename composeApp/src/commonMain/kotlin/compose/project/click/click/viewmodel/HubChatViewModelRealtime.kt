@@ -375,6 +375,7 @@ internal fun HubChatViewModel.clearLocalHubState(clearDiskCache: Boolean = false
     _outOfBounds.value = false
     clearHubSecureMediaCache(purgePersistentCache = true)
     activeHubCache.removeActiveHub(hubId)
+    AppDataManager.clearHubAccessState(hubId)
     if (clearDiskCache) {
         AppDataManager.clearHubThreadCache(hubId)
     }
@@ -416,10 +417,22 @@ internal suspend fun HubChatViewModel.loadInitialMessages() {
                 },
                 onFailure = { err ->
                     val msg = err.message.orEmpty()
-                    if (msg.contains("NOT_A_PARTICIPANT")) {
+                    if (
+                        msg.contains("NOT_A_PARTICIPANT") ||
+                        msg.contains("EVENT_HUB_ACCESS_DENIED") ||
+                        msg.contains("HUB_EXPIRED")
+                    ) {
                         participantDenied = true
+                        navigationEventChannel.trySend(HubChatNavigationEvent.PopBackToConnections)
+                        clearLocalHubState(clearDiskCache = true)
                         _realtimeState.value =
-                            HubRealtimeState.Error("Join this hub from the map to chat")
+                            HubRealtimeState.Error(
+                                if (msg.contains("HUB_EXPIRED")) {
+                                    "This hub is no longer active."
+                                } else {
+                                    "Check in to this event to join the hub."
+                                },
+                            )
                         return@withContext
                     }
                     println("HubChatViewModel: hub thread API failed: ${err.redactedRestMessage()}")

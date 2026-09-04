@@ -1,4 +1,4 @@
-# Crypto — End-to-End Encryption
+# Crypto — Legacy Application Encryption
 
 > Architectural reference for the `compose.project.click.click.crypto` package.  
 > Sourced from the Click Platforms KMP codebase and DeepWiki index (July 1, 2026).
@@ -9,7 +9,7 @@ For the full **threat model** (limitations, salt rotation, audit checklist), see
 
 ## Module Purpose
 
-The crypto module is Click's **client-side E2EE layer**. It encrypts chat message bodies, group broadcasts, hub messages, and attachment blobs **before** they reach Supabase Postgres or Storage. Decryption happens only in the app (and in platform push extensions for notification previews).
+The crypto module is Click's **client-side legacy application-encryption layer**. It encrypts eligible chat message bodies, group broadcasts, and attachment blobs before they reach Supabase Postgres or Storage. This is not zero-knowledge or end-to-end encryption: key derivation in v1 uses public identifiers, and hub content or metadata may be server-readable. Decryption happens in the app (and in platform push extensions for notification previews) when the applicable key is available.
 
 Design goals:
 
@@ -116,7 +116,7 @@ master = SHA-256( SALT || "hub-broadcast:" || hubId )
 encKey / macKey derived identically to 1:1
 ```
 
-Geofence / gatekeeper RLS on `hub_messages` limits who can read or post; crypto ensures server operators need `hubId` to decrypt.
+Geofence / gatekeeper RLS on `hub_messages` limits who can read or post. Hub keys are derived from the public hub ID, so this layer is not a zero-knowledge boundary; server authorization and RLS remain the primary access controls.
 
 ### `PlatformCrypto` — expect/actual
 
@@ -143,11 +143,11 @@ Android parity: `ClickFirebaseMessagingService` performs the same preview decryp
 
 ---
 
-## E2EE / KMP Constraints
+## Legacy encryption / KMP Constraints
 
 | Constraint | Detail |
 |------------|--------|
-| **Keys in memory only** | `chatCryptoCache` in `SupabaseChatRepository` — no Keychain/Keystore backing in v1 |
+| **Keys in memory only** | `chatCryptoCache` in `SupabaseChatRepository` — no Keychain/Keystore backing in v1; do not describe v1 as zero-knowledge E2EE |
 | **Sign-out wipe** | `clearSessionCaches()` must run on logout and foreground-recovery transitions |
 | **Deterministic pairwise keys** | Backend with `connectionId` + `userIds` + public salt can derive keys — accepted trade-off for UX (see `CRYPTO_README.md` §4.1) |
 | **No forward secrecy** | Static pairwise key per connection; Double-Ratchet planned |
@@ -192,7 +192,7 @@ Android parity: `ClickFirebaseMessagingService` performs the same preview decryp
 - **Connect in person (Tri-Factor):** Tap phones together using Bluetooth, inaudible sound, and GPS to prove you're in the same room.
 - **Scan a QR code:** Point your camera at someone's Click QR to connect instantly.
 - **Group connect (Multi-Tap):** Three or more people can connect at once and land in a verified group chat.
-- **Private encrypted chat:** Messages are end-to-end encrypted—only you and your connection can read them.
+- **Encrypted chat:** Eligible direct and group message bodies use legacy application encryption; this is not zero-knowledge end-to-end encryption, and hub content may be server-readable.
 - **Send photos, files & voice notes:** Share media in chat; files are encrypted before upload.
 - **Emoji reactions:** React to messages with emoji.
 - **Typing indicators & read receipts:** See when someone is typing and when they've read your message.
