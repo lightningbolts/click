@@ -739,8 +739,8 @@ fun ProfileBottomSheet(
                         .fillMaxWidth()
                         .fillMaxHeight()
                         .background(sheetPageBackground())
-                        .padding(horizontal = 20.dp)
-                        .padding(top = 12.dp, bottom = 12.dp),
+                        .padding(horizontal = ClickScreenSpacing.Horizontal)
+                        .padding(top = 8.dp, bottom = 8.dp),
             ) {
                 Text(
                     text = "Profile",
@@ -764,7 +764,7 @@ fun ProfileBottomSheet(
                     avatarUploading = avatarUploading,
                 )
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(12.dp))
 
                 ProfileActionGrid(
                     showNudge = state.canNudge,
@@ -774,7 +774,7 @@ fun ProfileBottomSheet(
                     onOpenDisposableRoll = onOpenDisposableRoll,
                 )
 
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(12.dp))
 
                 ScrollableTabRow(
                     selectedTabIndex = pagerState.currentPage,

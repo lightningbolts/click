@@ -1,4 +1,6 @@
-package compose.project.click.click.ui.screens
+@file:Suppress("ktlint:standard:function-naming")
+
+package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -6,13 +8,8 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,15 +22,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.data.repository.SupabaseRepository
-import compose.project.click.click.ui.components.AdaptiveCard
-import compose.project.click.click.ui.components.InterestEditor
-import compose.project.click.click.ui.components.filterToPredefinedInterestTags
-import compose.project.click.click.ui.theme.LocalPlatformStyle
-import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.ui.theme.SoftBlue
-import compose.project.click.click.ui.theme.clickBorderColor
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickChip // pragma: allowlist secret
+import compose.project.click.click.ui.components.InterestEditor // pragma: allowlist secret
+import compose.project.click.click.ui.components.filterToPredefinedInterestTags // pragma: allowlist secret
 import kotlinx.coroutines.launch
 
 /**
@@ -74,120 +68,117 @@ internal fun SettingsInterestsCard(
                 AppDataManager.applyInterestTags(loaded)
             },
             onFailure = {
-                loadError = it.message?.lines()?.firstOrNull()?.take(180)
+                loadError = it.message
+                    ?.lines()
+                    ?.firstOrNull()
+                    ?.take(180)
                     ?: "Could not load interests"
             },
         )
     }
 
-    AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier
+    Column(
+        modifier =
+            Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = "My Interests",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
+                .padding(vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = "My Interests",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = "Select categories and subcategories. Changes power Common Ground with your connections.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        if (filteredCached.isEmpty() && interestTags.isEmpty() && loadError == null) {
+            CircularProgressIndicator(
+                modifier = Modifier.padding(vertical = 16.dp),
+                strokeWidth = 2.dp,
             )
-            Text(
-                text = "Select categories and subcategories. Changes power Common Ground with your connections.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            if (filteredCached.isEmpty() && interestTags.isEmpty() && loadError == null) {
-                CircularProgressIndicator(
-                    modifier = Modifier.padding(vertical = 16.dp),
-                    strokeWidth = 2.dp,
-                )
-            } else {
-                if (interestTags.isNotEmpty()) {
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        interestTags.forEach { tag ->
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = SoftBlue,
-                                border = BorderStroke(1.dp, clickBorderColor()),
-                            ) {
-                                Text(
-                                    text = tag,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = PrimaryBlue,
-                                )
-                            }
-                        }
-                    }
-                }
-
-                InterestEditor(
-                    selectedTags = interestTags,
-                    onSelectedTagsChange = { next ->
-                        interestTags = next
-                        tagsDirty = next != savedTags
-                    },
-                    minTags = null,
-                    maxTags = null,
-                    showSelectionCount = true,
-                )
-
-                loadError?.let { err ->
-                    Text(
-                        text = err,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-
-                val platformStyle = LocalPlatformStyle.current
-                Button(
-                    onClick = {
-                        scope.launch {
-                            tagsSaving = true
-                            val toSave = interestTags
-                            supabaseRepository.updateUserInterests(userId, toSave).fold(
-                                onSuccess = {
-                                    savedTags = toSave
-                                    tagsDirty = false
-                                    loadError = null
-                                    AppDataManager.applyInterestTags(toSave)
-                                    onFeedback("Saved ${toSave.size} interests")
-                                },
-                                onFailure = { e ->
-                                    val msg = e.message?.lines()?.firstOrNull()?.take(180)
-                                        ?: "Could not save interests"
-                                    loadError = msg
-                                    onFeedback(msg)
-                                },
-                            )
-                            tagsSaving = false
-                        }
-                    },
-                    enabled = tagsDirty && !tagsSaving,
+        } else {
+            if (interestTags.isNotEmpty()) {
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(if (platformStyle.isIOS) 12.dp else 28.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    if (tagsSaving) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.padding(vertical = 4.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                        )
-                    } else {
-                        Text(
-                            if (tagsDirty) "Save Interests" else "Saved",
-                            fontWeight = FontWeight.SemiBold,
+                    interestTags.forEach { tag ->
+                        ClickChip(
+                            label = tag,
+                            selected = true,
+                            onClick = {},
+                            compact = true,
                         )
                     }
+                }
+            }
+
+            InterestEditor(
+                selectedTags = interestTags,
+                onSelectedTagsChange = { next ->
+                    interestTags = next
+                    tagsDirty = next != savedTags
+                },
+                minTags = null,
+                maxTags = null,
+                showSelectionCount = true,
+            )
+
+            loadError?.let { err ->
+                Text(
+                    text = err,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+
+            ClickButton(
+                onClick = {
+                    scope.launch {
+                        tagsSaving = true
+                        val toSave = interestTags
+                        supabaseRepository.updateUserInterests(userId, toSave).fold(
+                            onSuccess = {
+                                savedTags = toSave
+                                tagsDirty = false
+                                loadError = null
+                                AppDataManager.applyInterestTags(toSave)
+                                onFeedback("Saved ${toSave.size} interests")
+                            },
+                            onFailure = { e ->
+                                val msg =
+                                    e.message
+                                        ?.lines()
+                                        ?.firstOrNull()
+                                        ?.take(180)
+                                        ?: "Could not save interests"
+                                loadError = msg
+                                onFeedback(msg)
+                            },
+                        )
+                        tagsSaving = false
+                    }
+                },
+                enabled = tagsDirty && !tagsSaving,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (tagsSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.padding(vertical = 4.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                } else {
+                    Text(
+                        if (tagsDirty) "Save Interests" else "Saved",
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
             }
         }

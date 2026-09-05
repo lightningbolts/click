@@ -218,7 +218,7 @@ internal fun ColumnScope.ChatViewTimelinePane(
                             ) {
                                 GlassCard(
                                     modifier = Modifier.fillMaxWidth(),
-                                    usePrimaryBorder = true,
+                                    usePrimaryBorder = false,
                                     contentPadding = 28.dp,
                                 ) {
                                     Column(
@@ -229,7 +229,7 @@ internal fun ColumnScope.ChatViewTimelinePane(
                                             Icons.Filled.ChatBubbleOutline,
                                             contentDescription = null,
                                             modifier = Modifier.size(48.dp),
-                                            tint = PrimaryBlue.copy(alpha = 0.85f),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                         Spacer(modifier = Modifier.height(16.dp))
                                         Text(

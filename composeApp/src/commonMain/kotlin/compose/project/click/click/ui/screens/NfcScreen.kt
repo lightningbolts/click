@@ -14,16 +14,13 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.calendar.AvailabilityOverlapGap // pragma: allowlist secret
 import compose.project.click.click.calendar.lockAvailabilityIntentForGap // pragma: allowlist secret
@@ -41,6 +38,9 @@ import compose.project.click.click.sensors.BarometricHeightMonitorProvider // pr
 import compose.project.click.click.sensors.HardwareVibeMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.captureConnectionSensorContext // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickButtonVariant // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickScreenSpacing // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionContextPresentation // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionContextSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.HeaderBackIconButton // pragma: allowlist secret
@@ -148,6 +148,20 @@ fun NfcScreen(
 
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
+    LaunchedEffect(connectionState::class) {
+        when (connectionState) {
+            is ConnectionState.ProximityHandshaking,
+            is ConnectionState.ProximityFetchingLocation,
+            -> PlatformHapticsPolicy.lightImpact()
+            is ConnectionState.PendingConfirmation,
+            is ConnectionState.ProximityResolving,
+            -> PlatformHapticsPolicy.heavyImpact()
+            is ConnectionState.Success -> PlatformHapticsPolicy.successNotification()
+            is ConnectionState.Error -> PlatformHapticsPolicy.heavyImpact()
+            else -> Unit
+        }
+    }
+
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(
@@ -158,7 +172,9 @@ fun NfcScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 // Header - consistent with MyQRCodeScreen and QRScannerScreen
-                Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
+                Box(
+                    modifier = Modifier.padding(start = ClickScreenSpacing.Horizontal, top = topInset, end = ClickScreenSpacing.Horizontal),
+                ) {
                     PageHeader(
                         title = "Tap to Connect",
                         subtitle = "BLE + ultrasonic handshake",
@@ -190,7 +206,7 @@ fun NfcScreen(
                         Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                            .padding(horizontal = 24.dp),
+                            .padding(horizontal = ClickScreenSpacing.Horizontal),
                     contentAlignment = Alignment.Center,
                 ) {
                     AnimatedContent(
@@ -522,40 +538,29 @@ fun NfcScreen(
 
                 // Instructions at bottom
                 if (connectionState is ConnectionState.ProximityHandshaking) {
-                    Card(
+                    Column(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 24.dp, vertical = 16.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors =
-                            CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            ),
+                                .padding(horizontal = ClickScreenSpacing.Horizontal, vertical = ClickScreenSpacing.Compact),
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
+                        Text(
+                            text = "Stay close — both phones should be searching.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                        Spacer(modifier = Modifier.height(ClickScreenSpacing.RowGap))
+                        ClickButton(
+                            onClick = {
+                                proximityManager.stopAll()
+                                connectionViewModel.resetConnectionState()
+                            },
+                            variant = ClickButtonVariant.Secondary,
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text(
-                                text = "Stay close — broadcasting and listening for nearby taps.",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.SemiBold,
-                                textAlign = TextAlign.Center,
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Button(
-                                onClick = {
-                                    proximityManager.stopAll()
-                                    connectionViewModel.resetConnectionState()
-                                },
-                                colors =
-                                    ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.error,
-                                    ),
-                            ) {
-                                Text("Cancel")
-                            }
+                            Text("Cancel")
                         }
                     }
                 }

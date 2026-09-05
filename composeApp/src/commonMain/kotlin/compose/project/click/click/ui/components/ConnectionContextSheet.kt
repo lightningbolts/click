@@ -27,16 +27,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -587,10 +584,11 @@ fun ConnectionContextSheet(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     suggestions.forEach { tag ->
-                        FilterChip(
+                        ClickChip(
+                            label = "${tag.emoji} ${tag.label}",
                             selected = selectedTagId == tag.id,
                             onClick = { selectedTagId = tag.id },
-                            label = { Text("${tag.emoji} ${tag.label}") },
+                            compact = true,
                         )
                     }
                 }
@@ -609,10 +607,11 @@ fun ConnectionContextSheet(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     allTags.forEach { tag ->
-                        FilterChip(
+                        ClickChip(
+                            label = "${tag.emoji} ${tag.label}",
                             selected = selectedTagId == tag.id,
                             onClick = { selectedTagId = tag.id },
-                            label = { Text("${tag.emoji} ${tag.label}") },
+                            compact = true,
                         )
                     }
                 }
@@ -631,10 +630,11 @@ fun ConnectionContextSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
-                FilterChip(
+                ClickChip(
+                    label = "Write your own",
                     selected = selectedTagId == "custom",
                     onClick = { selectedTagId = "custom" },
-                    label = { Text("✏️ Write your own") },
+                    compact = true,
                 )
 
                 ClickOutlinedTextField(
@@ -704,14 +704,15 @@ fun ConnectionContextSheet(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    TextButton(
+                    ClickButton(
                         onClick = dismissSheet,
                         modifier = Modifier.weight(1f),
+                        variant = ClickButtonVariant.Secondary,
                     ) {
                         Text("Skip")
                     }
                     if (presentation == ConnectionContextPresentation.ReconnectEncounter) {
-                        Button(
+                        ClickButton(
                             onClick = {
                                 PlatformHapticsPolicy.lightImpact()
                                 onSaveEncounter?.invoke(resolvedSelectedIds)
@@ -736,7 +737,7 @@ fun ConnectionContextSheet(
                             }
                         }
                     } else {
-                        Button(
+                        ClickButton(
                             onClick = {
                                 PlatformHapticsPolicy.lightImpact()
                                 onConfirm(resolveSelectedTag(), ambientNoiseOptIn, resolvedSelectedIds)

@@ -1,10 +1,11 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.chat
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -37,8 +39,6 @@ import coil3.size.Size
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.disposableRollCollaborationTtlIso
 import compose.project.click.click.data.models.isDisposableRollLocked
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.util.LruMemoryCache
 import compose.project.click.click.util.redactedRestMessage
@@ -48,6 +48,8 @@ import compose.project.click.click.viewmodel.SecureChatMediaLoadState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 
 private val chatPhotoAttachmentShape = RoundedCornerShape(16.dp)
 
@@ -77,10 +79,15 @@ private val lockedDropBlurBitmapCache: LruMemoryCache<String, ImageBitmap> =
 /** Bump when blur strength changes so stale weak pixels are not reused. */
 private const val LOCKED_DROP_BLUR_CACHE_VERSION = 5
 
-private fun lockedDropCacheKey(messageId: String, source: ImageBitmap): String =
-    "$messageId#${source.width}x${source.height}#v$LOCKED_DROP_BLUR_CACHE_VERSION"
+private fun lockedDropCacheKey(
+    messageId: String,
+    source: ImageBitmap,
+): String = "$messageId#${source.width}x${source.height}#v$LOCKED_DROP_BLUR_CACHE_VERSION"
 
-private fun lockedDropDisplayBitmap(messageId: String, source: ImageBitmap): ImageBitmap {
+private fun lockedDropDisplayBitmap(
+    messageId: String,
+    source: ImageBitmap,
+): ImageBitmap {
     val key = lockedDropCacheKey(messageId, source)
     lockedDropBlurBitmapCache.get(key)?.let { return it }
     val blurred = runCatching { source.softBlurredForLockedDrop() }.getOrDefault(source)
@@ -95,7 +102,10 @@ private fun photoBitmapSlotKey(message: Message): String {
 }
 
 /** Re-key blurred locked-drop bitmaps when optimistic temp ids become server ids. */
-internal fun migrateLockedDropBlurCacheKey(tempId: String, serverMessageId: String) {
+internal fun migrateLockedDropBlurCacheKey(
+    tempId: String,
+    serverMessageId: String,
+) {
     val prefix = "$tempId#"
     lockedDropBlurBitmapCache.entriesSnapshot().forEach { (key, bmp) ->
         if (key.startsWith(prefix)) {
@@ -130,47 +140,42 @@ internal fun ChatBubblePhotoContent(
 ) {
     val rollLocked = message.isDisposableRollLocked()
     val canExpand = onPhotoClick != null && !rollLocked
-    val photoGestureModifier = when {
-        canExpand && onPhotoLongPress != null -> {
-            Modifier.combinedClickable(
-                indication = null,
-                interactionSource = remember(message.id) { MutableInteractionSource() },
-                onClick = onPhotoClick!!,
-                onLongClick = onPhotoLongPress,
-            )
+    val expandClick = onPhotoClick.takeIf { canExpand }
+    val photoLongPress = onPhotoLongPress
+    val photoGestureModifier =
+        if (expandClick != null || photoLongPress != null) {
+            Modifier.pointerInput(message.id, expandClick, photoLongPress) {
+                val tap = expandClick
+                val longPress = photoLongPress
+                if (longPress != null) {
+                    detectTapGestures(
+                        onTap = { tap?.invoke() },
+                        onLongPress = { longPress.invoke() },
+                    )
+                } else if (tap != null) {
+                    detectTapGestures(onTap = { tap.invoke() })
+                }
+            }
+        } else {
+            Modifier
         }
-        canExpand -> {
-            Modifier.combinedClickable(
-                indication = null,
-                interactionSource = remember(message.id) { MutableInteractionSource() },
-                onClick = onPhotoClick!!,
-            )
+    val countdownLabel =
+        remember(message.id, rollLocked) {
+            if (!rollLocked) return@remember null
+            val ttlIso = message.disposableRollCollaborationTtlIso() ?: return@remember "Locked"
+            val ttl = runCatching { Instant.parse(ttlIso) }.getOrNull() ?: return@remember "Locked"
+            val remainMs = (ttl.toEpochMilliseconds() - Clock.System.now().toEpochMilliseconds()).coerceAtLeast(0L)
+            val totalMin = remainMs / 60_000L
+            val hours = totalMin / 60L
+            val mins = totalMin % 60L
+            if (hours > 0) "Reveals in ${hours}h ${mins}m" else "Reveals in ${mins}m"
         }
-        onPhotoLongPress != null -> {
-            Modifier.combinedClickable(
-                indication = null,
-                interactionSource = remember(message.id) { MutableInteractionSource() },
-                onClick = {},
-                onLongClick = onPhotoLongPress,
-            )
-        }
-        else -> Modifier
-    }
-    val countdownLabel = remember(message.id, rollLocked) {
-        if (!rollLocked) return@remember null
-        val ttlIso = message.disposableRollCollaborationTtlIso() ?: return@remember "Locked"
-        val ttl = runCatching { Instant.parse(ttlIso) }.getOrNull() ?: return@remember "Locked"
-        val remainMs = (ttl.toEpochMilliseconds() - Clock.System.now().toEpochMilliseconds()).coerceAtLeast(0L)
-        val totalMin = remainMs / 60_000L
-        val hours = totalMin / 60L
-        val mins = totalMin % 60L
-        if (hours > 0) "Reveals in ${hours}h ${mins}m" else "Reveals in ${mins}m"
-    }
     Box(modifier = modifier.fillMaxWidth()) {
         val localPreviewBytes = secureState?.imageBytes
-        val bitmapSlotKey = remember(message.id, message.localSentAt, message.user_id) {
-            photoBitmapSlotKey(message)
-        }
+        val bitmapSlotKey =
+            remember(message.id, message.localSentAt, message.user_id) {
+                photoBitmapSlotKey(message)
+            }
         // Stable bitmap slot — keyed by localSentAt when present so temp→server id swaps
         // do not remount into a spinner (Click Drop send flicker).
         var displayBitmap by remember(bitmapSlotKey) {
@@ -201,9 +206,10 @@ internal fun ChatBubblePhotoContent(
                     lockedBitmap = it
                     return
                 }
-                val blurred = withContext(Dispatchers.Default) {
-                    lockedDropDisplayBitmap(message.id, source)
-                }
+                val blurred =
+                    withContext(Dispatchers.Default) {
+                        lockedDropDisplayBitmap(message.id, source)
+                    }
                 lockedBitmap = blurred
             }
 
@@ -214,17 +220,17 @@ internal fun ChatBubblePhotoContent(
             }
             val bytes = localPreviewBytes ?: return@LaunchedEffect
             // Decode + optional pixelation off the main thread so fling/back stay at 120Hz.
-            val decoded = withContext(Dispatchers.Default) {
-                chatImageDecodeGate.withPermit {
-                    runCatching { bytes.toChatDisplayImageBitmap() }
-                        .onFailure { e ->
-                            println(
-                                "ChatBubblePhotoContent: failed to decode local preview for message=${message.id}: ${e.redactedRestMessage()}",
-                            )
-                        }
-                        .getOrNull()
-                }
-            } ?: return@LaunchedEffect
+            val decoded =
+                withContext(Dispatchers.Default) {
+                    chatImageDecodeGate.withPermit {
+                        runCatching { bytes.toChatDisplayImageBitmap() }
+                            .onFailure { e ->
+                                println(
+                                    "ChatBubblePhotoContent: failed to decode local preview for message=${message.id}: ${e.redactedRestMessage()}",
+                                )
+                            }.getOrNull()
+                    }
+                } ?: return@LaunchedEffect
             secureChatImageBitmapCache.put(message.id, decoded)
             displayBitmap = decoded
             ensureLocked(decoded)
@@ -270,48 +276,53 @@ internal fun ChatBubblePhotoContent(
             isEncrypted -> SecurePhotoLoadingPlaceholder()
             !mediaUrl.isNullOrBlank() -> {
                 val platformContext = LocalPlatformContext.current
-                val request = remember(mediaUrl) {
-                    ImageRequest.Builder(platformContext)
-                        .data(mediaUrl)
-                        .size(Size(720, 540))
-                        .build()
-                }
+                val request =
+                    remember(mediaUrl) {
+                        ImageRequest
+                            .Builder(platformContext)
+                            .data(mediaUrl)
+                            .size(Size(720, 540))
+                            .build()
+                    }
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(4f / 3f)
-                        .heightIn(max = chatBubbleScaledDp(330f)),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(4f / 3f)
+                            .heightIn(max = chatBubbleScaledDp(330f))
+                            .clip(chatPhotoAttachmentShape)
+                            .then(photoGestureModifier),
                 ) {
                     AsyncImage(
                         model = request,
                         contentDescription = "Photo",
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .then(photoGestureModifier)
-                            .then(
-                                if (borderIfReceived) {
-                                    Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), chatPhotoAttachmentShape)
-                                } else {
-                                    Modifier
-                                },
-                            )
-                            .clip(chatPhotoAttachmentShape)
-                            // No live Modifier.blur — flickers hard under reply/back translation.
-                            .then(
-                                if (rollLocked) {
-                                    Modifier.graphicsLayer { alpha = 0.28f }
-                                } else {
-                                    Modifier
-                                },
-                            ),
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .then(
+                                    if (borderIfReceived) {
+                                        Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), chatPhotoAttachmentShape)
+                                    } else {
+                                        Modifier
+                                    },
+                                )
+                                // No live Modifier.blur — flickers hard under reply/back translation.
+                                .then(
+                                    if (rollLocked) {
+                                        Modifier.graphicsLayer { alpha = 0.28f }
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
                     )
                     if (rollLocked && countdownLabel != null) {
                         Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .clip(RoundedCornerShape(chatBubbleScaledDp(24f)))
-                                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.48f)),
+                            modifier =
+                                Modifier
+                                    .matchParentSize()
+                                    .clip(RoundedCornerShape(chatBubbleScaledDp(24f)))
+                                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.48f)),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
@@ -331,12 +342,13 @@ internal fun ChatBubblePhotoContent(
 @Composable
 private fun SecurePhotoLoadingPlaceholder() {
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(4f / 3f)
-            .heightIn(min = chatBubbleScaledDp(120f), max = chatBubbleScaledDp(330f))
-            .clip(chatPhotoAttachmentShape)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(4f / 3f)
+                .heightIn(min = chatBubbleScaledDp(120f), max = chatBubbleScaledDp(330f))
+                .clip(chatPhotoAttachmentShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
         contentAlignment = Alignment.Center,
     ) {
         CircularProgressIndicator(
@@ -357,41 +369,43 @@ private fun PhotoBitmapContent(
     uploadProgress: Float?,
 ) {
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(4f / 3f)
-            .heightIn(max = chatBubbleScaledDp(330f)),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(4f / 3f)
+                .heightIn(max = chatBubbleScaledDp(330f))
+                .clip(chatPhotoAttachmentShape)
+                .then(photoGestureModifier),
     ) {
         Image(
             bitmap = bitmap,
             contentDescription = "Photo",
             contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxSize()
-                .then(photoGestureModifier)
-                .then(
-                    if (borderIfReceived) {
-                        Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), chatPhotoAttachmentShape)
-                    } else {
-                        Modifier
-                    },
-                )
-                .clip(chatPhotoAttachmentShape)
-                .then(
-                    if (rollLocked) {
-                        // Bitmap is already pre-blurred; only dim — no live RenderEffect.
-                        Modifier.graphicsLayer { alpha = 0.92f }
-                    } else {
-                        Modifier
-                    },
-                ),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (borderIfReceived) {
+                            Modifier.border(1.dp, PrimaryBlue.copy(alpha = 0.18f), chatPhotoAttachmentShape)
+                        } else {
+                            Modifier
+                        },
+                    ).then(
+                        if (rollLocked) {
+                            // Bitmap is already pre-blurred; only dim — no live RenderEffect.
+                            Modifier.graphicsLayer { alpha = 0.92f }
+                        } else {
+                            Modifier
+                        },
+                    ),
         )
         if (rollLocked && countdownLabel != null) {
             Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .clip(chatPhotoAttachmentShape)
-                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.42f)),
+                modifier =
+                    Modifier
+                        .matchParentSize()
+                        .clip(chatPhotoAttachmentShape)
+                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.42f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -404,10 +418,11 @@ private fun PhotoBitmapContent(
         val up = uploadProgress
         if (up != null && up < 1f) {
             Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .clip(chatPhotoAttachmentShape)
-                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.22f)),
+                modifier =
+                    Modifier
+                        .matchParentSize()
+                        .clip(chatPhotoAttachmentShape)
+                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.22f)),
                 contentAlignment = Alignment.Center,
             ) {
                 CircularProgressIndicator(

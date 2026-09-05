@@ -7,7 +7,6 @@ package compose.project.click.click.ui.screens
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,7 +23,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -72,6 +70,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.ui.components.AppEmptyState
+import compose.project.click.click.ui.components.ClickListRow
 import compose.project.click.click.ui.components.ClickLogoPulse
 import compose.project.click.click.ui.components.ClickTextFieldMinHeight
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
@@ -362,7 +361,7 @@ internal fun SearchSectionHeader(label: String) {
                 MaterialTheme.typography.titleSmall.copy(
                     fontWeight = FontWeight.Bold,
                 ),
-            color = PrimaryBlue,
+            color = MaterialTheme.colorScheme.onSurface,
         )
     }
 }
@@ -384,20 +383,17 @@ internal fun SearchResultRow(
             else -> false
         }
     val alpha = if (archivedLook) 0.7f else 1f
-    Column(modifier = Modifier.fillMaxWidth().alpha(alpha)) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clickable {
-                    when (result) {
-                        is SearchResult.LocationBucket -> onNavigateToMap()
-                        is SearchResult.BeaconMatch -> onNavigateToBeacon(result.beacon.id)
-                        is SearchResult.OwnAvailabilityIntentMatch -> onNavigateToSettings()
-                        else -> result.toChatOpenTarget()?.let(onNavigateToChat)
-                    }
-                }.padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+    ClickListRow(
+        modifier = Modifier.alpha(alpha),
+        onClick = {
+            when (result) {
+                is SearchResult.LocationBucket -> onNavigateToMap()
+                is SearchResult.BeaconMatch -> onNavigateToBeacon(result.beacon.id)
+                is SearchResult.OwnAvailabilityIntentMatch -> onNavigateToSettings()
+                else -> result.toChatOpenTarget()?.let(onNavigateToChat)
+            }
+        },
+        leading = {
             when (result) {
                 is SearchResult.MessageHit -> MessageLeadingIcon()
                 is SearchResult.LocationBucket -> LocationLeadingIcon()
@@ -410,19 +406,19 @@ internal fun SearchResultRow(
                 is SearchResult.InterestMatch -> PersonLeadingAvatar(result.details)
                 is SearchResult.MemoryContextMatch -> PersonLeadingAvatar(result.details)
             }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                BadgeRow(result)
-                Spacer(Modifier.height(4.dp))
-                TitleAndSubtitle(result)
-            }
+        },
+        trailing = {
             Icon(
                 imageVector = Icons.Default.ChevronRight,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
                 modifier = Modifier.size(20.dp),
             )
-        }
+        },
+    ) {
+        BadgeRow(result)
+        Spacer(Modifier.height(2.dp))
+        TitleAndSubtitle(result)
     }
 }
 

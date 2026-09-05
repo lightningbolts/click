@@ -86,13 +86,13 @@ internal fun ChatComposerStrip(
     onAttachmentMenuExpandedChange: (Boolean) -> Unit,
     attachmentMenuContent: @Composable () -> Unit,
     modifier: Modifier = Modifier,
-    attachBackground: Color = MaterialTheme.colorScheme.primaryContainer,
-    attachTint: Color = PrimaryBlue,
+    attachBackground: Color = MaterialTheme.colorScheme.surfaceVariant,
+    attachTint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
 ) {
     val composerStyle = LocalPlatformStyle.current
-    val auxButtonSize = if (composerStyle.isIOS) 44.dp else 52.dp
-    val attachIconSize = if (composerStyle.isIOS) 24.dp else 26.dp
-    val sendIconSize = if (composerStyle.isIOS) 22.dp else 20.dp
+    val auxButtonSize = if (composerStyle.isIOS) 44.dp else 48.dp
+    val attachIconSize = 22.dp
+    val sendIconSize = 22.dp
     val fieldCorner = if (composerStyle.isIOS) 20.dp else 12.dp
     val composerGap = if (composerStyle.isIOS) 6.dp else 8.dp
     val fieldSideInset = auxButtonSize + composerGap

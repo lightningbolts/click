@@ -84,6 +84,15 @@ data class UnifiedPopupMotion(
                 slideEnterFraction = 0.06f,
                 slideExitFraction = 0.05f,
             )
+
+        /** Photo lightbox — fade the scrim only; scale makes the image flash on dismiss. */
+        val Media =
+            UnifiedPopupMotion(
+                fadeInMillis = 180,
+                fadeOutMillis = 160,
+                scaleInInitial = 1f,
+                scaleOutTarget = 1f,
+            )
     }
 }
 

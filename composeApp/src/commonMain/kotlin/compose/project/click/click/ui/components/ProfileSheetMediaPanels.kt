@@ -219,7 +219,7 @@ internal fun MediaPanel(
                             .clickable(
                                 interactionSource = thumbInteraction,
                                 indication = ripple(bounded = true, radius = 52.dp),
-                                enabled = thumbReady && !rollLocked,
+                                enabled = !rollLocked,
                             ) { onOpenMedia(media) }
                     Box(modifier = thumbModifier, contentAlignment = Alignment.Center) {
                         when {

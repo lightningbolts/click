@@ -27,9 +27,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickButtonVariant // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickChip // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickTextFieldMinHeight // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberConnectionHandshakePulse // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
@@ -56,8 +58,8 @@ internal fun NfcIdleContent(
         label = "tap_idle_halo_scale",
     )
     val haloAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.16f,
-        targetValue = 0.34f,
+        initialValue = 0.08f,
+        targetValue = 0.18f,
         animationSpec =
             infiniteRepeatable(
                 animation = tween(1800, easing = FastOutSlowInEasing),
@@ -85,7 +87,7 @@ internal fun NfcIdleContent(
                         .matchParentSize()
                         .scale(haloScale)
                         .alpha(if (supportsTap) haloAlpha else 0.12f)
-                        .border(2.dp, PrimaryBlue, CircleShape),
+                        .border(clickBorderWidth(), if (supportsTap) PrimaryBlue.copy(alpha = 0.35f) else clickBorderColor(), CircleShape),
             )
             Surface(
                 modifier = Modifier.size(128.dp),
@@ -129,7 +131,7 @@ internal fun NfcIdleContent(
         Text(
             text =
                 if (supportsTap) {
-                    "Tap Connect together with someone nearby. Both phones should enable Bluetooth and microphone access for the handshake."
+                    "Hold phones close and tap Connect. Bluetooth and microphone stay on for the handshake."
                 } else {
                     capabilityNote
                 },
@@ -172,49 +174,31 @@ internal fun NfcIdleContent(
         Spacer(modifier = Modifier.height(26.dp))
 
         if (supportsTap) {
-            Button(
+            ClickButton(
                 onClick = onStartScanning,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                shape = RoundedCornerShape(28.dp),
-                colors =
-                    ButtonDefaults.buttonColors(
-                        containerColor = PrimaryBlue,
-                    ),
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                Icon(Icons.Default.BluetoothSearching, contentDescription = null)
+                Icon(Icons.Default.BluetoothSearching, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    "Connect",
-                    fontSize = 18.sp,
-                )
+                Text("Connect")
             }
             Spacer(modifier = Modifier.height(10.dp))
             TextButton(onClick = onOpenAppSettings) {
                 Text(
                     "Open app settings",
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Medium,
                 )
             }
         } else {
-            Button(
+            ClickButton(
                 onClick = onOpenSettings,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                shape = RoundedCornerShape(28.dp),
-                colors =
-                    ButtonDefaults.buttonColors(
-                        containerColor = AccentBlue,
-                    ),
+                modifier = Modifier.fillMaxWidth(),
+                variant = ClickButtonVariant.Secondary,
             ) {
-                Icon(Icons.Default.Settings, contentDescription = null)
+                Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Open Settings", fontSize = 18.sp)
+                Text("Open Settings")
             }
         }
     }
@@ -241,7 +225,7 @@ internal fun NfcFetchingLocationContent(pulseActive: Boolean = false) {
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            text = "Fetching Location...",
+            text = "Getting location…",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
         )
@@ -249,7 +233,7 @@ internal fun NfcFetchingLocationContent(pulseActive: Boolean = false) {
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Getting your GPS coordinates for this connection",
+            text = "This tags the connection with where you met.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             textAlign = TextAlign.Center,
@@ -332,7 +316,7 @@ internal fun NfcScanningContent(pulseActive: Boolean = false) {
         Spacer(modifier = Modifier.height(32.dp))
 
         Text(
-            text = "Handshaking…",
+            text = "Searching…",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
         )
@@ -340,7 +324,7 @@ internal fun NfcScanningContent(pulseActive: Boolean = false) {
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Stay within a few feet — BLE and audio are active",
+            text = "Hold phones close. Bluetooth and audio are on.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             textAlign = TextAlign.Center,
@@ -431,28 +415,17 @@ internal fun NfcUserDetectedContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            OutlinedButton(
+            ClickButton(
                 onClick = onCancel,
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .height(56.dp),
-                shape = RoundedCornerShape(28.dp),
+                modifier = Modifier.weight(1f),
+                variant = ClickButtonVariant.Secondary,
             ) {
                 Text("Cancel")
             }
 
-            Button(
+            ClickButton(
                 onClick = onConfirm,
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .height(56.dp),
-                shape = RoundedCornerShape(28.dp),
-                colors =
-                    ButtonDefaults.buttonColors(
-                        containerColor = PrimaryBlue,
-                    ),
+                modifier = Modifier.weight(1f),
             ) {
                 Text("Connect")
             }
@@ -516,7 +489,7 @@ internal fun NfcMatchingPeersContent(pulseActive: Boolean = false) {
         Spacer(modifier = Modifier.height(32.dp))
 
         Text(
-            text = "Matching nearby taps…",
+            text = "Person detected…",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
         )
@@ -524,7 +497,7 @@ internal fun NfcMatchingPeersContent(pulseActive: Boolean = false) {
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Hang tight — this step is quick.",
+            text = "Confirming the nearby handshake.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
             textAlign = TextAlign.Center,
@@ -561,16 +534,16 @@ internal fun NfcSuccessContent(
             Icons.Default.CheckCircle,
             contentDescription = null,
             modifier = Modifier.size(100.dp),
-            tint = Color(0xFF4CAF50),
+            tint = PrimaryBlue,
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Connection Created!",
+            text = "You're connected",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF4CAF50),
+            color = MaterialTheme.colorScheme.onSurface,
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -636,7 +609,7 @@ internal fun NfcSuccessContent(
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant,
-                border = BorderStroke(2.dp, PrimaryBlue),
+                border = BorderStroke(clickBorderWidth(), clickBorderColor()),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Row(
@@ -706,14 +679,14 @@ internal fun NfcSuccessContent(
                         Icons.Default.Check,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
-                        tint = Color(0xFF4CAF50),
+                        tint = MaterialTheme.colorScheme.primary,
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         "Message sent!",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF4CAF50),
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                 }
             }
@@ -726,42 +699,30 @@ internal fun NfcSuccessContent(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Button(
+            ClickButton(
                 onClick = onViewConnection,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                shape = RoundedCornerShape(28.dp),
-                colors =
-                    ButtonDefaults.buttonColors(
-                        containerColor = PrimaryBlue,
-                    ),
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                Icon(Icons.Default.ChatBubble, contentDescription = null)
+                Icon(Icons.Default.ChatBubble, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("View Connection", fontSize = 18.sp)
+                Text("View Connection")
             }
 
-            OutlinedButton(
+            ClickButton(
                 onClick = onCreateAnother,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                shape = RoundedCornerShape(28.dp),
+                modifier = Modifier.fillMaxWidth(),
+                variant = ClickButtonVariant.Secondary,
             ) {
-                Icon(Icons.Default.Add, contentDescription = null)
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Connect Another", fontSize = 18.sp)
+                Text("Connect Another")
             }
         }
     }
 }
 
 /**
- * "Common Ground" section — displays overlapping interest tags
- * in vibrant neon-highlighted chips for immediate conversation starters.
+ * Overlapping interest tags as a quiet conversation prompt.
  */
 @Composable
 internal fun CommonGroundSection(tags: List<String>) {
@@ -770,44 +731,27 @@ internal fun CommonGroundSection(tags: List<String>) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                Icons.Default.Favorite,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-                tint = NeonPurple,
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "Common Ground",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = NeonPurple,
-            )
-        }
+        Text(
+            text = "Common ground",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Display up to 3 tags as neon chips
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             tags.take(3).forEach { tag ->
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    border = BorderStroke(clickBorderWidth(), clickBorderColor()),
-                ) {
-                    Text(
-                        text = tag,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                }
+                ClickChip(
+                    label = tag,
+                    selected = true,
+                    onClick = {},
+                    compact = true,
+                )
             }
         }
     }
@@ -834,10 +778,10 @@ internal fun NfcErrorContent(
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            text = "Oops!",
+            text = "Couldn't connect",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.error,
+            color = MaterialTheme.colorScheme.onSurface,
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -855,28 +799,17 @@ internal fun NfcErrorContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            OutlinedButton(
+            ClickButton(
                 onClick = onDismiss,
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .height(56.dp),
-                shape = RoundedCornerShape(28.dp),
+                modifier = Modifier.weight(1f),
+                variant = ClickButtonVariant.Secondary,
             ) {
                 Text("Dismiss")
             }
 
-            Button(
+            ClickButton(
                 onClick = onRetry,
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .height(56.dp),
-                shape = RoundedCornerShape(28.dp),
-                colors =
-                    ButtonDefaults.buttonColors(
-                        containerColor = PrimaryBlue,
-                    ),
+                modifier = Modifier.weight(1f),
             ) {
                 Text("Try Again")
             }
