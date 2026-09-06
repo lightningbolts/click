@@ -1,3 +1,8 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+)
+
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.animation.core.*
@@ -30,9 +35,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
-import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
+import compose.project.click.click.platform.rememberReduceMotionEnabled // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.MotionTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.ui.utils.BoundingBox // pragma: allowlist secret
 import compose.project.click.click.ui.utils.ConnectionMapPoint // pragma: allowlist secret
@@ -63,18 +70,24 @@ fun MemoriesListSection(
             if (mapState.connections.isEmpty()) {
                 EmptyMemoriesState(modifier)
             } else {
-                val allPoints = mapState.connections.mapNotNull {
-                    try { it.toMapPoint() } catch (e: Exception) { null }
-                }
-
-                val visiblePoints = if (visibleBounds != null) {
-                    allPoints.filter { point ->
-                        point.latitude in visibleBounds.minLat..visibleBounds.maxLat &&
-                            point.longitude in visibleBounds.minLon..visibleBounds.maxLon
+                val allPoints =
+                    mapState.connections.mapNotNull {
+                        try {
+                            it.toMapPoint()
+                        } catch (e: Exception) {
+                            null
+                        }
                     }
-                } else {
-                    allPoints
-                }
+
+                val visiblePoints =
+                    if (visibleBounds != null) {
+                        allPoints.filter { point ->
+                            point.latitude in visibleBounds.minLat..visibleBounds.maxLat &&
+                                point.longitude in visibleBounds.minLon..visibleBounds.maxLon
+                        }
+                    } else {
+                        allPoints
+                    }
 
                 val sortedPoints = visiblePoints.sortedByDescending { it.connection.created }
 
@@ -135,10 +148,11 @@ private fun EmptyMemoriesState(modifier: Modifier = Modifier) {
         ChatAmbientMeshBackground(
             connection = null,
             isHubNeutral = true,
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(RoundedCornerShape(28.dp))
-                .alpha(0.35f),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(28.dp))
+                    .alpha(0.35f),
         )
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
@@ -170,11 +184,12 @@ private fun MemoryLocationCard(
     point: ConnectionMapPoint,
     onClick: () -> Unit,
 ) {
-    val timeColor = when (point.timeState) {
-        TimeState.LIVE -> PrimaryBlue
-        TimeState.RECENT -> LightBlue
-        TimeState.ARCHIVE -> Color.Gray
-    }
+    val timeColor =
+        when (point.timeState) {
+            TimeState.LIVE -> PrimaryBlue
+            TimeState.RECENT -> LightBlue
+            TimeState.ARCHIVE -> Color.Gray
+        }
 
     GlassCard(
         modifier = Modifier.fillMaxWidth().alpha(point.opacity),
@@ -185,10 +200,11 @@ private fun MemoryLocationCard(
             verticalAlignment = Alignment.Top,
         ) {
             Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(timeColor),
+                modifier =
+                    Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(timeColor),
                 contentAlignment = Alignment.Center,
             ) {
                 if (point.shouldPulse) {
@@ -236,40 +252,45 @@ private fun MemoryLocationCard(
 
 @Composable
 private fun MemoryPulsingIndicator() {
+    val reduceMotion = rememberReduceMotionEnabled()
     val infiniteTransition = rememberInfiniteTransition()
     val scale by infiniteTransition.animateFloat(
-        initialValue = 0.8f,
-        targetValue = 1.5f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
+        initialValue = 0.9f,
+        targetValue = 1.12f,
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(MotionTokens.Pulse.Gentle, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
     )
     val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.6f,
+        initialValue = 0.45f,
         targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(MotionTokens.Pulse.Gentle, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
     )
 
     Box(
-        modifier = Modifier
-            .size(56.dp)
-            .scale(scale)
-            .alpha(alpha)
-            .background(PrimaryBlue.copy(alpha = 0.3f), CircleShape),
+        modifier =
+            Modifier
+                .size(56.dp)
+                .scale(if (reduceMotion) 1f else scale)
+                .alpha(if (reduceMotion) 0.22f else alpha)
+                .background(PrimaryBlue.copy(alpha = 0.3f), CircleShape),
     )
 }
 
 @Composable
 private fun MemoryTimeStateBadge(timeState: TimeState) {
-    val (color, label, icon) = when (timeState) {
-        TimeState.LIVE -> Triple(PrimaryBlue, "Live Now", Icons.Filled.Bolt)
-        TimeState.RECENT -> Triple(LightBlue, "Recent", Icons.Filled.AccessTime)
-        TimeState.ARCHIVE -> Triple(Color.Gray, "Memory", Icons.Filled.History)
-    }
+    val (color, label, icon) =
+        when (timeState) {
+            TimeState.LIVE -> Triple(PrimaryBlue, "Live Now", Icons.Filled.Bolt)
+            TimeState.RECENT -> Triple(LightBlue, "Recent", Icons.Filled.AccessTime)
+            TimeState.ARCHIVE -> Triple(Color.Gray, "Memory", Icons.Filled.History)
+        }
 
     Surface(
         shape = RoundedCornerShape(12.dp),

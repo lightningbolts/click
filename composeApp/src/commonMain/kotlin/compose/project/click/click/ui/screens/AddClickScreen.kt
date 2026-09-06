@@ -136,11 +136,11 @@ fun AddClickContent(
         val reduceMotion = rememberReduceMotionEnabled()
         val pulse = rememberInfiniteTransition(label = "tap_to_connect_pulse")
         val pulseAlpha by pulse.animateFloat(
-            initialValue = 0.45f,
+            initialValue = 0.72f,
             targetValue = 1f,
             animationSpec =
                 infiniteRepeatable(
-                    animation = tween(durationMillis = 1100, easing = FastOutSlowInEasing),
+                    animation = tween(durationMillis = MotionTokens.Pulse.Gentle, easing = FastOutSlowInEasing),
                     repeatMode = RepeatMode.Reverse,
                 ),
             label = "tap_to_connect_pulse_alpha",

@@ -7,6 +7,9 @@ package compose.project.click.click.ui.components // pragma: allowlist secret
  * Chat re-applies once exclusive ownership clears.
  */
 object OverlayExclusiveBindPolicy {
+    /** UIKit tab chrome needs an explicit cover; Android's Compose bar remains under the lightbox. */
+    fun shouldCoverNativeTabBarForMedia(isIOS: Boolean): Boolean = isIOS
+
     fun shouldSkipOverlayBind(
         exclusiveOwner: Any?,
         binderOwner: Any,
@@ -39,4 +42,26 @@ object OverlayExclusiveBindPolicy {
      * Re-apply the last expanded metrics instead of trusting the leftover constraint.
      */
     fun shouldReapplyTabBarHeightOnOverlayHide(): Boolean = true
+
+    /**
+     * xmark ↔ chevron.backward must swap on the same glass `UIButton`. A null previous
+     * value is the first paint (no swap). Callers must not wrap that control in
+     * `UIView.transition` — snapshotting Liquid Glass is the blink.
+     */
+    fun shouldReplaceLeadingChromeSymbol(
+        previousLeadingClose: Boolean?,
+        nextLeadingClose: Boolean,
+    ): Boolean = previousLeadingClose != null && previousLeadingClose != nextLeadingClose
+
+    /**
+     * Photo / media lightboxes rebind overlay chrome with an empty title so they can own
+     * close + save/share. Wiping the conversation title and avatar is a second chrome
+     * rebuild next to the buttons. Keep the existing identity row and only retarget actions.
+     */
+    fun shouldPreserveConversationChrome(
+        leadingClose: Boolean,
+        title: String,
+        hasIdentity: Boolean,
+        hasExistingTitle: Boolean,
+    ): Boolean = leadingClose && title.isEmpty() && !hasIdentity && hasExistingTitle
 }

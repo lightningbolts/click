@@ -29,13 +29,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.platform.rememberReduceMotionEnabled // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickButtonVariant // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickChip // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickTextFieldMinHeight // pragma: allowlist secret
-import compose.project.click.click.ui.components.rememberConnectionHandshakePulse // pragma: allowlist secret
+import compose.project.click.click.ui.components.SuccessBeat // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
-import kotlinx.coroutines.delay
 
 @Composable
 internal fun NfcIdleContent(
@@ -46,27 +46,37 @@ internal fun NfcIdleContent(
     showHowItWorksCard: Boolean,
     onOpenSettings: () -> Unit,
 ) {
+    val reduceMotion = rememberReduceMotionEnabled()
     val infiniteTransition = rememberInfiniteTransition(label = "tap_idle")
     val haloScale by infiniteTransition.animateFloat(
-        initialValue = 0.92f,
-        targetValue = 1.08f,
+        initialValue = 0.98f,
+        targetValue = 1.02f,
         animationSpec =
             infiniteRepeatable(
-                animation = tween(1800, easing = FastOutSlowInEasing),
+                animation = tween(MotionTokens.Pulse.Scanning, easing = FastOutSlowInEasing),
                 repeatMode = RepeatMode.Reverse,
             ),
         label = "tap_idle_halo_scale",
     )
     val haloAlpha by infiniteTransition.animateFloat(
         initialValue = 0.08f,
-        targetValue = 0.18f,
+        targetValue = 0.14f,
         animationSpec =
             infiniteRepeatable(
-                animation = tween(1800, easing = FastOutSlowInEasing),
+                animation = tween(MotionTokens.Pulse.Scanning, easing = FastOutSlowInEasing),
                 repeatMode = RepeatMode.Reverse,
             ),
         label = "tap_idle_halo_alpha",
     )
+    val idleScale = if (reduceMotion || !supportsTap) 1f else haloScale
+    val idleAlpha =
+        if (reduceMotion) {
+            0.12f
+        } else if (supportsTap) {
+            haloAlpha
+        } else {
+            0.12f
+        }
     Column(
         modifier =
             Modifier
@@ -85,8 +95,8 @@ internal fun NfcIdleContent(
                 modifier =
                     Modifier
                         .matchParentSize()
-                        .scale(haloScale)
-                        .alpha(if (supportsTap) haloAlpha else 0.12f)
+                        .scale(idleScale)
+                        .alpha(idleAlpha)
                         .border(clickBorderWidth(), if (supportsTap) PrimaryBlue.copy(alpha = 0.35f) else clickBorderColor(), CircleShape),
             )
             Surface(
@@ -206,7 +216,6 @@ internal fun NfcIdleContent(
 
 @Composable
 internal fun NfcFetchingLocationContent(pulseActive: Boolean = false) {
-    val (pulseScale, pulseAlpha) = rememberConnectionHandshakePulse(pulseActive)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -214,11 +223,7 @@ internal fun NfcFetchingLocationContent(pulseActive: Boolean = false) {
         Icon(
             Icons.Default.LocationOn,
             contentDescription = null,
-            modifier =
-                Modifier
-                    .size(100.dp)
-                    .scale(pulseScale)
-                    .alpha(pulseAlpha),
+            modifier = Modifier.size(100.dp),
             tint = PrimaryBlue,
         )
 
@@ -252,7 +257,7 @@ internal fun NfcFetchingLocationContent(pulseActive: Boolean = false) {
 
 @Composable
 internal fun NfcScanningContent(pulseActive: Boolean = false) {
-    val (pulseScale, pulseAlpha) = rememberConnectionHandshakePulse(pulseActive)
+    val reduceMotion = rememberReduceMotionEnabled()
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -263,52 +268,57 @@ internal fun NfcScanningContent(pulseActive: Boolean = false) {
             modifier = Modifier.size(200.dp),
             contentAlignment = Alignment.Center,
         ) {
-            // Pulsing circles
-            repeat(3) { index ->
-                val delay = index * 333
-                val circleScale by infiniteTransition.animateFloat(
-                    initialValue = 0.5f,
-                    targetValue = 1.5f,
-                    animationSpec =
-                        infiniteRepeatable(
-                            animation = tween(2000, easing = LinearEasing, delayMillis = delay),
-                            repeatMode = RepeatMode.Restart,
-                        ),
-                    label = "scan_ring_scale_$index",
-                )
+            if (!reduceMotion) {
+                repeat(3) { index ->
+                    val delay = index * 333
+                    val circleScale by infiniteTransition.animateFloat(
+                        initialValue = 0.5f,
+                        targetValue = 1.5f,
+                        animationSpec =
+                            infiniteRepeatable(
+                                animation = tween(MotionTokens.Pulse.Scanning, easing = LinearEasing, delayMillis = delay),
+                                repeatMode = RepeatMode.Restart,
+                            ),
+                        label = "scan_ring_scale_$index",
+                    )
 
-                val circleAlpha by infiniteTransition.animateFloat(
-                    initialValue = 0.6f,
-                    targetValue = 0f,
-                    animationSpec =
-                        infiniteRepeatable(
-                            animation = tween(2000, easing = LinearEasing, delayMillis = delay),
-                            repeatMode = RepeatMode.Restart,
-                        ),
-                    label = "scan_ring_alpha_$index",
-                )
+                    val circleAlpha by infiniteTransition.animateFloat(
+                        initialValue = 0.6f,
+                        targetValue = 0f,
+                        animationSpec =
+                            infiniteRepeatable(
+                                animation = tween(MotionTokens.Pulse.Scanning, easing = LinearEasing, delayMillis = delay),
+                                repeatMode = RepeatMode.Restart,
+                            ),
+                        label = "scan_ring_alpha_$index",
+                    )
 
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(200.dp)
+                                .scale(circleScale)
+                                .alpha(circleAlpha)
+                                .background(
+                                    color = PrimaryBlue,
+                                    shape = CircleShape,
+                                ),
+                    )
+                }
+            } else {
                 Box(
                     modifier =
                         Modifier
-                            .size(200.dp)
-                            .scale(circleScale)
-                            .alpha(circleAlpha)
-                            .background(
-                                color = PrimaryBlue,
-                                shape = CircleShape,
-                            ),
+                            .size(160.dp)
+                            .alpha(0.18f)
+                            .border(clickBorderWidth(), PrimaryBlue.copy(alpha = 0.35f), CircleShape),
                 )
             }
 
             Icon(
                 Icons.Default.BluetoothSearching,
                 contentDescription = null,
-                modifier =
-                    Modifier
-                        .size(80.dp)
-                        .scale(pulseScale)
-                        .alpha(pulseAlpha),
+                modifier = Modifier.size(80.dp),
                 tint = PrimaryBlue,
             )
         }
@@ -438,23 +448,15 @@ internal fun NfcCreatingConnectionContent(
     title: String = "Creating Connection...",
     pulseActive: Boolean = false,
 ) {
-    val (pulseScale, pulseAlpha) = rememberConnectionHandshakePulse(pulseActive)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Box(
-            modifier =
-                Modifier
-                    .scale(pulseScale)
-                    .alpha(pulseAlpha),
-        ) {
-            AdaptiveCircularProgressIndicator(
-                modifier = Modifier.size(80.dp),
-                color = PrimaryBlue,
-                strokeWidth = 6.dp,
-            )
-        }
+        AdaptiveCircularProgressIndicator(
+            modifier = Modifier.size(80.dp),
+            color = PrimaryBlue,
+            strokeWidth = 6.dp,
+        )
 
         Spacer(modifier = Modifier.height(32.dp))
 
@@ -468,23 +470,15 @@ internal fun NfcCreatingConnectionContent(
 
 @Composable
 internal fun NfcMatchingPeersContent(pulseActive: Boolean = false) {
-    val (pulseScale, pulseAlpha) = rememberConnectionHandshakePulse(pulseActive)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Box(
-            modifier =
-                Modifier
-                    .scale(pulseScale)
-                    .alpha(pulseAlpha),
-        ) {
-            AdaptiveCircularProgressIndicator(
-                modifier = Modifier.size(80.dp),
-                color = PrimaryBlue,
-                strokeWidth = 6.dp,
-            )
-        }
+        AdaptiveCircularProgressIndicator(
+            modifier = Modifier.size(80.dp),
+            color = PrimaryBlue,
+            strokeWidth = 6.dp,
+        )
 
         Spacer(modifier = Modifier.height(32.dp))
 
@@ -513,14 +507,8 @@ internal fun NfcSuccessContent(
     onViewConnection: () -> Unit,
     onCreateAnother: () -> Unit,
 ) {
-    var showConfetti by remember { mutableStateOf(true) }
     var sayHiMessage by remember { mutableStateOf("") }
     var messageSent by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        delay(3000)
-        showConfetti = false
-    }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -530,12 +518,17 @@ internal fun NfcSuccessContent(
                 .padding(32.dp)
                 .verticalScroll(rememberScrollState()),
     ) {
-        Icon(
-            Icons.Default.CheckCircle,
-            contentDescription = null,
-            modifier = Modifier.size(100.dp),
-            tint = PrimaryBlue,
-        )
+        SuccessBeat(
+            trigger = connection.id,
+            hapticsEnabled = false,
+        ) {
+            Icon(
+                Icons.Default.CheckCircle,
+                contentDescription = null,
+                modifier = Modifier.size(100.dp),
+                tint = PrimaryBlue,
+            )
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 

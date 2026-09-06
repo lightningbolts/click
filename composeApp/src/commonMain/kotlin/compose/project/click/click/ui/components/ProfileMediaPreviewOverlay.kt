@@ -6,23 +6,14 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,9 +25,9 @@ import coil3.compose.AsyncImage
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAudioBubble // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAudioChromeKind // pragma: allowlist secret
-import compose.project.click.click.ui.chat.fetchImageBytesFromUrl // pragma: allowlist secret
-import compose.project.click.click.ui.chat.saveChatImageToGallery // pragma: allowlist secret
-import compose.project.click.click.ui.chat.shareDecryptedImage // pragma: allowlist secret
+import compose.project.click.click.ui.chat.persistLightboxImageToGallery // pragma: allowlist secret
+import compose.project.click.click.ui.chat.shareLightboxImage // pragma: allowlist secret
+import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import kotlinx.coroutines.launch
 
@@ -58,11 +49,61 @@ internal fun ProfileMediaPreviewOverlay(
     if (previewMedia != null) {
         val media = previewMedia
         val bitmapForPreview = resolvedMediaBitmaps[media.id]
+        val isIOS = LocalPlatformStyle.current.isIOS
+        val isImage = media.mediaType == ProfileSheetMediaType.Image
+        val saveImage: () -> Unit = {
+            scope.launch {
+                val url = (resolvedMediaUrls[media.id] ?: media.mediaUrl)?.trim().orEmpty()
+                val decrypted =
+                    if (url.isNotBlank() &&
+                        media.isEncrypted &&
+                        !connectionChatId.isNullOrBlank() &&
+                        !effectiveViewerUserId.isNullOrBlank()
+                    ) {
+                        connectionRepository.downloadAndDecryptChatMedia(
+                            chatId = connectionChatId!!,
+                            viewerUserId = effectiveViewerUserId!!,
+                            mediaUrl = url,
+                        )
+                    } else {
+                        null
+                    }
+                persistLightboxImageToGallery(url, decrypted, media.mimeType)
+                onDismissPreview()
+            }
+        }
+        val shareImage: () -> Unit = {
+            scope.launch {
+                val url = (resolvedMediaUrls[media.id] ?: media.mediaUrl)?.trim().orEmpty()
+                val decrypted =
+                    if (url.isNotBlank() &&
+                        media.isEncrypted &&
+                        !connectionChatId.isNullOrBlank() &&
+                        !effectiveViewerUserId.isNullOrBlank()
+                    ) {
+                        connectionRepository.downloadAndDecryptChatMedia(
+                            chatId = connectionChatId!!,
+                            viewerUserId = effectiveViewerUserId!!,
+                            mediaUrl = url,
+                        )
+                    } else {
+                        null
+                    }
+                shareLightboxImage(url, decrypted, media.mimeType)
+                onDismissPreview()
+            }
+        }
         GlassFullscreenMediaOverlay(
             visible = mediaPreviewVisible,
             onDismissRequest = { onDismissPreview() },
             modifier = Modifier.fillMaxSize(),
             scrimAlpha = 1f,
+            nativeTrailingActions =
+                if (isImage) {
+                    mediaLightboxShareActions(onSave = saveImage, onShare = shareImage)
+                } else {
+                    emptyList()
+                },
         ) {
             Box(
                 modifier =
@@ -130,93 +171,18 @@ internal fun ProfileMediaPreviewOverlay(
                         }
                     }
                 }
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .windowInsetsPadding(WindowInsets.statusBars)
-                            .padding(horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconButton(onClick = { onDismissPreview() }) {
-                        Icon(
-                            imageVector = Icons.Outlined.Close,
-                            contentDescription = "Close",
-                            tint = Color.White,
-                        )
-                    }
-                    Spacer(Modifier.weight(1f))
-                    if (media.mediaType == ProfileSheetMediaType.Image) {
-                        TextButton(
-                            onClick = {
-                                scope.launch {
-                                    val url = (resolvedMediaUrls[media.id] ?: media.mediaUrl)?.trim().orEmpty()
-                                    if (url.isNotBlank() &&
-                                        media.isEncrypted &&
-                                        !connectionChatId.isNullOrBlank() &&
-                                        !effectiveViewerUserId.isNullOrBlank()
-                                    ) {
-                                        val bytes =
-                                            connectionRepository.downloadAndDecryptChatMedia(
-                                                chatId = connectionChatId!!,
-                                                viewerUserId = effectiveViewerUserId!!,
-                                                mediaUrl = url,
-                                            )
-                                        if (bytes != null && bytes.isNotEmpty()) {
-                                            saveChatImageToGallery(
-                                                imageUrl = url,
-                                                decryptedImageBytes = bytes,
-                                                mimeTypeHint = media.mimeType,
-                                            )
-                                        }
-                                    } else if (url.isNotBlank()) {
-                                        saveChatImageToGallery(imageUrl = url)
-                                    }
-                                    onDismissPreview()
-                                }
-                            },
-                        ) {
-                            Text("Save", color = Color.White)
+                MediaLightboxTopChrome(
+                    onClose = { onDismissPreview() },
+                    showClose = !isIOS,
+                    trailing = {
+                        if (!isIOS && isImage) {
+                            MediaLightboxSaveShareTrailing(
+                                onSave = saveImage,
+                                onShare = shareImage,
+                            )
                         }
-                        TextButton(
-                            onClick = {
-                                scope.launch {
-                                    val url = (resolvedMediaUrls[media.id] ?: media.mediaUrl)?.trim().orEmpty()
-                                    val ext =
-                                        when {
-                                            media.mimeType?.contains("png", ignoreCase = true) == true -> "png"
-                                            media.mimeType?.contains("webp", ignoreCase = true) == true -> "webp"
-                                            else -> "jpg"
-                                        }
-                                    if (url.isNotBlank()) {
-                                        if (media.isEncrypted &&
-                                            !connectionChatId.isNullOrBlank() &&
-                                            !effectiveViewerUserId.isNullOrBlank()
-                                        ) {
-                                            val bytes =
-                                                connectionRepository.downloadAndDecryptChatMedia(
-                                                    chatId = connectionChatId!!,
-                                                    viewerUserId = effectiveViewerUserId!!,
-                                                    mediaUrl = url,
-                                                )
-                                            if (bytes != null && bytes.isNotEmpty()) {
-                                                shareDecryptedImage(bytes, "click_share.$ext")
-                                            }
-                                        } else {
-                                            val bytes = fetchImageBytesFromUrl(url)
-                                            if (bytes != null && bytes.isNotEmpty()) {
-                                                shareDecryptedImage(bytes, "click_share.$ext")
-                                            }
-                                        }
-                                    }
-                                    onDismissPreview()
-                                }
-                            },
-                        ) {
-                            Text("Share", color = Color.White)
-                        }
-                    }
-                }
+                    },
+                )
             }
         }
     }

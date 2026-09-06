@@ -5,17 +5,7 @@ package compose.project.click.click.ui.chat // pragma: allowlist secret
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,24 +14,30 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.isDisposableRollLocked // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
+import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickZoomableMedia // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassFullscreenMediaOverlay // pragma: allowlist secret
+import compose.project.click.click.ui.components.MediaLightboxSaveShareTrailing // pragma: allowlist secret
+import compose.project.click.click.ui.components.MediaLightboxTopChrome // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedPopupTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.mediaLightboxShareActions // pragma: allowlist secret
+import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.utils.toChatDisplayImageBitmap // pragma: allowlist secret
 import compose.project.click.click.viewmodel.SecureChatMediaHost // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -110,11 +106,30 @@ fun ChatExpandedPhotoPreview(
         bitmap = decoded
     }
 
+    val isIOS = LocalPlatformStyle.current.isIOS
+    val scope = rememberCoroutineScope()
+    val decryptedBytes = secureState?.imageBytes
+    val mimeHint = message.originalMimeTypeOrNull()
+    val saveShareActions =
+        mediaLightboxShareActions(
+            onSave = {
+                scope.launch {
+                    persistLightboxImageToGallery(mediaUrl, decryptedBytes, mimeHint)
+                }
+            },
+            onShare = {
+                scope.launch {
+                    shareLightboxImage(mediaUrl, decryptedBytes, mimeHint)
+                }
+            },
+        )
+
     GlassFullscreenMediaOverlay(
         visible = visible,
         onDismissRequest = onDismiss,
         modifier = Modifier.fillMaxSize(),
         scrimAlpha = 1f,
+        nativeTrailingActions = saveShareActions,
     ) {
         Box(
             modifier =
@@ -162,22 +177,26 @@ fun ChatExpandedPhotoPreview(
                     )
                 }
             }
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .windowInsetsPadding(WindowInsets.statusBars)
-                        .padding(horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = onDismiss) {
-                    Icon(
-                        imageVector = Icons.Outlined.Close,
-                        contentDescription = "Close",
-                        tint = Color.White,
-                    )
-                }
-            }
+            MediaLightboxTopChrome(
+                onClose = onDismiss,
+                showClose = !isIOS,
+                trailing = {
+                    if (!isIOS) {
+                        MediaLightboxSaveShareTrailing(
+                            onSave = {
+                                scope.launch {
+                                    persistLightboxImageToGallery(mediaUrl, decryptedBytes, mimeHint)
+                                }
+                            },
+                            onShare = {
+                                scope.launch {
+                                    shareLightboxImage(mediaUrl, decryptedBytes, mimeHint)
+                                }
+                            },
+                        )
+                    }
+                },
+            )
         }
     }
 }

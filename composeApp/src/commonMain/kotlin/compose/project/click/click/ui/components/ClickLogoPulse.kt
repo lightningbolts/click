@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.components
 
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -20,11 +22,12 @@ import androidx.compose.ui.unit.dp
 import click.composeapp.generated.resources.Res
 import click.composeapp.generated.resources.click_logo
 import compose.project.click.click.platform.rememberReduceMotionEnabled
+import compose.project.click.click.ui.theme.MotionTokens
 import org.jetbrains.compose.resources.painterResource
 
-private const val LogoPulseDurationMs = 2_400
-private const val LogoAlphaMin = 0.42f
-private const val LogoAlphaMax = 1f
+private const val LOGO_PULSE_DURATION_MS = 2_400
+private const val LOGO_ALPHA_MIN = 0.42f
+private const val LOGO_ALPHA_MAX = 1f
 
 /**
  * Scale + opacity pulse for tri-factor handshake (Scanning / Connecting).
@@ -32,12 +35,13 @@ private const val LogoAlphaMax = 1f
  */
 @Composable
 fun rememberConnectionHandshakePulse(active: Boolean): Pair<Float, Float> {
-    val pulse = rememberWaitingPulse(
-        active = active,
-        durationMillis = 800,
-        scaleMax = 1.15f,
-        alphaMin = 0.88f,
-    )
+    val pulse =
+        rememberWaitingPulse(
+            active = active,
+            durationMillis = MotionTokens.Pulse.Gentle,
+            scaleMax = 1.04f,
+            alphaMin = 0.92f,
+        )
     return pulse.scale to pulse.alpha
 }
 
@@ -59,20 +63,22 @@ fun ClickLogoPulse(
         }
         return
     }
-    val halfCycle = LogoPulseDurationMs / 2
+    val halfCycle = LOGO_PULSE_DURATION_MS / 2
     val transition = rememberInfiniteTransition(label = "click_logo_loading")
     val logoAlpha by transition.animateFloat(
-        initialValue = LogoAlphaMin,
-        targetValue = LogoAlphaMin,
-        animationSpec = infiniteRepeatable(
-            animation = keyframes {
-                durationMillis = LogoPulseDurationMs
-                LogoAlphaMin at 0
-                LogoAlphaMax at halfCycle using FastOutSlowInEasing
-                LogoAlphaMin at LogoPulseDurationMs using FastOutSlowInEasing
-            },
-            repeatMode = RepeatMode.Restart,
-        ),
+        initialValue = LOGO_ALPHA_MIN,
+        targetValue = LOGO_ALPHA_MIN,
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    keyframes {
+                        durationMillis = LOGO_PULSE_DURATION_MS
+                        LOGO_ALPHA_MIN at 0
+                        LOGO_ALPHA_MAX at halfCycle using FastOutSlowInEasing
+                        LOGO_ALPHA_MIN at LOGO_PULSE_DURATION_MS using FastOutSlowInEasing
+                    },
+                repeatMode = RepeatMode.Restart,
+            ),
         label = "click_logo_pulse_alpha",
     )
 
@@ -81,9 +87,10 @@ fun ClickLogoPulse(
             painter = painterResource(Res.drawable.click_logo),
             contentDescription = "Loading",
             contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .size(logoSize)
-                .graphicsLayer { alpha = logoAlpha },
+            modifier =
+                Modifier
+                    .size(logoSize)
+                    .graphicsLayer { alpha = logoAlpha },
         )
     }
 }

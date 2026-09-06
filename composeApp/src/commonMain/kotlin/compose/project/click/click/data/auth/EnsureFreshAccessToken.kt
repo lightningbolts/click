@@ -1,7 +1,7 @@
 package compose.project.click.click.data.auth // pragma: allowlist secret
 
-import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.auth.SessionHydrationPolicy // pragma: allowlist secret
+import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
@@ -291,7 +291,9 @@ object EnsureFreshAccessToken {
     fun sdkAccessIsFresh(): Boolean {
         val token =
             runCatching {
-                SupabaseConfig.client.auth.currentSessionOrNull()?.accessToken
+                SupabaseConfig.client.auth
+                    .currentSessionOrNull()
+                    ?.accessToken
             }.getOrNull()
         return isAccessTokenFresh(token)
     }

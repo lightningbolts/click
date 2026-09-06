@@ -5,9 +5,7 @@
 
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -65,6 +63,7 @@ import compose.project.click.click.data.models.ContextTag // pragma: allowlist s
 import compose.project.click.click.data.models.UserProfile // pragma: allowlist secret
 import compose.project.click.click.data.repository.PROXIMITY_HOST_SELECTION_MAX_PEERS // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
+import compose.project.click.click.ui.theme.MotionTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 import compose.project.click.click.ui.utils.rememberCalendarPermissionRequester // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers
@@ -505,15 +504,11 @@ fun ConnectionContextSheet(
             val springBtn by animateFloatAsState(
                 targetValue =
                     if (presentation == ConnectionContextPresentation.ReconnectEncounter && encounterSaveInProgress) {
-                        0.94f
+                        MotionTokens.PressScale.ButtonPressedScale
                     } else {
                         1f
                     },
-                animationSpec =
-                    spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMediumLow,
-                    ),
+                animationSpec = MotionTokens.pressScaleSpec(),
                 label = "connection_ctx_primary",
             )
             val reconnectPulse =

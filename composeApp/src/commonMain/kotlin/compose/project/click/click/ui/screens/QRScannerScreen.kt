@@ -5,7 +5,6 @@
 
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -29,6 +28,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.platform.rememberReduceMotionEnabled // pragma: allowlist secret
 import compose.project.click.click.qr.QrParseResult // pragma: allowlist secret
 import compose.project.click.click.qr.parseQrCode // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
@@ -40,6 +40,7 @@ import compose.project.click.click.ui.components.QrScannerDetection // pragma: a
 import compose.project.click.click.ui.components.bottomChromePadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberConnectionHandshakePulse // pragma: allowlist secret
+import compose.project.click.click.ui.theme.MotionTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
@@ -135,9 +136,7 @@ fun QRScannerScreen(
             liveDetection != null -> QrScannerPresentationState.TargetAcquired
             else -> QrScannerPresentationState.Searching
         }
-    val pulseHandshake =
-        presentationState == QrScannerPresentationState.Searching ||
-            presentationState == QrScannerPresentationState.Connecting
+    val pulseHandshake = presentationState == QrScannerPresentationState.Connecting
     val (handshakeScale, handshakeAlpha) = rememberConnectionHandshakePulse(pulseHandshake)
 
     fun lockAndContinue(onContinue: () -> Unit) {
@@ -282,36 +281,18 @@ private fun ScannerLensOverlay(
     bottomContentInset: Dp,
     errorMessage: String,
 ) {
+    val reduceMotion = rememberReduceMotionEnabled()
+    val scanning = state == QrScannerPresentationState.Searching && !reduceMotion
     val infiniteTransition = rememberInfiniteTransition(label = "qr_scanner_overlay")
     val scanLineProgress by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec =
             infiniteRepeatable(
-                animation = tween(1800, easing = LinearEasing),
+                animation = tween(MotionTokens.Pulse.Scanning, easing = LinearEasing),
                 repeatMode = RepeatMode.Restart,
             ),
         label = "scan_line_progress",
-    )
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 0.9f,
-        targetValue = 1.08f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(1200, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse,
-            ),
-        label = "target_pulse_scale",
-    )
-    val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.28f,
-        targetValue = 0.7f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(1200, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse,
-            ),
-        label = "target_pulse_alpha",
     )
 
     BoxWithConstraints(modifier = modifier) {
@@ -348,7 +329,7 @@ private fun ScannerLensOverlay(
                     ),
         )
 
-        if (state != QrScannerPresentationState.Error) {
+        if (scanning) {
             Box(
                 modifier =
                     Modifier
@@ -379,10 +360,9 @@ private fun ScannerLensOverlay(
                     Modifier
                         .offset { IntOffset(xOffset, yOffset) }
                         .size(targetSize)
-                        .scale(pulseScale)
                         .border(
                             width = 2.dp,
-                            color = PrimaryBlue.copy(alpha = pulseAlpha),
+                            color = PrimaryBlue.copy(alpha = 0.85f),
                             shape = CircleShape,
                         ),
             )

@@ -49,15 +49,15 @@ import platform.PhotosUI.PHPickerFilter
 import platform.PhotosUI.PHPickerResult
 import platform.PhotosUI.PHPickerViewController
 import platform.PhotosUI.PHPickerViewControllerDelegateProtocol
+import platform.UIKit.UIColor
 import platform.UIKit.UIImage
 import platform.UIKit.UIImageJPEGRepresentation
 import platform.UIKit.UIImagePickerController
 import platform.UIKit.UIImagePickerControllerDelegateProtocol
 import platform.UIKit.UIImagePickerControllerOriginalImage
 import platform.UIKit.UIImagePickerControllerSourceType
-import platform.UIKit.UIModalPresentationOverFullScreen
+import platform.UIKit.UIModalPresentationFullScreen
 import platform.UIKit.UINavigationControllerDelegateProtocol
-import platform.UIKit.UITabBar
 import platform.UIKit.UIViewController
 import platform.UniformTypeIdentifiers.UTTypeImage
 import platform.darwin.NSObject
@@ -259,21 +259,33 @@ actual fun rememberChatMediaPickers(
 }
 
 /**
- * Present photo/camera pickers over the full window, including the home-indicator strip and
- * the native [UITabBar] that otherwise stays in front of Compose and peeks under a page sheet.
+ * Present photo/camera pickers over the full window, covering the native header and tab bar.
+ * Present from the window root (not the nested Compose VC) so the modal is not sized to the
+ * chat column — that leak is the header-height sliver of the screen underneath.
  */
 @OptIn(ExperimentalForeignApi::class)
 private fun presentFullscreenPicker(
     picker: UIViewController,
     host: UIViewController,
 ) {
-    picker.modalPresentationStyle = UIModalPresentationOverFullScreen
-    val presenter = iosTopViewControllerForPresentation() ?: host
-    presenter.view.subviews.forEach { child ->
-        val tabBar = child as? UITabBar ?: return@forEach
-        presenter.view.sendSubviewToBack(tabBar)
+    picker.modalPresentationStyle = UIModalPresentationFullScreen
+    picker.modalPresentationCapturesStatusBarAppearance = true
+    picker.view.backgroundColor = UIColor.blackColor
+    val window = host.view.window
+    val presenter =
+        window?.rootViewController?.let { root ->
+            var top = root
+            while (top.presentedViewController != null) {
+                top = top.presentedViewController ?: break
+            }
+            top
+        } ?: iosTopViewControllerForPresentation() ?: host
+    presenter.presentViewController(picker, animated = true) {
+        val bounds = picker.view.window?.bounds ?: window?.bounds
+        if (bounds != null) {
+            picker.view.setFrame(bounds)
+        }
     }
-    presenter.presentViewController(picker, animated = true, completion = null)
 }
 
 @OptIn(ExperimentalForeignApi::class)

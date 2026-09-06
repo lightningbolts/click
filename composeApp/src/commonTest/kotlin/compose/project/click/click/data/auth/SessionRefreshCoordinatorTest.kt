@@ -307,10 +307,11 @@ class SessionRefreshCoordinatorTest {
             assertFalse(afterSingleFlight)
             assertTrue(withTimeout(1_000L) { follower.await() }.isSuccess)
             assertTrue(
-                SessionRefreshCoordinator.singleFlightRefresh {
-                    invokeCount += 1
-                    Result.success(Unit)
-                }.isSuccess,
+                SessionRefreshCoordinator
+                    .singleFlightRefresh {
+                        invokeCount += 1
+                        Result.success(Unit)
+                    }.isSuccess,
             )
             assertEquals(2, invokeCount)
             SessionRefreshCoordinator.resetForTests()

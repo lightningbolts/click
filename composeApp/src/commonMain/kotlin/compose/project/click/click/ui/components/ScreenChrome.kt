@@ -59,6 +59,25 @@ object AppScreenChromeState {
     fun updateBottomChromeHeight(height: Dp) {
         if (height > 0.dp) bottomChromeHeight = height
     }
+
+    /**
+     * Count of full-screen overlays that must send the native UITabBar behind Compose.
+     * iOS cannot paint a Popup over a sibling `UITabBar`; send-to-back is the same path chat
+     * already uses and does not remount Liquid Glass.
+     */
+    var nativeTabBarCoverCount by mutableStateOf(0)
+        private set
+
+    val nativeTabBarCovered: Boolean
+        get() = nativeTabBarCoverCount > 0
+
+    fun acquireNativeTabBarCover() {
+        nativeTabBarCoverCount++
+    }
+
+    fun releaseNativeTabBarCover() {
+        nativeTabBarCoverCount = (nativeTabBarCoverCount - 1).coerceAtLeast(0)
+    }
 }
 
 /** Home-indicator / gesture inset + tab bar content — never less than this on iOS. */

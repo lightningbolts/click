@@ -80,6 +80,9 @@ class HubChatViewModel(
     internal val isEventHub: Boolean = false,
     internal val hubLocationResolver: suspend () -> LocationResult? = { null },
     internal val tokenStorage: TokenStorage = createTokenStorage(),
+    internal val freshHubJwtProvider: suspend (Boolean) -> String = { forceRefresh ->
+        tokenStorage.requireFreshHubJwt(forceRefresh)
+    },
     internal val chatApi: ChatApiClient = ChatApiClient(tokenStorage = tokenStorage),
     internal val hubLifecycleGateway: HubLifecycleGateway = ChatApiHubLifecycleGateway(chatApi),
     internal val activeHubCache: ActiveHubCache = AppDataManagerActiveHubCache,
@@ -167,6 +170,8 @@ class HubChatViewModel(
     internal var hubE2eeV2Session: HubE2eeV2Session? = null
     internal var hubParticipantIds: Set<String> = emptySet()
 
+    internal suspend fun requireFreshHubJwt(forceRefresh: Boolean = false): String = freshHubJwtProvider(forceRefresh)
+
     init {
         viewModelScope.launch {
             AppDataManager.awaitHubAccessStateRestored()
@@ -191,7 +196,7 @@ class HubChatViewModel(
         if (loadHubDetails) {
             viewModelScope.launch(Dispatchers.Default) {
                 try {
-                    val jwt = runCatching { tokenStorage.requireFreshHubJwt() }.getOrNull()
+                    val jwt = runCatching { requireFreshHubJwt() }.getOrNull()
                     if (!jwt.isNullOrBlank()) {
                         chatApi.getHubDetails(hubId, jwt).getOrNull()?.let { details ->
                             val creator = details.creatorId?.trim()?.takeIf { it.isNotEmpty() }
@@ -334,8 +339,7 @@ class HubChatViewModel(
         viewModelScope.launch {
             try {
                 val loc = resolveGatekeeperLocationOrThrow()
-                val jwt =
-                    tokenStorage.requireFreshHubJwt()
+                val jwt = requireFreshHubJwt()
                 val e2ee = ensureHubE2eeV2Session(hubParticipantIds)
                 val clientMessageId = e2ee?.let { MessageCryptoV2.generateClientMessageId() }
                 val outgoingBody =
@@ -418,8 +422,7 @@ class HubChatViewModel(
             _sendError.value = null
             try {
                 val loc = resolveGatekeeperLocationOrThrow()
-                val jwt =
-                    tokenStorage.requireFreshHubJwt()
+                val jwt = requireFreshHubJwt()
                 val e2ee = ensureHubE2eeV2Session(hubParticipantIds)
                 val clientMessageId = e2ee?.let { MessageCryptoV2.generateClientMessageId() }
                 val encryptedV2 =
@@ -525,7 +528,7 @@ class HubChatViewModel(
             _sendError.value = null
             try {
                 val loc = resolveGatekeeperLocationOrThrow()
-                val jwt = tokenStorage.requireFreshHubJwt()
+                val jwt = requireFreshHubJwt()
                 val e2ee = ensureHubE2eeV2Session(hubParticipantIds)
                 val clientMessageId = e2ee?.let { MessageCryptoV2.generateClientMessageId() }
                 val encryptedV2 =
@@ -624,7 +627,7 @@ class HubChatViewModel(
     private suspend fun resolveHubMediaUrl(message: Message): String? {
         val objectPath = message.hubMediaPathOrNull()
         if (objectPath == null) return message.mediaUrlOrNull()?.takeIf { it.isNotBlank() }
-        val jwt = tokenStorage.requireFreshHubJwt()
+        val jwt = requireFreshHubJwt()
         return chatApi
             .resolveHubMediaUrl(hubId = hubId, path = objectPath, authToken = jwt)
             .getOrNull()
@@ -778,8 +781,7 @@ class HubChatViewModel(
         }
         viewModelScope.launch(mutationDispatcher) {
             try {
-                val jwt =
-                    tokenStorage.requireFreshHubJwt()
+                val jwt = requireFreshHubJwt()
                 hubLifecycleGateway
                     .updateHub(
                         hubId = hubId,
@@ -799,8 +801,7 @@ class HubChatViewModel(
     fun leaveHub(onResult: (Boolean) -> Unit = {}) {
         viewModelScope.launch(mutationDispatcher) {
             try {
-                val jwt =
-                    tokenStorage.requireFreshHubJwt()
+                val jwt = requireFreshHubJwt()
                 hubLifecycleGateway
                     .leaveHub(
                         hubId = hubId,
@@ -819,8 +820,7 @@ class HubChatViewModel(
     fun deleteHub(onResult: (Boolean) -> Unit = {}) {
         viewModelScope.launch(mutationDispatcher) {
             try {
-                val jwt =
-                    tokenStorage.requireFreshHubJwt()
+                val jwt = requireFreshHubJwt()
                 hubLifecycleGateway
                     .deleteHub(
                         hubId = hubId,
@@ -840,6 +840,7 @@ class HubChatViewModel(
     override fun onCleared() {
         sessionJob?.cancel()
         sessionJob = null
+        clearHubE2eeV2Session()
         clearHubSecureMediaCache(purgePersistentCache = true)
         val ch = hubChannel
         hubChannel = null

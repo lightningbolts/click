@@ -31,6 +31,7 @@ import androidx.compose.ui.zIndex
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.platform.rememberReduceMotionEnabled // pragma: allowlist secret
 import compose.project.click.click.telemetry.TelemetryBatcher // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapClusterPin // pragma: allowlist secret
@@ -478,13 +479,14 @@ internal fun MarkerSheetTimeStateBadge(timeState: TimeState) {
 
 @Composable
 internal fun PulsingRing() {
+    val reduceMotion = rememberReduceMotionEnabled()
     val infiniteTransition = rememberInfiniteTransition()
     val scale by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = 1.3f,
+        targetValue = 1.12f,
         animationSpec =
             infiniteRepeatable(
-                animation = tween(1500, easing = FastOutSlowInEasing),
+                animation = tween(MotionTokens.Pulse.Scanning, easing = FastOutSlowInEasing),
                 repeatMode = RepeatMode.Restart,
             ),
     )
@@ -493,7 +495,7 @@ internal fun PulsingRing() {
         targetValue = 0f,
         animationSpec =
             infiniteRepeatable(
-                animation = tween(1500, easing = FastOutSlowInEasing),
+                animation = tween(MotionTokens.Pulse.Scanning, easing = FastOutSlowInEasing),
                 repeatMode = RepeatMode.Restart,
             ),
     )
@@ -502,8 +504,8 @@ internal fun PulsingRing() {
         modifier =
             Modifier
                 .size(100.dp)
-                .scale(scale)
-                .border(3.dp, PrimaryBlue.copy(alpha = alpha), CircleShape),
+                .scale(if (reduceMotion) 1f else scale)
+                .border(3.dp, PrimaryBlue.copy(alpha = if (reduceMotion) 0.28f else alpha), CircleShape),
     )
 }
 

@@ -267,7 +267,7 @@ internal fun ChatViewModel.sendMessageImpl() {
                     _messageSendError.value = ChatViewModel.OFFLINE_SEND_NOTICE
                 } else {
                     markOptimisticSendFailed(tempId)
-                    val detail = e.redactedRestMessage().ifBlank { "encryption or network error" }
+                    val detail = e.userFacingChatSendFailure()
                     _messageSendError.value = "Failed to send — $detail"
                     _messageInput.value = content
                     updateMessageInput(content)
@@ -466,7 +466,7 @@ internal fun ChatViewModel.commitStagedMediaToUploadImpl() {
                         markOptimisticSendFailed(tempId)
                         secureImageBytesCache.remove(tempId)
                         _secureChatMediaLoadState.update { m -> m - tempId }
-                        _messageSendError.value = "Failed to send photo — ${e.redactedRestMessage().ifBlank { "error" }}"
+                        _messageSendError.value = "Failed to send photo — ${e.userFacingChatSendFailure()}"
                     }
                 } finally {
                     progressJob?.cancel()
@@ -613,4 +613,15 @@ internal fun ChatViewModel.leaveChatRoomImpl(clearMessageSurface: Boolean = true
     }
     resetVibeCheckState()
     resetIcebreakerState()
+}
+
+internal fun Exception.userFacingChatSendFailure(): String {
+    val raw = redactedRestMessage()
+    val looksLikeV2Gate =
+        this is compose.project.click.click.data.repository.E2eeV2RequiredException ||
+            raw.contains("e2ee_v2_required", ignoreCase = true) ||
+            raw.contains("e2ee v2 required", ignoreCase = true) ||
+            raw.contains("e2ee v2 is required", ignoreCase = true)
+    if (looksLikeV2Gate) return "couldn't encrypt this chat"
+    return raw.ifBlank { "encryption or network error" }
 }

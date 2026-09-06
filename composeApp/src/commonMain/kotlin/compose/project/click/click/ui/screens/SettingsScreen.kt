@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -56,7 +55,6 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
-import compose.project.click.click.data.models.HomeLayoutMode // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
@@ -701,19 +699,6 @@ fun SettingsScreen(
                                         title = "Dark mode",
                                         checked = isDarkMode,
                                         onCheckedChange = { onToggleDarkMode() },
-                                    )
-                                    SettingsDivider()
-                                    val pileMode by AppDataManager.homeLayoutMode.collectAsState()
-                                    SettingsToggleRow(
-                                        icon = Icons.Default.Star,
-                                        title = "Photo pile home",
-                                        subtitle = "Show each home section as a swipeable stack of photos. Turn off for a linear list (better with TalkBack / VoiceOver).",
-                                        checked = pileMode == HomeLayoutMode.PILE,
-                                        onCheckedChange = { enabled ->
-                                            AppDataManager.setHomeLayoutMode(
-                                                if (enabled) HomeLayoutMode.PILE else HomeLayoutMode.LINEAR,
-                                            )
-                                        },
                                     )
                             }
                         }

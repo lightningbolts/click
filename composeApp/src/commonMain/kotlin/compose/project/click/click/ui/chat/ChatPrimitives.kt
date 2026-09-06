@@ -6,11 +6,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -75,7 +73,9 @@ import compose.project.click.click.data.storage.BeaconEngagementPersistence
 import compose.project.click.click.data.storage.BeaconRsvpPersistence
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.events.EventReminderCoordinator
+import compose.project.click.click.platform.rememberReduceMotionEnabled
 import compose.project.click.click.ui.theme.LightBlue
+import compose.project.click.click.ui.theme.MotionTokens
 import kotlinx.coroutines.delay
 
 /** Anchored attachment tray that does not steal IME focus from the composer field. */
@@ -105,17 +105,12 @@ internal fun ChatAttachmentMenuPopup(
 
     if (!keepMounted) return
 
-    val menuSpring =
-        spring<Float>(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMedium,
-        )
     val menuEnter =
-        fadeIn(animationSpec = menuSpring) +
-            scaleIn(initialScale = 0.86f, animationSpec = menuSpring)
+        fadeIn(animationSpec = MotionTokens.contentEnterSpec()) +
+            scaleIn(initialScale = 0.98f, animationSpec = MotionTokens.contentEnterSpec())
     val menuExit =
-        fadeOut(animationSpec = menuSpring) +
-            scaleOut(targetScale = 0.92f, animationSpec = menuSpring)
+        fadeOut(animationSpec = MotionTokens.contentExitSpec()) +
+            scaleOut(targetScale = 0.99f, animationSpec = MotionTokens.contentExitSpec())
 
     Popup(
         alignment = Alignment.BottomStart,
@@ -306,6 +301,7 @@ internal fun ConversationDaySeparator(label: String) {
 /** Three-dot typing indicator with staggered bounce, matching iMessage-style UX. */
 @Composable
 internal fun ChatTypingDots() {
+    val reduceMotion = rememberReduceMotionEnabled()
     val transition = rememberInfiniteTransition(label = "typing_dots")
     val delays = listOf(0, 140, 280)
     Row(
@@ -326,7 +322,7 @@ internal fun ChatTypingDots() {
             Box(
                 modifier =
                     Modifier
-                        .offset(y = chatBubbleTypingDotOffsetY(offsetY))
+                        .offset(y = if (reduceMotion) 0.dp else chatBubbleTypingDotOffsetY(offsetY))
                         .size(chatBubbleScaledDp(8f))
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)),
@@ -341,17 +337,19 @@ internal fun ChatTypingDots() {
  */
 @Composable
 internal fun LoadingSubtitlePlaceholder(modifier: Modifier = Modifier) {
+    val reduceMotion = rememberReduceMotionEnabled()
     val transition = rememberInfiniteTransition(label = "connection_subtitle_shimmer")
     val alpha by transition.animateFloat(
         initialValue = 0.3f,
         targetValue = 0.7f,
         animationSpec =
             infiniteRepeatable(
-                animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+                animation = tween(durationMillis = MotionTokens.Pulse.Shimmer, easing = FastOutSlowInEasing),
                 repeatMode = RepeatMode.Reverse,
             ),
         label = "connection_subtitle_shimmer_alpha",
     )
+    val resolvedAlpha = if (reduceMotion) 0.45f else alpha
 
     Box(
         modifier =
@@ -359,7 +357,7 @@ internal fun LoadingSubtitlePlaceholder(modifier: Modifier = Modifier) {
                 .height(12.dp)
                 .width(120.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)),
+                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = resolvedAlpha)),
     )
 }
 
@@ -380,21 +378,19 @@ internal fun AnimatedVisibilityChatBubble(
 ) {
     // Capture at first composition of this stable key — recycle must not re-animate.
     val playEnter = remember(bubbleStabilityKey) { animateEnter && isSent }
-    if (!playEnter) {
+    val reduceMotion = rememberReduceMotionEnabled()
+    if (!playEnter || reduceMotion) {
         content()
         return
     }
 
     val progress = remember(bubbleStabilityKey) { Animatable(0f) }
+    val enterOffsetPx = with(LocalDensity.current) { MotionTokens.Content.EnterOffset.toPx() }
     LaunchedEffect(bubbleStabilityKey) {
         progress.snapTo(0f)
         progress.animateTo(
             targetValue = 1f,
-            animationSpec =
-                spring(
-                    dampingRatio = 0.78f,
-                    stiffness = 700f,
-                ),
+            animationSpec = MotionTokens.contentEnterSpec(),
         )
     }
     Box(
@@ -402,11 +398,10 @@ internal fun AnimatedVisibilityChatBubble(
             Modifier.graphicsLayer {
                 val t = progress.value
                 alpha = t
-                val scale = 0.92f + 0.08f * t
+                val scale = 0.98f + 0.02f * t
                 scaleX = scale
                 scaleY = scale
-                // Rise from the composer without changing layout size.
-                translationY = (1f - t) * 28f
+                translationY = (1f - t) * enterOffsetPx
             },
     ) {
         content()

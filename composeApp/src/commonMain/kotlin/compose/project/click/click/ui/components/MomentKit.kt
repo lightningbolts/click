@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
@@ -39,17 +41,17 @@ data class WaitingPulseValues(
 
 object StateCardMotion {
     val Enter: EnterTransition =
-        fadeIn(animationSpec = MotionTokens.softEnterSpec()) +
+        fadeIn(animationSpec = MotionTokens.contentEnterSpec()) +
             scaleIn(
-                initialScale = 0.94f,
-                animationSpec = MotionTokens.softEnterSpec(),
+                initialScale = 0.98f,
+                animationSpec = MotionTokens.contentEnterSpec(),
             )
 
     val Exit: ExitTransition =
-        fadeOut(animationSpec = MotionTokens.softExitSpec()) +
+        fadeOut(animationSpec = MotionTokens.contentExitSpec()) +
             scaleOut(
-                targetScale = 0.97f,
-                animationSpec = MotionTokens.softExitSpec(),
+                targetScale = 0.99f,
+                animationSpec = MotionTokens.contentExitSpec(),
             )
 }
 
@@ -59,9 +61,9 @@ object StateCardMotion {
 @Composable
 fun rememberWaitingPulse(
     active: Boolean,
-    durationMillis: Int = 800,
-    scaleMax: Float = 1.15f,
-    alphaMin: Float = 0.88f,
+    durationMillis: Int = MotionTokens.Pulse.Gentle,
+    scaleMax: Float = 1.04f,
+    alphaMin: Float = 0.92f,
 ): WaitingPulseValues {
     val reduceMotion = rememberReduceMotionEnabled()
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -69,9 +71,10 @@ fun rememberWaitingPulse(
         mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
     }
     DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, _ ->
-            isForeground = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
-        }
+        val observer =
+            LifecycleEventObserver { _, _ ->
+                isForeground = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+            }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
@@ -82,19 +85,21 @@ fun rememberWaitingPulse(
     val scale by transition.animateFloat(
         initialValue = 1f,
         targetValue = scaleMax,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(durationMillis, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
         label = "moment_waiting_scale",
     )
     val alpha by transition.animateFloat(
         initialValue = alphaMin,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(durationMillis, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
         label = "moment_waiting_alpha",
     )
     return WaitingPulseValues(scale, alpha)
@@ -120,25 +125,34 @@ fun SuccessBeat(
             PlatformHapticsPolicy.successNotification()
             if (!lighterEcho) PlatformHapticsPolicy.heavyImpact()
         }
-        scale = if (reduceMotion) 1f else if (lighterEcho) 1.025f else 1.045f
-        delay(if (lighterEcho) 90 else 120)
+        scale =
+            if (reduceMotion) {
+                1f
+            } else if (lighterEcho) {
+                1.02f
+            } else {
+                1.04f
+            }
+        delay(if (lighterEcho) MotionTokens.Duration.Instant.toLong() else MotionTokens.Duration.Fast.toLong())
         scale = 1f
     }
 
     val animatedScale by androidx.compose.animation.core.animateFloatAsState(
         targetValue = scale,
-        animationSpec = if (lighterEcho) {
-            spring(dampingRatio = 0.86f, stiffness = 420f)
-        } else {
-            MotionTokens.emphasizedSuccessSpec()
-        },
+        animationSpec =
+            if (lighterEcho) {
+                spring(dampingRatio = 0.86f, stiffness = 420f)
+            } else {
+                MotionTokens.emphasizedSuccessSpec()
+            },
         label = "moment_success_scale",
     )
     Box(
-        modifier = modifier.graphicsLayer {
-            scaleX = animatedScale
-            scaleY = animatedScale
-        },
+        modifier =
+            modifier.graphicsLayer {
+                scaleX = animatedScale
+                scaleY = animatedScale
+            },
     ) {
         content()
     }
@@ -154,8 +168,8 @@ fun StateCardTransition(
     AnimatedVisibility(
         visible = visible,
         modifier = modifier,
-        enter = if (reduceMotion) fadeIn(animationSpec = tween(120)) else StateCardMotion.Enter,
-        exit = if (reduceMotion) fadeOut(animationSpec = tween(90)) else StateCardMotion.Exit,
+        enter = if (reduceMotion) MotionTokens.reduceMotionEnter() else StateCardMotion.Enter,
+        exit = if (reduceMotion) MotionTokens.reduceMotionExit() else StateCardMotion.Exit,
     ) {
         content()
     }

@@ -2,6 +2,8 @@
 
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -53,6 +55,7 @@ import compose.project.click.click.ui.chat.fetchImageBytesFromUrl // pragma: all
 import compose.project.click.click.ui.chat.saveDecryptedAttachmentToDownloads // pragma: allowlist secret
 import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
+import compose.project.click.click.ui.theme.MotionTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.util.profileMediaVaultId // pragma: allowlist secret
 import compose.project.click.click.util.profileMediaVaultLocalPath // pragma: allowlist secret
@@ -786,7 +789,18 @@ fun ProfileBottomSheet(
                         val selected = pagerState.currentPage == index
                         Tab(
                             selected = selected,
-                            onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                            onClick = {
+                                scope.launch {
+                                    pagerState.animateScrollToPage(
+                                        index,
+                                        animationSpec =
+                                            tween(
+                                                MotionTokens.Duration.Standard,
+                                                easing = FastOutSlowInEasing,
+                                            ),
+                                    )
+                                }
+                            },
                             text = {
                                 Text(
                                     tab.label,

@@ -5,8 +5,6 @@
 
 package compose.project.click.click.ui.chat // pragma: allowlist secret
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,7 +30,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,7 +39,6 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
@@ -52,12 +48,11 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.hapticSendMessage
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
-import kotlinx.coroutines.launch
 
 internal fun chatComposerCanSubmit(
     value: String,
@@ -103,8 +98,6 @@ internal fun ChatComposerStrip(
     val sendInteraction = remember { MutableInteractionSource() }
     val fieldInteraction = remember { MutableInteractionSource() }
     val focusRequester = remember { FocusRequester() }
-    val scope = rememberCoroutineScope()
-    val sendPress = remember { Animatable(1f) }
     var submitGuarded by remember { mutableStateOf(false) }
 
     // Release the one-frame double-tap guard once the draft has cleared (optimistic send).
@@ -239,11 +232,7 @@ internal fun ChatComposerStrip(
                     .size(auxButtonSize)
                     .zIndex(4f)
                     .focusProperties { canFocus = false }
-                    .graphicsLayer {
-                        val s = sendPress.value
-                        scaleX = s
-                        scaleY = s
-                    }.chatSpringPressScale(sendInteraction)
+                    .chatSpringPressScale(sendInteraction)
                     .clip(sendShape)
                     .background(if (canSend) PrimaryBlue else MaterialTheme.colorScheme.surfaceVariant)
                     .border(clickBorderWidth(), clickBorderColor(), sendShape)
@@ -253,19 +242,8 @@ internal fun ChatComposerStrip(
                         enabled = canSend,
                         onClick = {
                             submitGuarded = true
-                            PlatformHapticsPolicy.lightImpact()
+                            hapticSendMessage()
                             onSend()
-                            scope.launch {
-                                sendPress.snapTo(0.88f)
-                                sendPress.animateTo(
-                                    targetValue = 1f,
-                                    animationSpec =
-                                        spring(
-                                            dampingRatio = 0.62f,
-                                            stiffness = 900f,
-                                        ),
-                                )
-                            }
                         },
                     ),
             contentAlignment = Alignment.Center,

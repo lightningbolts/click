@@ -2,10 +2,12 @@
 
 package compose.project.click.click.data.repository // pragma: allowlist secret
 
+import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentInsert // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.UserAvailability // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
+import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
@@ -23,6 +25,7 @@ import kotlinx.serialization.json.putJsonArray
  */
 internal suspend fun SupabaseRepository.fetchAvailabilityOverlapsBatchImpl(peerUserIds: List<String>): Map<String, Boolean> {
     if (peerUserIds.isEmpty()) return emptyMap()
+    if (!EnsureFreshAccessToken.sdkAccessIsFresh()) return emptyMap()
     return try {
         @Serializable
         data class OverlapRow(
@@ -175,6 +178,10 @@ internal suspend fun SupabaseRepository.insertAvailabilityIntentImpl(row: Availa
  */
 internal suspend fun SupabaseRepository.fetchActiveAvailabilityIntentsForUserImpl(userId: String): List<AvailabilityIntentRow> {
     if (userId.isBlank()) return emptyList()
+    val access = supabase.auth.currentSessionOrNull()?.accessToken
+    check(EnsureFreshAccessToken.isAccessTokenFresh(access)) {
+        "Availability is unavailable until the session reconnects."
+    }
     return try {
         val rows =
             supabase
@@ -192,7 +199,7 @@ internal suspend fun SupabaseRepository.fetchActiveAvailabilityIntentsForUserImp
             }.sortedByDescending { it.createdOrStartInstant() }
     } catch (e: Exception) {
         println("Error fetching availability_intents (redacted): ${e.redactedRestMessage()}")
-        emptyList()
+        throw e
     }
 }
 

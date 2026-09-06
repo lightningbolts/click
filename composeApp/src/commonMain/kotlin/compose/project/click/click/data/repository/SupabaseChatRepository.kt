@@ -218,6 +218,7 @@ class SupabaseChatRepository(
             }
         }
         ChatSessionCaches.clearAll()
+        clearE2eeV2SessionCache()
     }
 
     @Serializable

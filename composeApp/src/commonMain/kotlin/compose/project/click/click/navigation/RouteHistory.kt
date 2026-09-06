@@ -1,7 +1,9 @@
 package compose.project.click.click.navigation
 
 /** Manual route stack used by the main shell's forward and back navigation. */
-internal class RouteHistory(initialRoute: String) {
+internal class RouteHistory(
+    initialRoute: String,
+) {
     private val routes = mutableListOf(initialRoute)
 
     val currentRoute: String

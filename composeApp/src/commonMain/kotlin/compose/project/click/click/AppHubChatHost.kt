@@ -11,11 +11,9 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -33,8 +31,10 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
-import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
@@ -109,6 +109,20 @@ internal fun AppHubChatHost(
                 else -> ""
             }
         if (activeHubArgs != null && hubUserId.isNotEmpty()) {
+            val hubOverlayViewModelOwner =
+                remember(activeHubArgs.realtimeChannel, hubUserId) {
+                    object : ViewModelStoreOwner {
+                        override val viewModelStore = ViewModelStore()
+                    }
+                }
+            DisposableEffect(hubOverlayViewModelOwner) {
+                onDispose {
+                    // Hub chat is an overlay session, not an app-scoped destination.
+                    // Clearing its store invokes HubChatViewModel.onCleared(), which
+                    // tears down realtime presence and zeroes overlay-owned state.
+                    hubOverlayViewModelOwner.viewModelStore.clear()
+                }
+            }
             val hubKeyboardController = LocalSoftwareKeyboardController.current
             val hubFocusManager = LocalFocusManager.current
             InteractiveSwipeBackContainer(
@@ -126,20 +140,22 @@ internal fun AppHubChatHost(
                 rightToLeftPeek = hubChatRightToLeftPeek,
                 previousContent = {},
                 currentContent = {
-                    HubChatScreen(
-                        args = activeHubArgs,
-                        currentUserId = hubUserId,
-                        targetMessageId = pendingHubTargetMessageId,
-                        onNavigateBack = {
-                            closeHubChat(NavigationTransitionMode.Tap)
-                        },
-                        resolveHubGatekeeperLocation = { resolveHubGatekeeperLocationForChat() },
-                        integrateTimestampPeekWithSwipeBackContainer = true,
-                        onRegisterSwipeBackRightToLeftPeek = {
-                            hubChatRightToLeftPeek = it
-                        },
-                        parentInteractiveBackSwipePx = hubSwipeDragPx,
-                    )
+                    CompositionLocalProvider(LocalViewModelStoreOwner provides hubOverlayViewModelOwner) {
+                        HubChatScreen(
+                            args = activeHubArgs,
+                            currentUserId = hubUserId,
+                            targetMessageId = pendingHubTargetMessageId,
+                            onNavigateBack = {
+                                closeHubChat(NavigationTransitionMode.Tap)
+                            },
+                            resolveHubGatekeeperLocation = { resolveHubGatekeeperLocationForChat() },
+                            integrateTimestampPeekWithSwipeBackContainer = true,
+                            onRegisterSwipeBackRightToLeftPeek = {
+                                hubChatRightToLeftPeek = it
+                            },
+                            parentInteractiveBackSwipePx = hubSwipeDragPx,
+                        )
+                    }
                 },
             )
         }
@@ -147,36 +163,36 @@ internal fun AppHubChatHost(
 
     androidx.compose.animation.AnimatedVisibility(
         visible = hubVerifyInProgress,
-        enter =
-            androidx.compose.animation.fadeIn(
-                animationSpec = spring(stiffness = Spring.StiffnessLow),
-            ),
-        exit =
-            androidx.compose.animation.fadeOut(
-                animationSpec = spring(stiffness = Spring.StiffnessMedium),
-            ),
+        enter = if (reduceMotion) MotionTokens.reduceMotionEnter() else MotionTokens.contentFadeIn(),
+        exit = if (reduceMotion) MotionTokens.reduceMotionExit() else MotionTokens.contentFadeOut(),
     ) {
-        val hubLoadTransition = rememberInfiniteTransition(label = "hub_verify_pulse")
-        val hubPulseAlpha by hubLoadTransition.animateFloat(
-            initialValue = 0.6f,
-            targetValue = 1f,
-            animationSpec =
-                infiniteRepeatable(
-                    animation = tween(durationMillis = 1100, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Reverse,
-                ),
-            label = "hub_verify_alpha",
-        )
-        val hubPulseMix by hubLoadTransition.animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec =
-                infiniteRepeatable(
-                    animation = tween(durationMillis = 1400, easing = LinearOutSlowInEasing),
-                    repeatMode = RepeatMode.Reverse,
-                ),
-            label = "hub_verify_mix",
-        )
+        val (hubPulseAlpha, hubPulseMix) =
+            if (reduceMotion) {
+                1f to 0.5f
+            } else {
+                val hubLoadTransition = rememberInfiniteTransition(label = "hub_verify_pulse")
+                val alpha by hubLoadTransition.animateFloat(
+                    initialValue = 0.6f,
+                    targetValue = 1f,
+                    animationSpec =
+                        infiniteRepeatable(
+                            animation = tween(durationMillis = MotionTokens.Pulse.Gentle, easing = FastOutSlowInEasing),
+                            repeatMode = RepeatMode.Reverse,
+                        ),
+                    label = "hub_verify_alpha",
+                )
+                val mix by hubLoadTransition.animateFloat(
+                    initialValue = 0f,
+                    targetValue = 1f,
+                    animationSpec =
+                        infiniteRepeatable(
+                            animation = tween(durationMillis = MotionTokens.Pulse.Gentle, easing = LinearOutSlowInEasing),
+                            repeatMode = RepeatMode.Reverse,
+                        ),
+                    label = "hub_verify_mix",
+                )
+                alpha to mix
+            }
         val hubAccentColor =
             androidx.compose.ui.graphics
                 .lerp(PrimaryBlue, LightBlue, hubPulseMix)
@@ -186,7 +202,7 @@ internal fun AppHubChatHost(
             ChatAmbientMeshBackground(
                 connection = null,
                 isHubNeutral = true,
-                animateMesh = true,
+                animateMesh = !reduceMotion,
                 modifier = Modifier.fillMaxSize(),
             )
             Box(

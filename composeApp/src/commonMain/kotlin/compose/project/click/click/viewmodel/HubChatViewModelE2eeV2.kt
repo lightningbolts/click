@@ -27,12 +27,25 @@ internal data class HubE2eeV2Session(
 
 internal const val HUB_E2EE_V2_UNAVAILABLE_MESSAGE = "Encrypted hub message unavailable"
 
+internal fun HubChatViewModel.clearHubE2eeV2Session() {
+    val session = hubE2eeV2Session
+    hubE2eeV2Session = null
+    session
+        ?.epochKeys
+        ?.values
+        ?.distinct()
+        ?.forEach { it.fill(0) }
+}
+
+private fun HubChatViewModel.replaceHubE2eeV2Session(session: HubE2eeV2Session) {
+    clearHubE2eeV2Session()
+    hubE2eeV2Session = session
+}
+
 /** Resolve, initialize, or rotate the hub epoch without ever sending a legacy write after upgrade. */
 internal suspend fun HubChatViewModel.ensureHubE2eeV2Session(participantUserIds: Set<String>): HubE2eeV2Session? {
-    val token = tokenStorage.requireFreshHubJwt()
-    val identity =
-        runCatching { MessageCryptoV2.loadOrCreateDeviceIdentity() }
-            .getOrElse { throw IllegalStateException("E2EE v2 device identity is unavailable") }
+    val token = requireFreshHubJwt()
+    val identity = MessageCryptoV2.loadOrCreateDeviceIdentity()
     // Registration is idempotent from the caller's perspective: an existing identity returns 409.
     chatApi.registerE2eeV2Device(identity.info.deviceId, identity.info.publicKeySpkiBase64, token)
     var devices = chatApi.discoverHubE2eeV2Devices(hubId, token).getOrElse { throw it }
@@ -105,7 +118,7 @@ internal suspend fun HubChatViewModel.ensureHubE2eeV2Session(participantUserIds:
         senderDeviceId = identity.info.deviceId,
         identity = identity,
         membershipFingerprint = state.membershipFingerprint ?: membershipFingerprintForHubDevices(devices),
-    ).also { hubE2eeV2Session = it }
+    ).also { replaceHubE2eeV2Session(it) }
 }
 
 private suspend fun HubChatViewModel.createHubE2eeV2EpochWithFreshKey(

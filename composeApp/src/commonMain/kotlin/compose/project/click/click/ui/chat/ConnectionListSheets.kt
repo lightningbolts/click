@@ -5,9 +5,7 @@
 
 package compose.project.click.click.ui.chat // pragma: allowlist secret
 
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -77,11 +75,13 @@ import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: a
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProvideSheetSwipeDismiss // pragma: allowlist secret
+import compose.project.click.click.ui.components.platformPressScale // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberSheetScrollAtTop // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetImePadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetPageBackground // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.MotionTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 
 private val PickerSelectionPurple = Color(0xFF9D4EDD)
@@ -495,11 +495,7 @@ internal fun LocationGapNudge(
     val isPressed by interactionSource.collectIsPressedAsState()
     val cardBorderAlpha by animateFloatAsState(
         targetValue = if (isPressed) GlassSheetTokens.GlassBorderPressed().alpha else GlassSheetTokens.GlassBorder().alpha,
-        animationSpec =
-            spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessMedium,
-            ),
+        animationSpec = MotionTokens.fadeSpec(),
         label = "location_nudge_border",
     )
 
@@ -513,6 +509,7 @@ internal fun LocationGapNudge(
                     color = GlassSheetTokens.GlassBorder().copy(alpha = cardBorderAlpha),
                     shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
                 ).background(GlassSheetTokens.GlassSurface())
+                .platformPressScale(interactionSource)
                 .clickable(
                     interactionSource = interactionSource,
                     indication = null,

@@ -152,7 +152,7 @@ internal fun LocationGroupCard(
 ) {
     val chevronAngle by animateFloatAsState(
         targetValue = if (isExpanded) 90f else 0f,
-        animationSpec = tween(durationMillis = 250),
+        animationSpec = tween(durationMillis = MotionTokens.Duration.Deliberate),
         label = "chevron",
     )
 
@@ -222,8 +222,8 @@ internal fun LocationGroupCard(
             // Expanded individual connections
             AnimatedVisibility(
                 visible = isExpanded,
-                enter = expandVertically(animationSpec = tween(250)) + fadeIn(tween(200)),
-                exit = shrinkVertically(animationSpec = tween(200)) + fadeOut(tween(150)),
+                enter = expandVertically(animationSpec = MotionTokens.expandSpec()) + fadeIn(MotionTokens.contentEnterSpec()),
+                exit = shrinkVertically(animationSpec = MotionTokens.expandSpec()) + fadeOut(MotionTokens.contentExitSpec()),
             ) {
                 Column(
                     modifier = Modifier.padding(top = 12.dp),

@@ -21,6 +21,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 /**
  * Full-bleed photo host that consumes taps (so they do not dismiss a parent scrim)
  * and supports pinch-to-zoom / pan / double-tap zoom.
+ *
+ * Identity transform skips [graphicsLayer] — applying a layer to [androidx.compose.foundation.Image]
+ * inside an iOS Compose [androidx.compose.ui.window.Dialog] can drop the bitmap (blank black
+ * lightbox) until the user pinches.
  */
 @Composable
 fun ClickZoomableMedia(
@@ -31,6 +35,7 @@ fun ClickZoomableMedia(
 ) {
     var scale by remember { mutableFloatStateOf(minScale) }
     var offset by remember { mutableStateOf(Offset.Zero) }
+    val zoomed = scale > minScale + 0.01f || offset != Offset.Zero
 
     Box(
         modifier =
@@ -59,12 +64,18 @@ fun ClickZoomableMedia(
         content(
             Modifier
                 .fillMaxSize()
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                    translationX = offset.x
-                    translationY = offset.y
-                },
+                .then(
+                    if (zoomed) {
+                        Modifier.graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                            translationX = offset.x
+                            translationY = offset.y
+                        }
+                    } else {
+                        Modifier
+                    },
+                ),
         )
     }
 }

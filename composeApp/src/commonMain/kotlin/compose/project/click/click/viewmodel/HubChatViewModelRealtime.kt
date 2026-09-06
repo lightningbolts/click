@@ -5,7 +5,6 @@ import compose.project.click.click.crypto.MessageCryptoV2 // pragma: allowlist s
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.api.ChatApiClient // pragma: allowlist secret
-import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageDeliveryState // pragma: allowlist secret
@@ -376,7 +375,7 @@ internal fun HubChatViewModel.clearHubSecureMediaCache(purgePersistentCache: Boo
 internal fun HubChatViewModel.clearLocalHubState(clearDiskCache: Boolean = false) {
     sessionJob?.cancel()
     sessionJob = null
-    hubE2eeV2Session = null
+    clearHubE2eeV2Session()
     _messages.value = emptyList()
     _draft.value = ""
     _occupantCount.value = 1
@@ -393,8 +392,7 @@ internal suspend fun HubChatViewModel.prepareHubRealtimeAuth(forceRefresh: Boole
     if (supabase.auth.currentSessionOrNull() == null) {
         runCatching { SupabaseConfig.importStoredSessionIfSdkEmpty(tokenStorage) }
     }
-    runCatching { EnsureFreshAccessToken.get(tokenStorage, forceRefresh = forceRefresh) }
-    tokenStorage.requireFreshHubJwt(forceRefresh = forceRefresh)
+    requireFreshHubJwt(forceRefresh = forceRefresh)
     rebindRealtimeSocket()
 }
 
@@ -412,14 +410,14 @@ internal fun ChatApiClient.HubMessageApiDto.toHubMessageRow(): HubMessageRow =
 internal suspend fun HubChatViewModel.loadInitialMessages() {
     withContext(Dispatchers.Default) {
         try {
-            val token = tokenStorage.requireFreshHubJwt()
+            val token = requireFreshHubJwt()
             val thread = chatApi.fetchHubThread(hubId, token)
             thread.fold(
                 onSuccess = { snapshot ->
                     hubParticipantIds = snapshot.participantIds.toSet()
                     runCatching { ensureHubE2eeV2Session(hubParticipantIds) }
                         .onFailure { error ->
-                            hubE2eeV2Session = null
+                            clearHubE2eeV2Session()
                             println("HubChatViewModel: E2EE v2 session unavailable: ${error.redactedRestMessage()}")
                         }
                     if (snapshot.occupantCount > 0) {
@@ -466,7 +464,7 @@ internal suspend fun HubChatViewModel.loadInitialMessages() {
             hubParticipantIds = rows.map { it.userId }.toSet() + currentUserId
             runCatching { ensureHubE2eeV2Session(hubParticipantIds) }
                 .onFailure { error ->
-                    hubE2eeV2Session = null
+                    clearHubE2eeV2Session()
                     println("HubChatViewModel: fallback E2EE v2 session unavailable: ${error.redactedRestMessage()}")
                 }
             mergeMessages(rows)
@@ -481,7 +479,7 @@ internal suspend fun HubChatViewModel.loadInitialMessages() {
 internal suspend fun HubChatViewModel.loadMessagesAround(messageId: String) {
     withContext(Dispatchers.Default) {
         try {
-            val token = runCatching { tokenStorage.requireFreshHubJwt() }.getOrNull()
+            val token = runCatching { requireFreshHubJwt() }.getOrNull()
             if (!token.isNullOrBlank()) {
                 val thread = chatApi.fetchHubThread(hubId, token, aroundMessageId = messageId)
                 thread.getOrNull()?.let { snapshot ->

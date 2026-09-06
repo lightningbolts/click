@@ -12,7 +12,6 @@ import kotlin.test.assertNotNull
  * Full [ChatViewModel] integration tests live in `androidUnitTest` with Robolectric.
  */
 class ChatViewModelStateTest {
-
     @Test
     fun chatListState_error_exposesMessage() {
         val state = ChatListState.Error("offline")
@@ -29,10 +28,11 @@ class ChatViewModelStateTest {
     fun chatTimelineCache_retainsTimelineAcrossSimulatedNavigation() {
         val cache = ChatTimelineCache()
         val connectionId = "conn-alpha"
-        val timeline = listOf(
-            Message(id = "m1", user_id = "u1", content = "older", timeCreated = 50L),
-            Message(id = "m2", user_id = "u2", content = "latest", timeCreated = 100L),
-        )
+        val timeline =
+            listOf(
+                Message(id = "m1", user_id = "u1", content = "older", timeCreated = 50L),
+                Message(id = "m2", user_id = "u2", content = "latest", timeCreated = 100L),
+            )
         cache.store(connectionId, timeline)
 
         // Simulate leaving the chat (cache is not cleared on back-navigation).
@@ -59,5 +59,14 @@ class ChatViewModelStateTest {
         assertEquals(message, repo.peekCachedMessageTimeline("conn")?.single())
         repo.mergeCachedTimelineMessage("conn", message.copy(content = "updated"))
         assertEquals("updated", repo.peekCachedMessageTimeline("conn")?.single()?.content)
+    }
+
+    @Test
+    fun sendFailure_doesNotSurfaceRawE2eeV2Required() {
+        val detail =
+            compose.project.click.click.data.repository
+                .E2eeV2RequiredException()
+                .userFacingChatSendFailure()
+        assertEquals("couldn't encrypt this chat", detail)
     }
 }

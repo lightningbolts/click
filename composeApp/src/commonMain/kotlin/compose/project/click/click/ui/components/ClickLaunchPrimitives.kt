@@ -43,6 +43,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
+import compose.project.click.click.ui.theme.MotionTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
@@ -227,12 +228,20 @@ fun ClickActionIcon(
             selected -> PrimaryBlue
             else -> MaterialTheme.colorScheme.onSurfaceVariant
         }
+    val interactionSource = remember { MutableInteractionSource() }
     Box(
         modifier =
             modifier
                 .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                .platformPressScale(interactionSource, MotionTokens.PressScale.IconPressedScale)
                 .clip(RoundedCornerShape(LocalPlatformStyle.current.compactCardCornerRadius))
-                .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = ripple(bounded = true),
+                    enabled = enabled,
+                    role = Role.Button,
+                    onClick = onClick,
+                ),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
@@ -274,10 +283,12 @@ fun ClickChip(
     val showBorder = enabled && !selected
     val hPad = if (compact) 10.dp else 12.dp
     val vPad = if (compact) 6.dp else 8.dp
+    val interactionSource = remember { MutableInteractionSource() }
     Row(
         modifier =
             modifier
                 .defaultMinSize(minHeight = if (compact) 36.dp else 40.dp)
+                .platformPressScale(interactionSource, MotionTokens.PressScale.ButtonPressedScale)
                 .clip(shape)
                 .background(background)
                 .then(
@@ -286,8 +297,12 @@ fun ClickChip(
                     } else {
                         Modifier
                     },
-                ).clickable(enabled = enabled, onClick = onClick)
-                .padding(horizontal = hPad, vertical = vPad),
+                ).clickable(
+                    interactionSource = interactionSource,
+                    indication = ripple(bounded = true),
+                    enabled = enabled,
+                    onClick = onClick,
+                ).padding(horizontal = hPad, vertical = vPad),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -325,14 +340,22 @@ fun ClickContentCard(
 ) {
     val radius = LocalPlatformStyle.current.cardCornerRadius
     val shape = RoundedCornerShape(radius)
+    val interactionSource = remember { MutableInteractionSource() }
     val cardModifier =
-        modifier.then(
-            if (showBorder) {
-                Modifier.border(clickBorderWidth(), clickBorderColor(), shape)
-            } else {
-                Modifier
-            },
-        )
+        modifier
+            .then(
+                if (onClick != null) {
+                    Modifier.platformPressScale(interactionSource)
+                } else {
+                    Modifier
+                },
+            ).then(
+                if (showBorder) {
+                    Modifier.border(clickBorderWidth(), clickBorderColor(), shape)
+                } else {
+                    Modifier
+                },
+            )
     if (onClick != null) {
         Surface(
             modifier = cardModifier,
@@ -341,6 +364,7 @@ fun ClickContentCard(
             shadowElevation = 0.dp,
             tonalElevation = 0.dp,
             onClick = onClick,
+            interactionSource = interactionSource,
         ) {
             Column(
                 modifier = Modifier.padding(contentPadding),

@@ -7,11 +7,9 @@ package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.core.*
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -21,7 +19,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
-import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.calendar.AvailabilityOverlapGap // pragma: allowlist secret
 import compose.project.click.click.calendar.lockAvailabilityIntentForGap // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
@@ -30,6 +27,10 @@ import compose.project.click.click.data.models.toConnectionPayloadWeatherJson //
 import compose.project.click.click.data.models.toUserProfile // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.hapticSmallCommit
+import compose.project.click.click.hapticTapConnected
+import compose.project.click.click.hapticTapDetected
+import compose.project.click.click.platform.rememberReduceMotionEnabled // pragma: allowlist secret
 import compose.project.click.click.proximity.MockProximityManager // pragma: allowlist secret
 import compose.project.click.click.proximity.ProximityManager // pragma: allowlist secret
 import compose.project.click.click.proximity.isSimulatorOrEmulatorRuntime // pragma: allowlist secret
@@ -152,12 +153,12 @@ fun NfcScreen(
         when (connectionState) {
             is ConnectionState.ProximityHandshaking,
             is ConnectionState.ProximityFetchingLocation,
-            -> PlatformHapticsPolicy.lightImpact()
+            -> hapticTapDetected()
             is ConnectionState.PendingConfirmation,
             is ConnectionState.ProximityResolving,
-            -> PlatformHapticsPolicy.heavyImpact()
-            is ConnectionState.Success -> PlatformHapticsPolicy.successNotification()
-            is ConnectionState.Error -> PlatformHapticsPolicy.heavyImpact()
+            -> hapticTapDetected()
+            is ConnectionState.Success -> hapticTapConnected()
+            is ConnectionState.Error -> Unit
             else -> Unit
         }
     }
@@ -209,22 +210,29 @@ fun NfcScreen(
                             .padding(horizontal = ClickScreenSpacing.Horizontal),
                     contentAlignment = Alignment.Center,
                 ) {
+                    val reduceMotion = rememberReduceMotionEnabled()
                     AnimatedContent(
                         targetState = connectionState,
                         transitionSpec = {
-                            (
-                                fadeIn(spring(dampingRatio = 0.82f, stiffness = 420f)) +
-                                    scaleIn(
-                                        initialScale = 0.96f,
-                                        animationSpec = spring(dampingRatio = 0.78f, stiffness = 360f),
-                                    )
-                            ).togetherWith(
-                                fadeOut(spring(dampingRatio = 0.9f, stiffness = 520f)) +
-                                    scaleOut(
-                                        targetScale = 0.98f,
-                                        animationSpec = spring(dampingRatio = 0.9f, stiffness = 520f),
-                                    ),
-                            ).using(SizeTransform(clip = false))
+                            val enteringSuccess = targetState is ConnectionState.Success
+                            val enteringError = targetState is ConnectionState.Error
+                            when {
+                                reduceMotion ->
+                                    MotionTokens.reduceMotionEnter() togetherWith MotionTokens.reduceMotionExit()
+                                enteringSuccess ->
+                                    (
+                                        fadeIn(animationSpec = MotionTokens.contentEnterSpec()) +
+                                            scaleIn(
+                                                initialScale = 0.96f,
+                                                animationSpec = MotionTokens.emphasizedSuccessSpec(),
+                                            )
+                                    ).togetherWith(fadeOut(animationSpec = MotionTokens.contentExitSpec()))
+                                enteringError ->
+                                    fadeIn(animationSpec = MotionTokens.contentEnterSpec())
+                                        .togetherWith(fadeOut(animationSpec = MotionTokens.destructiveSpec()))
+                                else ->
+                                    MotionTokens.contentFadeIn() togetherWith MotionTokens.contentFadeOut()
+                            }.using(SizeTransform(clip = false))
                         },
                         label = "tap_connect_state",
                     ) { state ->
@@ -490,13 +498,12 @@ fun NfcScreen(
                                     }
                                 calendarLockInProgress = false
                                 if (ok) {
-                                    PlatformHapticsPolicy.successNotification()
+                                    hapticSmallCommit()
                                 }
                             }
                         },
                         onConfirm = { contextTag, noiseOptIn, selectedIds ->
                             if (tagging.isNewConnection) {
-                                PlatformHapticsPolicy.successNotification()
                                 onProximityFinalizeStart()
                             }
                             scope.launch {

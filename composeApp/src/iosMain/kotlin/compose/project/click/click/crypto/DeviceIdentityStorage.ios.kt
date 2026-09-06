@@ -1,17 +1,27 @@
 package compose.project.click.click.crypto
 
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.MemScope
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc
+import kotlinx.cinterop.allocArrayOf
+import kotlinx.cinterop.convert
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
+import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.usePinned
 import kotlinx.cinterop.value
+import platform.CoreFoundation.CFDictionaryCreate
 import platform.CoreFoundation.CFDictionaryRef
+import platform.CoreFoundation.CFStringRef
+import platform.CoreFoundation.CFTypeRef
 import platform.CoreFoundation.CFTypeRefVar
+import platform.CoreFoundation.kCFAllocatorDefault
+import platform.CoreFoundation.kCFBooleanTrue
 import platform.Foundation.CFBridgingRelease
 import platform.Foundation.CFBridgingRetain
 import platform.Foundation.NSData
+import platform.Foundation.NSLock
 import platform.Foundation.NSMutableData
 import platform.Security.SecItemAdd
 import platform.Security.SecItemCopyMatching
@@ -44,11 +54,29 @@ actual class DeviceIdentity internal constructor(
 
 @OptIn(ExperimentalForeignApi::class)
 actual object DeviceIdentityStorage {
+    private val identityLock = NSLock()
+    private var cachedPersistentIdentity: DeviceIdentity? = null
+
     actual fun loadOrCreate(): DeviceIdentity {
-        readPrivateKey()?.let { return identityFromPrivate(it, persistent = true) }
-        val identity = identityFromPrivate(X25519.generatePrivateKey(), persistent = true)
-        check(writePrivateKey(identity.privateKey)) { "Unable to persist iOS E2EE v2 identity" }
-        return identity
+        identityLock.lock()
+        try {
+            cachedPersistentIdentity?.let { return it }
+            val stored = readPrivateKey()
+            if (stored != null) {
+                val identity = identityFromPrivate(stored, persistent = true)
+                cachedPersistentIdentity = identity
+                return identity
+            }
+            val identity = identityFromPrivate(X25519.generatePrivateKey(), persistent = true)
+            if (!writePrivateKey(identity.privateKey)) {
+                identity.privateKey.fill(0)
+                error("Unable to persist the E2EE device identity")
+            }
+            cachedPersistentIdentity = identity
+            return identity
+        } finally {
+            identityLock.unlock()
+        }
     }
 
     actual fun generateEphemeral(): DeviceIdentity = identityFromPrivate(X25519.generatePrivateKey(), persistent = false)
@@ -83,58 +111,101 @@ actual object DeviceIdentityStorage {
         )
     }
 
+    /**
+     * Same CFDictionaryCreate path as [compose.project.click.click.data.storage.IosTokenStorage].
+     * Kotlin Map → CFBridgingRetain yields errSecParam (-50) and used to abort send.
+     */
     private fun readPrivateKey(): ByteArray? =
         memScoped {
-            val query =
-                mapOf<Any?, Any?>(
-                    kSecClass to kSecClassGenericPassword,
-                    kSecAttrService to SERVICE,
-                    kSecAttrAccount to ACCOUNT,
-                    kSecReturnData to true,
-                    kSecMatchLimit to kSecMatchLimitOne,
-                )
-            val cfQuery = CFBridgingRetain(query) as CFDictionaryRef
-            val result = alloc<CFTypeRefVar>()
-            val status = SecItemCopyMatching(cfQuery, result.ptr)
-            CFBridgingRelease(cfQuery)
-            if (status != errSecSuccess) return@memScoped null
-            (CFBridgingRelease(result.value) as? NSData)?.toByteArray()?.takeIf { it.size == 32 }
+            val cfAccount = CFBridgingRetain(ACCOUNT)
+            val cfService = CFBridgingRetain(SERVICE)
+            try {
+                val query =
+                    cfDictionaryOf(
+                        mapOf(
+                            kSecClass to kSecClassGenericPassword,
+                            kSecAttrService to cfService,
+                            kSecAttrAccount to cfAccount,
+                            kSecReturnData to kCFBooleanTrue,
+                            kSecMatchLimit to kSecMatchLimitOne,
+                        ),
+                    )
+                val result = alloc<CFTypeRefVar>()
+                val status = SecItemCopyMatching(query, result.ptr)
+                CFBridgingRelease(query)
+                when (status) {
+                    errSecItemNotFound -> null
+                    errSecSuccess ->
+                        (CFBridgingRelease(result.value) as? NSData)
+                            ?.toByteArray()
+                            ?.takeIf { it.size == 32 }
+                            ?: error("Stored E2EE device identity is invalid")
+                    else -> error("Unable to read the E2EE device identity (status=$status)")
+                }
+            } finally {
+                CFBridgingRelease(cfAccount)
+                CFBridgingRelease(cfService)
+            }
         }
 
     private fun writePrivateKey(privateKey: ByteArray): Boolean =
         memScoped {
             val data = privateKey.toNSData()
-            val base =
-                mapOf<Any?, Any?>(
-                    kSecClass to kSecClassGenericPassword,
-                    kSecAttrService to SERVICE,
-                    kSecAttrAccount to ACCOUNT,
-                )
-            val add =
-                base +
-                    mapOf<Any?, Any?>(
-                        kSecValueData to data,
-                        kSecAttrAccessible to kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            val cfAccount = CFBridgingRetain(ACCOUNT)
+            val cfService = CFBridgingRetain(SERVICE)
+            val cfValue = CFBridgingRetain(data)
+            try {
+                val basePairs =
+                    mapOf<CFStringRef?, CFTypeRef?>(
+                        kSecClass to kSecClassGenericPassword,
+                        kSecAttrService to cfService,
+                        kSecAttrAccount to cfAccount,
                     )
-            val cfBase = CFBridgingRetain(base) as CFDictionaryRef
-            val cfAdd = CFBridgingRetain(add) as CFDictionaryRef
-            var status =
-                SecItemUpdate(
-                    cfBase,
-                    CFBridgingRetain(mapOf<Any?, Any?>(kSecValueData to data)) as CFDictionaryRef,
-                )
-            if (status == errSecItemNotFound) status = SecItemAdd(cfAdd, null)
-            if (status == errSecDuplicateItem) {
-                status =
-                    SecItemUpdate(
-                        cfBase,
-                        CFBridgingRetain(mapOf<Any?, Any?>(kSecValueData to data)) as CFDictionaryRef,
-                    )
+                val updatePairs = mapOf<CFStringRef?, CFTypeRef?>(kSecValueData to cfValue)
+                val addPairs =
+                    basePairs +
+                        mapOf(
+                            kSecValueData to cfValue,
+                            kSecAttrAccessible to kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+                        )
+                val cfBase = cfDictionaryOf(basePairs)
+                val cfUpdate = cfDictionaryOf(updatePairs)
+                var status = SecItemUpdate(cfBase, cfUpdate)
+                CFBridgingRelease(cfUpdate)
+                if (status == errSecItemNotFound) {
+                    val cfAdd = cfDictionaryOf(addPairs)
+                    status = SecItemAdd(cfAdd, null)
+                    CFBridgingRelease(cfAdd)
+                    if (status == errSecDuplicateItem) {
+                        val cfRetry = cfDictionaryOf(updatePairs)
+                        status = SecItemUpdate(cfBase, cfRetry)
+                        CFBridgingRelease(cfRetry)
+                    }
+                }
+                CFBridgingRelease(cfBase)
+                if (status != errSecSuccess) {
+                    println("DeviceIdentityStorage: Keychain write status=$status")
+                }
+                status == errSecSuccess
+            } finally {
+                CFBridgingRelease(cfAccount)
+                CFBridgingRelease(cfService)
+                CFBridgingRelease(cfValue)
             }
-            CFBridgingRelease(cfBase)
-            CFBridgingRelease(cfAdd)
-            status == errSecSuccess
         }
+
+    private fun MemScope.cfDictionaryOf(map: Map<CFStringRef?, CFTypeRef?>): CFDictionaryRef? {
+        val keys = allocArrayOf(*map.keys.toTypedArray())
+        val values = allocArrayOf(*map.values.toTypedArray())
+        return CFDictionaryCreate(
+            kCFAllocatorDefault,
+            keys.reinterpret(),
+            values.reinterpret(),
+            map.size.convert(),
+            null,
+            null,
+        )
+    }
 
     private fun NSData.toByteArray(): ByteArray {
         val output = ByteArray(length.toInt())

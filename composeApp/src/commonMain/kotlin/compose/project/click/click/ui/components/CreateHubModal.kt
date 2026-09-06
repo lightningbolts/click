@@ -4,9 +4,7 @@
 
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -41,11 +39,12 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.data.api.ApiClient
 import compose.project.click.click.data.api.HubCreateLocationBody
 import compose.project.click.click.data.api.HubCreatePostBody
+import compose.project.click.click.hapticTapConnected
 import compose.project.click.click.ui.components.sheetBodyScroll
+import compose.project.click.click.ui.theme.MotionTokens
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.utils.HUB_GATEKEEPER_HIGH_ACCURACY_TIMEOUT_MS
 import compose.project.click.click.utils.LocationService
@@ -246,12 +245,8 @@ private fun CreateHubSheetBody(
     }
 
     val springOk by animateFloatAsState(
-        targetValue = if (submitting) 0.94f else 1f,
-        animationSpec =
-            spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessMediumLow,
-            ),
+        targetValue = if (submitting) MotionTokens.PressScale.ButtonPressedScale else 1f,
+        animationSpec = MotionTokens.pressScaleSpec(),
         label = "create_hub_cta",
     )
 
@@ -394,8 +389,7 @@ private fun CreateHubSheetBody(
                                 onSuccess = { dto ->
                                     val hid = dto.hubId.trim()
                                     if (hid.isNotEmpty()) {
-                                        PlatformHapticsPolicy.heavyImpact()
-                                        PlatformHapticsPolicy.successNotification()
+                                        hapticTapConnected()
                                         onDismiss()
                                         onHubCreated(hid)
                                     } else {
