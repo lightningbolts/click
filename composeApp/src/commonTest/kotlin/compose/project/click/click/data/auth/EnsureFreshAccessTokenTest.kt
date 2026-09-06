@@ -41,6 +41,12 @@ class EnsureFreshAccessTokenTest {
     }
 
     @Test
+    fun sdkAccessIsFresh_rejectsBlank() {
+        assertFalse(EnsureFreshAccessToken.isAccessTokenFresh(null))
+        assertFalse(EnsureFreshAccessToken.isAccessTokenFresh(""))
+    }
+
+    @Test
     fun refreshSkew_isPositive() {
         assertTrue(EnsureFreshAccessToken.REFRESH_SKEW_MS > 0L)
         assertNotNull(EnsureFreshAccessToken.REFRESH_SKEW_MS)
@@ -57,7 +63,90 @@ class EnsureFreshAccessTokenTest {
                         jwt = jwt,
                         expiresAtEpochMs = 4_102_444_800_000L,
                     )
-                assertEquals(jwt, EnsureFreshAccessToken.get(storage))
+                assertEquals(
+                    jwt,
+                    EnsureFreshAccessToken.get(
+                        tokenStorage = storage,
+                        sdkSessionProvider = { null },
+                    ),
+                )
+            } finally {
+                SessionResumeGate.resetForTests()
+            }
+        }
+
+    @Test
+    fun get_prefersFreshLiveSdkTokenOverFreshStoredToken() =
+        runTest {
+            SessionResumeGate.markCompleted()
+            try {
+                val storedJwt = "hdr.eyJleHAiOjQxMDI0NDQ4MDB9.sig"
+                val liveJwt = "hdr.eyJleHAiOjQxMDI0NDUwMDB9.sig"
+                val storage =
+                    FakeTokenStorage(
+                        jwt = storedJwt,
+                        refreshToken = "stored-refresh",
+                        expiresAtEpochMs = 4_102_444_800_000L,
+                    )
+
+                assertEquals(
+                    liveJwt,
+                    EnsureFreshAccessToken.get(
+                        tokenStorage = storage,
+                        sdkSessionProvider = {
+                            EnsureFreshAccessToken.SessionSnapshot(
+                                accessToken = liveJwt,
+                                refreshToken = "live-refresh",
+                                expiresAtMs = 4_102_450_000_000L,
+                                tokenType = "bearer",
+                            )
+                        },
+                    ),
+                )
+            } finally {
+                SessionResumeGate.resetForTests()
+            }
+        }
+
+    @Test
+    fun get_rechecksLiveSdkAfterLaterStorageImportFails() =
+        runTest {
+            SessionResumeGate.markCompleted()
+            try {
+                val storedJwt = "hdr.eyJleHAiOjQxMDI0NTAwMDB9.sig"
+                val oldLiveJwt = "hdr.eyJleHAiOjQxMDI0NDAwMDB9.sig"
+                val rotatedLiveJwt = "hdr.eyJleHAiOjQxMDI0NjAwMDB9.sig"
+                val storage =
+                    FakeTokenStorage(
+                        jwt = storedJwt,
+                        refreshToken = "stored-refresh",
+                        expiresAtEpochMs = 4_102_450_000_000L,
+                    )
+                val snapshots =
+                    listOf(
+                        EnsureFreshAccessToken.SessionSnapshot(
+                            accessToken = oldLiveJwt,
+                            refreshToken = "old-live-refresh",
+                            expiresAtMs = 4_102_440_000_000L,
+                            tokenType = "bearer",
+                        ),
+                        EnsureFreshAccessToken.SessionSnapshot(
+                            accessToken = rotatedLiveJwt,
+                            refreshToken = "rotated-live-refresh",
+                            expiresAtMs = 4_102_460_000_000L,
+                            tokenType = "bearer",
+                        ),
+                    )
+                var snapshotIndex = 0
+
+                assertEquals(
+                    rotatedLiveJwt,
+                    EnsureFreshAccessToken.get(
+                        tokenStorage = storage,
+                        sdkSessionProvider = { snapshots.getOrNull(snapshotIndex++) },
+                        storedSessionImporter = { false },
+                    ),
+                )
             } finally {
                 SessionResumeGate.resetForTests()
             }
