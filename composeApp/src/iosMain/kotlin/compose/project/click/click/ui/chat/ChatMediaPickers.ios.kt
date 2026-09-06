@@ -55,7 +55,10 @@ import platform.UIKit.UIImagePickerController
 import platform.UIKit.UIImagePickerControllerDelegateProtocol
 import platform.UIKit.UIImagePickerControllerOriginalImage
 import platform.UIKit.UIImagePickerControllerSourceType
+import platform.UIKit.UIModalPresentationOverFullScreen
 import platform.UIKit.UINavigationControllerDelegateProtocol
+import platform.UIKit.UITabBar
+import platform.UIKit.UIViewController
 import platform.UniformTypeIdentifiers.UTTypeImage
 import platform.darwin.NSObject
 import platform.darwin.dispatch_async
@@ -172,8 +175,7 @@ actual fun rememberChatMediaPickers(
             }
         val picker = PHPickerViewController(configuration = config)
         picker.delegate = photoPickerDelegate
-        val presenter = iosTopViewControllerForPresentation() ?: viewController
-        presenter.presentViewController(picker, animated = true, completion = null)
+        presentFullscreenPicker(picker, host = viewController)
     }
 
     fun openCameraInternal() {
@@ -186,8 +188,7 @@ actual fun rememberChatMediaPickers(
         picker.sourceType = cameraSource
         picker.delegate = cameraPickerDelegate
         picker.allowsEditing = false
-        val presenter = iosTopViewControllerForPresentation() ?: viewController
-        presenter.presentViewController(picker, animated = true, completion = null)
+        presentFullscreenPicker(picker, host = viewController)
     }
 
     fun openCamera() {
@@ -255,6 +256,24 @@ actual fun rememberChatMediaPickers(
         openVoiceRecorder = { requestMicThenShowVoiceDialog() },
         openFilePicker = { launchFilePicker() },
     )
+}
+
+/**
+ * Present photo/camera pickers over the full window, including the home-indicator strip and
+ * the native [UITabBar] that otherwise stays in front of Compose and peeks under a page sheet.
+ */
+@OptIn(ExperimentalForeignApi::class)
+private fun presentFullscreenPicker(
+    picker: UIViewController,
+    host: UIViewController,
+) {
+    picker.modalPresentationStyle = UIModalPresentationOverFullScreen
+    val presenter = iosTopViewControllerForPresentation() ?: host
+    presenter.view.subviews.forEach { child ->
+        val tabBar = child as? UITabBar ?: return@forEach
+        presenter.view.sendSubviewToBack(tabBar)
+    }
+    presenter.presentViewController(picker, animated = true, completion = null)
 }
 
 @OptIn(ExperimentalForeignApi::class)

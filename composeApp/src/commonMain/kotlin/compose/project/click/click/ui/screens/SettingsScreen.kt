@@ -19,7 +19,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
@@ -67,11 +66,11 @@ import compose.project.click.click.platformForegroundTickFlow // pragma: allowli
 import compose.project.click.click.sensors.rememberAmbientNoiseMonitor // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
-import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvailabilitySheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickButtonVariant // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickListRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
@@ -352,8 +351,7 @@ fun SettingsScreen(
                         item {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 SettingsSectionHeader("Availability")
-                                AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
-                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                Column(modifier = Modifier.fillMaxWidth()) {
                                         SettingsToggleRow(
                                             icon = Icons.Default.EventAvailable,
                                             iconTint =
@@ -486,7 +484,6 @@ fun SettingsScreen(
                                             }
                                         }
                                     }
-                                }
                             }
                         }
                     }
@@ -495,8 +492,7 @@ fun SettingsScreen(
                         item {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 SettingsSectionHeader("Alerts")
-                                AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
-                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                Column(modifier = Modifier.fillMaxWidth()) {
                                         SettingsToggleRow(
                                             icon = Icons.Default.Notifications,
                                             title = "Message notifications",
@@ -568,7 +564,6 @@ fun SettingsScreen(
                                             )
                                         }
                                     }
-                                }
                             }
                         }
                     }
@@ -577,8 +572,7 @@ fun SettingsScreen(
                         item {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 SettingsSectionHeader("Privacy & data")
-                                AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
-                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                Column(modifier = Modifier.fillMaxWidth()) {
                                         YourDataLocationRows(
                                             locationPreferences = locationPreferences,
                                             ghostModeEnabled = ghostModeEnabled,
@@ -597,40 +591,28 @@ fun SettingsScreen(
                                             targetValue = if (showPermissionsHub) 180f else 0f,
                                             label = "permissions_hub_chevron",
                                         )
-                                        Row(
-                                            modifier =
-                                                Modifier
-                                                    .fillMaxWidth()
-                                                    .clickable { showPermissionsHub = !showPermissionsHub }
-                                                    .padding(horizontal = 12.dp, vertical = 12.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Shield,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(22.dp),
-                                                tint = PrimaryBlue,
-                                            )
-                                            Spacer(modifier = Modifier.width(14.dp))
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    "Permissions Hub",
-                                                    style = MaterialTheme.typography.bodyLarge,
-                                                    fontWeight = FontWeight.Medium,
+                                        ClickListRow(
+                                            title = "Permissions Hub",
+                                            subtitle = "Review microphone, location, and Bluetooth access.",
+                                            onClick = { showPermissionsHub = !showPermissionsHub },
+                                            leading = {
+                                                Icon(
+                                                    Icons.Default.Shield,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(22.dp),
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 )
-                                                Text(
-                                                    "Review & fix microphone, location, and Bluetooth access.",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            },
+                                            trailing = {
+                                                Icon(
+                                                    Icons.Default.ExpandMore,
+                                                    contentDescription = if (showPermissionsHub) "Collapse" else "Expand",
+                                                    modifier = Modifier.rotate(chevronRotation),
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 )
-                                            }
-                                            Icon(
-                                                Icons.Default.ExpandMore,
-                                                contentDescription = if (showPermissionsHub) "Collapse" else "Expand",
-                                                modifier = Modifier.rotate(chevronRotation),
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
+                                            },
+                                            showDivider = false,
+                                        )
                                         AnimatedVisibility(
                                             visible = showPermissionsHub,
                                             enter = expandVertically() + fadeIn(),
@@ -654,7 +636,6 @@ fun SettingsScreen(
                                             )
                                         }
                                     }
-                                }
                             }
                         }
                     }
@@ -689,14 +670,11 @@ fun SettingsScreen(
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 SettingsSectionHeader("Saved events")
                                 if (savedEventBookmarks.isEmpty()) {
-                                    AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
-                                        Text(
-                                            text = "No saved events yet. Bookmark events from Home or the map.",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(16.dp),
-                                        )
-                                    }
+                                    Text(
+                                        text = "No saved events yet. Bookmark events from Home or the map.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 } else {
                                     SavedEventsSection( // pragma: allowlist secret
                                         bookmarks = savedEventBookmarks,
@@ -718,8 +696,7 @@ fun SettingsScreen(
                         item {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 SettingsSectionHeader("Appearance")
-                                AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
-                                    SettingsToggleRow(
+                                SettingsToggleRow(
                                         icon = Icons.Default.DarkMode,
                                         title = "Dark mode",
                                         checked = isDarkMode,
@@ -738,7 +715,6 @@ fun SettingsScreen(
                                             )
                                         },
                                     )
-                                }
                             }
                         }
                     }

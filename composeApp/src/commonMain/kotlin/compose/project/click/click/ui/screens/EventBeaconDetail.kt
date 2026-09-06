@@ -7,7 +7,6 @@
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -20,7 +19,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -46,6 +44,8 @@ import compose.project.click.click.events.parseEventListingOptions // pragma: al
 import compose.project.click.click.notifications.ChatDeepLinkManager // pragma: allowlist secret
 import compose.project.click.click.platform.shareText // pragma: allowlist secret
 import compose.project.click.click.ui.components.AnimatedClickDialog // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickButtonVariant // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickDropdownMenu // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickMenuItem // pragma: allowlist secret
@@ -539,17 +539,6 @@ internal fun EventBeaconDetail(
             }
         }
 
-        if (
-            isCreator ||
-            (!currentUser?.id.isNullOrBlank() && displayBeacon.createdByUserId == currentUser?.id)
-        ) {
-            EventGuestListPasteCard(
-                beaconId = displayBeacon.id,
-                border = border,
-                cardSurface = cardSurface,
-            )
-        }
-
         if (showPeopleDirectory) {
             ClickFormBottomSheet(
                 onDismissRequest = { showPeopleDirectory = false },
@@ -618,35 +607,25 @@ internal fun EventBeaconDetail(
             }
         }
 
-        val actionShape = RoundedCornerShape(12.dp)
         val checkInLabel = eventCheckInCtaLabel(checkedIn = checkedIn, pending = checkInPending)
-        Button(
+        val eventHubId = displayBeacon.hubId ?: engagement?.hubId
+        val canOpenHub =
+            canOpenEventHub(
+                hubId = eventHubId,
+                isCreator = isCreator,
+                checkedIn = checkedIn,
+                hasRsvp = currentUserSignedUp,
+            )
+        val checkInIsPrimary = eventHubId.isNullOrBlank() || !canOpenHub
+
+        ClickButton(
             onClick = {
-                if (checkInPending) return@Button
+                if (checkInPending) return@ClickButton
                 viewModel.toggleBeaconCheckIn(displayBeacon.id)
             },
             enabled = !checkInPending,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-            shape = actionShape,
-            border = BorderStroke(clickBorderWidth(), border),
-            colors =
-                ButtonDefaults.buttonColors(
-                    containerColor =
-                        if (checkedIn) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.surface
-                        },
-                    contentColor =
-                        if (checkedIn) {
-                            MaterialTheme.colorScheme.onPrimary
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        },
-                    disabledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-                    disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                ),
-            contentPadding = PaddingValues(vertical = 14.dp),
+            modifier = Modifier.fillMaxWidth(),
+            variant = if (checkInIsPrimary) ClickButtonVariant.Primary else ClickButtonVariant.Secondary,
         ) {
             if (checkInPending) {
                 CircularProgressIndicator(
@@ -666,17 +645,9 @@ internal fun EventBeaconDetail(
             Text(checkInLabel, fontWeight = FontWeight.SemiBold)
         }
 
-        val eventHubId = displayBeacon.hubId ?: engagement?.hubId
-        val canOpenHub =
-            canOpenEventHub(
-                hubId = eventHubId,
-                isCreator = isCreator,
-                checkedIn = checkedIn,
-                hasRsvp = currentUserSignedUp,
-            )
         if (!eventHubId.isNullOrBlank()) {
             if (canOpenHub) {
-                Button(
+                ClickButton(
                     onClick = {
                         ChatDeepLinkManager.setPendingEventHub(
                             hubId = eventHubId,
@@ -685,15 +656,7 @@ internal fun EventBeaconDetail(
                         )
                         viewModel.clearSelection()
                     },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                    shape = actionShape,
-                    border = BorderStroke(clickBorderWidth(), border),
-                    colors =
-                        ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary,
-                        ),
-                    contentPadding = PaddingValues(vertical = 14.dp),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Chat,
@@ -712,7 +675,7 @@ internal fun EventBeaconDetail(
             }
         }
 
-        Button(
+        ClickButton(
             onClick = {
                 openEventMapsRoute(
                     openUri = { uriHandler.openUri(it) },
@@ -721,15 +684,8 @@ internal fun EventBeaconDetail(
                     label = displayBeacon.displayDynamicTitle(),
                 )
             },
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-            shape = actionShape,
-            border = BorderStroke(clickBorderWidth(), border),
-            colors =
-                ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                ),
-            contentPadding = PaddingValues(vertical = 14.dp),
+            modifier = Modifier.fillMaxWidth(),
+            variant = ClickButtonVariant.Secondary,
         ) {
             Icon(
                 imageVector = Icons.Filled.Directions,
@@ -746,9 +702,9 @@ internal fun EventBeaconDetail(
 
         if (!ended) {
             if (currentUserSignedUp || pendingOrWaitlisted) {
-                Button(
+                ClickButton(
                     onClick = {
-                        if (rsvpPending) return@Button
+                        if (rsvpPending) return@ClickButton
                         rsvpError = null
                         viewModel.cancelRsvpToBeacon(displayBeacon.id) { ok ->
                             if (!ok) {
@@ -758,17 +714,8 @@ internal fun EventBeaconDetail(
                         }
                     },
                     enabled = !rsvpPending,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                    shape = actionShape,
-                    border = BorderStroke(clickBorderWidth(), MaterialTheme.colorScheme.error),
-                    colors =
-                        ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = Color.White,
-                            disabledContainerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.45f),
-                            disabledContentColor = Color.White.copy(alpha = 0.7f),
-                        ),
-                    contentPadding = PaddingValues(vertical = 14.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    variant = ClickButtonVariant.Destructive,
                 ) {
                     Text(
                         text =
@@ -783,9 +730,9 @@ internal fun EventBeaconDetail(
                     )
                 }
             } else {
-                OutlinedButton(
+                ClickButton(
                     onClick = {
-                        if (rsvpPending) return@OutlinedButton
+                        if (rsvpPending) return@ClickButton
                         rsvpError = null
                         viewModel.rsvpToBeacon(displayBeacon.id) { ok ->
                             if (!ok) {
@@ -795,14 +742,8 @@ internal fun EventBeaconDetail(
                         }
                     },
                     enabled = !rsvpPending,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                    shape = actionShape,
-                    border = BorderStroke(clickBorderWidth(), border),
-                    colors =
-                        ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                        ),
-                    contentPadding = PaddingValues(vertical = 14.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    variant = ClickButtonVariant.Secondary,
                 ) {
                     Text(
                         text =

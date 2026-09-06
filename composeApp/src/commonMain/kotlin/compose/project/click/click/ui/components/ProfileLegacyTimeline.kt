@@ -25,7 +25,6 @@ import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Terrain
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -43,7 +42,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
@@ -228,10 +226,11 @@ fun ProfileLegacyTimelineContent(
                     body = body,
                 )
                 conn.priorContextTag?.trim()?.takeIf { it.isNotEmpty() }?.let { tag ->
-                    FilterChip(
+                    ClickChip(
+                        label = tag,
                         selected = false,
                         onClick = {},
-                        label = { Text(tag) },
+                        compact = true,
                     )
                 }
             }
@@ -358,10 +357,11 @@ fun ProfileLegacyTimelineContent(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 p.interestTags.forEach { tag ->
-                    FilterChip(
+                    ClickChip(
+                        label = tag,
                         selected = false,
-                        onClick = { },
-                        label = { Text(tag, style = MaterialTheme.typography.labelMedium) },
+                        onClick = {},
+                        compact = true,
                     )
                 }
             }
@@ -391,10 +391,11 @@ fun ProfileLegacyTimelineContent(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 personality.forEach { tag ->
-                    FilterChip(
+                    ClickChip(
+                        label = tag,
                         selected = false,
-                        onClick = { },
-                        label = { Text(tag, style = MaterialTheme.typography.labelMedium) },
+                        onClick = {},
+                        compact = true,
                     )
                 }
             }
@@ -425,10 +426,11 @@ fun ProfileLegacyTimelineContent(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 sharedTags.forEach { tag ->
-                    FilterChip(
+                    ClickChip(
+                        label = tag,
                         selected = true,
-                        onClick = { },
-                        label = { Text(tag, style = MaterialTheme.typography.labelMedium) },
+                        onClick = {},
+                        compact = true,
                     )
                 }
             }
@@ -459,26 +461,17 @@ fun ProfileLegacyTimelineContent(
             ) {
                 intentBubbles.forEach { bubble ->
                     val until = bubble.activeUntilShort()
-                    FilterChip(
+                    val intentLabel =
+                        if (until.isNotEmpty()) {
+                            "${bubble.displayLabel()} · $until"
+                        } else {
+                            bubble.displayLabel()
+                        }
+                    ClickChip(
+                        label = intentLabel,
                         selected = false,
-                        onClick = { },
-                        label = {
-                            Column {
-                                Text(
-                                    bubble.displayLabel(),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                if (until.isNotEmpty()) {
-                                    Text(
-                                        until,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                        },
+                        onClick = {},
+                        compact = true,
                     )
                 }
             }

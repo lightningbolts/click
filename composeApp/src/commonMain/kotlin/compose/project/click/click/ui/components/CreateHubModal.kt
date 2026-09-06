@@ -1,4 +1,8 @@
-package compose.project.click.click.ui.components
+@file:Suppress(
+    "ktlint:standard:function-naming",
+)
+
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -15,21 +19,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,24 +41,35 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.data.api.ApiClient
 import compose.project.click.click.data.api.HubCreateLocationBody
 import compose.project.click.click.data.api.HubCreatePostBody
-import compose.project.click.click.PlatformHapticsPolicy
+import compose.project.click.click.ui.components.sheetBodyScroll
 import compose.project.click.click.ui.theme.PrimaryBlue
-import compose.project.click.click.utils.hasUsableHubLocation
 import compose.project.click.click.utils.HUB_GATEKEEPER_HIGH_ACCURACY_TIMEOUT_MS
 import compose.project.click.click.utils.LocationService
+import compose.project.click.click.utils.hasUsableHubLocation
 import io.ktor.client.plugins.ClientRequestException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import compose.project.click.click.ui.components.sheetBodyScroll
 
-private val hubCategories = listOf(
-    "general", "music", "study", "sports", "food", "nightlife",
-    "gaming", "tech", "art", "fitness", "networking", "party",
-)
+private val hubCategories =
+    listOf(
+        "general",
+        "music",
+        "study",
+        "sports",
+        "food",
+        "nightlife",
+        "gaming",
+        "tech",
+        "art",
+        "fitness",
+        "networking",
+        "party",
+    )
 
 private const val CUSTOM_CATEGORY_MAX_CHARS = 24
 
@@ -79,9 +88,10 @@ fun CreateHubModal(
 
     ClickFormBottomSheet(onDismissRequest = onDismiss) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(sheetPageBackground()),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .background(sheetPageBackground()),
         ) {
             CreateHubSheetBody(
                 initialName = initialName,
@@ -117,15 +127,17 @@ fun JoinCommunityHubSheet(
         onDismiss()
     }) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(sheetPageBackground()),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .background(sheetPageBackground()),
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .sheetBodyScroll()
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .sheetBodyScroll()
+                        .padding(horizontal = ClickSheetDefaults.ContentHorizontalPadding, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 Text(
@@ -156,18 +168,20 @@ fun JoinCommunityHubSheet(
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    TextButton(
+                    ClickButton(
                         onClick = {
                             hubCodeDraft = ""
                             onDismiss()
                         },
+                        modifier = Modifier.weight(1f),
+                        variant = ClickButtonVariant.Secondary,
                     ) {
-                        Text("Cancel", color = GlassSheetTokens.OnOledMuted())
+                        Text("Cancel")
                     }
-                    TextButton(
+                    ClickButton(
                         onClick = {
                             val id = hubCodeDraft.trim()
                             if (id.isNotEmpty()) {
@@ -177,8 +191,9 @@ fun JoinCommunityHubSheet(
                             }
                         },
                         enabled = hubCodeDraft.trim().isNotEmpty(),
+                        modifier = Modifier.weight(1f),
                     ) {
-                        Text("Join hub", color = GlassSheetTokens.OnOled())
+                        Text("Join hub")
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -209,31 +224,34 @@ private fun CreateHubSheetBody(
 
     LaunchedEffect(Unit) {
         nameDraft = initialName.ifBlank { "" }
-        category = if (initialCategory.isNotBlank() && initialCategory in hubCategories) {
-            initialCategory
-        } else {
-            hubCategories.first()
-        }
+        category =
+            if (initialCategory.isNotBlank() && initialCategory in hubCategories) {
+                initialCategory
+            } else {
+                hubCategories.first()
+            }
         isCustomCategory = false
         customCategoryDraft = ""
         submitting = false
         locationPrimed = false
         primedLocation = null
-        primedLocation = withContext(Dispatchers.Default) {
-            locationService.getCurrentLocation()
-                ?: runCatching {
-                    locationService.getHighAccuracyLocation(HUB_GATEKEEPER_HIGH_ACCURACY_TIMEOUT_MS)
-                }.getOrNull()
-        }
+        primedLocation =
+            withContext(Dispatchers.Default) {
+                locationService.getCurrentLocation()
+                    ?: runCatching {
+                        locationService.getHighAccuracyLocation(HUB_GATEKEEPER_HIGH_ACCURACY_TIMEOUT_MS)
+                    }.getOrNull()
+            }
         locationPrimed = true
     }
 
     val springOk by animateFloatAsState(
         targetValue = if (submitting) 0.94f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow,
-        ),
+        animationSpec =
+            spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessMediumLow,
+            ),
         label = "create_hub_cta",
     )
 
@@ -241,16 +259,17 @@ private fun CreateHubSheetBody(
     val textFieldColors = hubSheetTextFieldColors()
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .sheetBodyScroll()
-            .padding(horizontal = 24.dp, vertical = 16.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .sheetBodyScroll()
+                .padding(horizontal = ClickSheetDefaults.ContentHorizontalPadding, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Icon(
             imageVector = Icons.Default.Groups,
             contentDescription = null,
-            tint = PrimaryBlue,
+            tint = GlassSheetTokens.OnOledMuted(),
             modifier = Modifier.size(36.dp),
         )
         Text(
@@ -285,29 +304,21 @@ private fun CreateHubSheetBody(
         ) {
             hubCategories.forEach { c ->
                 val label = c.replaceFirstChar { ch -> ch.uppercase() }
-                FilterChip(
+                ClickChip(
+                    label = label,
                     selected = !isCustomCategory && category == c,
                     onClick = {
                         category = c
                         isCustomCategory = false
                     },
-                    label = { Text(label) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        labelColor = GlassSheetTokens.OnOledMuted(),
-                        selectedLabelColor = GlassSheetTokens.OnOled(),
-                        selectedContainerColor = PrimaryBlue.copy(alpha = 0.25f),
-                    ),
+                    compact = true,
                 )
             }
-            FilterChip(
+            ClickChip(
+                label = "Custom…",
                 selected = isCustomCategory,
                 onClick = { isCustomCategory = true },
-                label = { Text("Custom…") },
-                colors = FilterChipDefaults.filterChipColors(
-                    labelColor = GlassSheetTokens.OnOledMuted(),
-                    selectedLabelColor = GlassSheetTokens.OnOled(),
-                    selectedContainerColor = PrimaryBlue.copy(alpha = 0.25f),
-                ),
+                compact = true,
             )
         }
         if (isCustomCategory) {
@@ -336,41 +347,49 @@ private fun CreateHubSheetBody(
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TextButton(onClick = { if (!submitting) onDismiss() }) {
-                Text("Cancel", color = GlassSheetTokens.OnOledMuted())
+            ClickButton(
+                onClick = { if (!submitting) onDismiss() },
+                modifier = Modifier.weight(1f),
+                variant = ClickButtonVariant.Secondary,
+            ) {
+                Text("Cancel")
             }
-            TextButton(
+            ClickButton(
                 onClick = {
                     val label = nameDraft.trim()
-                    if (label.isEmpty() || submitting || resolvedCategory.isEmpty()) return@TextButton
+                    if (label.isEmpty() || submitting || resolvedCategory.isEmpty()) return@ClickButton
                     scope.launch {
                         submitting = true
                         try {
-                            val loc = withContext(Dispatchers.Default) {
-                                primedLocation?.takeIf(::hasUsableHubLocation)
-                                    ?: locationService.getCurrentLocation()
-                                    ?: locationService.getHighAccuracyLocation(HUB_GATEKEEPER_HIGH_ACCURACY_TIMEOUT_MS)
-                            }
+                            val loc =
+                                withContext(Dispatchers.Default) {
+                                    primedLocation?.takeIf(::hasUsableHubLocation)
+                                        ?: locationService.getCurrentLocation()
+                                        ?: locationService.getHighAccuracyLocation(HUB_GATEKEEPER_HIGH_ACCURACY_TIMEOUT_MS)
+                                }
                             if (loc == null) {
                                 onError("Could not read GPS for this hub.")
                                 submitting = false
                                 return@launch
                             }
-                            val body = HubCreatePostBody(
-                                name = label,
-                                category = resolvedCategory,
-                                location = HubCreateLocationBody(
-                                    latitude = loc.latitude,
-                                    longitude = loc.longitude,
-                                    radiusMeters = 50,
-                                ),
-                            )
-                            val result = withContext(Dispatchers.Default) {
-                                api.postHubCreate(body)
-                            }
+                            val body =
+                                HubCreatePostBody(
+                                    name = label,
+                                    category = resolvedCategory,
+                                    location =
+                                        HubCreateLocationBody(
+                                            latitude = loc.latitude,
+                                            longitude = loc.longitude,
+                                            radiusMeters = 50,
+                                        ),
+                                )
+                            val result =
+                                withContext(Dispatchers.Default) {
+                                    api.postHubCreate(body)
+                                }
                             result.fold(
                                 onSuccess = { dto ->
                                     val hid = dto.hubId.trim()
@@ -384,11 +403,12 @@ private fun CreateHubSheetBody(
                                     }
                                 },
                                 onFailure = { e ->
-                                    val msg = when (e) {
-                                        is ClientRequestException ->
-                                            "Could not create hub (${e.response.status.value})"
-                                        else -> e.message ?: "Could not create hub"
-                                    }
+                                    val msg =
+                                        when (e) {
+                                            is ClientRequestException ->
+                                                "Could not create hub (${e.response.status.value})"
+                                            else -> e.message ?: "Could not create hub"
+                                        }
                                     onError(msg)
                                 },
                             )
@@ -400,7 +420,7 @@ private fun CreateHubSheetBody(
                     }
                 },
                 enabled = nameDraft.isNotBlank() && resolvedCategory.isNotEmpty() && locationPrimed && !submitting,
-                modifier = Modifier.scale(springOk),
+                modifier = Modifier.weight(1f).scale(springOk),
             ) {
                 if (submitting) {
                     CircularProgressIndicator(
@@ -409,7 +429,7 @@ private fun CreateHubSheetBody(
                         color = PrimaryBlue,
                     )
                 } else {
-                    Text("Create hub", color = GlassSheetTokens.OnOled())
+                    Text("Create hub")
                 }
             }
         }
@@ -418,14 +438,15 @@ private fun CreateHubSheetBody(
 }
 
 @Composable
-private fun hubSheetTextFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedTextColor = GlassSheetTokens.OnOled(),
-    unfocusedTextColor = GlassSheetTokens.OnOled(),
-    focusedBorderColor = PrimaryBlue,
-    unfocusedBorderColor = GlassSheetTokens.GlassBorder(),
-    cursorColor = PrimaryBlue,
-    focusedLabelColor = GlassSheetTokens.OnOledMuted(),
-    unfocusedLabelColor = GlassSheetTokens.OnOledMuted(),
-    focusedPlaceholderColor = GlassSheetTokens.OnOledMuted().copy(alpha = 0.5f),
-    unfocusedPlaceholderColor = GlassSheetTokens.OnOledMuted().copy(alpha = 0.5f),
-)
+private fun hubSheetTextFieldColors() =
+    OutlinedTextFieldDefaults.colors(
+        focusedTextColor = GlassSheetTokens.OnOled(),
+        unfocusedTextColor = GlassSheetTokens.OnOled(),
+        focusedBorderColor = PrimaryBlue,
+        unfocusedBorderColor = GlassSheetTokens.GlassBorder(),
+        cursorColor = PrimaryBlue,
+        focusedLabelColor = GlassSheetTokens.OnOledMuted(),
+        unfocusedLabelColor = GlassSheetTokens.OnOledMuted(),
+        focusedPlaceholderColor = GlassSheetTokens.OnOledMuted().copy(alpha = 0.5f),
+        unfocusedPlaceholderColor = GlassSheetTokens.OnOledMuted().copy(alpha = 0.5f),
+    )

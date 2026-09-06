@@ -27,6 +27,8 @@ import compose.project.click.click.ui.components.ActivityRecapSection // pragma:
 import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppShimmerScreen // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvailabilitySheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickScreenSpacing // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDialogChrome // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionArchiveWarningBanner // pragma: allowlist secret
@@ -61,9 +63,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.datetime.Clock
 
-// Spacing constants matching app's consistent 20.dp horizontal padding
-private val ScreenPaddingHorizontal = 20.dp
-private val CardSpacing = 24.dp
+private val CardSpacing = ClickScreenSpacing.Section
 
 /** Visible gap under the native greeting before the sticky search pill. */
 private val HeaderToSearchGap = 12.dp
@@ -257,7 +257,7 @@ fun HomeScreen(
                     modifier =
                         Modifier
                             .fillMaxSize()
-                            .padding(ScreenPaddingHorizontal),
+                            .padding(ClickScreenSpacing.Horizontal),
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
@@ -279,13 +279,7 @@ fun HomeScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-                    Button(
-                        onClick = { homeViewModel.refresh() },
-                        colors =
-                            ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                            ),
-                    ) {
+                    ClickButton(onClick = { homeViewModel.refresh() }) {
                         Text("Retry")
                     }
                 }

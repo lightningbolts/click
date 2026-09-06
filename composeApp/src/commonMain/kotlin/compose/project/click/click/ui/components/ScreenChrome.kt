@@ -32,10 +32,10 @@ import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowl
 
 private val AndroidStatusBarFallback = 24.dp
 
-/** Shared horizontal gutter for tab-root screens. */
+/** Shared horizontal gutter for tab-root screens. Delegates to [ClickScreenSpacing]. */
 object AppScreenDefaults {
-    val HorizontalPadding = 20.dp
-    val SectionSpacing = 24.dp
+    val HorizontalPadding = ClickScreenSpacing.Horizontal
+    val SectionSpacing = ClickScreenSpacing.Section
 
     /** First-item scroll offset (~20dp) before the tab-root header fully collapses. */
     val HeaderCollapseScrollThreshold = 20.dp
