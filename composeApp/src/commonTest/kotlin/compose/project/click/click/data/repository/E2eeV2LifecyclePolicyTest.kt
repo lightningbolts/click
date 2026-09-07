@@ -6,16 +6,17 @@ import kotlin.test.assertTrue
 
 class E2eeV2LifecyclePolicyTest {
     @Test
-    fun existingEpoch_keepsSendingWhenParticipantLookupFails() {
+    fun existingEpoch_doesNotRotateWhenParticipantLookupFails() {
         assertFalse(
             E2eeV2LifecyclePolicy.shouldCreateInitialEpoch(
                 currentEpoch = 3,
                 allParticipantsHaveV2Devices = false,
             ),
         )
-        assertTrue(
+        assertFalse(
             E2eeV2LifecyclePolicy.shouldRotateEpoch(
                 currentEpoch = 3,
+                allParticipantsHaveV2Devices = false,
                 membershipFingerprintMatches = false,
             ),
         )
@@ -42,12 +43,14 @@ class E2eeV2LifecyclePolicyTest {
         assertTrue(
             E2eeV2LifecyclePolicy.shouldRotateEpoch(
                 currentEpoch = 1,
+                allParticipantsHaveV2Devices = true,
                 membershipFingerprintMatches = false,
             ),
         )
         assertFalse(
             E2eeV2LifecyclePolicy.shouldRotateEpoch(
                 currentEpoch = 1,
+                allParticipantsHaveV2Devices = true,
                 membershipFingerprintMatches = true,
             ),
         )

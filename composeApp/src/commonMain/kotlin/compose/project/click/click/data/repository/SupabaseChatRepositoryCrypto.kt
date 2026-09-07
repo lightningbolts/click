@@ -118,15 +118,6 @@ internal fun Throwable.isE2eeV2Required(): Boolean {
         msg.contains("e2ee-v2-required")
 }
 
-internal fun Throwable.isBenignE2eeDeviceRegisterFailure(): Boolean {
-    val msg = redactedRestMessage().lowercase()
-    return msg.contains("409") ||
-        msg.contains("already") ||
-        msg.contains("conflict") ||
-        msg.contains("duplicate") ||
-        msg.contains("exists")
-}
-
 internal suspend fun SupabaseChatRepository.unwrapGroupMasterKeyFromDb(
     groupId: String,
     viewerUserId: String,
@@ -239,20 +230,23 @@ internal suspend fun SupabaseChatRepository.resolveE2eeV2ChatCrypto(
 ): E2eeV2ChatSession? {
     if (!forceRefresh && !allowLifecycle) E2eeV2SessionCache.get(chatId)?.let { return it }
     val token = ensureFreshJwtForChat() ?: return null
-    val identity = MessageCryptoV2.loadOrCreateDeviceIdentity()
-    apiClient
-        .registerE2eeV2Device(identity.info.deviceId, identity.info.publicKeySpkiBase64, token)
-        .onFailure { err ->
-            if (!err.isBenignE2eeDeviceRegisterFailure()) throw err
+    val identity =
+        try {
+            MessageCryptoV2.loadOrCreateDeviceIdentity()
+        } catch (_: Exception) {
+            throw E2eeV2RequiredException()
         }
+    apiClient.registerE2eeV2Device(identity.info.deviceId, identity.info.publicKeySpkiBase64, token)
     val devices =
-        apiClient.discoverE2eeV2Devices(chatId, token).getOrElse { throw it }
+        apiClient.discoverE2eeV2Devices(chatId, token).getOrElse { throw E2eeV2RequiredException() }
     val registered =
         devices.firstOrNull { it.deviceId == identity.info.deviceId }
-            ?: error("This device is not registered for chat encryption")
+            ?: throw E2eeV2RequiredException()
     val logicalDeviceId = identity.info.deviceId
     var state =
-        apiClient.getE2eeV2State(chatId, token, logicalDeviceId).getOrElse { throw it }
+        apiClient.getE2eeV2State(chatId, token, logicalDeviceId).getOrElse {
+            throw E2eeV2RequiredException()
+        }
     check(state.chatId == chatId && state.deviceId == logicalDeviceId) {
         "E2EE v2 epoch response identity mismatch"
     }
@@ -267,40 +261,47 @@ internal suspend fun SupabaseChatRepository.resolveE2eeV2ChatCrypto(
             true
         }
     val membershipFingerprint = membershipFingerprintForDevices(devices)
-    if (allowLifecycle &&
-        E2eeV2LifecyclePolicy.shouldCreateInitialEpoch(
-            currentEpoch = state.currentEpoch,
-            allParticipantsHaveV2Devices = allParticipantsHaveV2Devices,
-        )
-    ) {
-        state =
-            createE2eeV2EpochWithFreshKey(
-                chatId = chatId,
-                identity = identity,
-                devices = devices,
-                epoch = 1,
-                membershipFingerprint = membershipFingerprint,
-                authToken = token,
-            )
-    } else if (allowLifecycle &&
-        E2eeV2LifecyclePolicy.shouldRotateEpoch(
-            currentEpoch = state.currentEpoch,
-            membershipFingerprintMatches = state.membershipFingerprint == membershipFingerprint,
-        )
-    ) {
-        state =
-            createE2eeV2EpochWithFreshKey(
-                chatId = chatId,
-                identity = identity,
-                devices = devices,
-                epoch = state.currentEpoch!! + 1,
-                membershipFingerprint = membershipFingerprint,
-                authToken = token,
-            )
+    if (allowLifecycle) {
+        if (state.currentEpoch == null) {
+            if (!E2eeV2LifecyclePolicy.shouldCreateInitialEpoch(
+                    currentEpoch = state.currentEpoch,
+                    allParticipantsHaveV2Devices = allParticipantsHaveV2Devices,
+                )
+            ) {
+                return null
+            }
+            state =
+                createE2eeV2EpochWithFreshKey(
+                    chatId = chatId,
+                    identity = identity,
+                    devices = devices,
+                    epoch = 1,
+                    membershipFingerprint = membershipFingerprint,
+                    authToken = token,
+                )
+        } else {
+            if (!allParticipantsHaveV2Devices) throw E2eeV2RequiredException()
+            if (E2eeV2LifecyclePolicy.shouldRotateEpoch(
+                    currentEpoch = state.currentEpoch,
+                    allParticipantsHaveV2Devices = true,
+                    membershipFingerprintMatches = state.membershipFingerprint == membershipFingerprint,
+                )
+            ) {
+                state =
+                    createE2eeV2EpochWithFreshKey(
+                        chatId = chatId,
+                        identity = identity,
+                        devices = devices,
+                        epoch = state.currentEpoch + 1,
+                        membershipFingerprint = membershipFingerprint,
+                        authToken = token,
+                    )
+            }
+        }
     }
 
     val currentEpoch = state.currentEpoch ?: return null
-    if (currentEpoch <= 0) error("Invalid chat encryption epoch")
+    if (currentEpoch <= 0) throw E2eeV2RequiredException()
 
     // The epoch route returns recipient_device_id as the persisted row UUID. The request/query
     // contract and the envelope AAD use the logical identity.deviceId instead.
@@ -332,6 +333,7 @@ internal suspend fun SupabaseChatRepository.resolveE2eeV2ChatCrypto(
     if (E2eeV2LifecyclePolicy.shouldRekeyMissingUnwrap(allowLifecycle, epochKeys.containsKey(currentEpoch)) &&
         devices.isNotEmpty()
     ) {
+        zeroizeE2eeV2EpochKeys(listOf(epochKeys.values))
         state =
             createE2eeV2EpochWithFreshKey(
                 chatId = chatId,
@@ -345,7 +347,7 @@ internal suspend fun SupabaseChatRepository.resolveE2eeV2ChatCrypto(
     }
     val resolvedEpoch = state.currentEpoch ?: return null
     if (!epochKeys.containsKey(resolvedEpoch)) {
-        error("This device is not approved for the current chat encryption")
+        throw E2eeV2RequiredException()
     }
     return E2eeV2ChatSession(
         epoch = resolvedEpoch,

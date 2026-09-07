@@ -3,8 +3,8 @@ package compose.project.click.click.data.repository
 /**
  * Epoch create/rotate rules for send.
  *
- * Rotation follows discovered v2 devices (same as hub): a failed PostgREST participant
- * lookup must not skip a fingerprint change, or this device can be left unable to unwrap.
+ * Initial creation and rotation require a complete participant/device view. A failed
+ * participant lookup must fail closed rather than rotating keys for a partial membership.
  */
 internal object E2eeV2LifecyclePolicy {
     fun shouldCreateInitialEpoch(
@@ -14,8 +14,9 @@ internal object E2eeV2LifecyclePolicy {
 
     fun shouldRotateEpoch(
         currentEpoch: Int?,
+        allParticipantsHaveV2Devices: Boolean,
         membershipFingerprintMatches: Boolean,
-    ): Boolean = currentEpoch != null && !membershipFingerprintMatches
+    ): Boolean = currentEpoch != null && allParticipantsHaveV2Devices && !membershipFingerprintMatches
 
     fun shouldRekeyMissingUnwrap(
         allowLifecycle: Boolean,

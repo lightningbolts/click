@@ -45,7 +45,9 @@ private fun HubChatViewModel.replaceHubE2eeV2Session(session: HubE2eeV2Session) 
 /** Resolve, initialize, or rotate the hub epoch without ever sending a legacy write after upgrade. */
 internal suspend fun HubChatViewModel.ensureHubE2eeV2Session(participantUserIds: Set<String>): HubE2eeV2Session? {
     val token = requireFreshHubJwt()
-    val identity = MessageCryptoV2.loadOrCreateDeviceIdentity()
+    val identity =
+        runCatching { MessageCryptoV2.loadOrCreateDeviceIdentity() }
+            .getOrElse { throw IllegalStateException("E2EE v2 device identity is unavailable") }
     // Registration is idempotent from the caller's perspective: an existing identity returns 409.
     chatApi.registerE2eeV2Device(identity.info.deviceId, identity.info.publicKeySpkiBase64, token)
     var devices = chatApi.discoverHubE2eeV2Devices(hubId, token).getOrElse { throw it }

@@ -331,7 +331,7 @@ internal suspend fun SupabaseChatRepository.sendMessageImpl(
 
         suspend fun refreshV2WireContent() {
             v2Crypto = resolveE2eeV2ChatCrypto(chatId, userId, forceRefresh = true, allowLifecycle = true)
-                ?: throw IllegalStateException("Unable to load encryption for this chat")
+                ?: throw E2eeV2RequiredException()
             if (mediaUpload != null &&
                 (
                     mediaUpload.metadata.chatId != chatId ||
