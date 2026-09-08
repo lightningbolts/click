@@ -302,27 +302,33 @@ internal fun ConversationDaySeparator(label: String) {
 @Composable
 internal fun ChatTypingDots() {
     val reduceMotion = rememberReduceMotionEnabled()
-    val transition = rememberInfiniteTransition(label = "typing_dots")
+    val transition = if (reduceMotion) null else rememberInfiniteTransition(label = "typing_dots")
     val delays = listOf(0, 140, 280)
     Row(
         horizontalArrangement = Arrangement.spacedBy(chatBubbleScaledDp(5f)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         delays.forEachIndexed { index, delayMs ->
-            val offsetY by transition.animateFloat(
-                initialValue = 0f,
-                targetValue = 1f,
-                animationSpec =
-                    infiniteRepeatable(
-                        animation = tween(520, delayMillis = delayMs, easing = FastOutSlowInEasing),
-                        repeatMode = RepeatMode.Reverse,
-                    ),
-                label = "dot_$index",
-            )
+            val offsetY =
+                if (transition == null) {
+                    0f
+                } else {
+                    val animatedOffset by transition.animateFloat(
+                        initialValue = 0f,
+                        targetValue = 1f,
+                        animationSpec =
+                            infiniteRepeatable(
+                                animation = tween(520, delayMillis = delayMs, easing = FastOutSlowInEasing),
+                                repeatMode = RepeatMode.Reverse,
+                            ),
+                        label = "dot_$index",
+                    )
+                    animatedOffset
+                }
             Box(
                 modifier =
                     Modifier
-                        .offset(y = if (reduceMotion) 0.dp else chatBubbleTypingDotOffsetY(offsetY))
+                        .offset(y = chatBubbleTypingDotOffsetY(offsetY))
                         .size(chatBubbleScaledDp(8f))
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)),
@@ -338,18 +344,23 @@ internal fun ChatTypingDots() {
 @Composable
 internal fun LoadingSubtitlePlaceholder(modifier: Modifier = Modifier) {
     val reduceMotion = rememberReduceMotionEnabled()
-    val transition = rememberInfiniteTransition(label = "connection_subtitle_shimmer")
-    val alpha by transition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 0.7f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(durationMillis = MotionTokens.Pulse.Shimmer, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse,
-            ),
-        label = "connection_subtitle_shimmer_alpha",
-    )
-    val resolvedAlpha = if (reduceMotion) 0.45f else alpha
+    val alpha =
+        if (reduceMotion) {
+            0.45f
+        } else {
+            val transition = rememberInfiniteTransition(label = "connection_subtitle_shimmer")
+            val alpha by transition.animateFloat(
+                initialValue = 0.3f,
+                targetValue = 0.7f,
+                animationSpec =
+                    infiniteRepeatable(
+                        animation = tween(durationMillis = MotionTokens.Pulse.Shimmer, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse,
+                    ),
+                label = "connection_subtitle_shimmer_alpha",
+            )
+            alpha
+        }
 
     Box(
         modifier =
@@ -357,7 +368,7 @@ internal fun LoadingSubtitlePlaceholder(modifier: Modifier = Modifier) {
                 .height(12.dp)
                 .width(120.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = resolvedAlpha)),
+                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)),
     )
 }
 

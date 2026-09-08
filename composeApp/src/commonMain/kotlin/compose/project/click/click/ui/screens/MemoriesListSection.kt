@@ -253,32 +253,38 @@ private fun MemoryLocationCard(
 @Composable
 private fun MemoryPulsingIndicator() {
     val reduceMotion = rememberReduceMotionEnabled()
-    val infiniteTransition = rememberInfiniteTransition()
-    val scale by infiniteTransition.animateFloat(
-        initialValue = 0.9f,
-        targetValue = 1.12f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(MotionTokens.Pulse.Gentle, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Restart,
-            ),
-    )
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.45f,
-        targetValue = 0f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(MotionTokens.Pulse.Gentle, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Restart,
-            ),
-    )
+    val (scale, alpha) =
+        if (reduceMotion) {
+            1f to 0.22f
+        } else {
+            val infiniteTransition = rememberInfiniteTransition()
+            val scale by infiniteTransition.animateFloat(
+                initialValue = 0.9f,
+                targetValue = 1.12f,
+                animationSpec =
+                    infiniteRepeatable(
+                        animation = tween(MotionTokens.Pulse.Gentle, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Restart,
+                    ),
+            )
+            val alpha by infiniteTransition.animateFloat(
+                initialValue = 0.45f,
+                targetValue = 0f,
+                animationSpec =
+                    infiniteRepeatable(
+                        animation = tween(MotionTokens.Pulse.Gentle, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Restart,
+                    ),
+            )
+            scale to alpha
+        }
 
     Box(
         modifier =
             Modifier
                 .size(56.dp)
-                .scale(if (reduceMotion) 1f else scale)
-                .alpha(if (reduceMotion) 0.22f else alpha)
+                .scale(scale)
+                .alpha(alpha)
                 .background(PrimaryBlue.copy(alpha = 0.3f), CircleShape),
     )
 }

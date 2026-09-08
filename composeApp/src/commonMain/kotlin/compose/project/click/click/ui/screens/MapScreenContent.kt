@@ -480,32 +480,38 @@ internal fun MarkerSheetTimeStateBadge(timeState: TimeState) {
 @Composable
 internal fun PulsingRing() {
     val reduceMotion = rememberReduceMotionEnabled()
-    val infiniteTransition = rememberInfiniteTransition()
-    val scale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.12f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(MotionTokens.Pulse.Scanning, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Restart,
-            ),
-    )
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.5f,
-        targetValue = 0f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(MotionTokens.Pulse.Scanning, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Restart,
-            ),
-    )
+    val (scale, alpha) =
+        if (reduceMotion) {
+            1f to 0.28f
+        } else {
+            val infiniteTransition = rememberInfiniteTransition()
+            val scale by infiniteTransition.animateFloat(
+                initialValue = 1f,
+                targetValue = 1.12f,
+                animationSpec =
+                    infiniteRepeatable(
+                        animation = tween(MotionTokens.Pulse.Scanning, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Restart,
+                    ),
+            )
+            val alpha by infiniteTransition.animateFloat(
+                initialValue = 0.5f,
+                targetValue = 0f,
+                animationSpec =
+                    infiniteRepeatable(
+                        animation = tween(MotionTokens.Pulse.Scanning, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Restart,
+                    ),
+            )
+            scale to alpha
+        }
 
     Box(
         modifier =
             Modifier
                 .size(100.dp)
-                .scale(if (reduceMotion) 1f else scale)
-                .border(3.dp, PrimaryBlue.copy(alpha = if (reduceMotion) 0.28f else alpha), CircleShape),
+                .scale(scale)
+                .border(3.dp, PrimaryBlue.copy(alpha = alpha), CircleShape),
     )
 }
 

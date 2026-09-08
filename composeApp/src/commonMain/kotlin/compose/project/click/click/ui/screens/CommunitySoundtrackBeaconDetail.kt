@@ -673,16 +673,22 @@ internal fun MemoriesPillContent(
 @Composable
 internal fun LiveIndicator(count: Int) {
     val reduceMotion = rememberReduceMotionEnabled()
-    val infiniteTransition = rememberInfiniteTransition()
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.5f,
-        targetValue = 1f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(MotionTokens.Pulse.Gentle),
-                repeatMode = RepeatMode.Reverse,
-            ),
-    )
+    val alpha =
+        if (reduceMotion) {
+            1f
+        } else {
+            val infiniteTransition = rememberInfiniteTransition()
+            val alpha by infiniteTransition.animateFloat(
+                initialValue = 0.5f,
+                targetValue = 1f,
+                animationSpec =
+                    infiniteRepeatable(
+                        animation = tween(MotionTokens.Pulse.Gentle),
+                        repeatMode = RepeatMode.Reverse,
+                    ),
+            )
+            alpha
+        }
 
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
@@ -690,7 +696,7 @@ internal fun LiveIndicator(count: Int) {
                 Modifier
                     .size(8.dp)
                     .clip(CircleShape)
-                    .background(PrimaryBlue.copy(alpha = if (reduceMotion) 1f else alpha)),
+                    .background(PrimaryBlue.copy(alpha = alpha)),
         )
         Spacer(modifier = Modifier.width(6.dp))
         Text(

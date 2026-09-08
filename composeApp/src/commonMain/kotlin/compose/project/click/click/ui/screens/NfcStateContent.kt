@@ -47,36 +47,35 @@ internal fun NfcIdleContent(
     onOpenSettings: () -> Unit,
 ) {
     val reduceMotion = rememberReduceMotionEnabled()
-    val infiniteTransition = rememberInfiniteTransition(label = "tap_idle")
-    val haloScale by infiniteTransition.animateFloat(
-        initialValue = 0.98f,
-        targetValue = 1.02f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(MotionTokens.Pulse.Scanning, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse,
-            ),
-        label = "tap_idle_halo_scale",
-    )
-    val haloAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.08f,
-        targetValue = 0.14f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(MotionTokens.Pulse.Scanning, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse,
-            ),
-        label = "tap_idle_halo_alpha",
-    )
-    val idleScale = if (reduceMotion || !supportsTap) 1f else haloScale
-    val idleAlpha =
-        if (reduceMotion) {
-            0.12f
-        } else if (supportsTap) {
-            haloAlpha
+    val (haloScale, haloAlpha) =
+        if (reduceMotion || !supportsTap) {
+            1f to 0.12f
         } else {
-            0.12f
+            val infiniteTransition = rememberInfiniteTransition(label = "tap_idle")
+            val haloScale by infiniteTransition.animateFloat(
+                initialValue = 0.98f,
+                targetValue = 1.02f,
+                animationSpec =
+                    infiniteRepeatable(
+                        animation = tween(MotionTokens.Pulse.Scanning, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse,
+                    ),
+                label = "tap_idle_halo_scale",
+            )
+            val haloAlpha by infiniteTransition.animateFloat(
+                initialValue = 0.08f,
+                targetValue = 0.14f,
+                animationSpec =
+                    infiniteRepeatable(
+                        animation = tween(MotionTokens.Pulse.Scanning, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse,
+                    ),
+                label = "tap_idle_halo_alpha",
+            )
+            haloScale to haloAlpha
         }
+    val idleScale = haloScale
+    val idleAlpha = haloAlpha
     Column(
         modifier =
             Modifier
