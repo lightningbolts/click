@@ -11,6 +11,9 @@ stabilization plan. It records only evidence actually obtained. A passing
 compile, unit test, or simulator smoke flow is not treated as proof that an
 authenticated or hardware-dependent device journey passes.
 
+
+**September 7 follow-up:** [PR #95 review repairs and current phase gates](2026-09-07-pr95-review-repairs.md). The results below are historical evidence for the earlier branch state.
+
 ## 3. Phase status
 
 | Phase | Status | Evidence and disposition |
