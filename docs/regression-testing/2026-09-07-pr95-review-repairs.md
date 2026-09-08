@@ -185,9 +185,10 @@ phase-closure wording for the defects and new edits described here.
 
 ## Delivery
 
-The repairs are committed locally in six focused commits: auth, hub key ownership,
+The repairs are grouped in six focused commits: auth, hub key ownership,
 event control, accessibility/platform feedback, reduced motion, and verification
-documentation. They have not been pushed to GitHub or merged. The accompanying
+documentation. They are submitted through PR #95; CI status is recorded in the
+checks on its latest head. Physical-device release gates remain pending. The accompanying
 `PR95-review-repairs.patch` is a `git am` patch series based on the reviewed head
 above. Apply it to a checkout at that head with:
 
