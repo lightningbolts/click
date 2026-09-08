@@ -45,6 +45,12 @@ export class AgentStore {
 
       CREATE INDEX IF NOT EXISTS idx_chat_turns_phone
         ON chat_turns(phone_e164, id DESC);
+
+      CREATE TABLE IF NOT EXISTS last_listed_events (
+        phone_e164 TEXT PRIMARY KEY,
+        beacon_ids_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
     `);
   }
 
@@ -123,6 +129,35 @@ export class AgentStore {
       )
       .all(phoneE164, limit) as ChatTurn[];
     return rows.reverse();
+  }
+
+  getLastListedEvents(phoneE164: string): string[] {
+    const row = this.db
+      .prepare(
+        `SELECT beacon_ids_json FROM last_listed_events WHERE phone_e164 = ?`,
+      )
+      .get(phoneE164) as { beacon_ids_json: string } | undefined;
+    if (!row?.beacon_ids_json) return [];
+    try {
+      const parsed = JSON.parse(row.beacon_ids_json) as unknown;
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((x): x is string => typeof x === "string");
+    } catch {
+      return [];
+    }
+  }
+
+  setLastListedEvents(phoneE164: string, beaconIds: string[]): void {
+    const now = new Date().toISOString();
+    this.db
+      .prepare(
+        `INSERT INTO last_listed_events (phone_e164, beacon_ids_json, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(phone_e164) DO UPDATE SET
+           beacon_ids_json = excluded.beacon_ids_json,
+           updated_at = excluded.updated_at`,
+      )
+      .run(phoneE164, JSON.stringify(beaconIds), now);
   }
 
   close(): void {

@@ -13,6 +13,8 @@ Uses **gpt-4o-mini** by default (`LLM_MODEL` overrideable). Talks to click-web p
 
 ## Setup
 
+Step-by-step launch (Twilio + tunnel + smoke tests): see **[LAUNCH.md](./LAUNCH.md)**.
+
 ```bash
 cd messaging-agent
 cp .env.example .env
@@ -74,10 +76,15 @@ npm run typecheck
 ## Architecture
 
 ```
-Twilio → POST /webhooks/twilio → LLM + tools → click-web public APIs
-                              ↘ SQLite phone profile (ZIP, name, chat turns)
-                              ↘ Twilio REST reply / share SMS
+Twilio → POST /webhooks/twilio
+       → LLM router (structured JSON: which tools + args)
+       → run tools → click-web public APIs
+       → deterministic SMS formatter (links, lists, errors)
+       ↘ SQLite phone profile (ZIP, name, last listed events, chat turns)
+       ↘ Twilio REST reply / share SMS
 ```
+
+The model **chooses tools** from the inbound text; it does **not** free-write event lists or invent URLs. Replies are built from tool results (so `share_url` is always present when events are listed).
 
 Outbound replies are sent asynchronously via the Twilio REST API so LLM latency does not hit Twilio’s webhook timeout.
 

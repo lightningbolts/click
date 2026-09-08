@@ -158,6 +158,11 @@ export const AGENT_TOOLS: OpenAiTool[] = [
   },
 ];
 
+/** Prefer title; many live events only set description (e.g. "Test 2"). */
+export function eventDisplayTitle(e: PublicEventListItem): string {
+  return e.title?.trim() || e.description?.trim() || "Untitled event";
+}
+
 function formatEventBrief(
   e: PublicEventListItem & { distance_km?: number },
   shareUrl: string,
@@ -166,7 +171,7 @@ function formatEventBrief(
   return {
     index: index ?? null,
     beacon_id: e.beacon_id,
-    title: e.title,
+    title: eventDisplayTitle(e),
     start: e.event_start_at,
     end: e.event_end_at,
     location: e.location_name,
@@ -175,6 +180,7 @@ function formatEventBrief(
     rsvp_enabled: e.rsvp_enabled,
     distance_km:
       e.distance_km != null ? Math.round(e.distance_km * 10) / 10 : null,
+    // Always include — bot must paste this into SMS when mentioning the event.
     share_url: shareUrl,
   };
 }
@@ -358,7 +364,7 @@ export async function runTool(
         }
         const event = await deps.click.getPublicEvent(parsed.beacon_id);
         const url = deps.click.eventShareUrl(parsed.beacon_id);
-        const title = event.title?.trim() || "a Click event";
+        const title = eventDisplayTitle(event);
         const note = parsed.note?.trim();
         const body = note
           ? `${note}\n\n${title}\n${url}`

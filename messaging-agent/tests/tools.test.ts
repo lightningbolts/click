@@ -74,10 +74,35 @@ describe("runTool", () => {
     const raw = await runTool("list_nearby_events", "{}", deps);
     const body = JSON.parse(raw) as {
       count: number;
-      events: Array<{ title: string }>;
+      events: Array<{ title: string; share_url: string; beacon_id: string }>;
     };
     expect(body.count).toBe(1);
     expect(body.events[0].title).toBe("Rooftop Jazz");
+    expect(body.events[0].share_url).toBe(
+      `https://joinclick.co/e/${body.events[0].beacon_id}`,
+    );
+  });
+
+  it("uses description as title when title is null", async () => {
+    const deps = makeDeps();
+    const untitled: PublicEventListItem = {
+      ...events[0],
+      beacon_id: "33333333-3333-4333-8333-333333333333",
+      title: null,
+      description: "Test 2",
+      latitude: 37.78,
+      longitude: -122.41,
+    };
+    (deps.click.listPublicEvents as ReturnType<typeof vi.fn>).mockResolvedValue([
+      untitled,
+    ]);
+    deps.store.setZip(deps.phoneE164, "94107", 37.77, -122.42);
+    const raw = await runTool("list_nearby_events", "{}", deps);
+    const body = JSON.parse(raw) as {
+      events: Array<{ title: string; share_url: string }>;
+    };
+    expect(body.events[0].title).toBe("Test 2");
+    expect(body.events[0].share_url).toContain("/e/33333333-3333-4333-8333-333333333333");
   });
 
   it("searches by query without near_me", async () => {
