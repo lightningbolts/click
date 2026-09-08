@@ -1,5 +1,6 @@
 package compose.project.click.click.data.auth // pragma: allowlist secret
 
+import compose.project.click.click.auth.SessionHydrationPolicy // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
@@ -16,11 +17,19 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 /**
  * Shared access-token ensure for chat, presence, pending sync, Realtime, and click-web.
  *
- * Prefer live GoTrue session; never import [TokenStorage] over a live session (that overwrites
- * a good refresh token and causes "Refresh Token Not Found"). Rejects expired access JWTs —
- * callers must not send them to PostgREST / Realtime / click-web.
+ * Prefer the live GoTrue session; import [TokenStorage] over it only when the canonical dual-store
+ * policy confirms storage contains a later rotation. Rejects expired access JWTs — callers must
+ * not send them to PostgREST / Realtime / click-web.
  */
 object EnsureFreshAccessToken {
+    /** Minimal live-session view used to keep token selection unit-testable. */
+    data class SessionSnapshot(
+        val accessToken: String,
+        val refreshToken: String?,
+        val expiresAtMs: Long?,
+        val tokenType: String?,
+    )
+
     /** Refresh when access token expires within this skew. */
     const val REFRESH_SKEW_MS = 90_000L
 
@@ -28,9 +37,39 @@ object EnsureFreshAccessToken {
         tokenStorage: TokenStorage = createTokenStorage(),
         authRepository: AuthRepository = AuthRepository(tokenStorage),
         forceRefresh: Boolean = false,
+        sdkSessionProvider: () -> SessionSnapshot? = {
+            SupabaseConfig.client.auth.currentSessionOrNull()?.let { session ->
+                SessionSnapshot(
+                    accessToken = session.accessToken,
+                    refreshToken = session.refreshToken,
+                    expiresAtMs = session.expiresAt?.toEpochMilliseconds(),
+                    tokenType = session.tokenType,
+                )
+            }
+        },
+        storedSessionImporter: suspend (TokenStorage) -> Boolean = {
+            SupabaseConfig.importStoredSessionWithoutRefresh(it)
+        },
     ): String? {
+        // At most one GoTrue refresh per get() — persist + import + after-import used to
+        // fire 2–3 refreshSession(force) calls, which turns one rate-limit into a storm.
+        var refreshResult: Result<Unit>? = null
+
+        suspend fun refreshOnce(force: Boolean): Result<Unit> {
+            val alreadyCoolingDown = SessionRefreshCoordinator.recentlyFailed()
+            refreshResult?.let { return it }
+            val result = authRepository.refreshSession(forceRefresh = force)
+            refreshResult = result
+            if (!alreadyCoolingDown) {
+                result.onFailure {
+                    println("EnsureFreshAccessToken: refresh failed: ${it.redactedRestMessage()}")
+                }
+            }
+            return result
+        }
+
         if (!SessionResumeGate.isCompleted()) {
-            authRepository.refreshSession(forceRefresh = true)
+            refreshOnce(force = true)
         }
         val now = Clock.System.now().toEpochMilliseconds()
 
@@ -44,19 +83,86 @@ object EnsureFreshAccessToken {
             return t
         }
 
-        // Prefer a still-fresh TokenStorage JWT before touching the process-wide GoTrue
-        // client. Other unit tests may leave an SDK session that would otherwise force a
-        // network refresh (12–25s) and stall hub leave/delete tests at 1s.
-        if (!forceRefresh) {
-            val stored = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
-            val storedExp = tokenStorage.getExpiresAt() ?: jwtExpEpochMs(stored)
+        // Read the live GoTrue session first. TokenStorage is a mirror and may lag behind a
+        // refresh-token rotation; returning its JWT before this check can send an old token.
+        var sdkSession = sdkSessionProvider()
+        var stored = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+        var storedExp = tokenStorage.getExpiresAt() ?: jwtExpEpochMs(stored)
+
+        var storageWonLaterRotation = false
+        if (sdkSession != null) {
+            storageWonLaterRotation =
+                SessionHydrationPolicy.shouldImportStoredSession(
+                    sdkHasSession = true,
+                    sdkRefresh = sdkSession.refreshToken,
+                    storedRefresh = tokenStorage.getRefreshToken(),
+                    sdkAccessExpMs = sdkSession.expiresAtMs,
+                    storedAccessExpMs = storedExp,
+                )
+            if (!forceRefresh && !storageWonLaterRotation) {
+                val live = usable(sdkSession.accessToken, sdkSession.expiresAtMs)
+                val liveExp = sdkSession.expiresAtMs ?: jwtExpEpochMs(sdkSession.accessToken)
+                if (live != null && liveExp != null && liveExp > now + REFRESH_SKEW_MS) {
+                    runCatching {
+                        tokenStorage.saveTokens(
+                            jwt = sdkSession.accessToken,
+                            refreshToken = sdkSession.refreshToken.orEmpty(),
+                            expiresAt = sdkSession.expiresAtMs,
+                            tokenType = sdkSession.tokenType,
+                        )
+                    }
+                    return live
+                }
+            }
+        } else if (!forceRefresh) {
+            // SDK empty — retain the offline fast path, but only after the live-session check.
             val storedOk = usable(stored, storedExp)
             if (storedOk != null && storedExp != null && storedExp > now + REFRESH_SKEW_MS) {
                 return storedOk
             }
         }
 
-        val supabase = SupabaseConfig.client
+        val supabase by lazy { SupabaseConfig.client }
+
+        // Preserve the existing dual-store rule for the exceptional case where storage has a
+        // demonstrably later refresh-token rotation. Import before persisting the SDK snapshot,
+        // otherwise the older live snapshot would overwrite the newer stored credentials.
+        val importedLaterStorage =
+            if (storageWonLaterRotation) {
+                runCatching {
+                    storedSessionImporter(tokenStorage)
+                }.getOrDefault(false)
+            } else {
+                false
+            }
+        if (storageWonLaterRotation && !importedLaterStorage) {
+            sdkSession = sdkSessionProvider()
+            stored = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+            storedExp = tokenStorage.getExpiresAt() ?: jwtExpEpochMs(stored)
+            val storageStillWon =
+                sdkSession != null &&
+                    SessionHydrationPolicy.shouldImportStoredSession(
+                        sdkHasSession = true,
+                        sdkRefresh = sdkSession?.refreshToken,
+                        storedRefresh = tokenStorage.getRefreshToken(),
+                        sdkAccessExpMs = sdkSession?.expiresAtMs,
+                        storedAccessExpMs = storedExp,
+                    )
+            if (sdkSession != null && !storageStillWon) {
+                storageWonLaterRotation = false
+            } else {
+                val storedWithHeadroom = usable(stored, storedExp)
+                if (
+                    !forceRefresh &&
+                    storedWithHeadroom != null &&
+                    storedExp != null &&
+                    storedExp > now + REFRESH_SKEW_MS
+                ) {
+                    return storedWithHeadroom
+                }
+                return null
+            }
+        }
 
         suspend fun persistAndMaybeRefresh(
             accessToken: String,
@@ -80,13 +186,7 @@ object EnsureFreshAccessToken {
                     exp == null ||
                     exp <= now + REFRESH_SKEW_MS
             if (!needsRefresh && token != null) return token
-            authRepository
-                .refreshSession(forceRefresh = forceRefresh || token == null)
-                .onFailure {
-                    println(
-                        "EnsureFreshAccessToken: refresh failed: ${it.redactedRestMessage()}",
-                    )
-                }
+            refreshOnce(force = forceRefresh || token == null)
             val refreshed = supabase.auth.currentSessionOrNull()
             usable(
                 refreshed?.accessToken,
@@ -106,20 +206,39 @@ object EnsureFreshAccessToken {
             return null
         }
 
-        val sdkSession = supabase.auth.currentSessionOrNull()
-        if (sdkSession != null) {
+        val liveSession =
+            if (storageWonLaterRotation) {
+                supabase.auth.currentSessionOrNull()?.let { session ->
+                    SessionSnapshot(
+                        accessToken = session.accessToken,
+                        refreshToken = session.refreshToken,
+                        expiresAtMs = session.expiresAt?.toEpochMilliseconds(),
+                        tokenType = session.tokenType,
+                    )
+                }
+            } else {
+                sdkSession ?: supabase.auth.currentSessionOrNull()?.let { session ->
+                    SessionSnapshot(
+                        accessToken = session.accessToken,
+                        refreshToken = session.refreshToken,
+                        expiresAtMs = session.expiresAt?.toEpochMilliseconds(),
+                        tokenType = session.tokenType,
+                    )
+                }
+            }
+        if (liveSession != null) {
             persistAndMaybeRefresh(
-                accessToken = sdkSession.accessToken,
-                refreshToken = sdkSession.refreshToken,
-                expiresAtMs = sdkSession.expiresAt?.toEpochMilliseconds(),
-                tokenType = sdkSession.tokenType,
+                accessToken = liveSession.accessToken,
+                refreshToken = liveSession.refreshToken,
+                expiresAtMs = liveSession.expiresAtMs,
+                tokenType = liveSession.tokenType,
             )?.let { return it }
         }
 
         // SDK empty — hydrate from TokenStorage. Skip network refresh when the stored
         // access token still has headroom so unit tests and offline writes do not block
         // on GoTrue (refresh still runs on forceRefresh, near-expiry, or 401 retry).
-        runCatching { SupabaseConfig.importStoredSessionWithoutRefresh(tokenStorage) }
+        runCatching { storedSessionImporter(tokenStorage) }
         val imported = supabase.auth.currentSessionOrNull()
         if (imported != null) {
             persistAndMaybeRefresh(
@@ -130,21 +249,23 @@ object EnsureFreshAccessToken {
             )?.let { return it }
         }
 
-        val stored = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
-        val storedExp = tokenStorage.getExpiresAt() ?: jwtExpEpochMs(stored)
-        val storedUsable = usable(stored, storedExp)
+        val storedAfterImport = tokenStorage.getJwt()?.trim()?.takeIf { it.isNotEmpty() }
+        val storedExpAfterImport =
+            tokenStorage.getExpiresAt() ?: jwtExpEpochMs(storedAfterImport)
+        val storedUsable = usable(storedAfterImport, storedExpAfterImport)
         if (storedUsable != null && !forceRefresh) {
-            val needsRefresh = storedExp != null && storedExp <= now + REFRESH_SKEW_MS
+            val needsRefresh =
+                storedExpAfterImport != null && storedExpAfterImport <= now + REFRESH_SKEW_MS
             if (!needsRefresh) return storedUsable
         }
 
-        authRepository
-            .refreshSession(forceRefresh = forceRefresh)
-            .onFailure {
+        if (refreshResult == null) {
+            refreshOnce(force = forceRefresh).onFailure {
                 println(
                     "EnsureFreshAccessToken: refresh-after-import failed: ${it.redactedRestMessage()}",
                 )
             }
+        }
 
         val after = supabase.auth.currentSessionOrNull()
         if (after != null) {
@@ -165,6 +286,16 @@ object EnsureFreshAccessToken {
         }
 
         return null
+    }
+
+    fun sdkAccessIsFresh(): Boolean {
+        val token =
+            runCatching {
+                SupabaseConfig.client.auth
+                    .currentSessionOrNull()
+                    ?.accessToken
+            }.getOrNull()
+        return isAccessTokenFresh(token)
     }
 
     /** True when [jwt] has a parseable `exp` strictly in the future. */

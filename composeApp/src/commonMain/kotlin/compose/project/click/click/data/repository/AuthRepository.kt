@@ -8,6 +8,7 @@ import compose.project.click.click.auth.LocalSessionIdentity // pragma: allowlis
 import compose.project.click.click.auth.SessionHydrationPolicy // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
+import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.auth.SessionRefreshCoordinator // pragma: allowlist secret
 import compose.project.click.click.data.auth.SessionResumeGate // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
@@ -15,6 +16,7 @@ import compose.project.click.click.data.storage.createTokenStorage // pragma: al
 import compose.project.click.click.getPlatform // pragma: allowlist secret
 import compose.project.click.click.proximity.isSimulatorOrEmulatorRuntime // pragma: allowlist secret
 import compose.project.click.click.util.compressOutgoingChatImageForUpload // pragma: allowlist secret
+import compose.project.click.click.util.isHardAuthFailure // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.Apple
@@ -314,16 +316,13 @@ class AuthRepository(
         }
 
     suspend fun signOut(): Result<Unit> =
-        try {
+        run {
             SessionRefreshCoordinator.clearSuccessfulRefresh()
-            supabase.auth.signOut()
-            tokenStorage.clearTokens()
-            Result.success(Unit)
-        } catch (e: Exception) {
-            // Ensure tokens are cleared even if Supabase signout fails (e.g. network error)
-            SessionRefreshCoordinator.clearSuccessfulRefresh()
-            tokenStorage.clearTokens()
-            Result.failure(e)
+            signOutWithCleanup(
+                remoteSignOut = { supabase.auth.signOut() },
+                clearSdkSession = { supabase.auth.clearSession() },
+                clearTokenStorage = { tokenStorage.clearTokens() },
+            )
         }
 
     suspend fun restoreSession(): Result<UserInfo> {
@@ -462,7 +461,8 @@ class AuthRepository(
     suspend fun hasValidLocalSession(): Boolean = LocalSessionCache.read(tokenStorage) != null
 
     suspend fun refreshSession(forceRefresh: Boolean = false): Result<Unit> {
-        return SessionRefreshCoordinator.singleFlightRefresh {
+        val credential = supabase.auth.currentSessionOrNull()?.refreshToken ?: tokenStorage.getRefreshToken()
+        return SessionRefreshCoordinator.singleFlightRefresh(credential = credential) {
             try {
                 // Never skip GoTrue just because `exp` is still in the future. TestFlight updates
                 // and dual-store drift (SettingsSessionManager vs TokenStorage) keep access JWTs
@@ -479,6 +479,12 @@ class AuthRepository(
                     return@singleFlightRefresh Result.success(Unit)
                 }
                 hydrateGoTrueFromTokenStorageIfNeeded()
+                if (accessTokenHasRefreshHeadroom() && !forceRefresh) {
+                    persistCurrentSessionToTokenStorage()
+                    SessionRefreshCoordinator.markSuccessfulRefresh()
+                    SessionResumeGate.markCompleted()
+                    return@singleFlightRefresh Result.success(Unit)
+                }
                 val timeoutMs = if (forceRefresh) AUTH_RESUME_TIMEOUT_MS else AUTH_TIMEOUT_MS
                 withTimeout(timeoutMs) {
                     supabase.auth.refreshCurrentSession()
@@ -489,6 +495,19 @@ class AuthRepository(
                 Result.success(Unit)
             } catch (e: Exception) {
                 SessionResumeGate.markCompleted()
+                // Lost a refresh-token rotation race: the SDK (or another client) may already
+                // hold the new access JWT. Never import TokenStorage here — that replays the
+                // burned refresh token ("Already Used").
+                if (e.isHardAuthFailure()) {
+                    val existing = supabase.auth.currentSessionOrNull()
+                    if (
+                        EnsureFreshAccessToken.isAccessTokenFresh(existing?.accessToken)
+                    ) {
+                        persistCurrentSessionToTokenStorage()
+                        SessionRefreshCoordinator.markSuccessfulRefresh()
+                        return@singleFlightRefresh Result.success(Unit)
+                    }
+                }
                 Result.failure(e)
             }
         }
@@ -514,7 +533,15 @@ class AuthRepository(
      */
     private suspend fun shouldHydrateFromTokenStorage(): Boolean {
         val existing = supabase.auth.currentSessionOrNull()
-        return SessionHydrationPolicy.shouldImportStoredSession(sdkHasSession = existing != null)
+        return SessionHydrationPolicy.shouldImportStoredSession(
+            sdkHasSession = existing != null,
+            sdkRefresh = existing?.refreshToken,
+            storedRefresh = tokenStorage.getRefreshToken(),
+            sdkAccessExpMs = existing?.expiresAt?.toEpochMilliseconds(),
+            storedAccessExpMs =
+                tokenStorage.getExpiresAt()
+                    ?: EnsureFreshAccessToken.jwtExpEpochMs(tokenStorage.getJwt()),
+        )
     }
 
     private suspend fun hydrateGoTrueFromTokenStorageIfNeeded() {

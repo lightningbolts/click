@@ -533,8 +533,11 @@ class HomeViewModel(
     }
 
     private var bookmarksFetchPending = false
+    private var lastBookmarksAttemptAtMs = 0L
+    private val bookmarksRetryCooldownMs = 8_000L
 
     private suspend fun loadSavedEventBookmarks() {
+        lastBookmarksAttemptAtMs = Clock.System.now().toEpochMilliseconds()
         try {
             if (!ClickWebAuthCoordinator.ensureReady()) {
                 bookmarksFetchPending = true
@@ -567,6 +570,14 @@ class HomeViewModel(
     fun retrySavedEventBookmarksIfNeeded() {
         // Always refetch when empty (covers cold start where cache missed) or prior auth miss.
         if (!bookmarksFetchPending && _savedEventBookmarks.value.isNotEmpty()) return
+        val now = Clock.System.now().toEpochMilliseconds()
+        if (
+            bookmarksFetchPending &&
+            lastBookmarksAttemptAtMs > 0L &&
+            now - lastBookmarksAttemptAtMs < bookmarksRetryCooldownMs
+        ) {
+            return
+        }
         bookmarksFetchPending = true
         viewModelScope.launch {
             loadSavedEventBookmarks()

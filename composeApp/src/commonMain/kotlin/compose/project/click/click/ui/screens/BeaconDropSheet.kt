@@ -34,11 +34,8 @@ import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.PhotoCamera
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -76,6 +73,8 @@ import compose.project.click.click.events.GuestListVisibility // pragma: allowli
 import compose.project.click.click.events.validateEventSchedule // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 import compose.project.click.click.ui.components.ActionChipButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickChip // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickFieldTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
@@ -219,8 +218,6 @@ fun BeaconDropSheetContent(
             BeaconDropCategory.EVENT -> MapBeaconKind.EVENT
             BeaconDropCategory.COMMUNITY_HUB -> MapBeaconKind.OTHER
         }
-    val chipContainer = MaterialTheme.colorScheme.surfaceContainerHighest
-    val chipSelected = MaterialTheme.colorScheme.primaryContainer
     val scroll = rememberScrollState()
     val scrollAtTop = rememberSheetScrollAtTop(scroll)
     val schedulePickerUi = rememberEventSchedulePickerUiState()
@@ -275,44 +272,38 @@ fun BeaconDropSheetContent(
                         items = BeaconDropCategory.entries.toList(),
                         key = { it.name },
                     ) { cat ->
-                        FilterChip(
+                        val categoryLabel =
+                            when (cat) {
+                                BeaconDropCategory.SOUNDTRACK -> "Soundtrack"
+                                BeaconDropCategory.HAZARD -> "Hazard"
+                                BeaconDropCategory.UTILITY -> "Utility"
+                                BeaconDropCategory.SOS -> "SOS"
+                                BeaconDropCategory.STUDY -> "Study"
+                                BeaconDropCategory.EVENT -> "Event"
+                                BeaconDropCategory.COMMUNITY_HUB -> "Hub"
+                            }
+                        ClickChip(
+                            label = categoryLabel,
                             selected = form.category == cat,
                             onClick = {
-                                if (cat == BeaconDropCategory.COMMUNITY_HUB) {
-                                    focusManager.clearFocus(force = true)
-                                    onCreateHub()
-                                    return@FilterChip
-                                }
-                                if (form.category == cat) return@FilterChip
-                                // Dismiss IME before swapping Event forms to avoid sheet height thrash.
-                                focusManager.clearFocus(force = true)
-                                scope.launch {
-                                    delay(40)
-                                    viewModel.setCategory(cat)
-                                    viewModel.setSubmitValidationError(null)
-                                    onDismissError()
+                                when {
+                                    cat == BeaconDropCategory.COMMUNITY_HUB -> {
+                                        focusManager.clearFocus(force = true)
+                                        onCreateHub()
+                                    }
+                                    form.category == cat -> Unit
+                                    else -> {
+                                        focusManager.clearFocus(force = true)
+                                        scope.launch {
+                                            delay(40)
+                                            viewModel.setCategory(cat)
+                                            viewModel.setSubmitValidationError(null)
+                                            onDismissError()
+                                        }
+                                    }
                                 }
                             },
-                            label = {
-                                Text(
-                                    when (cat) {
-                                        BeaconDropCategory.SOUNDTRACK -> "Soundtrack"
-                                        BeaconDropCategory.HAZARD -> "Hazard"
-                                        BeaconDropCategory.UTILITY -> "Utility"
-                                        BeaconDropCategory.SOS -> "SOS"
-                                        BeaconDropCategory.STUDY -> "Study"
-                                        BeaconDropCategory.EVENT -> "Event"
-                                        BeaconDropCategory.COMMUNITY_HUB -> "Hub"
-                                    },
-                                )
-                            },
-                            colors =
-                                FilterChipDefaults.filterChipColors(
-                                    containerColor = chipContainer,
-                                    selectedContainerColor = chipSelected,
-                                    labelColor = MaterialTheme.colorScheme.onSurface,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onSurface,
-                                ),
+                            compact = true,
                         )
                     }
                 }
@@ -398,7 +389,8 @@ fun BeaconDropSheetContent(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             EVENT_CATEGORY_OPTIONS.forEach { option ->
-                                FilterChip(
+                                ClickChip(
+                                    label = option,
                                     selected = option in form.eventCategories,
                                     onClick = {
                                         val next =
@@ -409,14 +401,7 @@ fun BeaconDropSheetContent(
                                             }
                                         viewModel.setEventCategories(next)
                                     },
-                                    label = { Text(option) },
-                                    colors =
-                                        FilterChipDefaults.filterChipColors(
-                                            containerColor = chipContainer,
-                                            selectedContainerColor = chipSelected,
-                                            labelColor = MaterialTheme.colorScheme.onSurface,
-                                            selectedLabelColor = MaterialTheme.colorScheme.onSurface,
-                                        ),
+                                    compact = true,
                                 )
                             }
                         }
@@ -436,17 +421,13 @@ fun BeaconDropSheetContent(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             EventVenueScale.entries.forEach { option ->
-                                FilterChip(
+                                ClickChip(
+                                    label = option.label,
                                     selected = form.venueScale == option,
-                                    onClick = { viewModel.setVenueScale(option) },
-                                    label = { Text(option.label) },
-                                    colors =
-                                        FilterChipDefaults.filterChipColors(
-                                            containerColor = chipContainer,
-                                            selectedContainerColor = chipSelected,
-                                            labelColor = MaterialTheme.colorScheme.onSurface,
-                                            selectedLabelColor = MaterialTheme.colorScheme.onSurface,
-                                        ),
+                                    onClick = {
+                                        viewModel.setVenueScale(option)
+                                    },
+                                    compact = true,
                                 )
                             }
                         }
@@ -648,20 +629,14 @@ fun BeaconDropSheetContent(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             BeaconDuration.entries.forEach { opt ->
-                                FilterChip(
+                                ClickChip(
+                                    label = opt.label,
                                     selected = form.expiration == opt,
                                     onClick = {
                                         viewModel.setExpiration(opt)
                                         onDismissError()
                                     },
-                                    label = { Text(opt.label) },
-                                    colors =
-                                        FilterChipDefaults.filterChipColors(
-                                            containerColor = chipContainer,
-                                            selectedContainerColor = chipSelected,
-                                            labelColor = MaterialTheme.colorScheme.onSurface,
-                                            selectedLabelColor = MaterialTheme.colorScheme.onSurface,
-                                        ),
+                                    compact = true,
                                 )
                             }
                         }
@@ -753,25 +728,17 @@ fun BeaconDropSheetContent(
                         items = BeaconVisibilityAudience.entries.toList(),
                         key = { it.name },
                     ) { option ->
-                        FilterChip(
+                        val audienceLabel =
+                            when (option) {
+                                BeaconVisibilityAudience.EVERYONE -> "Everyone"
+                                BeaconVisibilityAudience.CONNECTIONS -> "Connections only"
+                                BeaconVisibilityAudience.CORE_CONNECTIONS -> "Core connections only"
+                            }
+                        ClickChip(
+                            label = audienceLabel,
                             selected = form.visibilityAudience == option,
                             onClick = { viewModel.setVisibilityAudience(option) },
-                            label = {
-                                Text(
-                                    when (option) {
-                                        BeaconVisibilityAudience.EVERYONE -> "Everyone"
-                                        BeaconVisibilityAudience.CONNECTIONS -> "Connections only"
-                                        BeaconVisibilityAudience.CORE_CONNECTIONS -> "Core connections only"
-                                    },
-                                )
-                            },
-                            colors =
-                                FilterChipDefaults.filterChipColors(
-                                    containerColor = chipContainer,
-                                    selectedContainerColor = chipSelected,
-                                    labelColor = MaterialTheme.colorScheme.onSurface,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onSurface,
-                                ),
+                            compact = true,
                         )
                     }
                 }
@@ -792,25 +759,17 @@ fun BeaconDropSheetContent(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         EventVisibility.entries.forEach { option ->
-                            FilterChip(
+                            val eventVisLabel =
+                                when (option) {
+                                    EventVisibility.PUBLIC -> "Public"
+                                    EventVisibility.UNLISTED -> "Unlisted"
+                                    EventVisibility.INVITE_ONLY -> "Invite-only"
+                                }
+                            ClickChip(
+                                label = eventVisLabel,
                                 selected = form.eventVisibility == option,
                                 onClick = { viewModel.setEventVisibility(option) },
-                                label = {
-                                    Text(
-                                        when (option) {
-                                            EventVisibility.PUBLIC -> "Public"
-                                            EventVisibility.UNLISTED -> "Unlisted"
-                                            EventVisibility.INVITE_ONLY -> "Invite-only"
-                                        },
-                                    )
-                                },
-                                colors =
-                                    FilterChipDefaults.filterChipColors(
-                                        containerColor = chipContainer,
-                                        selectedContainerColor = chipSelected,
-                                        labelColor = MaterialTheme.colorScheme.onSurface,
-                                        selectedLabelColor = MaterialTheme.colorScheme.onSurface,
-                                    ),
+                                compact = true,
                             )
                         }
                     }
@@ -869,24 +828,16 @@ fun BeaconDropSheetContent(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         GuestListVisibility.entries.forEach { option ->
-                            FilterChip(
+                            val guestVisLabel =
+                                when (option) {
+                                    GuestListVisibility.PUBLIC -> "Public"
+                                    GuestListVisibility.HOSTS_ONLY -> "Hosts only"
+                                }
+                            ClickChip(
+                                label = guestVisLabel,
                                 selected = form.guestListVisibility == option,
                                 onClick = { viewModel.setGuestListVisibility(option) },
-                                label = {
-                                    Text(
-                                        when (option) {
-                                            GuestListVisibility.PUBLIC -> "Public"
-                                            GuestListVisibility.HOSTS_ONLY -> "Hosts only"
-                                        },
-                                    )
-                                },
-                                colors =
-                                    FilterChipDefaults.filterChipColors(
-                                        containerColor = chipContainer,
-                                        selectedContainerColor = chipSelected,
-                                        labelColor = MaterialTheme.colorScheme.onSurface,
-                                        selectedLabelColor = MaterialTheme.colorScheme.onSurface,
-                                    ),
+                                compact = true,
                             )
                         }
                     }
@@ -925,9 +876,9 @@ fun BeaconDropSheetContent(
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
-                Button(
+                ClickButton(
                     onClick = {
-                        if (form.isSubmitting) return@Button
+                        if (form.isSubmitting) return@ClickButton
                         dismissKeyboard()
                         viewModel.setSubmitValidationError(null)
                         viewModel.setSubmitting(true)
@@ -950,54 +901,55 @@ fun BeaconDropSheetContent(
                         if (fieldError != null) {
                             viewModel.setSubmitValidationError(fieldError)
                             viewModel.setSubmitting(false)
-                            return@Button
-                        }
-                        val schedule =
-                            if (isEvent) {
-                                val scheduleError =
+                        } else {
+                            val scheduleError =
+                                if (isEvent) {
                                     validateEventSchedule(
                                         form.eventSchedule.startEpochMs,
                                         form.eventSchedule.endEpochMs,
                                     )
-                                viewModel.setEventSchedule(form.eventSchedule, scheduleError)
-                                if (scheduleError != null) {
-                                    viewModel.setSubmitting(false)
-                                    return@Button
+                                } else {
+                                    null
                                 }
-                                form.eventSchedule
-                            } else {
-                                null
-                            }
-                        onSubmit(
-                            kind,
-                            title,
-                            description,
-                            url,
-                            ttl,
-                            form.showCreatorName,
-                            form.visibilityAudience,
-                            schedule,
-                            if (isEvent) form.eventCategories.toList() else emptyList(),
-                            if (isEvent) form.venueScale else EventVenueScale.DEFAULT,
-                            if (isEvent) form.selectedEventLocation else null,
                             if (isEvent) {
-                                EventListingOptions(
-                                    eventVisibility = form.eventVisibility,
-                                    eventCapacity =
-                                        form.eventCapacityText
-                                            .trim()
-                                            .toIntOrNull()
-                                            ?.takeIf { it > 0 },
-                                    approvalRequired = form.approvalRequired,
-                                    guestListVisibility = form.guestListVisibility,
-                                )
+                                viewModel.setEventSchedule(form.eventSchedule, scheduleError)
+                            }
+                            if (scheduleError != null) {
+                                viewModel.setSubmitting(false)
                             } else {
-                                null
-                            },
-                            form.stagedPhotoBytes,
-                            form.stagedPhotoMime,
-                        ) {
-                            viewModel.setSubmitting(false)
+                                val schedule = if (isEvent) form.eventSchedule else null
+                                onSubmit(
+                                    kind,
+                                    title,
+                                    description,
+                                    url,
+                                    ttl,
+                                    form.showCreatorName,
+                                    form.visibilityAudience,
+                                    schedule,
+                                    if (isEvent) form.eventCategories.toList() else emptyList(),
+                                    if (isEvent) form.venueScale else EventVenueScale.DEFAULT,
+                                    if (isEvent) form.selectedEventLocation else null,
+                                    if (isEvent) {
+                                        EventListingOptions(
+                                            eventVisibility = form.eventVisibility,
+                                            eventCapacity =
+                                                form.eventCapacityText
+                                                    .trim()
+                                                    .toIntOrNull()
+                                                    ?.takeIf { it > 0 },
+                                            approvalRequired = form.approvalRequired,
+                                            guestListVisibility = form.guestListVisibility,
+                                        )
+                                    } else {
+                                        null
+                                    },
+                                    form.stagedPhotoBytes,
+                                    form.stagedPhotoMime,
+                                ) {
+                                    viewModel.setSubmitting(false)
+                                }
+                            }
                         }
                     },
                     enabled = !form.isSubmitting && !submitLocked,

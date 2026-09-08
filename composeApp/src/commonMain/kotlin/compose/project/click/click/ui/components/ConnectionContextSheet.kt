@@ -5,9 +5,7 @@
 
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,16 +25,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -68,6 +63,7 @@ import compose.project.click.click.data.models.ContextTag // pragma: allowlist s
 import compose.project.click.click.data.models.UserProfile // pragma: allowlist secret
 import compose.project.click.click.data.repository.PROXIMITY_HOST_SELECTION_MAX_PEERS // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
+import compose.project.click.click.ui.theme.MotionTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 import compose.project.click.click.ui.utils.rememberCalendarPermissionRequester // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers
@@ -508,15 +504,11 @@ fun ConnectionContextSheet(
             val springBtn by animateFloatAsState(
                 targetValue =
                     if (presentation == ConnectionContextPresentation.ReconnectEncounter && encounterSaveInProgress) {
-                        0.94f
+                        MotionTokens.PressScale.ButtonPressedScale
                     } else {
                         1f
                     },
-                animationSpec =
-                    spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMediumLow,
-                    ),
+                animationSpec = MotionTokens.pressScaleSpec(),
                 label = "connection_ctx_primary",
             )
             val reconnectPulse =
@@ -587,10 +579,11 @@ fun ConnectionContextSheet(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     suggestions.forEach { tag ->
-                        FilterChip(
+                        ClickChip(
+                            label = "${tag.emoji} ${tag.label}",
                             selected = selectedTagId == tag.id,
                             onClick = { selectedTagId = tag.id },
-                            label = { Text("${tag.emoji} ${tag.label}") },
+                            compact = true,
                         )
                     }
                 }
@@ -609,10 +602,11 @@ fun ConnectionContextSheet(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     allTags.forEach { tag ->
-                        FilterChip(
+                        ClickChip(
+                            label = "${tag.emoji} ${tag.label}",
                             selected = selectedTagId == tag.id,
                             onClick = { selectedTagId = tag.id },
-                            label = { Text("${tag.emoji} ${tag.label}") },
+                            compact = true,
                         )
                     }
                 }
@@ -631,10 +625,11 @@ fun ConnectionContextSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
-                FilterChip(
+                ClickChip(
+                    label = "Write your own",
                     selected = selectedTagId == "custom",
                     onClick = { selectedTagId = "custom" },
-                    label = { Text("✏️ Write your own") },
+                    compact = true,
                 )
 
                 ClickOutlinedTextField(
@@ -704,14 +699,15 @@ fun ConnectionContextSheet(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    TextButton(
+                    ClickButton(
                         onClick = dismissSheet,
                         modifier = Modifier.weight(1f),
+                        variant = ClickButtonVariant.Secondary,
                     ) {
                         Text("Skip")
                     }
                     if (presentation == ConnectionContextPresentation.ReconnectEncounter) {
-                        Button(
+                        ClickButton(
                             onClick = {
                                 PlatformHapticsPolicy.lightImpact()
                                 onSaveEncounter?.invoke(resolvedSelectedIds)
@@ -736,7 +732,7 @@ fun ConnectionContextSheet(
                             }
                         }
                     } else {
-                        Button(
+                        ClickButton(
                             onClick = {
                                 PlatformHapticsPolicy.lightImpact()
                                 onConfirm(resolveSelectedTag(), ambientNoiseOptIn, resolvedSelectedIds)

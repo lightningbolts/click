@@ -107,7 +107,6 @@ internal fun HomeStatCard(
 ) {
     GlassCard(
         modifier = modifier,
-        usePrimaryBorder = true,
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -153,14 +152,14 @@ internal fun LocationGroupCard(
 ) {
     val chevronAngle by animateFloatAsState(
         targetValue = if (isExpanded) 90f else 0f,
-        animationSpec = tween(durationMillis = 250),
+        animationSpec = tween(durationMillis = MotionTokens.Duration.Deliberate),
         label = "chevron",
     )
 
     GlassCard(
         modifier = modifier.fillMaxWidth(),
         onClick = onToggleExpand,
-        usePrimaryBorder = isExpanded,
+        usePrimaryBorder = false,
     ) {
         Column {
             // Group header row
@@ -223,8 +222,8 @@ internal fun LocationGroupCard(
             // Expanded individual connections
             AnimatedVisibility(
                 visible = isExpanded,
-                enter = expandVertically(animationSpec = tween(250)) + fadeIn(tween(200)),
-                exit = shrinkVertically(animationSpec = tween(200)) + fadeOut(tween(150)),
+                enter = expandVertically(animationSpec = MotionTokens.expandSpec()) + fadeIn(MotionTokens.contentEnterSpec()),
+                exit = shrinkVertically(animationSpec = MotionTokens.expandSpec()) + fadeOut(MotionTokens.contentExitSpec()),
             ) {
                 Column(
                     modifier = Modifier.padding(top = 12.dp),
@@ -449,7 +448,7 @@ fun HomeEventReminderCard(
 ) {
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        usePrimaryBorder = true,
+        usePrimaryBorder = false,
         contentPadding = 14.dp,
     ) {
         Column(
@@ -506,10 +505,9 @@ fun ReconnectReminderCard(
     avatarUrl: String? = null,
     email: String? = null,
 ) {
-    val actionShape = RoundedCornerShape(8.dp)
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        usePrimaryBorder = true,
+        usePrimaryBorder = false,
         contentPadding = 14.dp,
     ) {
         Column(
@@ -551,57 +549,18 @@ fun ReconnectReminderCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                OutlinedButton(
+                ClickButton(
                     onClick = onDismiss,
-                    modifier =
-                        Modifier
-                            .weight(1f)
-                            .height(44.dp),
-                    shape = actionShape,
-                    border = BorderStroke(clickBorderWidth(), clickBorderColor()),
-                    colors =
-                        ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                        ),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                    modifier = Modifier.weight(1f),
+                    variant = ClickButtonVariant.Secondary,
                 ) {
-                    Icon(
-                        Icons.Filled.Close,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        "Dismiss",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                    Text("Dismiss")
                 }
-                Button(
+                ClickButton(
                     onClick = onReconnect,
-                    modifier =
-                        Modifier
-                            .weight(1f)
-                            .height(44.dp),
-                    shape = actionShape,
-                    colors =
-                        ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary,
-                        ),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                    modifier = Modifier.weight(1f),
                 ) {
-                    Icon(
-                        Icons.Filled.Chat,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        "Message",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                    Text("Message")
                 }
             }
         }
@@ -620,7 +579,7 @@ fun ConnectionInsightsCard(
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         onClick = onToggle,
-        usePrimaryBorder = true,
+        usePrimaryBorder = false,
     ) {
         Column {
             // Header

@@ -267,6 +267,14 @@ actual fun BindPlatformNativeNavigationBar(
 
 @Composable
 @Suppress("UNUSED_PARAMETER")
+actual fun ApplyOverlayMediaChrome(
+    active: Boolean,
+    onClose: () -> Unit,
+    trailing: List<NativeChromeAction>,
+) = Unit
+
+@Composable
+@Suppress("UNUSED_PARAMETER")
 actual fun PlatformNativeMapFloatingChrome(
     visible: Boolean,
     layerLabel: String,

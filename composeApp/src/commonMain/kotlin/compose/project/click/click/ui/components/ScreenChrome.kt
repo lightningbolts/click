@@ -32,10 +32,10 @@ import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowl
 
 private val AndroidStatusBarFallback = 24.dp
 
-/** Shared horizontal gutter for tab-root screens. */
+/** Shared horizontal gutter for tab-root screens. Delegates to [ClickScreenSpacing]. */
 object AppScreenDefaults {
-    val HorizontalPadding = 20.dp
-    val SectionSpacing = 24.dp
+    val HorizontalPadding = ClickScreenSpacing.Horizontal
+    val SectionSpacing = ClickScreenSpacing.Section
 
     /** First-item scroll offset (~20dp) before the tab-root header fully collapses. */
     val HeaderCollapseScrollThreshold = 20.dp
@@ -58,6 +58,25 @@ object AppScreenChromeState {
 
     fun updateBottomChromeHeight(height: Dp) {
         if (height > 0.dp) bottomChromeHeight = height
+    }
+
+    /**
+     * Count of full-screen overlays that must send the native UITabBar behind Compose.
+     * iOS cannot paint a Popup over a sibling `UITabBar`; send-to-back is the same path chat
+     * already uses and does not remount Liquid Glass.
+     */
+    var nativeTabBarCoverCount by mutableStateOf(0)
+        private set
+
+    val nativeTabBarCovered: Boolean
+        get() = nativeTabBarCoverCount > 0
+
+    fun acquireNativeTabBarCover() {
+        nativeTabBarCoverCount++
+    }
+
+    fun releaseNativeTabBarCover() {
+        nativeTabBarCoverCount = (nativeTabBarCoverCount - 1).coerceAtLeast(0)
     }
 }
 

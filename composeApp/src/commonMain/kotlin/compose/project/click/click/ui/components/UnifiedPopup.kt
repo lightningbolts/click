@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,12 +46,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.zIndex
 
@@ -84,6 +92,15 @@ data class UnifiedPopupMotion(
                 slideEnterFraction = 0.06f,
                 slideExitFraction = 0.05f,
             )
+
+        /** Photo lightbox — fade the scrim only; scale makes the image flash on dismiss. */
+        val Media =
+            UnifiedPopupMotion(
+                fadeInMillis = 180,
+                fadeOutMillis = 160,
+                scaleInInitial = 1f,
+                scaleOutTarget = 1f,
+            )
     }
 }
 
@@ -109,6 +126,14 @@ fun UnifiedPopupOverlay(
      * under form sheets). Date/time pickers should pass false.
      */
     focusable: Boolean = true,
+    dismissOnClickOutside: Boolean = true,
+    clippingEnabled: Boolean = true,
+    /**
+     * Pin the popup to the window origin and size it to [LocalWindowInfo]. Needed for media
+     * lightboxes: a nested Popup is otherwise clipped to the chat column (below the native
+     * header, above the UITabBar).
+     */
+    fillWindow: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val transitionState = remember { MutableTransitionState(false) }
@@ -178,20 +203,35 @@ fun UnifiedPopupOverlay(
         requestDismiss()
     }
 
+    val windowSize = LocalWindowInfo.current.containerSize
+    val density = LocalDensity.current
+    val screenSize = rememberPlatformScreenSizeDp()
+    val windowOriginPositionProvider =
+        remember {
+            object : PopupPositionProvider {
+                override fun calculatePosition(
+                    anchorBounds: IntRect,
+                    windowSize: IntSize,
+                    layoutDirection: LayoutDirection,
+                    popupContentSize: IntSize,
+                ): IntOffset = IntOffset.Zero
+            }
+        }
+    val overlaySizeModifier =
+        if (fillWindow) {
+            val w = if (screenSize.width.value > 0f) screenSize.width else with(density) { windowSize.width.toDp() }
+            val h = if (screenSize.height.value > 0f) screenSize.height else with(density) { windowSize.height.toDp() }
+            Modifier.requiredSize(w, h)
+        } else {
+            Modifier.fillMaxSize()
+        }
+
     CompositionLocalProvider(LocalUnifiedPopupAnimatedDismiss provides ::requestDismiss) {
-        Popup(
-            onDismissRequest = { requestDismiss() },
-            properties =
-                PopupProperties(
-                    focusable = focusable,
-                    dismissOnBackPress = true,
-                    dismissOnClickOutside = true,
-                ),
-        ) {
+        val popupContent: @Composable () -> Unit = {
             Box(
                 modifier =
                     modifier
-                        .fillMaxSize()
+                        .then(overlaySizeModifier)
                         .zIndex(UnifiedPopupTokens.OverlayZIndex),
             ) {
                 AnimatedVisibility(
@@ -227,6 +267,32 @@ fun UnifiedPopupOverlay(
                     }
                 }
             }
+        }
+        if (fillWindow) {
+            Popup(
+                popupPositionProvider = windowOriginPositionProvider,
+                onDismissRequest = { requestDismiss() },
+                properties =
+                    PopupProperties(
+                        focusable = focusable,
+                        dismissOnBackPress = true,
+                        dismissOnClickOutside = dismissOnClickOutside,
+                        clippingEnabled = clippingEnabled,
+                    ),
+                content = popupContent,
+            )
+        } else {
+            Popup(
+                onDismissRequest = { requestDismiss() },
+                properties =
+                    PopupProperties(
+                        focusable = focusable,
+                        dismissOnBackPress = true,
+                        dismissOnClickOutside = dismissOnClickOutside,
+                        clippingEnabled = clippingEnabled,
+                    ),
+                content = popupContent,
+            )
         }
     }
 }

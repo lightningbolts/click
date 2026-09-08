@@ -40,7 +40,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
-import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 
@@ -282,9 +281,7 @@ fun DiscoverySortSegmentBar(
                         .clip(RoundedCornerShape(segmentCorner))
                         .then(
                             if (selected) {
-                                Modifier
-                                    .background(MaterialTheme.colorScheme.primaryContainer)
-                                    .border(2.dp, PrimaryBlue, RoundedCornerShape(segmentCorner))
+                                Modifier.background(MaterialTheme.colorScheme.primaryContainer)
                             } else {
                                 Modifier
                             },
@@ -344,9 +341,7 @@ fun ConnectionsSegmentBar(
                         .clip(RoundedCornerShape(segmentCorner))
                         .then(
                             if (selected) {
-                                Modifier
-                                    .background(MaterialTheme.colorScheme.primaryContainer)
-                                    .border(2.dp, PrimaryBlue, RoundedCornerShape(segmentCorner))
+                                Modifier.background(MaterialTheme.colorScheme.primaryContainer)
                             } else {
                                 Modifier
                             },

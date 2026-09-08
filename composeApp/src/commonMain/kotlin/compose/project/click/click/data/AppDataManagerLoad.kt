@@ -3,6 +3,7 @@
 package compose.project.click.click.data // pragma: allowlist secret
 
 import compose.project.click.click.auth.LocalSessionCache // pragma: allowlist secret
+import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.UserAvailability // pragma: allowlist secret
 import compose.project.click.click.data.models.resolveDisplayName // pragma: allowlist secret
@@ -136,7 +137,12 @@ internal suspend fun AppDataManager.loadAllData() {
                 val resolvedBirthday = metaBirthday ?: cachedSessionUser?.birthday
                 val resolvedImage = cachedImage
                 val offlineUser = cachedSessionUser?.takeIf { it.id == effectiveUserId }
-                if (offlineUser != null && authUser == null) {
+                if (!EnsureFreshAccessToken.sdkAccessIsFresh()) {
+                    user = offlineUser
+                    if (user == null) {
+                        println("AppDataManager: Skipping user create — no fresh JWT")
+                    }
+                } else if (offlineUser != null && authUser == null) {
                     user = offlineUser
                 } else {
                     // Create user in database if not exists
@@ -194,19 +200,27 @@ internal suspend fun AppDataManager.loadAllData() {
                 }
             }
 
-            _currentUser.value = user
-            println("AppDataManager: Current user set to: ${user.name}")
-            runCatching { chatRepository.startGlobalPresence(user.id) }
+            val loadedUser = user
+            if (loadedUser == null) {
+                println("AppDataManager: No user row and no fresh JWT — keeping cached profile")
+                _isDataLoaded.value = true
+                _isLoading.value = false
+                return@withTimeout
+            }
+
+            _currentUser.value = loadedUser
+            println("AppDataManager: Current user set to: ${loadedUser.name}")
+            runCatching { chatRepository.startGlobalPresence(loadedUser.id) }
                 .onFailure { e -> println("AppDataManager: Global presence start failed: ${e.redactedRestMessage()}") }
-            startPresenceHeartbeat(user.id)
-            startAggressiveBackgroundChatSync(user.id)
+            startPresenceHeartbeat(loadedUser.id)
+            startAggressiveBackgroundChatSync(loadedUser.id)
 
             // Interest tags: await during startup so Settings renders instantly (no shimmer).
             val interestsDeferred =
                 async {
                     runCatching {
                         supabaseRepository
-                            .fetchUserInterests(user.id)
+                            .fetchUserInterests(loadedUser.id)
                             .getOrNull()
                             ?.tags
                             .orEmpty()
@@ -214,7 +228,7 @@ internal suspend fun AppDataManager.loadAllData() {
                 }
 
             // Load location preferences from Supabase
-            runCatching { supabaseRepository.fetchLocationPreferences(user.id) }
+            runCatching { supabaseRepository.fetchLocationPreferences(loadedUser.id) }
                 .onSuccess { _locationPreferences.value = it }
                 .onFailure { println("AppDataManager: Failed to load location preferences: ${it.message}") }
 
@@ -238,7 +252,7 @@ internal suspend fun AppDataManager.loadAllData() {
             // Settings toggle is the intentional, contextual entry point for notification setup.
 
             scope.launch {
-                val remotePreferences = notificationPreferencesRepository.fetchPreferences(user.id)
+                val remotePreferences = notificationPreferencesRepository.fetchPreferences(loadedUser.id)
                 _notificationPreferences.value = remotePreferences
                 NotificationRuntimeState.setNotificationPreferences(
                     messageEnabled = remotePreferences.messagePushEnabled,
@@ -262,7 +276,7 @@ internal suspend fun AppDataManager.loadAllData() {
                 // Use local value immediately
                 _userAvailability.value =
                     UserAvailability(
-                        userId = user.id,
+                        userId = loadedUser.id,
                         isFreeThisWeek = localFreeThisWeek,
                         lastUpdated = Clock.System.now().toEpochMilliseconds(),
                     )
@@ -272,7 +286,7 @@ internal suspend fun AppDataManager.loadAllData() {
             coroutineScope {
                 val availabilityDeferred =
                     async {
-                        runCatching { supabaseRepository.fetchUserAvailability(user.id) }
+                        runCatching { supabaseRepository.fetchUserAvailability(loadedUser.id) }
                             .onFailure { println("AppDataManager: Availability fetch failed: ${it.message}") }
                             .getOrNull()
                     }
@@ -285,7 +299,7 @@ internal suspend fun AppDataManager.loadAllData() {
                 }
 
                 val interestTags = interestsDeferred.await()
-                if (_currentUser.value?.id == user.id) {
+                if (_currentUser.value?.id == loadedUser.id) {
                     _currentUser.value = _currentUser.value?.copy(tags = interestTags)
                     _userInterestTags.value = interestTags
                 }
@@ -293,18 +307,18 @@ internal suspend fun AppDataManager.loadAllData() {
                 _isDataLoaded.value = true
                 lastRefreshTime = Clock.System.now().toEpochMilliseconds()
                 persistSnapshot()
-                startSilentChatPrefetch(user.id)
+                startSilentChatPrefetch(loadedUser.id)
 
                 // Keep first paint fast: hydrate connected users in background instead of
                 // blocking Home readiness on this network call.
                 scope.launch {
-                    if (_currentUser.value?.id == user.id) {
-                        runCatching { refreshConnectedUsers(_connections.value, user.id) }
+                    if (_currentUser.value?.id == loadedUser.id) {
+                        runCatching { refreshConnectedUsers(_connections.value, loadedUser.id) }
                             .onFailure { e ->
                                 println("AppDataManager: Background connected-user hydration failed: ${e.redactedRestMessage()}")
                             }.onSuccess {
                                 startBackgroundProfilePrefetch(
-                                    viewerUserId = user.id,
+                                    viewerUserId = loadedUser.id,
                                     peerUserIds = _connectedUsers.value.keys.toList(),
                                 )
                             }

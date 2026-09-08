@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.chat
 
 import androidx.compose.animation.AnimatedVisibility
@@ -34,14 +36,12 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.PhotoCamera
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -67,8 +67,8 @@ import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.replySnippetForMetadata
+import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalPlatformStyle
-import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.utils.toImageBitmap // pragma: allowlist secret
 import compose.project.click.click.viewmodel.CHAT_STAGED_MEDIA_MAX // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
@@ -119,29 +119,33 @@ internal fun ConnectionChatMessageComposer(
     val composerStripInteraction = remember { MutableInteractionSource() }
     Box(modifier = Modifier.fillMaxWidth()) {
         Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(Color.Transparent)
-                .clickable(
-                    indication = null,
-                    interactionSource = composerStripInteraction,
-                ) {},
+            modifier =
+                Modifier
+                    .matchParentSize()
+                    .background(Color.Transparent)
+                    .clickable(
+                        indication = null,
+                        interactionSource = composerStripInteraction,
+                    ) {},
         )
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = composerRowHPad, vertical = composerRowVPad),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = composerRowHPad, vertical = composerRowVPad),
         ) {
             AnimatedVisibility(
                 visible = replyBannerVisible,
-                enter = expandVertically(
-                    animationSpec = tween(340, easing = FastOutSlowInEasing),
-                    expandFrom = Alignment.Bottom,
-                ) + fadeIn(animationSpec = tween(280, easing = FastOutSlowInEasing)),
-                exit = shrinkVertically(
-                    animationSpec = tween(360, easing = FastOutSlowInEasing),
-                    shrinkTowards = Alignment.Bottom,
-                ) + fadeOut(animationSpec = tween(300, easing = FastOutSlowInEasing)),
+                enter =
+                    expandVertically(
+                        animationSpec = tween(340, easing = FastOutSlowInEasing),
+                        expandFrom = Alignment.Bottom,
+                    ) + fadeIn(animationSpec = tween(280, easing = FastOutSlowInEasing)),
+                exit =
+                    shrinkVertically(
+                        animationSpec = tween(360, easing = FastOutSlowInEasing),
+                        shrinkTowards = Alignment.Bottom,
+                    ) + fadeOut(animationSpec = tween(300, easing = FastOutSlowInEasing)),
                 label = "replyComposerBanner",
             ) {
                 val rt = replyBannerContent
@@ -150,24 +154,27 @@ internal fun ConnectionChatMessageComposer(
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
                             shape = replyShape,
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(
-                                alpha = if (composerStyle.isIOS) 0.45f else 0.55f,
-                            ),
-                            border = if (composerStyle.isIOS) {
-                                BorderStroke(
-                                    0.5.dp,
-                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.22f),
-                                )
-                            } else {
-                                null
-                            },
+                            color =
+                                MaterialTheme.colorScheme.surfaceVariant.copy(
+                                    alpha = if (composerStyle.isIOS) 0.45f else 0.55f,
+                                ),
+                            border =
+                                if (composerStyle.isIOS) {
+                                    BorderStroke(
+                                        0.5.dp,
+                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.22f),
+                                    )
+                                } else {
+                                    null
+                                },
                             tonalElevation = 0.dp,
                             shadowElevation = 0.dp,
                         ) {
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Icon(
@@ -211,9 +218,10 @@ internal fun ConnectionChatMessageComposer(
             if (stagedBeacon != null) {
                 val beacon = stagedBeacon!!
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 6.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -224,13 +232,14 @@ internal fun ConnectionChatMessageComposer(
                             modifier = Modifier.fillMaxWidth(),
                         )
                         Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(6.dp)
-                                .size(24.dp)
-                                .clip(CircleShape)
-                                .background(Color.Black.copy(alpha = 0.52f))
-                                .clickable { viewModel.clearStagedBeacon() },
+                            modifier =
+                                Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(6.dp)
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.Black.copy(alpha = 0.52f))
+                                    .clickable { viewModel.clearStagedBeacon() },
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
@@ -241,14 +250,12 @@ internal fun ConnectionChatMessageComposer(
                             )
                         }
                     }
-                    Button(
+                    ClickButton(
                         onClick = {
                             PlatformHapticsPolicy.successNotification()
                             viewModel.commitStagedBeacon()
                         },
                         enabled = !isSending,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                     ) {
                         Text("Send")
                     }
@@ -256,9 +263,10 @@ internal fun ConnectionChatMessageComposer(
             }
             if (stagedChatImages.isNotEmpty()) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 6.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -267,15 +275,17 @@ internal fun ConnectionChatMessageComposer(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         items(stagedChatImages, key = { it.id }) { item ->
-                            val thumb: ImageBitmap? = remember(item.id, item.bytes) {
-                                runCatching { item.bytes.toImageBitmap() }.getOrNull()
-                            }
+                            val thumb: ImageBitmap? =
+                                remember(item.id, item.bytes) {
+                                    runCatching { item.bytes.toImageBitmap() }.getOrNull()
+                                }
                             Box {
                                 Box(
-                                    modifier = Modifier
-                                        .size(56.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)),
+                                    modifier =
+                                        Modifier
+                                            .size(56.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)),
                                 ) {
                                     if (thumb != null) {
                                         Image(
@@ -287,13 +297,14 @@ internal fun ConnectionChatMessageComposer(
                                     }
                                 }
                                 Box(
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(2.dp)
-                                        .size(20.dp)
-                                        .clip(CircleShape)
-                                        .background(Color.Black.copy(alpha = 0.52f))
-                                        .clickable { viewModel.removeStagedMedia(item.id) },
+                                    modifier =
+                                        Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(2.dp)
+                                            .size(20.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.Black.copy(alpha = 0.52f))
+                                            .clickable { viewModel.removeStagedMedia(item.id) },
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     Icon(
@@ -306,14 +317,12 @@ internal fun ConnectionChatMessageComposer(
                             }
                         }
                     }
-                    Button(
+                    ClickButton(
                         onClick = {
                             PlatformHapticsPolicy.lightImpact()
                             viewModel.commitStagedMediaToUpload()
                         },
                         enabled = !isSending,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                     ) {
                         Text("Send (${stagedChatImages.size})")
                     }
@@ -327,27 +336,29 @@ internal fun ConnectionChatMessageComposer(
             }
             messageSendError?.let { err ->
                 Text(
-                    text = if ("saved on this device" in err) {
-                        err
-                    } else {
-                        "$err · Review and tap send to retry"
-                    },
+                    text =
+                        if ("saved on this device" in err) {
+                            err
+                        } else {
+                            "$err · Review and tap send to retry"
+                        },
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 4.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 4.dp),
                 )
             }
-            val attachTint = PrimaryBlue.copy(alpha = 0.92f)
             ChatComposerStrip(
                 value = messageInput,
                 onValueChange = viewModel::updateMessageInput,
-                placeholder = when {
-                    editingMessageId != null -> "Edit message…"
-                    isGroupChat -> "Message the group…"
-                    else -> "Message ${chatDetails.otherUser.name}…"
-                },
+                placeholder =
+                    when {
+                        editingMessageId != null -> "Edit message…"
+                        isGroupChat -> "Message the group…"
+                        else -> "Message ${chatDetails.otherUser.name}…"
+                    },
                 enabled = true,
                 externallySending = isSending,
                 sendIcon = if (editingMessageId != null) Icons.Filled.Check else Icons.AutoMirrored.Filled.Send,
@@ -358,91 +369,90 @@ internal fun ConnectionChatMessageComposer(
                     attachmentMenuExpanded = expanded
                     if (expanded) onRefreshShareableBeacons()
                 },
-                attachBackground = PrimaryBlue.copy(alpha = if (isSending) 0.12f else 0.24f),
-                attachTint = attachTint,
                 attachmentMenuContent = {
                     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                            ChatAttachmentMenuRow(
-                                label = "Click Drops",
-                                icon = Icons.Filled.PhotoCamera,
-                                onClick = {
-                                    PlatformHapticsPolicy.heavyImpact()
-                                    PlatformHapticsPolicy.successNotification()
-                                    attachmentMenuExpanded = false
-                                    keyboardController?.hide()
-                                    focusManager.clearFocus()
-                                    onOpenDisposableRoll()
-                                },
-                            )
-                            ChatAttachmentMenuRow(
-                                label = "Share beacon",
-                                icon = Icons.Filled.Place,
-                                enabled = shareableBeacons.isNotEmpty(),
-                                supportingText = if (shareableBeacons.isEmpty()) {
+                        ChatAttachmentMenuRow(
+                            label = "Click Drops",
+                            icon = Icons.Filled.PhotoCamera,
+                            onClick = {
+                                PlatformHapticsPolicy.heavyImpact()
+                                PlatformHapticsPolicy.successNotification()
+                                attachmentMenuExpanded = false
+                                keyboardController?.hide()
+                                focusManager.clearFocus()
+                                onOpenDisposableRoll()
+                            },
+                        )
+                        ChatAttachmentMenuRow(
+                            label = "Share beacon",
+                            icon = Icons.Filled.Place,
+                            enabled = shareableBeacons.isNotEmpty(),
+                            supportingText =
+                                if (shareableBeacons.isEmpty()) {
                                     "No nearby beacons available"
                                 } else {
                                     null
                                 },
-                                onClick = {
-                                    if (shareableBeacons.isEmpty()) return@ChatAttachmentMenuRow
-                                    PlatformHapticsPolicy.heavyImpact()
-                                    attachmentMenuExpanded = false
-                                    keyboardController?.hide()
-                                    focusManager.clearFocus()
-                                    showBeaconPicker = true
-                                },
-                            )
-                            if (tetherPingEnabled) {
-                                ChatAttachmentMenuRow(
-                                    label = "Ping Tether",
-                                    icon = Icons.Filled.Explore,
-                                    enabled = !pingTetherLoading,
-                                    onClick = {
-                                        if (pingTetherLoading) return@ChatAttachmentMenuRow
-                                        PlatformHapticsPolicy.successNotification()
-                                        attachmentMenuExpanded = false
-                                        onPingTether()
-                                    },
-                                )
-                            }
+                            onClick = {
+                                if (shareableBeacons.isEmpty()) return@ChatAttachmentMenuRow
+                                PlatformHapticsPolicy.heavyImpact()
+                                attachmentMenuExpanded = false
+                                keyboardController?.hide()
+                                focusManager.clearFocus()
+                                showBeaconPicker = true
+                            },
+                        )
+                        if (tetherPingEnabled) {
                             ChatAttachmentMenuRow(
-                                label = "Photo library",
-                                icon = Icons.Outlined.Image,
+                                label = "Ping Tether",
+                                icon = Icons.Filled.Explore,
+                                enabled = !pingTetherLoading,
                                 onClick = {
-                                    PlatformHapticsPolicy.heavyImpact()
+                                    if (pingTetherLoading) return@ChatAttachmentMenuRow
+                                    PlatformHapticsPolicy.successNotification()
                                     attachmentMenuExpanded = false
-                                    mediaPickers.openPhotoLibrary()
+                                    onPingTether()
                                 },
                             )
-                            ChatAttachmentMenuRow(
-                                label = "Take photo",
-                                icon = Icons.Outlined.PhotoCamera,
-                                onClick = {
-                                    PlatformHapticsPolicy.heavyImpact()
-                                    attachmentMenuExpanded = false
-                                    keyboardController?.hide()
-                                    focusManager.clearFocus()
-                                    mediaPickers.openCamera()
-                                },
-                            )
-                            ChatAttachmentMenuRow(
-                                label = "Voice message",
-                                icon = Icons.Outlined.Mic,
-                                onClick = {
-                                    PlatformHapticsPolicy.heavyImpact()
-                                    attachmentMenuExpanded = false
-                                    mediaPickers.openVoiceRecorder()
-                                },
-                            )
-                            ChatAttachmentMenuRow(
-                                label = "File",
-                                icon = Icons.Outlined.AttachFile,
-                                onClick = {
-                                    PlatformHapticsPolicy.heavyImpact()
-                                    attachmentMenuExpanded = false
-                                    mediaPickers.openFilePicker()
-                                },
-                            )
+                        }
+                        ChatAttachmentMenuRow(
+                            label = "Photo library",
+                            icon = Icons.Outlined.Image,
+                            onClick = {
+                                PlatformHapticsPolicy.heavyImpact()
+                                attachmentMenuExpanded = false
+                                mediaPickers.openPhotoLibrary()
+                            },
+                        )
+                        ChatAttachmentMenuRow(
+                            label = "Take photo",
+                            icon = Icons.Outlined.PhotoCamera,
+                            onClick = {
+                                PlatformHapticsPolicy.heavyImpact()
+                                attachmentMenuExpanded = false
+                                keyboardController?.hide()
+                                focusManager.clearFocus()
+                                mediaPickers.openCamera()
+                            },
+                        )
+                        ChatAttachmentMenuRow(
+                            label = "Voice message",
+                            icon = Icons.Outlined.Mic,
+                            onClick = {
+                                PlatformHapticsPolicy.heavyImpact()
+                                attachmentMenuExpanded = false
+                                mediaPickers.openVoiceRecorder()
+                            },
+                        )
+                        ChatAttachmentMenuRow(
+                            label = "File",
+                            icon = Icons.Outlined.AttachFile,
+                            onClick = {
+                                PlatformHapticsPolicy.heavyImpact()
+                                attachmentMenuExpanded = false
+                                mediaPickers.openFilePicker()
+                            },
+                        )
                     }
                 },
             )

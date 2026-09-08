@@ -2,6 +2,8 @@
 
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -53,6 +55,7 @@ import compose.project.click.click.ui.chat.fetchImageBytesFromUrl // pragma: all
 import compose.project.click.click.ui.chat.saveDecryptedAttachmentToDownloads // pragma: allowlist secret
 import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
+import compose.project.click.click.ui.theme.MotionTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.util.profileMediaVaultId // pragma: allowlist secret
 import compose.project.click.click.util.profileMediaVaultLocalPath // pragma: allowlist secret
@@ -739,8 +742,8 @@ fun ProfileBottomSheet(
                         .fillMaxWidth()
                         .fillMaxHeight()
                         .background(sheetPageBackground())
-                        .padding(horizontal = 20.dp)
-                        .padding(top = 12.dp, bottom = 12.dp),
+                        .padding(horizontal = ClickScreenSpacing.Horizontal)
+                        .padding(top = 8.dp, bottom = 8.dp),
             ) {
                 Text(
                     text = "Profile",
@@ -764,7 +767,7 @@ fun ProfileBottomSheet(
                     avatarUploading = avatarUploading,
                 )
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(12.dp))
 
                 ProfileActionGrid(
                     showNudge = state.canNudge,
@@ -774,7 +777,7 @@ fun ProfileBottomSheet(
                     onOpenDisposableRoll = onOpenDisposableRoll,
                 )
 
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(12.dp))
 
                 ScrollableTabRow(
                     selectedTabIndex = pagerState.currentPage,
@@ -786,7 +789,18 @@ fun ProfileBottomSheet(
                         val selected = pagerState.currentPage == index
                         Tab(
                             selected = selected,
-                            onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                            onClick = {
+                                scope.launch {
+                                    pagerState.animateScrollToPage(
+                                        index,
+                                        animationSpec =
+                                            tween(
+                                                MotionTokens.Duration.Standard,
+                                                easing = FastOutSlowInEasing,
+                                            ),
+                                    )
+                                }
+                            },
                             text = {
                                 Text(
                                     tab.label,

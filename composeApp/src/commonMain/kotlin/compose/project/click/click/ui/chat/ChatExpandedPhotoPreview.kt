@@ -1,53 +1,48 @@
-package compose.project.click.click.ui.chat
+@file:Suppress("ktlint:standard:function-naming")
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
+package compose.project.click.click.ui.chat // pragma: allowlist secret
+
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
-import compose.project.click.click.data.models.MessageWithUser
-import compose.project.click.click.data.models.isEncryptedMedia
-import compose.project.click.click.data.models.isDisposableRollLocked
-import compose.project.click.click.data.models.mediaUrlOrNull
-import compose.project.click.click.ui.components.GlassFullscreenMediaOverlay
-import compose.project.click.click.ui.components.GlassSheetTokens
-import compose.project.click.click.ui.components.UnifiedPopupTokens
-import compose.project.click.click.utils.toChatDisplayImageBitmap
-import compose.project.click.click.viewmodel.SecureChatMediaHost
+import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
+import compose.project.click.click.data.models.isDisposableRollLocked // pragma: allowlist secret
+import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
+import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
+import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickZoomableMedia // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassFullscreenMediaOverlay // pragma: allowlist secret
+import compose.project.click.click.ui.components.MediaLightboxSaveShareTrailing // pragma: allowlist secret
+import compose.project.click.click.ui.components.MediaLightboxTopChrome // pragma: allowlist secret
+import compose.project.click.click.ui.components.UnifiedPopupTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.mediaLightboxShareActions // pragma: allowlist secret
+import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
+import compose.project.click.click.utils.toChatDisplayImageBitmap // pragma: allowlist secret
+import compose.project.click.click.viewmodel.SecureChatMediaHost // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.runtime.produceState
 
 /**
- * Tap-to-expand lightbox for chat photo messages (matches profile media preview UX).
+ * Full-screen tap-to-expand lightbox for chat photo messages.
+ * Pinch/pan/double-tap zoom; close via the top control or system back — not by tapping the photo.
  */
 @Composable
 fun ChatExpandedPhotoPreview(
@@ -103,90 +98,105 @@ fun ChatExpandedPhotoPreview(
             return@LaunchedEffect
         }
         val bytes = secureState?.imageBytes ?: return@LaunchedEffect
-        val decoded = withContext(Dispatchers.Default) {
-            runCatching { bytes.toChatDisplayImageBitmap() }.getOrNull()
-        } ?: return@LaunchedEffect
+        val decoded =
+            withContext(Dispatchers.Default) {
+                runCatching { bytes.toChatDisplayImageBitmap() }.getOrNull()
+            } ?: return@LaunchedEffect
         secureChatImageBitmapCache.put(message.id, decoded)
         bitmap = decoded
     }
-    val previewImageFade = remember(message.id) { Animatable(0f) }
 
-    LaunchedEffect(visible, message.id, bitmap, mediaUrl, isEncrypted) {
-        if (!visible) {
-            previewImageFade.animateTo(0f, tween(UnifiedPopupTokens.FadeOutMillis, easing = FastOutSlowInEasing))
-            return@LaunchedEffect
-        }
-        previewImageFade.snapTo(0f)
-        if ((isEncrypted && bitmap != null) || (!isEncrypted && mediaUrl.isNotBlank())) {
-            previewImageFade.animateTo(1f, tween(UnifiedPopupTokens.FadeInMillis, easing = FastOutSlowInEasing))
-        }
-    }
+    val isIOS = LocalPlatformStyle.current.isIOS
+    val scope = rememberCoroutineScope()
+    val decryptedBytes = secureState?.imageBytes
+    val mimeHint = message.originalMimeTypeOrNull()
+    val saveShareActions =
+        mediaLightboxShareActions(
+            onSave = {
+                scope.launch {
+                    persistLightboxImageToGallery(mediaUrl, decryptedBytes, mimeHint)
+                }
+            },
+            onShare = {
+                scope.launch {
+                    shareLightboxImage(mediaUrl, decryptedBytes, mimeHint)
+                }
+            },
+        )
 
-    Box(modifier = Modifier.fillMaxSize()) {
     GlassFullscreenMediaOverlay(
         visible = visible,
         onDismissRequest = onDismiss,
         modifier = Modifier.fillMaxSize(),
+        scrimAlpha = 1f,
+        nativeTrailingActions = saveShareActions,
     ) {
-        val shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner)
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 22.dp)
-                .clip(shape)
-                .border(1.dp, GlassSheetTokens.GlassBorder(), shape),
-            shape = shape,
-            color = GlassSheetTokens.OledBlack(),
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black),
         ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                when {
-                    isEncrypted -> {
-                        val bmp = bitmap
-                        if (bmp != null) {
+            when {
+                isEncrypted -> {
+                    val bmp = bitmap
+                    if (bmp != null) {
+                        ClickZoomableMedia {
                             Image(
                                 bitmap = bmp,
                                 contentDescription = "Photo",
                                 contentScale = ContentScale.Fit,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 420.dp)
-                                    .graphicsLayer { alpha = previewImageFade.value }
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                                modifier = it,
                             )
                         }
+                    } else {
+                        Text(
+                            text = "Preparing photo…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier.align(Alignment.Center),
+                        )
                     }
-                    mediaUrl.isNotBlank() -> {
+                }
+                mediaUrl.isNotBlank() -> {
+                    ClickZoomableMedia {
                         AsyncImage(
                             model = mediaUrl,
                             contentDescription = "Photo",
                             contentScale = ContentScale.Fit,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 420.dp)
-                                .graphicsLayer { alpha = previewImageFade.value }
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                        )
-                    }
-                    else -> {
-                        Text(
-                            text = "Preparing photo…",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = GlassSheetTokens.OnOledMuted(),
-                            modifier = Modifier.padding(vertical = 32.dp),
+                            modifier = it,
                         )
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-                TextButton(onClick = onDismiss) {
-                    Text("Close", color = GlassSheetTokens.OnOled())
+                else -> {
+                    Text(
+                        text = "Preparing photo…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.align(Alignment.Center),
+                    )
                 }
             }
+            MediaLightboxTopChrome(
+                onClose = onDismiss,
+                showClose = !isIOS,
+                trailing = {
+                    if (!isIOS) {
+                        MediaLightboxSaveShareTrailing(
+                            onSave = {
+                                scope.launch {
+                                    persistLightboxImageToGallery(mediaUrl, decryptedBytes, mimeHint)
+                                }
+                            },
+                            onShare = {
+                                scope.launch {
+                                    shareLightboxImage(mediaUrl, decryptedBytes, mimeHint)
+                                }
+                            },
+                        )
+                    }
+                },
+            )
         }
-    }
     }
 }

@@ -2,7 +2,6 @@
 
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -42,7 +41,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -71,7 +69,7 @@ internal fun ProfileSheetHeader(
         Box(
             modifier =
                 Modifier
-                    .size(78.dp)
+                    .size(56.dp)
                     .clickable(enabled = onAvatarClick != null && !avatarUploading) {
                         onAvatarClick?.invoke()
                     },
@@ -81,7 +79,7 @@ internal fun ProfileSheetHeader(
                 modifier =
                     Modifier
                         .align(Alignment.Center)
-                        .size(68.dp)
+                        .size(56.dp)
                         .clip(CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
@@ -98,7 +96,7 @@ internal fun ProfileSheetHeader(
                     modifier =
                         Modifier
                             .align(Alignment.Center)
-                            .size(68.dp)
+                            .size(56.dp)
                             .clip(CircleShape)
                             .background(GlassSheetTokens.OledBlack().copy(alpha = 0.55f)),
                     contentAlignment = Alignment.Center,
@@ -113,7 +111,7 @@ internal fun ProfileSheetHeader(
                     modifier =
                         Modifier
                             .align(Alignment.BottomEnd)
-                            .size(30.dp)
+                            .size(22.dp)
                             .clip(CircleShape)
                             .background(PrimaryBlue),
                     contentAlignment = Alignment.Center,
@@ -122,12 +120,12 @@ internal fun ProfileSheetHeader(
                         imageVector = Icons.Filled.PhotoCamera,
                         contentDescription = "Change group avatar",
                         tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(17.dp),
+                        modifier = Modifier.size(12.dp),
                     )
                 }
             }
         }
-        Spacer(Modifier.width(14.dp))
+        Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 displayName,
@@ -175,81 +173,56 @@ internal fun ProfileActionGrid(
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(ClickScreenSpacing.Compact),
     ) {
-        Row(
+        ClickButton(
+            onClick = onMessage,
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            ProfileActionCard(
-                label = "Message",
-                icon = Icons.Outlined.Message,
-                onClick = onMessage,
-                usePrimaryBorder = true,
-                modifier = Modifier.weight(1f),
-            )
-            if (showNudge) {
-                ProfileActionCard(
-                    label = "Nudge",
-                    icon = Icons.Outlined.NotificationsActive,
-                    onClick = onNudge,
-                    modifier = Modifier.weight(1f),
-                )
-            } else {
-                Spacer(modifier = Modifier.weight(1f))
-            }
-        }
-
-        if (showDisposableRoll && onOpenDisposableRoll != null) {
-            ProfileActionCard(
-                label = "Click Drops",
-                icon = Icons.Filled.PhotoCamera,
-                onClick = onOpenDisposableRoll,
-                usePrimaryBorder = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-    }
-}
-
-@Composable
-internal fun ProfileActionCard(
-    label: String,
-    icon: ImageVector,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    usePrimaryBorder: Boolean = false,
-) {
-    GlassCard(
-        modifier = modifier.heightIn(min = 52.dp),
-        onClick = onClick,
-        usePrimaryBorder = usePrimaryBorder,
-        contentPadding = 0.dp,
-    ) {
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 52.dp)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center,
         ) {
             Icon(
-                imageVector = icon,
+                imageVector = Icons.Outlined.Message,
                 contentDescription = null,
-                tint = if (usePrimaryBorder) PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(18.dp),
             )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Spacer(Modifier.width(8.dp))
+            Text("Message")
+        }
+        if (showNudge || (showDisposableRoll && onOpenDisposableRoll != null)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(ClickScreenSpacing.Compact),
+            ) {
+                if (showNudge) {
+                    ClickButton(
+                        onClick = onNudge,
+                        modifier = Modifier.weight(1f),
+                        variant = ClickButtonVariant.Secondary,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.NotificationsActive,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text("Nudge")
+                    }
+                }
+                if (showDisposableRoll && onOpenDisposableRoll != null) {
+                    ClickButton(
+                        onClick = onOpenDisposableRoll,
+                        modifier = Modifier.weight(1f),
+                        variant = ClickButtonVariant.Secondary,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PhotoCamera,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text("Drops")
+                    }
+                }
+            }
         }
     }
 }
@@ -368,15 +341,12 @@ internal fun JournalComposerCard(
     error: String?,
     onSubmit: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(18.dp)
+    val shape = RoundedCornerShape(12.dp)
     Column(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .clip(shape)
-                .border(1.dp, PrimaryBlue.copy(alpha = 0.28f), shape)
-                .background(GlassSheetTokens.GlassSurface())
-                .padding(14.dp),
+                .padding(vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text(
@@ -414,37 +384,20 @@ internal fun JournalComposerCard(
             )
             Spacer(Modifier.weight(1f))
             val addEnabled = text.trim().isNotEmpty() && !posting
-            val addShape = RoundedCornerShape(999.dp)
-            Surface(
+            ClickButton(
                 onClick = onSubmit,
                 enabled = addEnabled,
-                shape = addShape,
-                color = if (addEnabled) PrimaryBlue.copy(alpha = 0.18f) else Color.Transparent,
-                border =
-                    BorderStroke(
-                        1.dp,
-                        if (addEnabled) PrimaryBlue.copy(alpha = 0.7f) else GlassSheetTokens.GlassBorder(),
-                    ),
+                modifier = Modifier.heightIn(min = 40.dp),
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    if (posting) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(12.dp),
-                            strokeWidth = 1.5.dp,
-                            color = PrimaryBlue,
-                        )
-                    }
-                    Text(
-                        text = if (posting) "Adding…" else "Add",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (addEnabled) PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                if (posting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(12.dp),
+                        strokeWidth = 1.5.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
                     )
+                    Spacer(Modifier.width(6.dp))
                 }
+                Text(if (posting) "Adding…" else "Add")
             }
         }
         if (!error.isNullOrBlank()) {
@@ -557,15 +510,11 @@ internal fun JournalTimelineRow(
     onSaveEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(16.dp)
     Column(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .clip(shape)
-                .border(1.dp, GlassSheetTokens.GlassBorder(), shape)
-                .background(GlassSheetTokens.GlassSurface())
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -645,31 +594,26 @@ internal fun JournalTimelineRow(
 
 @Composable
 internal fun TimelineRow(item: ProfileSheetTimelineItem) {
-    val rowShape = RoundedCornerShape(14.dp)
     Row(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .clip(rowShape)
-                .border(1.dp, GlassSheetTokens.GlassBorder(), rowShape)
-                .background(GlassSheetTokens.GlassSurface())
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(vertical = 10.dp),
         verticalAlignment = Alignment.Top,
     ) {
         Box(
             modifier =
                 Modifier
-                    .width(32.dp)
-                    .padding(top = 6.dp),
+                    .width(24.dp)
+                    .padding(top = 8.dp),
             contentAlignment = Alignment.TopCenter,
         ) {
             Box(
                 modifier =
                     Modifier
-                        .size(12.dp)
+                        .size(8.dp)
                         .clip(CircleShape)
-                        .border(2.dp, PrimaryBlue.copy(alpha = 0.35f), CircleShape)
-                        .background(PrimaryBlue),
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)),
             )
         }
         Spacer(Modifier.width(4.dp))

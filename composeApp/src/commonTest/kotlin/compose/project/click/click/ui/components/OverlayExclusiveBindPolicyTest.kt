@@ -9,6 +9,12 @@ import kotlin.test.assertTrue
 
 class OverlayExclusiveBindPolicyTest {
     @Test
+    fun mediaCoversOnlyUIKitTabChrome() {
+        assertTrue(OverlayExclusiveBindPolicy.shouldCoverNativeTabBarForMedia(isIOS = true))
+        assertFalse(OverlayExclusiveBindPolicy.shouldCoverNativeTabBarForMedia(isIOS = false))
+    }
+
+    @Test
     fun chatSkipsBindWhileCameraHoldsExclusive() {
         val chat = Any()
         val camera = Any()
@@ -82,6 +88,50 @@ class OverlayExclusiveBindPolicyTest {
                 releasingOwner = camera,
                 currentOwner = chat,
                 underlyingOwner = chat,
+            ),
+        )
+    }
+
+    @Test
+    fun leadingSymbolSwapsOnlyWhenCloseFlagChanges() {
+        assertFalse(OverlayExclusiveBindPolicy.shouldReplaceLeadingChromeSymbol(null, true))
+        assertFalse(OverlayExclusiveBindPolicy.shouldReplaceLeadingChromeSymbol(true, true))
+        assertTrue(OverlayExclusiveBindPolicy.shouldReplaceLeadingChromeSymbol(true, false))
+        assertTrue(OverlayExclusiveBindPolicy.shouldReplaceLeadingChromeSymbol(false, true))
+    }
+
+    @Test
+    fun mediaOverlayKeepsConversationTitleAndAvatar() {
+        assertTrue(
+            OverlayExclusiveBindPolicy.shouldPreserveConversationChrome(
+                leadingClose = true,
+                title = "",
+                hasIdentity = false,
+                hasExistingTitle = true,
+            ),
+        )
+        assertFalse(
+            OverlayExclusiveBindPolicy.shouldPreserveConversationChrome(
+                leadingClose = true,
+                title = "Click Drops",
+                hasIdentity = false,
+                hasExistingTitle = true,
+            ),
+        )
+        assertFalse(
+            OverlayExclusiveBindPolicy.shouldPreserveConversationChrome(
+                leadingClose = true,
+                title = "",
+                hasIdentity = true,
+                hasExistingTitle = true,
+            ),
+        )
+        assertFalse(
+            OverlayExclusiveBindPolicy.shouldPreserveConversationChrome(
+                leadingClose = true,
+                title = "",
+                hasIdentity = false,
+                hasExistingTitle = false,
             ),
         )
     }

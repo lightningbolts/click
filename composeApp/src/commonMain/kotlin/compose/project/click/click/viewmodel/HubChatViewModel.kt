@@ -80,6 +80,9 @@ class HubChatViewModel(
     internal val isEventHub: Boolean = false,
     internal val hubLocationResolver: suspend () -> LocationResult? = { null },
     internal val tokenStorage: TokenStorage = createTokenStorage(),
+    internal val freshHubJwtProvider: suspend (Boolean) -> String = { forceRefresh ->
+        tokenStorage.requireFreshHubJwt(forceRefresh)
+    },
     internal val chatApi: ChatApiClient = ChatApiClient(tokenStorage = tokenStorage),
     internal val hubLifecycleGateway: HubLifecycleGateway = ChatApiHubLifecycleGateway(chatApi),
     internal val activeHubCache: ActiveHubCache = AppDataManagerActiveHubCache,
@@ -167,6 +170,8 @@ class HubChatViewModel(
     internal var hubE2eeV2Session: HubE2eeV2Session? = null
     internal var hubParticipantIds: Set<String> = emptySet()
 
+    internal suspend fun requireFreshHubJwt(forceRefresh: Boolean = false): String = freshHubJwtProvider(forceRefresh)
+
     init {
         viewModelScope.launch {
             AppDataManager.awaitHubAccessStateRestored()
@@ -191,7 +196,7 @@ class HubChatViewModel(
         if (loadHubDetails) {
             viewModelScope.launch(Dispatchers.Default) {
                 try {
-                    val jwt = runCatching { tokenStorage.requireFreshHubJwt() }.getOrNull()
+                    val jwt = runCatching { requireFreshHubJwt() }.getOrNull()
                     if (!jwt.isNullOrBlank()) {
                         chatApi.getHubDetails(hubId, jwt).getOrNull()?.let { details ->
                             val creator = details.creatorId?.trim()?.takeIf { it.isNotEmpty() }
@@ -334,62 +339,62 @@ class HubChatViewModel(
         viewModelScope.launch {
             try {
                 val loc = resolveGatekeeperLocationOrThrow()
-                val jwt =
-                    tokenStorage.requireFreshHubJwt()
-                val e2ee = ensureHubE2eeV2Session(hubParticipantIds)
-                val clientMessageId = e2ee?.let { MessageCryptoV2.generateClientMessageId() }
-                val outgoingBody =
-                    if (e2ee != null) {
-                        MessageCryptoV2.encryptMessage(
-                            metadata =
-                                MessageCryptoV2.MessageMetadata(
-                                    chatId = hubId,
-                                    epoch = e2ee.epoch,
-                                    senderDeviceId = e2ee.senderDeviceId,
-                                    clientMessageId = clientMessageId!!,
-                                ),
-                            epochKey = e2ee.epochKey,
-                            plaintext = text,
-                            replayGuard = e2ee.replayGuard,
-                        )
-                    } else {
-                        text
-                    }
-                val outgoingMetadata =
-                    e2ee?.let {
-                        buildJsonObject {
-                            put("crypto_version", MessageCryptoV2.CRYPTO_VERSION)
-                            put("epoch", it.epoch)
-                            put("sender_device_id", it.senderDeviceId)
-                            put("client_message_id", clientMessageId!!)
+                val jwt = requireFreshHubJwt()
+                withHubE2eeV2SendSession { e2ee ->
+                    val clientMessageId = e2ee?.let { MessageCryptoV2.generateClientMessageId() }
+                    val outgoingBody =
+                        if (e2ee != null) {
+                            MessageCryptoV2.encryptMessage(
+                                metadata =
+                                    MessageCryptoV2.MessageMetadata(
+                                        chatId = hubId,
+                                        epoch = e2ee.epoch,
+                                        senderDeviceId = e2ee.senderDeviceId,
+                                        clientMessageId = clientMessageId!!,
+                                    ),
+                                epochKey = e2ee.epochKey,
+                                plaintext = text,
+                                replayGuard = e2ee.replayGuard,
+                            )
+                        } else {
+                            text
                         }
-                    }
-                val dto =
-                    chatApi
-                        .sendHubMessage(
-                            hubId = hubId,
-                            body = outgoingBody,
-                            userLat = loc.latitude,
-                            userLong = loc.longitude,
-                            authToken = jwt,
-                            messageType = ChatMessageType.TEXT,
-                            metadata = outgoingMetadata,
-                        ).getOrElse { e -> throw e }
-                applyInsertedHubMessage(
-                    serverMessage =
-                        rowToMessageWithUser(
-                            HubMessageRow(
-                                id = dto.id,
-                                hubId = dto.hubId,
-                                userId = dto.userId,
-                                body = dto.body,
-                                createdAt = dto.createdAt,
-                                messageType = dto.messageType,
-                                metadata = dto.metadata,
-                            ),
-                        ).message,
-                    optimisticTempId = tempId,
-                )
+                    val outgoingMetadata =
+                        e2ee?.let {
+                            buildJsonObject {
+                                put("crypto_version", MessageCryptoV2.CRYPTO_VERSION)
+                                put("epoch", it.epoch)
+                                put("sender_device_id", it.senderDeviceId)
+                                put("client_message_id", clientMessageId!!)
+                            }
+                        }
+                    val dto =
+                        chatApi
+                            .sendHubMessage(
+                                hubId = hubId,
+                                body = outgoingBody,
+                                userLat = loc.latitude,
+                                userLong = loc.longitude,
+                                authToken = jwt,
+                                messageType = ChatMessageType.TEXT,
+                                metadata = outgoingMetadata,
+                            ).getOrElse { e -> throw e }
+                    applyInsertedHubMessage(
+                        serverMessage =
+                            rowToMessageWithUser(
+                                HubMessageRow(
+                                    id = dto.id,
+                                    hubId = dto.hubId,
+                                    userId = dto.userId,
+                                    body = dto.body,
+                                    createdAt = dto.createdAt,
+                                    messageType = dto.messageType,
+                                    metadata = dto.metadata,
+                                ),
+                            ).message,
+                        optimisticTempId = tempId,
+                    )
+                }
             } catch (e: Exception) {
                 markOptimisticSendFailed(tempId)
                 _draft.value = text
@@ -418,88 +423,88 @@ class HubChatViewModel(
             _sendError.value = null
             try {
                 val loc = resolveGatekeeperLocationOrThrow()
-                val jwt =
-                    tokenStorage.requireFreshHubJwt()
-                val e2ee = ensureHubE2eeV2Session(hubParticipantIds)
-                val clientMessageId = e2ee?.let { MessageCryptoV2.generateClientMessageId() }
-                val encryptedV2 =
-                    e2ee?.let {
-                        MessageCryptoV2.encryptMedia(
-                            metadata =
-                                MessageCryptoV2.MediaMetadata(
-                                    chatId = hubId,
-                                    epoch = it.epoch,
-                                    senderDeviceId = it.senderDeviceId,
-                                    clientMessageId = clientMessageId!!,
-                                    mediaCiphertextSha256 = "",
-                                ),
-                            epochKey = it.epochKey,
-                            plaintext = imageBytes,
-                            replayGuard = it.replayGuard,
-                        )
-                    }
-                val keys = if (e2ee == null) MessageCrypto.deriveKeysForHub(hubId) else null
-                val cipher = encryptedV2?.uploadedBytes ?: MessageCrypto.encryptMediaBytes(imageBytes, keys!!)
-                val leaf = randomHubMediaLeaf()
-                val objectPath = "$currentUserId/hub/$hubId/$leaf.bin"
-                val path =
+                val jwt = requireFreshHubJwt()
+                withHubE2eeV2SendSession { e2ee ->
+                    val clientMessageId = e2ee?.let { MessageCryptoV2.generateClientMessageId() }
+                    val encryptedV2 =
+                        e2ee?.let {
+                            MessageCryptoV2.encryptMedia(
+                                metadata =
+                                    MessageCryptoV2.MediaMetadata(
+                                        chatId = hubId,
+                                        epoch = it.epoch,
+                                        senderDeviceId = it.senderDeviceId,
+                                        clientMessageId = clientMessageId!!,
+                                        mediaCiphertextSha256 = "",
+                                    ),
+                                epochKey = it.epochKey,
+                                plaintext = imageBytes,
+                                replayGuard = it.replayGuard,
+                            )
+                        }
+                    val keys = if (e2ee == null) MessageCrypto.deriveKeysForHub(hubId) else null
+                    val cipher = encryptedV2?.uploadedBytes ?: MessageCrypto.encryptMediaBytes(imageBytes, keys!!)
+                    val leaf = randomHubMediaLeaf()
+                    val objectPath = "$currentUserId/hub/$hubId/$leaf.bin"
+                    val path =
+                        chatApi
+                            .uploadHubMedia(
+                                fileBytes = cipher,
+                                hubId = hubId,
+                                mimeType = "application/octet-stream",
+                                objectPath = objectPath,
+                                authToken = jwt,
+                                userLat = loc.latitude,
+                                userLong = loc.longitude,
+                                v2 =
+                                    encryptedV2?.let {
+                                        E2eeV2MediaUploadRequest(
+                                            envelope = it.authorizationEnvelope,
+                                            mediaCiphertextSha256 = it.mediaCiphertextSha256,
+                                            epoch = e2ee!!.epoch,
+                                            senderDeviceId = e2ee.senderDeviceId,
+                                            clientMessageId = clientMessageId!!,
+                                        )
+                                    },
+                            ).getOrElse { e -> throw e }
+                    val metadata: JsonObject =
+                        buildJsonObject {
+                            put("media_path", JsonPrimitive(path))
+                            put("media_bucket", JsonPrimitive("hub-media"))
+                            put("is_encrypted_media", JsonPrimitive(true))
+                            put("original_mime_type", JsonPrimitive(mimeType.ifBlank { "image/jpeg" }))
+                            if (encryptedV2 != null && e2ee != null) {
+                                put("crypto_version", MessageCryptoV2.CRYPTO_VERSION)
+                                put("media_chat_id", hubId)
+                                put("media_epoch", e2ee.epoch)
+                                put("media_sender_device_id", e2ee.senderDeviceId)
+                                put("media_client_message_id", clientMessageId!!)
+                                put("media_ciphertext_sha256", encryptedV2.mediaCiphertextSha256)
+                                put("media_authorization_envelope", encryptedV2.authorizationEnvelope)
+                            }
+                        }
+                    val outgoingBody =
+                        if (e2ee != null) {
+                            MessageCryptoV2.encryptMessage(
+                                metadata = MessageCryptoV2.MessageMetadata(hubId, e2ee.epoch, e2ee.senderDeviceId, clientMessageId!!),
+                                epochKey = e2ee.epochKey,
+                                plaintext = "Photo",
+                                replayGuard = e2ee.replayGuard,
+                            )
+                        } else {
+                            "Photo"
+                        }
                     chatApi
-                        .uploadHubMedia(
-                            fileBytes = cipher,
+                        .sendHubMessage(
                             hubId = hubId,
-                            mimeType = "application/octet-stream",
-                            objectPath = objectPath,
-                            authToken = jwt,
+                            body = outgoingBody,
                             userLat = loc.latitude,
                             userLong = loc.longitude,
-                            v2 =
-                                encryptedV2?.let {
-                                    E2eeV2MediaUploadRequest(
-                                        envelope = it.authorizationEnvelope,
-                                        mediaCiphertextSha256 = it.mediaCiphertextSha256,
-                                        epoch = e2ee!!.epoch,
-                                        senderDeviceId = e2ee.senderDeviceId,
-                                        clientMessageId = clientMessageId!!,
-                                    )
-                                },
+                            authToken = jwt,
+                            messageType = ChatMessageType.IMAGE,
+                            metadata = metadata,
                         ).getOrElse { e -> throw e }
-                val metadata: JsonObject =
-                    buildJsonObject {
-                        put("media_path", JsonPrimitive(path))
-                        put("media_bucket", JsonPrimitive("hub-media"))
-                        put("is_encrypted_media", JsonPrimitive(true))
-                        put("original_mime_type", JsonPrimitive(mimeType.ifBlank { "image/jpeg" }))
-                        if (encryptedV2 != null && e2ee != null) {
-                            put("crypto_version", MessageCryptoV2.CRYPTO_VERSION)
-                            put("media_chat_id", hubId)
-                            put("media_epoch", e2ee.epoch)
-                            put("media_sender_device_id", e2ee.senderDeviceId)
-                            put("media_client_message_id", clientMessageId!!)
-                            put("media_ciphertext_sha256", encryptedV2.mediaCiphertextSha256)
-                            put("media_authorization_envelope", encryptedV2.authorizationEnvelope)
-                        }
-                    }
-                val outgoingBody =
-                    if (e2ee != null) {
-                        MessageCryptoV2.encryptMessage(
-                            metadata = MessageCryptoV2.MessageMetadata(hubId, e2ee.epoch, e2ee.senderDeviceId, clientMessageId!!),
-                            epochKey = e2ee.epochKey,
-                            plaintext = "Photo",
-                            replayGuard = e2ee.replayGuard,
-                        )
-                    } else {
-                        "Photo"
-                    }
-                chatApi
-                    .sendHubMessage(
-                        hubId = hubId,
-                        body = outgoingBody,
-                        userLat = loc.latitude,
-                        userLong = loc.longitude,
-                        authToken = jwt,
-                        messageType = ChatMessageType.IMAGE,
-                        metadata = metadata,
-                    ).getOrElse { e -> throw e }
+                }
             } catch (e: Exception) {
                 if (isHubExpired(e)) {
                     _sendError.value = HUB_EXPIRED_MESSAGE
@@ -525,83 +530,84 @@ class HubChatViewModel(
             _sendError.value = null
             try {
                 val loc = resolveGatekeeperLocationOrThrow()
-                val jwt = tokenStorage.requireFreshHubJwt()
-                val e2ee = ensureHubE2eeV2Session(hubParticipantIds)
-                val clientMessageId = e2ee?.let { MessageCryptoV2.generateClientMessageId() }
-                val encryptedV2 =
-                    e2ee?.let {
-                        MessageCryptoV2.encryptMedia(
-                            metadata = MessageCryptoV2.MediaMetadata(hubId, it.epoch, it.senderDeviceId, clientMessageId!!, ""),
-                            epochKey = it.epochKey,
-                            plaintext = imageBytes,
-                            replayGuard = it.replayGuard,
-                        )
-                    }
-                val keys = if (e2ee == null) MessageCrypto.deriveKeysForHub(hubId) else null
-                val cipher = encryptedV2?.uploadedBytes ?: MessageCrypto.encryptMediaBytes(imageBytes, keys!!)
-                val leaf = randomHubMediaLeaf()
-                val objectPath = "$currentUserId/hub/$hubId/$leaf.bin"
-                val path =
+                val jwt = requireFreshHubJwt()
+                withHubE2eeV2SendSession { e2ee ->
+                    val clientMessageId = e2ee?.let { MessageCryptoV2.generateClientMessageId() }
+                    val encryptedV2 =
+                        e2ee?.let {
+                            MessageCryptoV2.encryptMedia(
+                                metadata = MessageCryptoV2.MediaMetadata(hubId, it.epoch, it.senderDeviceId, clientMessageId!!, ""),
+                                epochKey = it.epochKey,
+                                plaintext = imageBytes,
+                                replayGuard = it.replayGuard,
+                            )
+                        }
+                    val keys = if (e2ee == null) MessageCrypto.deriveKeysForHub(hubId) else null
+                    val cipher = encryptedV2?.uploadedBytes ?: MessageCrypto.encryptMediaBytes(imageBytes, keys!!)
+                    val leaf = randomHubMediaLeaf()
+                    val objectPath = "$currentUserId/hub/$hubId/$leaf.bin"
+                    val path =
+                        chatApi
+                            .uploadHubMedia(
+                                fileBytes = cipher,
+                                hubId = hubId,
+                                mimeType = "application/octet-stream",
+                                objectPath = objectPath,
+                                authToken = jwt,
+                                userLat = loc.latitude,
+                                userLong = loc.longitude,
+                                v2 =
+                                    encryptedV2?.let {
+                                        E2eeV2MediaUploadRequest(
+                                            envelope = it.authorizationEnvelope,
+                                            mediaCiphertextSha256 = it.mediaCiphertextSha256,
+                                            epoch = e2ee!!.epoch,
+                                            senderDeviceId = e2ee.senderDeviceId,
+                                            clientMessageId = clientMessageId!!,
+                                        )
+                                    },
+                            ).getOrElse { e -> throw e }
+                    val revealTtlIso = computeClickDropRevealTtlIso()
+                    val metadata: JsonObject =
+                        buildJsonObject {
+                            put("media_path", JsonPrimitive(path))
+                            put("media_bucket", JsonPrimitive("hub-media"))
+                            put("is_encrypted_media", JsonPrimitive(true))
+                            put("original_mime_type", JsonPrimitive(mimeType.ifBlank { "image/jpeg" }))
+                            put("disposable_roll", JsonPrimitive(true))
+                            put("collaboration_ttl", JsonPrimitive(revealTtlIso))
+                            if (encryptedV2 != null && e2ee != null) {
+                                put("crypto_version", MessageCryptoV2.CRYPTO_VERSION)
+                                put("media_chat_id", hubId)
+                                put("media_epoch", e2ee.epoch)
+                                put("media_sender_device_id", e2ee.senderDeviceId)
+                                put("media_client_message_id", clientMessageId!!)
+                                put("media_ciphertext_sha256", encryptedV2.mediaCiphertextSha256)
+                                put("media_authorization_envelope", encryptedV2.authorizationEnvelope)
+                            }
+                        }
+                    val outgoingBody =
+                        if (e2ee != null) {
+                            MessageCryptoV2.encryptMessage(
+                                metadata = MessageCryptoV2.MessageMetadata(hubId, e2ee.epoch, e2ee.senderDeviceId, clientMessageId!!),
+                                epochKey = e2ee.epochKey,
+                                plaintext = "Click Drop",
+                                replayGuard = e2ee.replayGuard,
+                            )
+                        } else {
+                            "Click Drop"
+                        }
                     chatApi
-                        .uploadHubMedia(
-                            fileBytes = cipher,
+                        .sendHubMessage(
                             hubId = hubId,
-                            mimeType = "application/octet-stream",
-                            objectPath = objectPath,
-                            authToken = jwt,
+                            body = outgoingBody,
                             userLat = loc.latitude,
                             userLong = loc.longitude,
-                            v2 =
-                                encryptedV2?.let {
-                                    E2eeV2MediaUploadRequest(
-                                        envelope = it.authorizationEnvelope,
-                                        mediaCiphertextSha256 = it.mediaCiphertextSha256,
-                                        epoch = e2ee!!.epoch,
-                                        senderDeviceId = e2ee.senderDeviceId,
-                                        clientMessageId = clientMessageId!!,
-                                    )
-                                },
+                            authToken = jwt,
+                            messageType = ChatMessageType.IMAGE,
+                            metadata = metadata,
                         ).getOrElse { e -> throw e }
-                val revealTtlIso = computeClickDropRevealTtlIso()
-                val metadata: JsonObject =
-                    buildJsonObject {
-                        put("media_path", JsonPrimitive(path))
-                        put("media_bucket", JsonPrimitive("hub-media"))
-                        put("is_encrypted_media", JsonPrimitive(true))
-                        put("original_mime_type", JsonPrimitive(mimeType.ifBlank { "image/jpeg" }))
-                        put("disposable_roll", JsonPrimitive(true))
-                        put("collaboration_ttl", JsonPrimitive(revealTtlIso))
-                        if (encryptedV2 != null && e2ee != null) {
-                            put("crypto_version", MessageCryptoV2.CRYPTO_VERSION)
-                            put("media_chat_id", hubId)
-                            put("media_epoch", e2ee.epoch)
-                            put("media_sender_device_id", e2ee.senderDeviceId)
-                            put("media_client_message_id", clientMessageId!!)
-                            put("media_ciphertext_sha256", encryptedV2.mediaCiphertextSha256)
-                            put("media_authorization_envelope", encryptedV2.authorizationEnvelope)
-                        }
-                    }
-                val outgoingBody =
-                    if (e2ee != null) {
-                        MessageCryptoV2.encryptMessage(
-                            metadata = MessageCryptoV2.MessageMetadata(hubId, e2ee.epoch, e2ee.senderDeviceId, clientMessageId!!),
-                            epochKey = e2ee.epochKey,
-                            plaintext = "Click Drop",
-                            replayGuard = e2ee.replayGuard,
-                        )
-                    } else {
-                        "Click Drop"
-                    }
-                chatApi
-                    .sendHubMessage(
-                        hubId = hubId,
-                        body = outgoingBody,
-                        userLat = loc.latitude,
-                        userLong = loc.longitude,
-                        authToken = jwt,
-                        messageType = ChatMessageType.IMAGE,
-                        metadata = metadata,
-                    ).getOrElse { e -> throw e }
+                }
             } catch (e: Exception) {
                 if (isHubExpired(e)) {
                     _sendError.value = HUB_EXPIRED_MESSAGE
@@ -624,7 +630,7 @@ class HubChatViewModel(
     private suspend fun resolveHubMediaUrl(message: Message): String? {
         val objectPath = message.hubMediaPathOrNull()
         if (objectPath == null) return message.mediaUrlOrNull()?.takeIf { it.isNotBlank() }
-        val jwt = tokenStorage.requireFreshHubJwt()
+        val jwt = requireFreshHubJwt()
         return chatApi
             .resolveHubMediaUrl(hubId = hubId, path = objectPath, authToken = jwt)
             .getOrNull()
@@ -778,8 +784,7 @@ class HubChatViewModel(
         }
         viewModelScope.launch(mutationDispatcher) {
             try {
-                val jwt =
-                    tokenStorage.requireFreshHubJwt()
+                val jwt = requireFreshHubJwt()
                 hubLifecycleGateway
                     .updateHub(
                         hubId = hubId,
@@ -799,8 +804,7 @@ class HubChatViewModel(
     fun leaveHub(onResult: (Boolean) -> Unit = {}) {
         viewModelScope.launch(mutationDispatcher) {
             try {
-                val jwt =
-                    tokenStorage.requireFreshHubJwt()
+                val jwt = requireFreshHubJwt()
                 hubLifecycleGateway
                     .leaveHub(
                         hubId = hubId,
@@ -819,8 +823,7 @@ class HubChatViewModel(
     fun deleteHub(onResult: (Boolean) -> Unit = {}) {
         viewModelScope.launch(mutationDispatcher) {
             try {
-                val jwt =
-                    tokenStorage.requireFreshHubJwt()
+                val jwt = requireFreshHubJwt()
                 hubLifecycleGateway
                     .deleteHub(
                         hubId = hubId,
@@ -840,6 +843,7 @@ class HubChatViewModel(
     override fun onCleared() {
         sessionJob?.cancel()
         sessionJob = null
+        clearHubE2eeV2Session()
         clearHubSecureMediaCache(purgePersistentCache = true)
         val ch = hubChannel
         hubChannel = null

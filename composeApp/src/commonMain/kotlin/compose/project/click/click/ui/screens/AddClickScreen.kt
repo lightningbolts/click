@@ -11,13 +11,12 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Check
@@ -30,14 +29,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.platform.rememberReduceMotionEnabled // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
-import compose.project.click.click.ui.components.AdaptiveButton // pragma: allowlist secret
-import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenWithFloatingHeader // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickContentCard // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickListRow // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickScreenSpacing // pragma: allowlist secret
 import compose.project.click.click.ui.components.CreateHubModal // pragma: allowlist secret
 import compose.project.click.click.ui.components.JoinCommunityHubSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.SuccessBeat // pragma: allowlist secret
@@ -129,30 +131,29 @@ fun AddClickContent(
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(24.dp),
+        verticalArrangement = Arrangement.spacedBy(ClickScreenSpacing.Section),
     ) {
         val reduceMotion = rememberReduceMotionEnabled()
         val pulse = rememberInfiniteTransition(label = "tap_to_connect_pulse")
         val pulseAlpha by pulse.animateFloat(
-            initialValue = 0.45f,
+            initialValue = 0.72f,
             targetValue = 1f,
             animationSpec =
                 infiniteRepeatable(
-                    animation = tween(durationMillis = 1100, easing = FastOutSlowInEasing),
+                    animation = tween(durationMillis = MotionTokens.Pulse.Gentle, easing = FastOutSlowInEasing),
                     repeatMode = RepeatMode.Reverse,
                 ),
             label = "tap_to_connect_pulse_alpha",
         )
-        // Tap to Connect (BLE + audio + GPS) — full width card first
-        AdaptiveCard(
+        ClickContentCard(
             modifier = Modifier.fillMaxWidth(),
             onClick = onNavigateToNfc,
+            showBorder = false,
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentPadding = ClickScreenSpacing.Section,
         ) {
             Column(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
@@ -162,133 +163,87 @@ fun AddClickContent(
                     tint = MaterialTheme.colorScheme.primary,
                     modifier =
                         Modifier
-                            .size(64.dp)
+                            .size(56.dp)
                             .graphicsLayer { alpha = if (reduceMotion) 1f else pulseAlpha },
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     "Tap to Connect",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                     fontWeight = FontWeight.Bold,
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(ClickScreenSpacing.Compact))
                 Text(
                     "Nearby handshake with Bluetooth and audio",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center,
                 )
             }
         }
 
-        // QR Code Section - Two cards side by side
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            AdaptiveCard(
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .aspectRatio(0.85f),
+        Column(modifier = Modifier.fillMaxWidth()) {
+            AddClickSecondaryRow(
+                title = "My QR",
+                subtitle = "Share your code",
+                icon = Icons.Filled.QrCode,
                 onClick = onShowMyQRCode,
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Icon(
-                        Icons.Filled.QrCode,
-                        contentDescription = "My QR Code",
-                        modifier = Modifier.size(72.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        "My Code",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        "Share your QR",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
-            AdaptiveCard(
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .aspectRatio(0.85f),
+            )
+            AddClickSecondaryRow(
+                title = "Scan QR",
+                subtitle = "Friend or hub code",
+                icon = Icons.Filled.QrCodeScanner,
                 onClick = onScanQRCode,
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Icon(
-                        Icons.Filled.QrCodeScanner,
-                        contentDescription = "Scan QR",
-                        modifier = Modifier.size(72.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        "Scan Code",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        "Friend or hub QR",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            OutlinedButton(
+            )
+            AddClickSecondaryRow(
+                title = "Create Community Hub",
+                subtitle = "Host a venue for nearby Clicks",
+                icon = Icons.Filled.Campaign,
                 onClick = { showCreateHubModal = true },
-                modifier = Modifier.weight(1f).height(48.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurfaceVariant),
-                colors =
-                    ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                    ),
-                shape = RoundedCornerShape(12.dp),
-            ) {
-                Icon(Icons.Filled.Campaign, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Create hub", fontWeight = FontWeight.SemiBold)
-            }
-            OutlinedButton(
+            )
+            AddClickSecondaryRow(
+                title = "Join Community Hub",
+                subtitle = "Enter a venue code",
+                icon = Icons.Filled.GroupAdd,
                 onClick = { showJoinHubSheet = true },
-                modifier = Modifier.weight(1f).height(48.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurfaceVariant),
-                colors =
-                    ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                    ),
-                shape = RoundedCornerShape(12.dp),
-            ) {
-                Icon(Icons.Filled.GroupAdd, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Join hub", fontWeight = FontWeight.SemiBold)
-            }
+                showDivider = false,
+            )
         }
     }
+}
+
+@Composable
+private fun AddClickSecondaryRow(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    showDivider: Boolean = true,
+) {
+    ClickListRow(
+        title = title,
+        subtitle = subtitle,
+        onClick = onClick,
+        showDivider = showDivider,
+        leading = {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp),
+            )
+        },
+        trailing = {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
+        },
+    )
 }
 
 @Composable
@@ -344,7 +299,7 @@ fun ClickedSuccessContent(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            AdaptiveButton(onClick = onStartChatting) {
+            ClickButton(onClick = onStartChatting, modifier = Modifier.fillMaxWidth()) {
                 Text("Start Chatting")
             }
         }
