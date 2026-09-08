@@ -461,7 +461,8 @@ class AuthRepository(
     suspend fun hasValidLocalSession(): Boolean = LocalSessionCache.read(tokenStorage) != null
 
     suspend fun refreshSession(forceRefresh: Boolean = false): Result<Unit> {
-        return SessionRefreshCoordinator.singleFlightRefresh {
+        val credential = supabase.auth.currentSessionOrNull()?.refreshToken ?: tokenStorage.getRefreshToken()
+        return SessionRefreshCoordinator.singleFlightRefresh(credential = credential) {
             try {
                 // Never skip GoTrue just because `exp` is still in the future. TestFlight updates
                 // and dual-store drift (SettingsSessionManager vs TokenStorage) keep access JWTs

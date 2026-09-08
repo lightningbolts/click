@@ -20,6 +20,73 @@ import kotlin.test.assertTrue
 
 class SessionRefreshCoordinatorTest {
     @Test
+    fun newCredentialDoesNotInheritBurnedTokenCooldown() =
+        runBlocking {
+            SessionRefreshCoordinator.resetForTests()
+            try {
+                val failure =
+                    SessionRefreshCoordinator.singleFlightRefresh("old-credential") {
+                        Result.failure<Unit>(IllegalStateException("Invalid refresh token"))
+                    }
+                var oldRetried = false
+                assertEquals(
+                    failure,
+                    SessionRefreshCoordinator.singleFlightRefresh("old-credential") {
+                        oldRetried = true
+                        Result.success(Unit)
+                    },
+                )
+                assertFalse(oldRetried)
+                var newInvoked = false
+                assertTrue(
+                    SessionRefreshCoordinator
+                        .singleFlightRefresh("new-credential") {
+                            newInvoked = true
+                            Result.success(Unit)
+                        }.isSuccess,
+                )
+                assertTrue(newInvoked)
+            } finally {
+                SessionRefreshCoordinator.resetForTests()
+            }
+        }
+
+    @Test
+    fun newCredentialWaitsForOldFlightButRunsItsOwnRefresh() =
+        runBlocking {
+            SessionRefreshCoordinator.resetForTests()
+            try {
+                val started = CompletableDeferred<Unit>()
+                val finishOld = CompletableDeferred<Unit>()
+                val old =
+                    async {
+                        SessionRefreshCoordinator.singleFlightRefresh("old-credential") {
+                            started.complete(Unit)
+                            finishOld.await()
+                            Result.failure<Unit>(IllegalStateException("Invalid refresh token"))
+                        }
+                    }
+                started.await()
+                var newInvocations = 0
+                val fresh =
+                    async {
+                        SessionRefreshCoordinator.singleFlightRefresh("new-credential") {
+                            newInvocations++
+                            Result.success(Unit)
+                        }
+                    }
+                yield()
+                assertEquals(0, newInvocations)
+                finishOld.complete(Unit)
+                assertTrue(old.await().isFailure)
+                assertTrue(fresh.await().isSuccess)
+                assertEquals(1, newInvocations)
+            } finally {
+                SessionRefreshCoordinator.resetForTests()
+            }
+        }
+
+    @Test
     fun singleFlightRefresh_concurrentCallersShareOneInvocation() =
         runBlocking {
             SessionRefreshCoordinator.resetForTests()

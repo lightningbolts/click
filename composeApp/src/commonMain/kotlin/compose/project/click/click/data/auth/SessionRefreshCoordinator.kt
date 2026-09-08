@@ -1,5 +1,6 @@
 package compose.project.click.click.data.auth
 
+import compose.project.click.click.crypto.PlatformCrypto
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
@@ -24,6 +25,8 @@ object SessionRefreshCoordinator {
     private var lastSuccessfulRefreshAtMs: Long = 0L
     private var lastFailureAtMs: Long = 0L
     private var lastFailure: Result<Unit>? = null
+    private var lastFailureCredential: List<Byte>? = null
+    private var inFlightCredential: List<Byte>? = null
     private const val COALESCE_MS = 15_000L
 
     /** GoTrue `/token` rate-limit window — do not retry immediately after a failed refresh. */
@@ -35,17 +38,23 @@ object SessionRefreshCoordinator {
     private var lastFailureCooldownMs: Long = FAILURE_COOLDOWN_MS
 
     /**
-     * Runs [block] once; concurrent callers await the same [Result].
+     * Runs [block] once for concurrent callers using the same credential.
      * After a failure, further callers reuse that [Result] until [FAILURE_COOLDOWN_MS] elapses
      * so a JWT-expired stampede cannot hammer GoTrue into a longer rate limit.
      */
-    suspend fun singleFlightRefresh(block: suspend () -> Result<Unit>): Result<Unit> {
+    suspend fun singleFlightRefresh(
+        credential: String? = null,
+        block: suspend () -> Result<Unit>,
+    ): Result<Unit> {
+        // Retain only a digest as the cache identity, never the refresh credential itself.
+        val credentialKey = credential?.let { PlatformCrypto.sha256(it.encodeToByteArray()).toList() }
         val leaderDeferred: CompletableDeferred<Result<Unit>>?
         val follower: CompletableDeferred<Result<Unit>>?
         val coalescedFailure: Result<Unit>?
+        var differentCredentialInFlight = false
         mutex.withLock {
             val failed = lastFailure
-            if (failed != null && recentlyFailedLocked()) {
+            if (failed != null && lastFailureCredential == credentialKey && recentlyFailedLocked()) {
                 leaderDeferred = null
                 follower = null
                 coalescedFailure = failed
@@ -55,9 +64,11 @@ object SessionRefreshCoordinator {
                 if (existing != null) {
                     leaderDeferred = null
                     follower = existing
+                    differentCredentialInFlight = inFlightCredential != credentialKey
                 } else {
                     val created = CompletableDeferred<Result<Unit>>()
                     inFlight = created
+                    inFlightCredential = credentialKey
                     leaderDeferred = created
                     follower = null
                 }
@@ -67,7 +78,10 @@ object SessionRefreshCoordinator {
             return coalescedFailure
         }
         if (follower != null) {
-            return follower.await()
+            val result = follower.await()
+            // Serialize SDK refreshes, but never give a newly signed-in session the old
+            // credential's result. No credential is logged or persisted here.
+            return if (differentCredentialInFlight) singleFlightRefresh(credential, block) else result
         }
         val deferred = leaderDeferred!!
         try {
@@ -83,9 +97,10 @@ object SessionRefreshCoordinator {
                 }
             withContext(NonCancellable) {
                 mutex.withLock {
-                    recordResultLocked(result)
+                    recordResultLocked(result, credentialKey)
                     if (inFlight === deferred) {
                         inFlight = null
+                        inFlightCredential = null
                     }
                     deferred.complete(result)
                 }
@@ -96,7 +111,10 @@ object SessionRefreshCoordinator {
         } finally {
             withContext(NonCancellable) {
                 mutex.withLock {
-                    if (inFlight === deferred) inFlight = null
+                    if (inFlight === deferred) {
+                        inFlight = null
+                        inFlightCredential = null
+                    }
                 }
             }
         }
@@ -106,6 +124,7 @@ object SessionRefreshCoordinator {
         lastSuccessfulRefreshAtMs = Clock.System.now().toEpochMilliseconds()
         lastFailureAtMs = 0L
         lastFailure = null
+        lastFailureCredential = null
         lastFailureCooldownMs = FAILURE_COOLDOWN_MS
     }
 
@@ -130,9 +149,11 @@ object SessionRefreshCoordinator {
         mutex.withLock {
             inFlight?.cancel()
             inFlight = null
+            inFlightCredential = null
             lastSuccessfulRefreshAtMs = 0L
             lastFailureAtMs = 0L
             lastFailure = null
+            lastFailureCredential = null
             lastFailureCooldownMs = FAILURE_COOLDOWN_MS
         }
     }
@@ -143,17 +164,22 @@ object SessionRefreshCoordinator {
         return Clock.System.now().toEpochMilliseconds() - last < lastFailureCooldownMs
     }
 
-    private fun recordResultLocked(result: Result<Unit>) {
+    private fun recordResultLocked(
+        result: Result<Unit>,
+        credential: List<Byte>?,
+    ) {
         val exception = result.exceptionOrNull()
         if (result.isSuccess || exception is CancellationException) {
             lastFailureAtMs = 0L
             lastFailure = null
+            lastFailureCredential = null
             lastFailureCooldownMs = FAILURE_COOLDOWN_MS
             return
         }
 
         lastFailureAtMs = Clock.System.now().toEpochMilliseconds()
         lastFailure = result
+        lastFailureCredential = credential
         val msg = exception?.message.orEmpty().lowercase()
         lastFailureCooldownMs =
             if (
