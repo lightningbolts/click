@@ -539,6 +539,13 @@ internal fun EventBeaconDetail(
             }
         }
 
+        if (
+            isCreator ||
+            (!currentUser?.id.isNullOrBlank() && displayBeacon.createdByUserId == currentUser?.id)
+        ) {
+            EventGuestListPasteCard(beaconId = displayBeacon.id, border = border, cardSurface = cardSurface)
+        }
+
         if (showPeopleDirectory) {
             ClickFormBottomSheet(
                 onDismissRequest = { showPeopleDirectory = false },
