@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -102,7 +103,7 @@ fun ClickListRow(
                     .platformPressScale(interactionSource)
                     .combinedClickable(
                         interactionSource = interactionSource,
-                        indication = ripple(bounded = true),
+                        indication = if (LocalPlatformStyle.current.useRipple) ripple(bounded = true) else null,
                         onClick = onClick,
                         onLongClick = onLongPress,
                     )
@@ -111,7 +112,7 @@ fun ClickListRow(
                     .platformPressScale(interactionSource)
                     .clickable(
                         interactionSource = interactionSource,
-                        indication = ripple(bounded = true),
+                        indication = if (LocalPlatformStyle.current.useRipple) ripple(bounded = true) else null,
                         onClick = onClick,
                     )
             else -> Modifier
@@ -237,7 +238,7 @@ fun ClickActionIcon(
                 .clip(RoundedCornerShape(LocalPlatformStyle.current.compactCardCornerRadius))
                 .clickable(
                     interactionSource = interactionSource,
-                    indication = ripple(bounded = true),
+                    indication = if (LocalPlatformStyle.current.useRipple) ripple(bounded = true) else null,
                     enabled = enabled,
                     role = Role.Button,
                     onClick = onClick,
@@ -287,7 +288,7 @@ fun ClickChip(
     Row(
         modifier =
             modifier
-                .defaultMinSize(minHeight = if (compact) 36.dp else 40.dp)
+                .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
                 .platformPressScale(interactionSource, MotionTokens.PressScale.ButtonPressedScale)
                 .clip(shape)
                 .background(background)
@@ -297,9 +298,11 @@ fun ClickChip(
                     } else {
                         Modifier
                     },
-                ).clickable(
+                ).selectable(
+                    selected = selected,
+                    role = Role.Button,
                     interactionSource = interactionSource,
-                    indication = ripple(bounded = true),
+                    indication = if (LocalPlatformStyle.current.useRipple) ripple(bounded = true) else null,
                     enabled = enabled,
                     onClick = onClick,
                 ).padding(horizontal = hPad, vertical = vPad),

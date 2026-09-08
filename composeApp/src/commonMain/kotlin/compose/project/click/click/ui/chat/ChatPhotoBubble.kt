@@ -5,6 +5,7 @@ package compose.project.click.click.ui.chat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
@@ -29,8 +30,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
@@ -144,18 +153,40 @@ internal fun ChatBubblePhotoContent(
     val photoLongPress = onPhotoLongPress
     val photoGestureModifier =
         if (expandClick != null || photoLongPress != null) {
-            Modifier.pointerInput(message.id, expandClick, photoLongPress) {
-                val tap = expandClick
-                val longPress = photoLongPress
-                if (longPress != null) {
-                    detectTapGestures(
-                        onTap = { tap?.invoke() },
-                        onLongPress = { longPress.invoke() },
-                    )
-                } else if (tap != null) {
-                    detectTapGestures(onTap = { tap.invoke() })
+            Modifier
+                .semantics(mergeDescendants = true) {
+                    if (expandClick != null) {
+                        onClick(label = "Open photo") {
+                            expandClick()
+                            true
+                        }
+                    }
+                    if (photoLongPress != null) {
+                        onLongClick(label = "Message actions") {
+                            photoLongPress()
+                            true
+                        }
+                    }
+                }.onKeyEvent { event ->
+                    if (expandClick != null && (event.key == Key.Enter || event.key == Key.Spacebar)) {
+                        if (event.type == KeyEventType.KeyUp) expandClick()
+                        true
+                    } else {
+                        false
+                    }
+                }.focusable()
+                .pointerInput(message.id, expandClick, photoLongPress) {
+                    val tap = expandClick
+                    val longPress = photoLongPress
+                    if (longPress != null) {
+                        detectTapGestures(
+                            onTap = { tap?.invoke() },
+                            onLongPress = { longPress.invoke() },
+                        )
+                    } else if (tap != null) {
+                        detectTapGestures(onTap = { tap.invoke() })
+                    }
                 }
-            }
         } else {
             Modifier
         }
