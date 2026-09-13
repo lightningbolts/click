@@ -4,9 +4,9 @@ import compose.project.click.click.data.api.ApiClient // pragma: allowlist secre
 import compose.project.click.click.data.api.BeaconAttendeeDto
 import compose.project.click.click.data.api.BeaconAttendeeDirectoryResponseDto
 import compose.project.click.click.data.api.BeaconRsvpGetResponseDto
+import compose.project.click.click.data.api.CommunityHubNearbyDto // pragma: allowlist secret
 import compose.project.click.click.data.api.ConnectionEventRecommendationResponseDto
 import compose.project.click.click.data.api.MapBeaconPatchBody
-import compose.project.click.click.data.api.CommunityHubNearbyDto // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconInsert // pragma: allowlist secret
 import compose.project.click.click.data.models.parseMapBeaconRows // pragma: allowlist secret
@@ -33,6 +33,12 @@ class MapBeaconRepository(
         return msg.contains("too many requests") || msg.contains("429")
     }
 
+    private fun isPermanentClientFailure(error: Throwable): Boolean {
+        val msg = error.message?.lowercase().orEmpty()
+        return listOf("400", "401", "403", "404", "bad request", "unauthorized", "forbidden", "not found")
+            .any(msg::contains)
+    }
+
     /** One short backoff retry on transient middleware 429s. */
     private suspend fun <T> withRateLimitRetry(block: suspend () -> Result<T>): Result<T> {
         val first = block()
@@ -40,6 +46,27 @@ class MapBeaconRepository(
         if (!isRateLimited(err)) return first
         delay(1_200L)
         return block()
+    }
+
+    /**
+     * Event/detail sheets often open from a lightweight bookmark/proximity seed. A single transient
+     * request failure used to leave `hub_id` absent for the lifetime of the sheet and therefore left
+     * Event Chat on `Preparing…` forever. Bound the hydration path to three quick attempts while
+     * avoiding retries for permanent client/auth/not-found failures.
+     */
+    private suspend fun <T> withDetailHydrationRetry(block: suspend () -> Result<T>): Result<T> {
+        var result = block()
+        var error = result.exceptionOrNull() ?: return result
+        if (isPermanentClientFailure(error)) return result
+
+        val backoffs = longArrayOf(250L, 700L)
+        for (backoff in backoffs) {
+            delay(backoff)
+            result = block()
+            error = result.exceptionOrNull() ?: return result
+            if (isPermanentClientFailure(error)) return result
+        }
+        return result
     }
 
     suspend fun fetchLocalBeacons(
@@ -61,9 +88,9 @@ class MapBeaconRepository(
         )
     }
 
-    /** Full beacon by id — used to hydrate event schedule when proximity list omitted it. */
+    /** Full beacon by id — used to hydrate event schedule, host metadata, and event hub id. */
     suspend fun fetchBeacon(beaconId: String): Result<MapBeacon> =
-        apiClient.getMapBeacon(beaconId)
+        withDetailHydrationRetry { apiClient.getMapBeacon(beaconId) }
 
     suspend fun insertBeacon(insert: MapBeaconInsert): Result<MapBeacon> =
         apiClient.postMapBeacon(insert)
@@ -104,7 +131,7 @@ class MapBeaconRepository(
         }
 
     suspend fun fetchBeaconEngagement(beaconId: String) =
-        apiClient.getBeaconEngagement(beaconId)
+        withDetailHydrationRetry { apiClient.getBeaconEngagement(beaconId) }
 
     suspend fun setBeaconBookmark(
         beaconId: String,
