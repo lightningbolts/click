@@ -97,7 +97,10 @@ jobs:
           echo "Android device execution is local-only; run scripts/maestro-smoke-android.sh on an accelerated device for release evidence."
 
   ios:
-    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'ios' || inputs.platform == 'both'
+    # The iOS smoke job performs another complete Debug simulator build. Running
+    # that on every PR duplicated the integration build already covered by iOS CI.
+    # Keep the behavioral smoke test as post-merge/release evidence instead.
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'ios' || inputs.platform == 'both'))
     runs-on: macos-26
     timeout-minutes: 90
 
