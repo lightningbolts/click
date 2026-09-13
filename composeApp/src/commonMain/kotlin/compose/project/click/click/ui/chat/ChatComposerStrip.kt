@@ -63,9 +63,9 @@ internal fun chatComposerCanSubmit(
 /**
  * Shared text/attach/send row for connection and hub chat.
  *
- * Send stays an icon — never a progress spinner. [submitGuarded] only blocks a double-tap on the
- * same draft for one frame; the ViewModel clears input synchronously so the next message can be
- * typed immediately (iMessage / Instagram style).
+ * The iOS treatment intentionally follows a messenger hierarchy: neutral attachment/input chrome,
+ * then one brand-filled send control only while sending is actionable. The field does not become a
+ * purple form outline on focus.
  */
 @Composable
 internal fun ChatComposerStrip(
@@ -85,11 +85,11 @@ internal fun ChatComposerStrip(
     attachTint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
 ) {
     val composerStyle = LocalPlatformStyle.current
-    val auxButtonSize = if (composerStyle.isIOS) 44.dp else 48.dp
-    val attachIconSize = 22.dp
-    val sendIconSize = 22.dp
-    val fieldCorner = if (composerStyle.isIOS) 20.dp else 12.dp
-    val composerGap = if (composerStyle.isIOS) 6.dp else 8.dp
+    val auxButtonSize = if (composerStyle.isIOS) 42.dp else 48.dp
+    val attachIconSize = 21.dp
+    val sendIconSize = 21.dp
+    val fieldCorner = if (composerStyle.isIOS) 22.dp else 12.dp
+    val composerGap = if (composerStyle.isIOS) 7.dp else 8.dp
     val fieldSideInset = auxButtonSize + composerGap
     val sendShape = if (composerStyle.isIOS) CircleShape else RoundedCornerShape(fieldCorner)
     val fieldShape = RoundedCornerShape(fieldCorner)
@@ -100,7 +100,6 @@ internal fun ChatComposerStrip(
     val focusRequester = remember { FocusRequester() }
     var submitGuarded by remember { mutableStateOf(false) }
 
-    // Release the one-frame double-tap guard once the draft has cleared (optimistic send).
     LaunchedEffect(value, submitGuarded) {
         if (submitGuarded && value.isBlank()) {
             submitGuarded = false
@@ -175,7 +174,7 @@ internal fun ChatComposerStrip(
                     colors = fieldColors,
                     contentPadding =
                         PaddingValues(
-                            horizontal = 12.dp,
+                            horizontal = 13.dp,
                             vertical = innerVerticalPad,
                         ),
                     container = {
@@ -209,9 +208,14 @@ internal fun ChatComposerStrip(
                         Modifier
                             .fillMaxSize()
                             .clip(CircleShape)
-                            .background(attachBackground)
-                            .border(clickBorderWidth(), clickBorderColor(), CircleShape)
-                            .chatSpringPressScale(attachInteraction),
+                            .background(attachBackground.copy(alpha = if (composerStyle.isIOS) 0.84f else 1f))
+                            .then(
+                                if (composerStyle.isIOS) {
+                                    Modifier
+                                } else {
+                                    Modifier.border(clickBorderWidth(), clickBorderColor(), CircleShape)
+                                },
+                            ).chatSpringPressScale(attachInteraction),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -234,9 +238,14 @@ internal fun ChatComposerStrip(
                     .focusProperties { canFocus = false }
                     .chatSpringPressScale(sendInteraction)
                     .clip(sendShape)
-                    .background(if (canSend) PrimaryBlue else MaterialTheme.colorScheme.surfaceVariant)
-                    .border(clickBorderWidth(), clickBorderColor(), sendShape)
-                    .clickable(
+                    .background(if (canSend) PrimaryBlue else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.84f))
+                    .then(
+                        if (composerStyle.isIOS) {
+                            Modifier
+                        } else {
+                            Modifier.border(clickBorderWidth(), clickBorderColor(), sendShape)
+                        },
+                    ).clickable(
                         interactionSource = sendInteraction,
                         indication = null,
                         enabled = canSend,
