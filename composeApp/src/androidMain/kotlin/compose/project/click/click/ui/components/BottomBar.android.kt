@@ -16,11 +16,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
@@ -32,14 +34,17 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
@@ -50,6 +55,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
+import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.navigation.NavigationItem
 import compose.project.click.click.ui.theme.NeonPurple
 import compose.project.click.click.ui.theme.PrimaryBlue
@@ -145,6 +152,9 @@ private fun MaterialBottomBarItem(
 ) {
     val scheme = MaterialTheme.colorScheme
     val isAdd = item.route == NavigationItem.AddClick.route
+    val isMe = item.route == NavigationItem.Settings.route
+    val currentUser by AppDataManager.currentUser.collectAsState()
+    val avatarUrl = currentUser?.image?.trim()?.takeIf { it.isNotEmpty() }
     val accent = if (isDark) NeonPurple else PrimaryBlue
 
     val iconColor by animateColorAsState(
@@ -169,7 +179,6 @@ private fun MaterialBottomBarItem(
 
     val interactionSource = remember { MutableInteractionSource() }
 
-    // No clip here — clipping was cutting off "Settings" / "Add Click".
     Column(
         modifier =
             modifier
@@ -189,7 +198,7 @@ private fun MaterialBottomBarItem(
                 Modifier
                     .size(width = 56.dp, height = 32.dp)
                     .then(
-                        if (selected && !isAdd) {
+                        if (selected && !isAdd && !isMe) {
                             Modifier.background(
                                 color = if (isDark) scheme.secondaryContainer else PrimaryBlue,
                                 shape = RoundedCornerShape(16.dp),
@@ -199,12 +208,29 @@ private fun MaterialBottomBarItem(
                         },
                     ),
         ) {
-            Icon(
-                imageVector = item.androidIcon(),
-                contentDescription = item.title,
-                tint = iconColor,
-                modifier = Modifier.size(if (isAdd) 26.dp else 24.dp),
-            )
+            if (isMe && avatarUrl != null) {
+                Box(
+                    modifier =
+                        Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(scheme.surfaceVariant),
+                ) {
+                    AsyncImage(
+                        model = avatarUrl,
+                        contentDescription = item.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            } else {
+                Icon(
+                    imageVector = item.androidIcon(),
+                    contentDescription = item.title,
+                    tint = iconColor,
+                    modifier = Modifier.size(if (isAdd) 26.dp else 24.dp),
+                )
+            }
         }
 
         FittedNavLabel(
