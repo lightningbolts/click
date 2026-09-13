@@ -799,49 +799,60 @@ fun ChatMessageBubble(
                             }
                         }
 
-                        if (reactionGroups.isNotEmpty()) {
-                            Row(
-                                modifier =
-                                    Modifier.padding(
-                                        horizontal = ChatBubbleTokens.reactionRowPadH,
-                                        vertical = ChatBubbleTokens.reactionRowPadV,
-                                    ),
-                                horizontalArrangement = Arrangement.spacedBy(ChatBubbleTokens.reactionChipGap),
-                            ) {
-                                reactionGroups.forEach { (emoji, count) ->
-                                    val isOwnReaction = reactions.any { it.reactionType == emoji && it.userId == currentUserId }
-                                    Box(
-                                        modifier =
-                                            Modifier
-                                                .clip(RoundedCornerShape(ChatBubbleTokens.reactionChipCorner))
-                                                .background(
-                                                    if (isOwnReaction) {
-                                                        PrimaryBlue.copy(alpha = 0.25f)
-                                                    } else {
-                                                        Color.White.copy(alpha = 0.08f)
-                                                    },
-                                                ).border(
-                                                    width = 1.dp,
-                                                    color =
+                        // Always reserve the same vertical slot. A reaction arriving from the
+                        // optimistic update or Realtime now changes only this slot's pixels and
+                        // cannot remeasure/move adjacent LazyColumn rows.
+                        Box(
+                            modifier =
+                                Modifier
+                                    .height(ChatBubbleTokens.reactionSlotHeight)
+                                    .widthIn(min = 48.dp, max = bubbleContentMaxWidth),
+                            contentAlignment = if (isSent) Alignment.TopEnd else Alignment.TopStart,
+                        ) {
+                            if (reactionGroups.isNotEmpty()) {
+                                Row(
+                                    modifier =
+                                        Modifier.padding(
+                                            horizontal = ChatBubbleTokens.reactionRowPadH,
+                                            vertical = ChatBubbleTokens.reactionRowPadV,
+                                        ),
+                                    horizontalArrangement = Arrangement.spacedBy(ChatBubbleTokens.reactionChipGap),
+                                ) {
+                                    reactionGroups.forEach { (emoji, count) ->
+                                        val isOwnReaction = reactions.any { it.reactionType == emoji && it.userId == currentUserId }
+                                        Box(
+                                            modifier =
+                                                Modifier
+                                                    .clip(RoundedCornerShape(ChatBubbleTokens.reactionChipCorner))
+                                                    .background(
                                                         if (isOwnReaction) {
-                                                            PrimaryBlue.copy(alpha = 0.5f)
+                                                            PrimaryBlue.copy(alpha = 0.25f)
                                                         } else {
-                                                            Color.White.copy(alpha = 0.12f)
+                                                            Color.White.copy(alpha = 0.08f)
                                                         },
-                                                    shape = RoundedCornerShape(ChatBubbleTokens.reactionChipCorner),
-                                                ).clickable {
-                                                    PlatformHapticsPolicy.lightImpact()
-                                                    onToggleReaction(emoji)
-                                                }.padding(
-                                                    horizontal = ChatBubbleTokens.reactionChipPadH,
-                                                    vertical = ChatBubbleTokens.reactionChipPadV,
-                                                ),
-                                    ) {
-                                        Text(
-                                            text = if (count > 1) "$emoji $count" else emoji,
-                                            fontSize = ChatBubbleTokens.reactionFontSp.sp,
-                                            color = Color.White,
-                                        )
+                                                    ).border(
+                                                        width = 1.dp,
+                                                        color =
+                                                            if (isOwnReaction) {
+                                                                PrimaryBlue.copy(alpha = 0.5f)
+                                                            } else {
+                                                                Color.White.copy(alpha = 0.12f)
+                                                            },
+                                                        shape = RoundedCornerShape(ChatBubbleTokens.reactionChipCorner),
+                                                    ).clickable {
+                                                        PlatformHapticsPolicy.lightImpact()
+                                                        onToggleReaction(emoji)
+                                                    }.padding(
+                                                        horizontal = ChatBubbleTokens.reactionChipPadH,
+                                                        vertical = ChatBubbleTokens.reactionChipPadV,
+                                                    ),
+                                        ) {
+                                            Text(
+                                                text = if (count > 1) "$emoji $count" else emoji,
+                                                fontSize = ChatBubbleTokens.reactionFontSp.sp,
+                                                color = Color.White,
+                                            )
+                                        }
                                     }
                                 }
                             }

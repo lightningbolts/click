@@ -26,7 +26,7 @@ internal fun chatBubbleTypingDotOffsetY(progress: Float): Dp = (-6f * REL * prog
  */
 internal object ChatBubbleTokens {
     /** Max width for message body as a fraction of measured chat row width (see [ChatMessageBubble]). */
-    const val messageMaxWidthToParentFraction: Float = 0.75f
+    val messageMaxWidthToParentFraction: Float = 0.75f
 
     /** Fallback when composables are not under measured constraints (e.g. previews). */
     val contentMaxWidth: Dp = chatBubbleScaledDp(450f)
@@ -47,9 +47,16 @@ internal object ChatBubbleTokens {
     val reactionChipPadV: Dp = chatBubbleScaledDp(3f)
     val reactionRowPadH: Dp = chatBubbleScaledDp(12f)
     val reactionRowPadV: Dp = chatBubbleScaledDp(2f)
+
+    /**
+     * Fixed vertical reservation under every normal bubble. Reaction arrival must update pixels,
+     * not LazyColumn row geometry; otherwise the first reaction visibly shifts neighboring rows.
+     */
+    val reactionSlotHeight: Dp = chatBubbleScaledDp(34f)
     val bubbleRowHorizontalInset: Dp = chatBubbleScaledDp(9f)
     val peerAvatarEndPad: Dp = chatBubbleScaledDp(9f)
     val peerAvatarBottomPad: Dp = chatBubbleScaledDp(3f)
+
     /** Extra row gap between reaction chips (~6.dp before shrink). */
     val reactionChipGap: Dp = chatBubbleScaledDp(6f)
 }
@@ -81,5 +88,7 @@ internal fun chatBubbleEditedFootnoteStyle(): TextStyle {
     return base.copy(fontSize = scaleSp(base.fontSize, EDITED_TYPE_SCALE))
 }
 
-private fun scaleSp(unit: TextUnit, factor: Float): TextUnit =
-    (unit.value * factor).sp
+private fun scaleSp(
+    unit: TextUnit,
+    factor: Float,
+): TextUnit = (unit.value * factor).sp

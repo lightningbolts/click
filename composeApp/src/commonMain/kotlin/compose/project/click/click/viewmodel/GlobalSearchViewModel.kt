@@ -260,8 +260,8 @@ class GlobalSearchViewModel(
      */
     private val junctionArchivedConnectionIds: () -> Set<String> = { AppDataManager.archivedConnectionIds.value },
     private val junctionHiddenConnectionIds: () -> Set<String> = { AppDataManager.hiddenConnectionIds.value },
-    /** Keystroke debounce; set to `0` in unit tests to avoid virtual-time coupling with [viewModelScope]. */
-    private val searchDebounceMs: Long = 300L,
+    /** Remote enrichment debounce; cached results are emitted synchronously before this delay. */
+    private val searchDebounceMs: Long = 140L,
     private val fetchOwnAvailabilityIntents: suspend (String) -> List<AvailabilityIntentRow> = { userId ->
         supabaseRepository.fetchActiveAvailabilityIntentsForUser(userId)
     },
@@ -311,6 +311,102 @@ class GlobalSearchViewModel(
         _visibleCategories.value = SearchResultCategory.entries.toSet()
     }
 
+    /**
+     * Produce an instant on-device result set from the already-rendered inbox, hot timelines,
+     * and map prefetch. This path performs no auth refresh, location request, or network I/O.
+     */
+    private fun immediateLocalResults(
+        lowerQuery: String,
+        userId: String,
+    ): GlobalSearchResults {
+        if (lowerQuery.isBlank() || userId.isBlank()) return GlobalSearchResults()
+
+        val cachedRows = AppDataManager.inboxFeedChats.value
+        val archivedIds = junctionArchivedConnectionIds()
+        val hiddenIds = junctionHiddenConnectionIds()
+        val activityTs: (ChatWithDetails) -> Long = { row ->
+            row.lastMessage?.timeCreated ?: row.connection.last_message_at ?: row.connection.created
+        }
+        val directRows = cachedRows.filter { it.groupClique == null }
+        val activeRows =
+            collapseOneToOneChatsByPeer(
+                directRows.filterNot { it.connection.isArchivedChannelForUser(archivedIds, hiddenIds) },
+                userId,
+                activityTs,
+            )
+        val archivedRows =
+            collapseOneToOneChatsByPeer(
+                directRows.filter { it.connection.isArchivedChannelForUser(archivedIds, hiddenIds) },
+                userId,
+                activityTs,
+            )
+        val cliqueRows = cachedRows.filter { it.groupClique != null }
+        val out = ArrayList<SearchResult>(48)
+
+        emitMemoryMatches(lowerQuery, activeRows, archivedRows, archivedIds, hiddenIds, out)
+        emitNameMatches(lowerQuery, activeRows, archivedRows, emptySet(), emptySet(), out)
+        emitCliqueNameMatches(lowerQuery, cliqueRows, out)
+        emitLocationBuckets(lowerQuery, activeRows, archivedRows, out)
+
+        val cachedLocation = AppDataManager.lastKnownDeviceLocation.value
+        emitBeaconMatches(
+            lowerQuery = lowerQuery,
+            beacons = AppDataManager.prefetchedMapBeacons.value,
+            userLat = cachedLocation?.first,
+            userLon = cachedLocation?.second,
+            out = out,
+        )
+
+        // Search the currently cached message windows immediately. Remote/server search may add
+        // older matches later, but typing never waits for it.
+        for (row in cachedRows) {
+            val chatId = row.chat.id ?: row.connection.id
+            val chatName = row.groupClique?.name ?: row.otherUser.name ?: row.connection.semanticLocation ?: "Chat"
+            val categories =
+                if (row.groupClique != null) {
+                    setOf(SearchResultCategory.Cliques)
+                } else {
+                    messageCategories(row.connection.id, archivedIds)
+                }
+            (listOfNotNull(row.lastMessage) + row.chat.messages)
+                .distinctBy { it.id }
+                .filter { it.content.contains(lowerQuery, ignoreCase = true) }
+                .forEach { msg ->
+                    out.add(
+                        SearchResult.MessageHit(
+                            result =
+                                MessageSearchResult(
+                                    message = msg,
+                                    chatId = chatId,
+                                    chatName = chatName,
+                                    connectionId = row.connection.id,
+                                    snippet = highlightedMessageSnippet(msg.content, lowerQuery),
+                                ),
+                            categories = categories,
+                        ),
+                    )
+                }
+        }
+
+        return GlobalSearchResults(
+            items =
+                out.distinctBy { result ->
+                    when (result) {
+                        is SearchResult.MessageHit -> "message:${result.result.message.id}"
+                        is SearchResult.ActiveConnection -> "active:${result.details.connection.id}"
+                        is SearchResult.ArchivedConnection -> "archived:${result.details.connection.id}"
+                        is SearchResult.Clique -> "clique:${result.details.connection.id}"
+                        is SearchResult.MemoryContextMatch -> "memory:${result.details.connection.id}"
+                        is SearchResult.LocationBucket -> "location:${result.result.location}"
+                        is SearchResult.BeaconMatch -> "beacon:${result.beacon.id}"
+                        is SearchResult.IntentMatch -> "intent:${result.details.connection.id}:${result.intentLabel}"
+                        is SearchResult.OwnAvailabilityIntentMatch -> "own-intent:${result.intent.hashCode()}"
+                        is SearchResult.InterestMatch -> "interest:${result.details.connection.id}"
+                    }
+                },
+        )
+    }
+
     fun search(
         query: String,
         viewerUserId: String,
@@ -318,12 +414,16 @@ class GlobalSearchViewModel(
         _searchQuery.value = query
         searchJob?.cancel()
 
-        if (query.isBlank()) {
+        val lowerQuery = query.lowercase().trim()
+        val userId = viewerUserId.trim()
+        if (lowerQuery.isBlank() || userId.isBlank()) {
             _results.value = GlobalSearchResults()
             _isSearching.value = false
             return
         }
 
+        // First paint is local and synchronous. This is the primary latency contract for search.
+        _results.value = immediateLocalResults(lowerQuery, userId)
         _isSearching.value = true
         searchJob =
             viewModelScope.launch {
@@ -333,12 +433,6 @@ class GlobalSearchViewModel(
                 }
                 try {
                     chatRepository.ensureFreshAuthToken()
-                    val lowerQuery = query.lowercase().trim()
-                    val userId = viewerUserId.trim()
-                    if (userId.isEmpty()) {
-                        _results.value = GlobalSearchResults()
-                        return@launch
-                    }
 
                     val (activeRowsRaw, archivedRowsRaw, cliqueRows, ownIntents, searchBeacons, searchLocation) =
                         coroutineScope {
@@ -418,7 +512,6 @@ class GlobalSearchViewModel(
                     )
 
                     emitCliqueNameMatches(lowerQuery, cliqueRows, out)
-
                     emitLocationBuckets(lowerQuery, activeRows, archivedRows, out)
 
                     if (out.isNotEmpty()) {
@@ -444,6 +537,7 @@ class GlobalSearchViewModel(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
+                    // Preserve instant local results on a transient remote failure.
                     println("GlobalSearch error: ${e.redactedRestMessage()}")
                 } finally {
                     if (searchJob === thisJob) {
