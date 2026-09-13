@@ -56,3 +56,46 @@ fun canOpenEventHub(
         policy = policy,
     )
 }
+
+enum class EventHubCtaState {
+    Preparing,
+    Retry,
+    Open,
+    RequiresRsvp,
+}
+
+/**
+ * Pure event-chat CTA state so missing-hub hydration has a bounded terminal state instead of an
+ * indefinite spinner. A creator or accepted RSVP member is eligible to hydrate/retry the hub id;
+ * everyone else sees the RSVP gate immediately.
+ */
+fun eventHubCtaState(
+    hubId: String?,
+    isCreator: Boolean,
+    checkedIn: Boolean,
+    hasRsvp: Boolean,
+    hydrationExhausted: Boolean,
+    policy: EventHubAccessPolicy = EVENT_HUB_ACCESS,
+): EventHubCtaState {
+    if (hubId.isNullOrBlank()) {
+        val eligibleToHydrate = isCreator || hasRsvp
+        return when {
+            !eligibleToHydrate -> EventHubCtaState.RequiresRsvp
+            hydrationExhausted -> EventHubCtaState.Retry
+            else -> EventHubCtaState.Preparing
+        }
+    }
+    return if (
+        canOpenEventHub(
+            hubId = hubId,
+            isCreator = isCreator,
+            checkedIn = checkedIn,
+            hasRsvp = hasRsvp,
+            policy = policy,
+        )
+    ) {
+        EventHubCtaState.Open
+    } else {
+        EventHubCtaState.RequiresRsvp
+    }
+}
