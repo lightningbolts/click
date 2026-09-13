@@ -101,6 +101,68 @@ class EventHubAccessTest {
     }
 
     @Test
+    fun missingHubTransitionsFromPreparingToRetryForEligibleMember() {
+        assertEquals(
+            EventHubCtaState.Preparing,
+            eventHubCtaState(
+                hubId = null,
+                isCreator = false,
+                checkedIn = false,
+                hasRsvp = true,
+                hydrationExhausted = false,
+            ),
+        )
+        assertEquals(
+            EventHubCtaState.Retry,
+            eventHubCtaState(
+                hubId = null,
+                isCreator = false,
+                checkedIn = false,
+                hasRsvp = true,
+                hydrationExhausted = true,
+            ),
+        )
+    }
+
+    @Test
+    fun missingHubNeverSpinsForUnaffiliatedViewer() {
+        assertEquals(
+            EventHubCtaState.RequiresRsvp,
+            eventHubCtaState(
+                hubId = null,
+                isCreator = false,
+                checkedIn = true,
+                hasRsvp = false,
+                hydrationExhausted = false,
+            ),
+        )
+    }
+
+    @Test
+    fun hydratedHubOpensForRsvpAndRemainsGatedOtherwise() {
+        assertEquals(
+            EventHubCtaState.Open,
+            eventHubCtaState(
+                hubId = "hub_1",
+                isCreator = false,
+                checkedIn = false,
+                hasRsvp = true,
+                hydrationExhausted = false,
+            ),
+        )
+        assertEquals(
+            EventHubCtaState.RequiresRsvp,
+            eventHubCtaState(
+                hubId = "hub_1",
+                isCreator = false,
+                checkedIn = true,
+                hasRsvp = false,
+                hydrationExhausted = false,
+            ),
+        )
+    }
+
+    @Test
     fun eventCategoryMarksLinkedHub() {
         assertTrue(isEventLinkedHubCategory("event"))
         assertTrue(isEventLinkedHubCategory("Event"))
