@@ -29,11 +29,12 @@ import compose.project.click.click.data.api.EventTeaserDto // pragma: allowlist 
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.withPreservedEventScheduleFrom // pragma: allowlist secret
+import compose.project.click.click.events.EventHubCtaState // pragma: allowlist secret
 import compose.project.click.click.events.EventRsvpRequestStatus // pragma: allowlist secret
 import compose.project.click.click.events.buildEventShareText // pragma: allowlist secret
 import compose.project.click.click.events.buildEventShareUrl // pragma: allowlist secret
-import compose.project.click.click.events.canOpenEventHub // pragma: allowlist secret
 import compose.project.click.click.events.eventCheckInCtaLabel // pragma: allowlist secret
+import compose.project.click.click.events.eventHubCtaState // pragma: allowlist secret
 import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.formatEventPostedAtLabel // pragma: allowlist secret
 import compose.project.click.click.events.formatEventScheduleRange // pragma: allowlist secret
@@ -313,6 +314,17 @@ internal fun EventBeaconDetail(
         rsvpCacheSignedUp || directoryEntry?.currentUserSignedUp == true
     val checkedIn =
         engagementCheckedIn || directoryEntry?.currentUserCheckedIn == true
+    val eventHubId = displayBeacon.hubId ?: engagement?.hubId
+    var eventChatHydrationExhausted by remember(displayBeacon.id) { mutableStateOf(false) }
+    var eventChatRetryNonce by remember(displayBeacon.id) { mutableIntStateOf(0) }
+    val eventChatState =
+        eventHubCtaState(
+            hubId = eventHubId,
+            isCreator = isEventCreator,
+            checkedIn = checkedIn,
+            hasRsvp = currentUserSignedUp,
+            hydrationExhausted = eventChatHydrationExhausted,
+        )
     val mutualsUnlocked = directoryEntry?.mutualsSectionUnlocked == true
     var showPeopleDirectory by remember(beacon.id) { mutableStateOf(false) }
     var directoryProfileUserId by remember(beacon.id) { mutableStateOf<String?>(null) }
@@ -331,6 +343,30 @@ internal fun EventBeaconDetail(
 
     LaunchedEffect(displayBeacon.id, currentUserSignedUp, checkedIn) {
         viewModel.loadBeaconAttendeeDirectory(displayBeacon.id, forceRefresh = false)
+    }
+
+    // A lightweight event seed may omit hub_id. Hydrate with a bounded retry window, then expose
+    // an explicit retry action instead of leaving a disabled spinner on screen indefinitely.
+    LaunchedEffect(
+        displayBeacon.id,
+        eventHubId,
+        currentUserSignedUp,
+        isEventCreator,
+        eventChatRetryNonce,
+    ) {
+        if (!eventHubId.isNullOrBlank() || (!isEventCreator && !currentUserSignedUp)) {
+            eventChatHydrationExhausted = false
+            return@LaunchedEffect
+        }
+        eventChatHydrationExhausted = false
+        val retryDelaysMs = longArrayOf(0L, 450L, 1_100L)
+        retryDelaysMs.forEach { retryDelayMs ->
+            if (retryDelayMs > 0L) delay(retryDelayMs)
+            viewModel.ensureEventBeaconDetail(displayBeacon.id, seed = displayBeacon)
+            viewModel.loadBeaconEngagement(displayBeacon.id, forceRefresh = true)
+            delay(900L)
+        }
+        eventChatHydrationExhausted = true
     }
 
     LaunchedEffect(showPeopleDirectory, displayBeacon.id) {
@@ -599,15 +635,9 @@ internal fun EventBeaconDetail(
         }
 
         val checkInLabel = eventCheckInCtaLabel(checkedIn = checkedIn, pending = checkInPending)
-        val eventHubId = displayBeacon.hubId ?: engagement?.hubId
-        val canOpenHub =
-            canOpenEventHub(
-                hubId = eventHubId,
-                isCreator = isEventCreator,
-                checkedIn = checkedIn,
-                hasRsvp = currentUserSignedUp,
-            )
-        val checkInIsPrimary = !canOpenHub
+        val canOpenHub = eventChatState == EventHubCtaState.Open
+        val eventChatActionable =
+            eventChatState == EventHubCtaState.Open || eventChatState == EventHubCtaState.Retry
 
         ClickButton(
             onClick = {
@@ -616,7 +646,7 @@ internal fun EventBeaconDetail(
             },
             enabled = !checkInPending,
             modifier = Modifier.fillMaxWidth(),
-            variant = if (checkInIsPrimary) ClickButtonVariant.Primary else ClickButtonVariant.Secondary,
+            variant = ClickButtonVariant.Secondary,
         ) {
             if (checkInPending) {
                 CircularProgressIndicator(
@@ -636,51 +666,71 @@ internal fun EventBeaconDetail(
             Text(checkInLabel, fontWeight = FontWeight.SemiBold)
         }
 
-        // Event chat is a first-class part of every event detail. Never make the affordance
-        // disappear while hub metadata hydrates; disappearance looked like the feature did not exist.
         ClickButton(
             onClick = {
-                val hubId = eventHubId ?: return@ClickButton
-                if (!canOpenHub) return@ClickButton
-                ChatDeepLinkManager.setPendingEventHub(
-                    hubId = hubId,
-                    title = displayBeacon.displayDynamicTitle(),
-                    creatorId = displayBeacon.createdByUserId,
-                )
-                viewModel.clearSelection()
+                when (eventChatState) {
+                    EventHubCtaState.Retry -> {
+                        eventChatHydrationExhausted = false
+                        eventChatRetryNonce += 1
+                    }
+                    EventHubCtaState.Open -> {
+                        val hubId = eventHubId ?: return@ClickButton
+                        ChatDeepLinkManager.setPendingEventHub(
+                            hubId = hubId,
+                            title = displayBeacon.displayDynamicTitle(),
+                            creatorId = displayBeacon.createdByUserId,
+                        )
+                        viewModel.clearSelection()
+                    }
+                    EventHubCtaState.Preparing,
+                    EventHubCtaState.RequiresRsvp,
+                    -> Unit
+                }
             },
-            enabled = canOpenHub,
+            enabled = eventChatActionable,
             modifier = Modifier.fillMaxWidth(),
             variant = if (canOpenHub) ClickButtonVariant.Primary else ClickButtonVariant.Secondary,
         ) {
-            if (eventHubId.isNullOrBlank()) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-            } else {
-                Icon(
-                    imageVector = Icons.Filled.Chat,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(modifier = Modifier.width(8.dp))
+            when (eventChatState) {
+                EventHubCtaState.Preparing -> {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                EventHubCtaState.Retry -> {
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                else -> {
+                    Icon(
+                        imageVector = Icons.Filled.Chat,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
             }
             Text(
                 text =
-                    when {
-                        eventHubId.isNullOrBlank() -> "Preparing event chat…"
-                        canOpenHub -> "Open event chat"
-                        else -> "Check in to join event chat"
+                    when (eventChatState) {
+                        EventHubCtaState.Preparing -> "Preparing event chat…"
+                        EventHubCtaState.Retry -> "Retry event chat"
+                        EventHubCtaState.Open -> "Open event chat"
+                        EventHubCtaState.RequiresRsvp -> "RSVP to join event chat"
                     },
                 fontWeight = FontWeight.SemiBold,
             )
         }
-        if (!canOpenHub && !eventHubId.isNullOrBlank()) {
+        if (eventChatState == EventHubCtaState.RequiresRsvp) {
             Text(
-                text = "The event chat unlocks after you check in at the event.",
+                text = "RSVP to coordinate with the event chat before you arrive.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
             )
@@ -749,12 +799,20 @@ internal fun EventBeaconDetail(
                             if (!ok) {
                                 rsvpError = viewModel.engagementSnackbar.value
                                     ?: "Could not update RSVP. Please try again."
+                            } else {
+                                // Rebind every source that can carry hub_id so the chat affordance
+                                // updates in the same sheet without requiring dismiss/reopen.
+                                viewModel.loadBeaconRsvp(displayBeacon.id, forceRefresh = true)
+                                viewModel.loadBeaconEngagement(displayBeacon.id, forceRefresh = true)
+                                viewModel.ensureEventBeaconDetail(displayBeacon.id, seed = displayBeacon)
+                                eventChatHydrationExhausted = false
+                                eventChatRetryNonce += 1
                             }
                         }
                     },
                     enabled = !rsvpPending,
                     modifier = Modifier.fillMaxWidth(),
-                    variant = ClickButtonVariant.Secondary,
+                    variant = ClickButtonVariant.Primary,
                 ) {
                     Text(
                         text =
