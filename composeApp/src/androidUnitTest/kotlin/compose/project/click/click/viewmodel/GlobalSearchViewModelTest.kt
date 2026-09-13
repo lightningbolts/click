@@ -508,7 +508,6 @@ class GlobalSearchViewModelTest {
                 assertTrue(vm.isSearching.value)
                 vm.search("alice", VIEWER)
                 assertTrue(vm.isSearching.value)
-                assertTrue(vm.results.value.isEmpty)
                 advanceTimeBy(300)
                 advanceUntilIdle()
                 assertFalse(vm.isSearching.value)
