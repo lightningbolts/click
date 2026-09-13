@@ -132,7 +132,6 @@ internal fun BeaconDetailSheetContent(
         }
     }
 
-    // Animated (scale + fade) confirmation, matching the create/join hub popup motion.
     AnimatedClickDialog(
         visible = showDeleteConfirm,
         onDismissRequest = { showDeleteConfirm = false },
@@ -204,7 +203,6 @@ internal fun BeaconOwnerOverflowMenu(
     }
 }
 
-/** Owner overflow — shared [ClickDropdownMenu] chrome. */
 @Composable
 internal fun BeaconOwnerDropdownMenu(
     expanded: Boolean,
@@ -267,9 +265,7 @@ internal fun EventBeaconDetail(
     val connectedUsers by AppDataManager.connectedUsers.collectAsState()
     val mapBeacons by viewModel.mapBeacons.collectAsState()
     val prefetchedBeacons by AppDataManager.prefetchedMapBeacons.collectAsState()
-    // Direct GET override — Home saved/bookmark seeds often lack host until fetch completes.
     var networkDetail by remember(beacon.id) { mutableStateOf<MapBeacon?>(null) }
-    // Key on the matching row (not the whole list) so host/posted patches invalidate remember.
     val fromMap = mapBeacons.firstOrNull { it.id == beacon.id }
     val fromPrefetch = prefetchedBeacons.firstOrNull { it.id == beacon.id }
     val displayBeacon =
@@ -302,21 +298,21 @@ internal fun EventBeaconDetail(
         displayBeacon.creatorDisplayName?.trim()?.takeIf { it.isNotEmpty() }
             ?: hostUser?.name?.trim()?.takeIf { it.isNotEmpty() }
     val hostAvatarUrl = hostUser?.image?.trim()?.takeIf { it.isNotEmpty() }
+    // The initial bookmark/proximity seed can omit creator_id. Re-evaluate ownership after
+    // detail hydration so creators never lose the event-chat affordance on iOS cold opens.
+    val isEventCreator =
+        isCreator ||
+            (!currentUser?.id.isNullOrBlank() && displayBeacon.createdByUserId == currentUser?.id)
 
     val directoryCache by viewModel.beaconDirectoryById.collectAsState()
     val directoryLoadingIds by viewModel.beaconDirectoryLoadingIds.collectAsState()
     val directoryEntry = directoryCache[beacon.id]
     val directoryAttendees = directoryEntry?.attendees.orEmpty()
     val directoryLoading = beacon.id in directoryLoadingIds
-    // The enriched directory independently returns the viewer's RSVP/check-in state.
-    // Prefer a positive answer from either cache so a stale engagement response cannot
-    // hide Cancel RSVP / Check out controls.
     val currentUserSignedUp =
         rsvpCacheSignedUp || directoryEntry?.currentUserSignedUp == true
     val checkedIn =
         engagementCheckedIn || directoryEntry?.currentUserCheckedIn == true
-    // Mutuals are server-authorized enrichment. Local/early check-in only changes the CTA;
-    // it must not expose an old or unavailable mutual directory payload.
     val mutualsUnlocked = directoryEntry?.mutualsSectionUnlocked == true
     var showPeopleDirectory by remember(beacon.id) { mutableStateOf(false) }
     var directoryProfileUserId by remember(beacon.id) { mutableStateOf<String?>(null) }
@@ -330,8 +326,6 @@ internal fun EventBeaconDetail(
         viewModel.loadBeaconRsvp(displayBeacon.id, forceRefresh = true)
         viewModel.loadBeaconEngagement(displayBeacon.id, forceRefresh = true)
         viewModel.recordEventImpression(displayBeacon.id)
-        // Always hydrate missing Posted / Host / creator / schedule — bookmark & proximity rows
-        // often already have schedule, so the old schedule-only gate skipped host+posted forever.
         viewModel.ensureEventBeaconDetail(displayBeacon.id, seed = displayBeacon)
     }
 
@@ -341,15 +335,12 @@ internal fun EventBeaconDetail(
 
     LaunchedEffect(showPeopleDirectory, displayBeacon.id) {
         if (showPeopleDirectory) {
-            // Prefer cache; only refresh if we never enriched this beacon.
             viewModel.loadBeaconAttendeeDirectory(
                 displayBeacon.id,
                 forceRefresh = directoryEntry == null,
             )
         }
     }
-    // UIKit cannot present the profile sheet while the directory's dismiss animation is active.
-    // Queue the presentation until the first page sheet has fully left the screen.
     LaunchedEffect(showPeopleDirectory, pendingDirectoryProfileUserId) {
         val pendingId = pendingDirectoryProfileUserId
         if (!showPeopleDirectory && pendingId != null) {
@@ -392,9 +383,7 @@ internal fun EventBeaconDetail(
             EventHeroActions(
                 bookmarked = bookmarked,
                 bookmarkPending = bookmarkPending,
-                isCreator =
-                    isCreator ||
-                        (!currentUser?.id.isNullOrBlank() && displayBeacon.createdByUserId == currentUser?.id),
+                isCreator = isEventCreator,
                 onShare = {
                     val shareUrl = buildEventShareUrl(displayBeacon.id)
                     viewModel.recordEventShare(displayBeacon.id, shareUrl = shareUrl)
@@ -425,7 +414,6 @@ internal fun EventBeaconDetail(
                 ?: displayBeacon.metadata.locationName
                     ?.trim()
                     ?.takeIf { it.isNotEmpty() }
-        // Legacy drops stored the literal "Current location" — never show that to viewers.
         var resolvedLocationLabel by remember(displayBeacon.id, rawLocationLabel) {
             mutableStateOf(
                 rawLocationLabel?.takeUnless { it.equals("Current location", ignoreCase = true) },
@@ -539,10 +527,7 @@ internal fun EventBeaconDetail(
             }
         }
 
-        if (
-            isCreator ||
-            (!currentUser?.id.isNullOrBlank() && displayBeacon.createdByUserId == currentUser?.id)
-        ) {
+        if (isEventCreator) {
             EventGuestListPasteCard(beaconId = displayBeacon.id, border = border, cardSurface = cardSurface)
         }
 
@@ -550,7 +535,6 @@ internal fun EventBeaconDetail(
             ClickFormBottomSheet(
                 onDismissRequest = { showPeopleDirectory = false },
                 expandable = true,
-                // Column + sheetBodyScroll — UIKit scroll-host (same as view-event; no surface-drag flicker).
                 useUiKitScrollHost = true,
             ) {
                 EventPeopleDirectorySheetContent(
@@ -619,11 +603,11 @@ internal fun EventBeaconDetail(
         val canOpenHub =
             canOpenEventHub(
                 hubId = eventHubId,
-                isCreator = isCreator,
+                isCreator = isEventCreator,
                 checkedIn = checkedIn,
                 hasRsvp = currentUserSignedUp,
             )
-        val checkInIsPrimary = eventHubId.isNullOrBlank() || !canOpenHub
+        val checkInIsPrimary = !canOpenHub
 
         ClickButton(
             onClick = {
@@ -652,34 +636,54 @@ internal fun EventBeaconDetail(
             Text(checkInLabel, fontWeight = FontWeight.SemiBold)
         }
 
-        if (!eventHubId.isNullOrBlank()) {
-            if (canOpenHub) {
-                ClickButton(
-                    onClick = {
-                        ChatDeepLinkManager.setPendingEventHub(
-                            hubId = eventHubId,
-                            title = displayBeacon.displayDynamicTitle(),
-                            creatorId = displayBeacon.createdByUserId,
-                        )
-                        viewModel.clearSelection()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Chat,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Open event hub", fontWeight = FontWeight.SemiBold)
-                }
-            } else {
-                Text(
-                    text = "Check in to join the event hub",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+        // Event chat is a first-class part of every event detail. Never make the affordance
+        // disappear while hub metadata hydrates; disappearance looked like the feature did not exist.
+        ClickButton(
+            onClick = {
+                val hubId = eventHubId ?: return@ClickButton
+                if (!canOpenHub) return@ClickButton
+                ChatDeepLinkManager.setPendingEventHub(
+                    hubId = hubId,
+                    title = displayBeacon.displayDynamicTitle(),
+                    creatorId = displayBeacon.createdByUserId,
                 )
+                viewModel.clearSelection()
+            },
+            enabled = canOpenHub,
+            modifier = Modifier.fillMaxWidth(),
+            variant = if (canOpenHub) ClickButtonVariant.Primary else ClickButtonVariant.Secondary,
+        ) {
+            if (eventHubId.isNullOrBlank()) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            } else {
+                Icon(
+                    imageVector = Icons.Filled.Chat,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
             }
+            Text(
+                text =
+                    when {
+                        eventHubId.isNullOrBlank() -> "Preparing event chat…"
+                        canOpenHub -> "Open event chat"
+                        else -> "Check in to join event chat"
+                    },
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        if (!canOpenHub && !eventHubId.isNullOrBlank()) {
+            Text(
+                text = "The event chat unlocks after you check in at the event.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+            )
         }
 
         ClickButton(
