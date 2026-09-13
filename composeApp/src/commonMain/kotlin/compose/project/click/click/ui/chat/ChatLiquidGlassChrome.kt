@@ -2,7 +2,6 @@
 
 package compose.project.click.click.ui.chat
 
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -18,12 +17,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.components.ClickCircularIconButton
+import compose.project.click.click.ui.components.platformPressScale
 import compose.project.click.click.ui.theme.LocalPlatformStyle
+import compose.project.click.click.ui.theme.MotionTokens
 import compose.project.click.click.ui.theme.PrimaryBlue
 
 /** Shared horizontal inset for chat header row and composer strip (outer edges align). */
@@ -117,15 +117,11 @@ internal fun ChatComposerChromeFadeUnderlay(
 @Composable
 internal fun Modifier.chatSpringPressScale(interactionSource: MutableInteractionSource): Modifier {
     val pressed by interactionSource.collectIsPressedAsState()
-    val offset by animateDpAsState(
-        targetValue = if (pressed) LocalPlatformStyle.current.pressOffset else 0.dp,
-        label = "chat_icon_press_offset",
-    )
-    val density = LocalDensity.current
-    return this.graphicsLayer {
-        translationY = with(density) { offset.toPx() }
-        alpha = if (pressed) 0.92f else 1f
-    }
+    return this
+        .platformPressScale(interactionSource, MotionTokens.PressScale.IconPressedScale)
+        .graphicsLayer {
+            alpha = if (pressed) 0.92f else 1f
+        }
 }
 
 /** Text-field container colors — opaque bordered Functional Clarity fields. */
@@ -142,7 +138,7 @@ internal fun rememberChatComposerFieldColors(): TextFieldColors {
     )
 }
 
-/** Spring bounce + null indication; pair with glass border tweaks at call sites for tactile feedback. */
+/** Press scale + null indication; pair with glass border tweaks at call sites for tactile feedback. */
 @Composable
 fun Modifier.bouncingClickable(
     enabled: Boolean = true,

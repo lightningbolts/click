@@ -38,6 +38,7 @@ import compose.project.click.click.deeplink.ConnectionDeepLinkRouter // pragma: 
 import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.encounter.EncounterTetherManager // pragma: allowlist secret
 import compose.project.click.click.navigation.NavigationItem // pragma: allowlist secret
+import compose.project.click.click.navigation.RouteHistory // pragma: allowlist secret
 import compose.project.click.click.notifications.ChatDeepLinkManager // pragma: allowlist secret
 import compose.project.click.click.notifications.ChatNotificationDismisser // pragma: allowlist secret
 import compose.project.click.click.sensors.AmbientNoiseMonitor // pragma: allowlist secret
@@ -155,7 +156,7 @@ internal fun AppMainShell(
     val transitionModeState = remember { mutableStateOf(NavigationTransitionMode.Tap) }
     var transitionMode by transitionModeState
     // Route history stack for back navigation
-    val routeHistory = remember { mutableStateListOf("home") }
+    val routeHistory = remember { RouteHistory(NavigationItem.Home.route) }
     val showNfcScreenState = remember { mutableStateOf(false) }
     var showNfcScreen by showNfcScreenState
     val pendingChatIdState = remember { mutableStateOf<String?>(null) }
@@ -179,10 +180,9 @@ internal fun AppMainShell(
     var verifiedCliqueProximityAutofillIntent by verifiedCliqueProximityAutofillIntentState
 
     fun navigateTo(route: String) {
-        if (route != currentRoute) {
+        if (routeHistory.navigateTo(route)) {
             transitionMode = NavigationTransitionMode.Tap
             previousRoute = currentRoute
-            routeHistory.add(currentRoute)
             currentRoute = route
             if (route != NavigationItem.Connections.route) {
                 isConnectionsChatOpen = false
@@ -196,15 +196,11 @@ internal fun AppMainShell(
 
     // Helper: go back to previous route
     fun navigateBack(mode: NavigationTransitionMode = NavigationTransitionMode.Tap): Boolean {
-        if (routeHistory.size > 1) {
-            transitionMode = mode
-            routeHistory.removeLastOrNull()
-            val target = routeHistory.lastOrNull() ?: "home"
-            previousRoute = currentRoute
-            currentRoute = target
-            return true
-        }
-        return false
+        val target = routeHistory.navigateBack() ?: return false
+        transitionMode = mode
+        previousRoute = currentRoute
+        currentRoute = target
+        return true
     }
 
     fun navigatePrimaryRouteBackHome(mode: NavigationTransitionMode = NavigationTransitionMode.Tap): Boolean {
@@ -215,8 +211,7 @@ internal fun AppMainShell(
         transitionMode = mode
         previousRoute = currentRoute
         currentRoute = NavigationItem.Home.route
-        routeHistory.clear()
-        routeHistory.add(NavigationItem.Home.route)
+        routeHistory.resetTo(NavigationItem.Home.route)
         isConnectionsChatOpen = false
         connectionsChatSuppressesTabBar = false
         pendingChatId = null
@@ -546,6 +541,7 @@ internal fun AppMainShell(
         ConnectionDeepLinkRouter.consume()
         showQRScanner = false
         showMyQRCode = false
+        showNfcScreen = false
         connectionViewModel.presentQrContextSheetFromScan(
             scannedUserId = scannedUserId,
             qrToken = null,

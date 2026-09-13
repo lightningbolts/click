@@ -1,8 +1,8 @@
-package compose.project.click.click.ui.components
+@file:Suppress("ktlint:standard:function-naming")
+
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,8 +21,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -35,12 +33,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import compose.project.click.click.ui.theme.LocalPlatformStyle
-import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 
 /**
  * Shared interest picker used in onboarding and settings (predefined categories only).
@@ -58,25 +54,31 @@ fun InterestEditor(
     var expandedCategory by remember { mutableStateOf<String?>(null) }
 
     fun toggleTag(tag: String) {
-        val next = if (tag in selectedTags) {
-            selectedTags.filter { it != tag }
-        } else if (maxTags == null || selectedTags.size < maxTags) {
-            selectedTags + tag
-        } else {
-            selectedTags
-        }
+        val next =
+            if (tag in selectedTags) {
+                selectedTags.filter { it != tag }
+            } else if (maxTags == null || selectedTags.size < maxTags) {
+                selectedTags + tag
+            } else {
+                selectedTags
+            }
         onSelectedTagsChange(next)
     }
 
     Column(modifier = modifier) {
         if (showSelectionCount && minTags != null) {
             Text(
-                text = "${selectedTags.size} selected" +
-                    if (selectedTags.size < minTags) " · need ${minTags - selectedTags.size} more" else " ✓",
+                text =
+                    "${selectedTags.size} selected" +
+                        if (selectedTags.size < minTags) " · need ${minTags - selectedTags.size} more" else " ✓",
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Medium,
-                color = if (selectedTags.size >= minTags) PrimaryBlue
-                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                color =
+                    if (selectedTags.size >= minTags) {
+                        PrimaryBlue
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    },
             )
             Spacer(modifier = Modifier.height(12.dp))
         } else if (showSelectionCount) {
@@ -91,25 +93,21 @@ fun InterestEditor(
 
         INTEREST_CATEGORIES.forEachIndexed { index, category ->
             val isCategorySelected = category.label in selectedTags
-            val hasSelectedSubs = category.subcategories.any { it in selectedTags }
             val isExpanded = expandedCategory == category.label
-            val borderColor by animateColorAsState(
-                targetValue = when {
-                    isCategorySelected -> PrimaryBlue
-                    hasSelectedSubs -> PrimaryBlue.copy(alpha = 0.5f)
-                    else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f)
-                },
-            )
 
             Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = if (index == 0) 0.dp else 5.dp)
-                    .clickable { toggleTag(category.label) },
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = if (index == 0) 0.dp else 5.dp)
+                        .clickable { toggleTag(category.label) },
                 shape = RoundedCornerShape(16.dp),
-                color = if (isCategorySelected) PrimaryBlue.copy(alpha = 0.10f)
-                else MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
-                border = BorderStroke(1.dp, borderColor),
+                color =
+                    if (isCategorySelected) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surface
+                    },
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -154,40 +152,22 @@ fun InterestEditor(
 
             AnimatedVisibility(visible = isExpanded) {
                 FlowRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    val chipStyle = LocalPlatformStyle.current
                     category.subcategories.forEach { sub ->
                         val isSubSelected = sub in selectedTags
                         val atMax = maxTags != null && !isSubSelected && selectedTags.size >= maxTags
-                        FilterChip(
+                        ClickChip(
+                            label = sub,
                             selected = isSubSelected,
                             onClick = { if (!atMax) toggleTag(sub) },
                             enabled = !atMax,
-                            label = {
-                                Text(
-                                    sub,
-                                    fontSize = 13.sp,
-                                    modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp),
-                                )
-                            },
-                            shape = RoundedCornerShape(20.dp),
-                            border = BorderStroke(
-                                if (chipStyle.isIOS) 0.5.dp else 1.dp,
-                                if (isSubSelected) PrimaryBlue else MaterialTheme.colorScheme.onSurface.copy(
-                                    alpha = if (chipStyle.isIOS) 0.12f else 0.15f,
-                                ),
-                            ),
-                            colors = FilterChipDefaults.filterChipColors(
-                                containerColor = Color.Transparent,
-                                selectedContainerColor = PrimaryBlue.copy(alpha = if (chipStyle.isIOS) 0.12f else 0.14f),
-                                selectedLabelColor = PrimaryBlue,
-                                labelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                            ),
+                            compact = true,
                         )
                     }
                 }

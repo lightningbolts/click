@@ -49,13 +49,16 @@ import platform.PhotosUI.PHPickerFilter
 import platform.PhotosUI.PHPickerResult
 import platform.PhotosUI.PHPickerViewController
 import platform.PhotosUI.PHPickerViewControllerDelegateProtocol
+import platform.UIKit.UIColor
 import platform.UIKit.UIImage
 import platform.UIKit.UIImageJPEGRepresentation
 import platform.UIKit.UIImagePickerController
 import platform.UIKit.UIImagePickerControllerDelegateProtocol
 import platform.UIKit.UIImagePickerControllerOriginalImage
 import platform.UIKit.UIImagePickerControllerSourceType
+import platform.UIKit.UIModalPresentationFullScreen
 import platform.UIKit.UINavigationControllerDelegateProtocol
+import platform.UIKit.UIViewController
 import platform.UniformTypeIdentifiers.UTTypeImage
 import platform.darwin.NSObject
 import platform.darwin.dispatch_async
@@ -172,8 +175,7 @@ actual fun rememberChatMediaPickers(
             }
         val picker = PHPickerViewController(configuration = config)
         picker.delegate = photoPickerDelegate
-        val presenter = iosTopViewControllerForPresentation() ?: viewController
-        presenter.presentViewController(picker, animated = true, completion = null)
+        presentFullscreenPicker(picker, host = viewController)
     }
 
     fun openCameraInternal() {
@@ -186,8 +188,7 @@ actual fun rememberChatMediaPickers(
         picker.sourceType = cameraSource
         picker.delegate = cameraPickerDelegate
         picker.allowsEditing = false
-        val presenter = iosTopViewControllerForPresentation() ?: viewController
-        presenter.presentViewController(picker, animated = true, completion = null)
+        presentFullscreenPicker(picker, host = viewController)
     }
 
     fun openCamera() {
@@ -255,6 +256,36 @@ actual fun rememberChatMediaPickers(
         openVoiceRecorder = { requestMicThenShowVoiceDialog() },
         openFilePicker = { launchFilePicker() },
     )
+}
+
+/**
+ * Present photo/camera pickers over the full window, covering the native header and tab bar.
+ * Present from the window root (not the nested Compose VC) so the modal is not sized to the
+ * chat column — that leak is the header-height sliver of the screen underneath.
+ */
+@OptIn(ExperimentalForeignApi::class)
+private fun presentFullscreenPicker(
+    picker: UIViewController,
+    host: UIViewController,
+) {
+    picker.modalPresentationStyle = UIModalPresentationFullScreen
+    picker.modalPresentationCapturesStatusBarAppearance = true
+    picker.view.backgroundColor = UIColor.blackColor
+    val window = host.view.window
+    val presenter =
+        window?.rootViewController?.let { root ->
+            var top = root
+            while (top.presentedViewController != null) {
+                top = top.presentedViewController ?: break
+            }
+            top
+        } ?: iosTopViewControllerForPresentation() ?: host
+    presenter.presentViewController(picker, animated = true) {
+        val bounds = picker.view.window?.bounds ?: window?.bounds
+        if (bounds != null) {
+            picker.view.setFrame(bounds)
+        }
+    }
 }
 
 @OptIn(ExperimentalForeignApi::class)

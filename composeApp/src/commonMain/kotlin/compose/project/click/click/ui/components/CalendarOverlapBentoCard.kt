@@ -1,8 +1,8 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.components
 
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,16 +23,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.calendar.AvailabilityOverlapGap
+import compose.project.click.click.ui.theme.MotionTokens
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.plus
-import kotlinx.datetime.todayIn
 import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.todayIn
 
 @Composable
 fun CalendarOverlapBentoCard(
@@ -43,17 +44,18 @@ fun CalendarOverlapBentoCard(
     modifier: Modifier = Modifier,
 ) {
     val scale by animateFloatAsState(
-        targetValue = if (lockInProgress) 0.96f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow,
-        ),
+        targetValue = if (lockInProgress) MotionTokens.PressScale.ButtonPressedScale else 1f,
+        animationSpec = MotionTokens.pressScaleSpec(),
         label = "calendar_overlap_bento",
     )
     Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .scale(scale),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                },
         shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
         color = GlassSheetTokens.GlassSurface(),
         border = BorderStroke(1.dp, GlassSheetTokens.GlassBorder()),
@@ -102,19 +104,25 @@ fun AvailabilityOverlapGap.formatDayAndTimeLabels(): Pair<String, String> {
     val tz = kotlinx.datetime.TimeZone.currentSystemDefault()
     val local = instant.toLocalDateTime(tz)
     val today = Clock.System.todayIn(tz)
-    val dayLabel = when {
-        local.date == today -> "Today"
-        local.date == today.plus(DatePeriod(days = 1)) -> "Tomorrow"
-        else -> local.date.dayOfWeek.name.lowercase().replaceFirstChar { it.titlecase() }
-    }
+    val dayLabel =
+        when {
+            local.date == today -> "Today"
+            local.date == today.plus(DatePeriod(days = 1)) -> "Tomorrow"
+            else ->
+                local.date.dayOfWeek.name
+                    .lowercase()
+                    .replaceFirstChar { it.titlecase() }
+        }
+
     fun pad(n: Int) = n.toString().padStart(2, '0')
     val hour = local.hour
     val minute = local.minute
     val amPm = if (hour >= 12) "PM" else "AM"
-    val hour12 = when (val h = hour % 12) {
-        0 -> 12
-        else -> h
-    }
+    val hour12 =
+        when (val h = hour % 12) {
+            0 -> 12
+            else -> h
+        }
     val time = "$hour12:${pad(minute)} $amPm"
     return dayLabel to time
 }

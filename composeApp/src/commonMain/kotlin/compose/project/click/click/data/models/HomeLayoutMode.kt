@@ -6,10 +6,6 @@ enum class HomeLayoutMode {
     ;
 
     companion object {
-        fun fromStored(raw: String?): HomeLayoutMode =
-            when (raw?.trim()?.lowercase()) {
-                "linear", "list" -> LINEAR
-                else -> PILE
-            }
+        fun fromStored(_raw: String?): HomeLayoutMode = LINEAR
     }
 }

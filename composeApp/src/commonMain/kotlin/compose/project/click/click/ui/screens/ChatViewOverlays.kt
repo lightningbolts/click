@@ -99,7 +99,12 @@ internal fun BoxScope.ChatViewOverlays(
         onDismissed = { tetherSenderAck = null },
     )
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .zIndex(100f),
+    ) {
         ChatExpandedPhotoPreview(
             target = expandedPhotoTarget,
             secureMediaHost = viewModel,

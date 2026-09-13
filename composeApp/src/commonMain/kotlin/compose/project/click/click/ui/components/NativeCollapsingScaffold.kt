@@ -158,6 +158,17 @@ expect fun BindPlatformNativeNavigationBar(
     leadingClose: Boolean = false,
 )
 
+/**
+ * Photo / media lightbox chrome. On iOS this retargets the existing overlay bar (X + save/share)
+ * instead of taking exclusive ownership with an empty title. No-op on Android.
+ */
+@Composable
+expect fun ApplyOverlayMediaChrome(
+    active: Boolean,
+    onClose: () -> Unit,
+    trailing: List<NativeChromeAction>,
+)
+
 data class NativeMapLayerOption(
     val id: String,
     val label: String,

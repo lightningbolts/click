@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click
 
 import androidx.compose.runtime.Composable
@@ -8,7 +10,9 @@ import androidx.compose.runtime.Composable
  */
 expect object PlatformHapticsPolicy {
     fun lightImpact()
+
     fun heavyImpact()
+
     fun successNotification()
 }
 
@@ -27,3 +31,24 @@ expect fun BindPlatformHapticsToViewHierarchy()
  * parity; it is currently always false on all targets.
  */
 expect fun shouldUseNoOpComposeHaptics(): Boolean
+
+/**
+ * Semantic haptic mapping. Screens should call these instead of choosing light/heavy ad hoc.
+ * Scrolling and ordinary navigation never fire haptics.
+ */
+fun hapticSendMessage() = PlatformHapticsPolicy.lightImpact()
+
+fun hapticSmallCommit() = PlatformHapticsPolicy.lightImpact()
+
+fun hapticTapDetected() = PlatformHapticsPolicy.lightImpact()
+
+fun hapticTapConnected() {
+    PlatformHapticsPolicy.successNotification()
+    PlatformHapticsPolicy.heavyImpact()
+}
+
+fun hapticCallAccept() = PlatformHapticsPolicy.lightImpact()
+
+fun hapticCallEnd() = PlatformHapticsPolicy.lightImpact()
+
+fun hapticDestructiveConfirm() = PlatformHapticsPolicy.heavyImpact()

@@ -40,9 +40,9 @@ import compose.project.click.click.data.api.ApiClient // pragma: allowlist secre
 import compose.project.click.click.data.api.DiscoverProfileCard // pragma: allowlist secret
 import compose.project.click.click.data.contacts.ContactBook // pragma: allowlist secret
 import compose.project.click.click.data.contacts.KnownSinceBucket // pragma: allowlist secret
-import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickButtonVariant // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickContentCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickDropdownMenu // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickMenuItem // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
@@ -197,7 +197,11 @@ fun PriorConnectionsScreen(
                         contentPadding = PaddingValues(bottom = 12.dp),
                     ) {
                         items(matches, key = { it.id }) { card ->
-                            AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
+                            ClickContentCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                showBorder = false,
+                                contentPadding = 12.dp,
+                            ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.fillMaxWidth(),

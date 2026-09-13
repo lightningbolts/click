@@ -114,6 +114,13 @@ internal class IosHostNavBarLayer {
             backgroundColor = UIColor.clearColor
         }
     internal val backButton = makeChromeButton()
+    internal val backGlyph =
+        UIImageView().apply {
+            translatesAutoresizingMaskIntoConstraints = false
+            userInteractionEnabled = false
+            contentMode = UIViewContentMode.UIViewContentModeCenter
+        }
+    internal var backGlassConfigured = false
     internal val searchButton = makeChromeButton()
     internal val avatarButton = makeChromeButton()
     internal val actionButtons = List(4) { makeChromeButton() }
@@ -145,6 +152,7 @@ internal class IosHostNavBarLayer {
     internal val actionTargets = List(4) { IosBarButtonTarget() }
     private var lastVisualKey: String? = null
     private var lastButtonSignature: String? = null
+    internal val paintedSymbols = mutableMapOf<UIButton, String>()
     private var lastCollapseFraction = 0f
     private var lastHeightPt = -1.0
     private var lastTitle: String? = null
@@ -376,8 +384,9 @@ internal class IosHostNavBarLayer {
             )
         overlayUnderlyingOwner = null
         ownerToken = restored
-        lastVisualKey = null
-        lastButtonSignature = null
+        // Keep [lastButtonSignature] / painted symbols so the next chat bind can swap
+        // xmark → chevron on the same glass control. Clearing [lastVisualKey] forced a
+        // full chrome rebuild and blinked the material.
     }
 
     fun attach(host: UIViewController) {
@@ -447,6 +456,11 @@ internal class IosHostNavBarLayer {
         val nextGlass = usesNativeLiquidGlass && !reduceTransparency
         if (nextGlass != usesGlassButtons) {
             lastButtonSignature = null
+            paintedSymbols.clear()
+            backGlassConfigured = false
+            chromeButtons().forEach { button ->
+                button.configuration = null
+            }
         }
         usesGlassButtons = nextGlass
         chromeButtons().forEach { button ->
@@ -569,16 +583,29 @@ internal class IosHostNavBarLayer {
                 }
             }
         bindRow(onOpenSearch, onNavigateBack, trailingActions, collapseSearchIntoBar, fraction, leadingClose)
-        if (visualKey == lastVisualKey) {
-            bindIdentity(
-                hasBack = onNavigateBack != null,
-                identity = identity,
-                presenceOnline = presenceOnline,
+        val preserveConversationChrome =
+            OverlayExclusiveBindPolicy.shouldPreserveConversationChrome(
+                leadingClose = leadingClose,
+                title = title,
+                hasIdentity = identity != null,
+                hasExistingTitle = !lastTitle.isNullOrEmpty(),
             )
+        if (visualKey == lastVisualKey) {
+            if (!preserveConversationChrome) {
+                bindIdentity(
+                    hasBack = onNavigateBack != null,
+                    identity = identity,
+                    presenceOnline = presenceOnline,
+                )
+            }
             setWantVisible(visible)
             return
         }
         lastVisualKey = visualKey
+        if (preserveConversationChrome) {
+            setWantVisible(visible)
+            return
+        }
         bar.prefersLargeTitles = false
         item.titleView = null
         item.title = null
@@ -784,15 +811,37 @@ internal class IosHostNavBarLayer {
         titleLabel.textAlignment = if (compactTabRoot) NSTextAlignmentCenter else NSTextAlignmentLeft
         subtitleLabel.textAlignment = titleLabel.textAlignment
         if (signature != lastButtonSignature) {
+            val previousSignature = lastButtonSignature
             lastButtonSignature = signature
-            backButton.hidden = onNavigateBack == null
-            rebuildTrailing(trailingActions, showSearch)
-            paintChromeButton(
-                backButton,
-                if (leadingClose) "xmark" else "chevron.backward",
-                if (leadingClose) "Close" else "Back",
-                clustered = false,
-            )
+            val showBack = onNavigateBack != null
+            if (backButton.hidden != !showBack) {
+                backButton.hidden = !showBack
+            }
+            val previousLeading = previousSignature?.take(2)
+            val trailingChanged =
+                previousSignature == null ||
+                    previousSignature.drop(2) != signature.drop(2)
+            if (trailingChanged) {
+                syncTrailingButtons(trailingActions, showSearch)
+            }
+            val previousLeadingClose = previousLeading?.getOrNull(1)?.let { it == 'X' }
+            val needsLeadingPaint =
+                showBack &&
+                    (
+                        previousSignature == null ||
+                            OverlayExclusiveBindPolicy.shouldReplaceLeadingChromeSymbol(
+                                previousLeadingClose,
+                                leadingClose,
+                            )
+                    )
+            if (needsLeadingPaint) {
+                paintChromeButton(
+                    backButton,
+                    if (leadingClose) "xmark" else "chevron.backward",
+                    if (leadingClose) "Close" else "Back",
+                    clustered = false,
+                )
+            }
         }
         applyTitleSlot(onNavigateBack != null, trailingActions.size + if (showSearch) 1 else 0)
     }

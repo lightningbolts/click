@@ -5,8 +5,6 @@
 
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -26,10 +24,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
+import compose.project.click.click.ui.theme.MotionTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 
@@ -52,17 +50,11 @@ fun ClickCircularIconButton(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val pressOffset by animateDpAsState(
-        targetValue = if (isPressed) LocalPlatformStyle.current.pressOffset else 0.dp,
-        animationSpec = spring(),
-        label = "circular_icon_press_offset",
-    )
-    val density = LocalDensity.current
     val buttonModifier =
         modifier
             .size(size)
+            .platformPressScale(interactionSource, MotionTokens.PressScale.IconPressedScale)
             .graphicsLayer {
-                translationY = with(density) { pressOffset.toPx() }
                 alpha =
                     if (!enabled) {
                         0.38f
@@ -123,6 +115,7 @@ fun ClickCircularGlassIconButton(
     modifier: Modifier = Modifier,
     size: Dp = 56.dp,
     glassStrength: Float = if (LocalPlatformStyle.current.isIOS) 0.64f else 0.4f,
+    tint: Color = MaterialTheme.colorScheme.onSurface,
 ) {
     ClickCircularIconButton(
         icon = icon,
@@ -131,5 +124,6 @@ fun ClickCircularGlassIconButton(
         modifier = modifier,
         size = size,
         glassStrength = glassStrength,
+        tint = tint,
     )
 }

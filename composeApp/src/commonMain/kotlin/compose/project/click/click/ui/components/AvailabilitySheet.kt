@@ -18,12 +18,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -127,11 +124,12 @@ fun AvailabilitySheet(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         AvailabilityIntentDuration.entries.forEach { option ->
-                            FilterChip(
+                            ClickChip(
+                                label = option.label,
                                 selected = duration == option,
                                 onClick = { viewModel.setIntentDuration(option) },
                                 enabled = !submitting,
-                                label = { Text(option.label) },
+                                compact = true,
                             )
                         }
                     }
@@ -171,17 +169,18 @@ fun AvailabilitySheet(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    TextButton(
+                    ClickButton(
                         onClick = {
                             viewModel.clearIntentSubmitError()
                             onDismiss()
                         },
                         modifier = Modifier.weight(1f),
                         enabled = !submitting,
+                        variant = ClickButtonVariant.Secondary,
                     ) {
                         Text("Cancel")
                     }
-                    Button(
+                    ClickButton(
                         onClick = {
                             viewModel.submitAvailabilityIntent(onSuccess = { onDismiss() })
                         },

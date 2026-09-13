@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.components
 
 import androidx.compose.foundation.background
@@ -30,8 +32,9 @@ import compose.project.click.click.ui.sheet.MapBeaconSheetRoot
 
 /** Shared padding and typography for every Click bottom sheet. */
 object ClickSheetDefaults {
-    val ContentHorizontalPadding = 20.dp
-    val ContentBottomPadding = 24.dp
+    val ContentHorizontalPadding = ClickScreenSpacing.Horizontal
+    val ContentBottomPadding = ClickScreenSpacing.Section
+
     /** Clearance under the iOS system grabber / sheet handle before primary chrome. */
     val ContentTopPaddingUnderGrabber = 20.dp
     val TitleBottomSpacing = 12.dp
@@ -78,9 +81,10 @@ fun ClickPlatformSheet(
             LocalSheetOnDismissRequest provides onDismissRequest,
         ) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(if (fillBody) Modifier.fillMaxSize() else Modifier),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .then(if (fillBody) Modifier.fillMaxSize() else Modifier),
             ) {
                 ClickSheetDialogChrome(
                     sheetColor = sheetColor,
@@ -88,9 +92,10 @@ fun ClickPlatformSheet(
                     alignSemanticColorsToSheet = true,
                 ) {
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .then(if (fillBody) Modifier.fillMaxHeight() else Modifier),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .then(if (fillBody) Modifier.fillMaxHeight() else Modifier),
                         content = content,
                     )
                 }
@@ -109,10 +114,11 @@ fun ClickSheetChrome(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(sheetPageBackground())
-            .padding(bottom = ClickSheetDefaults.ContentBottomPadding),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .background(sheetPageBackground())
+                .padding(bottom = ClickSheetDefaults.ContentBottomPadding),
     ) {
         if (title != null) {
             Text(

@@ -33,6 +33,7 @@ import compose.project.click.click.events.buildEventShareText // pragma: allowli
 import compose.project.click.click.events.buildEventShareUrl // pragma: allowlist secret
 import compose.project.click.click.media.rememberChatAudioPlayer // pragma: allowlist secret
 import compose.project.click.click.openBeaconOriginalMediaUrl // pragma: allowlist secret
+import compose.project.click.click.platform.rememberReduceMotionEnabled // pragma: allowlist secret
 import compose.project.click.click.platform.shareText // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
@@ -671,16 +672,23 @@ internal fun MemoriesPillContent(
 
 @Composable
 internal fun LiveIndicator(count: Int) {
-    val infiniteTransition = rememberInfiniteTransition()
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.5f,
-        targetValue = 1f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(1000),
-                repeatMode = RepeatMode.Reverse,
-            ),
-    )
+    val reduceMotion = rememberReduceMotionEnabled()
+    val alpha =
+        if (reduceMotion) {
+            1f
+        } else {
+            val infiniteTransition = rememberInfiniteTransition()
+            val alpha by infiniteTransition.animateFloat(
+                initialValue = 0.5f,
+                targetValue = 1f,
+                animationSpec =
+                    infiniteRepeatable(
+                        animation = tween(MotionTokens.Pulse.Gentle),
+                        repeatMode = RepeatMode.Reverse,
+                    ),
+            )
+            alpha
+        }
 
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(

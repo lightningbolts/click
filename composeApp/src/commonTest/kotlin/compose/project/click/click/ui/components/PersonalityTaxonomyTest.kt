@@ -2,7 +2,6 @@ package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 class PersonalityTaxonomyTest {
     @Test
@@ -23,8 +22,12 @@ class PersonalityTaxonomyTest {
     }
 
     @Test
-    fun predefinedSetMatchesCanonicalLabels() {
-        val predefined = predefinedPersonalityTags()
-        assertTrue(PERSONALITY_TRAITS.all { it.lowercase() in predefined })
+    fun displayGroupsPartitionTheCanonicalTraits() {
+        val grouped = PERSONALITY_TRAIT_GROUPS.flatMap { it.traits }
+        assertEquals(PERSONALITY_TRAITS.size, grouped.size)
+        assertEquals(PERSONALITY_TRAITS.toSet(), grouped.toSet())
+        PERSONALITY_TRAIT_GROUPS.forEach { group ->
+            assertEquals(group.traits.size, group.traits.toSet().size)
+        }
     }
 }

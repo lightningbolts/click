@@ -6,7 +6,6 @@
 
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,7 +14,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -41,13 +39,10 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
@@ -81,6 +76,9 @@ import compose.project.click.click.events.formatEventScheduleRange // pragma: al
 import compose.project.click.click.ui.components.AppEmptyState // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
 import compose.project.click.click.ui.components.CardVisualHero // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickButtonVariant // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickChip // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickLogoPulse // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSearchField // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
@@ -370,7 +368,7 @@ internal fun EventsDiscoveryFullScreen(
                             AppEmptyState(
                                 icon = Icons.Default.Place,
                                 title = "Nothing nearby",
-                                body = "Drop a soundtrack or event, enable more layers, or set a simulator location / grant location access so we can load what’s around you.",
+                                body = "Drop a soundtrack or event, or grant location so we can load what's around you.",
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
@@ -493,33 +491,11 @@ private fun FilterChipPill(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(12.dp)
-    val bg =
-        if (selected) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            Color.Transparent
-        }
-    val fg =
-        if (selected) {
-            MaterialTheme.colorScheme.onPrimary
-        } else {
-            MaterialTheme.colorScheme.primary
-        }
-    val outline = MaterialTheme.colorScheme.primary
-    Text(
-        text = label,
-        style = MaterialTheme.typography.labelLarge,
-        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-        color = fg,
-        maxLines = 1,
-        modifier =
-            Modifier
-                .clip(shape)
-                .border(clickBorderWidth(), outline, shape)
-                .background(bg)
-                .clickable(onClick = onClick)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+    ClickChip(
+        label = label,
+        selected = selected,
+        onClick = onClick,
+        compact = true,
     )
 }
 
@@ -798,17 +774,11 @@ private fun DiscoveryEventCard(
                     }
                 }
                 if (currentUserSignedUp) {
-                    OutlinedButton(
+                    ClickButton(
                         onClick = { viewModel.cancelRsvpToBeacon(beacon.id) {} },
                         enabled = !rsvpPending && !rsvpLoading,
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(clickBorderWidth(), clickBorderColor()),
-                        colors =
-                            ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onSurface,
-                            ),
-                        contentPadding = PaddingValues(vertical = 10.dp),
+                        variant = ClickButtonVariant.Secondary,
                     ) {
                         Text(
                             text = if (rsvpPending) "Updating…" else "Cancel RSVP",
@@ -817,17 +787,10 @@ private fun DiscoveryEventCard(
                         )
                     }
                 } else {
-                    Button(
+                    ClickButton(
                         onClick = { viewModel.rsvpToBeacon(beacon.id) {} },
                         enabled = !rsvpPending && !rsvpLoading,
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp),
-                        colors =
-                            ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary,
-                            ),
-                        contentPadding = PaddingValues(vertical = 10.dp),
                     ) {
                         Text(
                             text = if (rsvpPending) "Updating…" else "RSVP",

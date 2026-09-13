@@ -1,8 +1,13 @@
-package compose.project.click.click.ui.screens
+@file:Suppress(
+    "ktlint:standard:function-naming",
+    "ktlint:standard:no-wildcard-imports",
+    "ktlint:standard:max-line-length",
+)
+
+package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BluetoothSearching
@@ -12,16 +17,12 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Terrain
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
-import com.mohamedrejeb.calf.ui.toggle.AdaptiveSwitch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,11 +36,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
+import com.mohamedrejeb.calf.ui.toggle.AdaptiveSwitch
 import compose.project.click.click.sensors.AmbientNoiseMonitor
 import compose.project.click.click.ui.components.AdaptiveBackground
-import compose.project.click.click.ui.components.AdaptiveCard
+import compose.project.click.click.ui.components.ClickButton
+import compose.project.click.click.ui.components.ClickContentCard
 import compose.project.click.click.ui.components.PageHeader
-import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.ui.utils.openApplicationSystemSettings
 import compose.project.click.click.utils.LocationService
@@ -86,25 +89,27 @@ fun PermissionsOnboardingScreen(
 
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
-    fun selectionFromToggles() = PermissionsOnboardingSelection(
-        connectionSnapEnabled = connectionSnapEnabled,
-        showOnMapEnabled = showOnMapEnabled,
-        includeInInsightsEnabled = includeInInsightsEnabled,
-        notificationsEnabled = notificationsEnabled,
-        ambientNoiseEnabled = ambientNoiseEnabled,
-        barometricContextEnabled = barometricContextEnabled,
-    )
+    fun selectionFromToggles() =
+        PermissionsOnboardingSelection(
+            connectionSnapEnabled = connectionSnapEnabled,
+            showOnMapEnabled = showOnMapEnabled,
+            includeInInsightsEnabled = includeInInsightsEnabled,
+            notificationsEnabled = notificationsEnabled,
+            ambientNoiseEnabled = ambientNoiseEnabled,
+            barometricContextEnabled = barometricContextEnabled,
+        )
 
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         when (phase) {
             PermissionsOnboardingPhase.PickPreferences -> {
                 Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .navigationBarsPadding()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 20.dp)
-                        .padding(top = topInset, bottom = 24.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .navigationBarsPadding()
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 20.dp)
+                            .padding(top = topInset, bottom = 24.dp),
                 ) {
                     PageHeader(
                         title = "Set up your permissions",
@@ -113,17 +118,23 @@ fun PermissionsOnboardingScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
+                    ClickContentCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        showBorder = false,
+                        contentPadding = 0.dp,
+                    ) {
                         Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
                         ) {
                             PermissionToggleRow(
                                 icon = Icons.Default.Place,
                                 title = "Connection location snap",
-                                description = "One GPS point when you connect so your Memory Map and connection context stay accurate. " +
-                                    "No background tracking—the system permission dialog appears when you continue if this is on.",
+                                description =
+                                    "One GPS point when you connect so your Memory Map and connection context stay accurate. " +
+                                        "No background tracking—the system permission dialog appears when you continue if this is on.",
                                 checked = connectionSnapEnabled,
                                 enabled = true,
                                 onCheckedChange = {
@@ -147,7 +158,9 @@ fun PermissionsOnboardingScreen(
                             PermissionToggleRow(
                                 icon = Icons.Default.Terrain,
                                 title = "Movement & elevation context",
-                                description = "During a connection, optionally read barometric pressure once to infer a coarse height band. No continuous fitness or health tracking.",
+                                description =
+                                    "During a connection, optionally read barometric pressure once to infer a coarse height band. " +
+                                        "No continuous fitness or health tracking.",
                                 checked = barometricContextEnabled,
                                 enabled = connectionSnapEnabled,
                                 onCheckedChange = { barometricContextEnabled = it },
@@ -183,8 +196,9 @@ fun PermissionsOnboardingScreen(
                             PermissionInfoRow(
                                 icon = Icons.Default.BluetoothSearching,
                                 title = "Bluetooth for nearby Connect",
-                                description = "Tap Connect uses Bluetooth Low Energy to prove you are in the same room. " +
-                                    "Keep Bluetooth on; the system will ask for permission when you start your first handshake.",
+                                description =
+                                    "Tap Connect uses Bluetooth Low Energy to prove you are in the same room. " +
+                                        "Keep Bluetooth on; the system will ask for permission when you start your first handshake.",
                             )
                         }
                     }
@@ -196,17 +210,18 @@ fun PermissionsOnboardingScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Start,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 4.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp),
                     )
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    val btnStyle = LocalPlatformStyle.current
-                    Button(
+                    ClickButton(
                         onClick = {
                             val sel = selectionFromToggles()
+
                             fun proceedAfterLocation() {
                                 when {
                                     sel.ambientNoiseEnabled && !ambientNoiseMonitor.hasPermission -> {
@@ -228,12 +243,7 @@ fun PermissionsOnboardingScreen(
                             }
                         },
                         enabled = !isLoading && !locationPermissionFlowRunning,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-                        shape = RoundedCornerShape(if (btnStyle.isIOS) 14.dp else 28.dp),
-                        elevation = if (btnStyle.isIOS) ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp) else ButtonDefaults.buttonElevation(),
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         if (isLoading || locationPermissionFlowRunning) {
                             AdaptiveCircularProgressIndicator(
@@ -267,15 +277,14 @@ private fun MicrophonePermissionExplainerContent(
     onAllowComplete: () -> Unit,
 ) {
     var micPermissionFlowRunning by remember { mutableStateOf(false) }
-    val btnStyle = LocalPlatformStyle.current
-
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .navigationBarsPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp)
-            .padding(top = topInset, bottom = 24.dp),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(top = topInset, bottom = 24.dp),
     ) {
         PageHeader(
             title = "Ambient sound",
@@ -284,11 +293,16 @@ private fun MicrophonePermissionExplainerContent(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
+        ClickContentCard(
+            modifier = Modifier.fillMaxWidth(),
+            showBorder = false,
+            contentPadding = 0.dp,
+        ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
             ) {
                 PermissionInfoRow(
                     icon = Icons.Default.Mic,
@@ -300,9 +314,9 @@ private fun MicrophonePermissionExplainerContent(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        Button(
+        ClickButton(
             onClick = {
-                if (micPermissionFlowRunning) return@Button
+                if (micPermissionFlowRunning) return@ClickButton
                 micPermissionFlowRunning = true
                 requestMicrophonePermissionThen {
                     micPermissionFlowRunning = false
@@ -310,12 +324,7 @@ private fun MicrophonePermissionExplainerContent(
                 }
             },
             enabled = !micPermissionFlowRunning,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(if (btnStyle.isIOS) 14.dp else 28.dp),
-            elevation = if (btnStyle.isIOS) ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp) else ButtonDefaults.buttonElevation(),
-            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+            modifier = Modifier.fillMaxWidth(),
         ) {
             if (micPermissionFlowRunning) {
                 AdaptiveCircularProgressIndicator(
@@ -357,9 +366,10 @@ private fun PermissionInfoRow(
     description: String,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
@@ -399,22 +409,25 @@ private fun PermissionToggleRow(
     enabled: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    val iconTint = when {
-        !enabled -> MaterialTheme.colorScheme.onSurfaceVariant
-        checked -> PrimaryBlue
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    val titleColor = if (enabled) {
-        MaterialTheme.colorScheme.onSurface
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
+    val iconTint =
+        when {
+            !enabled -> MaterialTheme.colorScheme.onSurfaceVariant
+            checked -> PrimaryBlue
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
+        }
+    val titleColor =
+        if (enabled) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        }
     val descriptionColor = MaterialTheme.colorScheme.onSurfaceVariant
 
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
@@ -444,10 +457,11 @@ private fun PermissionToggleRow(
             checked = checked,
             enabled = enabled,
             onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = PrimaryBlue,
-                checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
-            ),
+            colors =
+                SwitchDefaults.colors(
+                    checkedThumbColor = PrimaryBlue,
+                    checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
+                ),
         )
     }
 }

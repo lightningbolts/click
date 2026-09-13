@@ -21,6 +21,7 @@ import platform.Foundation.create
 import platform.Foundation.dataWithContentsOfURL
 import platform.QuartzCore.CAGradientLayer
 import platform.QuartzCore.CALayer
+import platform.QuartzCore.CATransaction
 import platform.UIKit.NSDirectionalEdgeInsetsMake
 import platform.UIKit.NSLayoutConstraint
 import platform.UIKit.UIAction
@@ -36,6 +37,7 @@ import platform.UIKit.UICornerConfiguration
 import platform.UIKit.UIGlassEffect
 import platform.UIKit.UIGlassEffectStyle
 import platform.UIKit.UIImage
+import platform.UIKit.UIImageRenderingMode
 import platform.UIKit.UIImageSymbolConfiguration
 import platform.UIKit.UIImageSymbolWeightMedium
 import platform.UIKit.UILayoutConstraintAxisVertical
@@ -169,20 +171,19 @@ internal fun IosHostNavBarLayer.loadIdentityPhoto(url: String?) {
 }
 
 @OptIn(ExperimentalForeignApi::class)
-internal fun IosHostNavBarLayer.rebuildTrailing(
+internal fun IosHostNavBarLayer.syncTrailingButtons(
     trailingActions: List<NativeChromeAction>,
     showSearch: Boolean,
 ) {
-    trailingStack.arrangedSubviews.map { it as UIView }.forEach { view ->
-        trailingStack.removeArrangedSubview(view)
-        view.removeFromSuperview()
-    }
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    val desired = mutableListOf<UIButton>()
     trailingActions.forEachIndexed { index, action ->
         val button = actionButtons[index]
         button.hidden = false
         bindNativeMenu(button, action, actionIndex = index)
         paintChromeButton(button, action.sfSymbol, action.contentDescription, clustered = true)
-        trailingStack.addArrangedSubview(button)
+        desired.add(button)
     }
     actionButtons.drop(trailingActions.size).forEach { button ->
         button.hidden = true
@@ -193,16 +194,30 @@ internal fun IosHostNavBarLayer.rebuildTrailing(
         searchButton.hidden = false
         bindNativeMenu(searchButton, null, actionIndex = -1)
         paintChromeButton(searchButton, "magnifyingglass", "Search", clustered = true)
-        trailingStack.addArrangedSubview(searchButton)
+        desired.add(searchButton)
     } else {
         searchButton.hidden = true
         searchButton.menu = null
         searchButton.showsMenuAsPrimaryAction = false
     }
-    val hasTrailing = trailingActions.isNotEmpty() || showSearch
-    trailingCluster.hidden = !hasTrailing
+    trailingStack.arrangedSubviews.map { it as UIView }.forEach { view ->
+        if (desired.none { it === view }) {
+            trailingStack.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+    }
+    desired.forEach { button ->
+        if (trailingStack.arrangedSubviews.none { it === button }) {
+            trailingStack.addArrangedSubview(button)
+        }
+    }
+    val hasTrailing = desired.isNotEmpty()
+    if (trailingCluster.hidden != !hasTrailing) {
+        trailingCluster.hidden = !hasTrailing
+    }
     titleTrailingToCluster?.active = hasTrailing
     titleTrailingToBar?.active = !hasTrailing
+    CATransaction.commit()
 }
 
 @OptIn(ExperimentalForeignApi::class)
@@ -253,6 +268,8 @@ internal fun IosHostNavBarLayer.installRowIfNeeded() {
     titleColumn.addArrangedSubview(titleLabel)
     titleColumn.addArrangedSubview(subtitleLabel)
     chromeRow.addSubview(backButton)
+    backButton.addSubview(backGlyph)
+    backButton.bringSubviewToFront(backGlyph)
     chromeRow.addSubview(avatarButton)
     avatarButton.addSubview(avatarInitialsLabel)
     avatarButton.addSubview(avatarPhoto)
@@ -358,6 +375,8 @@ internal fun IosHostNavBarLayer.installRowIfNeeded() {
                 constant = NativeHeaderMetrics.LeadingInsetPt - 8.0,
             ),
             backButton.centerYAnchor.constraintEqualToAnchor(chromeRow.topAnchor, constant = chromePlane),
+            backGlyph.centerXAnchor.constraintEqualToAnchor(backButton.centerXAnchor),
+            backGlyph.centerYAnchor.constraintEqualToAnchor(backButton.centerYAnchor),
             avatarButton.centerYAnchor.constraintEqualToAnchor(chromeRow.topAnchor, constant = chromePlane),
             avatarInitialsLabel.leadingAnchor.constraintEqualToAnchor(avatarButton.leadingAnchor, constant = 3.0),
             avatarInitialsLabel.trailingAnchor.constraintEqualToAnchor(avatarButton.trailingAnchor, constant = -3.0),
@@ -404,6 +423,10 @@ internal fun IosHostNavBarLayer.paintChromeButton(
     accessibility: String,
     clustered: Boolean,
 ) {
+    if (paintedSymbols[button] == symbol) {
+        button.setAccessibilityLabel(accessibility)
+        return
+    }
     val symbolConfig =
         UIImageSymbolConfiguration.configurationWithPointSize(
             NativeHeaderMetrics.ChromeIconPointSize,
@@ -412,14 +435,37 @@ internal fun IosHostNavBarLayer.paintChromeButton(
     val image =
         UIImage.systemImageNamed(symbol, withConfiguration = symbolConfig)
             ?: UIImage.systemImageNamed(symbol)
+    val tint = if (lastIsDark) UIColor.whiteColor else UIColor.blackColor
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    if (!clustered && usesGlassButtons) {
+        if (!backGlassConfigured || button.configuration == null) {
+            val config = UIButtonConfiguration.glassButtonConfiguration()
+            config.cornerStyle = UIButtonConfigurationCornerStyleCapsule
+            config.image = null
+            config.contentInsets = NSDirectionalEdgeInsetsMake(0.0, 0.0, 0.0, 0.0)
+            button.configuration = config
+            backGlassConfigured = true
+        }
+        backGlyph.image = image?.imageWithRenderingMode(UIImageRenderingMode.UIImageRenderingModeAlwaysTemplate)
+        backGlyph.tintColor = tint
+        backGlyph.hidden = false
+        button.tintColor = tint
+        button.setAccessibilityLabel(accessibility)
+        CATransaction.commit()
+        paintedSymbols[button] = symbol
+        return
+    }
+    if (!clustered) {
+        backGlyph.hidden = true
+    }
+    val existing = button.configuration
     val config =
-        if (usesGlassButtons && clustered) {
+        if (existing != null) {
+            existing
+        } else if (usesGlassButtons && clustered) {
             UIButtonConfiguration.plainButtonConfiguration().apply {
-                baseForegroundColor = if (lastIsDark) UIColor.whiteColor else UIColor.blackColor
-            }
-        } else if (usesGlassButtons) {
-            UIButtonConfiguration.glassButtonConfiguration().apply {
-                cornerStyle = UIButtonConfigurationCornerStyleCapsule
+                baseForegroundColor = tint
             }
         } else {
             UIButtonConfiguration.plainButtonConfiguration()
@@ -428,9 +474,10 @@ internal fun IosHostNavBarLayer.paintChromeButton(
     config.preferredSymbolConfigurationForImage = symbolConfig
     config.contentInsets = NSDirectionalEdgeInsetsMake(0.0, 0.0, 0.0, 0.0)
     button.configuration = config
-    button.setImage(image, forState = UIControlStateNormal)
-    button.tintColor = if (lastIsDark) UIColor.whiteColor else UIColor.blackColor
+    button.tintColor = tint
     button.setAccessibilityLabel(accessibility)
+    CATransaction.commit()
+    paintedSymbols[button] = symbol
 }
 
 @OptIn(ExperimentalForeignApi::class)

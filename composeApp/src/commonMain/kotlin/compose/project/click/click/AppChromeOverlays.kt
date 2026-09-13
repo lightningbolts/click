@@ -20,6 +20,7 @@ import androidx.compose.ui.zIndex
 import compose.project.click.click.events.isEventLinkedHubCategory // pragma: allowlist secret
 import compose.project.click.click.navigation.NavigationItem // pragma: allowlist secret
 import compose.project.click.click.navigation.bottomNavItems // pragma: allowlist secret
+import compose.project.click.click.ui.components.AppScreenChromeState // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlobalTetherOverlay // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBottomBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastHost // pragma: allowlist secret
@@ -123,7 +124,7 @@ internal fun BoxScope.AppBottomChrome(
         PlatformBottomBar(
             items = bottomNavItems,
             currentRoute = currentRoute,
-            visible = !hideMainBottomBar,
+            visible = !hideMainBottomBar && !AppScreenChromeState.nativeTabBarCovered,
             onItemSelected = { item ->
                 navigateTo(item.route)
                 hubChatCloseJob?.cancel()

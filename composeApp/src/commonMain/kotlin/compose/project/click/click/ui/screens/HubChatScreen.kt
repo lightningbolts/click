@@ -8,7 +8,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -26,7 +25,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
@@ -42,7 +40,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -72,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.ui.camera.DisposableCameraView // pragma: allowlist secret
@@ -83,6 +81,7 @@ import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: all
 import compose.project.click.click.ui.chat.ChatChromeHorizontalPadding // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatComposerStrip // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatComposerStripReserve // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatExpandedPhotoPreview // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatHeaderIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatInterMessageHubBaseCompact // pragma: allowlist secret
@@ -120,8 +119,6 @@ import compose.project.click.click.ui.components.platformNativeHeaderClearance /
 import compose.project.click.click.ui.components.sheetPageBackground // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
-import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
-import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
 import compose.project.click.click.viewmodel.HubChatNavigationEvent // pragma: allowlist secret
 import compose.project.click.click.viewmodel.HubChatViewModel // pragma: allowlist secret
@@ -174,6 +171,7 @@ fun HubChatScreen(
     val outOfBounds by viewModel.outOfBounds.collectAsState()
     val isEventHub by viewModel.isEventHubFlow.collectAsState()
     var showClickDropsCamera by remember { mutableStateOf(false) }
+    var expandedPhotoTarget by remember { mutableStateOf<MessageWithUser?>(null) }
 
     val isCreator by viewModel.isCreator.collectAsState()
     val resolvedCreatorId by viewModel.resolvedCreatorId.collectAsState()
@@ -402,48 +400,29 @@ fun HubChatScreen(
                         }
                     }
 
-                    Surface(
+                    Text(
+                        text = "See someone interesting? Tap phones to connect.",
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
-                                .testTag("hub_tap_to_connect_banner")
-                                .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(14.dp)),
-                        color = PrimaryBlue,
-                        shape = RoundedCornerShape(14.dp),
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp,
-                    ) {
-                        Text(
-                            text = "See someone interesting? Go tap phones to make a permanent connection.",
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = Color.White,
-                            textAlign = TextAlign.Center,
-                        )
-                    }
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .testTag("hub_tap_to_connect_banner"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
 
                     if (inLobby) {
-                        Surface(
+                        Text(
+                            text = "You're the first one here. We'll ping you when others join.",
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                                    .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(16.dp)),
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(16.dp),
-                            tonalElevation = 0.dp,
-                            shadowElevation = 0.dp,
-                        ) {
-                            Text(
-                                text = "You're the first one here! We'll ping you when others join.",
-                                modifier = Modifier.padding(20.dp),
-                                style = MaterialTheme.typography.bodyLarge,
-                                textAlign = TextAlign.Center,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            )
-                        }
+                                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
 
                     // ── Timestamp peek ──────────────────────────────────────────
@@ -596,6 +575,7 @@ fun HubChatScreen(
                                     onDownloadAttachment = { _, _ ->
                                         ChatAttachmentDownloadOutcome.Failure("Download not available in hub chat.")
                                     },
+                                    onExpandPhoto = { expandedPhotoTarget = it },
                                     interMessageBaseCompact = ChatInterMessageHubBaseCompact,
                                     enableMessageContextMenu = false,
                                     highlightedMessageId = focusedSearchMessageId,
@@ -649,6 +629,12 @@ fun HubChatScreen(
                         .zIndex(10_500f),
             )
         }
+
+        ChatExpandedPhotoPreview(
+            target = expandedPhotoTarget,
+            secureMediaHost = viewModel,
+            onDismiss = { expandedPhotoTarget = null },
+        )
     }
 
     if (settingsMenuExpanded) {

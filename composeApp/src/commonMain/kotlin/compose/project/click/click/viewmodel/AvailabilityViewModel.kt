@@ -18,6 +18,7 @@ import compose.project.click.click.data.repository.SupabaseRepository // pragma:
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.github.jan.supabase.auth.auth
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,6 +42,39 @@ enum class AvailabilityIntentDuration(
     SIX_HOURS(6L * 60L * 60_000L, "6 hours"),
     TWENTY_FOUR_HOURS(24L * 60L * 60_000L, "24 hours"),
 }
+
+internal data class AvailabilityIntentRefreshDecision(
+    val intents: List<AvailabilityIntentRow>,
+    val hasResolved: Boolean,
+    val feedback: String?,
+)
+
+internal fun availabilityIntentRefreshDecision(
+    existing: List<AvailabilityIntentRow>,
+    previouslyResolved: Boolean,
+    fetched: Result<List<AvailabilityIntentRow>>,
+): AvailabilityIntentRefreshDecision =
+    fetched.fold(
+        onSuccess = { intents ->
+            AvailabilityIntentRefreshDecision(
+                intents = intents,
+                hasResolved = true,
+                feedback = null,
+            )
+        },
+        onFailure = {
+            AvailabilityIntentRefreshDecision(
+                intents = existing,
+                hasResolved = previouslyResolved,
+                feedback =
+                    if (existing.isEmpty()) {
+                        "Couldn't refresh availability. Try again when you're online."
+                    } else {
+                        "Couldn't refresh availability. Showing your last saved status."
+                    },
+            )
+        },
+    )
 
 class AvailabilityViewModel(
     private val supabaseRepository: SupabaseRepository = SupabaseRepository(),
@@ -150,9 +184,24 @@ class AvailabilityViewModel(
         if (showLoadingSpinner) {
             _loadingActiveAvailabilityIntents.value = true
         }
+        val fetched =
+            try {
+                Result.success(supabaseRepository.fetchActiveAvailabilityIntentsForUser(uid))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
         try {
-            _activeAvailabilityIntents.value = supabaseRepository.fetchActiveAvailabilityIntentsForUser(uid)
-            _hasResolvedActiveAvailabilityIntents.value = true
+            val decision =
+                availabilityIntentRefreshDecision(
+                    existing = _activeAvailabilityIntents.value,
+                    previouslyResolved = _hasResolvedActiveAvailabilityIntents.value,
+                    fetched = fetched,
+                )
+            _activeAvailabilityIntents.value = decision.intents
+            _hasResolvedActiveAvailabilityIntents.value = decision.hasResolved
+            _intentListFeedback.value = decision.feedback
         } finally {
             if (showLoadingSpinner) {
                 _loadingActiveAvailabilityIntents.value = false

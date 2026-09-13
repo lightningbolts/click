@@ -318,8 +318,7 @@ iOS: native `UINavigationBar` / `UITabBar` on the host view; body content must n
 
 - [ ] Back closes chat (platform-appropriate)
 - [ ] Peer name / avatar / presence (online dot overlays avatar outside clip; subtitle Online/Offline matches `onlineUsers` ∪ `isPeerOnline`)
-- [ ] Call menu: voice call, video call
-- [ ] `[UI]` Call menu `ClickPlatformDropdownMenu`
+- [x] `[N/A]` Voice/video call actions are not shipped on mobile; no call menu is exposed (`AI.md` §3)
 - [ ] Overflow → `ConnectionActionSheet` (same actions as list)
 
 ### 7.7 Vibe check & icebreakers (`VibeCheckAndIcebreaker`)
@@ -358,16 +357,9 @@ iOS: native `UINavigationBar` / `UITabBar` on the host view; body content must n
 
 ## 8. Voice & video calls
 
-- [ ] Outgoing voice call from chat → `CallPreviewOverlay` → connected
-- [ ] Outgoing video call
-- [ ] Incoming call UI → accept / decline
-- [ ] `ActiveCallOverlay` in-call controls (mute, speaker, end); control bar clears nav-bar / home-indicator inset
-- [ ] End call returns to chat; overlay dismisses cleanly
-- [ ] Group video 5+: layout stays Grid (all remotes visible); layout override resets on next call
-- [ ] `[P] iOS` CallKit integration; VoIP push path (no Firebase for VoIP)
-- [ ] `[KNOWN-6]` `[P] Android` LiveKit — outgoing voice/video after granting mic/camera (permission retry)
-- [ ] `[P] Android` Incoming call intent / notification (`POST_NOTIFICATIONS`)
-- [ ] Call push toggle in Settings respected
+- [x] `[N/A]` Voice/video calls were removed from mobile. Do not add
+  LiveKit, VoIP PushKit, CallKit, incoming-call payload handling, call
+  overlays, or call settings (`AI.md` §3).
 - [ ] Blocked user cannot call
 
 ---
@@ -612,12 +604,12 @@ Prefer the dedicated smoke doc for a timed pass: [02-smoke-10min.md](02-smoke-10
 - [ ] Beacon drop soundtrack URL: field stays **one row tall** and the caret is vertically centered in it. Root cause both prior times was the placeholder wrapping to two lines, which grows the decoration box past its 56dp single-line height and leaves the centered caret floating mid-field — plain hints must be passed as `ClickOutlinedTextField(placeholderText = …)`, not a `placeholder = { Text(...) }` slot
 - [ ] Beacon drop photo is **optional for every category** (soundtrack, event, community, hazard, SOS, utility, study, social): submit with no photo succeeds and the beacon renders with its generated gradient on the pin, in lists, and in its detail sheet
 - [ ] Beacon drop photo section shows two real bordered buttons (`Take photo` / `Photo library`), not highlighted text links; attaching one shows a thumbnail with Replace / Remove
-- [ ] Home photo pile: availability pill + recap/insights/stats render outside the pile; one unified roughly-square stack (~half screen height, 3 visible layers with vertical peek and interleaved category markers); LazyCardStack 1:1 drag; swipe past 200 dp or 800 dp/s throws off with velocity; swipe-down / left rewinds via `animateToBack`; tap opens detail with no jiggle (no fan carousel); below threshold springs back; stacked layers show scale 1.0/0.95/0.90, elevation 16/8/4 dp, ±15° rest tilt; Reduce Motion replaces tilt/spring with a plain rest pose
+- [ ] Home linear feed: saved events, availability, recap/insights/stats, nearby exploration, reconnect reminders, event reminders, recent connections, and empty/error states remain independently reachable; realtime/refresh updates preserve stable item keys and do not replay full-page entrance motion
 - [ ] Tab-root headers (Home, Add Click, Nearby, Settings, Clicks): native collapse to compact chrome; never disappear. iOS status bar / Dynamic Island stays behind system blur.
 - [ ] Settings → Saved events: tap a card → same event detail bottom sheet as Home (not a no-op)
 - [ ] Map pin profile: Timeline / Beacons / Media / Links match the Clicks-list profile for the same connection (`TabbedUserProfileSheet`)
 - [ ] Settings → My personality helper reads exactly `Pick exactly 5 traits.` (no login-gate sentence), on mobile and web
-- [ ] Generated visuals: the same beacon shows the same gradient + pattern on its map pin, home pile card, Events/Explore tile, share-to-chat card, search row, profile Beacons row, and detail header — and the same on click-web
+- [ ] Generated visuals: the same beacon shows the same gradient + pattern on its map pin, Home feed card, Events/Explore tile, share-to-chat card, search row, profile Beacons row, and detail header — and the same on click-web
 - [ ] Detail sheet headers show no duplicated text: the gradient band carries only a category chip, with title / schedule / location appearing exactly once in the section below
 - [ ] Event schedule picker: opening date/time popup does not shift form layout; hour/minute tumblers snap to nearest option after scroll
 - [ ] Birthday onboarding: typing digits auto-inserts dashes; calendar picker syncs with typed date

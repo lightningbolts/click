@@ -9,7 +9,9 @@ import compose.project.click.click.data.repository.AuthRepository // pragma: all
  */
 object ClickWebAuthCoordinator {
     suspend fun ensureReady(authRepository: AuthRepository = AuthRepository()): Boolean {
-        val token = EnsureFreshAccessToken.get(authRepository = authRepository, forceRefresh = true)
+        // Do not force-refresh: Home / map poll this on every composition. Forced GoTrue
+        // hits trip "Request rate limit reached", after which every JWT-backed call fails.
+        val token = EnsureFreshAccessToken.get(authRepository = authRepository)
         return !token.isNullOrBlank()
     }
 }

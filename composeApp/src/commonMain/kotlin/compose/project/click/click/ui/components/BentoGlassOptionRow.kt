@@ -1,8 +1,8 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -25,6 +25,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.platform.rememberReduceMotionEnabled
+import compose.project.click.click.ui.theme.MotionTokens
 
 /**
  * Touchable rounded row for sheet option lists (Bento-style interior radius).
@@ -48,48 +50,42 @@ fun BentoGlassOptionRow(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
+    val reduceMotion = rememberReduceMotionEnabled()
     val borderAlpha by animateFloatAsState(
         targetValue = if (pressed) 0.28f else 0.12f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium,
-        ),
+        animationSpec = MotionTokens.fadeSpec(),
         label = "bento_row_border",
-    )
-    val pressScale by animateFloatAsState(
-        targetValue = if (pressed) 0.97f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium,
-        ),
-        label = "bento_row_scale",
     )
     val shape = RoundedCornerShape(cornerRadius)
     val bodyColor =
-        if (destructive) androidx.compose.ui.graphics.Color(0xFFFF6B6B) else titleColor
+        if (destructive) {
+            androidx.compose.ui.graphics
+                .Color(0xFFFF6B6B)
+        } else {
+            titleColor
+        }
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = horizontalInset, vertical = verticalInset)
-            .clip(shape)
-            .then(
-                if (showBorder) {
-                    Modifier.border(1.dp, GlassSheetTokens.GlassBorder().copy(alpha = borderAlpha), shape)
-                } else {
-                    Modifier
-                },
-            )
-            .graphicsLayer {
-                scaleX = pressScale
-                scaleY = pressScale
-                alpha = if (pressed) 0.92f else 1f
-            }
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick,
-            )
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(horizontal = horizontalInset, vertical = verticalInset)
+                .clip(shape)
+                .then(
+                    if (showBorder) {
+                        Modifier.border(1.dp, GlassSheetTokens.GlassBorder().copy(alpha = borderAlpha), shape)
+                    } else {
+                        Modifier
+                    },
+                ).platformPressScale(interactionSource)
+                .graphicsLayer {
+                    if (pressed && !reduceMotion) {
+                        alpha = 0.92f
+                    }
+                }.clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = onClick,
+                ).padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),

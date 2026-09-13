@@ -280,6 +280,9 @@ private fun rememberIosHostNavBar(
     val layer = if (overlay) IosNavChrome.overlay else IosNavChrome.tab
     // Snapshot read so chat rebinds when Click Drops clears exclusive ownership.
     val exclusiveOwner = if (overlay) IosNavChrome.overlayExclusiveOwner else null
+    val mediaChrome = if (overlay && !leadingClose) IosNavChrome.overlayMediaChrome else null
+    val mediaClose = mediaChrome?.onClose
+    val mediaTrailing = mediaChrome?.trailing
 
     DisposableEffect(viewController, overlay, leadingClose) {
         layer.attach(viewController)
@@ -338,10 +341,10 @@ private fun rememberIosHostNavBar(
             collapseFraction = collapseFraction,
             hasSubtitle = hasSubtitle,
             onOpenSearch = searchHandler,
-            onNavigateBack = backHandler,
-            trailingActions = trailingHandlers,
+            onNavigateBack = mediaClose ?: backHandler,
+            trailingActions = mediaTrailing ?: trailingHandlers,
             collapseSearchIntoBar = collapseSearchIntoBar,
-            leadingClose = leadingClose,
+            leadingClose = leadingClose || mediaChrome != null,
         )
     }
 }
@@ -406,6 +409,87 @@ actual fun BindPlatformNativeNavigationBar(
     )
 }
 
+@Composable
+actual fun ApplyOverlayMediaChrome(
+    active: Boolean,
+    onClose: () -> Unit,
+    trailing: List<NativeChromeAction>,
+) {
+    val close by rememberUpdatedState(onClose)
+    val trailingLatest by rememberUpdatedState(trailing)
+    val hasUnderlyingBinder = remember { IosNavChrome.hasOverlayBinder() }
+    val trailingShape =
+        trailing.map { action ->
+            Triple(
+                action.sfSymbol,
+                action.contentDescription,
+                action.menuItems.map { item -> item.title to item.sfSymbol },
+            )
+        }
+    val stableTrailing =
+        remember(trailingShape) {
+            trailing.mapIndexed { actionIndex, action ->
+                action.copy(
+                    onClick = {
+                        trailingLatest.getOrNull(actionIndex)?.onClick?.invoke()
+                    },
+                    menuItems =
+                        action.menuItems.mapIndexed { itemIndex, item ->
+                            item.copy(
+                                onClick = {
+                                    trailingLatest
+                                        .getOrNull(actionIndex)
+                                        ?.menuItems
+                                        ?.getOrNull(itemIndex)
+                                        ?.onClick
+                                        ?.invoke()
+                                },
+                            )
+                        },
+                )
+            }
+        }
+    val stableMediaChrome =
+        remember(stableTrailing) {
+            OverlayMediaChrome(
+                onClose = { close() },
+                trailing = stableTrailing,
+            )
+        }
+    DisposableEffect(active, hasUnderlyingBinder, stableMediaChrome) {
+        if (active && hasUnderlyingBinder) {
+            IosNavChrome.overlayMediaChrome = stableMediaChrome
+        } else if (!active) {
+            IosNavChrome.overlayMediaChrome = null
+        }
+        onDispose {
+            if (IosNavChrome.overlayMediaChrome != null) {
+                IosNavChrome.overlayMediaChrome = null
+            }
+        }
+    }
+    if (active && !hasUnderlyingBinder) {
+        rememberIosHostNavBar(
+            title = "",
+            subtitle = null,
+            presenceOnline = null,
+            collapseFraction = 1f,
+            visible = LocalNativeChromeActive.current,
+            overlay = true,
+            onOpenSearch = null,
+            onNavigateBack = { close() },
+            nativeTrailingActions = trailingLatest,
+            collapseSearchIntoBar = false,
+            leadingClose = true,
+        )
+    }
+}
+
+internal data class OverlayMediaChrome(
+    val onClose: () -> Unit,
+    val trailing: List<NativeChromeAction>,
+)
+
 internal object IosNavChrome {
     val tab = IosHostNavBarLayer()
     val overlay = IosHostNavBarLayer()
@@ -417,7 +501,10 @@ internal object IosNavChrome {
      * when exclusive ownership clears.
      */
     var overlayExclusiveOwner by mutableStateOf<Any?>(null)
+    var overlayMediaChrome by mutableStateOf<OverlayMediaChrome?>(null)
     private val overlayBindOwners = mutableSetOf<Any>()
+
+    fun hasOverlayBinder(): Boolean = overlayBindOwners.isNotEmpty()
 
     fun registerOverlayBinder(owner: Any) {
         overlayBindOwners.add(owner)

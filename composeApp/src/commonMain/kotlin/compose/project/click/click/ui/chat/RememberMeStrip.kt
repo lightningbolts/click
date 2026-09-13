@@ -6,7 +6,6 @@
 package compose.project.click.click.ui.chat // pragma: allowlist secret
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -37,8 +35,6 @@ import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pr
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.CoreConnectionAvatarFrame // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
-import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
-import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 
 /**
  * Horizontal “Remember Me” rail for Core-pinned 1:1 connections.
@@ -56,17 +52,16 @@ fun RememberMeStrip(
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
             text = "Remember Me",
             style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 2.dp),
         )
         LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(end = 4.dp),
         ) {
             items(chats, key = { it.connection.id }) { chat ->
@@ -108,16 +103,15 @@ private fun RememberMeChip(
     val badge = formatRememberMeBadge(activityTs)
 
     Column(
-        modifier = Modifier.width(80.dp),
+        modifier = Modifier.width(64.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Box(contentAlignment = Alignment.BottomEnd) {
-            // Circular hit target only — avoid the 80dp-wide column becoming a square tap region.
             AvatarWithOnlineIndicator(isOnline = isOnline) {
                 CoreConnectionAvatarFrame(
                     isCore = true,
-                    avatarSize = 56.dp,
+                    avatarSize = 44.dp,
                     onClick = onClick,
                 ) {
                     ConnectionListUserAvatarFace(
@@ -125,10 +119,7 @@ private fun RememberMeChip(
                         email = user.email,
                         avatarUrl = user.image,
                         userId = user.id,
-                        modifier =
-                            Modifier
-                                .size(56.dp)
-                                .border(clickBorderWidth(), clickBorderColor(), CircleShape),
+                        modifier = Modifier.size(44.dp),
                         useCompactTypography = true,
                     )
                 }
@@ -137,31 +128,29 @@ private fun RememberMeChip(
                 Text(
                     text = badge,
                     color = MaterialTheme.colorScheme.onPrimary,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 9.sp,
                     maxLines = 1,
                     modifier =
                         Modifier
                             .clip(RoundedCornerShape(999.dp))
                             .background(PrimaryBlue)
-                            .border(2.dp, MaterialTheme.colorScheme.background, RoundedCornerShape(999.dp))
                             .padding(horizontal = 4.dp, vertical = 1.dp),
                 )
             }
         }
         Text(
             text = firstName,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onBackground,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier =
                 Modifier
-                    .widthIn(max = 80.dp)
-                    .clip(RoundedCornerShape(999.dp))
+                    .widthIn(max = 64.dp)
                     .clickable(onClick = onClick)
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                    .padding(horizontal = 2.dp),
             textAlign = TextAlign.Center,
         )
     }

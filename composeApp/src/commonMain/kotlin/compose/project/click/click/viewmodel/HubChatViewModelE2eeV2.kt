@@ -23,13 +23,34 @@ internal data class HubE2eeV2Session(
         get() = epochKeys[epoch] ?: error("Current hub E2EE v2 key is unavailable")
 
     fun keyForEpoch(value: Int): ByteArray? = epochKeys[value]
+
+    /** Cache ownership must not alias a send's keys across a suspended upload. */
+    fun copyWithIndependentKeys(): HubE2eeV2Session = copy(epochKeys = epochKeys.mapValues { (_, key) -> key.copyOf() })
+
+    fun clearKeys() {
+        epochKeys.values.forEach { it.fill(0) }
+    }
 }
 
 internal const val HUB_E2EE_V2_UNAVAILABLE_MESSAGE = "Encrypted hub message unavailable"
 
+internal fun HubChatViewModel.clearHubE2eeV2Session() {
+    val session = hubE2eeV2Session
+    hubE2eeV2Session = null
+    session?.clearKeys()
+}
+
+private fun HubChatViewModel.replaceHubE2eeV2Session(session: HubE2eeV2Session) {
+    clearHubE2eeV2Session()
+    hubE2eeV2Session = session
+}
+
 /** Resolve, initialize, or rotate the hub epoch without ever sending a legacy write after upgrade. */
-internal suspend fun HubChatViewModel.ensureHubE2eeV2Session(participantUserIds: Set<String>): HubE2eeV2Session? {
-    val token = tokenStorage.requireFreshHubJwt()
+internal suspend fun HubChatViewModel.ensureHubE2eeV2Session(
+    participantUserIds: Set<String>,
+    forSend: Boolean = false,
+): HubE2eeV2Session? {
+    val token = requireFreshHubJwt()
     val identity =
         runCatching { MessageCryptoV2.loadOrCreateDeviceIdentity() }
             .getOrElse { throw IllegalStateException("E2EE v2 device identity is unavailable") }
@@ -97,6 +118,7 @@ internal suspend fun HubChatViewModel.ensureHubE2eeV2Session(participantUserIds:
             if (key != null) keys[envelope.epoch] = key
         }
     if (!keys.containsKey(currentEpoch)) {
+        keys.values.forEach { it.fill(0) }
         throw IllegalStateException("This device is not approved for the current hub E2EE v2 epoch")
     }
     return HubE2eeV2Session(
@@ -105,8 +127,19 @@ internal suspend fun HubChatViewModel.ensureHubE2eeV2Session(participantUserIds:
         senderDeviceId = identity.info.deviceId,
         identity = identity,
         membershipFingerprint = state.membershipFingerprint ?: membershipFingerprintForHubDevices(devices),
-    ).also { hubE2eeV2Session = it }
+    ).also { replaceHubE2eeV2Session(if (forSend) it.copyWithIndependentKeys() else it) }
 }
+
+/** The operation owns freshly unwrapped keys; the read cache holds independent bytes. */
+internal suspend fun <T> HubChatViewModel.withHubE2eeV2SendSession(block: suspend (HubE2eeV2Session?) -> T): T =
+    ensureHubE2eeV2Session(hubParticipantIds, forSend = true).useForSend(block)
+
+internal suspend fun <T> HubE2eeV2Session?.useForSend(block: suspend (HubE2eeV2Session?) -> T): T =
+    try {
+        block(this)
+    } finally {
+        this?.clearKeys()
+    }
 
 private suspend fun HubChatViewModel.createHubE2eeV2EpochWithFreshKey(
     identity: compose.project.click.click.crypto.DeviceIdentity,

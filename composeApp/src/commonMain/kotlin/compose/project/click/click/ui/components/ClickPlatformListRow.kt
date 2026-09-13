@@ -104,7 +104,7 @@ fun ClickListRowShimmer(modifier: Modifier = Modifier) {
         targetValue = 0.62f,
         animationSpec =
             infiniteRepeatable(
-                animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+                animation = tween(durationMillis = MotionTokens.Pulse.Shimmer, easing = FastOutSlowInEasing),
                 repeatMode = RepeatMode.Reverse,
             ),
         label = "click_list_row_shimmer_alpha",

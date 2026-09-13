@@ -2,18 +2,13 @@
 
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -28,14 +23,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
-import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickChip // pragma: allowlist secret
 import compose.project.click.click.ui.components.PERSONALITY_REQUIRED_TAG_COUNT // pragma: allowlist secret
 import compose.project.click.click.ui.components.PersonalityEditor // pragma: allowlist secret
 import compose.project.click.click.ui.components.canonicalizePersonalityTags // pragma: allowlist secret
-import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
-import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
-import compose.project.click.click.ui.theme.SoftBlue // pragma: allowlist secret
-import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -82,95 +74,85 @@ internal fun SettingsPersonalityCard(
         }
     }
 
-    AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = "My personality",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = "Pick exactly $PERSONALITY_REQUIRED_TAG_COUNT traits.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = "My personality",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = "Pick exactly $PERSONALITY_REQUIRED_TAG_COUNT traits.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
 
-            if (selected.isNotEmpty()) {
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    selected.forEach { tag ->
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = SoftBlue,
-                            border = BorderStroke(1.dp, clickBorderColor()),
-                        ) {
-                            Text(
-                                text = tag,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = PrimaryBlue,
-                            )
-                        }
-                    }
+        if (selected.isNotEmpty()) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                selected.forEach { tag ->
+                    ClickChip(
+                        label = tag,
+                        selected = true,
+                        onClick = {},
+                        compact = true,
+                    )
                 }
             }
+        }
 
-            PersonalityEditor(
-                selectedTags = selected,
-                onSelectedTagsChange = { next ->
-                    selected = next
-                    dirty = next != saved
-                },
-            )
+        PersonalityEditor(
+            selectedTags = selected,
+            onSelectedTagsChange = { next ->
+                selected = next
+                dirty = next != saved
+            },
+        )
 
-            Text(
-                text = "${selected.size} of $PERSONALITY_REQUIRED_TAG_COUNT selected",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        Text(
+            text = "${selected.size} of $PERSONALITY_REQUIRED_TAG_COUNT selected",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
 
-            val platformStyle = LocalPlatformStyle.current
-            Button(
-                onClick = {
-                    scope.launch {
-                        saving = true
-                        val toSave = canonicalizePersonalityTags(selected)
-                        apiClient.patchUserProfile(userId, personalityTags = toSave).fold(
-                            onSuccess = { user ->
-                                saved = toSave
-                                dirty = false
-                                AppDataManager.applyPersonalityTags(user.personalityTags.ifEmpty { toSave })
-                                onFeedback("Saved $PERSONALITY_REQUIRED_TAG_COUNT personality traits")
-                            },
-                            onFailure = {
-                                val msg =
-                                    it.message
-                                        ?.lines()
-                                        ?.firstOrNull()
-                                        ?.take(180)
-                                        ?: "Could not save personality traits"
-                                onFeedback(msg)
-                            },
-                        )
-                        saving = false
-                    }
-                },
-                enabled = !saving && dirty && selected.size == PERSONALITY_REQUIRED_TAG_COUNT,
-                shape = RoundedCornerShape(if (platformStyle.isIOS) 12.dp else 16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
-            ) {
-                Text(if (saving) "Saving…" else "Save personality")
-            }
+        ClickButton(
+            onClick = {
+                scope.launch {
+                    saving = true
+                    val toSave = canonicalizePersonalityTags(selected)
+                    apiClient.patchUserProfile(userId, personalityTags = toSave).fold(
+                        onSuccess = { user ->
+                            saved = toSave
+                            dirty = false
+                            AppDataManager.applyPersonalityTags(user.personalityTags.ifEmpty { toSave })
+                            onFeedback("Saved $PERSONALITY_REQUIRED_TAG_COUNT personality traits")
+                        },
+                        onFailure = {
+                            val msg =
+                                it.message
+                                    ?.lines()
+                                    ?.firstOrNull()
+                                    ?.take(180)
+                                    ?: "Could not save personality traits"
+                            onFeedback(msg)
+                        },
+                    )
+                    saving = false
+                }
+            },
+            enabled = !saving && dirty && selected.size == PERSONALITY_REQUIRED_TAG_COUNT,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(if (saving) "Saving…" else "Save personality")
         }
     }
 }

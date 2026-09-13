@@ -3,10 +3,8 @@
 package compose.project.click.click.ui.chat // pragma: allowlist secret
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,11 +12,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Groups
@@ -39,15 +35,12 @@ import androidx.compose.ui.unit.sp
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.previewLabel // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator
-import compose.project.click.click.ui.components.ClickInsetDivider // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickPlatformListRowHeight // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickListRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickUnreadDot // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.CoreConnectionAvatarFrame // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
 import compose.project.click.click.ui.components.groupAvatarClusterWidth // pragma: allowlist secret
-import compose.project.click.click.ui.components.platformPressScale // pragma: allowlist secret
 import compose.project.click.click.util.AvailabilityOverlapCache // pragma: allowlist secret
 
 /**
@@ -108,24 +101,10 @@ fun ConnectionItem(
             }
         }
 
-    val rowInteraction = remember { MutableInteractionSource() }
-
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner))
-                    .height(ClickPlatformListRowHeight)
-                    .platformPressScale(rowInteraction)
-                    .connectionRowPressHighlight(rowInteraction)
-                    .connectionRowPressGestures(
-                        interactionSource = rowInteraction,
-                        onClick = onClick,
-                        onLongPress = onLongPress,
-                    ).padding(start = 16.dp, end = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+    ClickListRow(
+        onClick = onClick,
+        onLongPress = onLongPress,
+        leading = {
             if (isGroup) {
                 val groupListAvatarSize = 40.dp
                 val groupAvatarUrl =
@@ -162,8 +141,7 @@ fun ConnectionItem(
                                 Modifier
                                     .size(40.dp)
                                     .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                                    .border(2.dp, MaterialTheme.colorScheme.background, CircleShape),
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
@@ -201,99 +179,73 @@ fun ConnectionItem(
                     }
                 }
             }
-
-            Box(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Spacer(modifier = Modifier.width(12.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Row(
-                                modifier = Modifier.weight(1f),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    headline,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 16.sp,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.weight(1f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                if (!isGroup && hasIntentOverlap) {
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Icon(
-                                        Icons.Filled.Bolt,
-                                        contentDescription = "Shared availability",
-                                        tint = Color(0xFFFBBF24),
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                }
-                            }
-                            Text(
-                                timeText,
-                                fontWeight = FontWeight.Normal,
-                                fontSize = 12.sp,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(2.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            if (showLoadingSubtitle) {
-                                Box(modifier = Modifier.weight(1f)) {
-                                    LoadingSubtitlePlaceholder()
-                                }
-                            } else {
-                                val rawPreview =
-                                    when {
-                                        previewNeedsRefresh -> "New message"
-                                        effectiveLastMessage != null -> effectiveLastMessage.previewLabel()
-                                        connection.last_message_at != null -> "New message"
-                                        else -> "Start a conversation"
-                                    }
-                                val previewText =
-                                    if (rawPreview == "New message" && decryptedPreview != null) {
-                                        decryptedPreview
-                                    } else {
-                                        rawPreview
-                                    }
-                                // Instant text swap — Crossfade on recycled rows fights LazyColumn fling.
-                                Text(
-                                    previewText,
-                                    modifier = Modifier.weight(1f),
-                                    fontSize = 14.sp,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontWeight = FontWeight.Normal,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-
-                            if (unreadCount > 0) {
-                                Spacer(modifier = Modifier.width(8.dp))
-                                ClickUnreadDot()
-                            }
-                        }
-                    }
+        },
+        trailing = {
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    timeText,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (unreadCount > 0) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    ClickUnreadDot()
                 }
             }
+        },
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                headline,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 16.sp,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (!isGroup && hasIntentOverlap) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Icon(
+                    Icons.Filled.Bolt,
+                    contentDescription = "Shared availability",
+                    tint = Color(0xFFFBBF24),
+                    modifier = Modifier.size(16.dp),
+                )
+            }
         }
-        ClickInsetDivider()
+        Spacer(modifier = Modifier.height(2.dp))
+        if (showLoadingSubtitle) {
+            LoadingSubtitlePlaceholder()
+        } else {
+            val rawPreview =
+                when {
+                    previewNeedsRefresh -> "New message"
+                    effectiveLastMessage != null -> effectiveLastMessage.previewLabel()
+                    connection.last_message_at != null -> "New message"
+                    else -> "Start a conversation"
+                }
+            val previewText =
+                if (rawPreview == "New message" && decryptedPreview != null) {
+                    decryptedPreview
+                } else {
+                    rawPreview
+                }
+            Text(
+                previewText,
+                fontSize = 14.sp,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Normal,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }

@@ -90,6 +90,7 @@ class HubChatViewModelTest {
                     jwt = TEST_HUB_JWT,
                     expiresAtEpochMs = TEST_HUB_JWT_EXPIRES_AT_MS,
                 ),
+            freshHubJwtProvider = { _ -> TEST_HUB_JWT },
             hubLifecycleGateway = gateway,
             activeHubCache = cache,
             mutationDispatcher = mutationDispatcher,

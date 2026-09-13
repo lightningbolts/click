@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.CircularProgressIndicator
@@ -48,7 +47,6 @@ import compose.project.click.click.data.AppDataManager // pragma: allowlist secr
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProvideSheetSwipeDismiss // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberSheetScrollAtTop // pragma: allowlist secret
@@ -198,9 +196,9 @@ fun UserProfileBottomSheet(
                                 }
 
                             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                GlassCard(
+                                ClickContentCard(
                                     modifier = Modifier.fillMaxWidth(),
-                                    usePrimaryBorder = true,
+                                    showBorder = false,
                                     contentPadding = 16.dp,
                                 ) {
                                     Row(
@@ -246,8 +244,9 @@ fun UserProfileBottomSheet(
                                 }
 
                                 if (mutual.isNotEmpty()) {
-                                    GlassCard(
+                                    ClickContentCard(
                                         modifier = Modifier.fillMaxWidth(),
+                                        showBorder = false,
                                         contentPadding = 14.dp,
                                     ) {
                                         Text(
@@ -262,16 +261,11 @@ fun UserProfileBottomSheet(
                                             verticalArrangement = Arrangement.spacedBy(8.dp),
                                         ) {
                                             mutual.forEach { tag ->
-                                                Text(
-                                                    text = tag,
-                                                    style = MaterialTheme.typography.labelMedium,
-                                                    color = MaterialTheme.colorScheme.onSurface,
-                                                    modifier =
-                                                        Modifier
-                                                            .clip(RoundedCornerShape(GlassSheetTokens.BentoInteriorCorner))
-                                                            .background(
-                                                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                                                            ).padding(horizontal = 10.dp, vertical = 6.dp),
+                                                ClickChip(
+                                                    label = tag,
+                                                    selected = true,
+                                                    onClick = {},
+                                                    compact = true,
                                                 )
                                             }
                                         }
@@ -279,15 +273,16 @@ fun UserProfileBottomSheet(
                                 }
 
                                 if (capsuleLines.isNotEmpty() && conn != null) {
-                                    GlassCard(
+                                    ClickContentCard(
                                         modifier = Modifier.fillMaxWidth(),
+                                        showBorder = false,
                                         contentPadding = 0.dp,
                                     ) {
                                         Box(modifier = Modifier.fillMaxWidth()) {
                                             ChatAmbientMeshBackground(
                                                 connection = conn,
                                                 isHubNeutral = false,
-                                                animateMesh = true,
+                                                animateMesh = false,
                                                 modifier = Modifier.fillMaxSize(),
                                             )
                                             Column(

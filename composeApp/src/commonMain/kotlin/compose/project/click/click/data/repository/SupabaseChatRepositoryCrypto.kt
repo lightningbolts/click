@@ -47,6 +47,22 @@ private object E2eeV2SessionCache {
             ?.forEach { it.fill(0) }
         sessions[chatId] = session
     }
+
+    fun clear() {
+        zeroizeE2eeV2EpochKeys(sessions.values.map { it.epochKeys.values })
+        sessions.clear()
+    }
+}
+
+internal fun zeroizeE2eeV2EpochKeys(epochKeySets: Iterable<Collection<ByteArray>>) {
+    epochKeySets
+        .flatten()
+        .distinct()
+        .forEach { it.fill(0) }
+}
+
+internal fun clearE2eeV2SessionCache() {
+    E2eeV2SessionCache.clear()
 }
 
 internal suspend fun SupabaseChatRepository.ensureFreshJwtForChat(): String? =
@@ -157,6 +173,7 @@ internal suspend fun SupabaseChatRepository.resolveChatCrypto(
     viewerUserId: String?,
 ): ChatSessionCaches.ResolvedChatCrypto? {
     ChatSessionCaches.getCrypto(chatId)?.let { return it }
+    if (ensureFreshJwtForChat().isNullOrBlank()) return null
     return try {
         val row =
             supabase
@@ -243,40 +260,54 @@ internal suspend fun SupabaseChatRepository.resolveE2eeV2ChatCrypto(
         } else {
             true
         }
-    if (allowLifecycle && state.currentEpoch == null) {
-        if (!allParticipantsHaveV2Devices) return null
-        state =
-            createE2eeV2EpochWithFreshKey(
-                chatId = chatId,
-                identity = identity,
-                devices = devices,
-                epoch = 1,
-                membershipFingerprint = membershipFingerprintForDevices(devices),
-                authToken = token,
-            )
-    } else if (allowLifecycle && state.currentEpoch != null) {
-        if (!allParticipantsHaveV2Devices) throw E2eeV2RequiredException()
-        val fingerprint = membershipFingerprintForDevices(devices)
-        if (state.membershipFingerprint != fingerprint) {
+    val membershipFingerprint = membershipFingerprintForDevices(devices)
+    if (allowLifecycle) {
+        if (state.currentEpoch == null) {
+            if (!E2eeV2LifecyclePolicy.shouldCreateInitialEpoch(
+                    currentEpoch = state.currentEpoch,
+                    allParticipantsHaveV2Devices = allParticipantsHaveV2Devices,
+                )
+            ) {
+                return null
+            }
             state =
                 createE2eeV2EpochWithFreshKey(
                     chatId = chatId,
                     identity = identity,
                     devices = devices,
-                    epoch = state.currentEpoch + 1,
-                    membershipFingerprint = fingerprint,
+                    epoch = 1,
+                    membershipFingerprint = membershipFingerprint,
                     authToken = token,
                 )
+        } else {
+            if (!allParticipantsHaveV2Devices) throw E2eeV2RequiredException()
+            if (E2eeV2LifecyclePolicy.shouldRotateEpoch(
+                    currentEpoch = state.currentEpoch,
+                    allParticipantsHaveV2Devices = true,
+                    membershipFingerprintMatches = state.membershipFingerprint == membershipFingerprint,
+                )
+            ) {
+                state =
+                    createE2eeV2EpochWithFreshKey(
+                        chatId = chatId,
+                        identity = identity,
+                        devices = devices,
+                        epoch = state.currentEpoch + 1,
+                        membershipFingerprint = membershipFingerprint,
+                        authToken = token,
+                    )
+            }
         }
     }
 
     val currentEpoch = state.currentEpoch ?: return null
     if (currentEpoch <= 0) throw E2eeV2RequiredException()
+
     // The epoch route returns recipient_device_id as the persisted row UUID. The request/query
     // contract and the envelope AAD use the logical identity.deviceId instead.
-    val epochKeys =
-        state.envelopes
-            .filter { it.recipientDeviceId == registered.id }
+    fun unwrapKeys(source: compose.project.click.click.data.api.ClickWebChatE2eeV2StateEnvelope): Map<Int, ByteArray> =
+        source.envelopes
+            .filter { it.recipientDeviceId == registered.id || it.recipientDeviceId == logicalDeviceId }
             .mapNotNull { envelope ->
                 val key =
                     runCatching {
@@ -291,16 +322,39 @@ internal suspend fun SupabaseChatRepository.resolveE2eeV2ChatCrypto(
                             recipientIdentity = identity,
                             envelope = envelope.envelope,
                         )
+                    }.onFailure { err ->
+                        println(
+                            "ChatRepository: epoch unwrap failed chatId=$chatId epoch=${envelope.epoch}: ${err.redactedRestMessage()}",
+                        )
                     }.getOrNull() ?: return@mapNotNull null
                 envelope.epoch to key
             }.toMap()
-    if (!epochKeys.containsKey(currentEpoch)) throw E2eeV2RequiredException()
+    var epochKeys = unwrapKeys(state)
+    if (E2eeV2LifecyclePolicy.shouldRekeyMissingUnwrap(allowLifecycle, epochKeys.containsKey(currentEpoch)) &&
+        devices.isNotEmpty()
+    ) {
+        zeroizeE2eeV2EpochKeys(listOf(epochKeys.values))
+        state =
+            createE2eeV2EpochWithFreshKey(
+                chatId = chatId,
+                identity = identity,
+                devices = devices,
+                epoch = currentEpoch + 1,
+                membershipFingerprint = membershipFingerprint,
+                authToken = token,
+            )
+        epochKeys = unwrapKeys(state)
+    }
+    val resolvedEpoch = state.currentEpoch ?: return null
+    if (!epochKeys.containsKey(resolvedEpoch)) {
+        throw E2eeV2RequiredException()
+    }
     return E2eeV2ChatSession(
-        epoch = currentEpoch,
+        epoch = resolvedEpoch,
         epochKeys = epochKeys,
         senderDeviceId = logicalDeviceId,
         identity = identity,
-        membershipFingerprint = state.membershipFingerprint ?: membershipFingerprintForDevices(devices),
+        membershipFingerprint = state.membershipFingerprint ?: membershipFingerprint,
     ).also { E2eeV2SessionCache.put(chatId, it) }
 }
 
@@ -403,11 +457,9 @@ private suspend fun SupabaseChatRepository.createE2eeV2EpochWithFreshKey(
         if (concurrent?.currentEpoch == epoch && concurrent.membershipFingerprint == membershipFingerprint) {
             return concurrent
         }
-        throw write.exceptionOrNull() ?: E2eeV2RequiredException()
+        throw write.exceptionOrNull() ?: error("Unable to rotate chat encryption")
     }
-    return apiClient.getE2eeV2State(chatId, authToken, identity.info.deviceId).getOrElse {
-        throw E2eeV2RequiredException()
-    }
+    return apiClient.getE2eeV2State(chatId, authToken, identity.info.deviceId).getOrElse { throw it }
 }
 
 internal fun SupabaseChatRepository.peekE2eeV2ChatCrypto(chatId: String): E2eeV2ChatSession? = E2eeV2SessionCache.get(chatId)

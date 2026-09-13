@@ -79,6 +79,7 @@ import compose.project.click.click.ui.chat.BeaconPreviewModel // pragma: allowli
 import compose.project.click.click.ui.chat.ChatAudioBubble // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAudioChromeKind // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
+import compose.project.click.click.ui.theme.MotionTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.ui.utils.beaconTypeDisplayLabel // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers
@@ -192,14 +193,14 @@ internal fun MediaPanel(
                             } else {
                                 0.38f
                             },
-                        animationSpec = tween(220, easing = FastOutSlowInEasing),
+                        animationSpec = tween(MotionTokens.Duration.Standard, easing = FastOutSlowInEasing),
                         label = "media_thumb_${media.id}",
                     )
                     val thumbInteraction = remember(media.id) { MutableInteractionSource() }
                     val thumbPressed by thumbInteraction.collectIsPressedAsState()
                     val thumbScale by animateFloatAsState(
-                        targetValue = if (thumbPressed) 0.94f else 1f,
-                        animationSpec = tween(140, easing = FastOutSlowInEasing),
+                        targetValue = if (thumbPressed) MotionTokens.PressScale.CardPressedScale else 1f,
+                        animationSpec = MotionTokens.pressScaleSpec(),
                         label = "media_thumb_press",
                     )
                     val thumbShape = RoundedCornerShape(14.dp)
@@ -301,7 +302,7 @@ internal fun MediaPanel(
                     media.isEncrypted && local.isNullOrBlank() && !resolvingAudio
                 val rowReveal by animateFloatAsState(
                     targetValue = if (canPlay || unlockingAudio || failedEncryptedAudio) 1f else 0.4f,
-                    animationSpec = tween(200, easing = FastOutSlowInEasing),
+                    animationSpec = tween(MotionTokens.Duration.Standard, easing = FastOutSlowInEasing),
                     label = "media_audio_${media.id}",
                 )
                 Column(

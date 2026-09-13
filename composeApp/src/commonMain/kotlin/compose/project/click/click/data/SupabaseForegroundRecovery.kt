@@ -6,7 +6,6 @@ import compose.project.click.click.data.storage.TokenStorage // pragma: allowlis
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.realtime.realtime
 
 /**
@@ -27,9 +26,10 @@ object SupabaseForegroundRecovery {
         runCatching { SupabaseConfig.importStoredSessionIfSdkEmpty(tokenStorage) }
         val refreshOk =
             authRepository
-                .refreshSession(forceRefresh = true)
+                .refreshSession(forceRefresh = false)
                 .onSuccess {
-                    runCatching { client.auth.startAutoRefreshForCurrentSession() }
+                    // Do not start SDK auto-refresh — it races SessionRefreshCoordinator and
+                    // burns the refresh token ("Already Used").
                 }.onFailure { e ->
                     println(
                         "SupabaseForegroundRecovery: refresh failed: ${e.redactedRestMessage()}",

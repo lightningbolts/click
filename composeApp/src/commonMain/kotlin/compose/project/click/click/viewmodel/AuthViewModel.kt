@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import compose.project.click.click.auth.AuthBootFastPath // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
+import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.displayNameFromMetadata // pragma: allowlist secret
 import compose.project.click.click.data.realtime.rebindRealtimeSocket // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
@@ -25,7 +26,6 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 
 sealed class AuthState {
     object Idle : AuthState()
@@ -108,7 +108,19 @@ class AuthViewModel(
 
     private fun scheduleAutoRefreshForCurrentSession() {
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching { SupabaseConfig.client.auth.startAutoRefreshForCurrentSession() }
+            persistLiveSessionToTokenStorage()
+        }
+    }
+
+    private suspend fun persistLiveSessionToTokenStorage() {
+        val session = SupabaseConfig.client.auth.currentSessionOrNull() ?: return
+        runCatching {
+            tokenStorage.saveTokens(
+                jwt = session.accessToken,
+                refreshToken = session.refreshToken,
+                expiresAt = session.expiresAt?.toEpochMilliseconds(),
+                tokenType = session.tokenType,
+            )
         }
     }
 
@@ -194,17 +206,21 @@ class AuthViewModel(
     private suspend fun refreshSessionAndProfileInBackground() {
         withContext(Dispatchers.IO) {
             runCatching { SupabaseConfig.importStoredSessionIfSdkEmpty(tokenStorage) }
-            runCatching { authRepository.refreshSession(forceRefresh = true) }
-                .onSuccess {
-                    runCatching { SupabaseConfig.client.auth.startAutoRefreshForCurrentSession() }
+            val refresh = authRepository.refreshSession(forceRefresh = false)
+            refresh.fold(
+                onSuccess = {
+                    persistLiveSessionToTokenStorage()
                     runCatching { rebindRealtimeSocket() }
-                }.onFailure { error ->
+                },
+                onFailure = { error ->
                     if (error.isHardAuthFailure()) {
                         forceSessionExpiredReLogin(error)
                         return@withContext
                     }
                     restoreOfflineSessionIfPossible(error)
-                }
+                    return@withContext
+                },
+            )
             authRepository
                 .restoreSession()
                 .onSuccess { user ->
@@ -237,11 +253,9 @@ class AuthViewModel(
                     try {
                         runCatching { SupabaseConfig.importStoredSessionIfSdkEmpty(tokenStorage) }
                         authRepository
-                            .refreshSession(forceRefresh = true)
+                            .refreshSession(forceRefresh = false)
                             .onSuccess {
-                                runCatching {
-                                    SupabaseConfig.client.auth.startAutoRefreshForCurrentSession()
-                                }
+                                persistLiveSessionToTokenStorage()
                                 runCatching { rebindRealtimeSocket() }
                                 println("AuthViewModel: Background token refresh successful")
                             }.onFailure { e ->
@@ -499,44 +513,16 @@ class AuthViewModel(
      */
     private suspend fun forceSessionExpiredReLogin(error: Throwable) {
         val sdkSession = SupabaseConfig.client.auth.currentSessionOrNull()
-        if (sdkSession != null) {
-            val retry =
-                runCatching {
-                    withTimeout(12_000L) {
-                        SupabaseConfig.client.auth.refreshCurrentSession()
-                    }
-                }
-            val recovered =
-                retry.isSuccess &&
-                    SupabaseConfig.client.auth.currentSessionOrNull() != null
-            if (recovered) {
-                val session = SupabaseConfig.client.auth.currentSessionOrNull()
-                if (session != null) {
-                    runCatching {
-                        tokenStorage.saveTokens(
-                            jwt = session.accessToken,
-                            refreshToken = session.refreshToken,
-                            expiresAt = session.expiresAt?.toEpochMilliseconds(),
-                            tokenType = session.tokenType,
-                        )
-                    }
-                    runCatching { SupabaseConfig.client.auth.startAutoRefreshForCurrentSession() }
-                    println(
-                        "AuthViewModel: Recovered session after hard-failure retry " +
-                            "(original: ${error.redactedRestMessage()})",
-                    )
-                    return
-                }
-            }
-            val retryError = retry.exceptionOrNull()
-            if (retryError != null && !retryError.isHardAuthFailure()) {
-                println(
-                    "AuthViewModel: Hard-failure retry was soft; keeping session: " +
-                        retryError.redactedRestMessage(),
-                )
-                restoreOfflineSessionIfPossible(retryError)
-                return
-            }
+        if (
+            sdkSession != null &&
+            EnsureFreshAccessToken.isAccessTokenFresh(sdkSession.accessToken)
+        ) {
+            persistLiveSessionToTokenStorage()
+            println(
+                "AuthViewModel: Kept live SDK session after hard-failure " +
+                    "(original: ${error.redactedRestMessage()})",
+            )
+            return
         }
         println(
             "AuthViewModel: Hard auth failure — forcing re-login: ${error.redactedRestMessage()}",

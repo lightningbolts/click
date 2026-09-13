@@ -2,6 +2,7 @@
 
 package compose.project.click.click.data.repository // pragma: allowlist secret
 
+import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
@@ -259,6 +260,7 @@ internal suspend fun SupabaseRepository.fetchAvailabilityIntentBubblesFromUsersC
     userId: String,
 ): List<ProfileAvailabilityIntentBubble> {
     if (userId.isBlank()) return emptyList()
+    if (!EnsureFreshAccessToken.sdkAccessIsFresh()) return emptyList()
     return try {
         @Serializable
         data class Row(
@@ -294,6 +296,7 @@ internal suspend fun SupabaseRepository.fetchAvailabilityIntentBubblesFromIntent
     targetUserId: String,
 ): List<ProfileAvailabilityIntentBubble> {
     if (targetUserId.isBlank()) return emptyList()
+    if (!EnsureFreshAccessToken.sdkAccessIsFresh()) return emptyList()
     return try {
         val nowIso = Clock.System.now().toString()
         val rows =

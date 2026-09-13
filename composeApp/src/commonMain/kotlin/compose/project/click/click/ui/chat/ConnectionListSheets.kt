@@ -5,9 +5,7 @@
 
 package compose.project.click.click.ui.chat // pragma: allowlist secret
 
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -38,7 +36,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -69,17 +66,22 @@ import compose.project.click.click.data.AppDataManager // pragma: allowlist secr
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickButtonVariant // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickListRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSearchField // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProvideSheetSwipeDismiss // pragma: allowlist secret
+import compose.project.click.click.ui.components.platformPressScale // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberSheetScrollAtTop // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetImePadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetPageBackground // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
+import compose.project.click.click.ui.theme.MotionTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 
 private val PickerSelectionPurple = Color(0xFF9D4EDD)
@@ -219,17 +221,10 @@ private fun ConnectionPickerUserRow(
     onToggle: () -> Unit,
 ) {
     val label = user.name?.trim()?.ifBlank { null } ?: "Connection"
-    ListItem(
-        headlineContent = {
-            Text(
-                text = label,
-                color = if (enabled || selected) GlassSheetTokens.OnOled() else GlassSheetTokens.OnOledMuted(),
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        },
-        leadingContent = {
+    ClickListRow(
+        title = label,
+        onClick = if (enabled || selected) onToggle else null,
+        leading = {
             ConnectionPickerListAvatar(
                 displayName = user.name,
                 email = user.email,
@@ -239,8 +234,7 @@ private fun ConnectionPickerUserRow(
                 enabled = enabled,
             )
         },
-        modifier = Modifier.clickable(enabled = enabled || selected, onClick = onToggle),
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        showDivider = true,
     )
 }
 
@@ -319,7 +313,7 @@ internal fun ConnectionMemberPickerSheet(
                         .fillMaxHeight()
                         .sheetImePadding()
                         .background(sheetPageBackground())
-                        .padding(horizontal = 20.dp)
+                        .padding(horizontal = ClickSheetDefaults.ContentHorizontalPadding)
                         .padding(
                             top = ClickSheetDefaults.ContentTopPaddingUnderGrabber,
                             bottom = 16.dp,
@@ -440,14 +434,17 @@ internal fun ConnectionMemberPickerSheet(
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    TextButton(onClick = {
-                        dismissKeyboard()
-                        onDismissRequest()
-                    }) {
-                        Text("Cancel", color = onVariant)
+                    ClickButton(
+                        onClick = {
+                            dismissKeyboard()
+                            onDismissRequest()
+                        },
+                        variant = ClickButtonVariant.Secondary,
+                    ) {
+                        Text("Cancel")
                     }
                     Spacer(modifier = Modifier.width(8.dp))
-                    Button(
+                    ClickButton(
                         onClick = {
                             PlatformHapticsPolicy.heavyImpact()
                             onPrimaryClick()
@@ -498,11 +495,7 @@ internal fun LocationGapNudge(
     val isPressed by interactionSource.collectIsPressedAsState()
     val cardBorderAlpha by animateFloatAsState(
         targetValue = if (isPressed) GlassSheetTokens.GlassBorderPressed().alpha else GlassSheetTokens.GlassBorder().alpha,
-        animationSpec =
-            spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessMedium,
-            ),
+        animationSpec = MotionTokens.fadeSpec(),
         label = "location_nudge_border",
     )
 
@@ -516,6 +509,7 @@ internal fun LocationGapNudge(
                     color = GlassSheetTokens.GlassBorder().copy(alpha = cardBorderAlpha),
                     shape = RoundedCornerShape(GlassSheetTokens.BentoExteriorCorner),
                 ).background(GlassSheetTokens.GlassSurface())
+                .platformPressScale(interactionSource)
                 .clickable(
                     interactionSource = interactionSource,
                     indication = null,

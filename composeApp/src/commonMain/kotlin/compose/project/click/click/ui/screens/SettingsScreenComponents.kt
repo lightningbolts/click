@@ -8,13 +8,11 @@
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
@@ -34,8 +32,6 @@ import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -59,15 +55,14 @@ import com.mohamedrejeb.calf.ui.toggle.AdaptiveSwitch
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
-import compose.project.click.click.ui.components.AdaptiveCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickButtonVariant // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickContentCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickInsetDivider // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickListRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickNavRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSettingsDividerIndent // pragma: allowlist secret
-import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
-import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import compose.project.click.click.utils.LocationPermissionDisplayState // pragma: allowlist secret
 
 /**
@@ -165,7 +160,7 @@ internal fun PermissionRow(
             imageVector = icon,
             contentDescription = null,
             modifier = Modifier.size(22.dp).padding(top = 2.dp),
-            tint = PrimaryBlue,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
@@ -187,11 +182,10 @@ internal fun PermissionRow(
             )
             if (primaryLabel != null) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Button(
+                ClickButton(
                     onClick = onPrimaryClick,
                     enabled = primaryEnabled,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                    variant = ClickButtonVariant.Secondary,
                 ) {
                     Text(primaryLabel, fontWeight = FontWeight.Medium)
                 }
@@ -299,7 +293,11 @@ internal fun SettingsProfileHeader(
             }
     val email = user?.email?.trim()?.takeIf { it.isNotEmpty() }
 
-    AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
+    ClickContentCard(
+        modifier = Modifier.fillMaxWidth(),
+        showBorder = false,
+        contentPadding = 12.dp,
+    ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -404,40 +402,13 @@ internal fun SettingsProfileHeader(
 
 @Composable
 internal fun SettingsSignOutButton(onSignOut: () -> Unit) {
-    val sStyle = LocalPlatformStyle.current
-    Button(
+    ClickButton(
         onClick = onSignOut,
         modifier =
             Modifier
                 .fillMaxWidth()
                 .padding(top = 8.dp),
-        colors =
-            ButtonDefaults.buttonColors(
-                containerColor =
-                    if (sStyle.isIOS) {
-                        MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
-                    } else {
-                        MaterialTheme.colorScheme.error
-                    },
-                contentColor =
-                    if (sStyle.isIOS) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.onError
-                    },
-            ),
-        elevation =
-            if (sStyle.isIOS) {
-                ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp)
-            } else {
-                ButtonDefaults.buttonElevation()
-            },
-        shape = RoundedCornerShape(if (sStyle.isIOS) 10.dp else 12.dp),
-        border =
-            BorderStroke(
-                width = sStyle.cardBorderWidth,
-                color = if (sStyle.isIOS) MaterialTheme.colorScheme.error else clickBorderColor(),
-            ),
+        variant = ClickButtonVariant.Destructive,
     ) {
         Icon(
             imageVector = Icons.AutoMirrored.Filled.Logout,
@@ -451,8 +422,7 @@ internal fun SettingsSignOutButton(onSignOut: () -> Unit) {
 
 @Composable
 internal fun SettingsHubNavCard(onOpen: (SettingsPage) -> Unit) {
-    AdaptiveCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth()) {
             SettingsHubNavRow(
                 icon = Icons.Default.EventAvailable,
                 title = "Availability",
@@ -508,7 +478,6 @@ internal fun SettingsHubNavCard(onOpen: (SettingsPage) -> Unit) {
                 onClick = { onOpen(SettingsPage.Appearance) },
                 accentSlot = 3,
             )
-        }
     }
 }
 
@@ -626,43 +595,28 @@ internal fun SettingsToggleRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            modifier = Modifier.size(22.dp),
-            tint = iconTint,
-        )
-        Spacer(modifier = Modifier.width(14.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.bodyLarge,
+    ClickListRow(
+        title = title,
+        subtitle = subtitle,
+        leading = {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
+                tint = iconTint,
             )
-            if (subtitle != null) {
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = MaterialTheme.typography.bodySmall.lineHeight,
-                )
-            }
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        AdaptiveSwitch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors =
-                SwitchDefaults.colors(
-                    checkedThumbColor = PrimaryBlue,
-                    checkedTrackColor = PrimaryBlue.copy(alpha = 0.5f),
-                ),
-        )
-    }
+        },
+        trailing = {
+            AdaptiveSwitch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                colors =
+                    SwitchDefaults.colors(
+                        checkedThumbColor = PrimaryBlue,
+                        checkedTrackColor = PrimaryBlue.copy(alpha = 0.5f),
+                    ),
+            )
+        },
+        showDivider = false,
+    )
 }

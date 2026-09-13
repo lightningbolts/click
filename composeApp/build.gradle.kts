@@ -185,6 +185,7 @@ kotlin {
             implementation(compose.uiTest)
         }
         androidUnitTest.dependencies {
+            implementation(compose.uiTest)
             implementation(libs.junit)
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
@@ -247,6 +248,7 @@ android {
 
 dependencies {
     debugImplementation(compose.uiTooling)
+    debugImplementation("androidx.compose.ui:ui-test-manifest:1.11.2")
 }
 
 compose.resources {

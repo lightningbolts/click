@@ -32,10 +32,10 @@ internal suspend fun SupabaseChatRepository.fetchMessagesForChatImpl(
     viewerUserId: String?,
     limit: Int?,
     beforeTimeCreated: Long?,
-): List<Message>? =
-    try {
-        // Ensure SDK session is imported so PostgREST RLS returns rows (not empty []).
-        ensureFreshJwtForChat()
+): List<Message>? {
+    val jwt = ensureFreshJwtForChat()
+    if (jwt.isNullOrBlank()) return null
+    return try {
         val crypto = resolveChatCrypto(chatId, viewerUserId)
         val rows =
             when {
@@ -81,6 +81,7 @@ internal suspend fun SupabaseChatRepository.fetchMessagesForChatImpl(
         println("Error fetching messages: ${e.redactedRestMessage()}")
         null
     }
+}
 
 /**
  * Subscribe to [messages] and [message_reactions] on a **single** Realtime channel, then
@@ -412,6 +413,7 @@ internal suspend fun SupabaseChatRepository.fetchChatWithDetailsImpl(
 // Get participants for a chat via API
 internal suspend fun SupabaseChatRepository.fetchChatParticipantsImpl(chatId: String): List<User> {
     return try {
+        if (ensureFreshJwtForChat().isNullOrBlank()) return emptyList()
         val chat =
             supabase
                 .from("chats")

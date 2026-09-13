@@ -519,7 +519,7 @@ object AppDataManager {
     internal val _ghostModeEnabled = MutableStateFlow(false)
     val ghostModeEnabled: StateFlow<Boolean> = _ghostModeEnabled.asStateFlow()
 
-    internal val _homeLayoutMode = MutableStateFlow(HomeLayoutMode.PILE)
+    internal val _homeLayoutMode = MutableStateFlow(HomeLayoutMode.LINEAR)
     val homeLayoutMode: StateFlow<HomeLayoutMode> = _homeLayoutMode.asStateFlow()
 
     fun setHomeLayoutMode(mode: HomeLayoutMode) {
