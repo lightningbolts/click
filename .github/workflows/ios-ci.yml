@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -12,19 +13,17 @@ concurrency:
   group: ios-ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CLICK_WEB_ROOT: ${{ github.workspace }}/_click-web
+  REQUIRE_CLICK_WEB: "1"
+  XCODE_DERIVED_DATA: ${{ github.workspace }}/derivedData-xcode
+
 jobs:
-  ios-simulator-tests:
-    # Kotlin 2.3.x platform CoreLocation bindings autolink `_LocationEssentials`,
-    # which only exists in the Xcode 26 / iOS 26 SDK. macos-14's latest-stable
-    # is still Xcode 16.2 and fails at linkDebugTestIosSimulatorArm64.
+  ios-pr-gate:
+    # Keep the PR critical path focused on distinct coverage: KMP simulator tests,
+    # device-target compilation, and one complete Debug app integration build.
     runs-on: macos-26
-    # Gradle tests plus Debug/Release simulator and unsigned device xcodebuild
-    # do not finish in 90 minutes on a cold macos-26 runner.
-    timeout-minutes: 150
-    env:
-      CLICK_WEB_ROOT: ${{ github.workspace }}/_click-web
-      REQUIRE_CLICK_WEB: "1"
-      XCODE_DERIVED_DATA: ${{ github.workspace }}/derivedData-xcode
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -50,7 +49,6 @@ jobs:
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          # Any Xcode 26.x ships `_LocationEssentials` required by Kotlin 2.3.x CoreLocation.
           xcode-version: "26"
 
       - name: Set up JDK 17
@@ -96,6 +94,45 @@ jobs:
             -derivedDataPath "$XCODE_DERIVED_DATA" \
             CODE_SIGNING_ALLOWED=NO
 
+  ios-release-simulator-build:
+    # Release-only compilation catches optimizer/configuration regressions, but it
+    # does not add behavioral test coverage. Keep it off the PR critical path.
+    if: github.event_name != 'pull_request'
+    runs-on: macos-26
+    timeout-minutes: 75
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout click-web Supabase source of truth
+        uses: ./.github/actions/checkout-click-web
+        with:
+          token: ${{ secrets.CLICK_WEB_READ_TOKEN || github.token }}
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "26"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Create local.properties
+        env:
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
+        run: |
+          cat <<EOF > local.properties
+          MAPS_API_KEY=${MAPS_API_KEY:-dummy_key_for_ci}
+          EOF
+
       - name: Build complete iOS Release simulator app
         run: |
           xcodebuild build \
@@ -105,6 +142,45 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$XCODE_DERIVED_DATA" \
             CODE_SIGNING_ALLOWED=NO
+
+  ios-release-device-build:
+    # Device Release compilation is valuable release evidence, but running it in
+    # series with simulator validation added ~36 minutes to every PR.
+    if: github.event_name != 'pull_request'
+    runs-on: macos-26
+    timeout-minutes: 75
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout click-web Supabase source of truth
+        uses: ./.github/actions/checkout-click-web
+        with:
+          token: ${{ secrets.CLICK_WEB_READ_TOKEN || github.token }}
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "26"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Create local.properties
+        env:
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
+        run: |
+          cat <<EOF > local.properties
+          MAPS_API_KEY=${MAPS_API_KEY:-dummy_key_for_ci}
+          EOF
 
       - name: Build release-equivalent iOS device app
         run: |
