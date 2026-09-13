@@ -9,6 +9,7 @@ package compose.project.click.click.ui.screens // pragma: allowlist secret
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -67,6 +68,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
@@ -166,7 +168,8 @@ internal fun MapDiscoveryScreen(
 
 /**
  * Compact discovery lip. It deliberately reads as the collapsed state of a sheet rather than
- * a floating card so Map has one clear bottom-surface hierarchy above the tab bar.
+ * a floating card so Map has one clear bottom-surface hierarchy above the tab bar. Tapping or a
+ * short upward pull opens the same platform sheet, matching the physical affordance of the grabber.
  */
 @Composable
 internal fun EventsReopenChip(
@@ -183,6 +186,35 @@ internal fun EventsReopenChip(
                 .clip(shape)
                 .border(clickBorderWidth(), clickBorderColor(), shape)
                 .background(clickCardSurface())
+                .pointerInput(enabled) {
+                    if (!enabled) return@pointerInput
+                    val openThresholdPx = 28.dp.toPx()
+                    var accumulatedDrag = 0f
+                    var opened = false
+                    detectVerticalDragGestures(
+                        onDragStart = {
+                            accumulatedDrag = 0f
+                            opened = false
+                        },
+                        onDragCancel = {
+                            accumulatedDrag = 0f
+                            opened = false
+                        },
+                        onDragEnd = {
+                            accumulatedDrag = 0f
+                            opened = false
+                        },
+                        onVerticalDrag = { change, dragAmount ->
+                            accumulatedDrag += dragAmount
+                            if (!opened && accumulatedDrag <= -openThresholdPx) {
+                                opened = true
+                                change.consume()
+                                PlatformHapticsPolicy.lightImpact()
+                                onClick()
+                            }
+                        },
+                    )
+                }
                 .clickable(enabled = enabled, onClick = onClick)
                 .padding(top = 7.dp, bottom = 10.dp, start = 16.dp, end = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
