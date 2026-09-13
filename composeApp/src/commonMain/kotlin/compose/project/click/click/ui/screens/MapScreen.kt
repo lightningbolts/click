@@ -6,7 +6,6 @@
 
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.WindowInsets
@@ -18,9 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
@@ -35,20 +32,15 @@ import compose.project.click.click.ui.components.ClickSheetDialogChrome // pragm
 import compose.project.click.click.ui.components.CreateHubModal // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassmorphicOverlay // pragma: allowlist secret
-import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
 import compose.project.click.click.ui.components.LiquidGlassPill // pragma: allowlist secret
-import compose.project.click.click.ui.components.LocalNativeChromeActive // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformMap // pragma: allowlist secret
-import compose.project.click.click.ui.components.PlatformNativeNavigationBarSwipeReveal // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProfileSheetBadge // pragma: allowlist secret
 import compose.project.click.click.ui.components.TabbedUserProfileSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastHost // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastTokens // pragma: allowlist secret
-import compose.project.click.click.ui.components.interactiveSwipeBackUnderlay // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding // pragma: allowlist secret
-import compose.project.click.click.ui.components.rememberInteractiveBackHostState // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberUnifiedToastState // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
 import compose.project.click.click.ui.sheet.MapBeaconSheetRoot // pragma: allowlist secret
@@ -60,9 +52,7 @@ import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist
 import compose.project.click.click.viewmodel.MapSelection // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModel
 
 /**
@@ -74,8 +64,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModel
  *    "Liquid Glass" styling. Replaces the old [PageHeader] + top-right stats chip.
  *  * GhostMode FAB is gone — the toggle now lives in Settings (per directive Q5). Ghost mode
  *    state itself still flows from the view model so tinting/snackbars remain correct.
- *  * The memories list was extracted into [MemoriesListSection] and is consumed from the
- *    connections-nav tab + profile sheet Timeline subtab instead of cluttering the map.
+ *  * Nearby is a canonical platform bottom sheet over the persistent map, not a second route.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -187,70 +176,11 @@ fun MapScreen(
         }
     }
 
-    var eventsListTransitionMode by remember { mutableStateOf(EventsListTransitionMode.Tap) }
-    val eventsBackHost = rememberInteractiveBackHostState()
-    val eventsSwipeDragPx = eventsBackHost.dragOffsetPx
-    PlatformNativeNavigationBarSwipeReveal(eventsSwipeDragPx)
-    // Keep events UI composed after first open so swipe-back does not remount the list.
-    var eventsOverlayMounted by remember { mutableStateOf(false) }
-    var eventsCloseJob by remember { mutableStateOf<Job?>(null) }
-    val eventsScope = rememberCoroutineScope()
-    // 0 = off-screen below, 1 = fully shown — restores slide-up open without remounting.
-    val eventsVerticalReveal = remember { Animatable(0f) }
-
-    fun finalizeEventsClose() {
-        eventsBackHost.reset()
-        eventsListTransitionMode = EventsListTransitionMode.Tap
-        eventsCloseJob = null
-    }
-
-    fun closeEventsList(mode: EventsListTransitionMode) {
-        eventsCloseJob?.cancel()
-        eventsListTransitionMode = mode
-        if (mode == EventsListTransitionMode.Tap) {
-            onEventsSheetExpandedChanged(false)
-            eventsCloseJob =
-                eventsScope.launch {
-                    eventsVerticalReveal.animateTo(
-                        0f,
-                        animationSpec =
-                            spring(
-                                dampingRatio = Spring.DampingRatioNoBouncy,
-                                stiffness = Spring.StiffnessMediumLow,
-                            ),
-                    )
-                    if (!eventsSheetExpanded) finalizeEventsClose()
-                }
-        } else {
-            onEventsSheetExpandedChanged(false)
-            eventsCloseJob =
-                eventsScope.launch {
-                    delay(64L)
-                    eventsVerticalReveal.snapTo(0f)
-                    if (!eventsSheetExpanded) finalizeEventsClose()
-                }
-        }
-    }
-
+    // The platform sheet owns its own presentation/dismiss motion. Do not wrap it in the old
+    // full-screen horizontal/vertical route animation: two motion systems were causing jank,
+    // stale native chrome, and keyboard lifetime mismatches.
     LaunchedEffect(eventsSheetExpanded) {
         if (eventsSheetExpanded) {
-            eventsCloseJob?.cancel()
-            eventsCloseJob = null
-            eventsOverlayMounted = true
-            eventsBackHost.reset()
-            if (eventsVerticalReveal.value < 0.99f) {
-                eventsVerticalReveal.snapTo(0f)
-                eventsVerticalReveal.animateTo(
-                    1f,
-                    animationSpec =
-                        spring(
-                            dampingRatio = Spring.DampingRatioNoBouncy,
-                            stiffness = Spring.StiffnessMediumLow,
-                        ),
-                )
-            } else {
-                eventsVerticalReveal.snapTo(1f)
-            }
             viewModel.refreshDiscoveryFromMapInteraction()
         }
     }
@@ -277,7 +207,7 @@ fun MapScreen(
     }
 
     PlatformBackHandler(enabled = eventsSheetExpanded) {
-        closeEventsList(EventsListTransitionMode.Tap)
+        onEventsSheetExpandedChanged(false)
     }
 
     val toastState = rememberUnifiedToastState()
@@ -320,9 +250,6 @@ fun MapScreen(
         }
     }
 
-    // C12 directive: explicit state variable that drives the new ProfileBottomSheet.
-    // Pin taps update this directly (in addition to the view-model selection state) so
-    // sheet visibility is decoupled from any race in the selection StateFlow.
     var selectedProfileId by remember { mutableStateOf<String?>(null) }
     var showBeaconDropSheet by remember { mutableStateOf(false) }
     var showCreateHubModal by remember { mutableStateOf(false) }
@@ -349,9 +276,6 @@ fun MapScreen(
             }
     }
 
-    // Parallax removed — the upward shift was perceived as a layout bug when sheets opened.
-
-    // Match App.kt: content is full-bleed under the tab bar; bottom inset is applied only on controls.
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) {
@@ -397,8 +321,6 @@ fun MapScreen(
                             }
                         val fabBottomPadding = mapFabAboveNav + EventsReopenChipClearance
 
-                        // Map layer is isolated from eventsSheetExpanded so open/close cannot
-                        // invalidate PlatformMap (gestures stay on; overlay eats touches).
                         Box(modifier = Modifier.fillMaxSize()) {
                             MapContent(
                                 modifier = Modifier.fillMaxSize(),
@@ -437,8 +359,8 @@ fun MapScreen(
                                     },
                             )
 
-                            val nearbyFullyOpen =
-                                eventsSheetExpanded && !eventsBackHost.behindLayersVisible
+                            // Keep host map controls mounted under the sheet. Toggling UIKit host
+                            // controls on sheet presentation rematerializes glass and looks like a flash.
                             MapAlwaysOnChrome(
                                 dockBottomPadding = fabBottomPadding,
                                 layerFilters = layerFilters,
@@ -450,35 +372,23 @@ fun MapScreen(
                                 onZoomIn = { viewModel.zoomIn() },
                                 onZoomOut = { viewModel.zoomOut() },
                                 chromeVisible = true,
-                                // Stay composed under the events overlay. iOS clips host-view
-                                // controls to the uncovered strip instead of toggling hidden.
                                 modifier =
                                     Modifier
                                         .fillMaxSize()
-                                        .zIndex(10f)
-                                        .graphicsLayer { alpha = if (nearbyFullyOpen) 0f else 1f }
-                                        .interactiveSwipeBackUnderlay(eventsBackHost),
+                                        .zIndex(10f),
                             )
 
                             EventsReopenChip(
                                 count = eventNearbyCount,
-                                onClick = {
-                                    eventsCloseJob?.cancel()
-                                    eventsCloseJob = null
-                                    eventsBackHost.reset()
-                                    eventsListTransitionMode = EventsListTransitionMode.Tap
-                                    eventsOverlayMounted = true
-                                    onEventsSheetExpandedChanged(true)
-                                },
+                                onClick = { onEventsSheetExpandedChanged(true) },
                                 enabled = !eventsSheetExpanded,
                                 modifier =
                                     Modifier
                                         .align(Alignment.BottomCenter)
                                         .zIndex(15f)
-                                        .interactiveSwipeBackUnderlay(eventsBackHost)
                                         .padding(
-                                            start = 16.dp,
-                                            end = 16.dp,
+                                            start = 10.dp,
+                                            end = 10.dp,
                                             bottom = mapFabAboveNav,
                                         ),
                             )
@@ -493,87 +403,25 @@ fun MapScreen(
                                         .zIndex(20f),
                             )
 
-                            // Persist after first open; vertical reveal restores slide-up without remounting.
-                            if (eventsOverlayMounted) {
-                                val eventsClosed =
-                                    !eventsSheetExpanded &&
-                                        !eventsBackHost.behindLayersVisible &&
-                                        eventsVerticalReveal.value < 0.01f
-                                BoxWithConstraints(
-                                    modifier =
-                                        Modifier
-                                            .fillMaxSize()
-                                            .zIndex(40f),
-                                ) {
-                                    val heightPx = constraints.maxHeight
-                                    Box(
-                                        modifier =
-                                            Modifier
-                                                .fillMaxSize()
-                                                .graphicsLayer {
-                                                    // During interactive back, Y stays put — container owns X.
-                                                    val swiping =
-                                                        eventsBackHost.behindLayersVisible ||
-                                                            eventsSwipeDragPx.floatValue > 0.5f
-                                                    translationY =
-                                                        if (swiping) {
-                                                            0f
-                                                        } else {
-                                                            (1f - eventsVerticalReveal.value) * heightPx
-                                                        }
-                                                    alpha = if (eventsClosed) 0f else 1f
-                                                }.then(
-                                                    if (eventsClosed) {
-                                                        Modifier.offset { IntOffset(constraints.maxWidth, 0) }
-                                                    } else {
-                                                        Modifier
-                                                    },
-                                                ),
-                                    ) {
-                                        InteractiveSwipeBackContainer(
-                                            enabled = eventsSheetExpanded,
-                                            opaquePreviousBackground = false,
-                                            externalDragOffsetPx = eventsSwipeDragPx,
-                                            onBehindLayersVisibleChanged = {
-                                                eventsBackHost.behindLayersVisible = it
-                                            },
-                                            onBack = {
-                                                closeEventsList(EventsListTransitionMode.Gesture)
-                                            },
-                                            previousContent = {},
-                                            currentContent = {
-                                                CompositionLocalProvider(
-                                                    LocalNativeChromeActive provides
-                                                        (
-                                                            eventsSheetExpanded ||
-                                                                eventsBackHost.behindLayersVisible
-                                                        ),
-                                                ) {
-                                                    EventsDiscoveryFullScreen(
-                                                        feedItems = feedItems,
-                                                        discoveryFeedPending = discoveryFeedPending,
-                                                        discoveryFeedRefreshing = discoveryFeedLoading,
-                                                        onRefreshDiscovery = { viewModel.refreshDiscoveryFeed() },
-                                                        layerFilters = layerFilters,
-                                                        onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
-                                                        viewModel = viewModel,
-                                                        onBack = {
-                                                            closeEventsList(EventsListTransitionMode.Tap)
-                                                        },
-                                                        onBeaconClick = { beacon, distanceM ->
-                                                            TelemetryBatcher.recordActionTaken()
-                                                            viewModel.onBeaconPinTapped(
-                                                                beacon.id,
-                                                                seedDistanceMeters = distanceM,
-                                                            )
-                                                        },
-                                                        interactiveBackSwipeOffsetPx = eventsSwipeDragPx,
-                                                    )
-                                                }
-                                            },
+                            if (eventsSheetExpanded) {
+                                EventsDiscoveryFullScreen(
+                                    feedItems = feedItems,
+                                    discoveryFeedPending = discoveryFeedPending,
+                                    discoveryFeedRefreshing = discoveryFeedLoading,
+                                    onRefreshDiscovery = { viewModel.refreshDiscoveryFeed() },
+                                    layerFilters = layerFilters,
+                                    onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
+                                    viewModel = viewModel,
+                                    onBack = { onEventsSheetExpandedChanged(false) },
+                                    onBeaconClick = { beacon, distanceM ->
+                                        TelemetryBatcher.recordActionTaken()
+                                        viewModel.onBeaconPinTapped(
+                                            beacon.id,
+                                            seedDistanceMeters = distanceM,
                                         )
-                                    }
-                                }
+                                    },
+                                    interactiveBackSwipeOffsetPx = null,
+                                )
                             }
                         }
                     }
@@ -583,8 +431,6 @@ fun MapScreen(
     }
 
     if (showBeaconDropSheet) {
-        // ClickFormBottomSheet owns chrome + scroll-at-top holder. IME is handled inside
-        // BeaconDropSheetContent via sheetImePadding (WindowInsets.ime is 0 in UIKit sheets).
         ClickFormBottomSheet(
             onDismissRequest = {
                 showBeaconDropSheet = false
@@ -592,7 +438,6 @@ fun MapScreen(
             },
             contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
             expandable = true,
-            // Same as search: fill viewport + sheetImePadding + rubber-band dismiss.
             useUiKitScrollHost = true,
             uiKitFillViewport = true,
         ) {
@@ -620,8 +465,6 @@ fun MapScreen(
                                     loc.longitude,
                                 )
                             reverse ?: run {
-                                // Never persist the literal "Current location" label.
-                                // Avoid String.format — not available on Kotlin/Native.
                                 val lat = (kotlin.math.round(loc.latitude * 100_000.0) / 100_000.0)
                                 val lon = (kotlin.math.round(loc.longitude * 100_000.0) / 100_000.0)
                                 val coords = "$lat, $lon"
@@ -822,7 +665,6 @@ fun MapScreen(
                             .padding(bottom = 24.dp)
                             .zIndex(100f),
                 )
-                // Hosted inside the sheet window so it stacks above the sheet on iOS/Android.
                 shareBeaconToChat?.let { beaconToShare ->
                     BeaconShareToChatDialog(
                         beacon = beaconToShare,
@@ -898,7 +740,6 @@ fun MapScreen(
         },
     )
 
-    // Above modal sheets so check-in / engagement feedback is visible on event detail.
     Box(modifier = Modifier.fillMaxSize()) {
         UnifiedToastHost(
             state = toastState,
