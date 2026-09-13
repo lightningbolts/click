@@ -68,6 +68,12 @@ sealed class HomeState {
     ) : HomeState()
 }
 
+private fun activityRecapPlaceholder(window: String): ActivityRecapDto =
+    ActivityRecapDto(
+        window = if (window == "day") "day" else "week",
+        since = "",
+    )
+
 class HomeViewModel(
     private val chatRepository: ChatRepository = SupabaseChatRepository(tokenStorage = createTokenStorage()),
     private val connectionRepository: ConnectionRepository = ConnectionRepository(),
@@ -89,7 +95,9 @@ class HomeViewModel(
         MutableStateFlow(AppDataManager.cachedEventBookmarks.value)
     val savedEventBookmarks: StateFlow<List<EventBookmarkItemDto>> = _savedEventBookmarks.asStateFlow()
 
-    private val _activityRecap = MutableStateFlow<ActivityRecapDto?>(null)
+    // Keep the recap slot present from the first Home frame. `since == ""` is an explicit
+    // presentation placeholder; the UI renders stable recap geometry until the network value arrives.
+    private val _activityRecap = MutableStateFlow<ActivityRecapDto?>(activityRecapPlaceholder("week"))
     val activityRecap: StateFlow<ActivityRecapDto?> = _activityRecap.asStateFlow()
 
     private val _recapWindow = MutableStateFlow("week")
@@ -293,7 +301,7 @@ class HomeViewModel(
                     _connectedUsers.value = emptyMap()
                     _homeAvailabilityIntents.value = emptyList()
                     _homeAvailabilityOverlapMessages.value = emptyList()
-                    _activityRecap.value = null
+                    _activityRecap.value = activityRecapPlaceholder(_recapWindow.value)
                     AvailabilityOverlapCache.clear()
                     ViewerAvailabilityBubblesCache.clear()
                     availabilityIntentRefreshJob?.cancel()
@@ -798,6 +806,7 @@ class HomeViewModel(
         val normalized = if (window == "day") "day" else "week"
         if (_recapWindow.value == normalized) return
         _recapWindow.value = normalized
+        _activityRecap.value = activityRecapPlaceholder(normalized)
         viewModelScope.launch { loadActivityRecap() }
     }
 
