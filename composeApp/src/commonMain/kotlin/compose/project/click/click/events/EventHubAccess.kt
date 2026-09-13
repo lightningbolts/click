@@ -1,12 +1,16 @@
 package compose.project.click.click.events
 
 /**
- * Event-hub membership policy. Flip [requireRsvp] to also require an RSVP.
- * Host (event or hub creator) always bypasses both flags.
+ * Event-hub membership policy.
+ *
+ * Event chat is part of the RSVP experience: an RSVP member should be able to coordinate before
+ * arriving at the venue, so the shipped policy requires RSVP rather than an active check-in.
+ * Hosts always bypass both requirements. The flags remain configurable for tests/future event
+ * modes where a stricter policy is intentional.
  */
 data class EventHubAccessPolicy(
-    val requireCheckIn: Boolean = true,
-    val requireRsvp: Boolean = false,
+    val requireCheckIn: Boolean = false,
+    val requireRsvp: Boolean = true,
 )
 
 val EVENT_HUB_ACCESS = EventHubAccessPolicy()
