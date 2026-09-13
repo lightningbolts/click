@@ -26,7 +26,7 @@ internal fun chatBubbleTypingDotOffsetY(progress: Float): Dp = (-6f * REL * prog
  */
 internal object ChatBubbleTokens {
     /** Max width for message body as a fraction of measured chat row width (see [ChatMessageBubble]). */
-    const val messageMaxWidthToParentFraction: Float = 0.75f
+    val messageMaxWidthToParentFraction: Float = 0.75f
 
     /** Fallback when composables are not under measured constraints (e.g. previews). */
     val contentMaxWidth: Dp = chatBubbleScaledDp(450f)
