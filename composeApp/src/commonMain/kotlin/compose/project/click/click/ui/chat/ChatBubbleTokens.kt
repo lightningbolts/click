@@ -47,6 +47,11 @@ internal object ChatBubbleTokens {
     val reactionChipPadV: Dp = chatBubbleScaledDp(3f)
     val reactionRowPadH: Dp = chatBubbleScaledDp(12f)
     val reactionRowPadV: Dp = chatBubbleScaledDp(2f)
+    /**
+     * Fixed vertical reservation under every normal bubble. Reaction arrival must update pixels,
+     * not LazyColumn row geometry; otherwise the first reaction visibly shifts neighboring rows.
+     */
+    val reactionSlotHeight: Dp = chatBubbleScaledDp(34f)
     val bubbleRowHorizontalInset: Dp = chatBubbleScaledDp(9f)
     val peerAvatarEndPad: Dp = chatBubbleScaledDp(9f)
     val peerAvatarBottomPad: Dp = chatBubbleScaledDp(3f)
