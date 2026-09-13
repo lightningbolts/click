@@ -15,7 +15,8 @@ sealed class NavigationItem(
     object AddClick : NavigationItem("add_click", "Add Click", Icons.Filled.Add, "plus.circle.fill", "nav-add-click")
     object Connections : NavigationItem("connections", "Clicks", Icons.Filled.Person, "person.2.fill", "nav-clicks")
     object Map : NavigationItem("map", "Map", Icons.Filled.LocationOn, "location.fill", "nav-map")
-    object Settings : NavigationItem("settings", "Settings", Icons.Filled.Settings, "gearshape.fill", "nav-settings")
+    // Keep the route stable for deep links/state restoration; only the user-facing identity changes.
+    object Settings : NavigationItem("settings", "Me", Icons.Filled.AccountCircle, "person.crop.circle", "nav-settings")
     object Search : NavigationItem("search", "Search", Icons.Filled.Search, "magnifyingglass", "nav-search")
 }
 
@@ -24,5 +25,5 @@ val bottomNavItems = listOf(
     NavigationItem.AddClick,
     NavigationItem.Connections,
     NavigationItem.Map,
-    NavigationItem.Settings
+    NavigationItem.Settings,
 )
