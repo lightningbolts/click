@@ -236,7 +236,4 @@ internal fun MediaLightboxSaveShareTrailing(
     TextButton(onClick = onShare) {
         Text("Share", color = Color.White)
     }
-    TextButton(onClick = onShare) {
-        Text("Share", color = Color.White)
-    }
 }
