@@ -25,17 +25,17 @@ private data class StableOverlayChromeSnapshot(
     val backHandler: (() -> Unit)?,
     val backHidden: Boolean,
     val backSymbol: String?,
-    val backAccessibility: String?,
+    val backAccessibility: String,
     val searchHandler: (() -> Unit)?,
     val searchHidden: Boolean,
     val searchSymbol: String?,
-    val searchAccessibility: String?,
+    val searchAccessibility: String,
     val searchMenu: UIMenu?,
     val searchShowsMenu: Boolean,
     val actionHandlers: List<(() -> Unit)?>,
     val actionHidden: List<Boolean>,
     val actionSymbols: List<String?>,
-    val actionAccessibility: List<String?>,
+    val actionAccessibility: List<String>,
     val actionMenus: List<UIMenu?>,
     val actionShowsMenu: List<Boolean>,
     val arrangedSubviews: List<UIView>,
@@ -92,22 +92,23 @@ internal actual fun ApplyStableOverlayMediaChrome(
 }
 
 @OptIn(ExperimentalForeignApi::class)
-private fun IosHostNavBarLayer.captureStableOverlayChrome(): StableOverlayChromeSnapshot =
-    StableOverlayChromeSnapshot(
+private fun IosHostNavBarLayer.captureStableOverlayChrome(): StableOverlayChromeSnapshot {
+    val actionSymbols = actionButtons.map { paintedSymbols[it] }
+    return StableOverlayChromeSnapshot(
         backHandler = backTarget.handler,
         backHidden = backButton.hidden,
         backSymbol = paintedSymbols[backButton],
-        backAccessibility = backButton.accessibilityLabel,
+        backAccessibility = stableChromeAccessibility(paintedSymbols[backButton], leading = true),
         searchHandler = searchTarget.handler,
         searchHidden = searchButton.hidden,
         searchSymbol = paintedSymbols[searchButton],
-        searchAccessibility = searchButton.accessibilityLabel,
+        searchAccessibility = "Search",
         searchMenu = searchButton.menu,
         searchShowsMenu = searchButton.showsMenuAsPrimaryAction,
         actionHandlers = actionTargets.map { it.handler },
         actionHidden = actionButtons.map { it.hidden },
-        actionSymbols = actionButtons.map { paintedSymbols[it] },
-        actionAccessibility = actionButtons.map { it.accessibilityLabel },
+        actionSymbols = actionSymbols,
+        actionAccessibility = actionSymbols.map { stableChromeAccessibility(it, leading = false) },
         actionMenus = actionButtons.map { it.menu },
         actionShowsMenu = actionButtons.map { it.showsMenuAsPrimaryAction },
         arrangedSubviews = trailingStack.arrangedSubviews.map { it as UIView },
@@ -116,6 +117,24 @@ private fun IosHostNavBarLayer.captureStableOverlayChrome(): StableOverlayChrome
         titleTrailingToBarActive = titleTrailingToBar?.active == true,
         menuClicks = menuClicksByKey.toMap(),
     )
+}
+
+private fun stableChromeAccessibility(
+    symbol: String?,
+    leading: Boolean,
+): String =
+    when (symbol) {
+        "xmark" -> "Close"
+        "chevron.backward", "arrow.left" -> "Back"
+        "ellipsis", "ellipsis.circle" -> "More options"
+        "magnifyingglass" -> "Search"
+        "pencil" -> "Rename group"
+        "phone", "phone.fill" -> "Call"
+        "video", "video.fill" -> "Video call"
+        "square.and.arrow.up" -> "Share"
+        "square.and.arrow.down" -> "Save"
+        else -> if (leading) "Back" else "Action"
+    }
 
 @OptIn(ExperimentalForeignApi::class)
 private fun IosHostNavBarLayer.installStableMediaChrome(
@@ -219,11 +238,11 @@ private fun IosHostNavBarLayer.restoreStableOverlayChrome(snapshot: StableOverla
     snapshot.backSymbol?.let { symbol ->
         morphLeadingChromeSymbol(
             symbol = symbol,
-            accessibility = snapshot.backAccessibility ?: if (symbol == "xmark") "Close" else "Back",
+            accessibility = snapshot.backAccessibility,
         )
     } ?: paintedSymbols.remove(backButton)
     backButton.hidden = snapshot.backHidden
-    snapshot.backAccessibility?.let { backButton.setAccessibilityLabel(it) }
+    backButton.setAccessibilityLabel(snapshot.backAccessibility)
 
     menuClicksByKey.clear()
     menuClicksByKey.putAll(snapshot.menuClicks)
@@ -236,10 +255,10 @@ private fun IosHostNavBarLayer.restoreStableOverlayChrome(snapshot: StableOverla
         morphClusteredChromeSymbol(
             button = searchButton,
             symbol = symbol,
-            accessibility = snapshot.searchAccessibility ?: "Search",
+            accessibility = snapshot.searchAccessibility,
         )
     } ?: paintedSymbols.remove(searchButton)
-    snapshot.searchAccessibility?.let { searchButton.setAccessibilityLabel(it) }
+    searchButton.setAccessibilityLabel(snapshot.searchAccessibility)
 
     actionButtons.forEachIndexed { index, button ->
         actionTargets[index].handler = snapshot.actionHandlers[index]
@@ -251,12 +270,12 @@ private fun IosHostNavBarLayer.restoreStableOverlayChrome(snapshot: StableOverla
             morphClusteredChromeSymbol(
                 button = button,
                 symbol = symbol,
-                accessibility = snapshot.actionAccessibility[index] ?: "Action",
+                accessibility = snapshot.actionAccessibility[index],
             )
         } else {
             paintedSymbols.remove(button)
         }
-        snapshot.actionAccessibility[index]?.let { button.setAccessibilityLabel(it) }
+        button.setAccessibilityLabel(snapshot.actionAccessibility[index])
     }
 
     trailingStack.arrangedSubviews.map { it as UIView }.forEach { view ->
