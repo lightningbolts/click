@@ -564,7 +564,7 @@ internal fun BeaconChatCard(
         val engagement = BeaconEngagementPersistence.load(tokenStorage, currentUserId)[beaconId]
         signedUp = rsvp?.currentUserSignedUp == true
         bookmarked = engagement?.bookmarked == true
-        checkedIn = engagement?.checkedIn == true || engagement?.localEarlyCheckIn == true
+        checkedIn = engagement?.checkedIn == true
     }
     val model =
         remember(

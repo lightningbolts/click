@@ -181,11 +181,6 @@ class MapViewModel : ViewModel() {
     internal val _beaconCheckInPendingIds = MutableStateFlow<Set<String>>(emptySet())
     val beaconCheckInPendingIds: StateFlow<Set<String>> = _beaconCheckInPendingIds.asStateFlow()
 
-    /**
-     * Beacon ids the user early-checked-in (HTTP 409). Survives force-refresh races that can
-     * briefly see checkedIn=true with localEarlyCheckIn=false before the 409 write lands.
-     */
-    internal val earlyCheckInBeaconIds = mutableSetOf<String>()
     internal val engagementPersistMutex = Mutex()
     internal var engagementPersistGeneration = 0
 
@@ -439,7 +434,7 @@ class MapViewModel : ViewModel() {
 
     fun toggleBeaconBookmark(beaconId: String) = toggleBeaconBookmarkImpl(beaconId = beaconId)
 
-    fun toggleBeaconCheckIn(beaconId: String) = toggleBeaconCheckInImpl(beaconId = beaconId)
+    fun toggleBeaconCheckIn(beaconId: String) = toggleBeaconCheckInServerAuthoritativeImpl(beaconId = beaconId)
 
     fun deleteOwnedBeacon(
         beaconId: String,

@@ -258,7 +258,7 @@ internal fun EventBeaconDetail(
     val bookmarkPendingIds by viewModel.beaconBookmarkPendingIds.collectAsState()
     val engagement = engagementCache[beacon.id]
     val bookmarked = engagement?.bookmarked == true
-    val engagementCheckedIn = engagement?.checkedIn == true || engagement?.localEarlyCheckIn == true
+    val engagementCheckedIn = engagement?.checkedIn == true
     val checkInPending = beacon.id in checkInPendingIds
     val bookmarkPending = beacon.id in bookmarkPendingIds
     val uriHandler = LocalUriHandler.current
@@ -311,9 +311,9 @@ internal fun EventBeaconDetail(
     val directoryAttendees = directoryEntry?.attendees.orEmpty()
     val directoryLoading = beacon.id in directoryLoadingIds
     val currentUserSignedUp =
-        rsvpCacheSignedUp || directoryEntry?.currentUserSignedUp == true
+        entry?.currentUserSignedUp ?: (directoryEntry?.currentUserSignedUp == true)
     val checkedIn =
-        engagementCheckedIn || directoryEntry?.currentUserCheckedIn == true
+        engagement?.checkedIn ?: (directoryEntry?.currentUserCheckedIn == true)
     val eventHubId = displayBeacon.hubId ?: engagement?.hubId
     var eventChatHydrationExhausted by remember(displayBeacon.id) { mutableStateOf(false) }
     var eventChatRetryNonce by remember(displayBeacon.id) { mutableIntStateOf(0) }

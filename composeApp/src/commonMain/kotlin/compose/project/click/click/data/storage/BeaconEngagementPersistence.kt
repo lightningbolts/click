@@ -48,7 +48,6 @@ object BeaconEngagementPersistence {
                         checkedIn = entry.checkedIn && !entry.localEarlyCheckIn,
                         checkedInAt = entry.checkedInAt.takeIf { entry.checkedIn && !entry.localEarlyCheckIn },
                         checkInCount = entry.checkInCount,
-                        localEarlyCheckIn = false,
                         hubId = entry.hubId,
                     )
             }
@@ -69,14 +68,13 @@ object BeaconEngagementPersistence {
                 userId = userId,
                 entries =
                     cache.map { (beaconId, entry) ->
-                        val serverConfirmedCheckedIn = entry.checkedIn && !entry.localEarlyCheckIn
+                        val serverConfirmedCheckedIn = entry.checkedIn
                         PersistedEntry(
                             beaconId = beaconId,
                             bookmarked = entry.bookmarked,
                             checkedIn = serverConfirmedCheckedIn,
                             checkedInAt = entry.checkedInAt.takeIf { serverConfirmedCheckedIn },
                             checkInCount = entry.checkInCount,
-                            localEarlyCheckIn = false,
                             hubId = entry.hubId,
                             updatedAtEpochMs = now,
                         )
