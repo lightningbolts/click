@@ -99,6 +99,17 @@ class HubChatViewModel(
     internal val _messages = MutableStateFlow<List<MessageWithUser>>(emptyList())
     val messages: StateFlow<List<MessageWithUser>> = _messages.asStateFlow()
 
+    internal val _historyLoading = MutableStateFlow(startRealtime)
+    val historyLoading: StateFlow<Boolean> = _historyLoading.asStateFlow()
+    internal val _historyError = MutableStateFlow<String?>(null)
+    val historyError: StateFlow<String?> = _historyError.asStateFlow()
+
+    fun retryHistory() {
+        if (_historyLoading.value || participantDenied) return
+        _historyLoading.value = true
+        viewModelScope.launch { loadInitialMessages() }
+    }
+
     internal val _occupantCount = MutableStateFlow(1)
     val occupantCount: StateFlow<Int> = _occupantCount.asStateFlow()
 

@@ -271,6 +271,7 @@ private fun rememberIosHostNavBar(
         remember {
             NSProcessInfo.processInfo.operatingSystemVersion.useContents { majorVersion >= 26 }
         }
+    val titleContentAlpha = LocalNativeChromeTransitionAlpha.current
     val owner = remember { Any() }
     val searchHandler by rememberUpdatedState(onOpenSearch)
     val backHandler by rememberUpdatedState(onNavigateBack)
@@ -345,6 +346,7 @@ private fun rememberIosHostNavBar(
             trailingActions = mediaTrailing ?: trailingHandlers,
             collapseSearchIntoBar = collapseSearchIntoBar,
             leadingClose = leadingClose || mediaChrome != null,
+            titleContentAlpha = titleContentAlpha,
         )
     }
 }

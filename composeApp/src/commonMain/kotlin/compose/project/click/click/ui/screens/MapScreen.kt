@@ -378,21 +378,6 @@ fun MapScreen(
                                         .zIndex(10f),
                             )
 
-                            EventsReopenChip(
-                                count = eventNearbyCount,
-                                onClick = { onEventsSheetExpandedChanged(true) },
-                                enabled = !eventsSheetExpanded,
-                                modifier =
-                                    Modifier
-                                        .align(Alignment.BottomCenter)
-                                        .zIndex(15f)
-                                        .padding(
-                                            start = 10.dp,
-                                            end = 10.dp,
-                                            bottom = mapFabAboveNav,
-                                        ),
-                            )
-
                             GlassmorphicOverlay(
                                 visible = frictionUi.showGrassNudge && !eventsSheetExpanded,
                                 message = "Looking for the right vibe? Try dropping a 'Looking for Coffee' intent and let the map come to you. Put your phone in your pocket and we'll vibrate when a match is nearby.",
@@ -403,8 +388,14 @@ fun MapScreen(
                                         .zIndex(20f),
                             )
 
-                            if (eventsSheetExpanded) {
-                                EventsDiscoveryFullScreen(
+                            NearbyAnchoredSheet(
+                                expanded = eventsSheetExpanded,
+                                count = eventNearbyCount,
+                                modifier = Modifier.zIndex(15f),
+                                bottomPadding = mapFabAboveNav,
+                                onExpandedChanged = onEventsSheetExpandedChanged,
+                            ) { contentModifier ->
+                                EventsDiscoveryContent(
                                     feedItems = feedItems,
                                     discoveryFeedPending = discoveryFeedPending,
                                     discoveryFeedRefreshing = discoveryFeedLoading,
@@ -412,7 +403,7 @@ fun MapScreen(
                                     layerFilters = layerFilters,
                                     onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
                                     viewModel = viewModel,
-                                    onBack = { onEventsSheetExpandedChanged(false) },
+                                    expanded = eventsSheetExpanded,
                                     onBeaconClick = { beacon, distanceM ->
                                         TelemetryBatcher.recordActionTaken()
                                         viewModel.onBeaconPinTapped(
@@ -420,7 +411,7 @@ fun MapScreen(
                                             seedDistanceMeters = distanceM,
                                         )
                                     },
-                                    interactiveBackSwipeOffsetPx = null,
+                                    modifier = contentModifier,
                                 )
                             }
                         }

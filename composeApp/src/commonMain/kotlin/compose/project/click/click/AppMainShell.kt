@@ -64,10 +64,13 @@ import compose.project.click.click.viewmodel.VerifiedCliqueProximityIntent // pr
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -237,6 +240,25 @@ internal fun AppMainShell(
     var hubChatTransitionMode by hubChatTransitionModeState
     val hubChatCloseJobState = remember { mutableStateOf<Job?>(null) }
     var hubChatCloseJob by hubChatCloseJobState
+    var hubOpenJob by remember { mutableStateOf<Job?>(null) }
+    var hubOpenTarget by remember { mutableStateOf<String?>(null) }
+    var hubOpenVersion by remember { mutableLongStateOf(0L) }
+
+    DisposableEffect(currentUser.id) {
+        onDispose { hubOpenJob?.cancel() }
+    }
+    LaunchedEffect(currentUser.id) {
+        AppDataManager.hubAccessRevocations.collect { hubId ->
+            if (hubOpenTarget == hubId) {
+                hubOpenVersion++
+                hubOpenJob?.cancel()
+                hubOpenTarget = null
+                hubVerifyInProgress = false
+            }
+            if (hubChatArgs?.hubId == hubId) hubChatArgs = null
+            if (lastHubChatArgs?.hubId == hubId) lastHubChatArgs = null
+        }
+    }
 
     fun closeHubChat(mode: NavigationTransitionMode) {
         hubChatCloseJob?.cancel()
@@ -348,173 +370,121 @@ internal fun AppMainShell(
         }
     }
 
-    fun launchCommunityHubJoin(
+    fun launchHubOpen(
         hubId: String,
-        knownCreatorId: String? = null,
+        title: String,
+        knownCreatorId: String?,
+        allowStandalone: Boolean,
     ) {
         if (hubId.isBlank() || currentUser.id.isBlank()) return
         hubChatCloseJob?.cancel()
         hubChatCloseJob = null
-        // If we already have cached args for this hub, skip verification and re-enter.
-        val cached = lastHubChatArgs
-        if (cached != null && cached.hubId == hubId) {
-            hubChatArgs =
-                if (
-                    cached.creatorId == null &&
-                    !knownCreatorId.isNullOrBlank()
-                ) {
-                    cached.copy(creatorId = knownCreatorId)
-                } else {
-                    cached
-                }
-            return
-        }
-        connectionScope.launch {
-            hubVerifyInProgress = true
-            try {
-                requestLocationPermissionIfNeeded(
-                    !locationService.hasLocationPermission(),
-                )
-                if (!locationService.hasLocationPermission()) {
-                    toastState.show(connectionScope, "Location permission is required to join this hub.")
-                    return@launch
-                }
-                val loc = resolveHubGatekeeperLocationForChat()
-                if (loc == null) {
-                    toastState.show(connectionScope, "Could not read your location. Try again in an open area.")
-                    return@launch
-                }
-                lastHubGatekeeperFix = loc
-                val jwt =
-                    EnsureFreshAccessToken
-                        .get(tokenStorage)
-                        ?.trim()
-                        ?.takeIf { it.isNotEmpty() }
-                if (jwt.isNullOrBlank()) {
-                    toastState.show(connectionScope, "Please sign in again to join the hub.")
-                    return@launch
-                }
-                when (
-                    val outcome =
-                        HubConnectionManager.verifyProximity(
-                            httpClient = client,
-                            hubId = hubId,
-                            userLat = loc.latitude,
-                            userLong = loc.longitude,
-                            bearerJwt = jwt,
-                        )
-                ) {
-                    is HubVerifyResult.Success -> {
-                        val creatorId = outcome.creatorId ?: knownCreatorId
-                        val args =
-                            HubChatNavArgs(
-                                hubId = outcome.hubId,
-                                realtimeChannel = outcome.channel,
-                                hubTitle = outcome.name,
-                                creatorId = creatorId,
-                                isEventHub = false,
+        if (hubOpenTarget == hubId && hubOpenJob?.isActive == true) return
+        hubOpenJob?.cancel()
+        val requestVersion = ++hubOpenVersion
+        hubOpenTarget = hubId
+        hubOpenJob =
+            connectionScope.launch {
+                hubVerifyInProgress = true
+                try {
+                    AppDataManager.awaitHubAccessStateRestored()
+                    val accessRevision = AppDataManager.hubAccessRevision(hubId)
+                    val jwt =
+                        withTimeoutOrNull(15_000) { EnsureFreshAccessToken.get(tokenStorage) }
+                            ?.trim()
+                            ?.takeIf { it.isNotEmpty() }
+                    if (jwt == null) {
+                        toastState.show(connectionScope, "Please sign in again to join the hub.")
+                        return@launch
+                    }
+                    // Generic URLs have no event marker. The canonical gate identifies standalone
+                    // hubs by requiring coordinates; every event goes through the RSVP/host gate.
+                    var outcome = HubConnectionManager.joinEventHub(client, hubId, jwt)
+                    var isEvent = true
+                    if (allowStandalone && outcome is HubVerifyResult.Failure && outcome.code == "HUB_LOCATION_REQUIRED") {
+                        requestLocationPermissionIfNeeded(!locationService.hasLocationPermission())
+                        if (!locationService.hasLocationPermission()) {
+                            toastState.show(connectionScope, "Location permission is required to join this hub.")
+                            return@launch
+                        }
+                        val loc = withTimeoutOrNull(15_000) { resolveHubGatekeeperLocationForChat() }
+                        if (loc == null) {
+                            toastState.show(connectionScope, "Could not read your location. Please try again.")
+                            return@launch
+                        }
+                        lastHubGatekeeperFix = loc
+                        outcome = withTimeoutOrNull(15_000) {
+                            HubConnectionManager.verifyProximity(client, hubId, loc.latitude, loc.longitude, jwt)
+                        } ?: HubVerifyResult.Failure("Opening hub chat timed out. Please try again.")
+                        isEvent = (outcome as? HubVerifyResult.Success)?.eventBeaconId != null
+                        if (isEvent) outcome = HubConnectionManager.joinEventHub(client, hubId, jwt)
+                    }
+                    ensureActive()
+                    if (requestVersion != hubOpenVersion || accessRevision != AppDataManager.hubAccessRevision(hubId)) return@launch
+                    when (val access = outcome) {
+                        is HubVerifyResult.Success -> {
+                            val args =
+                                HubChatNavArgs(
+                                    hubId = access.hubId,
+                                    realtimeChannel = access.channel,
+                                    hubTitle = access.name.ifBlank { title },
+                                    creatorId = access.creatorId ?: knownCreatorId,
+                                    hubCategory = if (isEvent) "event" else "general",
+                                    isEventHub = isEvent,
+                                )
+                            AppDataManager.registerActiveHub(
+                                ActiveHubEntry(
+                                    hubId = args.hubId,
+                                    name = args.hubTitle,
+                                    realtimeChannel = args.realtimeChannel,
+                                    joinedAtMs =
+                                        kotlinx.datetime.Clock.System
+                                            .now()
+                                            .toEpochMilliseconds(),
+                                    creatorId = args.creatorId,
+                                    category = args.hubCategory,
+                                    isEventHub = args.isEventHub,
+                                ),
                             )
-                        lastHubChatArgs = args
-                        hubChatArgs = args
-                        AppDataManager.registerActiveHub(
-                            ActiveHubEntry(
-                                hubId = outcome.hubId,
-                                name = outcome.name,
-                                realtimeChannel = outcome.channel,
-                                joinedAtMs =
-                                    kotlinx.datetime.Clock.System
-                                        .now()
-                                        .toEpochMilliseconds(),
-                                creatorId = creatorId,
-                            ),
-                        )
+                            lastHubChatArgs = args
+                            hubChatArgs = args
+                        }
+                        is HubVerifyResult.Failure -> {
+                            if (lastHubChatArgs?.hubId == hubId) lastHubChatArgs = null
+                            AppDataManager.revokeHubAccess(hubId)
+                            toastState.show(connectionScope, access.userMessage)
+                        }
                     }
-                    is HubVerifyResult.Failure -> {
-                        toastState.show(connectionScope, outcome.userMessage)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    toastState.show(connectionScope, "Couldn't open chat. Please try again.")
+                } finally {
+                    if (requestVersion == hubOpenVersion) {
+                        hubVerifyInProgress = false
+                        hubOpenTarget = null
                     }
                 }
-            } finally {
-                hubVerifyInProgress = false
             }
-        }
     }
 
     fun launchEventHubJoin(
         hubId: String,
         title: String,
-        knownCreatorId: String? = null,
-    ) {
-        if (hubId.isBlank() || currentUser.id.isBlank()) return
-        hubChatCloseJob?.cancel()
-        hubChatCloseJob = null
-        val cached = lastHubChatArgs
-        if (cached != null && cached.hubId == hubId) {
-            hubChatArgs =
-                cached.copy(
-                    creatorId = cached.creatorId ?: knownCreatorId,
-                    isEventHub = true,
-                    hubCategory = if (cached.hubCategory.isBlank()) "event" else cached.hubCategory,
-                    hubTitle = title.ifBlank { cached.hubTitle },
-                )
-            return
-        }
-        connectionScope.launch {
-            hubVerifyInProgress = true
-            try {
-                val jwt =
-                    EnsureFreshAccessToken
-                        .get(tokenStorage)
-                        ?.trim()
-                        ?.takeIf { it.isNotEmpty() }
-                if (jwt.isNullOrBlank()) {
-                    toastState.show(connectionScope, "Please sign in again to join the hub.")
-                    return@launch
-                }
-                when (
-                    val outcome =
-                        HubConnectionManager.joinEventHub(
-                            httpClient = client,
-                            hubId = hubId,
-                            bearerJwt = jwt,
-                        )
-                ) {
-                    is HubVerifyResult.Success -> {
-                        val creatorId = outcome.creatorId ?: knownCreatorId
-                        val args =
-                            HubChatNavArgs(
-                                hubId = outcome.hubId,
-                                realtimeChannel = outcome.channel,
-                                hubTitle = outcome.name.ifBlank { title },
-                                creatorId = creatorId,
-                                hubCategory = "event",
-                                isEventHub = true,
-                            )
-                        lastHubChatArgs = args
-                        hubChatArgs = args
-                        AppDataManager.registerActiveHub(
-                            ActiveHubEntry(
-                                hubId = outcome.hubId,
-                                name = outcome.name.ifBlank { title },
-                                realtimeChannel = outcome.channel,
-                                joinedAtMs =
-                                    kotlinx.datetime.Clock.System
-                                        .now()
-                                        .toEpochMilliseconds(),
-                                creatorId = creatorId,
-                                category = "event",
-                                isEventHub = true,
-                            ),
-                        )
-                    }
-                    is HubVerifyResult.Failure -> {
-                        toastState.show(connectionScope, outcome.userMessage)
-                    }
-                }
-            } finally {
-                hubVerifyInProgress = false
-            }
-        }
-    }
+        creatorId: String? = null,
+    ) = launchHubOpen(hubId, title, creatorId, allowStandalone = false)
+
+    fun launchCommunityHubJoin(
+        hubId: String,
+        creatorId: String? = null,
+    ) = launchHubOpen(hubId, "Hub", creatorId, allowStandalone = true)
+
+    fun openHub(
+        hubId: String,
+        title: String,
+        creatorId: String?,
+        isEventHub: Boolean,
+    ) = launchHubOpen(hubId, title, creatorId, allowStandalone = !isEventHub)
 
     val pendingEventHub by ChatDeepLinkManager.pendingEventHub.collectAsState()
     LaunchedEffect(pendingEventHub, currentUser.id) {
@@ -757,6 +727,7 @@ internal fun AppMainShell(
                     color = MaterialTheme.colorScheme.background,
                 ) {
                     AppPrimaryTabsHost(
+                        openHub = ::openHub,
                         activeScreenKey = activeScreenKey,
                         currentRoute = currentRoute,
                         addClickOverlayKey = addClickOverlayKey,
@@ -856,6 +827,7 @@ internal fun AppMainShell(
             }
         }
         AppBottomChrome(
+            openHub = ::openHub,
             currentRoute = currentRoute,
             hideMainBottomBar = hideMainBottomBar,
             navigateTo = ::navigateTo,

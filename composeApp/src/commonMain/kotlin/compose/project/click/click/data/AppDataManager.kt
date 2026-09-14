@@ -433,12 +433,17 @@ object AppDataManager {
     }
 
     /**
-     * Atomically clear client state that could otherwise reopen a hub after check-out or server
+     * Atomically clear client state that could otherwise reopen a hub after RSVP cancellation or server
      * revocation. This is deliberately shared by map, chat, and deep-link flows.
      */
+    private val hubAccessRevisions = MutableStateFlow<Map<String, Long>>(emptyMap())
+
+    internal fun hubAccessRevision(hubId: String): Long = hubAccessRevisions.value[hubId] ?: 0L
+
     fun revokeHubAccess(hubId: String) {
         val trimmed = hubId.trim()
         if (trimmed.isEmpty()) return
+        hubAccessRevisions.value = hubAccessRevisions.value + (trimmed to (hubAccessRevision(trimmed) + 1L))
         _revokedHubIds.value = boundedHubAccessRevocationIds(_revokedHubIds.value + trimmed)
         clearHubAccessState(trimmed)
         // Record the durable state before publishing the one-shot event. A new VM can therefore

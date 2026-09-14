@@ -82,11 +82,6 @@ data class BeaconEngagementCacheEntry(
     val checkedIn: Boolean = false,
     val checkedInAt: String? = null,
     val checkInCount: Int = 0,
-    /**
-     * Client-kept early check-in after HTTP 409 (event not live yet). Survives force-refresh
-     * and process death until the server reports checkedIn or the user checks out.
-     */
-    val localEarlyCheckIn: Boolean = false,
     val hubId: String? = null,
 )
 

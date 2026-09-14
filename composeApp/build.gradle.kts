@@ -185,6 +185,7 @@ kotlin {
             implementation(compose.uiTest)
         }
         androidUnitTest.dependencies {
+            implementation("io.ktor:ktor-client-mock:3.0.1")
             implementation(compose.uiTest)
             implementation(libs.junit)
             implementation(libs.kotlin.test)

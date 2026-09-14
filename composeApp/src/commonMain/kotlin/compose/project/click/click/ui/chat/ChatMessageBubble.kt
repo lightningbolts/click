@@ -12,6 +12,7 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -812,7 +814,7 @@ fun ChatMessageBubble(
                             if (reactionGroups.isNotEmpty()) {
                                 Row(
                                     modifier =
-                                        Modifier.padding(
+                                        Modifier.horizontalScroll(rememberScrollState()).padding(
                                             horizontal = ChatBubbleTokens.reactionRowPadH,
                                             vertical = ChatBubbleTokens.reactionRowPadV,
                                         ),

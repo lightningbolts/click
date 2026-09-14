@@ -80,11 +80,7 @@ object NativeHeaderMetrics {
         val expanded =
             ExpandedBarHeightPt +
                 if (hasSubtitle) SubtitleLineHeightPt * SubtitleMaxLines else 0.0
-        // Identity stacks stay 52pt (centered on the avatar). Subpages with a
-        // back button grow so the subtitle is not clipped under the glass.
-        val compact =
-            CompactBarHeightPt +
-                if (growCompactSubtitle && hasSubtitle) SubtitleLineHeightPt else 0.0
+        val compact = CompactBarHeightPt
         return expanded + (compact - expanded) * fraction
     }
 
@@ -194,7 +190,7 @@ object NativeHeaderMetrics {
         hasIdentity: Boolean,
         hasSubtitle: Boolean,
         collapseFraction: Float,
-    ): Boolean = hasSubtitle && isCompactTitle(collapseFraction) && (hasIdentity || hasBack)
+    ): Boolean = false
 
     /**
      * Scan QR / Tap to Connect compact chrome must grow so the instruction line sits

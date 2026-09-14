@@ -64,9 +64,9 @@ class NativeHeaderMetricsTest {
     }
 
     @Test
-    fun stackCompactSubtitle_forChatIdentityAndSubpages() {
+    fun compactChromeSuppressesSubtitleForEveryDestination() {
         assertTrue(
-            NativeHeaderMetrics.shouldStackCompactSubtitle(
+            !NativeHeaderMetrics.shouldStackCompactSubtitle(
                 hasBack = true,
                 hasIdentity = false,
                 hasSubtitle = true,
@@ -74,7 +74,7 @@ class NativeHeaderMetricsTest {
             ),
         )
         assertTrue(
-            NativeHeaderMetrics.shouldStackCompactSubtitle(
+            !NativeHeaderMetrics.shouldStackCompactSubtitle(
                 hasBack = false,
                 hasIdentity = true,
                 hasSubtitle = true,
@@ -92,9 +92,9 @@ class NativeHeaderMetricsTest {
     }
 
     @Test
-    fun growCompactBar_onlyForSubpageSubtitleNotIdentity() {
+    fun compactChromeHasOneHeightAcrossSubpages() {
         assertTrue(
-            NativeHeaderMetrics.shouldGrowCompactBarForStackedSubtitle(
+            !NativeHeaderMetrics.shouldGrowCompactBarForStackedSubtitle(
                 hasBack = true,
                 hasIdentity = false,
                 hasSubtitle = true,
@@ -110,7 +110,7 @@ class NativeHeaderMetricsTest {
             ),
         )
         assertEquals(
-            70.0,
+            52.0,
             NativeHeaderMetrics.barHeightPt(
                 collapseFraction = 1f,
                 hasSubtitle = true,
@@ -233,9 +233,9 @@ class NativeHeaderMetricsTest {
     }
 
     @Test
-    fun headerClearance_hubCompactGrowsForSubtitle() {
+    fun headerClearanceUsesCanonicalCompactHeight() {
         assertEquals(
-            117.dp,
+            99.dp,
             platformNativeHeaderClearance(
                 statusBarTop = 47.dp,
                 collapseFraction = 1f,

@@ -40,6 +40,7 @@ import compose.project.click.click.ui.chat.ConnectionSheetDialogs
 import compose.project.click.click.ui.chat.GroupMembersPickerContext
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
+import compose.project.click.click.ui.components.NativeChromeTransition
 import compose.project.click.click.ui.components.PlatformBackHandler
 import compose.project.click.click.ui.components.PlatformNativeNavigationBarSwipeReveal
 import compose.project.click.click.ui.components.TabbedGroupProfileSheet
@@ -277,48 +278,50 @@ fun ConnectionsScreen(
                     },
                 label = "chat_overlay",
             ) {
-                val activeChatId = lastOpenChatIdForIosOverlay
-                if (activeChatId != null) {
-                    val keyboardController = LocalSoftwareKeyboardController.current
-                    val focusManager = LocalFocusManager.current
-                    InteractiveSwipeBackContainer(
-                        enabled = true,
-                        onBack = {
-                            focusManager.clearFocus()
-                            if (!isIOS) {
-                                keyboardController?.hide()
-                            }
-                            closeActiveChat(ChatTransitionMode.Gesture)
-                        },
-                        opaquePreviousBackground = false,
-                        externalDragOffsetPx = iosChatSwipeDragPx,
-                        onBehindLayersVisibleChanged = { revealing ->
-                            chatBackHost.behindLayersVisible = revealing
-                        },
-                        rightToLeftPeek = iosChatRightToLeftPeek,
-                        previousContent = {},
-                        currentContent = {
-                            ChatView(
-                                viewModel = viewModel,
-                                chatId = activeChatId,
-                                targetMessageId = initialTargetMessageId,
-                                onBackPressed = { closeActiveChat(ChatTransitionMode.Tap) },
-                                onOpenUserProfile = { profileUserId = it },
-                                onOpenGroupMembersPicker = {
-                                    groupMembersPickerContext = it
-                                    showGroupMembersSheet = true
-                                },
-                                integrateTimestampPeekWithSwipeBackContainer = true,
-                                onRegisterSwipeBackRightToLeftPeek = { iosChatRightToLeftPeek = it },
-                                parentInteractiveBackSwipePx = iosChatSwipeDragPx,
-                                onOpenDisposableRoll = onOpenDisposableRoll,
-                                onOpenDisposableRollForChat = onOpenDisposableRollForChat,
-                                shareableBeacons = shareableBeacons,
-                                mapViewModel = mapViewModel,
-                                onShareBeaconToChats = onShareBeaconToChats,
-                            )
-                        },
-                    )
+                NativeChromeTransition {
+                    val activeChatId = lastOpenChatIdForIosOverlay
+                    if (activeChatId != null) {
+                        val keyboardController = LocalSoftwareKeyboardController.current
+                        val focusManager = LocalFocusManager.current
+                        InteractiveSwipeBackContainer(
+                            enabled = true,
+                            onBack = {
+                                focusManager.clearFocus()
+                                if (!isIOS) {
+                                    keyboardController?.hide()
+                                }
+                                closeActiveChat(ChatTransitionMode.Gesture)
+                            },
+                            opaquePreviousBackground = false,
+                            externalDragOffsetPx = iosChatSwipeDragPx,
+                            onBehindLayersVisibleChanged = { revealing ->
+                                chatBackHost.behindLayersVisible = revealing
+                            },
+                            rightToLeftPeek = iosChatRightToLeftPeek,
+                            previousContent = {},
+                            currentContent = {
+                                ChatView(
+                                    viewModel = viewModel,
+                                    chatId = activeChatId,
+                                    targetMessageId = initialTargetMessageId,
+                                    onBackPressed = { closeActiveChat(ChatTransitionMode.Tap) },
+                                    onOpenUserProfile = { profileUserId = it },
+                                    onOpenGroupMembersPicker = {
+                                        groupMembersPickerContext = it
+                                        showGroupMembersSheet = true
+                                    },
+                                    integrateTimestampPeekWithSwipeBackContainer = true,
+                                    onRegisterSwipeBackRightToLeftPeek = { iosChatRightToLeftPeek = it },
+                                    parentInteractiveBackSwipePx = iosChatSwipeDragPx,
+                                    onOpenDisposableRoll = onOpenDisposableRoll,
+                                    onOpenDisposableRollForChat = onOpenDisposableRollForChat,
+                                    shareableBeacons = shareableBeacons,
+                                    mapViewModel = mapViewModel,
+                                    onShareBeaconToChats = onShareBeaconToChats,
+                                )
+                            },
+                        )
+                    }
                 }
             }
         }

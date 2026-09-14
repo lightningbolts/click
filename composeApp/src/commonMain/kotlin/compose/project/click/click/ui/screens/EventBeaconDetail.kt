@@ -7,11 +7,9 @@
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -258,7 +256,7 @@ internal fun EventBeaconDetail(
     val bookmarkPendingIds by viewModel.beaconBookmarkPendingIds.collectAsState()
     val engagement = engagementCache[beacon.id]
     val bookmarked = engagement?.bookmarked == true
-    val engagementCheckedIn = engagement?.checkedIn == true || engagement?.localEarlyCheckIn == true
+    val engagementCheckedIn = engagement?.checkedIn == true
     val checkInPending = beacon.id in checkInPendingIds
     val bookmarkPending = beacon.id in bookmarkPendingIds
     val uriHandler = LocalUriHandler.current
@@ -311,9 +309,9 @@ internal fun EventBeaconDetail(
     val directoryAttendees = directoryEntry?.attendees.orEmpty()
     val directoryLoading = beacon.id in directoryLoadingIds
     val currentUserSignedUp =
-        rsvpCacheSignedUp || directoryEntry?.currentUserSignedUp == true
+        entry?.currentUserSignedUp ?: (directoryEntry?.currentUserSignedUp == true)
     val checkedIn =
-        engagementCheckedIn || directoryEntry?.currentUserCheckedIn == true
+        engagement?.checkedIn ?: (directoryEntry?.currentUserCheckedIn == true)
     val eventHubId = displayBeacon.hubId ?: engagement?.hubId
     var eventChatHydrationExhausted by remember(displayBeacon.id) { mutableStateOf(false) }
     var eventChatRetryNonce by remember(displayBeacon.id) { mutableIntStateOf(0) }
@@ -397,16 +395,16 @@ internal fun EventBeaconDetail(
             verticalAlignment = Alignment.Top,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                if (live) {
-                    EventLiveBadge()
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
                 Text(
                     text = displayBeacon.displayDynamicTitle(),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
+                if (live) {
+                    EventLiveBadge()
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
                 distanceLabel?.let { d ->
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
@@ -439,10 +437,6 @@ internal fun EventBeaconDetail(
 
         schedule?.let { EventScheduleBento(schedule = it, border = border, cardSurface = cardSurface) }
 
-        if (categories.isNotEmpty()) {
-            EventCategoryChips(categories = categories, border = border, cardSurface = cardSurface)
-        }
-
         val rawLocationLabel =
             displayBeacon.metadata.formattedAddress
                 ?.trim()
@@ -472,14 +466,13 @@ internal fun EventBeaconDetail(
                     ?: reverse?.displayName?.takeIf { it.isNotBlank() }
             }
         }
-        resolvedLocationLabel?.let { locationLabel ->
+        run {
+            val locationLabel = resolvedLocationLabel ?: "Finding location…"
             Row(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .border(clickBorderWidth(), border, RoundedCornerShape(12.dp))
-                        .background(cardSurface, RoundedCornerShape(12.dp))
-                        .padding(16.dp),
+                        .padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.Top,
             ) {
@@ -491,11 +484,218 @@ internal fun EventBeaconDetail(
                 )
                 Text(
                     text = locationLabel,
+                    minLines = 2,
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
                 )
             }
+        }
+
+        if (ended) {
+            EventEndedBanner()
+        }
+
+        if (!ended) {
+            if (currentUserSignedUp || pendingOrWaitlisted) {
+                ClickButton(
+                    onClick = {
+                        if (rsvpPending) return@ClickButton
+                        rsvpError = null
+                        viewModel.cancelRsvpToBeacon(displayBeacon.id) { ok ->
+                            if (!ok) {
+                                rsvpError = viewModel.engagementSnackbar.value
+                                    ?: "Could not update RSVP. Please try again."
+                            }
+                        }
+                    },
+                    enabled = !rsvpPending,
+                    modifier = Modifier.fillMaxWidth(),
+                    variant = ClickButtonVariant.Destructive,
+                ) {
+                    Text(
+                        text =
+                            if (rsvpPending) {
+                                "Updating…"
+                            } else if (currentUserSignedUp) {
+                                "Cancel RSVP"
+                            } else {
+                                "Withdraw request"
+                            },
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            } else {
+                ClickButton(
+                    onClick = {
+                        if (rsvpPending) return@ClickButton
+                        rsvpError = null
+                        viewModel.rsvpToBeacon(displayBeacon.id) { ok ->
+                            if (!ok) {
+                                rsvpError = viewModel.engagementSnackbar.value
+                                    ?: "Could not update RSVP. Please try again."
+                            } else {
+                                // Rebind every source that can carry hub_id so the chat affordance
+                                // updates in the same sheet without requiring dismiss/reopen.
+                                viewModel.loadBeaconRsvp(displayBeacon.id, forceRefresh = true)
+                                viewModel.loadBeaconEngagement(displayBeacon.id, forceRefresh = true)
+                                viewModel.ensureEventBeaconDetail(displayBeacon.id, seed = displayBeacon)
+                                eventChatHydrationExhausted = false
+                                eventChatRetryNonce += 1
+                            }
+                        }
+                    },
+                    enabled = !rsvpPending,
+                    modifier = Modifier.fillMaxWidth(),
+                    variant = ClickButtonVariant.Primary,
+                ) {
+                    Text(
+                        text =
+                            if (rsvpPending) {
+                                "Updating…"
+                            } else if (listing.approvalRequired) {
+                                "Request to join"
+                            } else {
+                                "RSVP / Sign Up"
+                            },
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+
+            if (rsvpPending) {
+                Text(
+                    text = "Saving in the background...",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        EventRsvpStatusLine(
+            requestStatus = rsvpRequestStatus,
+            errorMessage = rsvpError,
+        )
+
+        val checkInLabel = eventCheckInCtaLabel(checkedIn = checkedIn, pending = checkInPending)
+        val canOpenHub = eventChatState == EventHubCtaState.Open
+        val eventChatActionable =
+            eventChatState == EventHubCtaState.Open || eventChatState == EventHubCtaState.Retry
+
+        ClickButton(
+            onClick = {
+                if (checkInPending) return@ClickButton
+                viewModel.toggleBeaconCheckIn(displayBeacon.id)
+            },
+            enabled = !checkInPending,
+            modifier = Modifier.fillMaxWidth(),
+            variant = ClickButtonVariant.Secondary,
+        ) {
+            if (checkInPending) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            } else {
+                Icon(
+                    imageVector = if (checkedIn) Icons.Filled.CheckCircle else Icons.Filled.Place,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Text(checkInLabel, fontWeight = FontWeight.SemiBold)
+        }
+
+        EventPeopleDirectorySection(
+            attendees =
+                directoryAttendees.ifEmpty {
+                    attendees.map {
+                        compose.project.click.click.events.DirectoryAttendee( // pragma: allowlist secret
+                            userId = it.userId,
+                            name = it.name,
+                            avatarUrl = it.avatarUrl,
+                        )
+                    }
+                },
+            loading = directoryLoading || rsvpLoading,
+            mutualsSectionUnlocked = mutualsUnlocked,
+            directoryEnriched = directoryEntry != null,
+            onOpenDirectory = { showPeopleDirectory = true },
+        )
+
+        ClickButton(
+            onClick = {
+                when (eventChatState) {
+                    EventHubCtaState.Retry -> {
+                        eventChatHydrationExhausted = false
+                        eventChatRetryNonce += 1
+                    }
+                    EventHubCtaState.Open -> {
+                        val hubId = eventHubId ?: return@ClickButton
+                        ChatDeepLinkManager.setPendingEventHub(
+                            hubId = hubId,
+                            title = displayBeacon.displayDynamicTitle(),
+                            creatorId = displayBeacon.createdByUserId,
+                        )
+                        viewModel.clearSelection()
+                    }
+                    EventHubCtaState.Preparing,
+                    EventHubCtaState.RequiresRsvp,
+                    -> Unit
+                }
+            },
+            enabled = eventChatActionable,
+            modifier = Modifier.fillMaxWidth(),
+            variant = if (canOpenHub) ClickButtonVariant.Primary else ClickButtonVariant.Secondary,
+        ) {
+            when (eventChatState) {
+                EventHubCtaState.Preparing -> {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                EventHubCtaState.Retry -> {
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                else -> {
+                    Icon(
+                        imageVector = Icons.Filled.Chat,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+            }
+            Text(
+                text =
+                    when (eventChatState) {
+                        EventHubCtaState.Preparing -> "Preparing event chat…"
+                        EventHubCtaState.Retry -> "Retry event chat"
+                        EventHubCtaState.Open -> "Open event chat"
+                        EventHubCtaState.RequiresRsvp -> "RSVP to join event chat"
+                    },
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        if (eventChatState == EventHubCtaState.RequiresRsvp) {
+            Text(
+                text = "RSVP to coordinate with the event chat before you arrive.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+            )
         }
 
         if (displayBeacon.showCreatorName && !hostDisplayName.isNullOrBlank()) {
@@ -526,22 +726,30 @@ internal fun EventBeaconDetail(
             )
         }
 
-        EventPeopleDirectorySection(
-            attendees =
-                directoryAttendees.ifEmpty {
-                    attendees.map {
-                        compose.project.click.click.events.DirectoryAttendee( // pragma: allowlist secret
-                            userId = it.userId,
-                            name = it.name,
-                            avatarUrl = it.avatarUrl,
-                        )
-                    }
-                },
-            loading = directoryLoading || rsvpLoading,
-            mutualsSectionUnlocked = mutualsUnlocked,
-            directoryEnriched = directoryEntry != null,
-            onOpenDirectory = { showPeopleDirectory = true },
-        )
+        if (categories.isNotEmpty()) {
+            EventCategoryChips(categories = categories, border = border, cardSurface = cardSurface)
+        }
+
+        ClickButton(
+            onClick = {
+                openEventMapsRoute(
+                    openUri = { uriHandler.openUri(it) },
+                    latitude = displayBeacon.latitude,
+                    longitude = displayBeacon.longitude,
+                    label = displayBeacon.displayDynamicTitle(),
+                )
+            },
+            modifier = Modifier.fillMaxWidth(),
+            variant = ClickButtonVariant.Secondary,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Directions,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Directions", fontWeight = FontWeight.SemiBold)
+        }
 
         if (!seedTeaserDismissed) {
             seedTeaser?.let { teaser ->
@@ -633,213 +841,5 @@ internal fun EventBeaconDetail(
                 )
             }
         }
-
-        val checkInLabel = eventCheckInCtaLabel(checkedIn = checkedIn, pending = checkInPending)
-        val canOpenHub = eventChatState == EventHubCtaState.Open
-        val eventChatActionable =
-            eventChatState == EventHubCtaState.Open || eventChatState == EventHubCtaState.Retry
-
-        ClickButton(
-            onClick = {
-                if (checkInPending) return@ClickButton
-                viewModel.toggleBeaconCheckIn(displayBeacon.id)
-            },
-            enabled = !checkInPending,
-            modifier = Modifier.fillMaxWidth(),
-            variant = ClickButtonVariant.Secondary,
-        ) {
-            if (checkInPending) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-            } else {
-                Icon(
-                    imageVector = if (checkedIn) Icons.Filled.CheckCircle else Icons.Filled.Place,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-            }
-            Text(checkInLabel, fontWeight = FontWeight.SemiBold)
-        }
-
-        ClickButton(
-            onClick = {
-                when (eventChatState) {
-                    EventHubCtaState.Retry -> {
-                        eventChatHydrationExhausted = false
-                        eventChatRetryNonce += 1
-                    }
-                    EventHubCtaState.Open -> {
-                        val hubId = eventHubId ?: return@ClickButton
-                        ChatDeepLinkManager.setPendingEventHub(
-                            hubId = hubId,
-                            title = displayBeacon.displayDynamicTitle(),
-                            creatorId = displayBeacon.createdByUserId,
-                        )
-                        viewModel.clearSelection()
-                    }
-                    EventHubCtaState.Preparing,
-                    EventHubCtaState.RequiresRsvp,
-                    -> Unit
-                }
-            },
-            enabled = eventChatActionable,
-            modifier = Modifier.fillMaxWidth(),
-            variant = if (canOpenHub) ClickButtonVariant.Primary else ClickButtonVariant.Secondary,
-        ) {
-            when (eventChatState) {
-                EventHubCtaState.Preparing -> {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-                EventHubCtaState.Retry -> {
-                    Icon(
-                        imageVector = Icons.Filled.Refresh,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-                else -> {
-                    Icon(
-                        imageVector = Icons.Filled.Chat,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-            }
-            Text(
-                text =
-                    when (eventChatState) {
-                        EventHubCtaState.Preparing -> "Preparing event chat…"
-                        EventHubCtaState.Retry -> "Retry event chat"
-                        EventHubCtaState.Open -> "Open event chat"
-                        EventHubCtaState.RequiresRsvp -> "RSVP to join event chat"
-                    },
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-        if (eventChatState == EventHubCtaState.RequiresRsvp) {
-            Text(
-                text = "RSVP to coordinate with the event chat before you arrive.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
-            )
-        }
-
-        ClickButton(
-            onClick = {
-                openEventMapsRoute(
-                    openUri = { uriHandler.openUri(it) },
-                    latitude = displayBeacon.latitude,
-                    longitude = displayBeacon.longitude,
-                    label = displayBeacon.displayDynamicTitle(),
-                )
-            },
-            modifier = Modifier.fillMaxWidth(),
-            variant = ClickButtonVariant.Secondary,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Directions,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Join Event Route", fontWeight = FontWeight.SemiBold)
-        }
-
-        if (ended) {
-            EventEndedBanner()
-        }
-
-        if (!ended) {
-            if (currentUserSignedUp || pendingOrWaitlisted) {
-                ClickButton(
-                    onClick = {
-                        if (rsvpPending) return@ClickButton
-                        rsvpError = null
-                        viewModel.cancelRsvpToBeacon(displayBeacon.id) { ok ->
-                            if (!ok) {
-                                rsvpError = viewModel.engagementSnackbar.value
-                                    ?: "Could not update RSVP. Please try again."
-                            }
-                        }
-                    },
-                    enabled = !rsvpPending,
-                    modifier = Modifier.fillMaxWidth(),
-                    variant = ClickButtonVariant.Destructive,
-                ) {
-                    Text(
-                        text =
-                            if (rsvpPending) {
-                                "Updating…"
-                            } else if (currentUserSignedUp) {
-                                "Cancel RSVP"
-                            } else {
-                                "Withdraw request"
-                            },
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-            } else {
-                ClickButton(
-                    onClick = {
-                        if (rsvpPending) return@ClickButton
-                        rsvpError = null
-                        viewModel.rsvpToBeacon(displayBeacon.id) { ok ->
-                            if (!ok) {
-                                rsvpError = viewModel.engagementSnackbar.value
-                                    ?: "Could not update RSVP. Please try again."
-                            } else {
-                                // Rebind every source that can carry hub_id so the chat affordance
-                                // updates in the same sheet without requiring dismiss/reopen.
-                                viewModel.loadBeaconRsvp(displayBeacon.id, forceRefresh = true)
-                                viewModel.loadBeaconEngagement(displayBeacon.id, forceRefresh = true)
-                                viewModel.ensureEventBeaconDetail(displayBeacon.id, seed = displayBeacon)
-                                eventChatHydrationExhausted = false
-                                eventChatRetryNonce += 1
-                            }
-                        }
-                    },
-                    enabled = !rsvpPending,
-                    modifier = Modifier.fillMaxWidth(),
-                    variant = ClickButtonVariant.Primary,
-                ) {
-                    Text(
-                        text =
-                            if (rsvpPending) {
-                                "Updating…"
-                            } else if (listing.approvalRequired) {
-                                "Request to join"
-                            } else {
-                                "RSVP / Sign Up"
-                            },
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-            }
-
-            if (rsvpPending) {
-                Text(
-                    text = "Saving in the background...",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        EventRsvpStatusLine(
-            requestStatus = rsvpRequestStatus,
-            errorMessage = rsvpError,
-        )
     }
 }

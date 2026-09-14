@@ -107,13 +107,18 @@ fun NfcScreen(
         }
     }
 
+    var screenActive by remember { mutableStateOf(true) }
     DisposableEffect(Unit) {
+        screenActive = true
         onDispose {
+            screenActive = false
+            connectionViewModel.cancelProximityHandshake()
             proximityManager.stopAll()
         }
     }
 
     fun startTapProximityHandshake(skipLocation: Boolean) {
+        if (!screenActive) return
         connectionViewModel.startTapProximityHandshake(
             httpClient = httpClient,
             proximityManager = proximityManager,
@@ -133,6 +138,7 @@ fun NfcScreen(
             return
         }
         requestProximityHardwarePermissions { granted ->
+            if (!screenActive) return@requestProximityHardwarePermissions
             if (!granted) {
                 connectionViewModel.showHardwarePermissionsMissing()
             } else if (!AppDataManager.shouldCaptureLocationAtTap()) {

@@ -1,29 +1,27 @@
 package compose.project.click.click.events
 
-/**
- * Maps beacon check-in API failures to user-facing copy.
- * Kept pure so optimism/rollback messaging stays covered by unit tests.
- *
- * Note: HTTP 409 (not live) is handled as early check-in success in MapViewModel —
- * it must not map through this helper for rollback.
- */
+/** Maps beacon check-in API failures to stable user-facing copy. */
 internal fun beaconCheckInFailureMessage(
     httpStatus: Int?,
     fallback: String? = null,
-): String = when (httpStatus) {
-    403 -> "Move closer to the event to check in"
-    409 -> "Check-in opens when the event starts"
-    400 -> "Location required to check in"
-    else -> fallback ?: "Couldn't check in"
-}
+): String =
+    when (httpStatus) {
+        401 -> "Please sign in again to check in"
+        403 -> "Move closer to the event to check in"
+        409 -> "Check-in opens when the event starts"
+        400 -> "Location is required to check in"
+        in 500..599 -> "Event check-in is temporarily unavailable"
+        else -> fallback?.takeIf { it.isNotBlank() } ?: "Couldn't check in"
+    }
 
-/** Labeled check-in CTA copy (not icon-only). */
+/** Labeled check-in CTA copy. Pending never implies that server validation succeeded. */
 internal fun eventCheckInCtaLabel(
     checkedIn: Boolean,
     pending: Boolean,
-): String = when {
-    pending && !checkedIn -> "Checking location…"
-    pending && checkedIn -> "Updating…"
-    checkedIn -> "Checked in"
-    else -> "Check in here"
-}
+): String =
+    when {
+        pending && checkedIn -> "Updating…"
+        pending -> "Checking location…"
+        checkedIn -> "Checked in"
+        else -> "Check in here"
+    }

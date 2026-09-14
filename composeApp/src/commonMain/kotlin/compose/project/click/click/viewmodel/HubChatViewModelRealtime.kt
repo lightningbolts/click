@@ -19,10 +19,13 @@ import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.realtime.Presence
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -35,41 +38,32 @@ internal fun HubChatViewModel.launchRealtimeSession() {
     _realtimeState.value = HubRealtimeState.Loading
     sessionJob =
         viewModelScope.launch {
-            try {
-                coroutineScope {
-                    val override = realtimeSessionOverride
-                    val realtimeJob =
-                        launch {
-                            if (override != null) {
-                                override()
-                                _realtimeState.value = HubRealtimeState.Ready
-                            } else {
-                                try {
-                                    runRealtimeSession()
-                                } catch (first: CancellationException) {
-                                    throw first
-                                } catch (first: Exception) {
-                                    println(
-                                        "HubChatViewModel: realtime connect failed, retrying: " +
-                                            first.redactedRestMessage(),
-                                    )
-                                    runRealtimeSession()
-                                }
+            supervisorScope {
+                val override = realtimeSessionOverride
+                if (override == null) launch { loadInitialMessages() }
+                launch {
+                    try {
+                        if (override != null) {
+                            override()
+                            _realtimeState.value = HubRealtimeState.Ready
+                        } else {
+                            try {
+                                runRealtimeSession()
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (_: Exception) {
+                                runRealtimeSession()
                             }
                         }
-                    if (override == null) {
-                        loadInitialMessages()
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        _realtimeState.value =
+                            HubRealtimeState.Error(
+                                error.message?.takeIf { it.isNotBlank() } ?: "Couldn't connect. Retry to reconnect.",
+                            )
                     }
-                    realtimeJob.join()
                 }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _realtimeState.value =
-                    HubRealtimeState.Error(
-                        e.message?.takeIf { it.isNotBlank() } ?: "Couldn't connect to this hub",
-                    )
-                println("HubChatViewModel: session error: ${e.redactedRestMessage()}")
             }
         }
 }
@@ -350,15 +344,38 @@ internal fun HubChatViewModel.appendOptimisticOutgoing(text: String): String {
 }
 
 internal suspend fun HubChatViewModel.mergeMessages(rows: List<HubMessageRow>) {
-    val filtered =
-        rows
-            .filter { it.hubId == hubId }
-            .sortedBy { it.createdAt }
-    prefetchSenderUi(filtered.map { it.userId })
+    val filtered = rows.filter { it.hubId == hubId }.sortedBy { it.createdAt }
+    // Publish message content before optional sender enrichment and retain realtime arrivals.
     val merged = filtered.map { rowToMessageWithUser(it) }
-    val next = merged + pendingOptimisticOutgoing(merged)
-    _messages.value = next
-    persistHubMessagesToDisk(next)
+    _messages.update { current ->
+        (current.filterNot { it.message.id.startsWith("temp-") } + merged)
+            .associateBy { it.message.id }
+            .values
+            .sortedBy { it.message.timeCreated } + pendingOptimisticOutgoing(merged)
+    }
+    persistHubMessagesToDisk(_messages.value)
+    viewModelScope.launch(Dispatchers.Default) {
+        try {
+            prefetchSenderUi(filtered.map { it.userId })
+            if (participantDenied) return@launch
+            _messages.update { current ->
+                current.map { item ->
+                    val sender = senderUiCache[item.message.user_id]
+                    if (item.isSent ||
+                        sender == null
+                    ) {
+                        item
+                    } else {
+                        item.copy(user = item.user.copy(name = sender.first, image = sender.second))
+                    }
+                }
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // Generic sender labels remain usable while enrichment is unavailable.
+        }
+    }
 }
 
 internal fun HubChatViewModel.clearHubSecureMediaCache(purgePersistentCache: Boolean = false) {
@@ -388,7 +405,7 @@ internal fun HubChatViewModel.clearLocalHubState(clearDiskCache: Boolean = false
     }
 }
 
-internal suspend fun HubChatViewModel.prepareHubRealtimeAuth(forceRefresh: Boolean = true) {
+internal suspend fun HubChatViewModel.prepareHubRealtimeAuth(forceRefresh: Boolean = false) {
     if (supabase.auth.currentSessionOrNull() == null) {
         runCatching { SupabaseConfig.importStoredSessionIfSdkEmpty(tokenStorage) }
     }
@@ -408,70 +425,83 @@ internal fun ChatApiClient.HubMessageApiDto.toHubMessageRow(): HubMessageRow =
     )
 
 internal suspend fun HubChatViewModel.loadInitialMessages() {
+    _historyLoading.value = true
+    _historyError.value = null
     withContext(Dispatchers.Default) {
         try {
-            val token = requireFreshHubJwt()
-            val thread = chatApi.fetchHubThread(hubId, token)
-            thread.fold(
-                onSuccess = { snapshot ->
-                    hubParticipantIds = snapshot.participantIds.toSet()
-                    runCatching { ensureHubE2eeV2Session(hubParticipantIds) }
-                        .onFailure { error ->
-                            clearHubE2eeV2Session()
-                            println("HubChatViewModel: E2EE v2 session unavailable: ${error.redactedRestMessage()}")
+            withTimeout(20_000) {
+                val token = requireFreshHubJwt()
+                val thread = withTimeout(15_000) { chatApi.fetchHubThread(hubId, token) }
+                thread.fold(
+                    onSuccess = { snapshot ->
+                        hubParticipantIds = snapshot.participantIds.toSet()
+                        runCatching { ensureHubE2eeV2Session(hubParticipantIds) }
+                            .onFailure { error ->
+                                clearHubE2eeV2Session()
+                                println("HubChatViewModel: E2EE v2 session unavailable: ${error.redactedRestMessage()}")
+                            }
+                        if (snapshot.occupantCount > 0) {
+                            _occupantCount.value = snapshot.occupantCount.coerceAtLeast(1)
                         }
-                    if (snapshot.occupantCount > 0) {
-                        _occupantCount.value = snapshot.occupantCount.coerceAtLeast(1)
-                    }
-                    prefetchSenderUi(snapshot.participantIds)
-                    mergeMessages(snapshot.messages.map { it.toHubMessageRow() })
-                    return@withContext
-                },
-                onFailure = { err ->
-                    val msg = err.message.orEmpty()
-                    if (
-                        msg.contains("NOT_A_PARTICIPANT") ||
-                        msg.contains("EVENT_HUB_ACCESS_DENIED") ||
-                        msg.contains("HUB_EXPIRED")
-                    ) {
-                        participantDenied = true
-                        navigationEventChannel.trySend(HubChatNavigationEvent.PopBackToConnections)
-                        clearLocalHubState(clearDiskCache = true)
-                        _realtimeState.value =
-                            HubRealtimeState.Error(
-                                if (msg.contains("HUB_EXPIRED")) {
-                                    "This hub is no longer active."
-                                } else {
-                                    "Check in to this event to join the hub."
-                                },
-                            )
-                        return@withContext
-                    }
-                    println("HubChatViewModel: hub thread API failed: ${err.redactedRestMessage()}")
-                },
-            )
-            val rows =
-                supabase
-                    .from("hub_messages")
-                    .select {
-                        filter {
-                            eq("hub_id", hubId)
+                        mergeMessages(snapshot.messages.map { it.toHubMessageRow() })
+                        return@withTimeout
+                    },
+                    onFailure = { err ->
+                        val msg = err.message.orEmpty()
+                        if (
+                            msg.contains("NOT_A_PARTICIPANT") ||
+                            msg.contains("EVENT_HUB_ACCESS_DENIED") ||
+                            msg.contains("HUB_EXPIRED")
+                        ) {
+                            AppDataManager.revokeHubAccess(hubId)
+                            participantDenied = true
+                            navigationEventChannel.trySend(HubChatNavigationEvent.PopBackToConnections)
+                            clearLocalHubState(clearDiskCache = true)
+                            _realtimeState.value =
+                                HubRealtimeState.Error(
+                                    if (msg.contains("HUB_EXPIRED")) {
+                                        "This hub is no longer active."
+                                    } else {
+                                        "RSVP to this event to join the hub."
+                                    },
+                                )
+                            return@withTimeout
                         }
-                        order("created_at", Order.DESCENDING)
-                        limit(HUB_INITIAL_MESSAGE_LIMIT)
-                    }.decodeList<HubMessageRow>()
-                    .asReversed()
-            hubParticipantIds = rows.map { it.userId }.toSet() + currentUserId
-            runCatching { ensureHubE2eeV2Session(hubParticipantIds) }
-                .onFailure { error ->
-                    clearHubE2eeV2Session()
-                    println("HubChatViewModel: fallback E2EE v2 session unavailable: ${error.redactedRestMessage()}")
-                }
-            mergeMessages(rows)
+                        if (_isEventHub.value) {
+                            _historyError.value = "Couldn't load messages. Please try again."
+                            return@withTimeout
+                        }
+                        println("HubChatViewModel: hub thread API failed: ${err.redactedRestMessage()}")
+                    },
+                )
+                val rows =
+                    supabase
+                        .from("hub_messages")
+                        .select {
+                            filter {
+                                eq("hub_id", hubId)
+                            }
+                            order("created_at", Order.DESCENDING)
+                            limit(HUB_INITIAL_MESSAGE_LIMIT)
+                        }.decodeList<HubMessageRow>()
+                        .asReversed()
+                hubParticipantIds = rows.map { it.userId }.toSet() + currentUserId
+                runCatching { ensureHubE2eeV2Session(hubParticipantIds) }
+                    .onFailure { error ->
+                        clearHubE2eeV2Session()
+                        println("HubChatViewModel: fallback E2EE v2 session unavailable: ${error.redactedRestMessage()}")
+                    }
+                mergeMessages(rows)
+            }
+        } catch (_: TimeoutCancellationException) {
+            _historyError.value = "Loading messages timed out. Please try again."
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            _historyError.value = "Couldn't load messages. Please try again."
             println("HubChatViewModel: load messages failed: ${e.redactedRestMessage()}")
+        } finally {
+            _historyLoading.value = false
         }
     }
 }

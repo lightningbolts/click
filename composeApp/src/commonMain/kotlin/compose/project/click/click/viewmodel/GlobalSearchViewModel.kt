@@ -261,7 +261,7 @@ class GlobalSearchViewModel(
     private val junctionArchivedConnectionIds: () -> Set<String> = { AppDataManager.archivedConnectionIds.value },
     private val junctionHiddenConnectionIds: () -> Set<String> = { AppDataManager.hiddenConnectionIds.value },
     /** Remote enrichment debounce; cached results are emitted synchronously before this delay. */
-    private val searchDebounceMs: Long = 140L,
+    private val searchDebounceMs: Long = 200L,
     private val fetchOwnAvailabilityIntents: suspend (String) -> List<AvailabilityIntentRow> = { userId ->
         supabaseRepository.fetchActiveAvailabilityIntentsForUser(userId)
     },
@@ -300,6 +300,7 @@ class GlobalSearchViewModel(
     val visibleCategories: StateFlow<Set<SearchResultCategory>> = _visibleCategories.asStateFlow()
 
     private var searchJob: Job? = null
+    private var searchVersion = 0L
 
     fun toggleCategory(category: SearchResultCategory) {
         val cur = _visibleCategories.value
@@ -411,6 +412,7 @@ class GlobalSearchViewModel(
         query: String,
         viewerUserId: String,
     ) {
+        val requestVersion = ++searchVersion
         _searchQuery.value = query
         searchJob?.cancel()
 
@@ -514,6 +516,7 @@ class GlobalSearchViewModel(
                     emitCliqueNameMatches(lowerQuery, cliqueRows, out)
                     emitLocationBuckets(lowerQuery, activeRows, archivedRows, out)
 
+                    if (requestVersion != searchVersion) return@launch
                     if (out.isNotEmpty()) {
                         _results.value = GlobalSearchResults(items = out.toList())
                     }
@@ -532,15 +535,16 @@ class GlobalSearchViewModel(
                         } else {
                             emptyList()
                         }
+                    if (requestVersion != searchVersion) return@launch
                     out.addAll(messageHits)
-                    _results.value = GlobalSearchResults(items = out)
+                    _results.value = GlobalSearchResults(items = out.toList())
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     // Preserve instant local results on a transient remote failure.
                     println("GlobalSearch error: ${e.redactedRestMessage()}")
                 } finally {
-                    if (searchJob === thisJob) {
+                    if (requestVersion == searchVersion && searchJob === thisJob) {
                         _isSearching.value = false
                     }
                 }
@@ -548,6 +552,7 @@ class GlobalSearchViewModel(
     }
 
     fun clear() {
+        searchVersion++
         searchJob?.cancel()
         _searchQuery.value = ""
         _results.value = GlobalSearchResults()

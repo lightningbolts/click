@@ -38,6 +38,7 @@ import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
+import compose.project.click.click.ui.components.NativeChromeTransition
 import compose.project.click.click.ui.components.PlatformNativeNavigationBarSwipeReveal // pragma: allowlist secret
 import compose.project.click.click.ui.screens.* // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
@@ -102,62 +103,64 @@ internal fun AppHubChatHost(
             },
         label = "hub_chat_overlay",
     ) {
-        val activeHubArgs = lastHubChatArgs
-        val hubUserId =
-            when (val state = authViewModel.authState) {
-                is AuthState.Success -> state.userId
-                else -> ""
-            }
-        if (activeHubArgs != null && hubUserId.isNotEmpty()) {
-            val hubOverlayViewModelOwner =
-                remember(activeHubArgs.realtimeChannel, hubUserId) {
-                    object : ViewModelStoreOwner {
-                        override val viewModelStore = ViewModelStore()
+        NativeChromeTransition(if (reduceMotion) 120 else 220) {
+            val activeHubArgs = lastHubChatArgs
+            val hubUserId =
+                when (val state = authViewModel.authState) {
+                    is AuthState.Success -> state.userId
+                    else -> ""
+                }
+            if (activeHubArgs != null && hubUserId.isNotEmpty()) {
+                val hubOverlayViewModelOwner =
+                    remember(activeHubArgs.realtimeChannel, hubUserId) {
+                        object : ViewModelStoreOwner {
+                            override val viewModelStore = ViewModelStore()
+                        }
+                    }
+                DisposableEffect(hubOverlayViewModelOwner) {
+                    onDispose {
+                        // Hub chat is an overlay session, not an app-scoped destination.
+                        // Clearing its store invokes HubChatViewModel.onCleared(), which
+                        // tears down realtime presence and zeroes overlay-owned state.
+                        hubOverlayViewModelOwner.viewModelStore.clear()
                     }
                 }
-            DisposableEffect(hubOverlayViewModelOwner) {
-                onDispose {
-                    // Hub chat is an overlay session, not an app-scoped destination.
-                    // Clearing its store invokes HubChatViewModel.onCleared(), which
-                    // tears down realtime presence and zeroes overlay-owned state.
-                    hubOverlayViewModelOwner.viewModelStore.clear()
-                }
+                val hubKeyboardController = LocalSoftwareKeyboardController.current
+                val hubFocusManager = LocalFocusManager.current
+                InteractiveSwipeBackContainer(
+                    enabled = true,
+                    opaquePreviousBackground = false,
+                    externalDragOffsetPx = hubSwipeDragPx,
+                    onBehindLayersVisibleChanged = {},
+                    onBack = {
+                        hubFocusManager.clearFocus()
+                        if (!isIOS) {
+                            hubKeyboardController?.hide()
+                        }
+                        closeHubChat(NavigationTransitionMode.GestureBack)
+                    },
+                    rightToLeftPeek = hubChatRightToLeftPeek,
+                    previousContent = {},
+                    currentContent = {
+                        CompositionLocalProvider(LocalViewModelStoreOwner provides hubOverlayViewModelOwner) {
+                            HubChatScreen(
+                                args = activeHubArgs,
+                                currentUserId = hubUserId,
+                                targetMessageId = pendingHubTargetMessageId,
+                                onNavigateBack = {
+                                    closeHubChat(NavigationTransitionMode.Tap)
+                                },
+                                resolveHubGatekeeperLocation = { resolveHubGatekeeperLocationForChat() },
+                                integrateTimestampPeekWithSwipeBackContainer = true,
+                                onRegisterSwipeBackRightToLeftPeek = {
+                                    hubChatRightToLeftPeek = it
+                                },
+                                parentInteractiveBackSwipePx = hubSwipeDragPx,
+                            )
+                        }
+                    },
+                )
             }
-            val hubKeyboardController = LocalSoftwareKeyboardController.current
-            val hubFocusManager = LocalFocusManager.current
-            InteractiveSwipeBackContainer(
-                enabled = true,
-                opaquePreviousBackground = false,
-                externalDragOffsetPx = hubSwipeDragPx,
-                onBehindLayersVisibleChanged = {},
-                onBack = {
-                    hubFocusManager.clearFocus()
-                    if (!isIOS) {
-                        hubKeyboardController?.hide()
-                    }
-                    closeHubChat(NavigationTransitionMode.GestureBack)
-                },
-                rightToLeftPeek = hubChatRightToLeftPeek,
-                previousContent = {},
-                currentContent = {
-                    CompositionLocalProvider(LocalViewModelStoreOwner provides hubOverlayViewModelOwner) {
-                        HubChatScreen(
-                            args = activeHubArgs,
-                            currentUserId = hubUserId,
-                            targetMessageId = pendingHubTargetMessageId,
-                            onNavigateBack = {
-                                closeHubChat(NavigationTransitionMode.Tap)
-                            },
-                            resolveHubGatekeeperLocation = { resolveHubGatekeeperLocationForChat() },
-                            integrateTimestampPeekWithSwipeBackContainer = true,
-                            onRegisterSwipeBackRightToLeftPeek = {
-                                hubChatRightToLeftPeek = it
-                            },
-                            parentInteractiveBackSwipePx = hubSwipeDragPx,
-                        )
-                    }
-                },
-            )
         }
     }
 

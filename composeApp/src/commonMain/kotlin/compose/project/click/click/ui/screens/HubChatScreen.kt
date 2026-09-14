@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyListState
@@ -77,7 +78,6 @@ import compose.project.click.click.ui.chat.CHAT_SEARCH_FOCUS_HOLD_MS // pragma: 
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAttachmentMenuRow // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatChromeHorizontalPadding // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatComposerStrip // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatComposerStripReserve // pragma: allowlist secret
@@ -302,6 +302,8 @@ fun HubChatScreen(
     val realtimeState by viewModel.realtimeState.collectAsState()
     val channelReady = realtimeState is HubRealtimeState.Ready
     val channelError = (realtimeState as? HubRealtimeState.Error)?.message
+    val historyLoading by viewModel.historyLoading.collectAsState()
+    val historyError by viewModel.historyError.collectAsState()
 
     Box(
         modifier = Modifier.fillMaxSize(),
@@ -312,25 +314,8 @@ fun HubChatScreen(
             modifier = Modifier.fillMaxSize(),
         )
 
-        if (channelError != null && messages.isEmpty()) {
-            HubRealtimeErrorView(
-                topInset = topInset,
-                nativeClearance = hubNativeClearance,
-                message = channelError,
-                onBackPressed = onNavigateBack,
-                onRetry = { viewModel.retryRealtime() },
-                composeHeader = !nativeNavChrome,
-            )
-        } else if (!channelReady && messages.isEmpty()) {
-            ChatChannelLoadingView(
-                topInset = topInset,
-                onBackPressed = onNavigateBack,
-                composeHeader = !nativeNavChrome,
-            )
-        }
-
         AnimatedVisibility(
-            visible = channelReady || messages.isNotEmpty(),
+            visible = true,
             enter = fadeIn(animationSpec = spring(stiffness = Spring.StiffnessLow)),
             exit = fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMedium)),
         ) {
@@ -396,6 +381,26 @@ fun HubChatScreen(
                                     tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                                     modifier = Modifier.testTag("hub_settings_menu"),
                                 )
+                            }
+                        }
+                    }
+
+                    if (historyError != null || channelError != null || historyLoading) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = historyError ?: channelError ?: "Loading messages…",
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (historyError != null || channelError != null) {
+                                TextButton(onClick = {
+                                    if (historyError != null) viewModel.retryHistory()
+                                    if (channelError != null) viewModel.retryRealtime()
+                                }) { Text("Retry") }
                             }
                         }
                     }

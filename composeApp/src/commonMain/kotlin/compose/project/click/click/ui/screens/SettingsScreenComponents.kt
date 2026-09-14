@@ -27,7 +27,6 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.WarningAmber
@@ -38,6 +37,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -48,7 +48,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.mohamedrejeb.calf.ui.toggle.AdaptiveSwitch
@@ -57,7 +56,6 @@ import compose.project.click.click.data.models.LocationPreferences // pragma: al
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickButtonVariant // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickContentCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickInsetDivider // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickListRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickNavRow // pragma: allowlist secret
@@ -293,109 +291,56 @@ internal fun SettingsProfileHeader(
             }
     val email = user?.email?.trim()?.takeIf { it.isNotEmpty() }
 
-    ClickContentCard(
-        modifier = Modifier.fillMaxWidth(),
-        showBorder = false,
-        contentPadding = 12.dp,
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+        Box(
+            modifier =
+                Modifier
+                    .size(60.dp)
+                    .clip(CircleShape)
+                .background(PrimaryBlue.copy(alpha = 0.15f))
+                .clickable(enabled = !avatarUploading, onClick = onChangePhoto),
+                contentAlignment = Alignment.Center,
         ) {
-            Box(modifier = Modifier.size(96.dp)) {
-                Box(
-                    modifier =
-                        Modifier
-                            .align(Alignment.Center)
-                            .size(88.dp)
-                            .clip(CircleShape)
-                            .clickable(enabled = !avatarUploading, onClick = onChangePhoto),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (!avatarUrl.isNullOrBlank()) {
-                        AsyncImage(
-                            model = avatarUrl,
-                            contentDescription = "Profile photo",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    } else {
-                        Box(
-                            modifier =
-                                Modifier
-                                    .fillMaxSize()
-                                    .background(PrimaryBlue.copy(alpha = 0.45f)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = profileAvatarInitials(user),
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimary,
-                            )
-                        }
-                    }
-                    if (avatarUploading) {
-                        Box(
-                            modifier =
-                                Modifier
-                                    .matchParentSize()
-                                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(28.dp),
-                                strokeWidth = 2.dp,
-                            )
-                        }
-                    }
-                }
-                Box(
-                    modifier =
-                        Modifier
-                            .align(Alignment.BottomEnd)
-                            .size(30.dp)
-                            .clip(CircleShape)
-                            .background(PrimaryBlue)
-                            .clickable(enabled = !avatarUploading, onClick = onChangePhoto),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        Icons.Default.PhotoCamera,
-                        contentDescription = "Change profile photo",
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
-            }
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(
-                    text = displayName,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center,
+            if (!avatarUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = avatarUrl,
+                    contentDescription = "Change profile photo",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
                 )
-                if (email != null) {
-                    Text(
-                        text = "@${email.substringBefore("@")}",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                    )
-                }
+            } else {
+                Text(
+                    text = profileAvatarInitials(user),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
             }
-            ClickButton(
-                onClick = onEditProfile,
-                modifier = Modifier.fillMaxWidth(),
-                variant = ClickButtonVariant.Secondary,
-            ) {
-                Text("Edit Profile", fontWeight = FontWeight.SemiBold)
+            if (avatarUploading) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
             }
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = displayName,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+            if (email != null) {
+                Text(
+                    text = "@${email.substringBefore("@")}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
+            TextButton(onClick = onEditProfile) { Text("Edit profile") }
         }
     }
 }
