@@ -22,6 +22,19 @@ class EventHubAccessTest {
     }
 
     @Test
+    fun eventCreatorAllowedWhenHubCreatorDiffers() {
+        assertTrue(
+            evaluateEventHubAccess(
+                userId = "event_host",
+                hubCreatorId = "system",
+                eventCreatorId = "event_host",
+                hasActiveCheckIn = false,
+                hasRsvp = false,
+            ),
+        )
+    }
+
+    @Test
     fun rsvpGuestAllowedBeforeCheckIn() {
         assertTrue(
             evaluateEventHubAccess(
