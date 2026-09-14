@@ -27,6 +27,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.Before
@@ -515,6 +516,57 @@ class GlobalSearchViewModelTest {
                     vm.results.value.items
                         .any { it is SearchResult.ActiveConnection },
                 )
+            } finally {
+                Dispatchers.resetMain()
+            }
+        }
+
+    @Test
+    fun lateRemoteResponseCannotReplaceANewerQueryOrClear() =
+        runTest {
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+            try {
+                val oldResponse = kotlinx.coroutines.CompletableDeferred<List<ConversationSearchHit>>()
+                val oldStarted = kotlinx.coroutines.CompletableDeferred<Unit>()
+                val repo =
+                    FakeChatRepository(
+                        onFetchDirectUserChatsWithDetails = { emptyList() },
+                        onFetchArchivedUserChatsWithDetails = { emptyList() },
+                        onFetchGroupUserChatsWithDetails = { emptyList() },
+                        onSearchConversationHits = { query ->
+                            if (query == "old") {
+                                oldStarted.complete(Unit)
+                                kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { oldResponse.await() }
+                            } else {
+                                emptyList()
+                            }
+                        },
+                    )
+                val vm = newVm(repo)
+                vm.search("old", VIEWER)
+                runCurrent()
+                assertTrue(oldStarted.isCompleted)
+                vm.search("new", VIEWER)
+                runCurrent()
+                vm.clear()
+                oldResponse.complete(
+                    listOf(
+                        ConversationSearchHit(
+                            messageId = "stale",
+                            chatId = "chat",
+                            conversationId = "conn",
+                            connectionId = "conn",
+                            senderId = PEER_A,
+                            timestamp = 1L,
+                            snippet = "old response",
+                            chatName = "Peer",
+                        ),
+                    ),
+                )
+                advanceUntilIdle()
+                assertEquals("", vm.searchQuery.value)
+                assertTrue(vm.results.value.isEmpty)
+                assertFalse(vm.isSearching.value)
             } finally {
                 Dispatchers.resetMain()
             }
