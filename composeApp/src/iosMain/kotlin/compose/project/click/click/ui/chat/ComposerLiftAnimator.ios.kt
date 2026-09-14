@@ -25,8 +25,12 @@ import kotlin.time.TimeSource
 
 /**
  * Runs the keyboard's UIView animation on a proxy that lives in the key window (so presentation
- * sampling works), then copies presentation ty into Compose each tick. A detached proxy jumps to
- * the end value immediately — that was the teleport bug.
+ * sampling works), then copies presentation ty into Compose each display-frame interval. A
+ * detached proxy jumps to the end value immediately — that was the teleport bug.
+ *
+ * Sampling at ~120 Hz is intentional. The previous 1 ms polling loop woke the main dispatcher
+ * hundreds of times during one keyboard animation even though UIKit cannot present that many
+ * frames, which made the first keyboard open compete with chat rendering work.
  */
 @OptIn(ExperimentalForeignApi::class)
 internal actual class ComposerLiftAnimator actual constructor() {
@@ -102,7 +106,7 @@ internal actual class ComposerLiftAnimator actual constructor() {
                 if (presentedPoints != null) {
                     liftPxState.floatValue = (presentedPoints * scale).toFloat()
                 }
-                delay(1L)
+                delay(PRESENTATION_SAMPLE_INTERVAL_MS)
             }
             liftPxState.floatValue = targetPx
         }
@@ -146,3 +150,5 @@ private fun uiKitKeyboardAnimationOptions(curve: Int): ULong {
     }
     return curveOption or UIViewAnimationOptionBeginFromCurrentState
 }
+
+private const val PRESENTATION_SAMPLE_INTERVAL_MS = 8L
