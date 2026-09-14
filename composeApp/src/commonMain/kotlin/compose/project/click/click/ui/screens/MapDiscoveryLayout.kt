@@ -214,8 +214,7 @@ internal fun EventsReopenChip(
                             }
                         },
                     )
-                }
-                .clickable(enabled = enabled, onClick = onClick)
+                }.clickable(enabled = enabled, onClick = onClick)
                 .padding(top = 7.dp, bottom = 10.dp, start = 16.dp, end = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
