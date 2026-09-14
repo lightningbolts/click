@@ -61,6 +61,7 @@ import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
 import compose.project.click.click.ui.utils.displayDynamicTitle // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.applyBeaconHubId // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
