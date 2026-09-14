@@ -70,7 +70,7 @@ object ChatDeepLinkManager {
         return value
     }
 
-    /** Drops pending navigation after check-out, expiry, removal, or a server access revocation. */
+    /** Drops pending navigation after RSVP cancellation, expiry, removal, or a server access revocation. */
     fun clearPendingHub(hubId: String) {
         val trimmed = hubId.trim()
         if (trimmed.isEmpty()) return

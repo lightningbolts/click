@@ -656,6 +656,19 @@ internal fun MapViewModel.cancelRsvpToBeaconImpl(
                             )
                     )
                 }
+                val beacon =
+                    _mapBeacons.value.firstOrNull { it.id == id }
+                        ?: (_selection.value as? MapSelection.BeaconSelected)?.beacon?.takeIf { it.id == id }
+                        ?: AppDataManager.prefetchedMapBeacons.value.firstOrNull { it.id == id }
+                val hubId = beacon?.hubId ?: _beaconEngagementById.value[id]?.hubId
+                val cachedHostId =
+                    AppDataManager.activeHubs.value
+                        .firstOrNull { it.hubId == hubId }
+                        ?.creatorId
+                val hostId = beacon?.createdByUserId ?: cachedHostId
+                if (hubId != null && (currentUserId == null || hostId != currentUserId)) {
+                    AppDataManager.revokeHubAccess(hubId)
+                }
                 _beaconRsvpPendingIds.update { it - id }
                 invalidateBeaconAttendeeDirectory(id)
                 if (_beaconEngagementById.value[id]?.checkedIn == true) {

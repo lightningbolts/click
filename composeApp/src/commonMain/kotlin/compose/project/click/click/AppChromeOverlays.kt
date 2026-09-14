@@ -86,6 +86,7 @@ internal fun BoxScope.AppSyncStatusCard(
 
 @Composable
 internal fun BoxScope.AppBottomChrome(
+    openHub: (String, String, String?, Boolean) -> Unit,
     currentRoute: String,
     hideMainBottomBar: Boolean,
     navigateTo: (String) -> Unit,
@@ -162,18 +163,12 @@ internal fun BoxScope.AppBottomChrome(
                     showUnifiedSearchSheet = false
                     if (target.isHub && !target.hubId.isNullOrBlank()) {
                         pendingHubTargetMessageId = target.targetMessageId
-                        hubChatArgs =
-                            HubChatNavArgs(
-                                hubId = target.hubId,
-                                realtimeChannel =
-                                    target.hubRealtimeChannel
-                                        ?.takeIf { it.isNotBlank() }
-                                        ?: "hub:${target.hubId}",
-                                hubTitle = target.hubTitle?.ifBlank { "Hub" } ?: "Hub",
-                                creatorId = target.hubCreatorId,
-                                hubCategory = target.hubCategory,
-                                isEventHub = isEventLinkedHubCategory(target.hubCategory),
-                            )
+                        openHub(
+                            target.hubId,
+                            target.hubTitle?.ifBlank { "Hub" } ?: "Hub",
+                            target.hubCreatorId,
+                            isEventLinkedHubCategory(target.hubCategory),
+                        )
                     } else {
                         pendingChatId = target.connectionId
                         pendingTargetMessageId = target.targetMessageId

@@ -89,6 +89,7 @@ internal fun AppPrimaryTabsHost(
     navigateTo: (String) -> Unit,
     navigatePrimaryRouteBackHome: (NavigationTransitionMode) -> Boolean,
     launchCommunityHubJoin: (String, String?) -> Unit,
+    openHub: (String, String, String?, Boolean) -> Unit,
     openConnectionDisposableRoll: (String?) -> Unit,
     openChatDisposableRoll: (String?) -> Unit,
     transitionModeState: MutableState<NavigationTransitionMode>,
@@ -263,15 +264,7 @@ internal fun AppPrimaryTabsHost(
                                     )
                                 },
                                 onHubSelected = { hub ->
-                                    hubChatArgs =
-                                        HubChatNavArgs(
-                                            hubId = hub.hubId,
-                                            realtimeChannel = hub.realtimeChannel,
-                                            hubTitle = hub.name,
-                                            creatorId = hub.creatorId,
-                                            hubCategory = hub.category,
-                                            isEventHub = hub.opensAsEventHub(),
-                                        )
+                                    openHub(hub.hubId, hub.name, hub.creatorId, hub.opensAsEventHub())
                                 },
                                 viewModel = chatViewModel,
                                 verifiedCliqueProximityAutofill = verifiedCliqueProximityAutofillIntent,
