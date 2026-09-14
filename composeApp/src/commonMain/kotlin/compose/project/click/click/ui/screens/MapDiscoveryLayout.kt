@@ -9,7 +9,6 @@ package compose.project.click.click.ui.screens // pragma: allowlist secret
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,9 +49,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -68,7 +64,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
@@ -89,17 +84,13 @@ import compose.project.click.click.ui.components.ClickButton // pragma: allowlis
 import compose.project.click.click.ui.components.ClickButtonVariant // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickChip // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickLogoPulse // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickPlatformSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSearchField // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.DiscoverySortSegmentBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
-import compose.project.click.click.ui.components.LocalSheetOnDismissRequest // pragma: allowlist secret
-import compose.project.click.click.ui.components.ProvideSheetSwipeDismiss // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberCardVisual // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding // pragma: allowlist secret
-import compose.project.click.click.ui.components.rememberSheetScrollAtTop // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetImePadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetPageBackground // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
@@ -186,35 +177,7 @@ internal fun EventsReopenChip(
                 .clip(shape)
                 .border(clickBorderWidth(), clickBorderColor(), shape)
                 .background(clickCardSurface())
-                .pointerInput(enabled) {
-                    if (!enabled) return@pointerInput
-                    val openThresholdPx = 28.dp.toPx()
-                    var accumulatedDrag = 0f
-                    var opened = false
-                    detectVerticalDragGestures(
-                        onDragStart = {
-                            accumulatedDrag = 0f
-                            opened = false
-                        },
-                        onDragCancel = {
-                            accumulatedDrag = 0f
-                            opened = false
-                        },
-                        onDragEnd = {
-                            accumulatedDrag = 0f
-                            opened = false
-                        },
-                        onVerticalDrag = { change, dragAmount ->
-                            accumulatedDrag += dragAmount
-                            if (!opened && accumulatedDrag <= -openThresholdPx) {
-                                opened = true
-                                change.consume()
-                                PlatformHapticsPolicy.lightImpact()
-                                onClick()
-                            }
-                        },
-                    )
-                }.clickable(enabled = enabled, onClick = onClick)
+                .clickable(enabled = enabled, onClick = onClick)
                 .padding(top = 7.dp, bottom = 10.dp, start = 16.dp, end = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -267,7 +230,7 @@ internal fun EventsReopenChip(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 @Suppress("UNUSED_PARAMETER")
-internal fun EventsDiscoveryFullScreen(
+internal fun EventsDiscoveryContent(
     feedItems: List<DiscoveryFeedItem>,
     discoveryFeedPending: Boolean,
     discoveryFeedRefreshing: Boolean,
@@ -275,9 +238,9 @@ internal fun EventsDiscoveryFullScreen(
     layerFilters: Set<MapLayerFilter>,
     onToggleLayerFilter: (MapLayerFilter) -> Unit,
     viewModel: MapViewModel,
-    onBack: () -> Unit,
+    expanded: Boolean,
     onBeaconClick: (MapBeacon, distanceMeters: Double?) -> Unit,
-    interactiveBackSwipeOffsetPx: androidx.compose.runtime.MutableFloatState? = null,
+    modifier: Modifier = Modifier,
 ) {
     var sortMode by remember { mutableIntStateOf(0) }
     val discoverySortMode = if (sortMode == 0) DiscoverySortMode.Distance else DiscoverySortMode.Recent
@@ -285,12 +248,12 @@ internal fun EventsDiscoveryFullScreen(
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val listState = rememberLazyListState()
-    val scrollAtTop = rememberSheetScrollAtTop(listState)
 
-    val dismissNearby: () -> Unit = {
-        keyboardController?.hide()
-        focusManager.clearFocus(force = true)
-        onBack()
+    LaunchedEffect(expanded) {
+        if (!expanded) {
+            keyboardController?.hide()
+            focusManager.clearFocus(force = true)
+        }
     }
 
     // The outer Map container can still close this state during route changes. Always tear down
@@ -341,207 +304,165 @@ internal fun EventsDiscoveryFullScreen(
         remember(discoverySections) {
             discoverySections.sumOf { it.items.size }
         }
-    val pullRefreshState = rememberPullToRefreshState()
-    val pullFraction = pullRefreshState.distanceFraction
-    var crossedRefreshThreshold by remember { mutableStateOf(false) }
-    LaunchedEffect(pullFraction, discoveryFeedRefreshing) {
-        val atThreshold = pullFraction >= 1f
-        if (atThreshold && !crossedRefreshThreshold && !discoveryFeedRefreshing) {
-            PlatformHapticsPolicy.lightImpact()
-        }
-        crossedRefreshThreshold = atThreshold
-    }
     val listBottomPad = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 16.dp
 
-    ClickPlatformSheet(
-        onDismissRequest = dismissNearby,
-        expandable = true,
-        useUiKitScrollHost = true,
-        uiKitFillViewport = true,
-        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+    Column(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .background(sheetPageBackground())
+                .sheetImePadding()
+                .padding(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = ClickSheetDefaults.ContentTopPaddingUnderGrabber,
+                ),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        ProvideSheetSwipeDismiss(
-            onDismissRequest = LocalSheetOnDismissRequest.current,
-            scrollAtTop = scrollAtTop,
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight()
-                        .background(sheetPageBackground())
-                        .sheetImePadding()
-                        .padding(
-                            start = 16.dp,
-                            end = 16.dp,
-                            top = ClickSheetDefaults.ContentTopPaddingUnderGrabber,
-                        ),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Nearby",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text =
-                                when (discoveryItemCount) {
-                                    0 -> "Explore what's around you"
-                                    1 -> "1 place nearby"
-                                    else -> "$discoveryItemCount places nearby"
-                                },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            PlatformHapticsPolicy.lightImpact()
-                            onRefreshDiscovery()
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Nearby",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text =
+                        when (discoveryItemCount) {
+                            0 -> "Explore what's around you"
+                            1 -> "1 place nearby"
+                            else -> "$discoveryItemCount places nearby"
                         },
-                        enabled = !discoveryFeedRefreshing,
-                    ) {
-                        if (discoveryFeedRefreshing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            Icon(Icons.Filled.Refresh, contentDescription = "Refresh nearby")
-                        }
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(
+                onClick = {
+                    PlatformHapticsPolicy.lightImpact()
+                    onRefreshDiscovery()
+                },
+                enabled = !discoveryFeedRefreshing,
+            ) {
+                if (discoveryFeedRefreshing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Icon(Icons.Filled.Refresh, contentDescription = "Refresh nearby")
+                }
+            }
+        }
+
+        EventsSheetSearchField(
+            query = eventsQuery,
+            onQueryChange = { eventsQuery = it },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        DiscoverySortSegmentBar(
+            selectedTabIndex = sortMode,
+            onTabSelected = { sortMode = it },
+        )
+        EventsSheetLayerChips(
+            layerFilters = layerFilters,
+            onToggleLayerFilter = onToggleLayerFilter,
+        )
+
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            contentPadding =
+                androidx.compose.foundation.layout.PaddingValues(
+                    top = 4.dp,
+                    bottom = listBottomPad,
+                ),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            when {
+                discoveryItemCount == 0 && discoveryFeedPending -> {
+                    item(key = "events_loading") {
+                        DiscoveryFeedLoadingPulse(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 32.dp),
+                        )
                     }
                 }
-
-                EventsSheetSearchField(
-                    query = eventsQuery,
-                    onQueryChange = { eventsQuery = it },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                DiscoverySortSegmentBar(
-                    selectedTabIndex = sortMode,
-                    onTabSelected = { sortMode = it },
-                )
-                EventsSheetLayerChips(
-                    layerFilters = layerFilters,
-                    onToggleLayerFilter = onToggleLayerFilter,
-                )
-
-                PullToRefreshBox(
-                    isRefreshing = discoveryFeedRefreshing,
-                    onRefresh = {
-                        PlatformHapticsPolicy.successNotification()
-                        onRefreshDiscovery()
-                    },
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    state = pullRefreshState,
-                    indicator = {
-                        PullToRefreshDefaults.Indicator(
-                            state = pullRefreshState,
-                            isRefreshing = discoveryFeedRefreshing,
-                            modifier = Modifier.align(Alignment.TopCenter),
-                            containerColor = MaterialTheme.colorScheme.surface,
-                            color = MaterialTheme.colorScheme.primary,
+                discoveryItemCount == 0 -> {
+                    item(key = "events_empty") {
+                        AppEmptyState(
+                            icon = Icons.Default.Place,
+                            title = "Nothing nearby",
+                            body = "Drop a soundtrack or event, or grant location so we can load what's around you.",
+                            modifier = Modifier.fillMaxWidth(),
                         )
-                    },
-                ) {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding =
-                            androidx.compose.foundation.layout.PaddingValues(
-                                top = 4.dp,
-                                bottom = listBottomPad,
-                            ),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        when {
-                            discoveryItemCount == 0 && discoveryFeedPending -> {
-                                item(key = "events_loading") {
-                                    DiscoveryFeedLoadingPulse(
-                                        modifier =
-                                            Modifier
-                                                .fillMaxWidth()
-                                                .padding(vertical = 32.dp),
-                                    )
+                    }
+                }
+                else -> {
+                    discoverySections.forEach { section ->
+                        item(key = "section-${section.title}") {
+                            Text(
+                                text = section.title,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 4.dp, bottom = 2.dp),
+                            )
+                        }
+                        items(
+                            items = section.items,
+                            key = { it.key },
+                            contentType = { item ->
+                                when (item) {
+                                    is DiscoveryFeedItem.Beacon -> "beacon-${item.beacon.kind}"
+                                    is DiscoveryFeedItem.Hub -> "hub"
+                                    is DiscoveryFeedItem.Connection -> "conn"
                                 }
-                            }
-                            discoveryItemCount == 0 -> {
-                                item(key = "events_empty") {
-                                    AppEmptyState(
-                                        icon = Icons.Default.Place,
-                                        title = "Nothing nearby",
-                                        body = "Drop a soundtrack or event, or grant location so we can load what's around you.",
-                                        modifier = Modifier.fillMaxWidth(),
-                                    )
-                                }
-                            }
-                            else -> {
-                                discoverySections.forEach { section ->
-                                    item(key = "section-${section.title}") {
-                                        Text(
-                                            text = section.title,
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier =
-                                                Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(top = 4.dp, bottom = 2.dp),
-                                        )
-                                    }
-                                    items(
-                                        items = section.items,
-                                        key = { it.key },
-                                        contentType = { item ->
-                                            when (item) {
-                                                is DiscoveryFeedItem.Beacon -> "beacon-${item.beacon.kind}"
-                                                is DiscoveryFeedItem.Hub -> "hub"
-                                                is DiscoveryFeedItem.Connection -> "conn"
-                                            }
+                            },
+                        ) { item ->
+                            when (item) {
+                                is DiscoveryFeedItem.Beacon -> {
+                                    DiscoveryEventCard(
+                                        item = item,
+                                        viewModel = viewModel,
+                                        onOpen = {
+                                            keyboardController?.hide()
+                                            focusManager.clearFocus(force = true)
+                                            onBeaconClick(
+                                                item.beacon,
+                                                item.distanceM.takeIf {
+                                                    it.isFinite() && it < Double.MAX_VALUE
+                                                },
+                                            )
                                         },
-                                    ) { item ->
-                                        when (item) {
-                                            is DiscoveryFeedItem.Beacon -> {
-                                                DiscoveryEventCard(
-                                                    item = item,
-                                                    viewModel = viewModel,
-                                                    onOpen = {
-                                                        keyboardController?.hide()
-                                                        focusManager.clearFocus(force = true)
-                                                        onBeaconClick(
-                                                            item.beacon,
-                                                            item.distanceM.takeIf {
-                                                                it.isFinite() && it < Double.MAX_VALUE
-                                                            },
-                                                        )
-                                                    },
-                                                )
-                                            }
-                                            is DiscoveryFeedItem.Hub -> {
-                                                DiscoveryHubCard(item = item)
-                                            }
-                                            is DiscoveryFeedItem.Connection -> Unit
-                                        }
-                                    }
+                                    )
                                 }
-                                if (discoveryItemCount == 1) {
-                                    item(key = "events_only_one") {
-                                        AppEmptyState(
-                                            icon = Icons.Default.Place,
-                                            title = "Only 1 beacon nearby",
-                                            body = "Drop your own!",
-                                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                                        )
-                                    }
+                                is DiscoveryFeedItem.Hub -> {
+                                    DiscoveryHubCard(item = item)
                                 }
+                                is DiscoveryFeedItem.Connection -> Unit
                             }
+                        }
+                    }
+                    if (discoveryItemCount == 1) {
+                        item(key = "events_only_one") {
+                            AppEmptyState(
+                                icon = Icons.Default.Place,
+                                title = "Only 1 beacon nearby",
+                                body = "Drop your own!",
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            )
                         }
                     }
                 }
