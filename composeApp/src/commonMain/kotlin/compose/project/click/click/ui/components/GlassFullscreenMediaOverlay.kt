@@ -49,10 +49,12 @@ import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowl
  * which hid the liquid-glass close control and left a header-height sliver of the chat
  * underneath. Click Drops uses the same in-tree cover + exclusive overlay bind.
  *
- * iOS close and trailing actions retarget the existing overlay [ApplyOverlayMediaChrome]
- * (same glass controls as chat). A second exclusive bind with an empty title rebuilt the
- * bar and rematerialized Liquid Glass. Android uses [MediaLightboxTopChrome]. Cover is not
- * used: covering then releasing hid the bar for a frame.
+ * iOS close and trailing actions retarget the existing overlay through
+ * [ApplyStableOverlayMediaChrome]. When a chat/hub route already owns native chrome, the media
+ * overlay changes the meaning of those exact UIKit buttons instead of rebinding the bar. The
+ * route chrome is restored as soon as the exit transition starts, so close -> back and media
+ * actions -> chat actions morph during the fade rather than flickering after unmount. Android
+ * continues to use [MediaLightboxTopChrome].
  */
 @Composable
 fun GlassFullscreenMediaOverlay(
@@ -99,8 +101,8 @@ fun GlassFullscreenMediaOverlay(
             isIOS = LocalPlatformStyle.current.isIOS,
         )
     CompositionLocalProvider(LocalNativeChromeActive provides true) {
-        ApplyOverlayMediaChrome(
-            active = true,
+        ApplyStableOverlayMediaChrome(
+            active = transitionState.targetState,
             onClose = ::requestDismiss,
             trailing = nativeTrailingActions,
         )
@@ -230,6 +232,9 @@ internal fun MediaLightboxSaveShareTrailing(
 ) {
     TextButton(onClick = onSave) {
         Text("Save", color = Color.White)
+    }
+    TextButton(onClick = onShare) {
+        Text("Share", color = Color.White)
     }
     TextButton(onClick = onShare) {
         Text("Share", color = Color.White)
