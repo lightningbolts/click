@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.Foundation.NSProcessInfo
@@ -70,9 +71,11 @@ internal actual fun ApplyStableOverlayMediaChrome(
     val close by rememberUpdatedState(onClose)
     val latestTrailing by rememberUpdatedState(trailing)
     val layer = IosNavChrome.overlay
+    val snapshotHolder = remember(layer) { arrayOfNulls<StableOverlayChromeSnapshot>(1) }
 
     DisposableEffect(layer) {
         val snapshot = layer.captureStableOverlayChrome()
+        snapshotHolder[0] = snapshot
         layer.logStableChromeIdentity("conversation-before-media")
         layer.installStableMediaChrome(
             onClose = { close() },
@@ -82,18 +85,23 @@ internal actual fun ApplyStableOverlayMediaChrome(
         layer.logStableChromeIdentity("media-installed")
         onDispose {
             layer.restoreStableOverlayChrome(snapshot)
+            snapshotHolder[0] = null
             layer.logStableChromeIdentity("conversation-restored")
         }
     }
 
     // Handler closures and chat presence can change while the lightbox is open. Refresh the media
     // meaning after composition without replacing the UIView instances, material views, owner
-    // token, or title container. This also wins over a same-frame route refresh from the chat.
+    // token, or title container. If the underlying chat rebinds its route actions in the same
+    // composition, this step deterministically reapplies media semantics before the frame renders.
     SideEffect {
-        layer.refreshStableMediaChrome(
-            onClose = { close() },
-            trailing = latestTrailing,
-        )
+        snapshotHolder[0]?.let { snapshot ->
+            layer.refreshStableMediaChrome(
+                onClose = { close() },
+                trailing = latestTrailing,
+                snapshot = snapshot,
+            )
+        }
     }
 }
 
@@ -161,6 +169,7 @@ private fun IosHostNavBarLayer.installStableMediaChrome(
 private fun IosHostNavBarLayer.refreshStableMediaChrome(
     onClose: () -> Unit,
     trailing: List<NativeChromeAction>,
+    snapshot: StableOverlayChromeSnapshot,
 ) {
     backTarget.handler = onClose
     backButton.hidden = false
@@ -168,11 +177,18 @@ private fun IosHostNavBarLayer.refreshStableMediaChrome(
         morphLeadingChromeSymbol("xmark", "Close")
     }
 
-    val currentVisible =
+    val actions = trailing.take(actionButtons.size)
+    var currentVisible =
         trailingStack.arrangedSubviews
             .mapNotNull { it as? UIButton }
             .filter { !it.hidden }
-    val actions = trailing.take(actionButtons.size)
+    if (currentVisible.size != actions.size) {
+        configureStableMediaTrailing(trailing, snapshot)
+        currentVisible =
+            trailingStack.arrangedSubviews
+                .mapNotNull { it as? UIButton }
+                .filter { !it.hidden }
+    }
     if (currentVisible.size != actions.size) return
 
     currentVisible.forEachIndexed { index, button ->
@@ -197,6 +213,7 @@ private fun IosHostNavBarLayer.configureStableMediaTrailing(
     snapshot: StableOverlayChromeSnapshot,
 ) {
     val actions = trailing.take(actionButtons.size)
+    val currentlyArranged = trailingStack.arrangedSubviews.map { it as UIView }
     val baseVisibleButtons =
         snapshot.arrangedSubviews
             .mapNotNull { it as? UIButton }
@@ -209,7 +226,7 @@ private fun IosHostNavBarLayer.configureStableMediaTrailing(
         actionButtons
             .filter { candidate ->
                 reusableRightAnchors.none { it === candidate } &&
-                    snapshot.arrangedSubviews.none { it === candidate }
+                    baseVisibleButtons.none { it === candidate }
             }.take(extraCount)
 
     // Extra media controls are inserted to the LEFT of the route-owned controls. The route's
@@ -218,8 +235,10 @@ private fun IosHostNavBarLayer.configureStableMediaTrailing(
     // UIStackView collapses hidden arranged views, so they cost no geometry but can be reused on the
     // next media transition without detaching/re-attaching anything.
     extraButtons.asReversed().forEach { button ->
-        button.hidden = true
-        trailingStack.insertArrangedSubview(button, atIndex = 0uL)
+        if (currentlyArranged.none { it === button }) {
+            button.hidden = true
+            trailingStack.insertArrangedSubview(button, atIndex = 0uL)
+        }
     }
 
     val mediaButtons = extraButtons + reusableRightAnchors
