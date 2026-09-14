@@ -24,10 +24,10 @@ class EventChatResolverTest {
     }
 
     @Test
-    fun rsvpDenialIsTerminalRequiresRsvp() {
+    fun rsvpDenialIsTerminalRequiresRsvpEvenWhenOnlyHumanMessageIsSurfaced() {
         val state =
             classifyEventChatResolveFailure(
-                ClickWebRequestException(403, "EVENT_HUB_ACCESS_DENIED"),
+                ClickWebRequestException(403, "RSVP to this event to join its chat."),
             )
 
         assertEquals(EventChatOpenState.RequiresRsvp, state)
@@ -37,7 +37,7 @@ class EventChatResolverTest {
     fun expiredHubIsTerminalExpired() {
         val state =
             classifyEventChatResolveFailure(
-                ClickWebRequestException(410, "HUB_EXPIRED"),
+                ClickWebRequestException(410, "This hub is no longer active."),
             )
 
         assertEquals(EventChatOpenState.Expired, state)
@@ -54,10 +54,10 @@ class EventChatResolverTest {
     }
 
     @Test
-    fun missingHubRelationIsExplicitRetryNotPreparingLoop() {
+    fun missingHubRelationIsExplicitRetryNotPreparingLoopEvenWithoutMachineCodeInMessage() {
         val state =
             classifyEventChatResolveFailure(
-                ClickWebRequestException(409, "EVENT_HUB_NOT_READY"),
+                ClickWebRequestException(409, "This event chat is not ready yet."),
             )
 
         val retry = assertIs<EventChatOpenState.RetryableError>(state)
