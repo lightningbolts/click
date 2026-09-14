@@ -20,6 +20,7 @@ import compose.project.click.click.events.normalizeEventRsvpErrorMessage // prag
 import compose.project.click.click.getPlatform // pragma: allowlist secret
 import compose.project.click.click.ui.utils.displayDynamicTitle // pragma: allowlist secret
 import io.github.jan.supabase.auth.auth
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -565,57 +566,68 @@ internal fun MapViewModel.rsvpToBeaconImpl(
     val previous = _beaconRsvpById.value[id]
     _beaconRsvpPendingIds.update { it + id }
     applyOptimisticRsvp(id, signedUp = true)
-    PlatformHapticsPolicy.successNotification()
     viewModelScope.launch {
-        if (!ensureClickWebAuthReady()) {
-            restoreRsvpSnapshot(id, previous)
-            _beaconRsvpPendingIds.update { it - id }
-            _engagementSnackbar.value = "Sign-in still loading — try RSVP again"
-            onFinished(false)
-            return@launch
-        }
-        val cachedLoc = AppDataManager.lastKnownDeviceLocation.value
-        mapBeaconRepository
-            .rsvpBeacon(
-                beaconId = id,
-                latitude = cachedLoc?.first,
-                longitude = cachedLoc?.second,
-            ).fold(
-                onSuccess = { attendee ->
-                    updateBeaconRsvpCache { current ->
-                        val prev = current[id]
-                        val localAttendee = currentUserAsAttendee()
-                        val confirmedAttendee =
-                            attendee.copy(
-                                name = attendee.name.takeIf { it.isNotBlank() } ?: localAttendee?.name ?: "You",
-                                avatarUrl = localAttendee?.avatarUrl ?: attendee.avatarUrl,
-                            )
-                        val mergedAttendees =
-                            (
-                                (prev?.attendees.orEmpty())
-                                    .filterNot { it.userId == confirmedAttendee.userId } + confirmedAttendee
-                            ).distinctBy { it.userId }
-                        current + (
-                            id to
-                                BeaconRsvpCacheEntry(
-                                    attendees = mergedAttendees,
-                                    currentUserSignedUp = true,
+        var confirmed = false
+        try {
+            if (!ensureClickWebAuthReady()) {
+                _engagementSnackbar.value = "Sign-in still loading — try RSVP again"
+
+                return@launch
+            }
+            val cachedLoc = AppDataManager.lastKnownDeviceLocation.value
+            mapBeaconRepository
+                .rsvpBeacon(
+                    beaconId = id,
+                    latitude = cachedLoc?.first,
+                    longitude = cachedLoc?.second,
+                ).fold(
+                    onSuccess = { attendee ->
+                        confirmed = true
+                        PlatformHapticsPolicy.successNotification()
+                        updateBeaconRsvpCache { current ->
+                            val prev = current[id]
+                            val localAttendee = currentUserAsAttendee()
+                            val confirmedAttendee =
+                                attendee.copy(
+                                    name = attendee.name.takeIf { it.isNotBlank() } ?: localAttendee?.name ?: "You",
+                                    avatarUrl = localAttendee?.avatarUrl ?: attendee.avatarUrl,
                                 )
-                        )
-                    }
-                    _beaconRsvpPendingIds.update { it - id }
-                    loadBeaconAttendeeDirectory(id, forceRefresh = true)
-                    onFinished(true)
-                },
-                onFailure = { e ->
-                    restoreRsvpSnapshot(id, previous)
-                    _beaconRsvpPendingIds.update { it - id }
-                    _engagementSnackbar.value =
-                        normalizeEventRsvpErrorMessage(e.message?.takeIf { it.isNotBlank() })
-                            ?: "Could not update RSVP. Please try again."
-                    onFinished(false)
-                },
-            )
+                            val mergedAttendees =
+                                (
+                                    (prev?.attendees.orEmpty())
+                                        .filterNot { it.userId == confirmedAttendee.userId } + confirmedAttendee
+                                ).distinctBy { it.userId }
+                            current + (
+                                id to
+                                    BeaconRsvpCacheEntry(
+                                        attendees = mergedAttendees,
+                                        currentUserSignedUp = true,
+                                    )
+                            )
+                        }
+
+                        loadBeaconAttendeeDirectory(id, forceRefresh = true)
+                    },
+                    onFailure = { e ->
+                        if (e is CancellationException) throw e
+
+                        _engagementSnackbar.value =
+                            normalizeEventRsvpErrorMessage(e.message?.takeIf { it.isNotBlank() })
+                                ?: "Could not update RSVP. Please try again."
+                    },
+                )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            if (!confirmed) {
+                _engagementSnackbar.value = normalizeEventRsvpErrorMessage(error.message)
+                    ?: "Could not update RSVP. Please try again."
+            }
+        } finally {
+            if (!confirmed) restoreRsvpSnapshot(id, previous)
+            _beaconRsvpPendingIds.update { it - id }
+            onFinished(confirmed)
+        }
     }
 }
 
@@ -629,61 +641,72 @@ internal fun MapViewModel.cancelRsvpToBeaconImpl(
     val previous = _beaconRsvpById.value[id]
     _beaconRsvpPendingIds.update { it + id }
     applyOptimisticRsvp(id, signedUp = false)
-    PlatformHapticsPolicy.successNotification()
     viewModelScope.launch {
-        if (!ensureClickWebAuthReady()) {
-            restoreRsvpSnapshot(id, previous)
+        var confirmed = false
+        try {
+            if (!ensureClickWebAuthReady()) {
+                _engagementSnackbar.value = "Sign-in still loading — try RSVP again"
+
+                return@launch
+            }
+            val currentUserId = AppDataManager.currentUser.value?.id
+            mapBeaconRepository.cancelRsvp(id).fold(
+                onSuccess = {
+                    confirmed = true
+                    PlatformHapticsPolicy.successNotification()
+                    updateBeaconRsvpCache { current ->
+                        val prev = current[id]
+                        val remaining =
+                            prev
+                                ?.attendees
+                                .orEmpty()
+                                .filterNot { it.userId == currentUserId }
+                        current + (
+                            id to
+                                BeaconRsvpCacheEntry(
+                                    attendees = remaining,
+                                    currentUserSignedUp = false,
+                                )
+                        )
+                    }
+                    val beacon =
+                        _mapBeacons.value.firstOrNull { it.id == id }
+                            ?: (_selection.value as? MapSelection.BeaconSelected)?.beacon?.takeIf { it.id == id }
+                            ?: AppDataManager.prefetchedMapBeacons.value.firstOrNull { it.id == id }
+                    val hubId = beacon?.hubId ?: _beaconEngagementById.value[id]?.hubId
+                    val cachedHostId =
+                        AppDataManager.activeHubs.value
+                            .firstOrNull { it.hubId == hubId }
+                            ?.creatorId
+                    val hostId = beacon?.createdByUserId ?: cachedHostId
+                    if (hubId != null && (currentUserId == null || hostId != currentUserId)) {
+                        AppDataManager.revokeHubAccess(hubId)
+                    }
+
+                    invalidateBeaconAttendeeDirectory(id)
+                    if (_beaconEngagementById.value[id]?.checkedIn == true) {
+                        loadBeaconAttendeeDirectory(id, forceRefresh = true)
+                    }
+                },
+                onFailure = { e ->
+                    if (e is CancellationException) throw e
+
+                    _engagementSnackbar.value =
+                        normalizeEventRsvpErrorMessage(e.message?.takeIf { it.isNotBlank() })
+                            ?: "Could not update RSVP. Please try again."
+                },
+            )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            if (!confirmed) {
+                _engagementSnackbar.value = normalizeEventRsvpErrorMessage(error.message)
+                    ?: "Could not update RSVP. Please try again."
+            }
+        } finally {
+            if (!confirmed) restoreRsvpSnapshot(id, previous)
             _beaconRsvpPendingIds.update { it - id }
-            _engagementSnackbar.value = "Sign-in still loading — try RSVP again"
-            onFinished(false)
-            return@launch
+            onFinished(confirmed)
         }
-        val currentUserId = AppDataManager.currentUser.value?.id
-        mapBeaconRepository.cancelRsvp(id).fold(
-            onSuccess = {
-                updateBeaconRsvpCache { current ->
-                    val prev = current[id]
-                    val remaining =
-                        prev
-                            ?.attendees
-                            .orEmpty()
-                            .filterNot { it.userId == currentUserId }
-                    current + (
-                        id to
-                            BeaconRsvpCacheEntry(
-                                attendees = remaining,
-                                currentUserSignedUp = false,
-                            )
-                    )
-                }
-                val beacon =
-                    _mapBeacons.value.firstOrNull { it.id == id }
-                        ?: (_selection.value as? MapSelection.BeaconSelected)?.beacon?.takeIf { it.id == id }
-                        ?: AppDataManager.prefetchedMapBeacons.value.firstOrNull { it.id == id }
-                val hubId = beacon?.hubId ?: _beaconEngagementById.value[id]?.hubId
-                val cachedHostId =
-                    AppDataManager.activeHubs.value
-                        .firstOrNull { it.hubId == hubId }
-                        ?.creatorId
-                val hostId = beacon?.createdByUserId ?: cachedHostId
-                if (hubId != null && (currentUserId == null || hostId != currentUserId)) {
-                    AppDataManager.revokeHubAccess(hubId)
-                }
-                _beaconRsvpPendingIds.update { it - id }
-                invalidateBeaconAttendeeDirectory(id)
-                if (_beaconEngagementById.value[id]?.checkedIn == true) {
-                    loadBeaconAttendeeDirectory(id, forceRefresh = true)
-                }
-                onFinished(true)
-            },
-            onFailure = { e ->
-                restoreRsvpSnapshot(id, previous)
-                _beaconRsvpPendingIds.update { it - id }
-                _engagementSnackbar.value =
-                    normalizeEventRsvpErrorMessage(e.message?.takeIf { it.isNotBlank() })
-                        ?: "Could not update RSVP. Please try again."
-                onFinished(false)
-            },
-        )
     }
 }
