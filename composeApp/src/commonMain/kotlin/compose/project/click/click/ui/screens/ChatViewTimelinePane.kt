@@ -62,6 +62,7 @@ import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft // pragm
 import compose.project.click.click.ui.chat.indexOfMessageId // pragma: allowlist secret
 import compose.project.click.click.ui.chat.isTimestampPeekRevealed // pragma: allowlist secret
 import compose.project.click.click.ui.chat.launchTimestampPeekReplyStyleSettle // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatTimelineKeyboardFollow // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberTimestampPeekRevealPx // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx // pragma: allowlist secret
 import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay // pragma: allowlist secret
@@ -137,6 +138,17 @@ internal fun ColumnScope.ChatViewTimelinePane(
     var openBeaconDetailFallback by openBeaconDetailFallbackState
     var openBeaconDetailMetadata by openBeaconDetailMetadataState
     var openBeaconDetailContent by openBeaconDetailContentState
+    val timelineFollowsKeyboardState =
+        rememberChatTimelineKeyboardFollow(
+            nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
+            shouldFollowOnKeyboardOpen = {
+                chatTimelineShouldFollowKeyboard(
+                    firstVisibleItemIndex = listState.firstVisibleItemIndex,
+                    initialTimelineScrollDone = initialTimelineScrollDoneState.value,
+                    userScrollInProgress = listState.isScrollInProgress,
+                )
+            },
+        )
     Box(
         modifier =
             Modifier
@@ -173,7 +185,7 @@ internal fun ColumnScope.ChatViewTimelinePane(
                         }
                     }
 
-                    // Messages. The keyboard only moves this viewport while the user is pinned to
+                    // Messages. The keyboard only moves this viewport for sessions that began at
                     // latest; history remains visually stationary while the composer follows IME.
                     Box(
                         modifier =
@@ -183,13 +195,7 @@ internal fun ColumnScope.ChatViewTimelinePane(
                                 .clipToBounds()
                                 .chatTimelineKeyboardViewport(
                                     nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
-                                    followKeyboard = {
-                                        chatTimelineShouldFollowKeyboard(
-                                            firstVisibleItemIndex = listState.firstVisibleItemIndex,
-                                            initialTimelineScrollDone = initialTimelineScrollDoneState.value,
-                                            userScrollInProgress = listState.isScrollInProgress,
-                                        )
-                                    },
+                                    followKeyboard = { timelineFollowsKeyboardState.value },
                                 )
                                 .zIndex(1f),
                     ) {
