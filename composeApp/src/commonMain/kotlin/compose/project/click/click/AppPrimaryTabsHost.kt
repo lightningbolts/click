@@ -216,7 +216,10 @@ internal fun AppPrimaryTabsHost(
                             currentUserId = currentUser.id,
                             currentUsername = currentUser.name,
                             locationService = locationService,
-                            onNavigateToNfc = { showNfcScreen = true },
+                            onNavigateToNfc = {
+                                connectionViewModel.resetConnectionState()
+                                showNfcScreen = true
+                            },
                             onShowMyQRCode = { showMyQRCode = true },
                             onScanQRCode = { showQRScanner = true },
                             onJoinCommunityHub = { hubId ->

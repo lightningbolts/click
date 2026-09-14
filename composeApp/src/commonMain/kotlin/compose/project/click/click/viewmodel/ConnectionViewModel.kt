@@ -30,6 +30,7 @@ import compose.project.click.click.utils.LocationService // pragma: allowlist se
 import io.ktor.client.HttpClient // pragma: allowlist secret
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -138,8 +139,11 @@ sealed class ConnectionState {
     object SecuringConnection : ConnectionState()
 }
 
-class ConnectionViewModel : ViewModel() {
-    internal val repository = ConnectionRepository()
+class ConnectionViewModel(
+    internal val repository: ConnectionRepository = ConnectionRepository(),
+) : ViewModel() {
+    internal var proximityHandshakeJob: Job? = null
+    internal var proximityRecoveryJob: Job? = null
 
     internal val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Idle)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
@@ -383,7 +387,15 @@ class ConnectionViewModel : ViewModel() {
         weatherSnapshotLabel = weatherSnapshotLabel,
     )
 
+    /** Release screen-owned handshake work without discarding a completed confirmation/context step. */
+    fun cancelProximityHandshake() {
+        proximityHandshakeJob?.cancel()
+        proximityRecoveryJob?.cancel()
+        lastTapProximityStartedAtMs = 0L
+    }
+
     fun resetConnectionState() {
+        cancelProximityHandshake()
         val tagging = _connectionState.value as? ConnectionState.TaggingContext
         if (tagging?.requiresSelection == true) {
             ConnectionFlowTelemetry.recordHostSelectionAbandoned(

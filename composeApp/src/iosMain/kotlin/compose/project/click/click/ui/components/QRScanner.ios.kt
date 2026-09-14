@@ -258,8 +258,8 @@ private fun CameraPreviewContent(
     var hasProcessed by remember { mutableStateOf(false) }
 
     // Process detected value
-    LaunchedEffect(detectedValue) {
-        if (detectedValue != null && !hasProcessed) {
+    LaunchedEffect(detectedValue, isActive) {
+        if (isActive && detectedValue != null && !hasProcessed) {
             hasProcessed = true
             onResult(detectedValue!!)
         }
@@ -297,7 +297,9 @@ private fun CameraPreviewContent(
             detectedValue = value
         }
     }
-    callbackHolder.onDetectionChanged = onDetectionChanged
+    callbackHolder.onDetectionChanged = { detection ->
+        if (isActive) onDetectionChanged(detection)
+    }
 
     // Remember the delegate to prevent garbage collection
     val metadataDelegate =
@@ -372,28 +374,16 @@ private fun CameraPreviewContent(
         }
     }
 
-    // Start/stop capture session
-    DisposableEffect(setupComplete) {
-        if (setupComplete) {
-            platform.darwin.dispatch_async(
-                platform.darwin.dispatch_get_global_queue(
-                    platform.darwin.DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(),
-                    0u,
-                ),
-            ) {
-                captureSession.startRunning()
-            }
+    // Serialize lifecycle operations: a late start must never race a stop when switching transport
+    // or leaving the scanner. Pausing detection also releases the camera, not just its callback.
+    val captureQueue = remember { platform.darwin.dispatch_queue_create("click.qr.capture", null) }
+    DisposableEffect(setupComplete, isActive) {
+        if (setupComplete && isActive) {
+            platform.darwin.dispatch_async(captureQueue) { captureSession.startRunning() }
         }
         onDispose {
-            platform.darwin.dispatch_async(
-                platform.darwin.dispatch_get_global_queue(
-                    platform.darwin.DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(),
-                    0u,
-                ),
-            ) {
-                if (captureSession.isRunning()) {
-                    captureSession.stopRunning()
-                }
+            platform.darwin.dispatch_async(captureQueue) {
+                if (captureSession.isRunning()) captureSession.stopRunning()
             }
         }
     }
